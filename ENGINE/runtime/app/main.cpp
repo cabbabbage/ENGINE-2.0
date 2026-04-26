@@ -266,14 +266,12 @@ void MainApp::setup() {
                         std::unique_ptr<loading_status::ScopedNotifier> scoped_loading_notifier;
                         if (loading_screen_ && renderer) {
                                 scoped_loading_notifier = std::make_unique<loading_status::ScopedNotifier>(
-                                        [this, renderer](const std::string& status) {
+                                        [this](const std::string& status) {
                                                 try {
                                                         loading_screen_->set_status(status);
                                                         loading_screen_->draw_frame();
                                                         if (renderer_) {
                                                                 renderer_->present();
-                                                        } else {
-                                                                SDL_RenderPresent(renderer);
                                                         }
                                                 } catch (...) {
                                                 }
@@ -286,8 +284,6 @@ void MainApp::setup() {
                                 loading_screen_->draw_frame();
                                 if (renderer_) {
                                         renderer_->present();
-                                } else {
-                                        SDL_RenderPresent(renderer);
                                 }
                                 SDL_Event ev;
                                 while (SDL_PollEvent(&ev)) {}
@@ -373,6 +369,14 @@ void MainApp::setup() {
                                 []() {
                                         vibble::log::warn("[MainApp] No player asset found. Launching in Dev Mode.");
                                 });
+                        if (loading_screen_) {
+                                loading_screen_->deactivate();
+                        }
+                        if (renderer_) {
+                                renderer_->begin_frame(SDL_Color{0, 0, 0, 255});
+                                renderer_->end_frame();
+                                renderer_->present();
+                        }
                         AudioEngine::instance().update();
                 },
                 [](const std::exception& e) {
@@ -603,6 +607,8 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                    << " pipeline_cache_hit_rate=" << stats.gpu_pipeline_cache_hit_rate
                    << " sdl_target_calls=" << stats.sdl_renderer_target_call_count
                    << " sdl_draw_calls=" << stats.sdl_renderer_draw_call_count
+                   << " present_calls=" << stats.present_call_count
+                   << " gpu_failed_frames=" << stats.gpu_failed_frame_count
                    << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)
                    << " backend=" << backend_name
                    << " present_mode=" << present_mode;

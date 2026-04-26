@@ -24,7 +24,8 @@ struct MapManifestBootstrapResult {
 
 MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifest,
                                                       const std::string& map_id,
-                                                      const std::filesystem::path& manifest_root);
+                                                      const std::filesystem::path& manifest_root,
+                                                      const nlohmann::json* asset_catalog = nullptr);
 
 nlohmann::json build_default_map_manifest(const std::string& map_name);
 

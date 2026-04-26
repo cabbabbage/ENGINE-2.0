@@ -2288,7 +2288,6 @@ void DevControls::process_next_multi_asset_item() {
     if (assets_) {
         if (SDL_Renderer* r = assets_->renderer()) {
             render_import_busy_overlay(r);
-            SDL_RenderPresent(r);
         }
     }
     while (multi_asset_import_.index < multi_asset_import_.items.size()) {
@@ -2787,7 +2786,6 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     if (assets_) {
         if (SDL_Renderer* r = assets_->renderer()) {
             render_import_busy_overlay(r);
-            SDL_RenderPresent(r);
         }
     }
 

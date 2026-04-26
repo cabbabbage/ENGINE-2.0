@@ -153,8 +153,6 @@ void MenuUI::game_loop() {
                                 }
                         }
                 }
-                log_render_diagnostics(renderer, "MenuUI");
-
                 if (menu_active_) {
                         render();
                         switch (consumeAction()) {
@@ -168,9 +166,8 @@ void MenuUI::game_loop() {
 
                 if (renderer_) {
                         renderer_->present();
-                } else {
-                        SDL_RenderPresent(renderer);
                 }
+                log_render_diagnostics(renderer, "MenuUI");
 
                 if (input_) input_->update();
 

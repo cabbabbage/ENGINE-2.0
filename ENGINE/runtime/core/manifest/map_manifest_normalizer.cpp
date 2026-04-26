@@ -4,6 +4,8 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
@@ -415,6 +417,198 @@ bool ensure_map_layers(nlohmann::json& map_manifest, const std::string& map_id) 
     return changed;
 }
 
+struct AssetNameCanonicalLookup {
+    std::unordered_map<std::string, std::string> unique_by_normalized_name;
+    std::unordered_set<std::string> ambiguous_normalized_names;
+};
+
+std::string normalize_asset_lookup_token(const std::string& raw_name) {
+    std::string normalized;
+    normalized.reserve(raw_name.size());
+    for (unsigned char ch : raw_name) {
+        if (std::isalnum(ch) != 0) {
+            normalized.push_back(static_cast<char>(std::tolower(ch)));
+        }
+    }
+
+    constexpr const char* kTypo = "backround";
+    constexpr const char* kCorrect = "background";
+    std::string::size_type pos = 0;
+    while ((pos = normalized.find(kTypo, pos)) != std::string::npos) {
+        normalized.replace(pos, std::char_traits<char>::length(kTypo), kCorrect);
+        pos += std::char_traits<char>::length(kCorrect);
+    }
+    return normalized;
+}
+
+AssetNameCanonicalLookup build_asset_name_lookup(const nlohmann::json* asset_catalog) {
+    AssetNameCanonicalLookup lookup;
+    if (!asset_catalog || !asset_catalog->is_object()) {
+        return lookup;
+    }
+
+    for (auto it = asset_catalog->begin(); it != asset_catalog->end(); ++it) {
+        const std::string canonical_name = it.key();
+        if (canonical_name.empty()) {
+            continue;
+        }
+        const std::string normalized = normalize_asset_lookup_token(canonical_name);
+        if (normalized.empty()) {
+            continue;
+        }
+
+        if (lookup.ambiguous_normalized_names.find(normalized) != lookup.ambiguous_normalized_names.end()) {
+            continue;
+        }
+
+        const auto existing = lookup.unique_by_normalized_name.find(normalized);
+        if (existing == lookup.unique_by_normalized_name.end()) {
+            lookup.unique_by_normalized_name.emplace(normalized, canonical_name);
+            continue;
+        }
+
+        if (existing->second != canonical_name) {
+            lookup.unique_by_normalized_name.erase(existing);
+            lookup.ambiguous_normalized_names.insert(normalized);
+        }
+    }
+
+    return lookup;
+}
+
+bool normalize_candidate_asset_name(nlohmann::json& candidate,
+                                    const AssetNameCanonicalLookup& lookup) {
+    if (!candidate.is_object()) {
+        return false;
+    }
+    auto name_it = candidate.find("name");
+    if (name_it == candidate.end() || !name_it->is_string()) {
+        return false;
+    }
+
+    const std::string current_name = name_it->get<std::string>();
+    if (current_name.empty()) {
+        return false;
+    }
+
+    std::string current_lower = current_name;
+    std::transform(current_lower.begin(), current_lower.end(), current_lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (current_lower == "null") {
+        return false;
+    }
+
+    const std::string normalized = normalize_asset_lookup_token(current_name);
+    if (normalized.empty()) {
+        return false;
+    }
+
+    if (lookup.ambiguous_normalized_names.find(normalized) != lookup.ambiguous_normalized_names.end()) {
+        return false;
+    }
+
+    const auto canonical_it = lookup.unique_by_normalized_name.find(normalized);
+    if (canonical_it == lookup.unique_by_normalized_name.end()) {
+        return false;
+    }
+
+    if (canonical_it->second == current_name) {
+        return false;
+    }
+
+    *name_it = canonical_it->second;
+    return true;
+}
+
+bool normalize_spawn_group_candidates(nlohmann::json& group,
+                                      const AssetNameCanonicalLookup& lookup) {
+    if (!group.is_object()) {
+        return false;
+    }
+
+    auto candidates_it = group.find("candidates");
+    if (candidates_it == group.end() || !candidates_it->is_array()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (auto& candidate : *candidates_it) {
+        if (normalize_candidate_asset_name(candidate, lookup)) {
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool normalize_spawn_group_array(nlohmann::json& owner,
+                                 const char* key,
+                                 const AssetNameCanonicalLookup& lookup) {
+    if (!owner.is_object()) {
+        return false;
+    }
+
+    auto groups_it = owner.find(key);
+    if (groups_it == owner.end() || !groups_it->is_array()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (auto& group : *groups_it) {
+        if (normalize_spawn_group_candidates(group, lookup)) {
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
+                                      const nlohmann::json* asset_catalog) {
+    const AssetNameCanonicalLookup lookup = build_asset_name_lookup(asset_catalog);
+    if (lookup.unique_by_normalized_name.empty()) {
+        return false;
+    }
+
+    bool changed = false;
+
+    if (normalize_spawn_group_array(map_manifest, "candidate_selectors", lookup)) {
+        changed = true;
+    }
+
+    if (map_manifest.contains("map_boundary_data") && map_manifest["map_boundary_data"].is_object()) {
+        nlohmann::json& map_boundary_data = map_manifest["map_boundary_data"];
+        if (normalize_spawn_group_array(map_boundary_data, "candidate_selectors", lookup)) {
+            changed = true;
+        }
+        if (normalize_spawn_group_array(map_boundary_data, "spawn_groups", lookup)) {
+            changed = true;
+        }
+    }
+
+    auto normalize_room_like_section = [&](const char* section_name) {
+        auto section_it = map_manifest.find(section_name);
+        if (section_it == map_manifest.end() || !section_it->is_object()) {
+            return;
+        }
+
+        for (auto section_entry_it = section_it->begin(); section_entry_it != section_it->end(); ++section_entry_it) {
+            if (!section_entry_it.value().is_object()) {
+                continue;
+            }
+            if (normalize_spawn_group_array(section_entry_it.value(), "spawn_groups", lookup)) {
+                changed = true;
+            }
+            if (normalize_spawn_group_array(section_entry_it.value(), "candidate_selectors", lookup)) {
+                changed = true;
+            }
+        }
+    };
+
+    normalize_room_like_section("rooms_data");
+    normalize_room_like_section("trails_data");
+    return changed;
+}
+
 } // namespace
 
 nlohmann::json build_default_map_manifest(const std::string& map_name) {
@@ -530,7 +724,8 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
 
 MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifest,
                                                       const std::string& map_id,
-                                                      const std::filesystem::path& manifest_root) {
+                                                      const std::filesystem::path& manifest_root,
+                                                      const nlohmann::json* asset_catalog) {
     MapManifestNormalizationResult result;
     bool changed = false;
 
@@ -569,6 +764,9 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     }
 
     if (ensure_map_layers(map_manifest, map_id)) {
+        changed = true;
+    }
+    if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
         changed = true;
     }
     if (normalize_room_config_section(map_manifest["rooms_data"])) {
@@ -628,7 +826,8 @@ MapManifestBootstrapResult bootstrap_map_manifest(const ManifestData& manifest_d
         std::filesystem::path(manifest::manifest_path()).parent_path();
     MapManifestNormalizationResult normalized = normalize_map_manifest(std::move(map_manifest_json),
                                                                        map_id,
-                                                                       manifest_root);
+                                                                       manifest_root,
+                                                                       &manifest_data.assets);
 
     bootstrap.map_manifest = std::move(normalized.map_manifest);
     bootstrap.resolved_content_root = std::move(normalized.resolved_content_root);

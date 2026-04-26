@@ -609,6 +609,17 @@ bool GpuSceneRenderer::end_frame(std::string* out_error) {
     return true;
 }
 
+void GpuSceneRenderer::abort_frame() {
+    frame_graph_.reset();
+    if (!device_) {
+        return;
+    }
+    std::string cancel_error;
+    if (!device_->end_frame(false, cancel_error) && !cancel_error.empty()) {
+        vibble::log::warn("[GpuSceneRenderer] Failed to abort GPU frame cleanly: " + cancel_error);
+    }
+}
+
 bool GpuSceneRenderer::ensure_texture_resource(const std::string& logical_name,
                                                const TextureResourceSpec& spec,
                                                std::string& out_error) {

@@ -48,6 +48,7 @@ public:
 
     bool begin_frame(std::string* out_error = nullptr);
     bool end_frame(std::string* out_error = nullptr);
+    void abort_frame();
 
     bool ensure_texture_resource(const std::string& logical_name,
                                  const TextureResourceSpec& spec,

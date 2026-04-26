@@ -407,6 +407,43 @@ inline float ticks_to_seconds(Uint64 ticks) {
     return static_cast<float>(ticks) * 0.001f;
 }
 
+void clear_backbuffer_to_color(SDL_Renderer* renderer,
+                               int screen_width,
+                               int screen_height,
+                               SDL_Color color) {
+    if (!renderer) {
+        return;
+    }
+    SDL_SetRenderTarget(renderer, nullptr);
+    SDL_SetRenderViewport(renderer, nullptr);
+    SDL_SetRenderClipRect(renderer, nullptr);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderClear(renderer);
+    (void)screen_width;
+    (void)screen_height;
+}
+
+void draw_gpu_failure_overlay(SDL_Renderer* renderer,
+                              int screen_width,
+                              int screen_height) {
+    if (!renderer || screen_width <= 0 || screen_height <= 0) {
+        return;
+    }
+
+    clear_backbuffer_to_color(renderer, screen_width, screen_height, SDL_Color{8, 8, 12, 255});
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 190, 20, 20, 215);
+    SDL_Rect top_bar{0, 0, screen_width, std::max(16, screen_height / 7)};
+    sdl_render::FillRect(renderer, &top_bar);
+
+    SDL_SetRenderDrawColor(renderer, 255, 96, 96, 255);
+    const int margin = std::max(24, std::min(screen_width, screen_height) / 10);
+    SDL_RenderLine(renderer, margin, margin, screen_width - margin, screen_height - margin);
+    SDL_RenderLine(renderer, screen_width - margin, margin, margin, screen_height - margin);
+}
+
 } // namespace
 
 namespace render_internal {
@@ -1975,6 +2012,28 @@ void SceneRenderer::render() {
     render_diagnostics::begin_frame();
     render_diagnostics::set_texture_memory_usage(render_diagnostics::tracked_texture_bytes(), false);
 
+    auto finalize_render_cpu_timer = [&]() {
+        const std::uint64_t render_end_counter = SDL_GetPerformanceCounter();
+        if (perf_freq > 0 && render_end_counter >= render_begin_counter) {
+            const double render_ms =
+                (static_cast<double>(render_end_counter - render_begin_counter) * 1000.0) /
+                static_cast<double>(perf_freq);
+            render_diagnostics::set_render_thread_cpu_ms(render_ms);
+        }
+    };
+
+    auto fail_gpu_frame = [&](const std::string& error_message, bool abort_open_gpu_frame) {
+        if (abort_open_gpu_frame && gpu_scene_renderer_) {
+            gpu_scene_renderer_->abort_frame();
+        }
+        draw_gpu_failure_overlay(renderer_, screen_width_, screen_height_);
+        render_diagnostics::note_gpu_frame_skipped_due_to_failure();
+        render_diagnostics::set_renderer_runtime_info("gpu", "failed", "error_overlay");
+        finalize_render_cpu_timer();
+        render_diagnostics::end_frame();
+        vibble::log::error("[SceneRenderer] GPU runtime frame failed: " + error_message);
+    };
+
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
     const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
@@ -2020,15 +2079,18 @@ void SceneRenderer::render() {
     }
 
     if (!gpu_scene_renderer_) {
-        render_diagnostics::set_renderer_runtime_info("gpu", "unavailable", "unknown");
-        render_diagnostics::end_frame();
-        vibble::log::error("[SceneRenderer] GPU runtime renderer is unavailable during frame execution.");
+        fail_gpu_frame("GPU runtime renderer is unavailable during frame execution.", false);
         return;
     }
+
+    if (first_gpu_submission_pending_) {
+        clear_backbuffer_to_color(renderer_, screen_width_, screen_height_, map_clear_color_);
+        first_gpu_submission_pending_ = false;
+    }
+
     std::string gpu_begin_error;
     if (!gpu_scene_renderer_->begin_frame(&gpu_begin_error)) {
-        render_diagnostics::end_frame();
-        vibble::log::error("[SceneRenderer] GPU frame begin failed: " + gpu_begin_error);
+        fail_gpu_frame("GPU frame begin failed: " + gpu_begin_error, false);
         return;
     }
     render_diagnostics::set_renderer_runtime_info("gpu",
@@ -2086,10 +2148,10 @@ void SceneRenderer::render() {
         !ensure_gpu_texture("scene_blur_fg", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
         !ensure_gpu_texture("scene_output", format_policy.albedo_format, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) ||
         !gpu_scene_renderer_->ensure_buffer_resource("light_bins", light_bin_spec, gpu_resource_error)) {
-        if (!gpu_resource_error.empty()) {
-            vibble::log::error("[SceneRenderer] GPU runtime resource initialization failed: " + gpu_resource_error);
-        }
-        render_diagnostics::end_frame();
+        const std::string error_message = gpu_resource_error.empty()
+            ? std::string("GPU runtime resource initialization failed.")
+            : std::string("GPU runtime resource initialization failed: ") + gpu_resource_error;
+        fail_gpu_frame(error_message, true);
         return;
     }
 
@@ -2217,8 +2279,7 @@ void SceneRenderer::render() {
         }
     std::string gpu_frame_error;
     if (!gpu_scene_renderer_->end_frame(&gpu_frame_error)) {
-        render_diagnostics::end_frame();
-        vibble::log::error("[SceneRenderer] GPU frame execution failed: " + gpu_frame_error);
+        fail_gpu_frame("GPU frame execution failed: " + gpu_frame_error, false);
         return;
     }
     const RenderFrameStats& gpu_frame_stats = render_diagnostics::current_frame_stats();
@@ -2229,13 +2290,7 @@ void SceneRenderer::render() {
                            ", draw_calls=" + std::to_string(gpu_frame_stats.sdl_renderer_draw_call_count) + ").");
     }
 
-    const std::uint64_t render_end_counter = SDL_GetPerformanceCounter();
-    if (perf_freq > 0 && render_end_counter >= render_begin_counter) {
-        const double render_ms =
-            (static_cast<double>(render_end_counter - render_begin_counter) * 1000.0) /
-            static_cast<double>(perf_freq);
-        render_diagnostics::set_render_thread_cpu_ms(render_ms);
-    }
+    finalize_render_cpu_timer();
     render_diagnostics::end_frame();
     return;
 }

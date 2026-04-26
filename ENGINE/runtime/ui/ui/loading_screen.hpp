@@ -14,8 +14,10 @@ class LoadingScreen {
     void init();
     void draw_frame();
     void set_status(std::string status);
+    void deactivate();
 
         private:
+    void release_texture();
     SDL_Renderer* renderer_;
     int screen_w_;
     int screen_h_;
@@ -24,6 +26,7 @@ class LoadingScreen {
     std::string status_text_;
     SDL_Texture* current_texture_ = nullptr;
     std::filesystem::path current_texture_path_;
+    bool active_ = false;
     std::filesystem::path project_root() const;
     std::filesystem::path loading_content_root() const;
     std::vector<std::filesystem::path> list_images_in(const std::filesystem::path& dir, bool recursive) const;

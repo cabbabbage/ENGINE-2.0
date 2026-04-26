@@ -551,6 +551,7 @@ void EngineRenderer::end_frame() {
 
 void EngineRenderer::present() {
     if (renderer_) {
+        render_diagnostics::note_present_call();
         const std::uint64_t perf_frequency = SDL_GetPerformanceFrequency();
         const std::uint64_t present_begin = SDL_GetPerformanceCounter();
         SDL_RenderPresent(renderer_);

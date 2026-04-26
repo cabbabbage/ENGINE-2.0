@@ -335,6 +335,7 @@ private:
     bool debug_auto_paths_ = false;
     bool movement_debug_visible_ = true;
     bool anchor_point_debug_enabled_ = false;
+    bool first_gpu_submission_pending_ = true;
 
     std::unordered_map<const Asset*, render_debug::MovementDebugAssetSnapshot> movement_debug_snapshots_;
     std::unordered_map<const Asset*, render_debug::MovementDebugObservedState> movement_debug_observed_state_;

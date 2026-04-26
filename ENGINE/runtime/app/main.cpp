@@ -135,7 +135,8 @@ void show_gpu_required_dialog_and_wait(SDL_Window* window, const std::string& de
 
         std::string message =
                 "This game now requires a compatible GPU renderer.\n"
-                "No CPU/software fallback is available.";
+                "No CPU/software fallback is available.\n"
+                "Press \"I understand\" to exit.";
         if (!details.empty()) {
                 message += "\n\nDetails:\n" + details;
         }

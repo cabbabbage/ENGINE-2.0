@@ -344,6 +344,7 @@ add_executable(engine_tests
     ENGINE/tests/test_shader_package_library.cpp
     ENGINE/tests/test_shader_pipeline_cache.cpp
     ENGINE/tests/test_floor_light_mask.cpp
+    ENGINE/tests/test_floor_tile_renderer.cpp
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_child_asset_runtime.cpp
     ENGINE/tests/test_floor_box_candidate_spawning.cpp

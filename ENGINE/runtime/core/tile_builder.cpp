@@ -30,6 +30,7 @@ struct ChunkTileAsset {
     SDL_Rect     source_rect{0, 0, 0, 0};
     int          texture_w    = 0;
     int          texture_h    = 0;
+    bool         smooth_scaling = false;
     bool         flipped      = false;
 };
 
@@ -364,6 +365,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
         ctx.source_rect  = frame_data.source_rect;
         ctx.texture_w    = frame_data.texture_w;
         ctx.texture_h    = frame_data.texture_h;
+        ctx.smooth_scaling = a->info ? a->info->smooth_scaling : false;
         ctx.flipped      = a->flipped;
 
         asset_contexts.push_back(ctx);
@@ -419,13 +421,18 @@ void build_grid_tiles(SDL_Renderer* renderer,
                 SDL_Rect tile_world{ x, y, step, step };
 
                 bool any = false;
+                bool any_smooth = false;
                 for (const ChunkTileAsset* ctx : tilers) {
                     if (!ctx) continue;
                     SDL_Rect sprite_inter{};
                     if (SDL_GetRectIntersection(&ctx->sprite_world, &tile_world, &sprite_inter) && sprite_inter.w > 0 &&
                         sprite_inter.h > 0) {
                         any = true;
-                        break;
+                        any_smooth = any_smooth || ctx->smooth_scaling;
+                        if (any_smooth) {
+                            // Scale mode only needs to know if at least one contributor is smooth.
+                            break;
+                        }
                     }
                 }
                 if (!any) continue;
@@ -433,7 +440,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
                 SDL_Texture* tile_tex = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA32), SDL_TEXTUREACCESS_TARGET, tile_world.w, tile_world.h);
                 if (!tile_tex) continue;
                 SDL_SetTextureBlendMode(tile_tex, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(tile_tex, SDL_SCALEMODE_LINEAR);
+                SDL_SetTextureScaleMode(tile_tex, any_smooth ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
                 SDL_Texture* prev = SDL_GetRenderTarget(renderer);
                 if (!SDL_SetRenderTarget(renderer, tile_tex)) {
                     SDL_DestroyTexture(tile_tex);

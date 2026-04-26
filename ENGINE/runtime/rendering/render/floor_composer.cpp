@@ -52,8 +52,6 @@ bool project_floor_grid_point_to_screen(const WarpedScreenGrid& cam,
         return false;
     }
 
-    out_screen.x = std::floor(out_screen.x);
-    out_screen.y = std::floor(out_screen.y);
     return true;
 }
 
@@ -284,6 +282,10 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
                 if (!fetch_texture_size(tile.texture, tex_size)) {
                     continue;
                 }
+                const float inv_w = (tex_size.x > 0.0f) ? (1.0f / tex_size.x) : 0.0f;
+                const float inv_h = (tex_size.y > 0.0f) ? (1.0f / tex_size.y) : 0.0f;
+                const float pad_x = std::clamp(0.5f * inv_w, 0.0f, 0.49f);
+                const float pad_y = std::clamp(0.5f * inv_h, 0.0f, 0.49f);
 
                 verts[0].position = points[0];
                 verts[1].position = points[1];
@@ -292,10 +294,10 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
                 for (auto& v : verts) {
                     v.color = white;
                 }
-                verts[0].tex_coord = SDL_FPoint{0.0f, 0.0f};
-                verts[1].tex_coord = SDL_FPoint{tex_size.x, 0.0f};
-                verts[2].tex_coord = SDL_FPoint{tex_size.x, tex_size.y};
-                verts[3].tex_coord = SDL_FPoint{0.0f, tex_size.y};
+                verts[0].tex_coord = SDL_FPoint{pad_x, pad_y};
+                verts[1].tex_coord = SDL_FPoint{1.0f - pad_x, pad_y};
+                verts[2].tex_coord = SDL_FPoint{1.0f - pad_x, 1.0f - pad_y};
+                verts[3].tex_coord = SDL_FPoint{pad_x, 1.0f - pad_y};
 
                 auto& entry = cache[tile_key];
                 entry.renderer = renderer;

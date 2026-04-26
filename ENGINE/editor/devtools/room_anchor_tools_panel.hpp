@@ -30,6 +30,7 @@ public:
         bool flip_vertical = true;
         float rotation_degrees = 0.0f;
         bool hidden = false;
+        bool orphan_on_end = true;
         bool resolve_x = true;
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
     };
@@ -129,6 +130,7 @@ private:
     std::unique_ptr<DMTextBox> depth_textbox_;
     std::unique_ptr<DMSlider> rotation_slider_;
     std::unique_ptr<DMCheckbox> hidden_checkbox_;
+    std::unique_ptr<DMCheckbox> orphan_on_end_checkbox_;
     std::unique_ptr<DMButton> advanced_options_button_;
     std::unique_ptr<DMCheckbox> flip_horizontal_checkbox_;
     std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;

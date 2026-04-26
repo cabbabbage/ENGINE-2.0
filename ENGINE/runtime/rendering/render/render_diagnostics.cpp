@@ -110,6 +110,9 @@ void begin_frame() {
     g_frame_stats.gpu_light_tile_assignments = 0;
     g_frame_stats.gpu_light_naive_evaluations = 0;
     g_frame_stats.gpu_light_tiled_evaluations = 0;
+    g_frame_stats.gpu_pipeline_cache_hits = 0;
+    g_frame_stats.gpu_pipeline_cache_misses = 0;
+    g_frame_stats.gpu_pipeline_cache_hit_rate = 1.0;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -206,6 +209,14 @@ void set_gpu_light_culling_stats(std::uint32_t tile_assignments,
     g_frame_stats.gpu_light_tile_assignments = tile_assignments;
     g_frame_stats.gpu_light_naive_evaluations = naive_evaluations;
     g_frame_stats.gpu_light_tiled_evaluations = tiled_evaluations;
+}
+
+void set_gpu_pipeline_cache_stats(std::uint64_t hits,
+                                  std::uint64_t misses,
+                                  double hit_rate) {
+    g_frame_stats.gpu_pipeline_cache_hits = hits;
+    g_frame_stats.gpu_pipeline_cache_misses = misses;
+    g_frame_stats.gpu_pipeline_cache_hit_rate = std::clamp(hit_rate, 0.0, 1.0);
 }
 
 void note_texture_created(SDL_Texture* texture) {

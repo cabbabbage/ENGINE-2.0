@@ -42,6 +42,8 @@ public:
                                                            const ComputeFactory& factory);
     void clear(SDL_GPUDevice* device);
     double hit_rate() const;
+    std::uint64_t total_hits() const;
+    std::uint64_t total_misses() const;
     std::size_t graphics_pipeline_count() const { return graphics_pipelines_.size(); }
     std::size_t compute_pipeline_count() const { return compute_pipelines_.size(); }
 

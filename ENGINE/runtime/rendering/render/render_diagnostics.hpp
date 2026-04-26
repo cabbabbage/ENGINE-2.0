@@ -32,6 +32,9 @@ struct RenderFrameStats {
     std::uint32_t gpu_light_tile_assignments = 0;
     std::uint32_t gpu_light_naive_evaluations = 0;
     std::uint32_t gpu_light_tiled_evaluations = 0;
+    std::uint64_t gpu_pipeline_cache_hits = 0;
+    std::uint64_t gpu_pipeline_cache_misses = 0;
+    double gpu_pipeline_cache_hit_rate = 1.0;
 };
 
 namespace render_diagnostics {
@@ -63,6 +66,9 @@ void set_render_thread_cpu_ms(double elapsed_ms);
 void set_gpu_light_culling_stats(std::uint32_t tile_assignments,
                                  std::uint32_t naive_evaluations,
                                  std::uint32_t tiled_evaluations);
+void set_gpu_pipeline_cache_stats(std::uint64_t hits,
+                                  std::uint64_t misses,
+                                  double hit_rate);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

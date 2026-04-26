@@ -87,17 +87,27 @@ void ShaderPipelineCache::clear(SDL_GPUDevice* device) {
 }
 
 double ShaderPipelineCache::hit_rate() const {
-    std::uint64_t hit_count = 0;
-    std::uint64_t miss_count = 0;
-    for (const auto& entry : hits_) {
-        hit_count += entry.second;
-    }
-    for (const auto& entry : misses_) {
-        miss_count += entry.second;
-    }
+    const std::uint64_t hit_count = total_hits();
+    const std::uint64_t miss_count = total_misses();
     const std::uint64_t total = hit_count + miss_count;
     if (total == 0) {
         return 1.0;
     }
     return static_cast<double>(hit_count) / static_cast<double>(total);
+}
+
+std::uint64_t ShaderPipelineCache::total_hits() const {
+    std::uint64_t hit_count = 0;
+    for (const auto& entry : hits_) {
+        hit_count += entry.second;
+    }
+    return hit_count;
+}
+
+std::uint64_t ShaderPipelineCache::total_misses() const {
+    std::uint64_t miss_count = 0;
+    for (const auto& entry : misses_) {
+        miss_count += entry.second;
+    }
+    return miss_count;
 }

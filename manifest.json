@@ -10843,12 +10843,6 @@
           "candidates": {
             "candidates": []
           }
-        },
-        {
-          "anchor_point_name": "anchor_2",
-          "candidates": {
-            "candidates": []
-          }
         }
       ],
       "animations": {
@@ -10932,32 +10926,6 @@
                 "scaling_method": "parent",
                 "texture_x": 537,
                 "texture_y": 524
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": true,
-                  "color": [
-                    255,
-                    236,
-                    196
-                  ],
-                  "enabled": true,
-                  "falloff": 1.7999999523162842,
-                  "intensity": 1.0,
-                  "opacity": 50.0,
-                  "radius": 220.0,
-                  "shadow_strength": 0.8199999928474426
-                },
-                "name": "anchor_2",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 103,
-                "texture_y": 585
               }
             ]
           ],
@@ -21326,9 +21294,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            124,
             242,
             36,
-            44,
             255
           ],
           "edge_smoothness": 2,
@@ -21729,9 +21697,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,

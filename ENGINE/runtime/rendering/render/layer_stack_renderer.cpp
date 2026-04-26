@@ -199,6 +199,7 @@ void LayerStackRenderer::reset_gpu_upload() {
                 SDL_ReleaseGPUBuffer(gpu_upload_.device, buffer);
                 buffer = nullptr;
                 ++gpu_upload_.buffer_destroy_count;
+                render_diagnostics::add_gpu_buffer_destroy_count();
             }
         };
         release_buffer(gpu_upload_.vertex_buffer);
@@ -247,6 +248,7 @@ bool LayerStackRenderer::ensure_gpu_buffer_capacity(SDL_GPUBuffer*& buffer,
         SDL_ReleaseGPUBuffer(gpu_upload_.device, buffer);
         buffer = nullptr;
         ++gpu_upload_.buffer_destroy_count;
+        render_diagnostics::add_gpu_buffer_destroy_count();
         capacity_bytes = 0;
     }
 
@@ -260,6 +262,7 @@ bool LayerStackRenderer::ensure_gpu_buffer_capacity(SDL_GPUBuffer*& buffer,
     }
     capacity_bytes = target_capacity;
     ++gpu_upload_.buffer_create_count;
+    render_diagnostics::add_gpu_buffer_create_count();
     return true;
 }
 
@@ -688,4 +691,3 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
     out.valid = true;
     return out;
 }
-

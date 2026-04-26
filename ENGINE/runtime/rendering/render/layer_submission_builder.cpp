@@ -261,6 +261,9 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
         result.packed_indices.push_back(static_cast<int>(vertex_offset + 3));
 
         render_pipeline::DrawPacket packet{};
+        const float packet_depth = std::isfinite(item.depth)
+            ? static_cast<float>(item.depth)
+            : static_cast<float>(layer.representative_depth);
         packet.vertex_offset = vertex_offset;
         packet.vertex_count = 4;
         packet.index_offset = index_offset;
@@ -268,7 +271,7 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
         packet.material_index = material_index;
         packet.layer_index = static_cast<std::uint32_t>(layer_idx);
         packet.light_cluster_index = static_cast<std::uint32_t>(layer_idx);
-        packet.depth = static_cast<float>(item.depth);
+        packet.depth = packet_depth;
         const std::uint32_t packet_index = static_cast<std::uint32_t>(result.packets.size());
         result.packets.push_back(packet);
         result.gpu_packets.push_back(render_pipeline::GpuDrawPacketRecord{

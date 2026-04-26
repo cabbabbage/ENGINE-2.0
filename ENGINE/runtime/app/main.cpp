@@ -738,6 +738,8 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                    << " rt_switches=" << stats.render_target_switch_count
                    << " tex_create=" << stats.texture_create_count
                    << " tex_destroy=" << stats.texture_destroy_count
+                   << " gpu_buf_create=" << stats.gpu_buffer_create_count
+                   << " gpu_buf_destroy=" << stats.gpu_buffer_destroy_count
                    << " cpu_light_gather_ms=" << stats.cpu_light_gather_ms
                    << " cpu_light_mask_ms=" << stats.cpu_light_mask_generation_ms
                    << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)

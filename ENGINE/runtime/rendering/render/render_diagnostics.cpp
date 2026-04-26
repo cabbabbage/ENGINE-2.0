@@ -36,6 +36,8 @@ void begin_frame() {
     g_frame_stats.draw_call_count = 0;
     g_frame_stats.texture_create_count = 0;
     g_frame_stats.texture_destroy_count = 0;
+    g_frame_stats.gpu_buffer_create_count = 0;
+    g_frame_stats.gpu_buffer_destroy_count = 0;
     g_frame_stats.render_target_switch_count = 0;
     g_frame_stats.cpu_light_gather_ms = 0.0;
     g_frame_stats.cpu_light_mask_generation_ms = 0.0;
@@ -75,6 +77,14 @@ void add_texture_create_count(std::uint32_t count) {
 
 void add_texture_destroy_count(std::uint32_t count) {
     g_frame_stats.texture_destroy_count += count;
+}
+
+void add_gpu_buffer_create_count(std::uint32_t count) {
+    g_frame_stats.gpu_buffer_create_count += count;
+}
+
+void add_gpu_buffer_destroy_count(std::uint32_t count) {
+    g_frame_stats.gpu_buffer_destroy_count += count;
 }
 
 void add_render_target_switch_count(std::uint32_t count) {

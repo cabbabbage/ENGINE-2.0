@@ -15,6 +15,8 @@ struct RenderFrameStats {
     std::uint32_t draw_call_count = 0;
     std::uint32_t texture_create_count = 0;
     std::uint32_t texture_destroy_count = 0;
+    std::uint32_t gpu_buffer_create_count = 0;
+    std::uint32_t gpu_buffer_destroy_count = 0;
     std::uint32_t render_target_switch_count = 0;
     double cpu_light_gather_ms = 0.0;
     double cpu_light_mask_generation_ms = 0.0;
@@ -38,6 +40,8 @@ void add_compute_pass(std::uint32_t count = 1);
 void add_draw_call_count(std::uint32_t count = 1);
 void add_texture_create_count(std::uint32_t count = 1);
 void add_texture_destroy_count(std::uint32_t count = 1);
+void add_gpu_buffer_create_count(std::uint32_t count = 1);
+void add_gpu_buffer_destroy_count(std::uint32_t count = 1);
 void add_render_target_switch_count(std::uint32_t count = 1);
 void add_cpu_light_gather_ms(double elapsed_ms);
 void add_cpu_light_mask_generation_ms(double elapsed_ms);

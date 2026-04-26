@@ -324,6 +324,8 @@ add_executable(engine_tests
     ENGINE/tests/test_layer_effect_processor.cpp
     ENGINE/tests/test_render_dof_composite_target.cpp
     ENGINE/tests/test_layer_submission_player_split.cpp
+    ENGINE/tests/test_layer_submission_packets.cpp
+    ENGINE/tests/test_layer_stack_gpu_submission.cpp
     ENGINE/tests/test_floor_light_mask.cpp
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_child_asset_runtime.cpp

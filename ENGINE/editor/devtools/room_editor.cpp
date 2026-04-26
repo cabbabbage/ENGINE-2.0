@@ -8036,6 +8036,98 @@ bool RoomEditor::is_asset_stack_editor_active() const {
            floor_box_mode_active();
 }
 
+bool RoomEditor::mode_owns_domain(EditorMode mode, OwnershipDomain domain) const {
+    switch (mode) {
+        case EditorMode::AnchorEdit:
+            return domain == OwnershipDomain::AnchorNonLight;
+        case EditorMode::LightEdit:
+            return domain == OwnershipDomain::AnchorLight;
+        case EditorMode::OvalAnchorEdit:
+            return domain == OwnershipDomain::OvalMappingAndPoints ||
+                   domain == OwnershipDomain::AnchorPointChildCandidates;
+        case EditorMode::MovementEdit:
+            return domain == OwnershipDomain::Movement;
+        case EditorMode::HitBoxEdit:
+            return domain == OwnershipDomain::HitBoxes;
+        case EditorMode::AttackBoxEdit:
+            return domain == OwnershipDomain::AttackBoxes;
+        case EditorMode::ImpassableBoxEdit:
+            return domain == OwnershipDomain::ImpassableGeometry;
+        case EditorMode::FloorBoxEdit:
+            return domain == OwnershipDomain::FloorBoxCandidates;
+        case EditorMode::Normal:
+        default:
+            return false;
+    }
+}
+
+bool RoomEditor::active_mode_owns_domain(OwnershipDomain domain) const {
+    return mode_owns_domain(editor_mode_, domain);
+}
+
+bool RoomEditor::log_rejected_domain_mutation(const char* operation, OwnershipDomain domain) const {
+    const char* op = operation ? operation : "unknown";
+    const char* domain_name = "unknown";
+    switch (domain) {
+        case OwnershipDomain::AnchorNonLight: domain_name = "anchor_non_light"; break;
+        case OwnershipDomain::AnchorLight: domain_name = "anchor_light"; break;
+        case OwnershipDomain::OvalMappingAndPoints: domain_name = "oval_mapping_and_points"; break;
+        case OwnershipDomain::AnchorPointChildCandidates: domain_name = "anchor_point_child_candidates"; break;
+        case OwnershipDomain::Movement: domain_name = "movement"; break;
+        case OwnershipDomain::HitBoxes: domain_name = "hit_boxes"; break;
+        case OwnershipDomain::AttackBoxes: domain_name = "attack_boxes"; break;
+        case OwnershipDomain::ImpassableGeometry: domain_name = "impassable_geometry"; break;
+        case OwnershipDomain::FloorBoxCandidates: domain_name = "floor_box_candidates"; break;
+    }
+    SDL_Log("[RoomEditor][OwnershipGuard] rejected operation=%s mode=%d domain=%s",
+            op,
+            static_cast<int>(editor_mode_),
+            domain_name);
+    SDL_assert(false && "RoomEditor ownership guard rejected out-of-scope mutation");
+    return false;
+}
+
+void RoomEditor::reconcile_mode_ownership_state(EditorMode previous_mode) {
+    (void)previous_mode;
+    if (!active_mode_owns_domain(OwnershipDomain::AnchorNonLight) &&
+        !active_mode_owns_domain(OwnershipDomain::AnchorLight)) {
+        clear_anchor_selection();
+    } else {
+        ensure_anchor_selection_valid();
+    }
+    if (!active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints)) {
+        oval_edit_.selected_point_index = -1;
+        oval_edit_.hovered_point_index = -1;
+        oval_edit_.center_selected = false;
+        oval_edit_.center_hovered = false;
+        oval_edit_.center_dragging = false;
+    }
+    if (!active_mode_owns_domain(OwnershipDomain::HitBoxes)) {
+        hitbox_edit_.selected_box_index = -1;
+        hitbox_edit_.hovered_box_index = -1;
+        hitbox_edit_.dragging_box = false;
+        hitbox_edit_.dragging_corner = false;
+    }
+    if (!active_mode_owns_domain(OwnershipDomain::AttackBoxes)) {
+        attack_box_edit_.selected_box_index = -1;
+        attack_box_edit_.hovered_box_index = -1;
+        attack_box_edit_.dragging_box = false;
+        attack_box_edit_.dragging_corner = false;
+    }
+    if (!active_mode_owns_domain(OwnershipDomain::ImpassableGeometry)) {
+        impassable_box_edit_.selected_box_index = -1;
+        impassable_box_edit_.hovered_box_index = -1;
+        impassable_box_edit_.dragging_box = false;
+        impassable_box_edit_.dragging_corner = false;
+    }
+    if (!active_mode_owns_domain(OwnershipDomain::FloorBoxCandidates)) {
+        floor_box_edit_.selected_box_index = -1;
+        floor_box_edit_.hovered_box_index = -1;
+        floor_box_edit_.dragging_box = false;
+        floor_box_edit_.dragging_corner = false;
+    }
+}
+
 bool RoomEditor::is_asset_editor_tab_scope_active() const {
     return asset_editor_tab_scope_active();
 }
@@ -11784,6 +11876,9 @@ bool RoomEditor::mutate_anchor_candidate_entry(const std::function<bool(nlohmann
                                                bool flush_now,
                                                const char* reason,
                                                const char* flush_tag) {
+    if (!active_mode_owns_domain(OwnershipDomain::AnchorPointChildCandidates)) {
+        return log_rejected_domain_mutation("mutate_anchor_candidate_entry", OwnershipDomain::AnchorPointChildCandidates);
+    }
     if (!anchor_candidate_editor_mode_active() ||
         !anchor_candidate_editor_.open ||
         !anchor_candidate_editor_.target_asset ||
@@ -12256,6 +12351,9 @@ bool RoomEditor::mutate_floor_box_candidate_entry(const std::function<bool(nlohm
                                                   bool flush_now,
                                                   const char* reason,
                                                   const char* flush_tag) {
+    if (!active_mode_owns_domain(OwnershipDomain::FloorBoxCandidates)) {
+        return log_rejected_domain_mutation("mutate_floor_box_candidate_entry", OwnershipDomain::FloorBoxCandidates);
+    }
     if (!floor_box_candidate_editor_mode_active() ||
         !floor_box_candidate_editor_.open ||
         !floor_box_candidate_editor_.target_asset ||
@@ -12580,6 +12678,12 @@ bool RoomEditor::persist_anchor_current_frame(devmode::core::DevSaveCoordinator:
 bool RoomEditor::mutate_anchor_current_frame(
     const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
     devmode::core::DevSaveCoordinator::Priority priority) {
+    const OwnershipDomain domain = light_mode_active()
+                                       ? OwnershipDomain::AnchorLight
+                                       : OwnershipDomain::AnchorNonLight;
+    if (!active_mode_owns_domain(domain)) {
+        return log_rejected_domain_mutation("mutate_anchor_current_frame", domain);
+    }
     if (!anchor_mode_active() || !anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
     }
@@ -12696,6 +12800,9 @@ bool RoomEditor::persist_hitbox_current_frame(devmode::core::DevSaveCoordinator:
 bool RoomEditor::mutate_hitbox_current_frame(
     const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
     devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!active_mode_owns_domain(OwnershipDomain::HitBoxes)) {
+        return log_rejected_domain_mutation("mutate_hitbox_current_frame", OwnershipDomain::HitBoxes);
+    }
     if (!hitbox_mode_active() || !hitbox_edit_.target_asset || !hitbox_edit_.target_asset->info) {
         return false;
     }
@@ -12791,6 +12898,9 @@ bool RoomEditor::persist_impassable_boxes(devmode::core::DevSaveCoordinator::Pri
 bool RoomEditor::mutate_impassable_shapes(
     const std::function<bool(std::vector<AssetInfo::ImpassableShape>&)>& mutator,
     devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!active_mode_owns_domain(OwnershipDomain::ImpassableGeometry)) {
+        return log_rejected_domain_mutation("mutate_impassable_shapes", OwnershipDomain::ImpassableGeometry);
+    }
     if (!impassable_box_mode_active() || !impassable_box_edit_.target_asset || !impassable_box_edit_.target_asset->info) {
         return false;
     }
@@ -12946,6 +13056,9 @@ bool RoomEditor::persist_specific_attack_box_frame(int frame_index,
 bool RoomEditor::mutate_attack_box_current_frame(
     const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
     devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!active_mode_owns_domain(OwnershipDomain::AttackBoxes)) {
+        return log_rejected_domain_mutation("mutate_attack_box_current_frame", OwnershipDomain::AttackBoxes);
+    }
     if (!attack_box_mode_active() || !attack_box_edit_.target_asset || !attack_box_edit_.target_asset->info) {
         return false;
     }
@@ -14152,6 +14265,9 @@ bool RoomEditor::persist_oval_mappings(devmode::core::DevSaveCoordinator::Priori
 }
 
 bool RoomEditor::add_oval_mapping() {
+    if (!active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints)) {
+        return log_rejected_domain_mutation("add_oval_mapping", OwnershipDomain::OvalMappingAndPoints);
+    }
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         return false;
     }
@@ -14213,6 +14329,9 @@ bool RoomEditor::add_oval_mapping() {
 }
 
 bool RoomEditor::delete_selected_oval_mapping() {
+    if (!active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints)) {
+        return log_rejected_domain_mutation("delete_selected_oval_mapping", OwnershipDomain::OvalMappingAndPoints);
+    }
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         return false;
     }
@@ -14258,6 +14377,9 @@ bool RoomEditor::delete_selected_oval_mapping() {
 }
 
 bool RoomEditor::apply_selected_oval_properties(const RoomOvalToolsPanel::OvalProperties& properties) {
+    if (!active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints)) {
+        return log_rejected_domain_mutation("apply_selected_oval_properties", OwnershipDomain::OvalMappingAndPoints);
+    }
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         return false;
     }
@@ -14453,6 +14575,9 @@ bool RoomEditor::apply_selected_oval_point_details_with_tags(const RoomOvalTools
                                                              const std::vector<std::string>& tags,
                                                              const std::vector<std::string>& anti_tags,
                                                              bool apply_tag_override) {
+    if (!active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints)) {
+        return log_rejected_domain_mutation("apply_selected_oval_point_details", OwnershipDomain::OvalMappingAndPoints);
+    }
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         return false;
     }
@@ -14502,6 +14627,9 @@ bool RoomEditor::apply_selected_oval_point_details_with_tags(const RoomOvalTools
 bool RoomEditor::mutate_selected_oval_center_anchor(
     const std::function<bool(DisplacedAssetAnchorPoint&)>& mutator,
     devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints)) {
+        return log_rejected_domain_mutation("mutate_selected_oval_center_anchor", OwnershipDomain::OvalMappingAndPoints);
+    }
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         return false;
     }
@@ -14589,6 +14717,9 @@ bool RoomEditor::apply_selected_oval_center_details(const RoomOvalToolsPanel::Ce
 }
 
 bool RoomEditor::drag_oval_center_to_screen(SDL_Point screen_point) {
+    if (!active_mode_owns_domain(OwnershipDomain::OvalMappingAndPoints)) {
+        return log_rejected_domain_mutation("drag_oval_center_to_screen", OwnershipDomain::OvalMappingAndPoints);
+    }
     if (!oval_mode_active() || !oval_edit_.center_selected || !oval_edit_.target_asset || !oval_edit_.target_asset->info) {
         return false;
     }
@@ -15206,7 +15337,9 @@ bool RoomEditor::enter_anchor_edit_mode(bool light_editor_mode) {
         const EditorMode target_mode =
             light_editor_mode ? EditorMode::LightEdit : EditorMode::AnchorEdit;
         if (editor_mode_ != target_mode) {
+            const EditorMode previous_mode = editor_mode_;
             editor_mode_ = target_mode;
+            reconcile_mode_ownership_state(previous_mode);
             anchor_edit_.light_editor_mode = light_editor_mode;
             refresh_anchor_mode_handles();
             update_asset_editor_layout();
@@ -15230,13 +15363,17 @@ bool RoomEditor::enter_anchor_edit_mode(bool light_editor_mode) {
     anchor_edit_.had_static_frame_before = true;
     anchor_edit_.static_frame_before = target->static_frame;
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = light_editor_mode ? EditorMode::LightEdit : EditorMode::AnchorEdit;
+    reconcile_mode_ownership_state(previous_mode);
     anchor_edit_.light_editor_mode = light_editor_mode;
     anchor_edit_.animation_id = selection.resolved_animation_id;
     anchor_edit_.frame_index = 0;
 
     if (!apply_anchor_animation_and_frame(anchor_edit_.animation_id, resolve_anchor_mode_frame_index())) {
+        const EditorMode failed_mode = editor_mode_;
         editor_mode_ = EditorMode::Normal;
+        reconcile_mode_ownership_state(failed_mode);
         anchor_edit_ = AnchorEditState{};
         return false;
     }
@@ -15264,7 +15401,9 @@ void RoomEditor::exit_anchor_edit_mode(bool flush_immediately) {
         anchor_edit_.target_asset->static_frame = anchor_edit_.static_frame_before;
     }
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::Normal;
+    reconcile_mode_ownership_state(previous_mode);
     anchor_edit_ = AnchorEditState{};
     sync_anchor_tools_panel();
     update_asset_editor_layout();
@@ -15293,12 +15432,16 @@ bool RoomEditor::enter_oval_anchor_edit_mode() {
     oval_edit_.selected_oval_index = target->info->oval_anchor_mappings.empty() ? -1 : 0;
     oval_edit_.selected_point_index = -1;
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::OvalAnchorEdit;
+    reconcile_mode_ownership_state(previous_mode);
     oval_edit_.animation_id = selection.resolved_animation_id;
     oval_edit_.frame_index = 0;
 
     if (!apply_oval_animation_and_frame(oval_edit_.animation_id, resolve_oval_mode_frame_index())) {
+        const EditorMode failed_mode = editor_mode_;
         editor_mode_ = EditorMode::Normal;
+        reconcile_mode_ownership_state(failed_mode);
         oval_edit_ = OvalAnchorEditState{};
         return false;
     }
@@ -15329,7 +15472,9 @@ void RoomEditor::exit_oval_anchor_edit_mode(bool flush_immediately) {
         oval_edit_.target_asset->static_frame = oval_edit_.static_frame_before;
     }
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::Normal;
+    reconcile_mode_ownership_state(previous_mode);
     oval_edit_ = OvalAnchorEditState{};
     sync_oval_tools_panel();
     update_asset_editor_layout();
@@ -16786,11 +16931,15 @@ bool RoomEditor::enter_movement_edit_mode() {
     }
     normalize_movement_frames_to_current_animation();
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::MovementEdit;
+    reconcile_mode_ownership_state(previous_mode);
     rebuild_movement_rel_positions();
     movement_edit_.frame_index = resolve_movement_mode_frame_index();
     if (!apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index)) {
+        const EditorMode failed_mode = editor_mode_;
         editor_mode_ = EditorMode::Normal;
+        reconcile_mode_ownership_state(failed_mode);
         movement_edit_ = MovementEditState{};
         return false;
     }
@@ -16819,12 +16968,16 @@ bool RoomEditor::enter_hitbox_edit_mode() {
     hitbox_edit_.had_static_frame_before = true;
     hitbox_edit_.static_frame_before = target->static_frame;
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::HitBoxEdit;
+    reconcile_mode_ownership_state(previous_mode);
     hitbox_edit_.animation_id = selection.resolved_animation_id;
     hitbox_edit_.frame_index = 0;
 
     if (!apply_hitbox_animation_and_frame(hitbox_edit_.animation_id, resolve_hitbox_mode_frame_index())) {
+        const EditorMode failed_mode = editor_mode_;
         editor_mode_ = EditorMode::Normal;
+        reconcile_mode_ownership_state(failed_mode);
         hitbox_edit_ = BoxEditState{};
         return false;
     }
@@ -16872,12 +17025,16 @@ bool RoomEditor::enter_attack_box_edit_mode() {
     attack_box_edit_.had_static_frame_before = true;
     attack_box_edit_.static_frame_before = target->static_frame;
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::AttackBoxEdit;
+    reconcile_mode_ownership_state(previous_mode);
     attack_box_edit_.animation_id = selection.resolved_animation_id;
     attack_box_edit_.frame_index = 0;
 
     if (!apply_attack_box_animation_and_frame(attack_box_edit_.animation_id, resolve_attack_box_mode_frame_index())) {
+        const EditorMode failed_mode = editor_mode_;
         editor_mode_ = EditorMode::Normal;
+        reconcile_mode_ownership_state(failed_mode);
         attack_box_edit_ = BoxEditState{};
         return false;
     }
@@ -16925,13 +17082,17 @@ bool RoomEditor::enter_impassable_box_edit_mode() {
     impassable_box_edit_.had_static_frame_before = true;
     impassable_box_edit_.static_frame_before = target->static_frame;
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::ImpassableBoxEdit;
+    reconcile_mode_ownership_state(previous_mode);
     impassable_box_edit_.animation_id = selection.resolved_animation_id;
     impassable_box_edit_.frame_index = 0;
 
     if (!apply_impassable_box_animation_and_frame(impassable_box_edit_.animation_id,
                                                   resolve_impassable_box_mode_frame_index())) {
+        const EditorMode failed_mode = editor_mode_;
         editor_mode_ = EditorMode::Normal;
+        reconcile_mode_ownership_state(failed_mode);
         impassable_box_edit_ = BoxEditState{};
         return false;
     }
@@ -17033,7 +17194,9 @@ bool RoomEditor::enter_floor_box_edit_mode() {
 
     floor_box_edit_ = FloorBoxEditState{};
     floor_box_edit_.target_asset = target;
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::FloorBoxEdit;
+    reconcile_mode_ownership_state(previous_mode);
     if (normalized) {
         target->refresh_runtime_floor_boxes_cache();
         persist_floor_boxes(devmode::core::DevSaveCoordinator::Priority::Debounced,
@@ -17070,7 +17233,9 @@ void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
         }
     }
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::Normal;
+    reconcile_mode_ownership_state(previous_mode);
     movement_edit_ = MovementEditState{};
     update_asset_editor_layout();
 }
@@ -17090,7 +17255,9 @@ void RoomEditor::exit_hitbox_edit_mode(bool persist_changes) {
         hitbox_edit_.target_asset->static_frame = hitbox_edit_.static_frame_before;
     }
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::Normal;
+    reconcile_mode_ownership_state(previous_mode);
     hitbox_edit_ = BoxEditState{};
     sync_hitbox_tools_panel();
     update_asset_editor_layout();
@@ -17111,7 +17278,9 @@ void RoomEditor::exit_attack_box_edit_mode(bool persist_changes) {
         attack_box_edit_.target_asset->static_frame = attack_box_edit_.static_frame_before;
     }
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::Normal;
+    reconcile_mode_ownership_state(previous_mode);
     attack_box_edit_ = BoxEditState{};
     sync_attack_box_tools_panel();
     update_asset_editor_layout();
@@ -17132,7 +17301,9 @@ void RoomEditor::exit_impassable_box_edit_mode(bool persist_changes) {
         impassable_box_edit_.target_asset->static_frame = impassable_box_edit_.static_frame_before;
     }
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::Normal;
+    reconcile_mode_ownership_state(previous_mode);
     impassable_box_edit_ = BoxEditState{};
     sync_impassable_box_tools_panel();
     update_asset_editor_layout();
@@ -17151,7 +17322,9 @@ void RoomEditor::exit_floor_box_edit_mode(bool persist_changes) {
                             "room-floor-box-edit");
     }
 
+    const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::Normal;
+    reconcile_mode_ownership_state(previous_mode);
     close_floor_box_candidate_editor();
     close_floor_box_candidate_editor();
     floor_box_edit_ = FloorBoxEditState{};
@@ -23056,12 +23229,36 @@ int RoomEditorTestAccess::subview_anchor() {
     return static_cast<int>(RoomEditor::AssetEditorSubview::Anchor);
 }
 
+int RoomEditorTestAccess::mode_movement() {
+    return static_cast<int>(RoomEditor::EditorMode::MovementEdit);
+}
+
 int RoomEditorTestAccess::mode_hitbox() {
     return static_cast<int>(RoomEditor::EditorMode::HitBoxEdit);
 }
 
 int RoomEditorTestAccess::mode_attack_box() {
     return static_cast<int>(RoomEditor::EditorMode::AttackBoxEdit);
+}
+
+bool RoomEditorTestAccess::mode_owns_hitbox_domain(const RoomEditor& editor, int mode) {
+    return editor.mode_owns_domain(static_cast<RoomEditor::EditorMode>(mode),
+                                   RoomEditor::OwnershipDomain::HitBoxes);
+}
+
+bool RoomEditorTestAccess::mode_owns_attack_domain(const RoomEditor& editor, int mode) {
+    return editor.mode_owns_domain(static_cast<RoomEditor::EditorMode>(mode),
+                                   RoomEditor::OwnershipDomain::AttackBoxes);
+}
+
+bool RoomEditorTestAccess::mode_owns_movement_domain(const RoomEditor& editor, int mode) {
+    return editor.mode_owns_domain(static_cast<RoomEditor::EditorMode>(mode),
+                                   RoomEditor::OwnershipDomain::Movement);
+}
+
+bool RoomEditorTestAccess::mode_owns_oval_domain(const RoomEditor& editor, int mode) {
+    return editor.mode_owns_domain(static_cast<RoomEditor::EditorMode>(mode),
+                                   RoomEditor::OwnershipDomain::OvalMappingAndPoints);
 }
 
 int RoomEditorTestAccess::active_subview(const RoomEditor& editor) {

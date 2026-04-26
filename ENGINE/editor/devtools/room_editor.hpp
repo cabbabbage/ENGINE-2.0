@@ -594,6 +594,10 @@ private:
     void sync_attack_payload_editor();
     void sync_floor_box_tools_panel();
     void ensure_anchor_selection_valid();
+    bool mode_owns_domain(EditorMode mode, OwnershipDomain domain) const;
+    bool active_mode_owns_domain(OwnershipDomain domain) const;
+    bool log_rejected_domain_mutation(const char* operation, OwnershipDomain domain) const;
+    void reconcile_mode_ownership_state(EditorMode previous_mode);
     bool anchor_visible_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
     bool anchor_mutable_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
     bool anchor_name_exists_across_eligible_animations(const std::shared_ptr<AssetInfo>& target_info,
@@ -813,6 +817,18 @@ private:
         AttackBoxEdit,
         ImpassableBoxEdit,
         FloorBoxEdit,
+    };
+
+    enum class OwnershipDomain {
+        AnchorNonLight,
+        AnchorLight,
+        OvalMappingAndPoints,
+        AnchorPointChildCandidates,
+        Movement,
+        HitBoxes,
+        AttackBoxes,
+        ImpassableGeometry,
+        FloorBoxCandidates,
     };
 
     enum class AssetEditorSubview {
@@ -1228,8 +1244,13 @@ struct RoomEditorTestAccess {
     static int subview_asset_info();
     static int subview_animation_editor();
     static int subview_anchor();
+    static int mode_movement();
     static int mode_hitbox();
     static int mode_attack_box();
+    static bool mode_owns_hitbox_domain(const RoomEditor& editor, int mode);
+    static bool mode_owns_attack_domain(const RoomEditor& editor, int mode);
+    static bool mode_owns_movement_domain(const RoomEditor& editor, int mode);
+    static bool mode_owns_oval_domain(const RoomEditor& editor, int mode);
 
     static int active_subview(const RoomEditor& editor);
     static void set_active_subview(RoomEditor& editor, int subview);

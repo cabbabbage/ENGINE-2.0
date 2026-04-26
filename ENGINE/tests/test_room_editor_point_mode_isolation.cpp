@@ -45,7 +45,7 @@ AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_na
 
 }  // namespace
 
-TEST_CASE("Anchor and light mode mutations operate on shared point ownership") {
+TEST_CASE("Anchor and light mode mutations are isolated by ownership") {
     std::vector<DisplacedAssetAnchorPoint> points{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
@@ -66,25 +66,25 @@ TEST_CASE("Anchor and light mode mutations operate on shared point ownership") {
         devmode::room_anchor_mode::AnchorPointOwner::Light,
         is_reserved));
 
-    CHECK(points[0].name == "light_shared");
+    CHECK(points[0].name == "shared");
     CHECK(points[1].name == "light_shared");
 
     REQUIRE(devmode::room_anchor_mode::delete_anchor_in_mode(
         points,
-        "light_shared",
+        "shared",
         devmode::room_anchor_mode::AnchorPointOwner::NonLight,
         is_reserved));
 
     CHECK(devmode::room_anchor_mode::find_anchor_in_mode(
               points,
-              "light_shared",
+              "shared",
               devmode::room_anchor_mode::AnchorPointOwner::NonLight,
               is_reserved) == nullptr);
     CHECK(devmode::room_anchor_mode::find_anchor_in_mode(
               points,
               "light_shared",
               devmode::room_anchor_mode::AnchorPointOwner::Light,
-              is_reserved) == nullptr);
+              is_reserved) != nullptr);
 }
 
 TEST_CASE("Hitbox and attack box payload writers keep unrelated editor keys untouched") {
@@ -374,5 +374,30 @@ TEST_CASE("RoomEditor blocks camera interaction while attack-box extrusion handl
 
     CHECK(RoomEditorTestAccess::editor_interaction_is_dragging(editor));
     CHECK(RoomEditorTestAccess::editor_interaction_camera_blocked(editor));
+}
+
+TEST_CASE("RoomEditor mode ownership policy isolates editor domains") {
+    RoomEditor editor(nullptr, 1280, 720);
+    const int hitbox = RoomEditorTestAccess::mode_hitbox();
+    const int attack = RoomEditorTestAccess::mode_attack_box();
+    const int movement = RoomEditorTestAccess::mode_movement();
+
+    CHECK(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, hitbox));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, attack));
+    CHECK(RoomEditorTestAccess::mode_owns_attack_domain(editor, attack));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_attack_domain(editor, hitbox));
+    CHECK(RoomEditorTestAccess::mode_owns_movement_domain(editor, movement));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_oval_domain(editor, hitbox));
+}
+
+TEST_CASE("RoomEditor mode-switch domain checks prevent leakage between hitbox and attack") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_hitbox());
+    CHECK(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, RoomEditorTestAccess::mode_hitbox()));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_attack_domain(editor, RoomEditorTestAccess::mode_hitbox()));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_attack_box());
+    CHECK(RoomEditorTestAccess::mode_owns_attack_domain(editor, RoomEditorTestAccess::mode_attack_box()));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, RoomEditorTestAccess::mode_attack_box()));
 }
 #endif

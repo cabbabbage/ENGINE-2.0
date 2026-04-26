@@ -161,7 +161,7 @@ TEST_CASE("Anchor mode payload normalization enforces exact frame count") {
     CHECK(payload["anchor_points"].size() == 3);
 }
 
-TEST_CASE("Anchor mode ownership treats anchor identity as shared across modes") {
+TEST_CASE("Anchor mode ownership isolates light and non-light anchors") {
     std::vector<DisplacedAssetAnchorPoint> anchors{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
@@ -179,15 +179,15 @@ TEST_CASE("Anchor mode ownership treats anchor identity as shared across modes")
     CHECK(anchor_visible_in_mode(anchors[0],
                                  devmode::room_anchor_mode::AnchorPointOwner::NonLight,
                                  is_reserved_name));
-    CHECK(anchor_visible_in_mode(anchors[0],
-                                 devmode::room_anchor_mode::AnchorPointOwner::Light,
-                                 is_reserved_name));
+    CHECK_FALSE(anchor_visible_in_mode(anchors[0],
+                                       devmode::room_anchor_mode::AnchorPointOwner::Light,
+                                       is_reserved_name));
     CHECK(anchor_visible_in_mode(anchors[1],
                                  devmode::room_anchor_mode::AnchorPointOwner::Light,
                                  is_reserved_name));
-    CHECK(anchor_visible_in_mode(anchors[1],
-                                 devmode::room_anchor_mode::AnchorPointOwner::NonLight,
-                                 is_reserved_name));
+    CHECK_FALSE(anchor_visible_in_mode(anchors[1],
+                                       devmode::room_anchor_mode::AnchorPointOwner::NonLight,
+                                       is_reserved_name));
     CHECK(!anchor_mutable_in_mode(anchors[4],
                                   devmode::room_anchor_mode::AnchorPointOwner::NonLight,
                                   is_reserved_name));
@@ -196,7 +196,7 @@ TEST_CASE("Anchor mode ownership treats anchor identity as shared across modes")
                                   is_reserved_name));
 }
 
-TEST_CASE("Anchor mode light delete removes only light-owned entries for selected identity") {
+TEST_CASE("Anchor mode rename and delete respect ownership split for same names") {
     std::vector<DisplacedAssetAnchorPoint> anchors{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
@@ -217,12 +217,12 @@ TEST_CASE("Anchor mode light delete removes only light-owned entries for selecte
                                   is_reserved_name));
 
     CHECK(anchors[0].name == "anchor_renamed");
-    CHECK(anchors[1].name == "anchor_renamed");
-    CHECK(anchors[2].name == "anchor_renamed");
+    CHECK(anchors[1].name == "shared");
+    CHECK(anchors[2].name == "shared");
     CHECK(anchors[3].name == "other");
 
     REQUIRE(delete_anchor_in_mode(anchors,
-                                  "anchor_renamed",
+                                  "shared",
                                   devmode::room_anchor_mode::AnchorPointOwner::Light,
                                   is_reserved_name));
 
@@ -240,7 +240,7 @@ TEST_CASE("Anchor mode light delete removes only light-owned entries for selecte
                               is_reserved_name) != nullptr);
     const auto remaining_light_it = std::find_if(
         anchors.begin(), anchors.end(), [](const DisplacedAssetAnchorPoint& anchor) {
-            return anchor.name == "anchor_renamed" && anchor.has_light_data;
+            return anchor.name == "shared" && anchor.has_light_data;
         });
     CHECK(remaining_light_it == anchors.end());
 }

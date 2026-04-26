@@ -29,6 +29,14 @@ std::string lowercase_ascii(std::string value) {
     return value;
 }
 
+bool is_valid_stage_name(const std::string& stage_name) {
+    const std::string lowered = lowercase_ascii(stage_name);
+    return lowered == "auto" ||
+           lowered == "vertex" ||
+           lowered == "fragment" ||
+           lowered == "compute";
+}
+
 bool parse_u64_hex_or_dec(const nlohmann::json& value, std::uint64_t& out_value) {
     out_value = 0;
     if (value.is_number_unsigned()) {
@@ -141,6 +149,12 @@ bool parse_binary_descriptor(const nlohmann::json& raw,
         rel_path = raw.value("path", std::string{});
         out_desc.entrypoint = raw.value("entrypoint", std::string("main"));
         out_desc.stage = raw.value("stage", std::string("auto"));
+        out_desc.stage = lowercase_ascii(out_desc.stage);
+        if (!is_valid_stage_name(out_desc.stage)) {
+            out_error = "Invalid shader stage '" + out_desc.stage +
+                        "' (expected auto/vertex/fragment/compute)";
+            return false;
+        }
         std::uint64_t expected_size = 0;
         const bool has_expected_size =
             raw.contains("file_size_bytes") &&
@@ -201,6 +215,7 @@ bool parse_binary_descriptor(const nlohmann::json& raw,
 
     out_desc.hash_fnv1a64 = computed_hash;
     out_desc.file_size_bytes = static_cast<std::uint64_t>(bytes.size());
+    out_desc.payload = std::move(bytes);
     out_desc.available = true;
     out_error.clear();
     return true;

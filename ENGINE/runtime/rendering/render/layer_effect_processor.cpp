@@ -931,7 +931,7 @@ void LayerEffectProcessor::destroy_lighting_resources() {
     for (auto& [key, texture] : light_falloff_textures_) {
         (void)key;
         if (texture) {
-            SDL_DestroyTexture(texture);
+            render_diagnostics::destroy_texture(texture);
         }
     }
     light_falloff_textures_.clear();
@@ -965,11 +965,11 @@ SDL_Texture* LayerEffectProcessor::ensure_light_falloff_texture(float falloff) {
                    static_cast<float>(kMinFalloffTextureSize),
                    static_cast<float>(kMaxFalloffTextureSize))));
 
-    SDL_Texture* texture = SDL_CreateTexture(renderer_,
-                                             SDL_PIXELFORMAT_RGBA8888,
-                                             SDL_TEXTUREACCESS_STREAMING,
-                                             texture_size,
-                                             texture_size);
+    SDL_Texture* texture = render_diagnostics::create_texture(renderer_,
+                                                              SDL_PIXELFORMAT_RGBA8888,
+                                                              SDL_TEXTUREACCESS_STREAMING,
+                                                              texture_size,
+                                                              texture_size);
     if (!texture) {
         return nullptr;
     }
@@ -977,7 +977,7 @@ SDL_Texture* LayerEffectProcessor::ensure_light_falloff_texture(float falloff) {
     void* pixels = nullptr;
     int pitch = 0;
     if (!SDL_LockTexture(texture, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
-        SDL_DestroyTexture(texture);
+        render_diagnostics::destroy_texture(texture);
         return nullptr;
     }
 

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class ShaderPackageLibrary {
 public:
@@ -13,6 +14,7 @@ public:
         std::string stage = "auto";
         std::uint64_t hash_fnv1a64 = 0;
         std::uint64_t file_size_bytes = 0;
+        std::vector<std::uint8_t> payload{};
         bool available = false;
     };
 

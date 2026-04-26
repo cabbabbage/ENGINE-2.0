@@ -7,7 +7,14 @@ std::size_t ShaderPipelineKeyHash::operator()(const ShaderPipelineKey& key) cons
     const std::size_t variant_hash = std::hash<std::string>{}(key.variant);
     const std::size_t color_hash = std::hash<int>{}(static_cast<int>(key.color_format));
     const std::size_t depth_hash = std::hash<int>{}(static_cast<int>(key.depth_format));
-    return shader_hash ^ (variant_hash << 1) ^ (color_hash << 2) ^ (depth_hash << 3);
+    const std::size_t sample_hash = std::hash<int>{}(static_cast<int>(key.sample_count));
+    const std::size_t state_hash = std::hash<std::uint32_t>{}(key.render_state_key);
+    return shader_hash ^
+           (variant_hash << 1) ^
+           (color_hash << 2) ^
+           (depth_hash << 3) ^
+           (sample_hash << 4) ^
+           (state_hash << 5);
 }
 
 void ShaderPipelineCache::register_hit(const ShaderPipelineKey& key) {

@@ -12,12 +12,16 @@ struct ShaderPipelineKey {
     std::string variant;
     SDL_GPUTextureFormat color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
     SDL_GPUTextureFormat depth_format = SDL_GPU_TEXTUREFORMAT_INVALID;
+    SDL_GPUSampleCount sample_count = SDL_GPU_SAMPLECOUNT_1;
+    std::uint32_t render_state_key = 0;
 
     bool operator==(const ShaderPipelineKey& other) const {
         return shader_id == other.shader_id &&
                variant == other.variant &&
                color_format == other.color_format &&
-               depth_format == other.depth_format;
+               depth_format == other.depth_format &&
+               sample_count == other.sample_count &&
+               render_state_key == other.render_state_key;
     }
 };
 

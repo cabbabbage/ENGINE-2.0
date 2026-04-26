@@ -1986,7 +1986,11 @@ void SceneRenderer::refresh_movement_debug_snapshots(const std::vector<Asset*>& 
 }
 
 void SceneRenderer::render() {
-    if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0 || !ensure_scene_target()) {
+    const bool gpu_mode_active = runtime_renderer_mode_ == RuntimeRendererMode::Gpu;
+    if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
+        return;
+    }
+    if (!gpu_mode_active && !ensure_scene_target()) {
         return;
     }
 
@@ -1995,7 +1999,6 @@ void SceneRenderer::render() {
     render_diagnostics::begin_frame();
     render_diagnostics::set_texture_memory_usage(render_diagnostics::tracked_texture_bytes(), false);
 
-    render_internal::clear_gameplay_target_to_color(renderer_, scene_composite_tex_, map_clear_color_);
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
     const WarpedScreenGrid::RealismSettings realism = cam.get_settings();
@@ -2273,6 +2276,7 @@ void SceneRenderer::render() {
             std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(screen_height_))};
         render_pipeline::BlurCompositeResult blur_result{};
 
+        render_internal::clear_gameplay_target_to_color(renderer_, scene_composite_tex_, map_clear_color_);
         render_diagnostics::set_renderer_runtime_info("legacy", "sdl_renderer", "unknown");
         floor_texture = floor_composer_ ? floor_composer_->compose(cam,
                                                                    grid,

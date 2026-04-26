@@ -7,6 +7,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <utility>
 
 namespace {
 
@@ -469,85 +470,52 @@ bool GpuSceneRenderer::has_shader_variant(const std::string& shader_name) const 
     return shader_packages_.find(shader_name) != nullptr;
 }
 
-void GpuSceneRenderer::touch_graphics_pipeline(const std::string& shader_name,
-                                               std::uint32_t render_state_key) {
-    const ShaderPipelineKey key = make_pipeline_key(shader_name, render_state_key);
-    (void)pipeline_cache_.get_or_create_graphics_pipeline(
+SDL_GPUGraphicsPipeline* GpuSceneRenderer::get_graphics_pipeline(const std::string& pipeline_name,
+                                                                 std::uint32_t render_state_key) {
+    std::string pipeline_error;
+    const ShaderPipelineKey key = make_pipeline_key(pipeline_name, render_state_key);
+    SDL_GPUGraphicsPipeline* pipeline = pipeline_cache_.get_or_create_graphics_pipeline(
         key,
-        []() -> SDL_GPUGraphicsPipeline* { return nullptr; });
+        [&]() { return create_graphics_pipeline(pipeline_name, pipeline_error); });
+    if (!pipeline && !pipeline_error.empty()) {
+        vibble::log::error("[GpuSceneRenderer] Graphics pipeline resolve failed for '" +
+                           pipeline_name + "': " + pipeline_error);
+    }
+    return pipeline;
 }
 
-bool GpuSceneRenderer::dispatch_compute_light_binning(Uint32 group_count_x,
-                                                      Uint32 group_count_y,
-                                                      std::string* out_error) {
-    if (!device_ || !device_->gpu_device()) {
-        if (out_error) {
-            *out_error = "GPU device unavailable";
-        }
-        return false;
-    }
-    const GpuRenderDevice::FrameState& frame_state = device_->frame_state();
-    if (!frame_state.command_buffer) {
-        if (out_error) {
-            *out_error = "No active GPU frame command buffer";
-        }
-        return false;
-    }
-
+SDL_GPUComputePipeline* GpuSceneRenderer::get_compute_pipeline(const std::string& pipeline_name,
+                                                               std::uint32_t render_state_key) {
     std::string pipeline_error;
-    const ShaderPipelineKey key = make_pipeline_key(kRequiredComputePipeline, kComputeLightBinningStateKey);
+    const ShaderPipelineKey key = make_pipeline_key(pipeline_name, render_state_key);
     SDL_GPUComputePipeline* pipeline = pipeline_cache_.get_or_create_compute_pipeline(
         key,
-        [&]() { return create_compute_pipeline(kRequiredComputePipeline, pipeline_error); });
-    if (!pipeline) {
-        if (out_error) {
-            *out_error = pipeline_error.empty() ? "compute pipeline unavailable" : pipeline_error;
-        }
-        return false;
+        [&]() { return create_compute_pipeline(pipeline_name, pipeline_error); });
+    if (!pipeline && !pipeline_error.empty()) {
+        vibble::log::error("[GpuSceneRenderer] Compute pipeline resolve failed for '" +
+                           pipeline_name + "': " + pipeline_error);
     }
-
-    SDL_GPUComputePass* compute_pass = SDL_BeginGPUComputePass(frame_state.command_buffer, nullptr, 0, nullptr, 0);
-    if (!compute_pass) {
-        if (out_error) {
-            *out_error = std::string("SDL_BeginGPUComputePass failed: ") + SDL_GetError();
-        }
-        return false;
-    }
-
-    SDL_BindGPUComputePipeline(compute_pass, pipeline);
-    SDL_DispatchGPUCompute(compute_pass,
-                           std::max<Uint32>(1, group_count_x),
-                           std::max<Uint32>(1, group_count_y),
-                           1);
-    SDL_EndGPUComputePass(compute_pass);
-    if (out_error) {
-        out_error->clear();
-    }
-    return true;
+    return pipeline;
 }
 
-void GpuSceneRenderer::add_render_pass(std::string name,
-                                       GpuFrameGraph::PassCallback callback,
-                                       std::vector<GpuFrameGraph::ResourceDependency> resources) {
-    frame_graph_.add_render_pass(std::move(name), std::move(callback), std::move(resources));
+void GpuSceneRenderer::add_pass(GpuFrameGraph::PassDescriptor pass) {
+    frame_graph_.add_pass(std::move(pass));
 }
 
-void GpuSceneRenderer::add_copy_pass(std::string name,
-                                     GpuFrameGraph::PassCallback callback,
-                                     std::vector<GpuFrameGraph::ResourceDependency> resources) {
-    frame_graph_.add_copy_pass(std::move(name), std::move(callback), std::move(resources));
-}
-
-void GpuSceneRenderer::add_compute_pass(std::string name,
-                                        GpuFrameGraph::PassCallback callback,
-                                        std::vector<GpuFrameGraph::ResourceDependency> resources) {
-    frame_graph_.add_compute_pass(std::move(name), std::move(callback), std::move(resources));
-}
-
-void GpuSceneRenderer::begin_frame() {
+bool GpuSceneRenderer::begin_frame(std::string* out_error) {
     std::string frame_error;
     if (device_ && !device_->begin_frame(frame_error)) {
         vibble::log::error("[GpuSceneRenderer] begin_frame failed: " + frame_error);
+        if (out_error) {
+            *out_error = frame_error;
+        }
+        return false;
+    }
+    if (!device_) {
+        if (out_error) {
+            *out_error = "GPU device is unavailable";
+        }
+        return false;
     }
     frame_graph_.reset();
     render_diagnostics::set_renderer_runtime_info("gpu",
@@ -559,13 +527,37 @@ void GpuSceneRenderer::begin_frame() {
     render_diagnostics::set_texture_memory_usage(texture_memory_bytes, texture_memory_known);
     last_pipeline_hit_total_ = pipeline_cache_.total_hits();
     last_pipeline_miss_total_ = pipeline_cache_.total_misses();
+    if (out_error) {
+        out_error->clear();
+    }
+    return true;
 }
 
 bool GpuSceneRenderer::end_frame(std::string* out_error) {
+    const GpuRenderDevice::FrameState& frame_state = device_ ? device_->frame_state() : GpuRenderDevice::FrameState{};
     GpuFrameGraph::ExecuteOptions execute_options{};
     execute_options.strict_resource_validation = true;
     execute_options.fail_on_validation_error = true;
-    const GpuFrameGraph::ExecutionStats graph_stats = frame_graph_.execute(execute_options);
+    execute_options.fail_on_missing_resource = true;
+    execute_options.fail_on_missing_pipeline = true;
+    GpuFrameGraph::ExecuteContext execute_context{};
+    execute_context.command_buffer = frame_state.command_buffer;
+    execute_context.swapchain_texture = frame_state.swapchain_texture;
+    execute_context.swapchain_width = frame_state.swapchain_width;
+    execute_context.swapchain_height = frame_state.swapchain_height;
+    execute_context.resolve_texture = [this](const std::string& name) {
+        return find_texture_resource(name);
+    };
+    execute_context.resolve_buffer = [this](const std::string& name) {
+        return find_buffer_resource(name);
+    };
+    execute_context.resolve_graphics_pipeline = [this](const std::string& name, std::uint32_t state_key) {
+        return get_graphics_pipeline(name, state_key);
+    };
+    execute_context.resolve_compute_pipeline = [this](const std::string& name, std::uint32_t state_key) {
+        return get_compute_pipeline(name, state_key);
+    };
+    const GpuFrameGraph::ExecutionStats graph_stats = frame_graph_.execute(execute_context, execute_options);
     if (!graph_stats.success) {
         std::string frame_error = graph_stats.error_message.empty()
             ? "Frame graph dependency validation failed"

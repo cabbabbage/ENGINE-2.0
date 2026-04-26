@@ -35,6 +35,8 @@ struct RenderFrameStats {
     std::uint64_t gpu_pipeline_cache_hits = 0;
     std::uint64_t gpu_pipeline_cache_misses = 0;
     double gpu_pipeline_cache_hit_rate = 1.0;
+    std::uint32_t sdl_renderer_target_call_count = 0;
+    std::uint32_t sdl_renderer_draw_call_count = 0;
 };
 
 namespace render_diagnostics {

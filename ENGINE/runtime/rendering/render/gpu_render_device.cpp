@@ -184,9 +184,18 @@ bool GpuRenderDevice::begin_frame(std::string& out_error) {
         return false;
     }
 
-    frame_state_.command_buffer = SDL_AcquireGPUCommandBuffer(gpu_device_);
+    static constexpr int kAcquireCommandBufferRetries = 3;
+    for (int attempt = 0; attempt < kAcquireCommandBufferRetries; ++attempt) {
+        frame_state_.command_buffer = SDL_AcquireGPUCommandBuffer(gpu_device_);
+        if (frame_state_.command_buffer) {
+            break;
+        }
+        if (attempt + 1 < kAcquireCommandBufferRetries) {
+            SDL_Delay(1);
+        }
+    }
     if (!frame_state_.command_buffer) {
-        out_error = "Failed to acquire GPU command buffer";
+        out_error = "Failed to acquire GPU command buffer: " + safe_string(SDL_GetError());
         return false;
     }
 

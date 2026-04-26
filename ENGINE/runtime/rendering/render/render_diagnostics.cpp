@@ -113,6 +113,8 @@ void begin_frame() {
     g_frame_stats.gpu_pipeline_cache_hits = 0;
     g_frame_stats.gpu_pipeline_cache_misses = 0;
     g_frame_stats.gpu_pipeline_cache_hit_rate = 1.0;
+    g_frame_stats.sdl_renderer_target_call_count = 0;
+    g_frame_stats.sdl_renderer_draw_call_count = 0;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -261,6 +263,7 @@ SDL_Texture* create_texture(SDL_Renderer* renderer,
 }
 
 bool set_render_target(SDL_Renderer* renderer, SDL_Texture* texture) {
+    ++g_frame_stats.sdl_renderer_target_call_count;
     if (texture != g_last_render_target) {
         ++g_frame_stats.render_target_switch_count;
         g_last_render_target = texture;
@@ -278,6 +281,7 @@ bool render_texture(SDL_Renderer* renderer,
                     const SDL_FRect* dstrect) {
     const bool ok = SDL_RenderTexture(renderer, texture, srcrect, dstrect);
     if (ok) {
+        ++g_frame_stats.sdl_renderer_draw_call_count;
         add_draw_call_count();
     }
     return ok;
@@ -291,6 +295,7 @@ bool render_geometry(SDL_Renderer* renderer,
                      int num_indices) {
     const bool ok = SDL_RenderGeometry(renderer, texture, vertices, num_vertices, indices, num_indices);
     if (ok) {
+        ++g_frame_stats.sdl_renderer_draw_call_count;
         add_draw_call_count();
     }
     return ok;

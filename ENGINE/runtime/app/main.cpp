@@ -569,6 +569,8 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                    << " pipeline_cache_hits=" << stats.gpu_pipeline_cache_hits
                    << " pipeline_cache_misses=" << stats.gpu_pipeline_cache_misses
                    << " pipeline_cache_hit_rate=" << stats.gpu_pipeline_cache_hit_rate
+                   << " sdl_target_calls=" << stats.sdl_renderer_target_call_count
+                   << " sdl_draw_calls=" << stats.sdl_renderer_draw_call_count
                    << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)
                    << " backend=" << backend_name
                    << " present_mode=" << present_mode;

@@ -10,7 +10,7 @@
 namespace {
 
 std::uint64_t fnv1a64_bytes(const std::vector<std::uint8_t>& bytes) {
-    constexpr std::uint64_t kOffsetBasis = 1469598103934665603ull;
+    constexpr std::uint64_t kOffsetBasis = 14695981039346656037ull;
     constexpr std::uint64_t kPrime = 1099511628211ull;
     std::uint64_t hash = kOffsetBasis;
     for (const std::uint8_t b : bytes) {

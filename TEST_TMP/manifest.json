@@ -1,0 +1,32 @@
+{
+  "assets": {
+    "hero": {
+      "animations": {
+        "attack": {
+          "tags": [
+            "combat",
+            "melee"
+          ]
+        },
+        "idle": {
+          "tags": [
+            "locomotion",
+            "ground"
+          ]
+        }
+      }
+    },
+    "mage": {
+      "animations": {
+        "cast": {
+          "tags": [
+            "magic",
+            "combat"
+          ]
+        }
+      }
+    }
+  },
+  "maps": {},
+  "version": 2
+}

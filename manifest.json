@@ -10931,19 +10931,6 @@
           "invert_y": false,
           "invert_z": false,
           "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -10970,8 +10957,16 @@
           "name": "Impassable Shape",
           "points": [
             {
-              "x": 63,
-              "y": 661
+              "x": 411,
+              "y": 788
+            },
+            {
+              "x": 26,
+              "y": 788
+            },
+            {
+              "x": 85,
+              "y": 667
             },
             {
               "x": 993,
@@ -10982,13 +10977,21 @@
               "y": 795
             },
             {
-              "x": 23,
-              "y": 803
+              "x": 651,
+              "y": 791
+            },
+            {
+              "x": 657,
+              "y": 821
+            },
+            {
+              "x": 413,
+              "y": 820
             }
           ]
         }
       ],
-      "movement_enabled": true,
+      "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
@@ -14755,7 +14758,7 @@
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
-          "locked": false,
+          "locked": true,
           "movement": [
             [
               0,
@@ -14795,7 +14798,7 @@
             "dz": 0
           },
           "number_of_frames": 6,
-          "on_end": "default",
+          "on_end": "loop",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -21624,9 +21627,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            132,
             242,
             36,
-            54,
             255
           ],
           "edge_smoothness": 2,
@@ -22020,16 +22023,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -666,
-          "camera_center_dz": -642,
-          "camera_height_px": 2579,
-          "camera_tilt_deg": 45.24452209472656,
+          "camera_center_dx": -1399,
+          "camera_center_dz": -1216,
+          "camera_height_px": 343,
+          "camera_tilt_deg": 48.13273239135742,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            226,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,

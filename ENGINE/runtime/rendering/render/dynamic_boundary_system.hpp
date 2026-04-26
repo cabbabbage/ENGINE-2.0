@@ -133,6 +133,15 @@ public:
     static float max_random_jitter();
     static float sample_size_variation_from_hash(std::uint64_t key_hash);
     static float compute_effective_base_scale(const AssetInfo& info, float size_variation_sample);
+    static float compute_depth_efficiency_keep_ratio(double depth_distance,
+                                                     double max_cull_depth,
+                                                     float threshold_ratio,
+                                                     float min_density_ratio);
+    static bool  should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio);
+    static void  advance_frame_state(FrameState& frame_state,
+                                     const std::vector<BoundaryFrame>& frames,
+                                     float delta_ms,
+                                     bool freeze_animation);
 
     bool is_initialized() const { return initialized_; }
     void invalidate_config();

@@ -43,6 +43,13 @@ inline float make_positive_scale(float value, float fallback = 1.0f) {
     return fallback;
 }
 
+inline float clamp_unit_interval(float value, float fallback) {
+    if (!std::isfinite(value)) {
+        return std::clamp(fallback, 0.0f, 1.0f);
+    }
+    return std::clamp(value, 0.0f, 1.0f);
+}
+
 inline SDL_Point rounded_world_point(const SDL_FPoint& point) {
     return SDL_Point{
         static_cast<int>(std::lround(point.x)),
@@ -397,6 +404,15 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         static_assignment_fingerprint_ = next_static;
     }
 
+    const WarpedScreenGrid::RealismSettings realism_settings = cam.get_settings();
+    const double max_cull_depth = std::max(1.0, static_cast<double>(realism_settings.max_cull_depth));
+    const float depth_efficiency_threshold_ratio =
+        clamp_unit_interval(realism_settings.dynamic_renderer_depth_efficiency_threshold, 0.40f);
+    const float depth_efficiency_min_density_ratio =
+        clamp_unit_interval(realism_settings.dynamic_renderer_depth_efficiency_min_density_ratio, 0.10f);
+    const double depth_efficiency_threshold_depth =
+        max_cull_depth * static_cast<double>(depth_efficiency_threshold_ratio);
+
     for (const StaticCellAssignment& assignment : static_assignments_) {
         if (assignment.boundary_type_index < 0 || assignment.boundary_type_index >= static_cast<int>(boundary_types_.size())) {
             continue;
@@ -405,17 +421,28 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         if (assignment.assignment.is_null || assignment.assignment.resolved_asset_name.empty()) {
             continue;
         }
-        BoundaryAssetRuntime* candidate =
-            ensure_candidate_runtime(btype, assignment.assignment.resolved_asset_name);
-        if (!candidate || candidate->is_null || candidate->frames.empty()) {
-            continue;
-        }
 
         const double depth_from_anchor =
             render_depth::depth_from_anchor(cam.anchor_world_z(), static_cast<double>(assignment.world_z));
         const double depth_distance = std::fabs(depth_from_anchor);
-        const double max_cull_depth = static_cast<double>(cam.get_settings().max_cull_depth);
         if (!std::isfinite(depth_distance) || depth_distance > max_cull_depth) {
+            continue;
+        }
+        const float depth_keep_ratio = compute_depth_efficiency_keep_ratio(depth_distance,
+                                                                           max_cull_depth,
+                                                                           depth_efficiency_threshold_ratio,
+                                                                           depth_efficiency_min_density_ratio);
+        if (!(depth_keep_ratio > 0.0f)) {
+            continue;
+        }
+        if (depth_keep_ratio < 1.0f &&
+            !should_keep_depth_efficiency_sample(hash_key(assignment.key), depth_keep_ratio)) {
+            continue;
+        }
+
+        BoundaryAssetRuntime* candidate =
+            ensure_candidate_runtime(btype, assignment.assignment.resolved_asset_name);
+        if (!candidate || candidate->is_null || candidate->frames.empty()) {
             continue;
         }
 
@@ -428,28 +455,21 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         }
 
         auto& frame_state = animation_states_[assignment.key];
-        frame_state.elapsed_ms += delta_ms;
         const int total_frames = static_cast<int>(candidate->frames.size());
         if (total_frames <= 0) {
             continue;
         }
+        const bool freeze_animation = depth_distance > depth_efficiency_threshold_depth;
+        advance_frame_state(frame_state, candidate->frames, delta_ms, freeze_animation);
 
         int current_index = frame_state.frame_index % total_frames;
+        if (current_index < 0) {
+            current_index += total_frames;
+        }
         float frame_duration = candidate->frames[current_index].duration_ms;
         if (!(frame_duration > 0.0f)) {
             frame_duration = kDefaultAnimationFrameMs;
         }
-        while (frame_state.elapsed_ms >= frame_duration && total_frames > 0) {
-            frame_state.elapsed_ms -= frame_duration;
-            current_index = (current_index + 1) % total_frames;
-            frame_state.frame_index = current_index;
-            frame_duration = candidate->frames[current_index].duration_ms;
-            if (!(frame_duration > 0.0f)) {
-                frame_duration = kDefaultAnimationFrameMs;
-            }
-        }
-
-        frame_state.frame_index = current_index;
         const BoundaryFrame& active_frame = candidate->frames[current_index];
         const BoundaryScaleResult scale_result =
             compute_boundary_asset_scale(*candidate,
@@ -948,6 +968,108 @@ float DynamicBoundarySystem::compute_effective_base_scale(const AssetInfo& info,
         return authored_base;
     }
     return authored_base * multiplier;
+}
+
+float DynamicBoundarySystem::compute_depth_efficiency_keep_ratio(double depth_distance,
+                                                                 double max_cull_depth,
+                                                                 float threshold_ratio,
+                                                                 float min_density_ratio) {
+    if (!std::isfinite(depth_distance) || !std::isfinite(max_cull_depth) || max_cull_depth <= 0.0) {
+        return 0.0f;
+    }
+
+    const float clamped_threshold_ratio = clamp_unit_interval(threshold_ratio, 0.40f);
+    const float clamped_min_density_ratio = clamp_unit_interval(min_density_ratio, 0.10f);
+    if (depth_distance <= 0.0) {
+        return 1.0f;
+    }
+
+    const double threshold_depth = max_cull_depth * static_cast<double>(clamped_threshold_ratio);
+    if (depth_distance <= threshold_depth) {
+        return 1.0f;
+    }
+    if (clamped_threshold_ratio >= 1.0f) {
+        return 1.0f;
+    }
+    if (depth_distance >= max_cull_depth) {
+        return clamped_min_density_ratio;
+    }
+
+    const double span = max_cull_depth - threshold_depth;
+    if (span <= 1e-6) {
+        return 1.0f;
+    }
+    const double t = std::clamp((depth_distance - threshold_depth) / span, 0.0, 1.0);
+    const double keep_ratio =
+        1.0 + (static_cast<double>(clamped_min_density_ratio) - 1.0) * t;
+    if (!std::isfinite(keep_ratio)) {
+        return clamped_min_density_ratio;
+    }
+    return std::clamp(static_cast<float>(keep_ratio), clamped_min_density_ratio, 1.0f);
+}
+
+bool DynamicBoundarySystem::should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio) {
+    const float clamped_keep_ratio = clamp_unit_interval(keep_ratio, 0.0f);
+    if (clamped_keep_ratio <= 0.0f) {
+        return false;
+    }
+    if (clamped_keep_ratio >= 1.0f) {
+        return true;
+    }
+
+    const std::uint64_t mixed_hash = mix_uint64(key_hash, 0x4450524546464943ULL);
+    const double sample =
+        static_cast<double>(mixed_hash) /
+        static_cast<double>(std::numeric_limits<std::uint64_t>::max());
+    return sample <= static_cast<double>(clamped_keep_ratio);
+}
+
+void DynamicBoundarySystem::advance_frame_state(FrameState& frame_state,
+                                                const std::vector<BoundaryFrame>& frames,
+                                                float delta_ms,
+                                                bool freeze_animation) {
+    if (frames.empty()) {
+        return;
+    }
+    if (!std::isfinite(delta_ms) || delta_ms < 0.0f) {
+        delta_ms = 0.0f;
+    }
+
+    const int total_frames = static_cast<int>(frames.size());
+    if (total_frames <= 0) {
+        return;
+    }
+    int current_index = frame_state.frame_index % total_frames;
+    if (current_index < 0) {
+        current_index += total_frames;
+    }
+
+    float elapsed_ms = frame_state.elapsed_ms;
+    if (!std::isfinite(elapsed_ms) || elapsed_ms < 0.0f) {
+        elapsed_ms = 0.0f;
+    }
+    if (freeze_animation || delta_ms <= 0.0f) {
+        frame_state.frame_index = current_index;
+        frame_state.elapsed_ms = elapsed_ms;
+        return;
+    }
+
+    elapsed_ms += delta_ms;
+    float frame_duration = frames[current_index].duration_ms;
+    if (!(frame_duration > 0.0f)) {
+        frame_duration = kDefaultAnimationFrameMs;
+    }
+    while (elapsed_ms >= frame_duration && total_frames > 0) {
+        elapsed_ms -= frame_duration;
+        current_index = (current_index + 1) % total_frames;
+        frame_duration = frames[current_index].duration_ms;
+        if (!(frame_duration > 0.0f)) {
+            frame_duration = kDefaultAnimationFrameMs;
+        }
+    }
+
+    frame_state.frame_index = current_index;
+    frame_state.elapsed_ms = elapsed_ms;
 }
 
 void DynamicBoundarySystem::ensure_region_cache_valid(const world::WorldGrid& grid,

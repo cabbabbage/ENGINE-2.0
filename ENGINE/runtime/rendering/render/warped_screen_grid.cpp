@@ -734,6 +734,16 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     if (!std::isfinite(settings_.max_cull_depth) || settings_.max_cull_depth < 1.0f) {
         settings_.max_cull_depth = 1.0f;
     }
+    if (!std::isfinite(settings_.dynamic_renderer_depth_efficiency_threshold)) {
+        settings_.dynamic_renderer_depth_efficiency_threshold = 0.40f;
+    }
+    settings_.dynamic_renderer_depth_efficiency_threshold =
+        std::clamp(settings_.dynamic_renderer_depth_efficiency_threshold, 0.0f, 1.0f);
+    if (!std::isfinite(settings_.dynamic_renderer_depth_efficiency_min_density_ratio)) {
+        settings_.dynamic_renderer_depth_efficiency_min_density_ratio = 0.10f;
+    }
+    settings_.dynamic_renderer_depth_efficiency_min_density_ratio =
+        std::clamp(settings_.dynamic_renderer_depth_efficiency_min_density_ratio, 0.0f, 1.0f);
     if (!std::isfinite(settings_.layer_depth_interval) || settings_.layer_depth_interval < 1.0f) {
         settings_.layer_depth_interval = 1.0f;
     }
@@ -1486,6 +1496,14 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_bool("min_visible_uses_light_radius", updated.min_visible_uses_light_radius);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
+    read_float("dynamic_renderer_depth_efficiency_threshold",
+               updated.dynamic_renderer_depth_efficiency_threshold,
+               0.0f,
+               1.0f);
+    read_float("dynamic_renderer_depth_efficiency_min_density_ratio",
+               updated.dynamic_renderer_depth_efficiency_min_density_ratio,
+               0.0f,
+               1.0f);
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
     read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
     read_float("front_layer_light_strength_multiplier",
@@ -1577,6 +1595,10 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["min_visible_uses_light_radius"] = settings_.min_visible_uses_light_radius;
     result["base_height_px"] = settings_.base_height_px;
     result["max_cull_depth"] = settings_.max_cull_depth;
+    result["dynamic_renderer_depth_efficiency_threshold"] =
+        settings_.dynamic_renderer_depth_efficiency_threshold;
+    result["dynamic_renderer_depth_efficiency_min_density_ratio"] =
+        settings_.dynamic_renderer_depth_efficiency_min_density_ratio;
     result["layer_depth_interval"] = settings_.layer_depth_interval;
     result["layer_depth_curve"] = settings_.layer_depth_curve;
     result["front_layer_light_strength_multiplier"] = settings_.front_layer_light_strength_multiplier;

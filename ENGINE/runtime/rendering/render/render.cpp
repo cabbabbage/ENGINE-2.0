@@ -967,13 +967,15 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
             return;
         }
 
-        SDL_FPoint base_screen{};
-        if (!project_world_point(cam,
-                                 sprite.world_pos.x,
-                                 sprite.world_pos.y,
-                                 static_cast<float>(sprite.world_z),
-                                 base_screen)) {
-            return;
+        SDL_FPoint base_screen = sprite.screen_pos;
+        if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y)) {
+            if (!project_world_point(cam,
+                                     sprite.world_pos.x,
+                                     sprite.world_pos.y,
+                                     static_cast<float>(sprite.world_z),
+                                     base_screen)) {
+                return;
+            }
         }
 
         const float half_width = sprite.world_width * 0.5f;

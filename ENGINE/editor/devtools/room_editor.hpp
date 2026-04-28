@@ -126,7 +126,7 @@ public:
     bool has_active_modal() const;
     void pulse_active_modal_header();
 
-    void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info);
+    void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info, const SDL_Point* committed_world_pos = nullptr);
 
     void toggle_room_config();
     void open_room_config();
@@ -182,6 +182,19 @@ private:
     bool regenerate_geometry(Room* room);
     nlohmann::json* find_area_entry_json(Room* room, const std::string& area_name) const;
     void ensure_area_anchor_spawn_entry(Room* room, const std::string& area_name);
+    struct PendingLibraryPlacement {
+        SDL_Point world_point{0, 0};
+        std::string room_name;
+        Uint32 requested_at_ticks = 0;
+        std::uint64_t request_serial = 0;
+        bool snap_enabled = false;
+        int snap_resolution = 0;
+    };
+    void begin_library_placement(const SDL_Point& world_point);
+    void clear_library_placement();
+    bool has_pending_library_placement() const;
+    std::optional<SDL_Point> resolve_pending_library_placement_world() const;
+    bool commit_library_asset_placement(const std::shared_ptr<AssetInfo>& info, Asset*& out_spawned_asset);
     enum class BlockingPanel {
         Camera,
         MapLayers,
@@ -1191,6 +1204,8 @@ private:
     bool pending_spawn_group_room_config_reopen_ = false;
     bool pending_spawn_group_selection_resync_ = false;
     std::optional<SDL_Point> pending_spawn_world_pos_{};
+    std::optional<PendingLibraryPlacement> pending_library_placement_{};
+    std::uint64_t pending_library_placement_serial_ = 0;
     std::optional<std::string> active_spawn_group_id_{};
     std::uint64_t room_assets_edit_version_ = 0;
     bool suppress_spawn_group_close_clear_ = false;

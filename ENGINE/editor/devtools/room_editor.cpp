@@ -5512,7 +5512,82 @@ void RoomEditor::pulse_active_modal_header() {
     }
 }
 
-void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info) {
+void RoomEditor::begin_library_placement(const SDL_Point& world_point) {
+    PendingLibraryPlacement placement;
+    placement.world_point = world_point;
+    placement.room_name = current_room_ ? current_room_->room_name : std::string{};
+    placement.requested_at_ticks = SDL_GetTicks();
+    placement.request_serial = ++pending_library_placement_serial_;
+    placement.snap_enabled = snap_to_grid_enabled_;
+    placement.snap_resolution = placement.snap_enabled ? current_grid_resolution() : 0;
+    pending_library_placement_ = std::move(placement);
+    pending_spawn_world_pos_ = world_point;
+}
+
+void RoomEditor::clear_library_placement() {
+    pending_library_placement_.reset();
+    pending_spawn_world_pos_.reset();
+}
+
+bool RoomEditor::has_pending_library_placement() const {
+    return pending_library_placement_.has_value();
+}
+
+std::optional<SDL_Point> RoomEditor::resolve_pending_library_placement_world() const {
+    if (!pending_library_placement_) {
+        return std::nullopt;
+    }
+    const PendingLibraryPlacement& placement = *pending_library_placement_;
+    SDL_Point resolved = placement.world_point;
+    if (placement.snap_enabled && placement.snap_resolution > 0) {
+        resolved = snap_world_point_to_overlay_grid(resolved, placement.snap_resolution);
+    }
+    return resolved;
+}
+
+bool RoomEditor::commit_library_asset_placement(const std::shared_ptr<AssetInfo>& info, Asset*& out_spawned_asset) {
+    out_spawned_asset = nullptr;
+    if (!info || !assets_ || !current_room_ || !pending_library_placement_) {
+        return false;
+    }
+
+    const PendingLibraryPlacement placement = *pending_library_placement_;
+    if (!placement.room_name.empty() && current_room_->room_name != placement.room_name) {
+        return false;
+    }
+
+    const std::optional<SDL_Point> resolved_opt = resolve_pending_library_placement_world();
+    if (!resolved_opt.has_value()) {
+        return false;
+    }
+    const SDL_Point resolved_world = *resolved_opt;
+    const bool inside_room = !current_room_->room_area || current_room_->room_area->contains_point(resolved_world);
+    if (!inside_room) {
+        return false;
+    }
+
+    Asset* spawned = assets_->spawn_asset(info->name, resolved_world);
+    if (!spawned) {
+        return false;
+    }
+
+    finalize_asset_drag(spawned, info, &resolved_world);
+    out_spawned_asset = spawned;
+
+    clear_library_placement();
+    suppress_world_left_click_frames_ = std::max(suppress_world_left_click_frames_, 2);
+    suppress_next_left_click_ = true;
+    click_buffer_frames_ = 2;
+    clear_mouse_press_state(true);
+    reset_drag_state();
+    if (input_) {
+        input_->clearClickBuffer();
+        input_->consumeMouseButton(Input::LEFT);
+    }
+    return true;
+}
+
+void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info, const SDL_Point* committed_world_pos) {
     if (!asset || !info || !current_room_) return;
 
     auto& root = current_room_->assets_data();
@@ -5536,8 +5611,11 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
     nlohmann::json entry;
     entry["spawn_id"]        = spawn_id;
     entry["position"]        = "Exact";
-    entry["dx"]              = asset->world_x() - center.x;
-    entry["dz"]              = asset->world_z() - center.y;
+    const SDL_Point committed = committed_world_pos
+        ? *committed_world_pos
+        : SDL_Point{asset->world_x(), asset->world_z()};
+    entry["dx"]              = committed.x - center.x;
+    entry["dz"]              = committed.y - center.y;
     if (width  > 0) entry["origional_width"]  = width;
     if (height > 0) entry["origional_height"] = height;
     entry["display_name"]    = info->name;

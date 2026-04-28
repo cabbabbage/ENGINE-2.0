@@ -1349,7 +1349,7 @@ void RoomConfigurator::ensure_base_panels() {
             panel->set_visible(true);
             panel->force_pointer_ready();
             panel->set_embedded_focus_state(false);
-            panel->set_embedded_interaction_enabled(false);
+            panel->set_embedded_interaction_enabled(true);
         }
         base_panel_keys_[panel.get()] = key;
         if (created && !base_panel_expanded_state_.count(key)) {
@@ -1583,7 +1583,7 @@ void RoomConfigurator::apply_panel_focus_states() {
         }
         const bool focused = (panel == focused_panel_);
         panel->set_embedded_focus_state(focused);
-        panel->set_embedded_interaction_enabled(focused);
+        panel->set_embedded_interaction_enabled(panel->is_visible());
 };
 
     for (auto* panel : ordered_base_panels_) {
@@ -2110,7 +2110,7 @@ void RoomConfigurator::rebuild_rows_internal() {
                 return false;
             }
             const bool removed = on_spawn_group_delete_(spawn_id);
-            refresh_spawn_group_rows_if_needed();
+            request_rebuild();
             return removed;
         });
 
@@ -2139,6 +2139,9 @@ void RoomConfigurator::rebuild_rows_internal() {
 
     refresh_base_panel_rows();
     refresh_spawn_group_rows_if_needed();
+    if (!focused_panel_ && geometry_panel_ && geometry_panel_->is_visible()) {
+        focus_panel(geometry_panel_.get());
+    }
 
     if (force_collapse_sections) {
         for (auto* panel : ordered_base_panels_) {
@@ -2160,7 +2163,6 @@ void RoomConfigurator::update(const Input& input, int screen_w, int screen_h) {
         rebuild_rows();
     }
     ensure_base_panels();
-    refresh_spawn_group_rows_if_needed();
     const bool panel_visible = container_ && container_->is_visible();
     SDL_Rect panel_work_area = work_area_;
     if (panel_work_area.w <= 0 || panel_work_area.h <= 0) {
@@ -2203,7 +2205,6 @@ void RoomConfigurator::prepare_for_event(int screen_w, int screen_h) {
         return;
     }
     ensure_base_panels();
-    refresh_spawn_group_rows_if_needed();
     last_screen_w_ = use_w;
     last_screen_h_ = use_h;
     if (container_) {

@@ -23669,6 +23669,42 @@
               "value": "NewRoom"
             }
           ]
+        },
+        {
+          "bounding_extent": 2330.3252991803524,
+          "level": 2,
+          "max_rooms": 6,
+          "min_rooms": 3,
+          "name": "layer_2",
+          "ring_radius": 19820.0,
+          "rooms": [
+            {
+              "max_instances": 6,
+              "min_instances": 3,
+              "name": "NewRoom",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "NewRoom"
+            }
+          ]
+        },
+        {
+          "bounding_extent": 2330.3252991803524,
+          "level": 3,
+          "max_rooms": 15,
+          "min_rooms": 7,
+          "name": "layer_3",
+          "ring_radius": 29481.0,
+          "rooms": [
+            {
+              "max_instances": 15,
+              "min_instances": 7,
+              "name": "NewRoom",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "NewRoom"
+            }
+          ]
         }
       ],
       "map_layers_settings": {
@@ -23684,9 +23720,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            123,
-            36,
             242,
+            91,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -24091,9 +24127,9 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            187,
             242,
-            36,
+            61,
+            242,
             255
           ],
           "edge_smoothness": 101,

@@ -25123,7 +25123,7 @@
           {
             "candidates": [
               {
-                "chance": 0,
+                "chance": 34,
                 "name": "null"
               },
               {
@@ -25148,7 +25148,7 @@
           }
         ],
         "inherits_map_assets": false,
-        "regen_seed": 1
+        "regen_seed": 2
       },
       "map_grid_settings": {
         "grid_resolution": 6,

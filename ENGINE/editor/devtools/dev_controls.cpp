@@ -1769,7 +1769,7 @@ void DevControls::render_misc_options_panel(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, panel_bg.r, panel_bg.g, panel_bg.b, panel_bg.a);
     sdl_render::FillRect(renderer, &misc_options_panel_rect_);
     SDL_SetRenderDrawColor(renderer, panel_border.r, panel_border.g, panel_border.b, panel_border.a);
-    sdl_render::DrawRect(renderer, &misc_options_panel_rect_);
+    sdl_render::Rect(renderer, &misc_options_panel_rect_);
 
     SDL_Rect header_rect = misc_options_panel_rect_;
     header_rect.h = DMStyles::Label().font_size + DMSpacing::panel_padding();
@@ -1800,7 +1800,7 @@ void DevControls::render_misc_options_panel(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, misc_map_color_.r, misc_map_color_.g, misc_map_color_.b, misc_map_color_.a);
     sdl_render::FillRect(renderer, &preview_rect);
     SDL_SetRenderDrawColor(renderer, panel_border.r, panel_border.g, panel_border.b, panel_border.a);
-    sdl_render::DrawRect(renderer, &preview_rect);
+    sdl_render::Rect(renderer, &preview_rect);
 }
 
 void DevControls::open_misc_options_panel() {

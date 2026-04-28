@@ -2587,9 +2587,22 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
 }
 
 void RoomEditor::set_room_config_visible(bool visible) {
-    (void)visible;
-    room_config_dock_open_ = false;
-    room_config_panel_visible_ = false;
+    ensure_room_configurator();
+    if (!room_cfg_ui_) {
+        room_config_dock_open_ = false;
+        room_config_panel_visible_ = false;
+        return;
+    }
+    room_config_dock_open_ = visible;
+    room_config_panel_visible_ = visible;
+    if (visible) {
+        room_cfg_ui_->set_room_metadata_only_mode(false);
+        room_cfg_ui_->set_bounds(room_config_bounds_);
+        room_cfg_ui_->open(current_room_);
+    } else {
+        room_cfg_ui_->close();
+    }
+    update_spawn_group_config_anchor();
 }
 
 class ScopedBoolOverride {
@@ -5691,16 +5704,16 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
 }
 
 void RoomEditor::toggle_room_config() {
-    set_room_config_visible(false);
+    set_room_config_visible(!is_room_config_open());
 }
 
 void RoomEditor::open_room_config() {
-    set_room_config_visible(false);
+    set_room_config_visible(true);
 }
 
 void RoomEditor::open_room_config_for(Asset* asset) {
     (void)asset;
-    set_room_config_visible(false);
+    set_room_config_visible(true);
 }
 
 void RoomEditor::close_room_config() {
@@ -5708,11 +5721,96 @@ void RoomEditor::close_room_config() {
 }
 
 bool RoomEditor::is_room_config_open() const {
-    return false;
+    return room_cfg_ui_ && room_cfg_ui_->visible();
 }
 
 bool RoomEditor::is_camera_settings_open() const {
     return false;
+}
+
+void RoomEditor::open_room_config_for_json_entry(nlohmann::json& room_data, bool is_trail_context) {
+    ensure_room_configurator();
+    if (!room_cfg_ui_) {
+        return;
+    }
+    room_cfg_ui_->set_room_metadata_only_mode(true);
+    room_cfg_ui_->set_bounds(room_config_bounds_);
+    room_cfg_ui_->open(room_data, [this, is_trail_context]() {
+        if (!assets_) {
+            return;
+        }
+        assets_->mark_map_data_dirty();
+        if (mark_map_dirty_callback_) {
+            mark_map_dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        }
+        if (is_trail_context) {
+            show_notice("Trail template saved.");
+        } else {
+            show_notice("Room template saved.");
+        }
+    });
+    room_config_dock_open_ = true;
+    room_config_panel_visible_ = true;
+}
+
+void RoomEditor::create_room_from_footer() {
+    if (!assets_) return;
+    nlohmann::json& map_info = assets_->map_info_json();
+    std::string key = map_layers::create_room_entry(map_info);
+    if (key.empty()) {
+        show_notice("Unable to create room entry.");
+        return;
+    }
+    nlohmann::json& room_entry = map_info["rooms_data"][key];
+    room_entry["geometry"] = "Square";
+    room_entry["min_width"] = 1200;
+    room_entry["max_width"] = 1800;
+    room_entry["min_height"] = 1200;
+    room_entry["max_height"] = 1800;
+    room_entry["edge_smoothness"] = 4;
+    room_entry["curvyness"] = 2;
+    room_entry["is_boss"] = false;
+    room_entry["inherits_map_assets"] = false;
+    room_entry["tags"] = nlohmann::json::array();
+    if (!room_entry.contains("spawn_groups") || !room_entry["spawn_groups"].is_array()) {
+        room_entry["spawn_groups"] = nlohmann::json::array();
+    }
+
+    open_room_config_for_json_entry(room_entry, false);
+    show_notice("Created room template: " + key);
+}
+
+void RoomEditor::create_trail_from_footer() {
+    if (!assets_) return;
+    nlohmann::json& map_info = assets_->map_info_json();
+    nlohmann::json& trails = map_info["trails_data"];
+    if (!trails.is_object()) {
+        trails = nlohmann::json::object();
+    }
+    std::string base = "NewTrail";
+    std::string key = base;
+    int suffix = 1;
+    while (trails.contains(key)) {
+        key = base + std::to_string(suffix++);
+    }
+    nlohmann::json& trail_entry = trails[key];
+    trail_entry = nlohmann::json::object();
+    trail_entry["name"] = key;
+    trail_entry["geometry"] = "Square";
+    trail_entry["min_width"] = 600;
+    trail_entry["max_width"] = 900;
+    trail_entry["min_height"] = 600;
+    trail_entry["max_height"] = 900;
+    trail_entry["edge_smoothness"] = 4;
+    trail_entry["curvyness"] = 2;
+    trail_entry["tags"] = nlohmann::json::array();
+    trail_entry["anti_tags"] = nlohmann::json::array();
+    if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {
+        trail_entry["spawn_groups"] = nlohmann::json::array();
+    }
+
+    open_room_config_for_json_entry(trail_entry, true);
+    show_notice("Created trail template: " + key);
 }
 
 void RoomEditor::regenerate_room() {
@@ -21129,9 +21227,36 @@ bool RoomEditor::focus_selection_matches_snapshot() const {
 }
 
 void RoomEditor::ensure_room_configurator() {
-    room_cfg_ui_.reset();
-    room_config_dock_open_ = false;
-    room_config_panel_visible_ = false;
+    if (room_cfg_ui_) {
+        return;
+    }
+    room_cfg_ui_ = std::make_unique<RoomConfigurator>();
+    if (!room_cfg_ui_) {
+        return;
+    }
+    room_cfg_ui_->set_manifest_store(manifest_store_);
+    room_cfg_ui_->set_assets(assets_);
+    room_cfg_ui_->set_room_save_callback([this](bool immediate) {
+        return save_current_room_assets_json(immediate
+                                                 ? devmode::core::DevSaveCoordinator::Priority::Immediate
+                                                 : devmode::core::DevSaveCoordinator::Priority::Debounced);
+    });
+    room_cfg_ui_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired_name) {
+        return rename_active_room(old_name, desired_name);
+    });
+    room_cfg_ui_->set_on_close([this]() {
+        room_config_dock_open_ = false;
+        room_config_panel_visible_ = false;
+        update_spawn_group_config_anchor();
+    });
+    room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
+        room_config_panel_visible_ = visible;
+        room_config_dock_open_ = visible;
+        if (header_visibility_callback_) {
+            header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
+        }
+    });
+    room_cfg_ui_->set_bounds(room_config_bounds_);
 }
 
 std::string RoomEditor::rename_active_room(const std::string& old_name, const std::string& desired_name) {
@@ -21213,9 +21338,17 @@ void RoomEditor::ensure_spawn_group_config_ui() {
 }
 
 void RoomEditor::update_room_config_bounds() {
-    room_config_bounds_ = SDL_Rect{0, 0, 0, 0};
-    room_config_dock_open_ = false;
-    room_config_panel_visible_ = false;
+    constexpr int kPanelWidth = 420;
+    constexpr int kMargin = 12;
+    const int footer_h = (shared_footer_bar_ && shared_footer_bar_->visible()) ? shared_footer_bar_->rect().h : 0;
+    const int usable_h = std::max(240, screen_h_ - footer_h - (kMargin * 2));
+    const int panel_w = std::min(std::max(320, kPanelWidth), std::max(320, screen_w_ - (kMargin * 2)));
+    room_config_bounds_ = SDL_Rect{
+        std::max(kMargin, screen_w_ - panel_w - kMargin),
+        kMargin,
+        panel_w,
+        usable_h
+    };
 }
 
 void RoomEditor::configure_shared_panel() {
@@ -21227,8 +21360,14 @@ void RoomEditor::configure_shared_panel() {
 }
 
 void RoomEditor::refresh_room_config_visibility() {
-    room_config_dock_open_ = false;
-    room_config_panel_visible_ = false;
+    if (!room_cfg_ui_) {
+        room_config_dock_open_ = false;
+        room_config_panel_visible_ = false;
+        update_spawn_group_config_anchor();
+        return;
+    }
+    room_config_panel_visible_ = room_cfg_ui_->visible();
+    room_config_dock_open_ = room_config_panel_visible_;
     update_spawn_group_config_anchor();
 }
 
@@ -23052,7 +23191,10 @@ void RoomEditor::focus_camera_on_spawn_group(const std::string& spawn_id) {
 }
 
 void RoomEditor::reopen_room_configurator() {
-    room_config_dock_open_ = false;
+    if (!room_config_dock_open_) {
+        return;
+    }
+    set_room_config_visible(true);
 }
 
 void RoomEditor::rebuild_room_spawn_id_cache() {
@@ -23861,8 +24003,9 @@ void RoomEditor::set_current_room(Room* room, bool lock_room) {
     refresh_spawn_group_config_ui();
     mark_spatial_index_dirty();
 
-    if (room_cfg_ui_) {
+    if (room_cfg_ui_ && room_config_dock_open_) {
         room_editor_trace("[RoomEditor] opening room config UI");
+        room_cfg_ui_->set_room_metadata_only_mode(false);
         room_cfg_ui_->open(current_room_);
         refresh_room_config_visibility();
     }

@@ -1,5 +1,2 @@
 type,last_updated,severity,description,created_by,attachment_path
-issue,2026-04-28 02:42:53,low,,,
-issue,2026-04-28 02:43:51,low,room config pannel needs to be consolifated no more multple versions of room config panel. mouse focus and controll needs to be centralized and make sure all widgets works. the room config we see in the layers window should be the same connected to the room editor footer button. make sure everything works perfctly.,,
-issue,2026-04-28 02:42:41,low,tile loading is strange and doesnt often work. figure out the issue and fix.,,
-modification,2026-04-28 02:42:21,medium,fo the anchor point editor mode (the one with children asset attment thing) if the user has an anchor point selected and they press ctrl _ c create a coppy of that anchor point with identical data . let it be seen imidiatly in the scene only difference is the anchor point will have _coppy at the end of the name. (for normal anchor point editor in the asset info editor stack not for the oval one),,
+issue,2026-04-28 02:42:53,low,fix the sinking logic it is inconsistant with camera positon and it shouldnt be,,

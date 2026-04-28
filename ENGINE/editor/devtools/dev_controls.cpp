@@ -4309,18 +4309,21 @@ void DevControls::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetI
 
 void DevControls::toggle_room_config() {
     if (!can_use_room_editor_ui()) return;
-    if (assets_) {
-        assets_->show_dev_notice("Room Config is disabled", 1200);
+    if (room_editor_) {
+        room_editor_->toggle_room_config();
     }
     sync_header_button_states();
 }
 
 void DevControls::close_room_config() {
+    if (room_editor_) {
+        room_editor_->close_room_config();
+    }
     sync_header_button_states();
 }
 
 bool DevControls::is_room_config_open() const {
-    return false;
+    return room_editor_ && room_editor_->is_room_config_open();
 }
 
 void DevControls::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {
@@ -4509,13 +4512,51 @@ void DevControls::configure_header_button_sets() {
     room_config_btn.style_override = &DMStyles::ListButton();
     room_config_btn.active_style_override = &DMStyles::AccentButton();
     room_config_btn.on_toggle = [this](bool active) {
+        if (!room_editor_) {
+            sync_header_button_states();
+            return;
+        }
         if (active) {
             close_misc_options_panel();
+            room_editor_->open_room_config();
+        } else {
+            room_editor_->close_room_config();
         }
-        (void)active;
         sync_header_button_states();
 };
     room_buttons.push_back(std::move(room_config_btn));
+
+    MapModeUI::HeaderButtonConfig create_room_btn;
+    create_room_btn.id = "create_room";
+    create_room_btn.label = "Create Room";
+    create_room_btn.momentary = true;
+    create_room_btn.group = FooterButtonGroup::Actions;
+    create_room_btn.style_override = &DMStyles::CreateButton();
+    create_room_btn.active_style_override = &DMStyles::AccentButton();
+    create_room_btn.on_toggle = [this](bool) {
+        if (room_editor_) {
+            room_editor_->create_room_from_footer();
+            room_editor_->open_room_config();
+        }
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(create_room_btn));
+
+    MapModeUI::HeaderButtonConfig create_trail_btn;
+    create_trail_btn.id = "create_trail";
+    create_trail_btn.label = "Create Trail";
+    create_trail_btn.momentary = true;
+    create_trail_btn.group = FooterButtonGroup::Actions;
+    create_trail_btn.style_override = &DMStyles::CreateButton();
+    create_trail_btn.active_style_override = &DMStyles::AccentButton();
+    create_trail_btn.on_toggle = [this](bool) {
+        if (room_editor_) {
+            room_editor_->create_trail_from_footer();
+            room_editor_->open_room_config();
+        }
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(create_trail_btn));
 
     MapModeUI::HeaderButtonConfig misc_options_btn;
     misc_options_btn.id = "misc_options";
@@ -4603,7 +4644,7 @@ void DevControls::sync_header_button_states() {
         }
         return;
     }
-    const bool room_config_open = false;
+    const bool room_config_open = room_editor_ && room_editor_->is_room_config_open();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "room_config", room_config_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "misc_options", is_misc_options_panel_open());
     const bool library_open = room_editor_ && room_editor_->is_asset_library_open();
@@ -4613,6 +4654,8 @@ void DevControls::sync_header_button_states() {
     const bool layers_open = map_mode_ui_->is_layers_panel_visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "layers", layers_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "regenerate", false);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_room", false);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_trail", false);
 
     const bool boundary_open = boundary_assets_modal_ && boundary_assets_modal_->visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "map_boundary", boundary_open);
@@ -5388,5 +5431,3 @@ bool DevControls::persist_map_info_to_disk() {
     mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
     return true;
 }
-
-

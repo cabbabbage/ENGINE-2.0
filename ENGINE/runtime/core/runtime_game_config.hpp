@@ -23,13 +23,13 @@ inline RandomOrbit3DControllerBehaviorConfig make_default_fly_orbit_behavior_con
     RandomOrbit3DControllerBehaviorConfig cfg{};
     cfg.visit_threshold_px = 18;
     cfg.orbit_radius_px = 10;
-    cfg.orbit_vertical_amplitude_px = 36;
+    cfg.orbit_vertical_amplitude_px = 306;
     cfg.orbit_segment_checkpoints = 4;
-    cfg.orbit_enter_distance_px = 280;
-    cfg.orbit_exit_distance_px = 420;
+    cfg.orbit_enter_distance_px = 80;
+    cfg.orbit_exit_distance_px = 120;
     cfg.approach_checkpoint_count = 5;
     cfg.approach_min_wave_px = 18;
-    cfg.approach_max_wave_px = 160;
+    cfg.approach_max_wave_px = 30;
     cfg.approach_vertical_wave_px = 48;
     cfg.orbit_angular_velocity_radians = 0.45;
     cfg.retarget_blend_step = 0.35;

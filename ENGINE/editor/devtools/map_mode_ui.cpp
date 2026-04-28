@@ -799,7 +799,6 @@ void MapModeUI::ensure_panels() {
         layer_controls_display_->set_on_show_rooms_list([this]() {
             this->show_sliding_panel(SlidingPanel::RoomsList);
         });
-        layer_controls_display_->set_on_create_room([this]() { this->create_room_from_layers_controls(); });
     }
     if (layers_panel_) {
         layers_panel_->set_rooms_list_container(rooms_list_container_.get());
@@ -1659,4 +1658,3 @@ void MapModeUI::complete_map_color_sampling(SDL_Color color) {
         apply_cb(color);
     }
 }
-

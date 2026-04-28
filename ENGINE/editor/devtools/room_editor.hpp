@@ -131,6 +131,8 @@ public:
     void toggle_room_config();
     void open_room_config();
     void close_room_config();
+    void create_room_from_footer();
+    void create_trail_from_footer();
     bool is_room_config_open() const;
     bool is_camera_settings_open() const;
     void regenerate_room();
@@ -299,6 +301,7 @@ private:
     void apply_focus_filter();
     bool focus_selection_matches_snapshot() const;
     void ensure_room_configurator();
+    void open_room_config_for_json_entry(nlohmann::json& room_data, bool is_trail_context);
     void ensure_spawn_group_config_ui();
     void update_room_config_bounds();
     void begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier);

@@ -25157,7 +25157,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 6403.1242374328485,
+          "bounding_extent": 5374.5,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -25180,7 +25180,7 @@
           "max_rooms": 2,
           "min_rooms": 2,
           "name": "layer_1",
-          "ring_radius": 19232.0,
+          "ring_radius": 18203.0,
           "rooms": [
             {
               "max_instances": 1,
@@ -25693,13 +25693,13 @@
             255
           ],
           "edge_smoothness": 101,
-          "geometry": "Square",
+          "geometry": "Circle",
           "inherits_map_assets": true,
           "is_boss": false,
           "max_height": 8000,
-          "max_width": 10000,
+          "max_width": 10749,
           "min_height": 8000,
-          "min_width": 10000,
+          "min_width": 10749,
           "name": "spawn",
           "room_tags": [],
           "spawn_groups": [
@@ -25916,7 +25916,7 @@
           ],
           "trail_connection_sector": {
             "direction_deg": 180.0,
-            "width_percent": 60
+            "width_percent": 66
           }
         }
       },
@@ -25928,21 +25928,21 @@
           "camera_height_px": 332,
           "camera_tilt_deg": 31.7884521484375,
           "camera_zoom_percent": 0,
-          "curvyness": 2,
+          "curvyness": 10,
           "display_color": [
             85,
             242,
             143,
             255
           ],
-          "edge_smoothness": 6,
-          "geometry": "Line",
+          "edge_smoothness": 2,
+          "geometry": "Square",
           "inherits_map_assets": false,
           "is_boss": false,
-          "max_height": 1472,
-          "max_width": 1472,
-          "min_height": 1080,
-          "min_width": 1080,
+          "max_height": 1162,
+          "max_width": 1162,
+          "min_height": 1162,
+          "min_width": 1162,
           "name": "basic",
           "spawn_groups": [
             {

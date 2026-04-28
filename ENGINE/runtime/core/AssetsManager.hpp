@@ -255,6 +255,8 @@ public:
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }
+    bool dev_grid_overlay_enabled() const;
+    int dev_grid_overlay_cell_size_px() const;
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
 

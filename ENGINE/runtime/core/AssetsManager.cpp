@@ -863,6 +863,17 @@ bool Assets::boundary_assets_visible() const {
     return dev_controls_->boundary_assets_visible();
 }
 
+bool Assets::dev_grid_overlay_enabled() const {
+    return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_grid_overlay_enabled();
+}
+
+int Assets::dev_grid_overlay_cell_size_px() const {
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return map_grid_settings_.spacing();
+    }
+    return std::max(1, dev_controls_->grid_cell_size_px());
+}
+
 float Assets::boundary_min_visible_screen_ratio() const {
     return boundary_min_visible_screen_ratio_;
 }

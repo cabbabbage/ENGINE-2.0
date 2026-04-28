@@ -43,6 +43,7 @@ bool SceneCompositePass::compose(SDL_Texture* gameplay_target,
 bool SceneCompositePass::compose_gpu(SDL_Texture* gameplay_target,
                                      SDL_Texture* floor_texture,
                                      SDL_Texture* floor_dark_mask_texture,
+                                     SDL_Texture* floor_overlay_texture,
                                      SDL_Texture* scene_texture,
                                      const render_pipeline::BlurCompositeResult& blur_result) {
     if (!renderer_ || !gameplay_target) {
@@ -68,6 +69,9 @@ bool SceneCompositePass::compose_gpu(SDL_Texture* gameplay_target,
         SDL_SetTextureColorMod(floor_dark_mask_texture, 255, 255, 255);
         render_diagnostics::render_texture(renderer_, floor_dark_mask_texture, nullptr, nullptr);
     }
+    if (floor_overlay_texture) {
+        render_texture_utils::draw_fullscreen_texture(renderer_, floor_overlay_texture);
+    }
 
     SDL_Texture* resolved_scene = scene_texture;
     if (blur_result.valid && blur_result.background_mid) {
@@ -79,5 +83,5 @@ bool SceneCompositePass::compose_gpu(SDL_Texture* gameplay_target,
         render_texture_utils::draw_fullscreen_texture(renderer_, blur_result.foreground_mid);
     }
 
-    return floor_texture || floor_dark_mask_texture || resolved_scene != nullptr;
+    return floor_texture || floor_dark_mask_texture || floor_overlay_texture || resolved_scene != nullptr;
 }

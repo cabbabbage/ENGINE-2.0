@@ -1449,7 +1449,17 @@ std::vector<std::vector<SDL_Point>> build_centerline_variants(const std::vector<
         }
         bool duplicate = false;
         for (const auto& existing : variants) {
-            if (existing == variant) {
+            if (existing.size() != variant.size()) {
+                continue;
+            }
+            const bool same_points = std::equal(
+                existing.begin(),
+                existing.end(),
+                variant.begin(),
+                [](const SDL_Point& lhs, const SDL_Point& rhs) {
+                    return lhs.x == rhs.x && lhs.y == rhs.y;
+                });
+            if (same_points) {
                 duplicate = true;
                 break;
             }

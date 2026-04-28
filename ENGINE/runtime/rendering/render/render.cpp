@@ -2127,6 +2127,7 @@ void SceneRenderer::render() {
                           scene_composite_pass_->compose_gpu(scene_composite_tex_,
                                                              floor_texture,
                                                              floor_composer_ ? floor_composer_->floor_dark_mask_texture() : nullptr,
+                                                             floor_composer_ ? floor_composer_->floor_overlay_texture() : nullptr,
                                                              layer_render.final_texture,
                                                              blur_result);
     if (!composed) {

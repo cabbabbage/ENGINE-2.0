@@ -86,7 +86,6 @@ public:
     void update_ui(const Input& input);
     void handle_sdl_event(const SDL_Event& event);
     void render_overlays(SDL_Renderer* renderer);
-    void render_grid_overlay();
 
     void toggle_asset_library();
     void open_asset_library();
@@ -265,8 +264,6 @@ public:
     void apply_grid_resolution_change(int resolution);
     void nudge_overlay_grid_resolution(int delta);
     void push_grid_resolution_toast(int resolution);
-    void render_grid_resolution_toast(SDL_Renderer* renderer);
-    void render_room_geometry_overlay(SDL_Renderer* renderer);
     void ensure_misc_options_widgets();
     void sync_misc_options_from_map_info();
     void layout_misc_options_panel();

@@ -436,6 +436,9 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
         clear_movement_plan();
         return;
     }
+    if (should_defer_auto_move_for_committed_attack()) {
+        return;
+    }
     auto_move_attacking_enabled_ =
         resolve_auto_move_combat_options(combat_overrides).attacking_enabled;
     SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
@@ -461,6 +464,9 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
+        return;
+    }
+    if (should_defer_auto_move_for_committed_attack()) {
         return;
     }
     if (self_) {
@@ -500,6 +506,9 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
         clear_movement_plan();
         return;
     }
+    if (should_defer_auto_move_for_committed_attack()) {
+        return;
+    }
     auto_move_attacking_enabled_ =
         resolve_auto_move_combat_options(combat_overrides).attacking_enabled;
 
@@ -532,6 +541,9 @@ void AnimationUpdate::auto_move_3d(Asset* target_asset,
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
+        return;
+    }
+    if (should_defer_auto_move_for_committed_attack()) {
         return;
     }
 
@@ -581,6 +593,9 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
+        return;
+    }
+    if (should_defer_auto_move_for_committed_attack()) {
         return;
     }
 
@@ -760,6 +775,9 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
+        return;
+    }
+    if (should_defer_auto_move_for_committed_attack()) {
         return;
     }
 
@@ -1135,6 +1153,10 @@ AnimationUpdate::AutoMoveCombatOptions AnimationUpdate::resolve_auto_move_combat
     }
 
     return options;
+}
+
+bool AnimationUpdate::should_defer_auto_move_for_committed_attack() const {
+    return runtime_ && runtime_->auto_attack_commitment_active();
 }
 
 void AnimationUpdate::set_animation(const std::string& animation_id) {

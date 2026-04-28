@@ -1,6 +1,7 @@
 #include "animation_runtime.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <string>
 #include <unordered_set>
@@ -122,6 +123,73 @@ int resolve_effective_grid_resolution(const Asset* self,
     }
     return grid_service.default_resolution();
 }
+
+enum class HorizontalFacingIntent {
+    Unknown = 0,
+    Left,
+    Right,
+};
+
+HorizontalFacingIntent facing_intent_for_delta_x(int delta_x, int deadzone_px) {
+    const int clamped_deadzone = std::max(0, deadzone_px);
+    if (delta_x > clamped_deadzone) {
+        return HorizontalFacingIntent::Right;
+    }
+    if (delta_x < -clamped_deadzone) {
+        return HorizontalFacingIntent::Left;
+    }
+    return HorizontalFacingIntent::Unknown;
+}
+
+std::string lower_ascii_copy(const std::string& value) {
+    std::string out = value;
+    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return out;
+}
+
+HorizontalFacingIntent attack_facing_intent(const std::vector<std::string>& tags,
+                                            const std::string& animation_id) {
+    const bool has_left_tag = animation_update::tag_utils::has_normalized_tag(tags, "left");
+    const bool has_right_tag = animation_update::tag_utils::has_normalized_tag(tags, "right");
+    if (has_left_tag != has_right_tag) {
+        return has_right_tag ? HorizontalFacingIntent::Right : HorizontalFacingIntent::Left;
+    }
+
+    const std::string lowered_id = lower_ascii_copy(animation_id);
+    const bool id_has_left = lowered_id.find("left") != std::string::npos;
+    const bool id_has_right = lowered_id.find("right") != std::string::npos;
+    if (id_has_left != id_has_right) {
+        return id_has_right ? HorizontalFacingIntent::Right : HorizontalFacingIntent::Left;
+    }
+
+    return HorizontalFacingIntent::Unknown;
+}
+
+int attack_facing_match_score_impl(const std::vector<std::string>& animation_tags,
+                                   const std::string& animation_id,
+                                   int target_delta_x,
+                                   int deadzone_px) {
+    const HorizontalFacingIntent target_intent = facing_intent_for_delta_x(target_delta_x, deadzone_px);
+    const HorizontalFacingIntent attack_intent = attack_facing_intent(animation_tags, animation_id);
+    if (target_intent == HorizontalFacingIntent::Unknown || attack_intent == HorizontalFacingIntent::Unknown) {
+        return 0;
+    }
+    return target_intent == attack_intent ? 1 : -1;
+}
+
+} // namespace
+
+namespace animation_runtime::test_hooks {
+
+int attack_facing_match_score(const std::vector<std::string>& animation_tags,
+                              const std::string& animation_id,
+                              int target_delta_x,
+                              int deadzone_px) {
+    return attack_facing_match_score_impl(animation_tags, animation_id, target_delta_x, deadzone_px);
+}
+
 }
 
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
@@ -270,35 +338,73 @@ std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
 }
 
 bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
+    const bool committed_cycle_boundary = current_animation_is_attack() && committed_attack_target_asset_id_.has_value();
+    if (committed_cycle_boundary) {
+        clear_attack_commitment();
+    }
     if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
         return false;
     }
     const std::uint32_t frame_id = resolve_frame_id_for_cooldown();
-    if (next_attack_cycle_eval_frame_ != 0 && frame_id < next_attack_cycle_eval_frame_) {
+    if (!committed_cycle_boundary &&
+        next_attack_cycle_eval_frame_ != 0 &&
+        frame_id < next_attack_cycle_eval_frame_) {
         return false;
     }
 
     const auto targets = attack_candidate_targets();
     if (targets.empty()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
         return false;
     }
     const auto attack_candidates = attack_animation_candidates();
     if (attack_candidates.empty()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
         return false;
     }
 
     struct RankedChoice {
         animation_update::AttackValidation::AttackWindowScore score =
             animation_update::AttackValidation::AttackWindowScore::Miss;
+        int facing_score = -2;
         std::string animation_id{};
         std::string target_asset_id{};
     } best{};
+    bool has_best = false;
+
+    auto better_choice = [](const RankedChoice& candidate, const RankedChoice& current_best) {
+        const int candidate_score = static_cast<int>(candidate.score);
+        const int best_score = static_cast<int>(current_best.score);
+        if (candidate_score != best_score) {
+            return candidate_score > best_score;
+        }
+        if (candidate.facing_score != current_best.facing_score) {
+            return candidate.facing_score > current_best.facing_score;
+        }
+        if (candidate.target_asset_id != current_best.target_asset_id) {
+            return candidate.target_asset_id < current_best.target_asset_id;
+        }
+        return candidate.animation_id < current_best.animation_id;
+    };
+
+    constexpr int kAttackFacingDeadzonePx = 6;
 
     for (Asset* target : targets) {
         const std::string target_id = animation_update::detail::stable_asset_id(*target);
         if (target_id.empty()) {
             continue;
         }
+        const int target_delta_x = target->world_x() - self_->world_x();
         for (const std::string& attack_animation_id : attack_candidates) {
             const auto evaluation =
                 animation_update::AttackValidation::evaluate_attack_window(
@@ -306,23 +412,37 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
                     *target,
                     attack_animation_id,
                     8);
-            if (static_cast<int>(evaluation.score) > static_cast<int>(best.score)) {
-                best.score = evaluation.score;
-                best.animation_id = attack_animation_id;
-                best.target_asset_id = target_id;
+            if (evaluation.score == animation_update::AttackValidation::AttackWindowScore::Miss) {
+                continue;
             }
-            if (best.score == animation_update::AttackValidation::AttackWindowScore::ClearHit) {
-                break;
+
+            int facing_score = 0;
+            const auto attack_it = self_->info->animations.find(attack_animation_id);
+            if (attack_it != self_->info->animations.end()) {
+                facing_score =
+                    attack_facing_match_score_impl(attack_it->second.tags,
+                                                   attack_animation_id,
+                                                   target_delta_x,
+                                                   kAttackFacingDeadzonePx);
             }
-        }
-        if (best.score == animation_update::AttackValidation::AttackWindowScore::ClearHit) {
-            break;
+
+            RankedChoice candidate{};
+            candidate.score = evaluation.score;
+            candidate.facing_score = facing_score;
+            candidate.animation_id = attack_animation_id;
+            candidate.target_asset_id = target_id;
+            if (!has_best || better_choice(candidate, best)) {
+                best = std::move(candidate);
+                has_best = true;
+            }
         }
     }
 
-    if (best.score == animation_update::AttackValidation::AttackWindowScore::Miss ||
-        best.animation_id.empty() ||
-        best.target_asset_id.empty()) {
+    if (!has_best || best.animation_id.empty() || best.target_asset_id.empty()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
         return false;
     }
     committed_attack_target_asset_id_ = best.target_asset_id;
@@ -343,6 +463,17 @@ bool AnimationRuntime::current_animation_is_attack() const {
         return false;
     }
     return animation_update::tag_utils::has_normalized_tag(it->second.tags, "attack");
+}
+
+bool AnimationRuntime::auto_attack_commitment_active() const {
+    if (!self_ || !self_->info || !current_animation_is_attack()) {
+        return false;
+    }
+    if (committed_attack_target_asset_id_.has_value()) {
+        return true;
+    }
+    return !committed_attack_animation_id_.empty() &&
+           committed_attack_animation_id_ == self_->current_animation;
 }
 
 void AnimationRuntime::clear_attack_commitment() {
@@ -788,8 +919,10 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
 
     const bool is_player = self_->info && self_->info->type == asset_types::player;
     const bool reverse_command_active = reverse_mode_applies_to_current_animation();
-    const bool static_blocked = self_->static_frame && !reverse_command_active;
-    const bool locked_blocked = anim->locked && !reverse_command_active;
+    const bool committed_attack_follow_through =
+        auto_attack_commitment_active() && current_animation_is_attack();
+    const bool static_blocked = self_->static_frame && !reverse_command_active && !committed_attack_follow_through;
+    const bool locked_blocked = anim->locked && !reverse_command_active && !committed_attack_follow_through;
     bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || lock_on_end_active_);
     bool has_overriding_plan = false;
     if (planner_iface_) {

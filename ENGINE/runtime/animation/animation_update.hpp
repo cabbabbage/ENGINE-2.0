@@ -189,4 +189,5 @@ private:
     vibble::grid::Grid& grid() const;
     int effective_grid_resolution(std::optional<int> override_resolution) const;
     AutoMoveCombatOptions resolve_auto_move_combat_options(AutoMoveCombatOverrides overrides = {}) const;
+    bool should_defer_auto_move_for_committed_attack() const;
 };

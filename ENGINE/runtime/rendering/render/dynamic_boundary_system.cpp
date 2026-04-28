@@ -27,6 +27,7 @@
 namespace {
 constexpr float kDefaultAnimationFrameMs = 1000.0f / 24.0f;
 constexpr long long kMaxBoundaryCells = 250000;
+constexpr float kDepthEfficiencyVisibilityHysteresisWidth = 0.05f;
 
 inline bool is_trail_string(const std::string& text) {
     if (text.size() != 5) return false;
@@ -219,10 +220,25 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         delta_ms = 0.0f;
     }
 
-    for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
+    auto promoted_asset_is_valid = [&](const Asset* promoted) -> bool {
+        return promoted && !promoted->dead && assets->contains_asset(promoted);
+    };
+    auto erase_promoted_slot = [&](auto it, bool delete_asset) {
         Asset* promoted = it->second;
-        if (!promoted || !assets->contains_asset(promoted)) {
-            it = promoted_boundary_assets_.erase(it);
+        if (delete_asset && promoted_asset_is_valid(promoted)) {
+            promoted->Delete();
+        }
+        return promoted_boundary_assets_.erase(it);
+    };
+    auto erase_promoted_slot_by_key = [&](const PromotionSlotKey& key, bool delete_asset) {
+        auto it = promoted_boundary_assets_.find(key);
+        if (it != promoted_boundary_assets_.end()) {
+            (void)erase_promoted_slot(it, delete_asset);
+        }
+    };
+    for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
+        if (!promoted_asset_is_valid(it->second)) {
+            it = erase_promoted_slot(it, false);
             continue;
         }
         ++it;
@@ -241,6 +257,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     }
 
     if (boundary_types_.empty()) {
+        for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
+            it = erase_promoted_slot(it, true);
+        }
+        depth_visibility_states_.clear();
         return;
     }
 
@@ -416,6 +436,9 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     }
 
     const WarpedScreenGrid::RealismSettings realism_settings = cam.get_settings();
+    const world::CameraProjectionParams projection = cam.projection_params();
+    const float depth_axis_sign =
+        render_depth::normalize_depth_axis_sign(static_cast<float>(projection.forward_z));
     const double max_cull_depth = std::max(1.0, static_cast<double>(realism_settings.max_cull_depth));
     const double depth_efficiency_depth = std::clamp(
         static_cast<double>(std::isfinite(realism_settings.dynamic_renderer_depth_efficiency_depth)
@@ -425,6 +448,14 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         max_cull_depth);
     const float depth_efficiency_min_density_ratio =
         clamp_unit_interval(realism_settings.dynamic_renderer_depth_efficiency_min_density_ratio, 0.10f);
+    ++depth_visibility_epoch_;
+    if (depth_visibility_epoch_ == 0) {
+        depth_visibility_epoch_ = 1;
+        for (auto& [key, state] : depth_visibility_states_) {
+            (void)key;
+            state.last_seen_epoch = 0;
+        }
+    }
 
     for (const StaticCellAssignment& assignment : static_assignments_) {
         if (assignment.boundary_type_index < 0 || assignment.boundary_type_index >= static_cast<int>(boundary_types_.size())) {
@@ -437,19 +468,25 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
 
         const double depth_from_anchor =
             render_depth::depth_from_anchor(cam.anchor_world_z(), static_cast<double>(assignment.world_z));
-        const double depth_distance = std::fabs(depth_from_anchor);
-        if (!std::isfinite(depth_distance) || depth_distance > max_cull_depth) {
+        const double forward_depth_offset = compute_forward_depth_offset(depth_from_anchor, depth_axis_sign);
+        if (!std::isfinite(forward_depth_offset) || forward_depth_offset > max_cull_depth) {
             continue;
         }
-        const float depth_keep_ratio = compute_depth_efficiency_keep_ratio(depth_distance,
-                                                                           max_cull_depth,
-                                                                           depth_efficiency_depth,
-                                                                           depth_efficiency_min_density_ratio);
-        if (!(depth_keep_ratio > 0.0f)) {
-            continue;
-        }
-        if (depth_keep_ratio < 1.0f &&
-            !should_keep_depth_efficiency_sample(hash_key(assignment.key), depth_keep_ratio)) {
+        const float depth_keep_ratio = compute_depth_efficiency_keep_ratio(forward_depth_offset,
+                                                                            max_cull_depth,
+                                                                            depth_efficiency_depth,
+                                                                            depth_efficiency_min_density_ratio);
+        const std::uint64_t key_hash = hash_key(assignment.key);
+        const float deterministic_sample = depth_efficiency_sample_from_hash(key_hash);
+        auto& visibility_state = depth_visibility_states_[assignment.key];
+        visibility_state.last_seen_epoch = depth_visibility_epoch_;
+        const bool visible_after_efficiency = evaluate_depth_efficiency_visibility(
+            deterministic_sample,
+            depth_keep_ratio,
+            visibility_state.visible,
+            kDepthEfficiencyVisibilityHysteresisWidth);
+        visibility_state.visible = visible_after_efficiency;
+        if (!visible_after_efficiency) {
             continue;
         }
 
@@ -458,47 +495,63 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         if (!candidate || candidate->is_null || candidate->frames.empty()) {
             continue;
         }
-        if (candidate->info &&
-            ControllerFactory::has_registered_controller_for_asset_name(candidate->info->name)) {
-            const PromotionSlotKey slot_key{
-                static_cast<int>(std::lround(assignment.world_pos.x)),
-                assignment.world_z,
-                assignment.key.region_domain
-            };
-            visible_promotion_slots.insert(slot_key);
-            auto promoted_it = promoted_boundary_assets_.find(slot_key);
-            if (promoted_it != promoted_boundary_assets_.end()) {
-                Asset* promoted = promoted_it->second;
-                if (promoted && assets->contains_asset(promoted)) {
-                    continue;
+        const PromotionSlotKey slot_key{
+            static_cast<int>(std::lround(assignment.world_pos.x)),
+            assignment.world_z,
+            assignment.key.region_domain
+        };
+        const bool has_registered_controller =
+            candidate->info &&
+            ControllerFactory::has_registered_controller_for_asset_name(candidate->info->name);
+        if (has_registered_controller) {
+            const bool allow_promotion = should_promote_controller_candidate(
+                true,
+                visible_after_efficiency,
+                forward_depth_offset,
+                depth_efficiency_depth);
+            if (allow_promotion) {
+                visible_promotion_slots.insert(slot_key);
+                auto promoted_it = promoted_boundary_assets_.find(slot_key);
+                if (promoted_it != promoted_boundary_assets_.end()) {
+                    Asset* promoted = promoted_it->second;
+                    if (promoted_asset_is_valid(promoted)) {
+                        continue;
+                    }
+                    promoted_it = erase_promoted_slot(promoted_it, false);
+                    (void)promoted_it;
                 }
-                promoted_boundary_assets_.erase(promoted_it);
-            }
-            const std::string promoted_spawn_id = btype.spawn_id.empty()
-                ? std::string{}
-                : (btype.spawn_id + "::promoted::" +
-                   std::to_string(slot_key.world_x) + ":" +
-                   std::to_string(slot_key.world_z) + ":" +
-                   std::to_string(slot_key.region_domain));
-            if (!promoted_spawn_id.empty()) {
-                if (Asset* existing = assets->find_asset_by_stable_id(promoted_spawn_id)) {
-                    promoted_boundary_assets_[slot_key] = existing;
-                    continue;
-                }
-            }
-            const SDL_Point spawn_pos{
-                static_cast<int>(std::lround(assignment.world_pos.x)),
-                assignment.world_z
-            };
-            Asset* promoted = assets->spawn_asset(assignment.assignment.resolved_asset_name, spawn_pos);
-            if (promoted) {
-                promoted->spawn_method = "DynamicBoundaryPromoted";
+                const std::string promoted_spawn_id = btype.spawn_id.empty()
+                    ? std::string{}
+                    : (btype.spawn_id + "::promoted::" +
+                       std::to_string(slot_key.world_x) + ":" +
+                       std::to_string(slot_key.world_z) + ":" +
+                       std::to_string(slot_key.region_domain));
                 if (!promoted_spawn_id.empty()) {
-                    promoted->spawn_id = promoted_spawn_id;
+                    if (Asset* existing = assets->find_asset_by_stable_id(promoted_spawn_id)) {
+                        if (promoted_asset_is_valid(existing)) {
+                            promoted_boundary_assets_[slot_key] = existing;
+                            continue;
+                        }
+                    }
                 }
-                promoted_boundary_assets_[slot_key] = promoted;
-                continue;
+                const SDL_Point spawn_pos{
+                    static_cast<int>(std::lround(assignment.world_pos.x)),
+                    assignment.world_z
+                };
+                Asset* promoted = assets->spawn_asset(assignment.assignment.resolved_asset_name, spawn_pos);
+                if (promoted) {
+                    promoted->spawn_method = "DynamicBoundaryPromoted";
+                    if (!promoted_spawn_id.empty()) {
+                        promoted->spawn_id = promoted_spawn_id;
+                    }
+                    promoted_boundary_assets_[slot_key] = promoted;
+                    continue;
+                }
+            } else {
+                erase_promoted_slot_by_key(slot_key, true);
             }
+        } else {
+            erase_promoted_slot_by_key(slot_key, true);
         }
 
         SDL_FPoint screen_pos{};
@@ -514,7 +567,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         if (total_frames <= 0) {
             continue;
         }
-        const bool freeze_animation = depth_distance > depth_efficiency_depth;
+        const bool freeze_animation = forward_depth_offset > depth_efficiency_depth;
         advance_frame_state(frame_state, candidate->frames, delta_ms, freeze_animation);
 
         int current_index = frame_state.frame_index % total_frames;
@@ -605,7 +658,14 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
 
     for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
         if (visible_promotion_slots.find(it->first) == visible_promotion_slots.end()) {
-            it = promoted_boundary_assets_.erase(it);
+            it = erase_promoted_slot(it, true);
+            continue;
+        }
+        ++it;
+    }
+    for (auto it = depth_visibility_states_.begin(); it != depth_visibility_states_.end();) {
+        if (it->second.last_seen_epoch != depth_visibility_epoch_) {
+            it = depth_visibility_states_.erase(it);
             continue;
         }
         ++it;
@@ -939,6 +999,8 @@ bool DynamicBoundarySystem::refresh_boundary_config_revision(const nlohmann::jso
 void DynamicBoundarySystem::clear_runtime_caches() {
     boundary_assignments_.clear();
     animation_states_.clear();
+    depth_visibility_states_.clear();
+    depth_visibility_epoch_ = 0;
     active_boundary_sprites_.clear();
     region_cache_.clear();
     region_area_index_.clear();
@@ -1067,7 +1129,29 @@ float DynamicBoundarySystem::compute_depth_efficiency_keep_ratio(double depth_di
     return std::clamp(static_cast<float>(keep_ratio), clamped_min_density_ratio, 1.0f);
 }
 
-bool DynamicBoundarySystem::should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio) {
+double DynamicBoundarySystem::compute_forward_depth_offset(double depth_from_anchor, float depth_axis_sign) {
+    if (!std::isfinite(depth_from_anchor) || !std::isfinite(depth_axis_sign)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double sign = static_cast<double>(render_depth::normalize_depth_axis_sign(depth_axis_sign));
+    return -sign * depth_from_anchor;
+}
+
+float DynamicBoundarySystem::depth_efficiency_sample_from_hash(std::uint64_t key_hash) {
+    const std::uint64_t mixed_hash = mix_uint64(key_hash, 0x4450524546464943ULL);
+    const double sample =
+        static_cast<double>(mixed_hash) /
+        static_cast<double>(std::numeric_limits<std::uint64_t>::max());
+    if (!std::isfinite(sample)) {
+        return 0.0f;
+    }
+    return std::clamp(static_cast<float>(sample), 0.0f, 1.0f);
+}
+
+bool DynamicBoundarySystem::evaluate_depth_efficiency_visibility(float deterministic_sample,
+                                                                 float keep_ratio,
+                                                                 bool was_visible,
+                                                                 float hysteresis_width) {
     const float clamped_keep_ratio = clamp_unit_interval(keep_ratio, 0.0f);
     if (clamped_keep_ratio <= 0.0f) {
         return false;
@@ -1076,11 +1160,36 @@ bool DynamicBoundarySystem::should_keep_depth_efficiency_sample(std::uint64_t ke
         return true;
     }
 
-    const std::uint64_t mixed_hash = mix_uint64(key_hash, 0x4450524546464943ULL);
-    const double sample =
-        static_cast<double>(mixed_hash) /
-        static_cast<double>(std::numeric_limits<std::uint64_t>::max());
-    return sample <= static_cast<double>(clamped_keep_ratio);
+    const float clamped_sample = clamp_unit_interval(deterministic_sample, 0.0f);
+    const float clamped_hysteresis = std::clamp(std::fabs(hysteresis_width), 0.0f, 0.49f);
+    const float entry_threshold = std::max(0.0f, clamped_keep_ratio - clamped_hysteresis);
+    const float exit_threshold = std::min(1.0f, clamped_keep_ratio + clamped_hysteresis);
+    return was_visible ? (clamped_sample <= exit_threshold) : (clamped_sample <= entry_threshold);
+}
+
+bool DynamicBoundarySystem::should_promote_controller_candidate(bool has_registered_controller,
+                                                                bool visible_after_efficiency,
+                                                                double forward_depth_offset,
+                                                                double efficiency_depth) {
+    if (!has_registered_controller || !visible_after_efficiency) {
+        return false;
+    }
+    if (!std::isfinite(forward_depth_offset) || !std::isfinite(efficiency_depth)) {
+        return false;
+    }
+    const double clamped_efficiency_depth = std::max(0.0, efficiency_depth);
+    return forward_depth_offset >= 0.0 && forward_depth_offset <= clamped_efficiency_depth;
+}
+
+bool DynamicBoundarySystem::should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio) {
+    const float clamped_keep_ratio = clamp_unit_interval(keep_ratio, 0.0f);
+    if (clamped_keep_ratio <= 0.0f) {
+        return false;
+    }
+    if (clamped_keep_ratio >= 1.0f) {
+        return true;
+    }
+    return depth_efficiency_sample_from_hash(key_hash) <= clamped_keep_ratio;
 }
 
 void DynamicBoundarySystem::advance_frame_state(FrameState& frame_state,

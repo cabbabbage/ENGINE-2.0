@@ -23677,7 +23677,7 @@
           "display_color": [
             242,
             36,
-            125,
+            54,
             255
           ],
           "edge_smoothness": 2,
@@ -24071,16 +24071,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -918,
-          "camera_center_dz": -891,
-          "camera_height_px": 499,
+          "camera_center_dx": 43,
+          "camera_center_dz": 177,
+          "camera_height_px": 233,
           "camera_tilt_deg": 50.791439056396484,
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            242,
-            61,
+            226,
             255
           ],
           "edge_smoothness": 101,
@@ -24196,8 +24196,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 176,
-              "dz": -224,
+              "dx": 32,
+              "dz": 220,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24209,7 +24209,7 @@
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
-              "resolution": 4,
+              "resolution": 2,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-a84d1adacd90"

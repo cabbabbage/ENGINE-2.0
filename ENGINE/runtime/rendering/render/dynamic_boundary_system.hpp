@@ -139,6 +139,16 @@ public:
                                                      double max_cull_depth,
                                                      double efficiency_depth,
                                                      float min_density_ratio);
+    static double compute_forward_depth_offset(double depth_from_anchor, float depth_axis_sign);
+    static float depth_efficiency_sample_from_hash(std::uint64_t key_hash);
+    static bool  evaluate_depth_efficiency_visibility(float deterministic_sample,
+                                                      float keep_ratio,
+                                                      bool was_visible,
+                                                      float hysteresis_width = 0.05f);
+    static bool  should_promote_controller_candidate(bool has_registered_controller,
+                                                     bool visible_after_efficiency,
+                                                     double forward_depth_offset,
+                                                     double efficiency_depth);
     static bool  should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio);
     static void  advance_frame_state(FrameState& frame_state,
                                      const std::vector<BoundaryFrame>& frames,
@@ -165,6 +175,12 @@ private:
     std::size_t room_trail_catalog_signature_ = std::numeric_limits<std::size_t>::max();
     std::unordered_map<BoundaryKey, BoundaryAssignment, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
+    struct DepthVisibilityState {
+        bool visible = true;
+        std::uint64_t last_seen_epoch = 0;
+    };
+    std::unordered_map<BoundaryKey, DepthVisibilityState, BoundaryKeyHash> depth_visibility_states_;
+    std::uint64_t depth_visibility_epoch_ = 0;
     struct PromotionSlotKey {
         int world_x = 0;
         int world_z = 0;

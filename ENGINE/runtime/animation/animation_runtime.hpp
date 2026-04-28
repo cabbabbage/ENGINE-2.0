@@ -76,6 +76,7 @@ public:
     void set_debug_enabled(bool enabled);
 
     bool has_active_plan() const;
+    bool auto_attack_commitment_active() const;
     bool maybe_trigger_attack_on_cycle_boundary();
 
 private:
@@ -150,3 +151,12 @@ private:
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }
 };
+
+namespace animation_runtime::test_hooks {
+
+int attack_facing_match_score(const std::vector<std::string>& animation_tags,
+                              const std::string& animation_id,
+                              int target_delta_x,
+                              int deadzone_px = 6);
+
+} // namespace animation_runtime::test_hooks

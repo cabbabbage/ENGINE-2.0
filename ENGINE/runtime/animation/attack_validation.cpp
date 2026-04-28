@@ -552,7 +552,12 @@ AttackValidation::AttackWindowEvaluation AttackValidation::evaluate_attack_windo
         target_velocity.y * ((clamped_horizon + 1) / 2),
         target_velocity.z * ((clamped_horizon + 1) / 2)};
 
-    const auto& attack_volumes = attacker.current_attack_box_volumes();
+    const bool evaluating_current_animation =
+        !attacker.current_animation.empty() &&
+        attacker.current_animation == attack_animation_id;
+    const std::vector<Asset::RuntimeBoxVolume> empty_attack_volumes{};
+    const std::vector<Asset::RuntimeBoxVolume>& attack_volumes =
+        evaluating_current_animation ? attacker.current_attack_box_volumes() : empty_attack_volumes;
     AABB3 coarse_attack_sweep{};
     if (!attack_volumes.empty()) {
         for (const auto& volume : attack_volumes) {

@@ -3032,7 +3032,13 @@ void AssetInfo::set_spawn_groups_payload(const nlohmann::json& groups) {
     }
 
     if (groups.is_array()) {
-        info_json_["spawn_groups"] = groups;
+        nlohmann::json sanitized = groups;
+        for (auto& entry : sanitized) {
+            vibble::spawn_group_codec::EntryDefaults defaults{};
+            defaults.display_name = vibble::spawn_group_codec::read_string_field(entry, "display_name", "New Spawn");
+            vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(entry, defaults);
+        }
+        info_json_["spawn_groups"] = std::move(sanitized);
     } else {
         info_json_.erase("spawn_groups");
     }
@@ -3052,6 +3058,11 @@ void AssetInfo::set_spawn_groups(const nlohmann::json& groups) {
     nlohmann::json sanitized = nlohmann::json::array();
     if (groups.is_array()) {
         sanitized = groups;
+        for (auto& entry : sanitized) {
+            vibble::spawn_group_codec::EntryDefaults defaults{};
+            defaults.display_name = vibble::spawn_group_codec::read_string_field(entry, "display_name", "New Spawn");
+            vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(entry, defaults);
+        }
     }
 
     info_json_["spawn_groups"] = std::move(sanitized);

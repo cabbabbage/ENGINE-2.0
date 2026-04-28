@@ -34,6 +34,10 @@ TEST_CASE("SpawnGroupCodec materializes canonical defaults") {
     CHECK(entry["max_number"] == 1);
     CHECK(entry["resolve_geometry_to_room_size"] == true);
     CHECK(entry["resolve_quantity_to_room_size"] == false);
+    CHECK(entry["randomize_y"] == false);
+    CHECK(entry["position_y"] == 0);
+    CHECK(!entry.contains("min_y"));
+    CHECK(!entry.contains("max_y"));
     CHECK(entry["candidates"].is_array());
     REQUIRE(entry["candidates"].size() == 1);
     CHECK(entry["candidates"][0]["name"] == "null");
@@ -168,4 +172,32 @@ TEST_CASE("SpawnGroupCodec sanitizes perimeter and edge field bounds") {
     CHECK(edge["min_number"] == 1);
     CHECK(edge["max_number"] == 1);
     CHECK(edge["edge_inset_percent"] == 200);
+}
+
+TEST_CASE("SpawnGroupCodec sanitizes randomized y range and exact y mode") {
+    nlohmann::json random_y = nlohmann::json::object({
+        {"position", "Random"},
+        {"randomize_y", true},
+        {"min_y", 12},
+        {"max_y", -3}
+    });
+    nlohmann::json exact_y = nlohmann::json::object({
+        {"position", "Random"},
+        {"randomize_y", false},
+        {"position_y", "7"},
+        {"min_y", 1},
+        {"max_y", 2}
+    });
+
+    CHECK(vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(random_y));
+    CHECK(random_y["randomize_y"] == true);
+    CHECK(random_y["min_y"] == -3);
+    CHECK(random_y["max_y"] == 12);
+    CHECK(!random_y.contains("position_y"));
+
+    CHECK(vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(exact_y));
+    CHECK(exact_y["randomize_y"] == false);
+    CHECK(exact_y["position_y"] == 7);
+    CHECK(!exact_y.contains("min_y"));
+    CHECK(!exact_y.contains("max_y"));
 }

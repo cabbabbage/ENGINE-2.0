@@ -5039,11 +5039,12 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                                                 5)) {
                             continue;
                         }
+                        const int spawn_depth = info.resolve_spawn_depth(ctx.rng());
                         auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
                                                       candidate->info,
                                                       *area_ptr,
                                                       spawn_pos,
-                                                      0,
+                                                      spawn_depth,
                                                       info.spawn_id,
                                                       info.position);
                         if (!result) {

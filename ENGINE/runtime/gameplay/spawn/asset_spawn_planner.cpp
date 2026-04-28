@@ -275,6 +275,18 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
         s.exact_point.x  = asset.value("ep_x", average_range("ep_x_min", "ep_x_max", -1));
         s.exact_point.y  = asset.value("ep_y", average_range("ep_y_min", "ep_y_max", -1));
 
+        s.randomize_y = vibble::spawn_group_codec::read_bool_field(asset, "randomize_y", false);
+        s.position_y = vibble::spawn_group_codec::read_int_field(asset, "position_y", vibble::spawn_group_codec::kDefaultPositionY);
+        s.min_y = vibble::spawn_group_codec::read_int_field(asset, "min_y", s.position_y);
+        s.max_y = vibble::spawn_group_codec::read_int_field(asset, "max_y", s.position_y);
+        if (s.max_y < s.min_y) {
+            std::swap(s.min_y, s.max_y);
+        }
+        if (!s.randomize_y) {
+            s.min_y = s.position_y;
+            s.max_y = s.position_y;
+        }
+
         if (position == "Perimeter") {
             int base_radius = asset.value("radius", asset.value("perimeter_radius", 0));
             s.perimeter_radius = resolve_geometry ? scaler.scale_length(base_radius) : base_radius;

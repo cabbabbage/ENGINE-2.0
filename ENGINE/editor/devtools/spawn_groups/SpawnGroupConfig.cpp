@@ -104,6 +104,7 @@ constexpr int kPerimeterRadiusSliderMax = 10000;
 constexpr int kEdgeInsetSliderMin = 0;
 constexpr int kEdgeInsetSliderMax = 200;
 constexpr int kEdgeInsetDefault = 100;
+constexpr int kDefaultPositionY = 0;
 
 std::function<std::vector<std::string>()> empty_provider() {
     return []() { return std::vector<std::string>{}; };
@@ -749,6 +750,33 @@ struct SpawnGroupConfig::Entry {
         exact_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(std::move(exact_box),
             [this](const std::string& text) { on_exact_changed(text); }, false, editable_);
 
+        auto randomize_y_checkbox = std::make_unique<DMCheckbox>("Randomize Y", false);
+        randomize_y_widget_ = std::make_unique<CallbackCheckboxWidget>(
+            std::move(randomize_y_checkbox),
+            [this](bool value) { on_randomize_y_changed(value); },
+            editable_);
+
+        auto y_position_box = std::make_unique<DMTextBox>("Y Position", "");
+        y_position_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(
+            std::move(y_position_box),
+            [this](const std::string& text) { on_position_y_changed(text); },
+            false,
+            editable_);
+
+        auto min_y_box = std::make_unique<DMTextBox>("Min Y", "");
+        min_y_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(
+            std::move(min_y_box),
+            [this](const std::string& text) { on_min_y_changed(text); },
+            false,
+            editable_);
+
+        auto max_y_box = std::make_unique<DMTextBox>("Max Y", "");
+        max_y_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(
+            std::move(max_y_box),
+            [this](const std::string& text) { on_max_y_changed(text); },
+            false,
+            editable_);
+
         auto resolution_slider = std::make_unique<DMSlider>("Grid Resolution (2^r px)", 0, vibble::grid::kMaxResolution, current_resolution_);
         resolution_slider->set_defer_commit_until_unfocus(false);
         resolution_widget_ = std::make_unique<SpawnGroupCallbackSliderWidget>(
@@ -886,6 +914,7 @@ struct SpawnGroupConfig::Entry {
         const bool previous_use_exact_quantity = use_exact_quantity_;
         const bool previous_show_resolve_quantity = show_resolve_quantity_widget_;
         const bool previous_hide_quantity_controls = quantity_hidden() || was_exact_method;
+        const bool previous_randomize_y = randomize_y_;
         current_method_ = method;
         use_exact_quantity_ = is_exact_method_token(method);
         bool previous_show_radius = show_perimeter_radius_widget_;
@@ -992,6 +1021,37 @@ struct SpawnGroupConfig::Entry {
         max_widget_->set_value(std::to_string(max_number));
         exact_widget_->set_value(std::to_string(quantity));
 
+        randomize_y_ = safe_bool(entry, "randomize_y", false);
+        int position_y = safe_int(entry, "position_y", kDefaultPositionY);
+        int min_y = safe_int(entry, "min_y", position_y);
+        int max_y = safe_int(entry, "max_y", position_y);
+        if (max_y < min_y) {
+            std::swap(min_y, max_y);
+        }
+        if (!randomize_y_) {
+            min_y = position_y;
+            max_y = position_y;
+        }
+        if (randomize_y_widget_) {
+            randomize_y_widget_->set_value(randomize_y_);
+            randomize_y_widget_->set_editable(editable_);
+        }
+        if (y_position_widget_) {
+            y_position_widget_->set_value(std::to_string(position_y));
+            y_position_widget_->set_editable(editable_ && !randomize_y_);
+        }
+        if (min_y_widget_) {
+            min_y_widget_->set_value(std::to_string(min_y));
+            min_y_widget_->set_editable(editable_ && randomize_y_);
+        }
+        if (max_y_widget_) {
+            max_y_widget_->set_value(std::to_string(max_y));
+            max_y_widget_->set_editable(editable_ && randomize_y_);
+        }
+        if (owner_ && previous_randomize_y != randomize_y_) {
+            owner_->mark_layout_dirty();
+        }
+
         bool enforce_spacing = entry.is_object() ? entry.value("enforce_spacing", false) : false;
         enforce_widget_->set_value(enforce_spacing);
 
@@ -1039,6 +1099,18 @@ struct SpawnGroupConfig::Entry {
         }
         if (exact_widget_) {
             exact_widget_->set_editable(allow_quantity_inputs && use_exact_quantity_);
+        }
+        if (randomize_y_widget_) {
+            randomize_y_widget_->set_editable(editable_);
+        }
+        if (y_position_widget_) {
+            y_position_widget_->set_editable(editable_ && !randomize_y_);
+        }
+        if (min_y_widget_) {
+            min_y_widget_->set_editable(editable_ && randomize_y_);
+        }
+        if (max_y_widget_) {
+            max_y_widget_->set_editable(editable_ && randomize_y_);
         }
         if (resolution_widget_) {
             resolution_widget_->set_editable(editable_);
@@ -1115,6 +1187,18 @@ struct SpawnGroupConfig::Entry {
                 DockableCollapsible::Row qty_row;
                 qty_row.push_back(exact_widget_.get());
                 rows.push_back(qty_row);
+            }
+
+            if (randomize_y_widget_) {
+                rows.push_back({randomize_y_widget_.get()});
+            }
+            if (randomize_y_) {
+                DockableCollapsible::Row y_range_row;
+                if (min_y_widget_) y_range_row.push_back(min_y_widget_.get());
+                if (max_y_widget_) y_range_row.push_back(max_y_widget_.get());
+                if (!y_range_row.empty()) rows.push_back(y_range_row);
+            } else if (y_position_widget_) {
+                rows.push_back({y_position_widget_.get()});
             }
 
             if (show_perimeter_radius_widget_ && perimeter_radius_widget_) {
@@ -1605,6 +1689,87 @@ private:
         }
     }
 
+    void on_randomize_y_changed(bool value) {
+        if (!editable_) return;
+        if (auto* entry = mutable_entry()) {
+            (*entry)["randomize_y"] = value;
+            if (value) {
+                const int fallback = safe_int(*entry, "position_y", kDefaultPositionY);
+                int min_value = safe_int(*entry, "min_y", fallback);
+                int max_value = safe_int(*entry, "max_y", fallback);
+                if (max_value < min_value) {
+                    std::swap(min_value, max_value);
+                }
+                (*entry)["min_y"] = min_value;
+                (*entry)["max_y"] = max_value;
+                (*entry).erase("position_y");
+            } else {
+                const int fallback = safe_int(*entry, "position_y", safe_int(*entry, "min_y", kDefaultPositionY));
+                (*entry)["position_y"] = fallback;
+                (*entry).erase("min_y");
+                (*entry).erase("max_y");
+            }
+            notify_change(false, false, false);
+            sync_from_json();
+        }
+    }
+
+    void on_position_y_changed(const std::string& text) {
+        if (!editable_) return;
+        if (y_position_widget_ && y_position_widget_->box() && y_position_widget_->box()->is_editing()) {
+            return;
+        }
+        if (auto* entry = mutable_entry()) {
+            int value = parse_int_or(text, safe_int(*entry, "position_y", kDefaultPositionY));
+            (*entry)["position_y"] = value;
+            (*entry)["randomize_y"] = false;
+            (*entry).erase("min_y");
+            (*entry).erase("max_y");
+            notify_change(false, false, false);
+            sync_from_json();
+        }
+    }
+
+    void on_min_y_changed(const std::string& text) {
+        if (!editable_) return;
+        if (min_y_widget_ && min_y_widget_->box() && min_y_widget_->box()->is_editing()) {
+            return;
+        }
+        if (auto* entry = mutable_entry()) {
+            int min_value = parse_int_or(text, safe_int(*entry, "min_y", safe_int(*entry, "position_y", kDefaultPositionY)));
+            int max_value = safe_int(*entry, "max_y", min_value);
+            if (max_value < min_value) {
+                max_value = min_value;
+            }
+            (*entry)["randomize_y"] = true;
+            (*entry)["min_y"] = min_value;
+            (*entry)["max_y"] = max_value;
+            (*entry).erase("position_y");
+            notify_change(false, false, false);
+            sync_from_json();
+        }
+    }
+
+    void on_max_y_changed(const std::string& text) {
+        if (!editable_) return;
+        if (max_y_widget_ && max_y_widget_->box() && max_y_widget_->box()->is_editing()) {
+            return;
+        }
+        if (auto* entry = mutable_entry()) {
+            int min_value = safe_int(*entry, "min_y", safe_int(*entry, "position_y", kDefaultPositionY));
+            int max_value = parse_int_or(text, safe_int(*entry, "max_y", min_value));
+            if (max_value < min_value) {
+                max_value = min_value;
+            }
+            (*entry)["randomize_y"] = true;
+            (*entry)["min_y"] = min_value;
+            (*entry)["max_y"] = max_value;
+            (*entry).erase("position_y");
+            notify_change(false, false, false);
+            sync_from_json();
+        }
+    }
+
     void on_resolve_geometry_changed(bool value) {
         if (!editable_) return;
         if (auto* entry = mutable_entry()) {
@@ -1724,6 +1889,10 @@ private:
     std::unique_ptr<SpawnGroupCallbackTextBoxWidget> min_widget_{};
     std::unique_ptr<SpawnGroupCallbackTextBoxWidget> max_widget_{};
     std::unique_ptr<SpawnGroupCallbackTextBoxWidget> exact_widget_{};
+    std::unique_ptr<CallbackCheckboxWidget> randomize_y_widget_{};
+    std::unique_ptr<SpawnGroupCallbackTextBoxWidget> y_position_widget_{};
+    std::unique_ptr<SpawnGroupCallbackTextBoxWidget> min_y_widget_{};
+    std::unique_ptr<SpawnGroupCallbackTextBoxWidget> max_y_widget_{};
     std::unique_ptr<SpawnGroupCallbackSliderWidget> resolution_widget_{};
     std::unique_ptr<SpawnGroupCallbackSliderWidget> perimeter_radius_widget_{};
     std::unique_ptr<SpawnGroupCallbackSliderWidget> edge_inset_widget_{};
@@ -1731,6 +1900,7 @@ private:
     bool show_edge_inset_widget_ = false;
     bool show_resolve_geometry_widget_ = false;
     bool show_resolve_quantity_widget_ = false;
+    bool randomize_y_ = false;
     int current_resolution_ = 0;
 
     bool locked_ = false;

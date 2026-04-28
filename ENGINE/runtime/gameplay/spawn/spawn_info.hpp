@@ -33,6 +33,10 @@ struct SpawnInfo {
     int perimeter_radius = 0;
 
     int edge_inset_percent = 100;
+    bool randomize_y = false;
+    int position_y = 0;
+    int min_y = 0;
+    int max_y = 0;
 
     bool adjust_geometry_to_room = false;
     ExecutionMode execution_mode = ExecutionMode::Standard;
@@ -41,6 +45,18 @@ struct SpawnInfo {
 
     bool has_candidates() const { return !candidates.empty(); }
     bool uses_batch_grid() const { return execution_mode == ExecutionMode::BatchGrid; }
+
+    int resolve_spawn_depth(std::mt19937& rng) const {
+        if (!randomize_y) {
+            return position_y;
+        }
+        const int lo = std::min(min_y, max_y);
+        const int hi = std::max(min_y, max_y);
+        if (lo == hi) {
+            return lo;
+        }
+        return std::uniform_int_distribution<int>(lo, hi)(rng);
+    }
 
     std::optional<vibble::spawn::ResolvedCandidate> select_candidate(
         std::mt19937& rng,

@@ -66,11 +66,12 @@ AttemptResult attempt_spawn(const SpawnInfo& item,
         return AttemptResult::CheckRejected;
     }
 
+    const int spawn_depth = item.resolve_spawn_depth(ctx.rng());
     auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
                                   candidate->info,
                                   area,
                                   pos,
-                                  0,
+                                  spawn_depth,
                                   item.spawn_id,
                                   item.position);
     if (!result) {

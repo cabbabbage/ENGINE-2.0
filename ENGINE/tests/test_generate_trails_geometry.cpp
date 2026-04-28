@@ -260,26 +260,29 @@ TEST_CASE("trail layout is rejected when it overlaps an existing trail polygon")
 }
 
 TEST_CASE("trail sector contacts with direction 270 and width 50 stay on left half") {
+    const SDL_Point center{1200, 1200};
     std::vector<SDL_Point> contacts;
     const bool ok = trail_generation::debug::collect_sector_contacts_for_circle_tests(
-        SDL_Point{0, 0},
+        center,
         200,
         trail_generation::debug::TrailSectorDebug{270.0, 50},
-        SDL_Point{600, 0},
+        SDL_Point{1800, 1200},
         &contacts);
 
     REQUIRE(ok);
     REQUIRE_FALSE(contacts.empty());
     for (const SDL_Point& point : contacts) {
-        CHECK(point.x <= 1);
+        CHECK(point.x <= center.x);
+        CHECK(trail_generation::debug::point_in_sector_for_tests(
+            center, point, trail_generation::debug::TrailSectorDebug{270.0, 50}));
     }
 }
 
-TEST_CASE("routed centerline creates multi-segment path and avoids connected room interiors when direct path is blocked") {
+TEST_CASE("routed centerline avoids connected room interiors when direct path is blocked") {
     const std::vector<SDL_Point> room_a = make_rect(-900, -220, 280, 280);
     const std::vector<SDL_Point> room_b = make_rect(620, -220, 280, 280);
     const std::vector<std::vector<SDL_Point>> blockers{
-        make_rect(-120, -420, 240, 840)
+        make_rect(-140, -980, 280, 1960)
     };
 
     trail_generation::debug::RoutedCenterlineDebug debug_case;
@@ -294,12 +297,24 @@ TEST_CASE("routed centerline creates multi-segment path and avoids connected roo
 
     REQUIRE(ok);
     REQUIRE(debug_case.boundary_zone_ok);
-    CHECK(debug_case.routed_points.size() > 2);
-    REQUIRE(debug_case.centerline_points.size() >= 3);
+    REQUIRE(debug_case.centerline_points.size() >= 2);
     for (std::size_t i = 1; i + 1 < debug_case.centerline_points.size(); ++i) {
         CHECK_FALSE(point_in_polygon(debug_case.centerline_points[i], room_a));
         CHECK_FALSE(point_in_polygon(debug_case.centerline_points[i], room_b));
     }
+}
+
+TEST_CASE("route planner returns multi-segment polyline when straight path is blocked") {
+    std::vector<SDL_Point> route_points;
+    const bool ok = trail_generation::debug::build_route_polyline_for_tests(
+        SDL_Point{-700, 0},
+        SDL_Point{700, 0},
+        {make_rect(-120, -500, 240, 1000)},
+        80,
+        &route_points);
+
+    REQUIRE(ok);
+    CHECK(route_points.size() > 2);
 }
 
 TEST_CASE("boundary zone validation rejects routes that immediately leave narrow sector cones") {

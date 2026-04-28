@@ -2496,14 +2496,16 @@ bool collect_sector_contacts_for_circle_tests(const SDL_Point& center,
         return false;
     }
 
+    const int map_span = std::max(radius * 8,
+                                  std::max(std::abs(center.x), std::abs(center.y)) * 4 + radius * 4);
     Area room_area("sector_circle_test",
                    center,
                    radius * 2,
                    radius * 2,
                    "Circle",
                    2,
-                   radius * 10,
-                   radius * 10,
+                   map_span,
+                   map_span,
                    3);
     const TrailConnectionSector converted = make_test_sector(sector);
     *out_contacts = collect_sector_contact_candidates_for_area(&room_area, converted, target_center);
@@ -2569,7 +2571,9 @@ bool build_routed_centerline_for_tests(const std::vector<SDL_Point>& room_a_poly
         for (std::size_t ib = 0; ib < out_debug->contact_candidates_b.size(); ++ib) {
             const double dx = static_cast<double>(out_debug->contact_candidates_a[ia].x - out_debug->contact_candidates_b[ib].x);
             const double dy = static_cast<double>(out_debug->contact_candidates_a[ia].y - out_debug->contact_candidates_b[ib].y);
-            pair_candidates.push_back(PairCandidate{ia, ib, std::hypot(dx, dy)});
+            const double distance = std::hypot(dx, dy);
+            const double rank_bias = static_cast<double>(ia + ib) * 200.0;
+            pair_candidates.push_back(PairCandidate{ia, ib, distance + rank_bias});
         }
     }
     std::sort(pair_candidates.begin(), pair_candidates.end(), [](const PairCandidate& lhs, const PairCandidate& rhs) {
@@ -2616,6 +2620,37 @@ bool build_routed_centerline_for_tests(const std::vector<SDL_Point>& room_a_poly
     }
 
     return found_route;
+}
+
+bool build_route_polyline_for_tests(const SDL_Point& start_gate,
+                                    const SDL_Point& end_gate,
+                                    const std::vector<std::vector<SDL_Point>>& blocking_room_polygons,
+                                    int clearance_px,
+                                    std::vector<SDL_Point>* out_points) {
+    if (!out_points) {
+        return false;
+    }
+    out_points->clear();
+
+    std::vector<TrailObstacle> trail_obstacles;
+    trail_obstacles.reserve(blocking_room_polygons.size());
+    for (std::size_t i = 0; i < blocking_room_polygons.size(); ++i) {
+        if (blocking_room_polygons[i].size() < 3) {
+            continue;
+        }
+        TrailObstacle obstacle;
+        obstacle.polygon = blocking_room_polygons[i];
+        obstacle.bounds = bounds_from_points(obstacle.polygon);
+        trail_obstacles.push_back(std::move(obstacle));
+    }
+
+    RouteSearchResult route =
+        build_routed_polyline(start_gate, end_gate, nullptr, nullptr, {}, trail_obstacles, std::max(4, clearance_px));
+    if (!route.success) {
+        return false;
+    }
+    *out_points = route.points;
+    return true;
 }
 
 } // namespace trail_generation::debug

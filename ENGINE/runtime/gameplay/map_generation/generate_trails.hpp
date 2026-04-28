@@ -112,5 +112,11 @@ bool build_routed_centerline_for_tests(const std::vector<SDL_Point>& room_a_poly
                                        const std::vector<std::vector<SDL_Point>>& blocking_room_polygons,
                                        int corridor_clearance_px,
                                        RoutedCenterlineDebug* out_debug);
+
+bool build_route_polyline_for_tests(const SDL_Point& start_gate,
+                                    const SDL_Point& end_gate,
+                                    const std::vector<std::vector<SDL_Point>>& blocking_room_polygons,
+                                    int clearance_px,
+                                    std::vector<SDL_Point>* out_points);
 } // namespace trail_generation::debug
 #endif

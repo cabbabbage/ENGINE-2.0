@@ -251,7 +251,8 @@ public:
         }
 
         const SDL_Color panel_bg = DMStyles::PanelBG();
-        SDL_SetRenderDrawColor(renderer, panel_bg.r, panel_bg.g, panel_bg.b, static_cast<Uint8>(std::max(80, panel_bg.a)));
+        const Uint8 panel_alpha = static_cast<Uint8>(std::max(80, static_cast<int>(panel_bg.a)));
+        SDL_SetRenderDrawColor(renderer, panel_bg.r, panel_bg.g, panel_bg.b, panel_alpha);
         sdl_render::FillRect(renderer, &rect_);
 
         const CircleLayout layout = compute_layout();

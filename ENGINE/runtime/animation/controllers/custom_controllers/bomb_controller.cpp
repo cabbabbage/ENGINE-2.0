@@ -1,5 +1,6 @@
 #include "bomb_controller.hpp"
 #include "assets/asset/Asset.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/controllers/shared/custom_controller_api.hpp"
 
 bomb_controller::bomb_controller(Asset* self)

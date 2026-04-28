@@ -1,4 +1,5 @@
 #include "spider_controller.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/controllers/shared/custom_controller_api.hpp"
 #include "assets/asset/Asset.hpp"
 

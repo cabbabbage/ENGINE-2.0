@@ -113,7 +113,7 @@ TEST_CASE("RoomConfigurator compact mode self-heals malformed dimensions and pre
     CHECK(saved.value("max_width", 0) >= saved.value("min_width", 0));
     CHECK(saved.value("min_height", 0) >= 1);
     CHECK(saved.value("max_height", 0) >= saved.value("min_height", 0));
-    CHECK(saved.value("max_height", 0) <= 4000);
+    CHECK(saved.value("max_height", 0) <= 40000);
     CHECK(saved.value("edge_smoothness", 0) == 101);
     CHECK_FALSE(saved.contains("radius"));
     CHECK_FALSE(saved.contains("min_radius"));

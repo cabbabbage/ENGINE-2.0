@@ -1515,9 +1515,14 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         if (!asset) {
             continue;
         }
-        const std::optional<AnchorPoint> resolved = asset->anchor_state(registry_entry.anchor_name,
-                                                                         anchor_points::GridMaterialization::None,
-                                                                         Asset::AnchorResolveMode::Cached);
+        std::optional<AnchorPoint> resolved = asset->anchor_state(registry_entry.anchor_name,
+                                                                  anchor_points::GridMaterialization::None,
+                                                                  Asset::AnchorResolveMode::Cached);
+        if (!resolved.has_value() || !resolved->exists) {
+            resolved = asset->anchor_state(registry_entry.anchor_name,
+                                           anchor_points::GridMaterialization::None,
+                                           Asset::AnchorResolveMode::ForceRecompute);
+        }
         if (!resolved.has_value() || !resolved->exists) {
             ++runtime_light_culled_count_;
             continue;

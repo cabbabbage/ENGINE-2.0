@@ -24,7 +24,7 @@ namespace {
 using vibble::strings::to_lower_copy;
 
 constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 4000;
+constexpr int kMaxRoomDimension = 40000;
 
 bool read_json_int(const nlohmann::json& src, const char* key, int& out_value) {
         if (!src.is_object() || !key) {

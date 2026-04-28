@@ -27,7 +27,7 @@ namespace {
 constexpr int kRoomConfigPanelMinWidth = 260;
 constexpr bool kTrailsAllowIndependentDimensions = true;
 constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 4000;
+constexpr int kMaxRoomDimension = 40000;
 constexpr int kSliderExpansionMargin = 64;
 constexpr int kSliderExpansionFactor = 2;
 constexpr double kDegreesFullCircle = 360.0;

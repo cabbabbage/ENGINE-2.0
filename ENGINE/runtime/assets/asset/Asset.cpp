@@ -683,7 +683,6 @@ Asset& Asset::operator=(const Asset& o) {
         directional_target_world_z_ = o.directional_target_world_z_;
         directional_target_valid_ = o.directional_target_valid_;
         base_spawn_tilt_degrees_ = o.base_spawn_tilt_degrees_;
-        runtime_sink_crop_cache_ = RuntimeSinkCropCache{};
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
@@ -2903,81 +2902,6 @@ double Asset::effective_render_angle() const {
                 ? anchor_sprite_transform_override_angle_degrees_
                 : 0.0;
         return base_tilt + runtime_override;
-}
-
-int Asset::resolve_runtime_sink_crop_source_px(int frame_w,
-                                               int frame_h,
-                                               float remainder_scale) const {
-        if (frame_w <= 0 || frame_h <= 1) {
-                return 0;
-        }
-        const float safe_remainder =
-                (std::isfinite(remainder_scale) && remainder_scale > 1e-5f)
-                        ? remainder_scale
-                        : 1.0f;
-        const double angle_degrees = effective_render_angle();
-        const int world_y_value = world_y();
-        const int angle_q = static_cast<int>(std::lround(angle_degrees * 100.0));
-        const int remainder_q = static_cast<int>(std::lround(safe_remainder * 1000.0f));
-
-        auto& cache = runtime_sink_crop_cache_;
-        if (cache.valid &&
-            cache.frame_w == frame_w &&
-            cache.frame_h == frame_h &&
-            cache.world_y == world_y_value &&
-            cache.angle_q == angle_q &&
-            cache.remainder_q == remainder_q) {
-                return cache.crop_source_px;
-        }
-
-        if (world_y_value >= 0 && std::fabs(angle_degrees) <= 1e-5) {
-                cache.valid = true;
-                cache.frame_w = frame_w;
-                cache.frame_h = frame_h;
-                cache.world_y = world_y_value;
-                cache.angle_q = angle_q;
-                cache.remainder_q = remainder_q;
-                cache.crop_source_px = 0;
-                return 0;
-        }
-
-        constexpr double kPi = 3.14159265358979323846;
-        const double radians = angle_degrees * (kPi / 180.0);
-        const double cos_theta = std::cos(radians);
-        const double sin_theta = std::sin(radians);
-        const double anchor_x = static_cast<double>(frame_w) * 0.5;
-        const double anchor_y = static_cast<double>(frame_h);
-        const std::array<std::pair<double, double>, 4> corners{{
-                {0.0, 0.0},
-                {static_cast<double>(frame_w), 0.0},
-                {static_cast<double>(frame_w), static_cast<double>(frame_h)},
-                {0.0, static_cast<double>(frame_h)}
-        }};
-
-        double max_rotational_below_anchor = 0.0;
-        for (const auto& corner : corners) {
-                const double dx = corner.first - anchor_x;
-                const double dy = corner.second - anchor_y;
-                const double rotated_y = anchor_y + (dx * sin_theta + dy * cos_theta);
-                max_rotational_below_anchor =
-                        std::max(max_rotational_below_anchor, rotated_y - anchor_y);
-        }
-        const int rotational_crop = std::max(0, static_cast<int>(std::ceil(max_rotational_below_anchor)));
-
-        const float burial_px_scaled = std::max(0.0f, static_cast<float>(-world_y_value));
-        const int burial_crop = std::max(0, static_cast<int>(std::ceil(burial_px_scaled / safe_remainder)));
-
-        const int max_crop = std::max(0, frame_h - 1);
-        const int total_crop = std::clamp(rotational_crop + burial_crop, 0, max_crop);
-
-        cache.valid = true;
-        cache.frame_w = frame_w;
-        cache.frame_h = frame_h;
-        cache.world_y = world_y_value;
-        cache.angle_q = angle_q;
-        cache.remainder_q = remainder_q;
-        cache.crop_source_px = total_crop;
-        return total_crop;
 }
 
 float Asset::smoothed_translation_x() const {

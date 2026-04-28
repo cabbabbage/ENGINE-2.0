@@ -399,7 +399,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 55.0
+        "scale_percentage": 42.0
       },
       "start": "default",
       "starting_health": 200,
@@ -407,7 +407,9 @@
       "tillable": false,
       "tilt_range_max_deg": 46,
       "tilt_range_min_deg": -48,
-      "weight_kg": 400.0
+      "weight_kg": 400.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "bench": {
       "anchor_point_child_candidates": [
@@ -17243,6 +17245,7 @@
       "asset_name": "mushroom",
       "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -17251,7 +17254,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 20.0,
+        "scale_percentage": 29.0,
         "size_variation": 6.0
       },
       "start": "default",
@@ -17263,7 +17266,11 @@
         "small"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "mushroom_1": {
       "anchor_point_child_candidates": [],
@@ -23676,9 +23683,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
+            123,
             36,
-            115,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -24083,9 +24090,9 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            85,
+            187,
             242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -24141,8 +24148,8 @@
                 }
               ],
               "display_name": "church",
-              "dx": -192,
-              "dz": -832,
+              "dx": -976,
+              "dz": -1432,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24154,7 +24161,7 @@
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
-              "resolution": 2,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-de4bd258da4f"
@@ -24171,8 +24178,8 @@
                 }
               ],
               "display_name": "fountain",
-              "dx": -564,
-              "dz": -1032,
+              "dx": -384,
+              "dz": -816,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24184,7 +24191,7 @@
               "position": "Exact",
               "priority": 2,
               "quantity": 1,
-              "resolution": 2,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-0290826c0349"
@@ -24201,8 +24208,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 32,
-              "dz": 220,
+              "dx": 80,
+              "dz": -112,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24214,40 +24221,10 @@
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
-              "resolution": 2,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-a84d1adacd90"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "spider",
-              "dx": -680,
-              "dz": -632,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 4,
-              "quantity": 1,
-              "resolution": 2,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-329a17b407ab"
             },
             {
               "candidates": [
@@ -24272,42 +24249,12 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 5,
+              "priority": 4,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-8228ce7a49ec"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "bomb"
-                }
-              ],
-              "display_name": "bomb",
-              "dx": -716,
-              "dz": -716,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 6,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-c57b671cf45a"
             },
             {
               "candidates": [
@@ -24332,7 +24279,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 7,
+              "priority": 5,
               "quantity": 1,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
@@ -24362,7 +24309,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 8,
+              "priority": 6,
               "quantity": 1,
               "resolution": 4,
               "resolve_geometry_to_room_size": true,
@@ -24392,7 +24339,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 9,
+              "priority": 7,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -24422,7 +24369,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 10,
+              "priority": 8,
               "quantity": 1,
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
@@ -24452,12 +24399,42 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 11,
+              "priority": 9,
               "quantity": 1,
               "resolution": 9,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-5bd5b043afc2"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -1216,
+              "dz": 376,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 10,
+              "quantity": 1,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-de2123af9b30"
             },
             {
               "candidates": [
@@ -24482,12 +24459,12 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 12,
+              "priority": 11,
               "quantity": 1,
               "resolution": 9,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-de2123af9b30"
+              "spawn_id": "spn-9b962c139b55"
             }
           ],
           "trail_connection_sector": {

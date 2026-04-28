@@ -111,11 +111,16 @@ std::vector<int> foreground_chain_layers(const std::vector<int>& non_empty_layer
 class GeometryBatcher {
 public:
     explicit GeometryBatcher(SDL_Renderer* renderer);
+    static constexpr int kMaxVerticesPerItem = 6;
+    static constexpr int kMaxIndicesPerItem = 12;
 
     struct DrawItem {
         SDL_Texture* texture = nullptr;
         SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
-        SDL_Vertex vertices[4];
+        SDL_Vertex vertices[kMaxVerticesPerItem]{};
+        int indices[kMaxIndicesPerItem]{};
+        int vertex_count = 0;
+        int index_count = 0;
         double depth = 0.0;
     };
 
@@ -124,6 +129,13 @@ public:
                  const int indices[6],
                  SDL_BlendMode blend_mode,
                  double depth);
+    void addGeometry(SDL_Texture* texture,
+                     const SDL_Vertex* vertices,
+                     int vertex_count,
+                     const int* indices,
+                     int index_count,
+                     SDL_BlendMode blend_mode,
+                     double depth);
 
     void flush();
     void clear();

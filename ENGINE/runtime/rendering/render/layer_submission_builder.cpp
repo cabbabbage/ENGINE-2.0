@@ -60,8 +60,13 @@ double layer_midpoint_depth(int layer_idx,
 }
 
 void expand_layer_bounds(render_pipeline::LayerSubmission& layer,
-                         const std::array<SDL_Vertex, 4>& vertices) {
-    for (const SDL_Vertex& vertex : vertices) {
+                         const SDL_Vertex* vertices,
+                         int vertex_count) {
+    if (!vertices || vertex_count <= 0) {
+        return;
+    }
+    for (int i = 0; i < vertex_count; ++i) {
+        const SDL_Vertex& vertex = vertices[i];
         if (!std::isfinite(vertex.position.x) || !std::isfinite(vertex.position.y)) {
             continue;
         }
@@ -128,8 +133,8 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
 
     result.layer_count = layer_count;
     result.layers.resize(static_cast<std::size_t>(layer_count));
-    result.packed_vertices.reserve(estimated_draw_count * 4);
-    result.packed_indices.reserve(estimated_draw_count * 6);
+    result.packed_vertices.reserve(estimated_draw_count * GeometryBatcher::kMaxVerticesPerItem);
+    result.packed_indices.reserve(estimated_draw_count * GeometryBatcher::kMaxIndicesPerItem);
     result.packets.reserve(estimated_draw_count);
     result.gpu_packets.reserve(estimated_draw_count);
     result.materials.reserve(std::min<std::size_t>(estimated_draw_count, 256));
@@ -199,28 +204,27 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
 
         const MaterialRegistryKey material_key{item.texture, item.blend_mode};
         const std::uint32_t material_index = resolve_material_index(material_key, material_registry, result);
+        if (item.vertex_count <= 0 || item.index_count <= 0) {
+            return;
+        }
         const std::uint32_t vertex_offset = static_cast<std::uint32_t>(result.packed_vertices.size());
-        result.packed_vertices.push_back(item.vertices[0]);
-        result.packed_vertices.push_back(item.vertices[1]);
-        result.packed_vertices.push_back(item.vertices[2]);
-        result.packed_vertices.push_back(item.vertices[3]);
+        for (int vi = 0; vi < item.vertex_count; ++vi) {
+            result.packed_vertices.push_back(item.vertices[vi]);
+        }
 
         const std::uint32_t index_offset = static_cast<std::uint32_t>(result.packed_indices.size());
-        result.packed_indices.push_back(static_cast<int>(vertex_offset + 0));
-        result.packed_indices.push_back(static_cast<int>(vertex_offset + 1));
-        result.packed_indices.push_back(static_cast<int>(vertex_offset + 2));
-        result.packed_indices.push_back(static_cast<int>(vertex_offset + 0));
-        result.packed_indices.push_back(static_cast<int>(vertex_offset + 2));
-        result.packed_indices.push_back(static_cast<int>(vertex_offset + 3));
+        for (int ii = 0; ii < item.index_count; ++ii) {
+            result.packed_indices.push_back(static_cast<int>(vertex_offset + item.indices[ii]));
+        }
 
         render_pipeline::DrawPacket packet{};
         const float packet_depth = std::isfinite(item.depth)
             ? static_cast<float>(item.depth)
             : static_cast<float>(layer.representative_depth);
         packet.vertex_offset = vertex_offset;
-        packet.vertex_count = 4;
+        packet.vertex_count = static_cast<std::uint32_t>(item.vertex_count);
         packet.index_offset = index_offset;
-        packet.index_count = 6;
+        packet.index_count = static_cast<std::uint32_t>(item.index_count);
         packet.material_index = material_index;
         packet.layer_index = static_cast<std::uint32_t>(layer_idx);
         packet.light_cluster_index = static_cast<std::uint32_t>(layer_idx);
@@ -244,12 +248,12 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
             layer.command_ranges.push_back(render_pipeline::DrawCommandRange{
                 material_index,
                 index_offset,
-                6,
+                packet.index_count,
                 packet_index,
                 1});
         } else {
             render_pipeline::DrawCommandRange& range = layer.command_ranges.back();
-            range.index_count += 6;
+            range.index_count += packet.index_count;
             range.packet_count += 1;
         }
 
@@ -257,8 +261,7 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
             layer.depth_min = std::min(layer.depth_min, item.depth);
             layer.depth_max = std::max(layer.depth_max, item.depth);
         }
-        expand_layer_bounds(layer, std::array<SDL_Vertex, 4>{
-            item.vertices[0], item.vertices[1], item.vertices[2], item.vertices[3]});
+        expand_layer_bounds(layer, item.vertices, item.vertex_count);
     });
 
     for (int i = 0; i < layer_count; ++i) {

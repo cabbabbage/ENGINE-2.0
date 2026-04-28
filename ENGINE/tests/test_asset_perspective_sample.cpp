@@ -159,7 +159,7 @@ TEST_CASE("Asset constructor applies spawn depth to world Y") {
     CHECK(asset.world_y() == -12);
 }
 
-TEST_CASE("Direct render object builder applies sinking crop from tilt and negative world Y") {
+TEST_CASE("Direct render object builder preserves source geometry and emits sink clip metadata") {
     auto info = std::make_shared<AssetInfo>("sink_builder");
     info->set_tilt_range_degrees(45, 45);
     Area spawn_area("sample_spawn", 0);
@@ -178,13 +178,16 @@ TEST_CASE("Direct render object builder applies sinking crop from tilt and negat
 
     RenderObject tilted_object{};
     REQUIRE(render_build::build_direct_asset_render_object(&tilted, cache, tilted_object));
-    CHECK(tilted_object.has_src_rect);
-    CHECK(tilted_object.src_rect.h < 32);
-    CHECK(tilted_object.screen_rect.h < 32);
+    CHECK_FALSE(tilted_object.has_src_rect);
+    CHECK(tilted_object.src_rect.h == 0);
+    CHECK(tilted_object.screen_rect.h == 32);
+    CHECK(tilted_object.sink_clip_enabled);
+    CHECK(tilted_object.sink_height_offset_px == doctest::Approx(0.0f));
 
     RenderObject buried_object{};
     REQUIRE(render_build::build_direct_asset_render_object(&buried, cache, buried_object));
-    CHECK(buried_object.has_src_rect);
-    CHECK(buried_object.src_rect.h < tilted_object.src_rect.h);
-    CHECK(buried_object.src_rect.h >= 1);
+    CHECK_FALSE(buried_object.has_src_rect);
+    CHECK(buried_object.screen_rect.h == 32);
+    CHECK(buried_object.sink_clip_enabled);
+    CHECK(buried_object.sink_height_offset_px == doctest::Approx(-20.0f));
 }

@@ -175,6 +175,8 @@ bool build_direct_asset_render_object(Asset* asset,
     out_object.center = SDL_Point{0, 0};
     out_object.use_custom_center = false;
     out_object.flip = base_flip;
+    out_object.sink_clip_enabled = true;
+    out_object.sink_height_offset_px = static_cast<float>(asset->world_y());
     out_object.texture_w = cache_record.frame_w;
     out_object.texture_h = cache_record.frame_h;
     out_object.has_texture_size = cache_record.has_texture_size;
@@ -186,24 +188,6 @@ bool build_direct_asset_render_object(Asset* asset,
     out_object.projection_anchor_uv = cache_record.projection_anchor_uv;
     out_object.has_src_rect = cache_record.has_src_rect;
     out_object.src_rect = cache_record.src_rect;
-
-    const int sink_crop_source_px = asset->resolve_runtime_sink_crop_source_px(cache_record.frame_w,
-                                                                                cache_record.frame_h,
-                                                                                remainder);
-    if (sink_crop_source_px > 0) {
-        SDL_Rect source_rect = cache_record.has_src_rect
-            ? cache_record.src_rect
-            : SDL_Rect{0, 0, cache_record.frame_w, cache_record.frame_h};
-        source_rect.w = std::max(1, source_rect.w);
-        source_rect.h = std::max(1, source_rect.h - sink_crop_source_px);
-
-        out_object.has_src_rect = true;
-        out_object.src_rect = source_rect;
-        out_object.texture_h = source_rect.h;
-
-        const int cropped_final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(source_rect.h) * remainder)));
-        out_object.screen_rect.h = cropped_final_h;
-    }
 
     return true;
 }

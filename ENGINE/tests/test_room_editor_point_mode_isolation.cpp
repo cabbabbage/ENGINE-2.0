@@ -709,6 +709,39 @@ TEST_CASE("RoomEditor spawn-group edits queue deferred work while callback scope
     CHECK(RoomEditorTestAccess::respawn_spawn_group_call_count(editor) == 0);
 }
 
+TEST_CASE("RoomEditor spawn-group deferred queue coalesces repeated edits for same spawn id") {
+    RoomEditor editor(nullptr, 1280, 720);
+
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", true, true, true, true);
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", true, false, false, false);
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", false, true, false, true);
+
+    CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 1);
+
+    RoomEditorTestAccess::process_pending_spawn_group_work(editor);
+    CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 0);
+}
+
+TEST_CASE("RoomEditor ownership classification keeps room and boundary domains isolated") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_spawn_id_ownership_cache(editor, {"room_spawn"}, {"boundary_spawn"});
+
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, "room_spawn") ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::Room));
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, "boundary_spawn") ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::MapBoundary));
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, "other_spawn") ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::Other));
+}
+
+TEST_CASE("RoomEditor spawn membership gating allows boundary ownership without room containment checks") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_spawn_id_ownership_cache(editor, {"room_spawn"}, {"boundary_spawn"});
+
+    CHECK(RoomEditorTestAccess::spawn_membership_allows_room_selection(editor, "boundary_spawn", ""));
+    CHECK_FALSE(RoomEditorTestAccess::spawn_membership_allows_room_selection(editor, "other_spawn", ""));
+}
+
 TEST_CASE("RoomEditor processes and clears deferred spawn-group queue work") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", false, true, false, false);

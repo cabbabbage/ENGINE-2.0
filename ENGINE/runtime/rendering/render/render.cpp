@@ -6,6 +6,7 @@
 #include "rendering/render/blur_chain_renderer.hpp"
 #include "rendering/render/layer_stack_renderer.hpp"
 #include "rendering/render/layer_submission_builder.hpp"
+#include "rendering/render/sink_clip.hpp"
 #include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/scene_composite_pass.hpp"
@@ -231,6 +232,77 @@ struct WarpedMesh {
     std::array<int, 6> indices{0, 1, 2, 0, 2, 3};
     bool valid = false;
 };
+
+SDL_FPoint sanitize_anchor_uv_for_sink_clip(SDL_FPoint uv) {
+    if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
+        return SDL_FPoint{0.5f, 1.0f};
+    }
+    return SDL_FPoint{
+        std::clamp(uv.x, 0.0f, 1.0f),
+        std::clamp(uv.y, 0.0f, 1.0f)};
+}
+
+enum class SinkClipSubmitResult {
+    Submitted,
+    FullyClipped,
+    Failed
+};
+
+SinkClipSubmitResult submit_sink_clipped_geometry(const RenderObject& obj,
+                                                  const WarpedMesh& mesh,
+                                                  double depth_from_focus_plane,
+                                                  GeometryBatcher& batcher) {
+    if (!obj.sink_clip_enabled) {
+        return SinkClipSubmitResult::Failed;
+    }
+    if (!std::isfinite(obj.sink_height_offset_px)) {
+        return SinkClipSubmitResult::Failed;
+    }
+
+    render_projection::ProjectedSpriteFrame projected{};
+    projected.screen_tl = mesh.vertices[0].position;
+    projected.screen_tr = mesh.vertices[1].position;
+    projected.screen_br = mesh.vertices[2].position;
+    projected.screen_bl = mesh.vertices[3].position;
+    const SDL_FPoint anchor_uv = sanitize_anchor_uv_for_sink_clip(obj.projection_anchor_uv);
+    const SDL_FPoint anchor_screen = projected.sample_screen_from_uv(anchor_uv);
+    if (!std::isfinite(anchor_screen.x) || !std::isfinite(anchor_screen.y)) {
+        return SinkClipSubmitResult::Failed;
+    }
+
+    const float sink_line_y = anchor_screen.y + obj.sink_height_offset_px;
+    if (!std::isfinite(sink_line_y)) {
+        return SinkClipSubmitResult::Failed;
+    }
+
+    const SDL_Vertex quad_vertices[4]{
+        mesh.vertices[0],
+        mesh.vertices[1],
+        mesh.vertices[2],
+        mesh.vertices[3]};
+    const render_sink::ClipResult clip =
+        render_sink::clip_quad_against_horizontal_sink_line(quad_vertices, sink_line_y, 1.0e-3f);
+
+    if (clip.fully_clipped) {
+        return SinkClipSubmitResult::FullyClipped;
+    }
+    if (!clip.valid) {
+        return SinkClipSubmitResult::Failed;
+    }
+    if (!clip.clipped) {
+        batcher.addQuad(obj.texture, mesh.vertices.data(), mesh.indices.data(), obj.blend_mode, depth_from_focus_plane);
+        return SinkClipSubmitResult::Submitted;
+    }
+
+    batcher.addGeometry(obj.texture,
+                        clip.vertices.data(),
+                        clip.vertex_count,
+                        clip.indices.data(),
+                        clip.index_count,
+                        obj.blend_mode,
+                        depth_from_focus_plane);
+    return SinkClipSubmitResult::Submitted;
+}
 
 bool build_perspective_mesh(RenderObject& obj,
                             const WarpedScreenGrid& cam,
@@ -751,18 +823,43 @@ void GeometryBatcher::addQuad(SDL_Texture* texture,
                               const int indices[6],
                               SDL_BlendMode blend_mode,
                               double depth) {
-    (void)indices;
-    if (!texture) {
+    addGeometry(texture, vertices, 4, indices, 6, blend_mode, depth);
+}
+
+void GeometryBatcher::addGeometry(SDL_Texture* texture,
+                                  const SDL_Vertex* vertices,
+                                  int vertex_count,
+                                  const int* indices,
+                                  int index_count,
+                                  SDL_BlendMode blend_mode,
+                                  double depth) {
+    if (!texture ||
+        !vertices ||
+        !indices ||
+        vertex_count < 3 ||
+        vertex_count > kMaxVerticesPerItem ||
+        index_count < 3 ||
+        index_count > kMaxIndicesPerItem ||
+        (index_count % 3) != 0) {
         return;
+    }
+    for (int i = 0; i < index_count; ++i) {
+        if (indices[i] < 0 || indices[i] >= vertex_count) {
+            return;
+        }
     }
 
     DrawItem item{};
     item.texture = texture;
     item.blend_mode = blend_mode;
-    item.vertices[0] = vertices[0];
-    item.vertices[1] = vertices[1];
-    item.vertices[2] = vertices[2];
-    item.vertices[3] = vertices[3];
+    item.vertex_count = vertex_count;
+    item.index_count = index_count;
+    for (int i = 0; i < vertex_count; ++i) {
+        item.vertices[i] = vertices[i];
+    }
+    for (int i = 0; i < index_count; ++i) {
+        item.indices[i] = indices[i];
+    }
     item.depth = depth;
 
     DepthBucket* bucket = nullptr;
@@ -795,7 +892,6 @@ void GeometryBatcher::flush() {
     const auto start = std::chrono::steady_clock::now();
     draw_call_count_ = 0;
     total_vertices_ = 0;
-    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
     vertex_buffer_.clear();
     index_buffer_.clear();
 
@@ -822,13 +918,15 @@ void GeometryBatcher::flush() {
             current_texture = item.texture;
             current_blend = item.blend_mode;
         }
+        if (item.vertex_count < 3 || item.index_count < 3) {
+            return;
+        }
         const int base = static_cast<int>(vertex_buffer_.size());
-        vertex_buffer_.push_back(item.vertices[0]);
-        vertex_buffer_.push_back(item.vertices[1]);
-        vertex_buffer_.push_back(item.vertices[2]);
-        vertex_buffer_.push_back(item.vertices[3]);
-        for (int idx : kQuadIndices) {
-            index_buffer_.push_back(base + idx);
+        for (int vi = 0; vi < item.vertex_count; ++vi) {
+            vertex_buffer_.push_back(item.vertices[vi]);
+        }
+        for (int ii = 0; ii < item.index_count; ++ii) {
+            index_buffer_.push_back(base + item.indices[ii]);
         }
     };
 
@@ -1277,11 +1375,15 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         // אבל השאר את חלוקת DOF/שכבות קשורה לעומק מישור הפוקוס של הנכס, ולא
         // להיסט Z של עוגן הרינדור של הספרייט. אחרת אובייקט השחקן או הפוקוס עלול
         // להידחף לשכבה מטושטשת סמוכה גם כאשר מישור הפוקוס של המצלמה תקין.
-        geometry_batcher_->addQuad(obj.texture,
-                                mesh.vertices.data(),
-                                mesh.indices.data(),
-                                obj.blend_mode,
-                                asset_depth_from_focus_plane);
+        const SinkClipSubmitResult sink_submit =
+            submit_sink_clipped_geometry(obj, mesh, asset_depth_from_focus_plane, *geometry_batcher_);
+        if (sink_submit == SinkClipSubmitResult::Failed) {
+            geometry_batcher_->addQuad(obj.texture,
+                                       mesh.vertices.data(),
+                                       mesh.indices.data(),
+                                       obj.blend_mode,
+                                       asset_depth_from_focus_plane);
+        }
             continue;
         }
 

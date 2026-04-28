@@ -1268,7 +1268,7 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
                         pending_selection_ = resolved;
                         selection_dispatched_this_update_ = true;
                         close();
-                    } else {
+                    } else if (!resolved) {
                         std::cerr << "[AssetLibraryUI] No assets found for tag '" << tag_value << "'\n";
                     }
                 },

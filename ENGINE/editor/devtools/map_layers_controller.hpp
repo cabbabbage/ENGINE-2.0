@@ -43,6 +43,7 @@ public:
     nlohmann::json* layer(int index);
     const nlohmann::json& layers() const;
     std::vector<std::string> available_rooms() const;
+    std::vector<std::string> available_room_tags() const;
 
     double min_edge_distance() const;
     bool set_min_edge_distance(double value);
@@ -55,6 +56,7 @@ public:
     bool rename_layer(int index, const std::string& name);
 
     bool add_candidate(int layer_index, const std::string& room_name);
+    bool add_candidate_tag(int layer_index, const std::string& room_tag);
     bool remove_candidate(int layer_index, int candidate_index);
     bool set_candidate_instance_range(int layer_index, int candidate_index, int min_instances, int max_instances);
     bool set_candidate_instance_count(int layer_index, int candidate_index, int max_instances);
@@ -62,6 +64,8 @@ public:
     bool remove_candidate_child(int layer_index, int candidate_index, const std::string& child_room);
 
 private:
+    bool add_candidate_internal(int layer_index, const std::string& source_type, const std::string& value);
+    static void normalize_candidate_shape(nlohmann::json& candidate);
     void ensure_initialized();
     void ensure_layer_indices();
     bool validate_layer_index(int index) const;

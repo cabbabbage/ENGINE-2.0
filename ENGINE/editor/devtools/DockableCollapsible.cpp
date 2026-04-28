@@ -459,6 +459,7 @@ void DockableCollapsible::set_position_internal(int x, int y, bool from_layout_m
 
     if (from_layout_manager) {
         update_geometry_after_move();
+        invalidate_layout(true);
         return;
     }
 

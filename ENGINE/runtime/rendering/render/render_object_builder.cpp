@@ -35,6 +35,8 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
     const int flip_v = (flip & SDL_FLIP_VERTICAL) != 0 ? 1 : 0;
     const int angle_q = static_cast<int>(std::lround(asset.effective_render_angle() * 100.0));
     const int z_q = static_cast<int>(std::lround((asset.world_z_offset() + asset.render_anchor_offset_z()) * 1000.0f));
+    const int scale_q = static_cast<int>(std::lround(asset.current_remaining_scale_adjustment * 1000.0f));
+    const int world_y_q = asset.world_y();
     Uint32 hash = 2166136261u;
     auto mix = [&](Uint32 v) {
         hash ^= v;
@@ -44,6 +46,8 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
     mix(static_cast<Uint32>(flip_v));
     mix(static_cast<Uint32>(angle_q));
     mix(static_cast<Uint32>(z_q));
+    mix(static_cast<Uint32>(scale_q));
+    mix(static_cast<Uint32>(world_y_q));
     return hash;
 }
 
@@ -182,6 +186,25 @@ bool build_direct_asset_render_object(Asset* asset,
     out_object.projection_anchor_uv = cache_record.projection_anchor_uv;
     out_object.has_src_rect = cache_record.has_src_rect;
     out_object.src_rect = cache_record.src_rect;
+
+    const int sink_crop_source_px = asset->resolve_runtime_sink_crop_source_px(cache_record.frame_w,
+                                                                                cache_record.frame_h,
+                                                                                remainder);
+    if (sink_crop_source_px > 0) {
+        SDL_Rect source_rect = cache_record.has_src_rect
+            ? cache_record.src_rect
+            : SDL_Rect{0, 0, cache_record.frame_w, cache_record.frame_h};
+        source_rect.w = std::max(1, source_rect.w);
+        source_rect.h = std::max(1, source_rect.h - sink_crop_source_px);
+
+        out_object.has_src_rect = true;
+        out_object.src_rect = source_rect;
+        out_object.texture_h = source_rect.h;
+
+        const int cropped_final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(source_rect.h) * remainder)));
+        out_object.screen_rect.h = cropped_final_h;
+    }
+
     return true;
 }
 

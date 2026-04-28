@@ -23651,9 +23651,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            123,
-            36,
             242,
+            36,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -24080,9 +24080,9 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            187,
+            85,
             242,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -24108,8 +24108,8 @@
                 }
               ],
               "display_name": "casino",
-              "dx": -580,
-              "dz": -1344,
+              "dx": 616,
+              "dz": -1032,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24123,7 +24123,7 @@
               "priority": 0,
               "quantity": 1,
               "randomize_y": false,
-              "resolution": 2,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-316850aea838"
@@ -24472,6 +24472,7 @@
               "origional_width": 4000,
               "position": "Exact",
               "position_y": 0,
+              "priority": 11,
               "quantity": 1,
               "randomize_y": false,
               "resolution": 9,

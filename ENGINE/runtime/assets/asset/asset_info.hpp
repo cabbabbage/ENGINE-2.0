@@ -90,6 +90,8 @@ class AssetInfo {
     float size_variation_percent = 0.0f;
     float weight_kg = 0.0f;
     int bounce_amount = 0;
+    int tilt_range_min_deg = 0;
+    int tilt_range_max_deg = 0;
     bool smooth_scaling = true;
     int original_canvas_width = 0;
     int original_canvas_height = 0;
@@ -239,6 +241,7 @@ class AssetInfo {
     float get_weight_kg() const { return weight_kg; }
     void set_bounce_amount(int amount);
     int get_bounce_amount() const { return bounce_amount; }
+    void set_tilt_range_degrees(int min_degrees, int max_degrees);
     void set_scale_filter(bool smooth);
     void set_tags(const std::vector<std::string> &t);
     void add_tag(const std::string &tag);

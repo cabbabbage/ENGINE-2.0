@@ -590,6 +590,10 @@ float clamp_size_variation_percent(float value) {
     return std::clamp(value, 0.0f, 20.0f);
 }
 
+int clamp_tilt_degrees(int value) {
+    return std::clamp(value, -180, 180);
+}
+
 std::optional<double> parse_number_like_json(const nlohmann::json& value) {
     if (value.is_number_float()) {
         return value.get<double>();
@@ -2433,6 +2437,8 @@ nlohmann::json AssetInfo::manifest_payload() const {
         }
         payload["weight_kg"] = weight_kg;
         payload["bounce_amount"] = bounce_amount;
+        payload["tilt_range_min_deg"] = tilt_range_min_deg;
+        payload["tilt_range_max_deg"] = tilt_range_max_deg;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
@@ -2593,6 +2599,18 @@ void AssetInfo::set_weight_kg(float weight) {
 void AssetInfo::set_bounce_amount(int amount) {
         bounce_amount = std::clamp(amount, 0, 100);
         info_json_["bounce_amount"] = bounce_amount;
+}
+
+void AssetInfo::set_tilt_range_degrees(int min_degrees, int max_degrees) {
+        int sanitized_min = clamp_tilt_degrees(min_degrees);
+        int sanitized_max = clamp_tilt_degrees(max_degrees);
+        if (sanitized_max < sanitized_min) {
+                std::swap(sanitized_min, sanitized_max);
+        }
+        tilt_range_min_deg = sanitized_min;
+        tilt_range_max_deg = sanitized_max;
+        info_json_["tilt_range_min_deg"] = tilt_range_min_deg;
+        info_json_["tilt_range_max_deg"] = tilt_range_max_deg;
 }
 
 void AssetInfo::set_scale_filter(bool smooth) {
@@ -2990,10 +3008,31 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 } else {
                         bounce_amount = 0;
                 }
+                int tilt_min = 0;
+                int tilt_max = 0;
+                if (data.contains("tilt_range_min_deg")) {
+                        if (const auto parsed = parse_number_like_json(data["tilt_range_min_deg"])) {
+                                tilt_min = static_cast<int>(std::lround(*parsed));
+                        }
+                }
+                if (data.contains("tilt_range_max_deg")) {
+                        if (const auto parsed = parse_number_like_json(data["tilt_range_max_deg"])) {
+                                tilt_max = static_cast<int>(std::lround(*parsed));
+                        }
+                }
+                tilt_min = clamp_tilt_degrees(tilt_min);
+                tilt_max = clamp_tilt_degrees(tilt_max);
+                if (tilt_max < tilt_min) {
+                        std::swap(tilt_min, tilt_max);
+                }
+                tilt_range_min_deg = tilt_min;
+                tilt_range_max_deg = tilt_max;
         } catch (...) {
 
         }
         info_json_["bounce_amount"] = bounce_amount;
+        info_json_["tilt_range_min_deg"] = tilt_range_min_deg;
+        info_json_["tilt_range_max_deg"] = tilt_range_max_deg;
 
         if (is_vibble_asset_name(name) && oval_anchor_mappings.empty()) {
                 const std::vector<std::string> vibble_mapping_names{

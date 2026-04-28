@@ -126,6 +126,19 @@ SDL_Point nearest_polygon_point_to_center(const Room& trail_room, const SDL_Poin
     return nearest;
 }
 
+int count_trail_vertices_inside_room(const Room& trail_room, const Room& room) {
+    if (!trail_room.room_area || !room.room_area) {
+        return 0;
+    }
+    int count = 0;
+    for (const SDL_Point& point : trail_room.room_area->get_points()) {
+        if (room.room_area->contains_point(point)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 bool trail_respects_room_sector(const Room& room, const Room& trail_room) {
     const nlohmann::json& data = room.assets_data();
     if (!data.is_object() || !data.contains("trail_connection_sector") || !data["trail_connection_sector"].is_object()) {
@@ -401,4 +414,35 @@ TEST_CASE("random planned trail connections obey room trail connection sectors")
             CHECK(trail_respects_room_sector(*connected, trail_room));
         }
     }
+}
+
+TEST_CASE("trail endpoints include fully contained mouth footprint inside connected rooms") {
+    auto room_a = make_room_with_sector("contained_a", make_rect(-900, -220, 280, 280), 90.0, 50);
+    auto room_b = make_room_with_sector("contained_b", make_rect(620, -220, 280, 280), 270.0, 50);
+    std::vector<Room*> all_rooms{room_a.get(), room_b.get()};
+
+    nlohmann::json trails_data = nlohmann::json::object({
+        {"default_trail", nlohmann::json::object({
+             {"name", "default_trail"},
+             {"min_width", 90},
+             {"max_width", 120},
+             {"curvyness", 2}
+         })}
+    });
+
+    GenerateTrails generator(trails_data, {});
+    generator.set_all_rooms_reference(all_rooms);
+    std::vector<std::unique_ptr<Room>> trails = generator.generate_trails(
+        {{room_a.get(), room_b.get()}},
+        "test_map",
+        nullptr,
+        5000.0,
+        nullptr,
+        nullptr,
+        Room::ManifestWriter{});
+
+    REQUIRE(trails.size() == 1);
+    const Room& trail_room = *trails.front();
+    CHECK(count_trail_vertices_inside_room(trail_room, *room_a) >= 3);
+    CHECK(count_trail_vertices_inside_room(trail_room, *room_b) >= 3);
 }

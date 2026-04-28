@@ -28,6 +28,8 @@ struct PlanEdge {
 struct MapGraphPlan {
     bool valid = false;
     std::string spawn_room_name;
+    int trail_endpoint_containment_safety_px = 12;
+    int trail_room_margin_px = 750;
     std::vector<LayerSpec> resolved_layers;
     std::vector<PlanNode> nodes;
     std::vector<PlanEdge> edges;
@@ -37,4 +39,3 @@ struct MapGraphPlan {
 MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest);
 
 } // namespace map_graph
-

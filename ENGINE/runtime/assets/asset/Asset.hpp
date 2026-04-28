@@ -138,6 +138,7 @@ class Asset {
     float runtime_height_px() const;
     float runtime_effective_base_scale() const;
     float size_variation_sample() const { return size_variation_sample_; }
+    double base_spawn_tilt_degrees() const { return base_spawn_tilt_degrees_; }
     enum class PerspectiveSource {
         AnchorBindingOverride,
         CameraTraversal,
@@ -257,6 +258,9 @@ class Asset {
     bool has_anchor_sprite_transform_override() const { return anchor_sprite_transform_override_active_; }
     SDL_FlipMode effective_render_flip() const;
     double effective_render_angle() const;
+    int resolve_runtime_sink_crop_source_px(int frame_w,
+                                            int frame_h,
+                                            float remainder_scale) const;
 
     bool is_composite_dirty() const { return composite_dirty_; }
     void mark_composite_dirty() { composite_dirty_ = true; }
@@ -556,6 +560,17 @@ private:
 
     std::optional<TilingInfo> tiling_info_{};
     float size_variation_sample_ = 0.0f;
+    double base_spawn_tilt_degrees_ = 0.0;
+    struct RuntimeSinkCropCache {
+        bool valid = false;
+        int frame_w = 0;
+        int frame_h = 0;
+        int world_y = 0;
+        int angle_q = 0;
+        int remainder_q = 0;
+        int crop_source_px = 0;
+    };
+    mutable RuntimeSinkCropCache runtime_sink_crop_cache_{};
     void ensure_animation_runtime(bool force_recreate);
 
     void clear_downscale_cache();

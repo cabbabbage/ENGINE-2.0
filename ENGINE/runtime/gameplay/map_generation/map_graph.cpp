@@ -8,6 +8,8 @@ namespace map_graph {
 namespace {
 
 constexpr const char* kDefaultSpawnName = "Spawn";
+constexpr int kTrailEndpointContainmentSafetyPx = 12;
+constexpr int kTrailRoomMarginPx = 750;
 
 std::string normalize_tag_value(const std::string& raw) {
     std::string out;
@@ -137,6 +139,8 @@ void ensure_room_entry_exists(nlohmann::json& rooms_data, const std::string& roo
 
 MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
     MapGraphPlan plan;
+    plan.trail_endpoint_containment_safety_px = kTrailEndpointContainmentSafetyPx;
+    plan.trail_room_margin_px = kTrailRoomMarginPx;
     if (!map_manifest || !map_manifest->is_object()) {
         plan.diagnostics.push_back("error: map manifest is missing or invalid.");
         return plan;

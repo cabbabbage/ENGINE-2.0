@@ -49,6 +49,7 @@ constexpr double kRoomMarginDistanceWorldPx = 750.0;
 constexpr double kCurvyRouteAmplitudeScaleWorldPx = 24.0;
 constexpr double kCurvyRouteSampleSpacingBaseWorldPx = 140.0;
 constexpr double kCurvyRouteSampleSpacingMinWorldPx = 56.0;
+constexpr int kCurvyVariantCount = 5;
 
 struct Vec2 {
     double x = 0.0;
@@ -1292,7 +1293,98 @@ bool polyline_is_valid_for_route(const std::vector<SDL_Point>& points,
     return true;
 }
 
-std::vector<SDL_Point> build_curvier_polyline(const std::vector<SDL_Point>& base_points, int curvyness) {
+bool polyline_is_valid_for_anchor_exit(const std::vector<SDL_Point>& points,
+                                       Room* anchor_room,
+                                       Room* room_a,
+                                       Room* room_b,
+                                       const std::vector<RoomObstacle>& room_obstacles,
+                                       const std::vector<TrailObstacle>& existing_trails,
+                                       int clearance_px) {
+    if (!anchor_room || !anchor_room->room_area || points.size() < 2) {
+        return false;
+    }
+
+    const double spacing = std::max(12.0, static_cast<double>(kTrailRouteSampleSpacingWorldPx) * 0.5);
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        const Vec2 a = to_vec2(points[i - 1]);
+        const Vec2 b = to_vec2(points[i]);
+        const Vec2 delta = subtract(b, a);
+        const double len = length(delta);
+        if (len <= kPointEpsilon) {
+            continue;
+        }
+        const int samples = std::max(1, static_cast<int>(std::ceil(len / spacing)));
+        for (int s = 0; s <= samples; ++s) {
+            const bool segment_endpoint = (i == 1 && s == 0) || (i + 1 == points.size() && s == samples);
+            if (segment_endpoint) {
+                continue;
+            }
+            const double t = static_cast<double>(s) / static_cast<double>(samples);
+            const SDL_Point sample = to_point(add(a, scale(delta, t)));
+
+            const bool in_anchor_room = anchor_room->room_area->contains_point(sample);
+            if (in_anchor_room) {
+                continue;
+            }
+            if (point_inside_blocking_room(sample, room_a, room_b, room_obstacles)) {
+                return false;
+            }
+            if (room_a && room_a != anchor_room && room_a->room_area && room_a->room_area->contains_point(sample)) {
+                return false;
+            }
+            if (room_b && room_b != anchor_room && room_b->room_area && room_b->room_area->contains_point(sample)) {
+                return false;
+            }
+            if (point_inside_existing_trail(sample, existing_trails)) {
+                return false;
+            }
+
+            if (clearance_px > 1) {
+                const int half = std::max(1, clearance_px / 2);
+                const std::array<SDL_Point, 8> offsets{
+                    SDL_Point{half, 0},
+                    SDL_Point{-half, 0},
+                    SDL_Point{0, half},
+                    SDL_Point{0, -half},
+                    SDL_Point{half, half},
+                    SDL_Point{-half, half},
+                    SDL_Point{half, -half},
+                    SDL_Point{-half, -half},
+                };
+                for (const SDL_Point& offset : offsets) {
+                    const SDL_Point expanded{sample.x + offset.x, sample.y + offset.y};
+                    const bool expanded_in_anchor = anchor_room->room_area->contains_point(expanded);
+                    if (expanded_in_anchor) {
+                        continue;
+                    }
+                    if (point_inside_blocking_room(expanded, room_a, room_b, room_obstacles) ||
+                        point_inside_existing_trail(expanded, existing_trails) ||
+                        (room_a && room_a != anchor_room && room_a->room_area && room_a->room_area->contains_point(expanded)) ||
+                        (room_b && room_b != anchor_room && room_b->room_area && room_b->room_area->contains_point(expanded))) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
+std::uint32_t stable_route_seed(const std::string& a, const std::string& b, int variant_index) {
+    const std::string key = (a < b) ? (a + "|" + b) : (b + "|" + a);
+    std::uint32_t hash = 2166136261u;
+    for (unsigned char ch : key) {
+        hash ^= static_cast<std::uint32_t>(ch);
+        hash *= 16777619u;
+    }
+    hash ^= static_cast<std::uint32_t>(variant_index * 2654435761u);
+    return hash;
+}
+
+std::vector<SDL_Point> build_curvier_polyline(const std::vector<SDL_Point>& base_points,
+                                              int curvyness,
+                                              double amplitude_scale,
+                                              double phase_shift) {
     std::vector<SDL_Point> polyline = dedupe_consecutive_points(base_points);
     if (polyline.size() < 2 || curvyness <= 0) {
         return polyline;
@@ -1310,7 +1402,7 @@ std::vector<SDL_Point> build_curvier_polyline(const std::vector<SDL_Point>& base
     const int sample_count = std::max(2, static_cast<int>(std::ceil(total / sample_spacing)));
     const double amplitude_limit = std::min(
         total * 0.2,
-        static_cast<double>(curvyness) * kCurvyRouteAmplitudeScaleWorldPx);
+        static_cast<double>(curvyness) * kCurvyRouteAmplitudeScaleWorldPx * std::max(0.0, amplitude_scale));
     if (amplitude_limit <= 0.0) {
         return polyline;
     }
@@ -1326,13 +1418,47 @@ std::vector<SDL_Point> build_curvier_polyline(const std::vector<SDL_Point>& base
             continue;
         }
         const Vec2 normal{-tangent.y, tangent.x};
-        const double phase = (d / std::max(1.0, total)) * (2.0 * 3.14159265358979323846);
+        const double phase = (d / std::max(1.0, total)) * (2.0 * 3.14159265358979323846) + phase_shift;
         const double envelope = std::sin((d / std::max(1.0, total)) * 3.14159265358979323846);
         const double lateral = std::sin(phase) * amplitude_limit * envelope;
         curved.push_back(to_point(add(point, scale(normal, lateral))));
     }
     curved.push_back(polyline.back());
     return dedupe_consecutive_points(curved);
+}
+
+std::vector<std::vector<SDL_Point>> build_centerline_variants(const std::vector<SDL_Point>& base_points,
+                                                              int curvyness,
+                                                              const std::string& room_a_name,
+                                                              const std::string& room_b_name) {
+    std::vector<std::vector<SDL_Point>> variants;
+    variants.push_back(dedupe_consecutive_points(base_points));  // Always keep safe fallback first.
+    if (curvyness <= 0) {
+        return variants;
+    }
+
+    for (int i = 0; i < kCurvyVariantCount; ++i) {
+        const std::uint32_t seed = stable_route_seed(room_a_name, room_b_name, i);
+        const double unit = static_cast<double>(seed % 10000u) / 9999.0;
+        const double phase_shift = unit * 2.0 * 3.14159265358979323846;
+        const double amplitude_scale = 0.45 + static_cast<double>(i + 1) / static_cast<double>(kCurvyVariantCount + 1);
+        std::vector<SDL_Point> variant = build_curvier_polyline(base_points, curvyness, amplitude_scale, phase_shift);
+        variant = dedupe_consecutive_points(variant);
+        if (variant.size() < 2) {
+            continue;
+        }
+        bool duplicate = false;
+        for (const auto& existing : variants) {
+            if (existing == variant) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            variants.push_back(std::move(variant));
+        }
+    }
+    return variants;
 }
 
 bool boundary_zone_within_sector_for_area(const std::vector<SDL_Point>& centerline_points,
@@ -1887,10 +2013,10 @@ bool attempt_trail_connection(Room* a,
         const SDL_Point end_margin = room_margin_point(b_center, end_contact);
         std::vector<SDL_Point> start_leg{start_contact, start_margin};
         std::vector<SDL_Point> end_leg{end_margin, end_contact};
-        if (!polyline_is_valid_for_route(start_leg, a, b, room_obstacles, existing_trails, gate_clearance_px)) {
+        if (!polyline_is_valid_for_anchor_exit(start_leg, a, a, b, room_obstacles, existing_trails, gate_clearance_px)) {
             continue;
         }
-        if (!polyline_is_valid_for_route(end_leg, a, b, room_obstacles, existing_trails, gate_clearance_px)) {
+        if (!polyline_is_valid_for_anchor_exit(end_leg, b, a, b, room_obstacles, existing_trails, gate_clearance_px)) {
             continue;
         }
         saw_route_candidate = true;
@@ -1904,40 +2030,58 @@ bool attempt_trail_connection(Room* a,
         if (!route.success || route.points.size() < 2) {
             continue;
         }
-
-        std::vector<SDL_Point> centerline_points = stitch_route_with_contacts(start_contact, route.points, end_contact);
-        centerline_points = build_curvier_polyline(centerline_points, curvyness);
-        if (centerline_points.size() < 2) {
-            continue;
-        }
-        if (!boundary_zones_respect_room_sectors(centerline_points, a, b)) {
-            saw_boundary_zone_violation = true;
+        if (!polyline_is_valid_for_route(route.points, a, b, room_obstacles, existing_trails, routing_clearance_px)) {
             continue;
         }
 
-        std::vector<double> required_distances;
-        const std::vector<double> cumulative = build_polyline_cumulative_lengths(centerline_points);
-        if (cumulative.size() >= 4) {
-            required_distances.push_back(cumulative[1]);
-            required_distances.push_back(cumulative[cumulative.size() - 2]);
-        }
-
-        const auto layout_start = clock::now();
-        if (!build_trail_layout_from_polyline(centerline_points,
-                                              min_width,
-                                              max_width,
-                                              curvyness,
-                                              required_distances,
-                                              a,
-                                              b,
-                                              room_obstacles,
-                                              existing_trails,
-                                              rng,
-                                              stats,
-                                              &build_result)) {
+        std::vector<SDL_Point> base_centerline = stitch_route_with_contacts(start_contact, route.points, end_contact);
+        if (base_centerline.size() < 2) {
             continue;
         }
-        const auto layout_end = clock::now();
+
+        const std::vector<std::vector<SDL_Point>> centerline_variants =
+            build_centerline_variants(base_centerline, curvyness, a->room_name, b->room_name);
+        bool built_from_variant = false;
+        clock::time_point layout_start{};
+        clock::time_point layout_end{};
+        for (const std::vector<SDL_Point>& centerline_points : centerline_variants) {
+            if (centerline_points.size() < 2) {
+                continue;
+            }
+            if (!boundary_zones_respect_room_sectors(centerline_points, a, b)) {
+                saw_boundary_zone_violation = true;
+                continue;
+            }
+
+            std::vector<double> required_distances;
+            const std::vector<double> cumulative = build_polyline_cumulative_lengths(centerline_points);
+            if (cumulative.size() >= 4) {
+                required_distances.push_back(cumulative[1]);
+                required_distances.push_back(cumulative[cumulative.size() - 2]);
+            }
+
+            layout_start = clock::now();
+            if (!build_trail_layout_from_polyline(centerline_points,
+                                                  min_width,
+                                                  max_width,
+                                                  curvyness,
+                                                  required_distances,
+                                                  a,
+                                                  b,
+                                                  room_obstacles,
+                                                  existing_trails,
+                                                  rng,
+                                                  stats,
+                                                  &build_result)) {
+                continue;
+            }
+            layout_end = clock::now();
+            built_from_variant = true;
+            break;
+        }
+        if (!built_from_variant) {
+            continue;
+        }
 
         Area candidate("trail_candidate", build_result.polygon, 3);
 

@@ -23651,9 +23651,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
+            123,
             36,
-            115,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -24058,9 +24058,9 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            85,
+            187,
             242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -24116,8 +24116,8 @@
                 }
               ],
               "display_name": "church",
-              "dx": -1608,
-              "dz": -1320,
+              "dx": -192,
+              "dz": -832,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24206,8 +24206,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -720,
-              "dz": -800,
+              "dx": -680,
+              "dz": -632,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24219,7 +24219,7 @@
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
-              "resolution": 4,
+              "resolution": 2,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-329a17b407ab"

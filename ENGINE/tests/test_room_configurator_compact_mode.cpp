@@ -120,6 +120,21 @@ TEST_CASE("RoomConfigurator compact mode self-heals malformed dimensions and pre
     CHECK_FALSE(saved.contains("max_radius"));
 }
 
+TEST_CASE("RoomConfigurator compact mode does not derive curvyness from edge_smoothness when curvyness is missing") {
+    RoomConfigurator configurator;
+    configurator.set_room_metadata_only_mode(true);
+
+    nlohmann::json source = square_room_fixture();
+    source.erase("curvyness");
+    source["edge_smoothness"] = 37;
+
+    configurator.open(source);
+    const nlohmann::json saved = configurator.build_json();
+
+    CHECK(saved.value("edge_smoothness", 0) == 37);
+    CHECK(saved.value("curvyness", -1) == 2);
+}
+
 TEST_CASE("RoomConfigurator compact mode persists trail connection sector defaults when missing") {
     RoomConfigurator configurator;
     configurator.set_room_metadata_only_mode(true);

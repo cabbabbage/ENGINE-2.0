@@ -724,8 +724,6 @@ struct RoomConfigurator::State {
             if (auto cv = read_json_int(src, "curvyness")) {
                 curvyness = std::max(0, *cv);
             }
-        } else {
-            curvyness = edge_smoothness;  // Only set default when no value exists
         }
 
         trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
@@ -753,11 +751,7 @@ struct RoomConfigurator::State {
         dest["is_boss"] = is_boss;
         dest["inherits_map_assets"] = inherits_assets;
         dest["edge_smoothness"] = edge_smoothness;
-        if (allow_height) {
-            dest["curvyness"] = curvyness;
-        } else {
-            dest.erase("curvyness");
-        }
+        dest["curvyness"] = curvyness;
 
         // Camera fields are authored by RoomEditor shortcuts (Ctrl+A/Ctrl+R).
         // RoomConfigurator no longer owns camera state, so preserve any existing keys.
@@ -836,9 +830,7 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     copy_field("min_radius");
     copy_field("max_radius");
     copy_field("edge_smoothness");
-    if (allow_height) {
-        copy_field("curvyness");
-    }
+    copy_field("curvyness");
     if (include_trail_connection_sector) {
         copy_field("trail_connection_sector");
     }

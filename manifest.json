@@ -23720,8 +23720,8 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            167,
             242,
-            91,
             36,
             255
           ],
@@ -24127,8 +24127,8 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
+            85,
             242,
-            61,
             242,
             255
           ],
@@ -24143,36 +24143,6 @@
           "name": "spawn",
           "room_tags": [],
           "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "bomb"
-                }
-              ],
-              "display_name": "bomb",
-              "dx": -13288,
-              "dz": -13288,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4000,
-              "origional_width": 4000,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 9,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-08fa152953bc"
-            },
             {
               "candidates": [
                 {
@@ -24196,7 +24166,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
-              "priority": 1,
+              "priority": 0,
               "quantity": 1,
               "resolution": 9,
               "resolve_geometry_to_room_size": true,

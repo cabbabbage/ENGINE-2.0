@@ -1260,27 +1260,68 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
         if (handle_panel_focus_event(e)) {
             return true;
         }
-        if (focused_panel_ && focused_panel_->is_visible()) {
-            DockableCollapsible* focused_before_event = focused_panel_;
-            if (focused_before_event->handle_event(e)) {
-                request_container_layout();
-                const auto panel_still_active = [this](DockableCollapsible* candidate) {
-                    if (!candidate) {
-                        return false;
-                    }
-                    for (auto* panel : ordered_base_panels_) {
-                        if (panel == candidate) {
-                            return true;
-                        }
-                    }
+        const bool pointer_event =
+            (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+        const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
+        auto dispatch_to_panel = [this, &e](DockableCollapsible* panel) -> bool {
+            if (!panel || !panel->is_visible()) {
+                return false;
+            }
+            DockableCollapsible* panel_before_event = panel;
+            if (!panel_before_event->handle_event(e)) {
+                return false;
+            }
+            request_container_layout();
+            const auto panel_still_active = [this](DockableCollapsible* candidate) {
+                if (!candidate) {
                     return false;
-                };
-                if (panel_still_active(focused_before_event)) {
-                    auto it = base_panel_keys_.find(focused_before_event);
-                    if (it != base_panel_keys_.end()) {
-                        set_base_panel_expanded(it->second, focused_before_event->is_expanded());
+                }
+                for (auto* active_panel : ordered_base_panels_) {
+                    if (active_panel == candidate) {
+                        return true;
                     }
                 }
+                return false;
+            };
+            if (panel_still_active(panel_before_event)) {
+                auto it = base_panel_keys_.find(panel_before_event);
+                if (it != base_panel_keys_.end()) {
+                    set_base_panel_expanded(it->second, panel_before_event->is_expanded());
+                }
+            }
+            return true;
+        };
+
+        DockableCollapsible* pointer_panel = nullptr;
+        if (pointer_event) {
+            SDL_Point pointer{};
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
+                pointer = sdl_mouse_util::MotionPoint(e.motion);
+            } else {
+                pointer = sdl_mouse_util::ButtonPoint(e.button);
+            }
+            pointer_panel = panel_at_point(pointer);
+        } else if (wheel_event) {
+            SDL_Point pointer{};
+            sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
+            pointer_panel = panel_at_point(pointer);
+        }
+
+        // Always route pointer/wheel input to the panel under the cursor first.
+        if (dispatch_to_panel(pointer_panel)) {
+            return true;
+        }
+
+        // Non-pointer interactions still prefer focused panel semantics.
+        if (!pointer_event && !wheel_event && dispatch_to_panel(focused_panel_)) {
+            return true;
+        }
+
+        for (auto* panel : ordered_base_panels_) {
+            if (panel == pointer_panel || panel == focused_panel_) {
+                continue;
+            }
+            if (dispatch_to_panel(panel)) {
                 return true;
             }
         }

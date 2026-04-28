@@ -187,6 +187,10 @@ void draw_room_and_trail_geometry_overlay(SDL_Renderer* renderer,
         return;
     }
 
+    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     for (const Room* room : rooms) {
         if (!room || !room->room_area) {
@@ -211,6 +215,9 @@ void draw_room_and_trail_geometry_overlay(SDL_Renderer* renderer,
             SDL_RenderLine(renderer, sa.x, sa.y, sb.x, sb.y);
         }
     }
+
+    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
 }
 
 void draw_grid_overlay_points(SDL_Renderer* renderer,
@@ -238,17 +245,28 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
     };
     const SDL_Point center_world{snap_axis(mouse_world.x), snap_axis(mouse_world.y)};
 
-    constexpr int kRadiusCells = 11;
     constexpr int kGridPointSizePx = 2;
     constexpr int kGridPointHalf = kGridPointSizePx / 2;
     constexpr int kHighlightPointSizePx = 4;
     constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
-    const float radius_world = static_cast<float>(cell * kRadiusCells);
+
+    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+
+    auto [view_min_x, view_min_z, view_max_x, view_max_z] = cam.get_current_view().get_bounds();
+    const float view_world_w = std::max(1.0f, static_cast<float>(std::abs(view_max_x - view_min_x)));
+    const float view_world_h = std::max(1.0f, static_cast<float>(std::abs(view_max_z - view_min_z)));
+    const float base_view_span = std::min(view_world_w, view_world_h);
+    // Keep a stable on-screen footprint by basing radius on current visible world span.
+    const float radius_world = std::max(static_cast<float>(cell * 4), base_view_span * 0.11f);
+    const int radius_cells = std::max(4, static_cast<int>(std::ceil(radius_world / static_cast<float>(cell))));
     const float radius_sq = radius_world * radius_world;
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    for (int gy = -kRadiusCells; gy <= kRadiusCells; ++gy) {
-        for (int gx = -kRadiusCells; gx <= kRadiusCells; ++gx) {
+    for (int gy = -radius_cells; gy <= radius_cells; ++gy) {
+        for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
             const float dx = static_cast<float>(gx * cell);
             const float dy = static_cast<float>(gy * cell);
             const float dist_sq = dx * dx + dy * dy;
@@ -282,6 +300,9 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
             SDL_RenderFillRect(renderer, &point_rect);
         }
     }
+
+    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
 }
 
 } // namespace

@@ -24386,8 +24386,8 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": -1445,
-              "dz": -716,
+              "dx": -920,
+              "dz": -112,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24399,7 +24399,7 @@
               "position": "Exact",
               "priority": 10,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-d0f7ae175255"

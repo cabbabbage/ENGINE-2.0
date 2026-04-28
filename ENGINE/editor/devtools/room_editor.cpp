@@ -5938,6 +5938,13 @@ void RoomEditor::apply_asset_scale_live_update(Asset* asset, int scale_percent) 
     const int clamped_percent = std::clamp(scale_percent, 1, 400);
     asset->info->set_scale_percentage(static_cast<float>(clamped_percent));
     asset->on_scale_factor_changed();
+    if (assets_ && asset->info->tillable) {
+        if (auto tiling = assets_->compute_tiling_for_asset(asset); tiling && tiling->is_valid()) {
+            asset->set_tiling_info(*tiling);
+        } else {
+            asset->set_tiling_info(std::nullopt);
+        }
+    }
 
     if (save_coordinator_ && manifest_store_) {
         nlohmann::json payload = asset->info->manifest_payload();
@@ -7043,6 +7050,44 @@ bool RoomEditor::compute_asset_render_object_bounds(const WarpedScreenGrid& cam,
         return false;
     }
 
+    if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
+        const float left = static_cast<float>(tiling->coverage.x);
+        const float right = static_cast<float>(tiling->coverage.x + tiling->coverage.w);
+        const float top = static_cast<float>(tiling->coverage.y);
+        const float bottom = static_cast<float>(tiling->coverage.y + tiling->coverage.h);
+        SDL_FPoint p0{};
+        SDL_FPoint p1{};
+        SDL_FPoint p2{};
+        SDL_FPoint p3{};
+        if (cam.project_world_point(SDL_FPoint{left, 0.0f}, top, p0) &&
+            cam.project_world_point(SDL_FPoint{right, 0.0f}, top, p1) &&
+            cam.project_world_point(SDL_FPoint{left, 0.0f}, bottom, p2) &&
+            cam.project_world_point(SDL_FPoint{right, 0.0f}, bottom, p3) &&
+            std::isfinite(p0.x) && std::isfinite(p0.y) &&
+            std::isfinite(p1.x) && std::isfinite(p1.y) &&
+            std::isfinite(p2.x) && std::isfinite(p2.y) &&
+            std::isfinite(p3.x) && std::isfinite(p3.y)) {
+            const float min_x = std::min(std::min(p0.x, p1.x), std::min(p2.x, p3.x));
+            const float max_x = std::max(std::max(p0.x, p1.x), std::max(p2.x, p3.x));
+            const float min_y = std::min(std::min(p0.y, p1.y), std::min(p2.y, p3.y));
+            const float max_y = std::max(std::max(p0.y, p1.y), std::max(p2.y, p3.y));
+            if (max_x > min_x && max_y > min_y) {
+                const int left_px = static_cast<int>(std::floor(min_x));
+                const int top_px = static_cast<int>(std::floor(min_y));
+                const int right_px = static_cast<int>(std::ceil(max_x));
+                const int bottom_px = static_cast<int>(std::ceil(max_y));
+                out_rect = SDL_Rect{
+                    left_px,
+                    top_px,
+                    std::max(1, right_px - left_px),
+                    std::max(1, bottom_px - top_px)};
+                if (screen_rect_is_reasonable(out_rect)) {
+                    return true;
+                }
+            }
+        }
+    }
+
     RenderObject obj{};
     if (!render_build::build_direct_asset_render_object(asset, obj)) {
         return false;
@@ -7368,6 +7413,13 @@ void RoomEditor::sync_dragged_assets_immediately() {
                 current.y,
                 asset->grid_resolution);
             (void)assets_->world_grid().move_asset(asset, old_pos, new_pos);
+            if (asset->info && asset->info->tillable) {
+                if (auto tiling = assets_->compute_tiling_for_asset(asset); tiling && tiling->is_valid()) {
+                    asset->set_tiling_info(*tiling);
+                } else {
+                    asset->set_tiling_info(std::nullopt);
+                }
+            }
         }
         state.last_synced_pos = current;
         moved_any = true;

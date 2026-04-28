@@ -1211,6 +1211,12 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
 
             rendered_assets_for_debug.push_back(asset);
 
+            // Tileable assets with valid tiling coverage are drawn by the tile system.
+            // Skip direct sprite rendering to avoid drawing the same asset twice.
+            if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
+                continue;
+            }
+
             auto& cache_entry = asset_render_cache_[asset];
             SDL_Texture* current_texture_identity = asset->get_current_variant_texture();
             if (!current_texture_identity) {

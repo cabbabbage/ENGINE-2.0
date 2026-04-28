@@ -12,6 +12,10 @@ constexpr int kMinResolution = 0;
 constexpr int kMaxResolution = vibble::grid::kMaxResolution;
 constexpr int kMinJitter = 0;
 constexpr int kMaxJitter = 500;
+constexpr int kMinTileStepPx = 0;
+constexpr int kMaxTileStepPx = 8192;
+constexpr int kMinResolvedTileStepPx = 1;
+constexpr int kMaxResolvedTileStepPx = 8192;
 
 int power_of_three(int exponent) {
     if (exponent <= 0) {
@@ -29,7 +33,7 @@ int power_of_three(int exponent) {
 }
 
 MapGridSettings MapGridSettings::defaults() {
-    return MapGridSettings{8, 0};
+    return MapGridSettings{8, 0, 0};
 }
 
 MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
@@ -45,9 +49,15 @@ MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
         if (obj->contains("position_jitter_px") && (*obj)["position_jitter_px"].is_number_integer()) {
             settings.position_jitter_px = (*obj)["position_jitter_px"].get<int>();
         }
+        if (obj->contains("tile_step_px") && (*obj)["tile_step_px"].is_number_integer()) {
+            settings.tile_step_px = (*obj)["tile_step_px"].get<int>();
+        } else if (obj->contains("tile_size_px") && (*obj)["tile_size_px"].is_number_integer()) {
+            settings.tile_step_px = (*obj)["tile_size_px"].get<int>();
+        }
     } catch (...) {
         settings.grid_resolution = defaults().grid_resolution;
         settings.position_jitter_px = defaults().position_jitter_px;
+        settings.tile_step_px = defaults().tile_step_px;
     }
 
     settings.clamp();
@@ -57,6 +67,7 @@ MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
 void MapGridSettings::clamp() {
     grid_resolution = std::clamp(grid_resolution, kMinResolution, kMaxResolution);
     position_jitter_px = std::clamp(position_jitter_px, kMinJitter, kMaxJitter);
+    tile_step_px = std::clamp(tile_step_px, kMinTileStepPx, kMaxTileStepPx);
 }
 
 void MapGridSettings::apply_to_json(nlohmann::json& obj) const {
@@ -65,12 +76,14 @@ void MapGridSettings::apply_to_json(nlohmann::json& obj) const {
     }
     obj["grid_resolution"] = grid_resolution;
     obj["position_jitter_px"] = position_jitter_px;
+    obj["tile_step_px"] = tile_step_px;
     obj.erase("resolution");
     obj.erase("r_chunk");
     obj.erase("chunk_resolution");
     obj.erase("chunk_size");
     obj.erase("chunk_size_px");
     obj.erase("tile_resolution");
+    obj.erase("tile_size_px");
 }
 
 void ensure_map_grid_settings(nlohmann::json& map_info) {
@@ -88,4 +101,20 @@ void ensure_map_grid_settings(nlohmann::json& map_info) {
 int MapGridSettings::spacing() const {
     const int clamped = std::clamp(grid_resolution, kMinResolution, kMaxResolution);
     return power_of_three(clamped);
+}
+
+int clamp_tiled_asset_step_px(int step_px) {
+    return std::clamp(step_px, kMinResolvedTileStepPx, kMaxResolvedTileStepPx);
+}
+
+int resolve_tiled_asset_step_px(const MapGridSettings& settings, int fallback_step_px) {
+    if (settings.tile_step_px > 0) {
+        return clamp_tiled_asset_step_px(settings.tile_step_px);
+    }
+
+    int resolved = fallback_step_px;
+    if (resolved <= 0) {
+        resolved = settings.spacing();
+    }
+    return clamp_tiled_asset_step_px(std::max(1, resolved));
 }

@@ -35,5 +35,6 @@ void Chunk::releaseTileTextures() {
         }
     }
     tiles.clear();
+    ++tile_texture_revision;
 }
 }

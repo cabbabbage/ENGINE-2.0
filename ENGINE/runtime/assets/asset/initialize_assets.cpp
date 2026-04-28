@@ -58,11 +58,16 @@ void InitializeAssets::initialize(Assets& assets,
 
                 try {
                     if (raw->info && raw->info->tillable) {
-                        auto t = assets.compute_tiling_for_asset(raw);
-                        if (t && t->is_valid()) {
-                            raw->set_tiling_info(*t);
+                        const auto& existing_tiling = raw->tiling_info();
+                        if (existing_tiling && existing_tiling->is_valid()) {
+                            raw->set_tiling_info(*existing_tiling);
                         } else {
-                            raw->set_tiling_info(std::nullopt);
+                            auto t = assets.compute_tiling_for_asset(raw);
+                            if (t && t->is_valid()) {
+                                raw->set_tiling_info(*t);
+                            } else {
+                                raw->set_tiling_info(std::nullopt);
+                            }
                         }
                     } else {
                         raw->set_tiling_info(std::nullopt);

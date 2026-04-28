@@ -24,6 +24,7 @@ struct Chunk {
 
     std::vector<Asset*> assets;
     std::uint64_t       occlusion_revision = 0;
+    std::uint64_t       tile_texture_revision = 0;
 
     std::vector<GridTile> tiles;
 

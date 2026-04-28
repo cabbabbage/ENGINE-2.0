@@ -3467,27 +3467,24 @@ std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* a
     if (!asset->info->tillable) {
         return std::nullopt;
     }
-
-    int step = map_grid_settings_.spacing();
-
-    if (step <= 0) {
-        const int raw_w = std::max(1, asset->info->original_canvas_width);
-        const int raw_h = std::max(1, asset->info->original_canvas_height);
-        double scale = 1.0;
-        if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
-            scale = static_cast<double>(asset->info->scale_factor);
-        }
-        step = std::max(1, static_cast<int>(std::lround(static_cast<double>(std::max(raw_w, raw_h)) * scale)));
+    if (asset->tiling_info() && asset->tiling_info()->is_valid()) {
+        return asset->tiling_info();
     }
-    step = std::max(1, step);
 
-    const SDL_Point world_pos{ asset->world_x(), asset->world_z() };
-    const int base_w = std::max(1, asset->info->original_canvas_width);
-    const int base_h = std::max(1, asset->info->original_canvas_height);
+    const int raw_w = std::max(1, asset->info->original_canvas_width);
+    const int raw_h = std::max(1, asset->info->original_canvas_height);
     double scale = 1.0;
     if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
         scale = static_cast<double>(asset->info->scale_factor);
     }
+    const int fallback_step = std::max(
+        1,
+        static_cast<int>(std::lround(static_cast<double>(std::max(raw_w, raw_h)) * scale)));
+    const int step = resolve_tiled_asset_step_px(map_grid_settings_, fallback_step);
+
+    const SDL_Point world_pos{ asset->world_x(), asset->world_z() };
+    const int base_w = raw_w;
+    const int base_h = raw_h;
     const int scaled_w = std::max(1, static_cast<int>(std::lround(static_cast<double>(base_w) * scale)));
     const int scaled_h = std::max(1, static_cast<int>(std::lround(static_cast<double>(base_h) * scale)));
 

@@ -98,6 +98,38 @@ TEST_CASE("MapGridSettings defaults missing grid_resolution to 8") {
     nlohmann::json section = nlohmann::json::object();
     MapGridSettings settings = MapGridSettings::from_json(&section);
     CHECK(settings.grid_resolution == 8);
+    CHECK(settings.tile_step_px == 0);
+}
+
+TEST_CASE("MapGridSettings preserves explicit tile_step_px and clamps invalid values") {
+    nlohmann::json section = nlohmann::json::object({
+        {"grid_resolution", 4},
+        {"tile_step_px", 96}
+    });
+    MapGridSettings settings = MapGridSettings::from_json(&section);
+    CHECK(settings.grid_resolution == 4);
+    CHECK(settings.tile_step_px == 96);
+
+    nlohmann::json out = nlohmann::json::object();
+    settings.apply_to_json(out);
+    CHECK(out.value("tile_step_px", -1) == 96);
+
+    nlohmann::json invalid = nlohmann::json::object({
+        {"tile_step_px", -700}
+    });
+    MapGridSettings invalid_settings = MapGridSettings::from_json(&invalid);
+    CHECK(invalid_settings.tile_step_px == 0);
+}
+
+TEST_CASE("resolve_tiled_asset_step_px uses explicit setting then fallback") {
+    MapGridSettings settings = MapGridSettings::defaults();
+    settings.grid_resolution = 3;
+    settings.tile_step_px = 128;
+    CHECK(resolve_tiled_asset_step_px(settings, 42) == 128);
+
+    settings.tile_step_px = 0;
+    CHECK(resolve_tiled_asset_step_px(settings, 42) == 42);
+    CHECK(resolve_tiled_asset_step_px(settings, 0) == settings.spacing());
 }
 
 TEST_CASE("normalize_map_manifest inserts default grid_resolution when missing") {

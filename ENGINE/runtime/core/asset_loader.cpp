@@ -256,6 +256,9 @@ void AssetLoader::finalizeAssets() {
         std::size_t total_assets       = 0;
         std::size_t finalized_assets   = 0;
         std::size_t skipped_assets     = 0;
+        std::size_t skipped_missing_default_count = 0;
+        std::vector<std::string> skipped_missing_default_names;
+        skipped_missing_default_names.reserve(16);
 
         for (Room* room : getRooms()) {
                 if (!room) {
@@ -283,6 +286,10 @@ void AssetLoader::finalizeAssets() {
                         auto default_anim = a->info->animations.find("default");
                         if (default_anim == a->info->animations.end() || !default_anim->second.has_frames()) {
                                 vibble::log::error(std::string("[AssetLoader] finalizeAssets: asset '") + name + "' is missing default animation frames; skipping.");
+                                ++skipped_missing_default_count;
+                                if (skipped_missing_default_names.size() < 16) {
+                                        skipped_missing_default_names.push_back(name);
+                                }
                                 asset_up.reset();
                                 ++skipped_assets;
                                 ++room_skipped;
@@ -320,12 +327,22 @@ void AssetLoader::finalizeAssets() {
         }
 
         {
-                std::string msg = std::string("[AssetLoader] finalizeAssets complete: ") + std::to_string(finalized_assets) + "/" + std::to_string(total_assets) + " assets ready";
-                if (skipped_assets > 0) {
-                        msg += std::string(" (") + std::to_string(skipped_assets) + " skipped)";
-                }
-                vibble::log::info(msg);
+        std::string msg = std::string("[AssetLoader] finalizeAssets complete: ") + std::to_string(finalized_assets) + "/" + std::to_string(total_assets) + " assets ready";
+        if (skipped_assets > 0) {
+                msg += std::string(" (") + std::to_string(skipped_assets) + " skipped)";
         }
+        vibble::log::info(msg);
+        vibble::log::warn(std::string("[AssetLoader] finalizeAssets missing-default skip count: ") +
+                          std::to_string(skipped_missing_default_count));
+        if (!skipped_missing_default_names.empty()) {
+                std::string sampled = skipped_missing_default_names.front();
+                for (std::size_t i = 1; i < skipped_missing_default_names.size(); ++i) {
+                        sampled += ", " + skipped_missing_default_names[i];
+                }
+                vibble::log::error(std::string("[AssetLoader] finalizeAssets high-severity: missing default frames after full preload. Sample assets: ") +
+                                   sampled);
+        }
+}
 }
 
 std::vector<std::unique_ptr<Asset>> AssetLoader::extract_all_assets() {

@@ -139,8 +139,36 @@ struct CachedGroundTileProjection {
     SDL_Texture* texture = nullptr;
     SDL_Rect world_rect{0, 0, 0, 0};
     std::uint64_t camera_state_version = 0;
+    std::uint64_t last_touched_frame = 0;
     std::array<SDL_Vertex, 4> vertices{};
     bool valid = false;
+};
+
+struct GroundTileCacheKey {
+    int chunk_i = 0;
+    int chunk_j = 0;
+    std::uint64_t tile_texture_revision = 0;
+    std::uint32_t tile_index = 0;
+
+    bool operator==(const GroundTileCacheKey& other) const {
+        return chunk_i == other.chunk_i &&
+               chunk_j == other.chunk_j &&
+               tile_texture_revision == other.tile_texture_revision &&
+               tile_index == other.tile_index;
+    }
+};
+
+struct GroundTileCacheKeyHash {
+    std::size_t operator()(const GroundTileCacheKey& key) const {
+        const std::uint64_t h0 = static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.chunk_i));
+        const std::uint64_t h1 = static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.chunk_j));
+        const std::uint64_t h2 = key.tile_texture_revision;
+        const std::uint64_t h3 = key.tile_index;
+        std::size_t seed = static_cast<std::size_t>(h0 ^ (h1 << 32));
+        seed ^= static_cast<std::size_t>(h2 + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+        seed ^= static_cast<std::size_t>(h3 + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+        return seed;
+    }
 };
 
 bool cached_ground_tile_projection_matches(const CachedGroundTileProjection& entry,
@@ -158,14 +186,24 @@ bool cached_ground_tile_projection_matches(const CachedGroundTileProjection& ent
            entry.world_rect.h == world_rect.h;
 }
 
-std::unordered_map<const void*, CachedGroundTileProjection>& ground_tile_projection_cache() {
-    static std::unordered_map<const void*, CachedGroundTileProjection> cache;
+std::unordered_map<GroundTileCacheKey, CachedGroundTileProjection, GroundTileCacheKeyHash>& ground_tile_projection_cache() {
+    static std::unordered_map<GroundTileCacheKey, CachedGroundTileProjection, GroundTileCacheKeyHash> cache;
     return cache;
 }
 
-void maybe_prune_ground_tile_projection_cache() {
+void maybe_prune_ground_tile_projection_cache(std::uint64_t current_frame_marker) {
     auto& cache = ground_tile_projection_cache();
-    if (cache.size() > 65536) {
+    constexpr std::uint64_t kMaxStaleFrames = 120;
+    for (auto it = cache.begin(); it != cache.end();) {
+        const CachedGroundTileProjection& entry = it->second;
+        if (!entry.valid || (current_frame_marker > entry.last_touched_frame &&
+                             (current_frame_marker - entry.last_touched_frame) > kMaxStaleFrames)) {
+            it = cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (cache.size() > 131072) {
         cache.clear();
     }
 }
@@ -312,6 +350,7 @@ GridTileRenderer::GridTileRenderer(Assets* assets)
 
 void GridTileRenderer::invalidate_texture_cache() {
     texture_size_cache_.clear();
+    ground_tile_projection_cache().clear();
 }
 
 bool GridTileRenderer::fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size) {
@@ -366,7 +405,10 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
         return;
     }
 
-    maybe_prune_ground_tile_projection_cache();
+    static std::uint64_t frame_marker = 0;
+    ++frame_marker;
+
+    maybe_prune_ground_tile_projection_cache(frame_marker);
     auto& cache = ground_tile_projection_cache();
     const std::uint64_t camera_version = cam.camera_state_version();
     const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
@@ -377,12 +419,20 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
             continue;
         }
 
+        const std::uint64_t tile_revision = chunk->tile_texture_revision;
+        std::uint32_t tile_index = 0;
         for (const auto& tile : chunk->tiles) {
             if (!tile.texture || tile.world_rect.w <= 0 || tile.world_rect.h <= 0) {
+                ++tile_index;
                 continue;
             }
 
-            const void* tile_key = static_cast<const void*>(&tile);
+            const GroundTileCacheKey tile_key{
+                chunk->i,
+                chunk->j,
+                tile_revision,
+                tile_index
+            };
             auto it = cache.find(tile_key);
             const bool reuse =
                 it != cache.end() &&
@@ -398,6 +448,7 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
                 verts[1] = it->second.vertices[1];
                 verts[2] = it->second.vertices[2];
                 verts[3] = it->second.vertices[3];
+                it->second.last_touched_frame = frame_marker;
             } else {
                 SDL_Point tl{tile.world_rect.x, tile.world_rect.y};
                 SDL_Point tr{tile.world_rect.x + tile.world_rect.w, tile.world_rect.y};
@@ -441,6 +492,7 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
                 entry.texture = tile.texture;
                 entry.world_rect = tile.world_rect;
                 entry.camera_state_version = camera_version;
+                entry.last_touched_frame = frame_marker;
                 entry.vertices[0] = verts[0];
                 entry.vertices[1] = verts[1];
                 entry.vertices[2] = verts[2];
@@ -453,6 +505,7 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
             } else {
                 render_diagnostics::render_geometry(renderer, tile.texture, verts, 4, indices, 6);
             }
+            ++tile_index;
         }
     }
 }

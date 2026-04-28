@@ -280,6 +280,7 @@ void vibble_controller::movement(const Input& input) {
 void vibble_controller::on_update(const Input& input) {
     ensure_hand_defaults();
     movement(input);
+    update_world_carried_asset_pose();
     using namespace std::chrono;
     auto now = steady_clock::now();
 
@@ -497,6 +498,9 @@ Asset* vibble_controller::find_closest_tagged_asset(std::string_view tag, int ra
         if (!candidate || candidate == player || candidate->dead || !candidate->active || !candidate->info) {
             continue;
         }
+        if (candidate == carried_world_asset_) {
+            continue;
+        }
         if (!has_tag(*candidate, tag)) {
             continue;
         }
@@ -511,6 +515,9 @@ Asset* vibble_controller::find_closest_tagged_asset(std::string_view tag, int ra
 }
 
 bool vibble_controller::is_carrying_non_gun() const {
+    if (carried_world_asset_ && !carried_world_asset_->dead) {
+        return !normalized_tokens_equal(carried_asset_name_, kGunAssetName);
+    }
     if (!carried_child_.has_value()) {
         return false;
     }
@@ -538,6 +545,38 @@ void vibble_controller::ensure_hand_defaults() {
     if (gun_child_.has_value()) {
         gun_child_->hide();
     }
+}
+
+void vibble_controller::update_world_carried_asset_pose() {
+    Asset* player = self_ptr();
+    if (!player || !carried_world_asset_ || carried_world_asset_->dead) {
+        carried_world_asset_ = nullptr;
+        return;
+    }
+
+    const auto hand_anchor = player->anchor_state(std::string{kHandAnchorName},
+                                                  anchor_points::GridMaterialization::None,
+                                                  Asset::AnchorResolveMode::ForceRecompute);
+    if (!hand_anchor.has_value()) {
+        return;
+    }
+
+    carried_world_asset_->set_anchor_hidden(false);
+    carried_world_asset_->set_hidden(false);
+    carried_world_asset_->active = true;
+
+    int target_layer = hand_anchor->resolution_layer;
+    if (target_layer < 0) {
+        target_layer = carried_world_asset_->grid_resolution;
+    }
+    // Anchor contract: world_quantized_px = {world_x, world_y}, and world_z is the depth axis.
+    carried_world_asset_->move_to_world_position(hand_anchor->world_quantized_px.x,
+                                                 hand_anchor->world_quantized_px.y,
+                                                 hand_anchor->world_z,
+                                                 target_layer);
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+        carried_world_asset_,
+        std::string{});
 }
 
 OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
@@ -572,7 +611,7 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
 
 void vibble_controller::drop_carried_asset(const Input& input, int held_frames) {
     Asset* player = self_ptr();
-    if (!player || !carried_child_.has_value()) {
+    if (!player) {
         return;
     }
     if (!is_carrying_non_gun()) {
@@ -580,6 +619,21 @@ void vibble_controller::drop_carried_asset(const Input& input, int held_frames) 
     }
 
     const OrphanImpulse impulse = build_throw_impulse(*player, input, held_frames);
+    if (carried_world_asset_ && !carried_world_asset_->dead) {
+        carried_world_asset_->set_anchor_hidden(false);
+        carried_world_asset_->set_hidden(false);
+        carried_world_asset_->active = true;
+        carried_world_asset_->notify_orphaned(player, impulse);
+        carried_world_asset_ = nullptr;
+        carried_asset_name_.clear();
+        ensure_hand_defaults();
+        return;
+    }
+
+    if (!carried_child_.has_value()) {
+        return;
+    }
+
     (void)carried_child_->orphan(impulse);
     carried_child_.reset();
     carried_asset_name_.clear();
@@ -590,11 +644,35 @@ void vibble_controller::pickup_asset(Asset& player, Asset& target) {
     if (!target.info) {
         return;
     }
+    if (&target == &player) {
+        return;
+    }
+
+    if (Assets* owner_assets = assets()) {
+        for (Asset* candidate_owner : owner_assets->getActive()) {
+            if (!candidate_owner || candidate_owner == &target) {
+                continue;
+            }
+            if (candidate_owner->has_child(&target)) {
+                candidate_owner->remove_child(&target);
+            }
+        }
+    }
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().unregister_child(&target);
+    target.clear_anchor_perspective_override();
+    target.clear_anchor_sprite_transform_override();
+    target.clear_render_anchor_offset();
+    target.set_anchor_hidden(false);
+    target.set_hidden(false);
+    target.active = true;
+    if (Assets* owner_assets = assets()) {
+        owner_assets->mark_active_assets_dirty();
+    }
+
     carried_asset_name_ = target.info->name;
-    target.Delete();
     carried_child_.reset();
-    carried_child_.emplace(player, carried_asset_name_);
-    carried_child_->bind(std::string{kHandAnchorName});
+    carried_world_asset_ = &target;
+    update_world_carried_asset_pose();
     if (gun_child_.has_value()) {
         gun_child_->hide();
     }

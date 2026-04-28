@@ -53,6 +53,7 @@ private:
     void drop_carried_asset(const Input& input, int held_frames);
     void pickup_asset(Asset& player, Asset& target);
     OrphanImpulse build_throw_impulse(const Asset& player, const Input& input, int held_frames) const;
+    void update_world_carried_asset_pose();
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
@@ -80,6 +81,7 @@ private:
     std::string last_facing_animation_ = "default";
     std::optional<ChildAsset> gun_child_;
     std::optional<ChildAsset> carried_child_;
+    Asset* carried_world_asset_ = nullptr;
     std::string carried_asset_name_;
 };
 

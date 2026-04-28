@@ -11,7 +11,8 @@
                 "name": "flame_no_light"
               }
             ]
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_2",
@@ -22,7 +23,8 @@
                 "name": "flame_no_light"
               }
             ]
-          }
+          },
+          "orphan_on_end": true
         },
         {
           "anchor_point_name": "anchor_3",
@@ -33,7 +35,8 @@
                 "name": "flame_fps_12"
               }
             ]
-          }
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -90,6 +93,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -102,7 +106,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -110,6 +115,7 @@
       "asset_name": "3_candles",
       "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -121,12 +127,17 @@
       },
       "start": "default",
       "tags": [
+        "can_carry",
         "candle",
         "light",
         "small_surface_top"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "attack_speed": {
       "anchor_point_child_candidates": [],
@@ -13179,7 +13190,7 @@
       "tillable": false,
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
-      "weight_kg": 0.0,
+      "weight_kg": 20.0,
       "y_pos_max": 0,
       "y_pos_min": 0
     },
@@ -24548,25 +24559,26 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 1.0,
+        "behind_layer_light_strength_multiplier": 0.7199999690055847,
         "blur_px": 1.4299999475479126,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": false,
-        "dynamic_renderer_depth_efficiency_depth": 1156.0,
+        "depth_of_field_enabled": true,
+        "dynamic_renderer_depth_efficiency_depth": 2037.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
-        "front_layer_light_strength_multiplier": 1.090000033378601,
+        "front_layer_light_strength_multiplier": 1.0199999809265137,
         "layer_depth_curve": 62.189998626708984,
         "layer_depth_interval": 763.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
         "light_fade_smoothing_enabled": true,
+        "light_max_cull_depth": 15135.0,
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 4709.0,
+        "max_cull_depth": 12445.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
@@ -24712,9 +24724,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -25072,9 +25084,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
-            85,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -25185,9 +25197,9 @@
           "camera_zoom_percent": 43,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,

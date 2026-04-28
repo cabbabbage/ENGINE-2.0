@@ -720,7 +720,7 @@ SDL_Texture* FloorComposer::compose_gpu(const WarpedScreenGrid& cam,
 
     std::vector<LayerEffectProcessor::GpuRadialLight> gpu_lights;
     gpu_lights.reserve(runtime_lights.size());
-    const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth * 0.5));
+    const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth));
     for (const auto& light : runtime_lights) {
         if (!light.has_floor_projection ||
             !std::isfinite(light.floor_world_x) ||
@@ -870,7 +870,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
         const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
         SDL_RenderFillRect(renderer_, &full_rect);
 
-        const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth * 0.5));
+        const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth));
         SDL_Texture* falloff_texture = ensure_floor_light_falloff_texture();
         if (falloff_texture) {
             SDL_SetTextureBlendMode(falloff_texture, SDL_BLENDMODE_ADD);

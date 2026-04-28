@@ -2105,14 +2105,18 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
             if (visibility.visible) {
                 if (owned.get() != tracked_player_asset_ && min_visible_px > 0.0f) {
-                    float effective_largest_dim = 0.0f;
-                    if (visibility.projected_bounds.has_value()) {
-                        effective_largest_dim = visibility.projected_bounds->largest_dim_px;
-                    }
-                    effective_largest_dim = std::max(effective_largest_dim, visibility.max_light_diameter_px);
-                    if (effective_largest_dim > 0.0f &&
-                        effective_largest_dim < min_visible_px) {
-                        continue;
+                    const bool preserve_runtime_lights =
+                        (visibility.reason_flags & kVisibilityReasonLight) != 0;
+                    if (!preserve_runtime_lights) {
+                        float effective_largest_dim = 0.0f;
+                        if (visibility.projected_bounds.has_value()) {
+                            effective_largest_dim = visibility.projected_bounds->largest_dim_px;
+                        }
+                        effective_largest_dim = std::max(effective_largest_dim, visibility.max_light_diameter_px);
+                        if (effective_largest_dim > 0.0f &&
+                            effective_largest_dim < min_visible_px) {
+                            continue;
+                        }
                     }
                 }
                 frustum_hits.push_back(owned.get());

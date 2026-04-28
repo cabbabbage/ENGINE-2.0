@@ -3338,6 +3338,8 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     manifest_entry["min_same_type_distance"] = 0;
     manifest_entry["min_distance_all"] = 0;
     manifest_entry["can_invert"] = false;
+    manifest_entry["tilt_range_min_deg"] = 0;
+    manifest_entry["tilt_range_max_deg"] = 0;
     manifest_entry["size_settings"] = {
         {"scale_percentage", 100.0},
         {"size_variation", 0.0}

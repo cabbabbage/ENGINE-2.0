@@ -2437,8 +2437,13 @@ nlohmann::json AssetInfo::manifest_payload() const {
         }
         payload["weight_kg"] = weight_kg;
         payload["bounce_amount"] = bounce_amount;
-        payload["tilt_range_min_deg"] = tilt_range_min_deg;
-        payload["tilt_range_max_deg"] = tilt_range_max_deg;
+        int sanitized_tilt_min = clamp_tilt_degrees(tilt_range_min_deg);
+        int sanitized_tilt_max = clamp_tilt_degrees(tilt_range_max_deg);
+        if (sanitized_tilt_max < sanitized_tilt_min) {
+                std::swap(sanitized_tilt_min, sanitized_tilt_max);
+        }
+        payload["tilt_range_min_deg"] = sanitized_tilt_min;
+        payload["tilt_range_max_deg"] = sanitized_tilt_max;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();

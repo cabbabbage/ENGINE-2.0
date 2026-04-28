@@ -14739,30 +14739,34 @@ bool RoomEditor::add_anchor_in_current_frame() {
     return true;
 }
 
-bool RoomEditor::duplicate_selected_light_in_current_frame() {
-    if (!light_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
+bool RoomEditor::duplicate_selected_anchor_in_current_frame() {
+    if (!anchor_mode_active() || anchor_edit_.selected_anchor_name.empty()) {
         return false;
     }
     if (!anchor_edit_.target_asset || !anchor_edit_.target_asset->info) {
         return false;
     }
+    if (selected_anchor_is_oval_center()) {
+        return false;
+    }
 
+    const auto owner = devmode::room_anchor_mode::owner_from_light_mode(light_mode_active());
+    const auto is_reserved_anchor_name = [this](const std::string& anchor_name) {
+        return is_valid_oval_center_anchor_name(anchor_name);
+    };
     const std::string source_anchor_name = anchor_edit_.selected_anchor_name;
     std::string duplicated_anchor_name;
     const bool changed = mutate_anchor_current_frame(
         [&](std::vector<DisplacedAssetAnchorPoint>& anchors) {
-            const auto source_it = std::find_if(
-                anchors.begin(),
-                anchors.end(),
-                [&](const DisplacedAssetAnchorPoint& anchor) {
-                    return anchor.name == source_anchor_name &&
-                           anchor.is_valid() &&
-                           anchor.has_light_data &&
-                           !is_valid_oval_center_anchor_name(anchor.name);
-                });
-            if (source_it == anchors.end()) {
+            DisplacedAssetAnchorPoint* source_ptr = devmode::room_anchor_mode::find_anchor_in_mode_mutable(
+                anchors,
+                source_anchor_name,
+                owner,
+                is_reserved_anchor_name);
+            if (!source_ptr) {
                 return false;
             }
+            const std::size_t source_index = static_cast<std::size_t>(std::distance(&anchors.front(), source_ptr));
 
             std::vector<std::string> existing_names;
             existing_names.reserve(anchors.size());
@@ -14778,11 +14782,13 @@ bool RoomEditor::duplicate_selected_light_in_current_frame() {
                 return false;
             }
 
-            DisplacedAssetAnchorPoint duplicate = *source_it;
+            DisplacedAssetAnchorPoint duplicate = *source_ptr;
             duplicate.name = duplicated_anchor_name;
-            duplicate.has_light_data = true;
-            duplicate.light.sanitize();
-            anchors.insert(source_it + 1, duplicate);
+            if (owner == devmode::room_anchor_mode::AnchorPointOwner::Light) {
+                duplicate.has_light_data = true;
+                duplicate.light.sanitize();
+            }
+            anchors.insert(anchors.begin() + static_cast<std::ptrdiff_t>(source_index) + 1, duplicate);
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -14806,7 +14812,9 @@ bool RoomEditor::duplicate_selected_light_in_current_frame() {
             anchor_edit_.target_asset,
             duplicated_anchor_name);
     }
-    show_notice("Duplicated light anchor: " + duplicated_anchor_name);
+    show_notice(std::string("Duplicated ") +
+                (owner == devmode::room_anchor_mode::AnchorPointOwner::Light ? "light anchor: " : "anchor: ") +
+                duplicated_anchor_name);
     return true;
 }
 
@@ -20967,9 +20975,9 @@ void RoomEditor::handle_shortcuts(const Input& input) {
     }
 
     if (input.wasScancodePressed(SDL_SCANCODE_C)) {
-        if (light_mode_active()) {
-            if (!duplicate_selected_light_in_current_frame()) {
-                show_notice("Select a light anchor first");
+        if (anchor_mode_active()) {
+            if (!duplicate_selected_anchor_in_current_frame()) {
+                show_notice(light_mode_active() ? "Select a light anchor first" : "Select an anchor first");
             }
         } else {
             copy_selected_spawn_group();

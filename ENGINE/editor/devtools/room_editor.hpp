@@ -683,7 +683,7 @@ private:
     bool update_anchor_depth(const std::string& anchor_name, float delta_world);
     bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
     bool add_anchor_in_current_frame();
-    bool duplicate_selected_light_in_current_frame();
+    bool duplicate_selected_anchor_in_current_frame();
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
     bool delete_selected_anchor_in_current_frame();
     bool add_oval_mapping();

@@ -17180,6 +17180,52 @@
             "name": "",
             "path": "default"
           },
+          "tags": [
+            "right"
+          ]
+        },
+        "default_left": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "default",
+            "path": ""
+          },
+          "tags": [
+            "left"
+          ]
+        },
+        "fire_left": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "default",
+            "path": ""
+          },
           "tags": []
         },
         "fire_right": {
@@ -17196,7 +17242,10 @@
             "name": "",
             "path": "fire_right"
           },
-          "tags": []
+          "tags": [
+            "attack",
+            "right"
+          ]
         }
       },
       "anti_tags": [],
@@ -17216,7 +17265,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0,
+        "scale_percentage": 9.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -23764,7 +23813,9 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "tags": [],
+              "tags": [
+                "right"
+              ],
               "texture_x": 50,
               "texture_y": 0
             },
@@ -23788,7 +23839,9 @@
               "resolve_x": true,
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
-              "tags": [],
+              "tags": [
+                "left"
+              ],
               "texture_x": -50,
               "texture_y": 0
             },
@@ -25125,10 +25178,10 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1350,
-          "camera_center_dz": -1004,
-          "camera_height_px": 297,
-          "camera_tilt_deg": 47.09130096435547,
+          "camera_center_dx": -2450,
+          "camera_center_dz": -2658,
+          "camera_height_px": 578,
+          "camera_tilt_deg": 28.29129981994629,
           "camera_zoom_percent": 43,
           "curvyness": 2,
           "display_color": [
@@ -25267,6 +25320,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-004fab624830"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "casino"
+                }
+              ],
+              "display_name": "casino",
+              "dx": -2746,
+              "dz": -3240,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10000,
+              "position": "Exact",
+              "priority": 4,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-1d2fcba07670"
             }
           ],
           "trail_connection_sector": {

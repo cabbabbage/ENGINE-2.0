@@ -713,8 +713,7 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                               std::unordered_set<std::string>& runtime_loaded_assets,
                               const std::vector<std::string>& ordered_names,
                               const std::string& preload_label,
-                              const std::string& load_label,
-                              bool tiled_static_fast_path) {
+                              const std::string& load_label) {
         WarmupPassStats stats;
         if (!renderer || ordered_names.empty()) {
                 return stats;
@@ -841,15 +840,13 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                 }
                 try {
                         const auto item_begin = std::chrono::steady_clock::now();
-                        const bool include_all_animations = !(tiled_static_fast_path && info->tillable);
-                        info->loadAnimations(renderer, include_all_animations, true);
+                        info->loadAnimations(renderer, true, true);
                         const auto item_end = std::chrono::steady_clock::now();
                         const auto item_ms = std::chrono::duration_cast<std::chrono::milliseconds>(item_end - item_begin).count();
                         runtime_loaded_assets.insert(info->name);
                         stats.load_succeeded.push_back(info->name);
-                        vibble::log::info(std::string("[AssetLibrary] ") + load_label + " loaded '" + info->name +
-                                          "' mode=" + (include_all_animations ? "full" : "essential") +
-                                          " in " + std::to_string(item_ms) + "ms");
+                        vibble::log::info(std::string("[AssetLibrary] ") + load_label + " loaded '" + info->name + "' in " +
+                                          std::to_string(item_ms) + "ms");
                 } catch (const std::exception& ex) {
                         stats.load_failed.push_back(info->name);
                         vibble::log::error(std::string("[AssetLibrary] ") + load_label + " failed for '" + info->name +
@@ -1085,14 +1082,11 @@ void AssetLibrary::ensureAllAnimationsLoaded(SDL_Renderer* renderer) {
         runtime_loaded_assets_,
         sorted_names_from_set(all_names),
         "Preload pass 1",
-        "Pure load pass",
-        false);
+        "Pure load pass");
     startup_warmup_complete_ = stats.load_failed.empty() && stats.cache_failed.empty();
 }
 
-void AssetLibrary::ensureAnimationsLoadedFor(SDL_Renderer* renderer,
-                                             const std::unordered_set<std::string>& names,
-                                             bool tiled_static_fast_path) {
+void AssetLibrary::ensureAnimationsLoadedFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names) {
     if (!renderer || names.empty()) {
         return;
     }
@@ -1103,12 +1097,7 @@ void AssetLibrary::ensureAnimationsLoadedFor(SDL_Renderer* renderer,
         runtime_loaded_assets_,
         sorted_names_from_set(names),
         "Targeted preload",
-        "Targeted load",
-        tiled_static_fast_path);
-}
-
-void AssetLibrary::ensureRuntimeAnimationsLoadedFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names) {
-    ensureAnimationsLoadedFor(renderer, names, true);
+        "Targeted load");
 }
 
 void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names) {
@@ -1204,8 +1193,7 @@ AssetLibrary::RefreshMissingResult AssetLibrary::repairAndRefreshMissing(SDL_Ren
             runtime_loaded_assets_,
             sorted_names_from_set(names_to_load),
             "Repair / Refresh Missing preload",
-            "Repair / Refresh Missing load",
-            false);
+            "Repair / Refresh Missing load");
         append_unique_names(result.repaired_assets, stats.cache_repaired);
         append_unique_names(result.loaded_assets, stats.load_succeeded);
         append_unique_names(result.failed_assets, stats.cache_failed);

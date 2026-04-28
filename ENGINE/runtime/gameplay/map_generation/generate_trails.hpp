@@ -72,6 +72,20 @@ struct TrailLayoutDebug {
     std::vector<SDL_Point> polygon;
 };
 
+struct TrailSectorDebug {
+    double direction_deg = 0.0;
+    int width_percent = 100;
+};
+
+struct RoutedCenterlineDebug {
+    std::vector<SDL_Point> contact_candidates_a;
+    std::vector<SDL_Point> contact_candidates_b;
+    std::vector<SDL_Point> routed_points;
+    std::vector<SDL_Point> centerline_points;
+    bool route_budget_exhausted = false;
+    bool boundary_zone_ok = false;
+};
+
 bool build_layout_for_tests(const SDL_Point& start_tip,
                             const SDL_Point& end_tip,
                             int min_width,
@@ -80,5 +94,23 @@ bool build_layout_for_tests(const SDL_Point& start_tip,
                             const std::vector<Area>& existing_trails,
                             std::uint32_t seed,
                             TrailLayoutDebug* out_layout);
+
+bool point_in_sector_for_tests(const SDL_Point& center,
+                               const SDL_Point& point,
+                               const TrailSectorDebug& sector);
+
+bool collect_sector_contacts_for_circle_tests(const SDL_Point& center,
+                                              int radius,
+                                              const TrailSectorDebug& sector,
+                                              const SDL_Point& target_center,
+                                              std::vector<SDL_Point>* out_contacts);
+
+bool build_routed_centerline_for_tests(const std::vector<SDL_Point>& room_a_polygon,
+                                       const TrailSectorDebug& sector_a,
+                                       const std::vector<SDL_Point>& room_b_polygon,
+                                       const TrailSectorDebug& sector_b,
+                                       const std::vector<std::vector<SDL_Point>>& blocking_room_polygons,
+                                       int corridor_clearance_px,
+                                       RoutedCenterlineDebug* out_debug);
 } // namespace trail_generation::debug
 #endif

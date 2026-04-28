@@ -5,11 +5,13 @@
 #include "utils/map_grid_settings.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <numeric>
+#include <queue>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -29,6 +31,20 @@ constexpr double kCenterlineCurvatureScaleWorldPx = 45.0;
 constexpr double kCenterlineControlSpacingWorldPx = 300.0;
 constexpr double kCenterlineValidationSpacingWorldPx = 48.0;
 constexpr double kPointEpsilon = 1e-6;
+constexpr double kDegreesFullRotation = 360.0;
+constexpr double kTrailSectorDefaultDirectionDeg = 0.0;
+constexpr int kTrailSectorDefaultWidthPercent = 100;
+constexpr int kTrailSectorMinWidthPercent = 25;
+constexpr int kTrailSectorMaxWidthPercent = 100;
+constexpr int kTrailContactAngleSamples = 36;
+constexpr int kTrailRouteSearchMaxExpansions = 500000;
+constexpr int kTrailRouteSearchMaxCellSpan = 512;
+constexpr int kTrailRouteInitialCellSizeWorldPx = 96;
+constexpr int kTrailRouteSampleSpacingWorldPx = 32;
+constexpr int kTrailBoundaryZoneDistanceWorldPx = 240;
+constexpr int kTrailContactGateIterations = 24;
+constexpr double kTrailContactGateStepWorldPx = 24.0;
+constexpr int kTrailRoutePairBudget = 256;
 
 struct Vec2 {
     double x = 0.0;
@@ -51,6 +67,11 @@ struct RoomObstacle {
 struct TrailObstacle {
     std::vector<SDL_Point> polygon;
     Bounds bounds{};
+};
+
+struct TrailConnectionSector {
+    double direction_deg = kTrailSectorDefaultDirectionDeg;
+    int width_percent = kTrailSectorDefaultWidthPercent;
 };
 
 struct CenterlineSample {
@@ -86,7 +107,10 @@ enum class TrailFailureReason {
     BlockedByTrail,
     SectionPlacementFailed,
     PolygonTooSmall,
-    LayoutAttemptsExhausted
+    LayoutAttemptsExhausted,
+    NoValidSectorContacts,
+    SectorBoundaryZoneViolation,
+    RouteSearchBudgetExceeded,
 };
 
 struct TrailAttemptStats {
@@ -97,6 +121,9 @@ struct TrailAttemptStats {
     int centerline_trail_rejections = 0;
     int section_failures = 0;
     int polygon_failures = 0;
+    int sector_contact_failures = 0;
+    int sector_boundary_failures = 0;
+    int route_budget_failures = 0;
     TrailFailureReason last_failure = TrailFailureReason::None;
 };
 
@@ -112,6 +139,9 @@ struct GenerationPerfSummary {
     int total_trail_rejections = 0;
     int total_section_failures = 0;
     int total_polygon_failures = 0;
+    int total_sector_contact_failures = 0;
+    int total_sector_boundary_failures = 0;
+    int total_route_budget_failures = 0;
     int total_rooms_considered = 0;
 };
 
@@ -173,6 +203,9 @@ const char* failure_reason_name(TrailFailureReason reason) {
         case TrailFailureReason::SectionPlacementFailed: return "section_placement_failed";
         case TrailFailureReason::PolygonTooSmall: return "polygon_too_small";
         case TrailFailureReason::LayoutAttemptsExhausted: return "layout_attempts_exhausted";
+        case TrailFailureReason::NoValidSectorContacts: return "no_valid_sector_contacts";
+        case TrailFailureReason::SectorBoundaryZoneViolation: return "sector_boundary_zone_violation";
+        case TrailFailureReason::RouteSearchBudgetExceeded: return "route_search_budget_exceeded";
         default: return "unknown";
     }
 }
@@ -248,6 +281,95 @@ Vec2 normalize_or_default(const Vec2& value, const Vec2& fallback) {
 
 bool nearly_equal(double a, double b, double eps = kPointEpsilon) {
     return std::abs(a - b) <= eps;
+}
+
+double normalize_angle_degrees(double value) {
+    if (!std::isfinite(value)) {
+        return kTrailSectorDefaultDirectionDeg;
+    }
+    double normalized = std::fmod(value, kDegreesFullRotation);
+    if (normalized < 0.0) {
+        normalized += kDegreesFullRotation;
+    }
+    if (normalized >= kDegreesFullRotation) {
+        normalized -= kDegreesFullRotation;
+    }
+    return normalized;
+}
+
+double shortest_angular_distance_degrees(double a, double b) {
+    const double na = normalize_angle_degrees(a);
+    const double nb = normalize_angle_degrees(b);
+    double delta = std::abs(na - nb);
+    if (delta > 180.0) {
+        delta = kDegreesFullRotation - delta;
+    }
+    return delta;
+}
+
+Vec2 direction_for_angle_degrees(double angle_deg) {
+    const double normalized = normalize_angle_degrees(angle_deg);
+    const double radians = normalized * (3.14159265358979323846 / 180.0);
+    return Vec2{std::sin(radians), -std::cos(radians)};
+}
+
+double angle_degrees_from_center(const SDL_Point& center, const SDL_Point& point) {
+    const double dx = static_cast<double>(point.x - center.x);
+    const double dy = static_cast<double>(point.y - center.y);
+    const double angle_rad = std::atan2(dx, -dy);
+    return normalize_angle_degrees(angle_rad * (180.0 / 3.14159265358979323846));
+}
+
+TrailConnectionSector sector_from_room(const Room* room) {
+    TrailConnectionSector sector;
+    if (!room) {
+        return sector;
+    }
+    const nlohmann::json& data = room->assets_data();
+    if (!data.is_object()) {
+        return sector;
+    }
+    auto sector_it = data.find("trail_connection_sector");
+    if (sector_it == data.end() || !sector_it->is_object()) {
+        return sector;
+    }
+    if (sector_it->contains("direction_deg")) {
+        const auto& value = (*sector_it)["direction_deg"];
+        if (value.is_number_integer()) {
+            sector.direction_deg = static_cast<double>(value.get<int>());
+        } else if (value.is_number_float()) {
+            sector.direction_deg = value.get<double>();
+        }
+    }
+    if (sector_it->contains("width_percent")) {
+        const auto& value = (*sector_it)["width_percent"];
+        if (value.is_number_integer()) {
+            sector.width_percent = value.get<int>();
+        } else if (value.is_number_float()) {
+            sector.width_percent = static_cast<int>(std::lround(value.get<double>()));
+        }
+    }
+    sector.direction_deg = normalize_angle_degrees(sector.direction_deg);
+    sector.width_percent = std::clamp(sector.width_percent, kTrailSectorMinWidthPercent, kTrailSectorMaxWidthPercent);
+    return sector;
+}
+
+bool angle_in_sector(double angle_deg, const TrailConnectionSector& sector) {
+    const double span = (kDegreesFullRotation * static_cast<double>(sector.width_percent)) / 100.0;
+    if (span >= kDegreesFullRotation - 1e-6) {
+        return true;
+    }
+    const double center = normalize_angle_degrees(sector.direction_deg);
+    return shortest_angular_distance_degrees(angle_deg, center) <= (span * 0.5 + 1e-6);
+}
+
+bool point_is_in_room_sector(const SDL_Point& point, const Room* room, const TrailConnectionSector& sector) {
+    if (!room || !room->room_area) {
+        return false;
+    }
+    const SDL_Point center = room->room_area->get_center();
+    const double angle_deg = angle_degrees_from_center(center, point);
+    return angle_in_sector(angle_deg, sector);
 }
 
 bool on_segment(const Vec2& a, const Vec2& b, const Vec2& c) {
@@ -397,6 +519,167 @@ SDL_Point compute_edge_point(const SDL_Point& center, const SDL_Point& toward, c
         }
     }
     return edge;
+}
+
+SDL_Point make_far_target(const SDL_Point& center, double angle_deg) {
+    const Vec2 dir = direction_for_angle_degrees(angle_deg);
+    return SDL_Point{
+        static_cast<int>(std::lround(static_cast<double>(center.x) + dir.x * 32768.0)),
+        static_cast<int>(std::lround(static_cast<double>(center.y) + dir.y * 32768.0)),
+    };
+}
+
+std::vector<SDL_Point> collect_sector_contact_candidates_for_area(const Area* area,
+                                                                  const TrailConnectionSector& sector,
+                                                                  const SDL_Point& target_center) {
+    std::vector<SDL_Point> points;
+    if (!area) {
+        return points;
+    }
+    const SDL_Point center = area->get_center();
+    const double span_deg = (kDegreesFullRotation * static_cast<double>(sector.width_percent)) / 100.0;
+    const double start_deg = normalize_angle_degrees(sector.direction_deg - span_deg * 0.5);
+    const double target_angle = angle_degrees_from_center(center, target_center);
+
+    auto add_candidate = [&](double angle_deg) {
+        if (!angle_in_sector(angle_deg, sector)) {
+            return;
+        }
+        const SDL_Point toward = make_far_target(center, angle_deg);
+        const SDL_Point edge = compute_edge_point(center, toward, area);
+        if (std::find_if(points.begin(), points.end(), [&](const SDL_Point& existing) {
+                return existing.x == edge.x && existing.y == edge.y;
+            }) == points.end()) {
+            points.push_back(edge);
+        }
+    };
+
+    add_candidate(target_angle);
+    const int samples = std::max(6, kTrailContactAngleSamples);
+    for (int i = 0; i < samples; ++i) {
+        const double t = (samples == 1) ? 0.0 : static_cast<double>(i) / static_cast<double>(samples - 1);
+        const double angle = normalize_angle_degrees(start_deg + span_deg * t);
+        add_candidate(angle);
+    }
+
+    std::stable_sort(points.begin(), points.end(), [&](const SDL_Point& lhs, const SDL_Point& rhs) {
+        const double da = shortest_angular_distance_degrees(angle_degrees_from_center(center, lhs), target_angle);
+        const double db = shortest_angular_distance_degrees(angle_degrees_from_center(center, rhs), target_angle);
+        return da < db;
+    });
+    return points;
+}
+
+std::vector<SDL_Point> collect_sector_contact_candidates(Room* room, const SDL_Point& target_center) {
+    if (!room || !room->room_area) {
+        return {};
+    }
+    const TrailConnectionSector sector = sector_from_room(room);
+    return collect_sector_contact_candidates_for_area(room->room_area.get(), sector, target_center);
+}
+
+std::vector<SDL_Point> dedupe_consecutive_points(const std::vector<SDL_Point>& points) {
+    std::vector<SDL_Point> deduped;
+    deduped.reserve(points.size());
+    for (const SDL_Point& point : points) {
+        if (!deduped.empty() && deduped.back().x == point.x && deduped.back().y == point.y) {
+            continue;
+        }
+        deduped.push_back(point);
+    }
+    return deduped;
+}
+
+std::vector<double> build_polyline_cumulative_lengths(const std::vector<SDL_Point>& points) {
+    std::vector<double> distances;
+    if (points.empty()) {
+        return distances;
+    }
+    distances.reserve(points.size());
+    distances.push_back(0.0);
+    double total = 0.0;
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        const double dx = static_cast<double>(points[i].x - points[i - 1].x);
+        const double dy = static_cast<double>(points[i].y - points[i - 1].y);
+        total += std::hypot(dx, dy);
+        distances.push_back(total);
+    }
+    return distances;
+}
+
+double polyline_total_length(const std::vector<double>& cumulative_lengths) {
+    if (cumulative_lengths.empty()) {
+        return 0.0;
+    }
+    return cumulative_lengths.back();
+}
+
+bool sample_polyline_at_distance(const std::vector<SDL_Point>& points,
+                                 const std::vector<double>& cumulative_lengths,
+                                 double distance,
+                                 Vec2* out_point,
+                                 Vec2* out_tangent) {
+    if (!out_point || !out_tangent || points.size() < 2 || cumulative_lengths.size() != points.size()) {
+        return false;
+    }
+
+    const double total = polyline_total_length(cumulative_lengths);
+    if (total <= kPointEpsilon) {
+        return false;
+    }
+    const double d = std::clamp(distance, 0.0, total);
+
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        const Vec2 p0 = to_vec2(points[i - 1]);
+        const Vec2 p1 = to_vec2(points[i]);
+        const Vec2 segment = subtract(p1, p0);
+        const double segment_len = length(segment);
+        if (segment_len <= kPointEpsilon) {
+            continue;
+        }
+        const double seg_start = cumulative_lengths[i - 1];
+        const double seg_end = cumulative_lengths[i];
+        if (d <= seg_end + 1e-6 || i + 1 == points.size()) {
+            const double t = std::clamp((d - seg_start) / std::max(kPointEpsilon, seg_end - seg_start), 0.0, 1.0);
+            *out_point = add(p0, scale(segment, t));
+            *out_tangent = scale(segment, 1.0 / segment_len);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::vector<CenterlineSample> build_centerline_samples_from_polyline(
+    const std::vector<SDL_Point>& polyline_points,
+    const std::vector<double>& sample_distances) {
+    std::vector<CenterlineSample> samples;
+    if (polyline_points.size() < 2 || sample_distances.empty()) {
+        return samples;
+    }
+
+    const std::vector<double> cumulative_lengths = build_polyline_cumulative_lengths(polyline_points);
+    if (polyline_total_length(cumulative_lengths) <= 1.0) {
+        return samples;
+    }
+
+    samples.reserve(sample_distances.size());
+    for (double distance : sample_distances) {
+        Vec2 point{};
+        Vec2 tangent{};
+        if (!sample_polyline_at_distance(polyline_points, cumulative_lengths, distance, &point, &tangent)) {
+            continue;
+        }
+
+        CenterlineSample sample;
+        sample.distance = distance;
+        sample.point = point;
+        sample.tangent = tangent;
+        sample.normal = Vec2{-tangent.y, tangent.x};
+        samples.push_back(sample);
+    }
+
+    return samples;
 }
 
 std::vector<double> build_distances(double trail_length,
@@ -568,13 +851,456 @@ bool point_inside_existing_trail(const SDL_Point& point,
     return false;
 }
 
+struct RouteSearchResult {
+    bool success = false;
+    bool budget_exhausted = false;
+    std::vector<SDL_Point> points;
+};
+
+bool point_blocked_for_route(const SDL_Point& point,
+                             Room* room_a,
+                             Room* room_b,
+                             const std::vector<RoomObstacle>& room_obstacles,
+                             const std::vector<TrailObstacle>& existing_trails) {
+    if (room_a && room_a->room_area && room_a->room_area->contains_point(point)) {
+        return true;
+    }
+    if (room_b && room_b->room_area && room_b->room_area->contains_point(point)) {
+        return true;
+    }
+    if (point_inside_blocking_room(point, room_a, room_b, room_obstacles)) {
+        return true;
+    }
+    return point_inside_existing_trail(point, existing_trails);
+}
+
+bool point_blocked_for_route_with_clearance(const SDL_Point& point,
+                                            Room* room_a,
+                                            Room* room_b,
+                                            const std::vector<RoomObstacle>& room_obstacles,
+                                            const std::vector<TrailObstacle>& existing_trails,
+                                            int clearance_px) {
+    if (point_blocked_for_route(point, room_a, room_b, room_obstacles, existing_trails)) {
+        return true;
+    }
+    if (clearance_px <= 1) {
+        return false;
+    }
+    const int half = std::max(1, clearance_px / 2);
+    const std::array<SDL_Point, 8> offsets{
+        SDL_Point{half, 0},
+        SDL_Point{-half, 0},
+        SDL_Point{0, half},
+        SDL_Point{0, -half},
+        SDL_Point{half, half},
+        SDL_Point{-half, half},
+        SDL_Point{half, -half},
+        SDL_Point{-half, -half},
+    };
+    for (const SDL_Point& offset : offsets) {
+        SDL_Point sample{point.x + offset.x, point.y + offset.y};
+        if (point_blocked_for_route(sample, room_a, room_b, room_obstacles, existing_trails)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<SDL_Point> dedupe_path_points(const std::vector<SDL_Point>& points) {
+    std::vector<SDL_Point> result;
+    result.reserve(points.size());
+    for (const SDL_Point& point : points) {
+        if (!result.empty() && result.back().x == point.x && result.back().y == point.y) {
+            continue;
+        }
+        result.push_back(point);
+    }
+    return result;
+}
+
+bool segment_clear_for_route(const SDL_Point& a,
+                             const SDL_Point& b,
+                             Room* room_a,
+                             Room* room_b,
+                             const std::vector<RoomObstacle>& room_obstacles,
+                             const std::vector<TrailObstacle>& existing_trails,
+                             int clearance_px) {
+    const double dx = static_cast<double>(b.x - a.x);
+    const double dy = static_cast<double>(b.y - a.y);
+    const double dist = std::hypot(dx, dy);
+    if (dist <= kPointEpsilon) {
+        return !point_blocked_for_route_with_clearance(a, room_a, room_b, room_obstacles, existing_trails, clearance_px);
+    }
+    const int samples = std::max(2, static_cast<int>(std::ceil(dist / static_cast<double>(kTrailRouteSampleSpacingWorldPx))));
+    for (int i = 0; i <= samples; ++i) {
+        if (i == 0 || i == samples) {
+            continue;
+        }
+        const double t = static_cast<double>(i) / static_cast<double>(samples);
+        SDL_Point sample{
+            static_cast<int>(std::lround(static_cast<double>(a.x) + dx * t)),
+            static_cast<int>(std::lround(static_cast<double>(a.y) + dy * t)),
+        };
+        if (point_blocked_for_route_with_clearance(sample, room_a, room_b, room_obstacles, existing_trails, clearance_px)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<SDL_Point> simplify_route_points(const std::vector<SDL_Point>& points,
+                                             Room* room_a,
+                                             Room* room_b,
+                                             const std::vector<RoomObstacle>& room_obstacles,
+                                             const std::vector<TrailObstacle>& existing_trails,
+                                             int clearance_px) {
+    std::vector<SDL_Point> deduped = dedupe_path_points(points);
+    if (deduped.size() <= 2) {
+        return deduped;
+    }
+    std::vector<SDL_Point> simplified;
+    simplified.reserve(deduped.size());
+    std::size_t i = 0;
+    simplified.push_back(deduped.front());
+    while (i + 1 < deduped.size()) {
+        std::size_t best = i + 1;
+        for (std::size_t j = deduped.size() - 1; j > i + 1; --j) {
+            if (segment_clear_for_route(deduped[i], deduped[j], room_a, room_b, room_obstacles, existing_trails, clearance_px)) {
+                best = j;
+                break;
+            }
+        }
+        simplified.push_back(deduped[best]);
+        i = best;
+    }
+    return dedupe_path_points(simplified);
+}
+
+RouteSearchResult build_routed_polyline(const SDL_Point& start_gate,
+                                        const SDL_Point& end_gate,
+                                        Room* room_a,
+                                        Room* room_b,
+                                        const std::vector<RoomObstacle>& room_obstacles,
+                                        const std::vector<TrailObstacle>& existing_trails,
+                                        int clearance_px) {
+    RouteSearchResult result;
+
+    Bounds bounds{};
+    bounds.min_x = std::min(start_gate.x, end_gate.x);
+    bounds.max_x = std::max(start_gate.x, end_gate.x);
+    bounds.min_y = std::min(start_gate.y, end_gate.y);
+    bounds.max_y = std::max(start_gate.y, end_gate.y);
+    for (const RoomObstacle& obstacle : room_obstacles) {
+        bounds.min_x = std::min(bounds.min_x, obstacle.bounds.min_x);
+        bounds.max_x = std::max(bounds.max_x, obstacle.bounds.max_x);
+        bounds.min_y = std::min(bounds.min_y, obstacle.bounds.min_y);
+        bounds.max_y = std::max(bounds.max_y, obstacle.bounds.max_y);
+    }
+    for (const TrailObstacle& trail : existing_trails) {
+        bounds.min_x = std::min(bounds.min_x, trail.bounds.min_x);
+        bounds.max_x = std::max(bounds.max_x, trail.bounds.max_x);
+        bounds.min_y = std::min(bounds.min_y, trail.bounds.min_y);
+        bounds.max_y = std::max(bounds.max_y, trail.bounds.max_y);
+    }
+
+    const double margin = std::max(200.0, static_cast<double>(clearance_px) * 3.0);
+    bounds.min_x -= margin;
+    bounds.min_y -= margin;
+    bounds.max_x += margin;
+    bounds.max_y += margin;
+
+    int cell_size = std::max(kTrailRouteInitialCellSizeWorldPx, std::max(16, clearance_px / 2));
+    int grid_w = 0;
+    int grid_h = 0;
+    auto recompute_grid = [&]() {
+        grid_w = std::max(3, static_cast<int>(std::ceil((bounds.max_x - bounds.min_x) / static_cast<double>(cell_size))) + 1);
+        grid_h = std::max(3, static_cast<int>(std::ceil((bounds.max_y - bounds.min_y) / static_cast<double>(cell_size))) + 1);
+    };
+    recompute_grid();
+    while ((grid_w > kTrailRouteSearchMaxCellSpan || grid_h > kTrailRouteSearchMaxCellSpan) && cell_size < 2048) {
+        cell_size = static_cast<int>(std::ceil(cell_size * 1.5));
+        recompute_grid();
+    }
+
+    auto to_cell = [&](const SDL_Point& point) {
+        const int x = static_cast<int>(std::floor((static_cast<double>(point.x) - bounds.min_x) / static_cast<double>(cell_size)));
+        const int y = static_cast<int>(std::floor((static_cast<double>(point.y) - bounds.min_y) / static_cast<double>(cell_size)));
+        return SDL_Point{std::clamp(x, 0, grid_w - 1), std::clamp(y, 0, grid_h - 1)};
+    };
+    auto to_world = [&](int cx, int cy) {
+        return SDL_Point{
+            static_cast<int>(std::lround(bounds.min_x + (static_cast<double>(cx) + 0.5) * static_cast<double>(cell_size))),
+            static_cast<int>(std::lround(bounds.min_y + (static_cast<double>(cy) + 0.5) * static_cast<double>(cell_size))),
+        };
+    };
+    auto cell_index = [&](int cx, int cy) {
+        return cy * grid_w + cx;
+    };
+
+    const SDL_Point raw_start = to_cell(start_gate);
+    const SDL_Point raw_goal = to_cell(end_gate);
+
+    std::vector<int8_t> blocked_cache(static_cast<std::size_t>(grid_w * grid_h), -1);
+    auto is_blocked_cell = [&](int cx, int cy) {
+        const int index = cell_index(cx, cy);
+        int8_t cached = blocked_cache[static_cast<std::size_t>(index)];
+        if (cached != -1) {
+            return cached == 1;
+        }
+        const SDL_Point sample = to_world(cx, cy);
+        const bool blocked = point_blocked_for_route_with_clearance(
+            sample, room_a, room_b, room_obstacles, existing_trails, clearance_px);
+        blocked_cache[static_cast<std::size_t>(index)] = blocked ? 1 : 0;
+        return blocked;
+    };
+
+    auto find_open_cell = [&](const SDL_Point& seed) {
+        if (!is_blocked_cell(seed.x, seed.y)) {
+            return seed;
+        }
+        for (int radius = 1; radius <= 6; ++radius) {
+            for (int dy = -radius; dy <= radius; ++dy) {
+                for (int dx = -radius; dx <= radius; ++dx) {
+                    if (std::abs(dx) != radius && std::abs(dy) != radius) {
+                        continue;
+                    }
+                    const int nx = seed.x + dx;
+                    const int ny = seed.y + dy;
+                    if (nx < 0 || ny < 0 || nx >= grid_w || ny >= grid_h) {
+                        continue;
+                    }
+                    if (!is_blocked_cell(nx, ny)) {
+                        return SDL_Point{nx, ny};
+                    }
+                }
+            }
+        }
+        return seed;
+    };
+
+    const SDL_Point start = find_open_cell(raw_start);
+    const SDL_Point goal = find_open_cell(raw_goal);
+    if (is_blocked_cell(start.x, start.y) || is_blocked_cell(goal.x, goal.y)) {
+        return result;
+    }
+
+    struct OpenNode {
+        int index = -1;
+        double score = 0.0;
+        bool operator<(const OpenNode& other) const {
+            return score > other.score;
+        }
+    };
+
+    const int node_count = grid_w * grid_h;
+    std::vector<double> g_score(static_cast<std::size_t>(node_count), std::numeric_limits<double>::infinity());
+    std::vector<int> parent(static_cast<std::size_t>(node_count), -1);
+    std::vector<uint8_t> closed(static_cast<std::size_t>(node_count), 0);
+    std::priority_queue<OpenNode> open;
+
+    const int start_index = cell_index(start.x, start.y);
+    const int goal_index = cell_index(goal.x, goal.y);
+    g_score[static_cast<std::size_t>(start_index)] = 0.0;
+    open.push(OpenNode{start_index, 0.0});
+
+    auto heuristic = [&](int cx, int cy) {
+        const double dx = static_cast<double>(goal.x - cx);
+        const double dy = static_cast<double>(goal.y - cy);
+        return std::hypot(dx, dy);
+    };
+
+    static const std::array<SDL_Point, 8> kNeighbors{
+        SDL_Point{1, 0}, SDL_Point{-1, 0}, SDL_Point{0, 1}, SDL_Point{0, -1},
+        SDL_Point{1, 1}, SDL_Point{-1, 1}, SDL_Point{1, -1}, SDL_Point{-1, -1},
+    };
+
+    int expansions = 0;
+    while (!open.empty()) {
+        const OpenNode current = open.top();
+        open.pop();
+        if (current.index < 0 || current.index >= node_count) {
+            continue;
+        }
+        if (closed[static_cast<std::size_t>(current.index)] != 0) {
+            continue;
+        }
+        closed[static_cast<std::size_t>(current.index)] = 1;
+        if (++expansions > kTrailRouteSearchMaxExpansions) {
+            result.budget_exhausted = true;
+            return result;
+        }
+        if (current.index == goal_index) {
+            break;
+        }
+
+        const int cx = current.index % grid_w;
+        const int cy = current.index / grid_w;
+        for (const SDL_Point& offset : kNeighbors) {
+            const int nx = cx + offset.x;
+            const int ny = cy + offset.y;
+            if (nx < 0 || ny < 0 || nx >= grid_w || ny >= grid_h) {
+                continue;
+            }
+            if (is_blocked_cell(nx, ny)) {
+                continue;
+            }
+            const int neighbor_index = cell_index(nx, ny);
+            const double move_cost = (offset.x == 0 || offset.y == 0) ? 1.0 : 1.41421356237;
+            const double tentative = g_score[static_cast<std::size_t>(current.index)] + move_cost;
+            if (tentative + 1e-9 >= g_score[static_cast<std::size_t>(neighbor_index)]) {
+                continue;
+            }
+            g_score[static_cast<std::size_t>(neighbor_index)] = tentative;
+            parent[static_cast<std::size_t>(neighbor_index)] = current.index;
+            const double f_score = tentative + heuristic(nx, ny);
+            open.push(OpenNode{neighbor_index, f_score});
+        }
+    }
+
+    if (parent[static_cast<std::size_t>(goal_index)] == -1 && goal_index != start_index) {
+        return result;
+    }
+
+    std::vector<SDL_Point> route_points;
+    int walk = goal_index;
+    route_points.push_back(end_gate);
+    route_points.push_back(to_world(goal.x, goal.y));
+    while (walk != -1 && walk != start_index) {
+        const int cx = walk % grid_w;
+        const int cy = walk / grid_w;
+        route_points.push_back(to_world(cx, cy));
+        walk = parent[static_cast<std::size_t>(walk)];
+    }
+    route_points.push_back(to_world(start.x, start.y));
+    route_points.push_back(start_gate);
+    std::reverse(route_points.begin(), route_points.end());
+    route_points = simplify_route_points(route_points, room_a, room_b, room_obstacles, existing_trails, clearance_px);
+    result.success = route_points.size() >= 2;
+    result.points = std::move(route_points);
+    return result;
+}
+
+bool compute_contact_gate_from_center(const SDL_Point& contact,
+                                      const SDL_Point& center,
+                                      Room* room_a,
+                                      Room* room_b,
+                                      const std::vector<RoomObstacle>& room_obstacles,
+                                      const std::vector<TrailObstacle>& existing_trails,
+                                      int clearance_px,
+                                      SDL_Point* out_gate) {
+    if (!out_gate) {
+        return false;
+    }
+
+    Vec2 dir = subtract(to_vec2(contact), to_vec2(center));
+    const double dir_len = length(dir);
+    if (dir_len <= kPointEpsilon) {
+        return false;
+    }
+    dir = scale(dir, 1.0 / dir_len);
+
+    for (int i = 0; i <= kTrailContactGateIterations; ++i) {
+        const double distance = static_cast<double>(i) * kTrailContactGateStepWorldPx;
+        SDL_Point candidate{
+            static_cast<int>(std::lround(static_cast<double>(contact.x) + dir.x * distance)),
+            static_cast<int>(std::lround(static_cast<double>(contact.y) + dir.y * distance)),
+        };
+        if (!point_blocked_for_route_with_clearance(
+                candidate, room_a, room_b, room_obstacles, existing_trails, std::max(1, clearance_px))) {
+            *out_gate = candidate;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool compute_contact_gate(const SDL_Point& contact,
+                          Room* anchor_room,
+                          Room* room_a,
+                          Room* room_b,
+                          const std::vector<RoomObstacle>& room_obstacles,
+                          const std::vector<TrailObstacle>& existing_trails,
+                          int clearance_px,
+                          SDL_Point* out_gate) {
+    if (!anchor_room || !anchor_room->room_area || !out_gate) {
+        return false;
+    }
+
+    const SDL_Point center = anchor_room->room_area->get_center();
+    return compute_contact_gate_from_center(
+        contact, center, room_a, room_b, room_obstacles, existing_trails, clearance_px, out_gate);
+}
+
+std::vector<SDL_Point> stitch_route_with_contacts(const SDL_Point& start_contact,
+                                                  const std::vector<SDL_Point>& routed_points,
+                                                  const SDL_Point& end_contact) {
+    std::vector<SDL_Point> stitched;
+    stitched.reserve(routed_points.size() + 2);
+    stitched.push_back(start_contact);
+    stitched.insert(stitched.end(), routed_points.begin(), routed_points.end());
+    stitched.push_back(end_contact);
+    return dedupe_consecutive_points(stitched);
+}
+
+bool boundary_zone_within_sector_for_area(const std::vector<SDL_Point>& centerline_points,
+                                          const Area* area,
+                                          const TrailConnectionSector& sector,
+                                          bool from_start) {
+    if (!area || centerline_points.size() < 2) {
+        return false;
+    }
+
+    const std::vector<double> cumulative = build_polyline_cumulative_lengths(centerline_points);
+    const double total_length = polyline_total_length(cumulative);
+    if (total_length <= kPointEpsilon) {
+        return false;
+    }
+
+    const double zone_length = std::min(total_length, static_cast<double>(kTrailBoundaryZoneDistanceWorldPx));
+    const double step = std::max(12.0, static_cast<double>(kTrailRouteSampleSpacingWorldPx) * 0.5);
+    const int sample_count = std::max(1, static_cast<int>(std::ceil(zone_length / step)));
+    for (int i = 0; i <= sample_count; ++i) {
+        const double local = std::min(zone_length, static_cast<double>(i) * step);
+        const double distance = from_start ? local : (total_length - local);
+        Vec2 point{};
+        Vec2 tangent{};
+        if (!sample_polyline_at_distance(centerline_points, cumulative, distance, &point, &tangent)) {
+            return false;
+        }
+        const SDL_Point point_px = to_point(point);
+        const SDL_Point center = area->get_center();
+        const double angle_deg = angle_degrees_from_center(center, point_px);
+        if (!angle_in_sector(angle_deg, sector)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool boundary_zone_within_sector(const std::vector<SDL_Point>& centerline_points, Room* room, bool from_start) {
+    if (!room || !room->room_area) {
+        return false;
+    }
+    const TrailConnectionSector sector = sector_from_room(room);
+    return boundary_zone_within_sector_for_area(centerline_points, room->room_area.get(), sector, from_start);
+}
+
+bool boundary_zones_respect_room_sectors(const std::vector<SDL_Point>& centerline_points, Room* room_a, Room* room_b) {
+    return boundary_zone_within_sector(centerline_points, room_a, true) &&
+           boundary_zone_within_sector(centerline_points, room_b, false);
+}
+
 bool centerline_is_valid(Room* room_a,
                          Room* room_b,
                          const std::vector<CenterlineSample>& validation_samples,
                          const std::vector<RoomObstacle>& room_obstacles,
                          const std::vector<TrailObstacle>& existing_trails,
-                         TrailAttemptStats* stats) {
-    for (const CenterlineSample& sample : validation_samples) {
+                         TrailAttemptStats* stats,
+                         bool allow_connected_room_interior) {
+    for (std::size_t i = 0; i < validation_samples.size(); ++i) {
+        const CenterlineSample& sample = validation_samples[i];
         const SDL_Point point = to_point(sample.point);
         if (point_inside_blocking_room(point, room_a, room_b, room_obstacles)) {
             if (stats) {
@@ -584,6 +1310,14 @@ bool centerline_is_valid(Room* room_a,
             return false;
         }
         if (point_inside_any_room(point, room_a ? room_a->room_area.get() : nullptr, room_b ? room_b->room_area.get() : nullptr)) {
+            const bool endpoint_sample = (i == 0 || i + 1 == validation_samples.size());
+            if (!allow_connected_room_interior && !endpoint_sample) {
+                if (stats) {
+                    ++stats->centerline_room_rejections;
+                    stats->last_failure = TrailFailureReason::BlockedByRoom;
+                }
+                return false;
+            }
             continue;
         }
         if (point_inside_existing_trail(point, existing_trails)) {
@@ -703,7 +1437,8 @@ bool build_trail_layout(const SDL_Point& start_tip,
                         const std::vector<TrailObstacle>& existing_trails,
                         std::mt19937& rng,
                         TrailAttemptStats* stats,
-                        TrailBuildResult* out_result) {
+                        TrailBuildResult* out_result,
+                        bool allow_connected_room_interior) {
     if (!out_result) {
         if (stats) {
             stats->last_failure = TrailFailureReason::InvalidArgs;
@@ -774,7 +1509,8 @@ bool build_trail_layout(const SDL_Point& start_tip,
                                                                                           validation_distances,
                                                                                           control_distances,
                                                                                           control_offsets);
-        if (!centerline_is_valid(room_a, room_b, validation_samples, room_obstacles, existing_trails, stats)) {
+        if (!centerline_is_valid(
+                room_a, room_b, validation_samples, room_obstacles, existing_trails, stats, allow_connected_room_interior)) {
             continue;
         }
 
@@ -812,6 +1548,164 @@ bool build_trail_layout(const SDL_Point& start_tip,
     return false;
 }
 
+bool sections_respect_connected_room_boundaries(const std::vector<TrailSection>& sections,
+                                                Room* room_a,
+                                                Room* room_b) {
+    if (sections.size() <= 2) {
+        return true;
+    }
+    const Area* area_a = room_a ? room_a->room_area.get() : nullptr;
+    const Area* area_b = room_b ? room_b->room_area.get() : nullptr;
+    auto inside_connected = [&](const Vec2& value) {
+        const SDL_Point point = to_point(value);
+        if (area_a && area_a->contains_point(point)) {
+            return true;
+        }
+        if (area_b && area_b->contains_point(point)) {
+            return true;
+        }
+        return false;
+    };
+
+    for (std::size_t i = 1; i + 1 < sections.size(); ++i) {
+        if (inside_connected(sections[i].center) || inside_connected(sections[i].left) || inside_connected(sections[i].right)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_points,
+                                      int min_width,
+                                      int max_width,
+                                      int curvyness,
+                                      const std::vector<double>& required_distances,
+                                      Room* room_a,
+                                      Room* room_b,
+                                      const std::vector<RoomObstacle>& room_obstacles,
+                                      const std::vector<TrailObstacle>& existing_trails,
+                                      std::mt19937& rng,
+                                      TrailAttemptStats* stats,
+                                      TrailBuildResult* out_result) {
+    if (!out_result) {
+        if (stats) {
+            stats->last_failure = TrailFailureReason::InvalidArgs;
+        }
+        return false;
+    }
+
+    out_result->sections.clear();
+    out_result->polygon.clear();
+
+    std::vector<SDL_Point> polyline = dedupe_consecutive_points(centerline_points);
+    if (polyline.size() < 2) {
+        if (stats) {
+            stats->last_failure = TrailFailureReason::DegenerateCenterline;
+        }
+        return false;
+    }
+
+    if (max_width < min_width) {
+        std::swap(min_width, max_width);
+    }
+    min_width = std::max(1, min_width);
+    max_width = std::max(min_width, max_width);
+    curvyness = std::max(0, curvyness);
+
+    const std::vector<double> cumulative = build_polyline_cumulative_lengths(polyline);
+    const double trail_length = polyline_total_length(cumulative);
+    if (trail_length <= 1.0) {
+        if (stats) {
+            stats->last_failure = TrailFailureReason::DegenerateCenterline;
+        }
+        return false;
+    }
+
+    std::vector<double> required = required_distances;
+    for (double& value : required) {
+        value = std::clamp(value, 0.0, trail_length);
+    }
+    required.push_back(0.0);
+    required.push_back(trail_length);
+
+    const std::vector<double> section_distances = build_section_distances(trail_length, required);
+    if (section_distances.empty()) {
+        if (stats) {
+            stats->last_failure = TrailFailureReason::EmptySectionDistances;
+        }
+        return false;
+    }
+    const std::vector<double> validation_distances = build_validation_distances(trail_length, required);
+    if (validation_distances.empty()) {
+        if (stats) {
+            stats->last_failure = TrailFailureReason::EmptyValidationDistances;
+        }
+        return false;
+    }
+
+    if (stats) {
+        ++stats->layout_attempts;
+        ++stats->straight_attempts;
+    }
+
+    const std::vector<CenterlineSample> validation_samples =
+        build_centerline_samples_from_polyline(polyline, validation_distances);
+    if (validation_samples.empty()) {
+        if (stats) {
+            stats->last_failure = TrailFailureReason::DegenerateCenterline;
+        }
+        return false;
+    }
+    if (!centerline_is_valid(room_a,
+                             room_b,
+                             validation_samples,
+                             room_obstacles,
+                             existing_trails,
+                             stats,
+                             false)) {
+        return false;
+    }
+
+    const std::vector<CenterlineSample> section_samples =
+        build_centerline_samples_from_polyline(polyline, section_distances);
+    if (section_samples.empty()) {
+        if (stats) {
+            stats->last_failure = TrailFailureReason::EmptySectionDistances;
+        }
+        return false;
+    }
+
+    std::vector<TrailSection> sections;
+    if (!place_sections(section_samples, min_width, max_width, curvyness, rng, stats, &sections)) {
+        return false;
+    }
+    if (!sections_respect_connected_room_boundaries(sections, room_a, room_b)) {
+        if (stats) {
+            ++stats->centerline_room_rejections;
+            stats->last_failure = TrailFailureReason::BlockedByRoom;
+        }
+        return false;
+    }
+
+    std::vector<SDL_Point> polygon = build_polygon(to_vec2(polyline.front()), to_vec2(polyline.back()), sections);
+    if (polygon.size() < 4) {
+        if (stats) {
+            ++stats->polygon_failures;
+            stats->last_failure = TrailFailureReason::PolygonTooSmall;
+        }
+        return false;
+    }
+
+    out_result->start_tip = polyline.front();
+    out_result->end_tip = polyline.back();
+    out_result->sections = std::move(sections);
+    out_result->polygon = std::move(polygon);
+    if (stats) {
+        stats->last_failure = TrailFailureReason::None;
+    }
+    return true;
+}
+
 bool attempt_trail_connection(Room* a,
                               Room* b,
                               const std::vector<RoomObstacle>& room_obstacles,
@@ -842,112 +1736,195 @@ bool attempt_trail_connection(Room* a,
     const int max_width = config.value("max_width", min_width);
     const int curvyness = config.value("curvyness", 2);
     const std::string name = config.value("name", trail_name.empty() ? std::string("trail_segment") : trail_name);
+    const int routing_clearance_px = std::max(8, max_width / 2 + 12);
+    const int gate_clearance_px = std::max(4, max_width / 3);
 
     const SDL_Point a_center = a->room_area->get_center();
     const SDL_Point b_center = b->room_area->get_center();
-    const SDL_Point a_edge = compute_edge_point(a_center, b_center, a->room_area.get());
-    const SDL_Point b_edge = compute_edge_point(b_center, a_center, b->room_area.get());
-
-    const Vec2 center_start = to_vec2(a_center);
-    const Vec2 center_end = to_vec2(b_center);
-    const Vec2 center_axis = subtract(center_end, center_start);
-    const double center_len = length(center_axis);
-    if (center_len <= 1.0) {
+    std::vector<SDL_Point> a_contacts = collect_sector_contact_candidates(a, b_center);
+    std::vector<SDL_Point> b_contacts = collect_sector_contact_candidates(b, a_center);
+    if (a_contacts.empty() || b_contacts.empty()) {
         if (stats) {
-            stats->last_failure = TrailFailureReason::DegenerateCenterline;
+            ++stats->sector_contact_failures;
+            stats->last_failure = TrailFailureReason::NoValidSectorContacts;
         }
         return false;
     }
-    const Vec2 center_dir = scale(center_axis, 1.0 / center_len);
 
-    auto project_ratio = [&](const SDL_Point& point) {
-        const double projected = dot(subtract(to_vec2(point), center_start), center_dir);
-        return std::clamp(projected / center_len, 0.0, 1.0);
+    struct ContactPairCandidate {
+        std::size_t a_index = 0;
+        std::size_t b_index = 0;
+        double score = 0.0;
     };
 
-    std::vector<double> required_distances;
-    required_distances.reserve(2);
-    required_distances.push_back(project_ratio(a_edge) * center_len);
-    required_distances.push_back(project_ratio(b_edge) * center_len);
+    std::vector<ContactPairCandidate> pair_candidates;
+    pair_candidates.reserve(a_contacts.size() * b_contacts.size());
+    for (std::size_t i = 0; i < a_contacts.size(); ++i) {
+        for (std::size_t j = 0; j < b_contacts.size(); ++j) {
+            const double dx = static_cast<double>(a_contacts[i].x - b_contacts[j].x);
+            const double dy = static_cast<double>(a_contacts[i].y - b_contacts[j].y);
+            const double distance = std::hypot(dx, dy);
+            const double rank_bias = static_cast<double>(i + j) * 25.0;
+            pair_candidates.push_back(ContactPairCandidate{i, j, distance + rank_bias});
+        }
+    }
+    std::sort(pair_candidates.begin(), pair_candidates.end(), [](const ContactPairCandidate& lhs, const ContactPairCandidate& rhs) {
+        return lhs.score < rhs.score;
+    });
+
+    if (pair_candidates.size() > static_cast<std::size_t>(kTrailRoutePairBudget)) {
+        vibble::log::warn(
+            std::string("[GenerateTrails] Route pair budget clamp") +
+            " rooms=" + a->room_name + "<->" + b->room_name +
+            " candidates=" + std::to_string(pair_candidates.size()) +
+            " budget=" + std::to_string(kTrailRoutePairBudget));
+        pair_candidates.resize(static_cast<std::size_t>(kTrailRoutePairBudget));
+    }
 
     TrailBuildResult build_result;
+    bool route_budget_exhausted = false;
+    bool saw_boundary_zone_violation = false;
+    bool saw_route_candidate = false;
 
-    const auto layout_start = clock::now();
-    if (!build_trail_layout(a_center,
-                            b_center,
-                            min_width,
-                            max_width,
-                            curvyness,
-                            required_distances,
-                            a,
-                            b,
-                            room_obstacles,
-                            existing_trails,
-                            rng,
-                            stats,
-                            &build_result)) {
-        return false;
+    int route_pair_attempts = 0;
+    for (const ContactPairCandidate& pair : pair_candidates) {
+        ++route_pair_attempts;
+        const SDL_Point start_contact = a_contacts[pair.a_index];
+        const SDL_Point end_contact = b_contacts[pair.b_index];
+
+        SDL_Point start_gate{};
+        SDL_Point end_gate{};
+        if (!compute_contact_gate(
+                start_contact, a, a, b, room_obstacles, existing_trails, gate_clearance_px, &start_gate)) {
+            continue;
+        }
+        if (!compute_contact_gate(
+                end_contact, b, a, b, room_obstacles, existing_trails, gate_clearance_px, &end_gate)) {
+            continue;
+        }
+        saw_route_candidate = true;
+
+        RouteSearchResult route = build_routed_polyline(
+            start_gate, end_gate, a, b, room_obstacles, existing_trails, routing_clearance_px);
+        if (route.budget_exhausted) {
+            route_budget_exhausted = true;
+            continue;
+        }
+        if (!route.success || route.points.size() < 2) {
+            continue;
+        }
+
+        std::vector<SDL_Point> centerline_points = stitch_route_with_contacts(start_contact, route.points, end_contact);
+        if (centerline_points.size() < 2) {
+            continue;
+        }
+        if (!boundary_zones_respect_room_sectors(centerline_points, a, b)) {
+            saw_boundary_zone_violation = true;
+            continue;
+        }
+
+        std::vector<double> required_distances;
+        const std::vector<double> cumulative = build_polyline_cumulative_lengths(centerline_points);
+        if (cumulative.size() >= 4) {
+            required_distances.push_back(cumulative[1]);
+            required_distances.push_back(cumulative[cumulative.size() - 2]);
+        }
+
+        const auto layout_start = clock::now();
+        if (!build_trail_layout_from_polyline(centerline_points,
+                                              min_width,
+                                              max_width,
+                                              curvyness,
+                                              required_distances,
+                                              a,
+                                              b,
+                                              room_obstacles,
+                                              existing_trails,
+                                              rng,
+                                              stats,
+                                              &build_result)) {
+            continue;
+        }
+        const auto layout_end = clock::now();
+
+        Area candidate("trail_candidate", build_result.polygon, 3);
+
+        const auto room_build_start = clock::now();
+        auto trail_room = std::make_unique<Room>(
+            a->map_origin,
+            "trail",
+            name,
+            nullptr,
+            manifest_context,
+            asset_lib,
+            &candidate,
+            trail_config,
+            MapGridSettings::defaults(),
+            map_radius,
+            "trails_data",
+            map_manifest,
+            manifest_store,
+            manifest_context,
+            manifest_writer,
+            false);
+        const auto room_build_end = clock::now();
+
+        a->add_connecting_room(trail_room.get());
+        b->add_connecting_room(trail_room.get());
+        trail_room->add_connecting_room(a);
+        trail_room->add_connecting_room(b);
+
+        trail_room->camera_height_px = std::clamp(config.value("camera_height_px", 1000), 1, 2000);
+        trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 360.0f);
+        trail_room->camera_zoom_percent = std::clamp(config.value("camera_zoom_percent", 0), 0, 100);
+        trail_room->camera_center_dx = config.value("camera_center_dx", 0);
+        trail_room->camera_center_dz = config.value("camera_center_dz", 0);
+
+        TrailObstacle obstacle;
+        obstacle.polygon = build_result.polygon;
+        obstacle.bounds = bounds_from_points(obstacle.polygon);
+        existing_trails.push_back(std::move(obstacle));
+        trail_rooms.push_back(std::move(trail_room));
+
+        vibble::log::info(
+            std::string("[GenerateTrails] Built trail room") +
+            " rooms=" + a->room_name + "<->" + b->room_name +
+            " route_pair_attempts=" + std::to_string(route_pair_attempts) +
+            " layout_ms=" + std::to_string(duration_ms(layout_end - layout_start)) +
+            " room_ctor_ms=" + std::to_string(duration_ms(room_build_end - room_build_start)));
+
+        if (testing) {
+            vibble::log::debug(
+                std::string("[GenerateTrails] Trail placed: ") +
+                a->room_name + " <-> " + b->room_name +
+                " route_pair_attempts=" + std::to_string(route_pair_attempts) +
+                " layout_attempts=" + std::to_string(stats ? stats->layout_attempts : 0) +
+                " straight_attempts=" + std::to_string(stats ? stats->straight_attempts : 0) +
+                " curved_attempts=" + std::to_string(stats ? stats->curved_attempts : 0) +
+                " room_rejects=" + std::to_string(stats ? stats->centerline_room_rejections : 0) +
+                " trail_rejects=" + std::to_string(stats ? stats->centerline_trail_rejections : 0) +
+                " section_failures=" + std::to_string(stats ? stats->section_failures : 0));
+        }
+
+        return true;
     }
-    const auto layout_end = clock::now();
 
-    Area candidate("trail_candidate", build_result.polygon, 3);
-
-    const auto room_build_start = clock::now();
-    auto trail_room = std::make_unique<Room>(
-        a->map_origin,
-        "trail",
-        name,
-        nullptr,
-        manifest_context,
-        asset_lib,
-        &candidate,
-        trail_config,
-        MapGridSettings::defaults(),
-        map_radius,
-        "trails_data",
-        map_manifest,
-        manifest_store,
-        manifest_context,
-        manifest_writer,
-        false);
-    const auto room_build_end = clock::now();
-
-    a->add_connecting_room(trail_room.get());
-    b->add_connecting_room(trail_room.get());
-    trail_room->add_connecting_room(a);
-    trail_room->add_connecting_room(b);
-
-    trail_room->camera_height_px = std::clamp(config.value("camera_height_px", 1000), 1, 2000);
-    trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 360.0f);
-    trail_room->camera_zoom_percent = std::clamp(config.value("camera_zoom_percent", 0), 0, 100);
-    trail_room->camera_center_dx = config.value("camera_center_dx", 0);
-    trail_room->camera_center_dz = config.value("camera_center_dz", 0);
-
-    TrailObstacle obstacle;
-    obstacle.polygon = build_result.polygon;
-    obstacle.bounds = bounds_from_points(obstacle.polygon);
-    existing_trails.push_back(std::move(obstacle));
-    trail_rooms.push_back(std::move(trail_room));
-
-    vibble::log::info(
-        std::string("[GenerateTrails] Built trail room") +
-        " rooms=" + a->room_name + "<->" + b->room_name +
-        " layout_ms=" + std::to_string(duration_ms(layout_end - layout_start)) +
-        " room_ctor_ms=" + std::to_string(duration_ms(room_build_end - room_build_start)));
-
-    if (testing) {
-        vibble::log::debug(
-            std::string("[GenerateTrails] Trail placed: ") +
-            a->room_name + " <-> " + b->room_name +
-            " layout_attempts=" + std::to_string(stats ? stats->layout_attempts : 0) +
-            " straight_attempts=" + std::to_string(stats ? stats->straight_attempts : 0) +
-            " curved_attempts=" + std::to_string(stats ? stats->curved_attempts : 0) +
-            " room_rejects=" + std::to_string(stats ? stats->centerline_room_rejections : 0) +
-            " trail_rejects=" + std::to_string(stats ? stats->centerline_trail_rejections : 0) +
-            " section_failures=" + std::to_string(stats ? stats->section_failures : 0));
+    if (stats) {
+        if (!saw_route_candidate) {
+            ++stats->sector_contact_failures;
+            stats->last_failure = TrailFailureReason::NoValidSectorContacts;
+        } else if (route_budget_exhausted) {
+            ++stats->route_budget_failures;
+            stats->last_failure = TrailFailureReason::RouteSearchBudgetExceeded;
+        } else if (saw_boundary_zone_violation) {
+            ++stats->sector_boundary_failures;
+            stats->last_failure = TrailFailureReason::SectorBoundaryZoneViolation;
+        } else {
+            ++stats->sector_contact_failures;
+            stats->last_failure = TrailFailureReason::NoValidSectorContacts;
+        }
     }
-
-    return true;
+    return false;
 }
 
 
@@ -1089,6 +2066,9 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(const std::ve
             perf.total_trail_rejections += stats.centerline_trail_rejections;
             perf.total_section_failures += stats.section_failures;
             perf.total_polygon_failures += stats.polygon_failures;
+            perf.total_sector_contact_failures += stats.sector_contact_failures;
+            perf.total_sector_boundary_failures += stats.sector_boundary_failures;
+            perf.total_route_budget_failures += stats.route_budget_failures;
 
             if (!success) {
                 if (!have_failed_stats || stats.layout_attempts >= best_failed_stats.layout_attempts) {
@@ -1108,6 +2088,9 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(const std::ve
                     " trail_rejects=" + std::to_string(stats.centerline_trail_rejections) +
                     " section_failures=" + std::to_string(stats.section_failures) +
                     " polygon_failures=" + std::to_string(stats.polygon_failures) +
+                    " sector_contact_failures=" + std::to_string(stats.sector_contact_failures) +
+                    " sector_boundary_failures=" + std::to_string(stats.sector_boundary_failures) +
+                    " route_budget_failures=" + std::to_string(stats.route_budget_failures) +
                     " last_failure=" + std::string(failure_reason_name(stats.last_failure)) +
                     " attempt_ms=" + std::to_string(duration_ms(attempt_end - attempt_start))
                 );
@@ -1125,6 +2108,9 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(const std::ve
                     " trail_rejects=" + std::to_string(stats.centerline_trail_rejections) +
                     " section_failures=" + std::to_string(stats.section_failures) +
                     " polygon_failures=" + std::to_string(stats.polygon_failures) +
+                    " sector_contact_failures=" + std::to_string(stats.sector_contact_failures) +
+                    " sector_boundary_failures=" + std::to_string(stats.sector_boundary_failures) +
+                    " route_budget_failures=" + std::to_string(stats.route_budget_failures) +
                     " attempt_ms=" + std::to_string(duration_ms(attempt_end - attempt_start))
                 );
             }
@@ -1143,6 +2129,9 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(const std::ve
                 " trail_rejects=" + std::to_string(best_failed_stats.centerline_trail_rejections) +
                 " section_failures=" + std::to_string(best_failed_stats.section_failures) +
                 " polygon_failures=" + std::to_string(best_failed_stats.polygon_failures) +
+                " sector_contact_failures=" + std::to_string(best_failed_stats.sector_contact_failures) +
+                " sector_boundary_failures=" + std::to_string(best_failed_stats.sector_boundary_failures) +
+                " route_budget_failures=" + std::to_string(best_failed_stats.route_budget_failures) +
                 " connection_ms=" + std::to_string(duration_ms(clock::now() - connection_start))
             );
         } else {
@@ -1169,6 +2158,9 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(const std::ve
         " trail_rejects=" + std::to_string(perf.total_trail_rejections) +
         " section_failures=" + std::to_string(perf.total_section_failures) +
         " polygon_failures=" + std::to_string(perf.total_polygon_failures) +
+        " sector_contact_failures=" + std::to_string(perf.total_sector_contact_failures) +
+        " sector_boundary_failures=" + std::to_string(perf.total_sector_boundary_failures) +
+        " route_budget_failures=" + std::to_string(perf.total_route_budget_failures) +
         " total_ms=" + std::to_string(duration_ms(generation_end - generation_start))
     );
 
@@ -1443,7 +2435,8 @@ bool build_layout_for_tests(const SDL_Point& start_tip,
                             trail_obstacles,
                             rng,
                             &stats,
-                            &build_result)) {
+                            &build_result,
+                            true)) {
         vibble::log::warn(
             std::string("[TrailGeometryTest] build_layout_for_tests failed") +
             " layout_attempts=" + std::to_string(stats.layout_attempts) +
@@ -1473,6 +2466,156 @@ bool build_layout_for_tests(const SDL_Point& start_tip,
         out_layout->sections.push_back(debug_section);
     }
     return true;
+}
+
+TrailConnectionSector make_test_sector(const TrailSectorDebug& sector) {
+    TrailConnectionSector converted;
+    converted.direction_deg = normalize_angle_degrees(sector.direction_deg);
+    converted.width_percent = std::clamp(sector.width_percent, kTrailSectorMinWidthPercent, kTrailSectorMaxWidthPercent);
+    return converted;
+}
+
+bool point_in_sector_for_tests(const SDL_Point& center,
+                               const SDL_Point& point,
+                               const TrailSectorDebug& sector) {
+    const TrailConnectionSector converted = make_test_sector(sector);
+    const double angle = angle_degrees_from_center(center, point);
+    return angle_in_sector(angle, converted);
+}
+
+bool collect_sector_contacts_for_circle_tests(const SDL_Point& center,
+                                              int radius,
+                                              const TrailSectorDebug& sector,
+                                              const SDL_Point& target_center,
+                                              std::vector<SDL_Point>* out_contacts) {
+    if (!out_contacts) {
+        return false;
+    }
+    out_contacts->clear();
+    if (radius <= 0) {
+        return false;
+    }
+
+    Area room_area("sector_circle_test",
+                   center,
+                   radius * 2,
+                   radius * 2,
+                   "Circle",
+                   2,
+                   radius * 10,
+                   radius * 10,
+                   3);
+    const TrailConnectionSector converted = make_test_sector(sector);
+    *out_contacts = collect_sector_contact_candidates_for_area(&room_area, converted, target_center);
+    return !out_contacts->empty();
+}
+
+bool build_routed_centerline_for_tests(const std::vector<SDL_Point>& room_a_polygon,
+                                       const TrailSectorDebug& sector_a,
+                                       const std::vector<SDL_Point>& room_b_polygon,
+                                       const TrailSectorDebug& sector_b,
+                                       const std::vector<std::vector<SDL_Point>>& blocking_room_polygons,
+                                       int corridor_clearance_px,
+                                       RoutedCenterlineDebug* out_debug) {
+    if (!out_debug) {
+        return false;
+    }
+    *out_debug = RoutedCenterlineDebug{};
+    if (room_a_polygon.size() < 3 || room_b_polygon.size() < 3) {
+        return false;
+    }
+
+    Area room_a_area("route_room_a", room_a_polygon, 3);
+    Area room_b_area("route_room_b", room_b_polygon, 3);
+    room_a_area.set_type("room");
+    room_b_area.set_type("room");
+    const TrailConnectionSector converted_a = make_test_sector(sector_a);
+    const TrailConnectionSector converted_b = make_test_sector(sector_b);
+
+    std::vector<Area> blocker_areas;
+    blocker_areas.reserve(blocking_room_polygons.size());
+    for (std::size_t i = 0; i < blocking_room_polygons.size(); ++i) {
+        if (blocking_room_polygons[i].size() < 3) {
+            continue;
+        }
+        blocker_areas.emplace_back("route_blocker_" + std::to_string(i), blocking_room_polygons[i], 3);
+        blocker_areas.back().set_type("room");
+    }
+
+    std::vector<RoomObstacle> room_obstacles;
+    room_obstacles.reserve(2 + blocker_areas.size());
+    room_obstacles.push_back(RoomObstacle{nullptr, &room_a_area, bounds_from_area(room_a_area)});
+    room_obstacles.push_back(RoomObstacle{nullptr, &room_b_area, bounds_from_area(room_b_area)});
+    for (Area& blocker : blocker_areas) {
+        room_obstacles.push_back(RoomObstacle{nullptr, &blocker, bounds_from_area(blocker)});
+    }
+
+    const SDL_Point center_a = room_a_area.get_center();
+    const SDL_Point center_b = room_b_area.get_center();
+    out_debug->contact_candidates_a = collect_sector_contact_candidates_for_area(&room_a_area, converted_a, center_b);
+    out_debug->contact_candidates_b = collect_sector_contact_candidates_for_area(&room_b_area, converted_b, center_a);
+    if (out_debug->contact_candidates_a.empty() || out_debug->contact_candidates_b.empty()) {
+        return false;
+    }
+
+    struct PairCandidate {
+        std::size_t ia = 0;
+        std::size_t ib = 0;
+        double score = 0.0;
+    };
+    std::vector<PairCandidate> pair_candidates;
+    pair_candidates.reserve(out_debug->contact_candidates_a.size() * out_debug->contact_candidates_b.size());
+    for (std::size_t ia = 0; ia < out_debug->contact_candidates_a.size(); ++ia) {
+        for (std::size_t ib = 0; ib < out_debug->contact_candidates_b.size(); ++ib) {
+            const double dx = static_cast<double>(out_debug->contact_candidates_a[ia].x - out_debug->contact_candidates_b[ib].x);
+            const double dy = static_cast<double>(out_debug->contact_candidates_a[ia].y - out_debug->contact_candidates_b[ib].y);
+            pair_candidates.push_back(PairCandidate{ia, ib, std::hypot(dx, dy)});
+        }
+    }
+    std::sort(pair_candidates.begin(), pair_candidates.end(), [](const PairCandidate& lhs, const PairCandidate& rhs) {
+        return lhs.score < rhs.score;
+    });
+    if (pair_candidates.size() > static_cast<std::size_t>(kTrailRoutePairBudget)) {
+        pair_candidates.resize(static_cast<std::size_t>(kTrailRoutePairBudget));
+    }
+
+    bool found_route = false;
+    const int clearance = std::max(4, corridor_clearance_px);
+    const int gate_clearance = std::max(2, corridor_clearance_px / 2);
+    for (const PairCandidate& pair : pair_candidates) {
+        const SDL_Point start_contact = out_debug->contact_candidates_a[pair.ia];
+        const SDL_Point end_contact = out_debug->contact_candidates_b[pair.ib];
+
+        SDL_Point start_gate{};
+        SDL_Point end_gate{};
+        if (!compute_contact_gate_from_center(
+                start_contact, center_a, nullptr, nullptr, room_obstacles, {}, gate_clearance, &start_gate)) {
+            continue;
+        }
+        if (!compute_contact_gate_from_center(
+                end_contact, center_b, nullptr, nullptr, room_obstacles, {}, gate_clearance, &end_gate)) {
+            continue;
+        }
+
+        RouteSearchResult route =
+            build_routed_polyline(start_gate, end_gate, nullptr, nullptr, room_obstacles, {}, clearance);
+        out_debug->route_budget_exhausted = out_debug->route_budget_exhausted || route.budget_exhausted;
+        if (!route.success || route.points.size() < 2) {
+            continue;
+        }
+
+        found_route = true;
+        out_debug->routed_points = route.points;
+        out_debug->centerline_points = stitch_route_with_contacts(start_contact, route.points, end_contact);
+        out_debug->boundary_zone_ok =
+            boundary_zone_within_sector_for_area(out_debug->centerline_points, &room_a_area, converted_a, true) &&
+            boundary_zone_within_sector_for_area(out_debug->centerline_points, &room_b_area, converted_b, false);
+        if (out_debug->boundary_zone_ok) {
+            break;
+        }
+    }
+
+    return found_route;
 }
 
 } // namespace trail_generation::debug

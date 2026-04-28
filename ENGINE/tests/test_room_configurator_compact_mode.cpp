@@ -122,3 +122,36 @@ TEST_CASE("RoomConfigurator compact mode self-heals malformed dimensions and pre
     CHECK_FALSE(saved.contains("min_radius"));
     CHECK_FALSE(saved.contains("max_radius"));
 }
+
+TEST_CASE("RoomConfigurator compact mode persists trail connection sector defaults when missing") {
+    RoomConfigurator configurator;
+    configurator.set_room_metadata_only_mode(true);
+
+    nlohmann::json source = square_room_fixture();
+    source.erase("trail_connection_sector");
+    configurator.open(source);
+
+    const nlohmann::json saved = configurator.build_json();
+    REQUIRE(saved.contains("trail_connection_sector"));
+    REQUIRE(saved["trail_connection_sector"].is_object());
+    CHECK(saved["trail_connection_sector"].value("direction_deg", -1.0) == doctest::Approx(0.0));
+    CHECK(saved["trail_connection_sector"].value("width_percent", -1) == 100);
+}
+
+TEST_CASE("RoomConfigurator compact mode normalizes trail connection sector values") {
+    RoomConfigurator configurator;
+    configurator.set_room_metadata_only_mode(true);
+
+    nlohmann::json source = square_room_fixture();
+    source["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", -90.0},
+        {"width_percent", 1}
+    });
+    configurator.open(source);
+
+    const nlohmann::json saved = configurator.build_json();
+    REQUIRE(saved.contains("trail_connection_sector"));
+    REQUIRE(saved["trail_connection_sector"].is_object());
+    CHECK(saved["trail_connection_sector"].value("direction_deg", -1.0) == doctest::Approx(270.0));
+    CHECK(saved["trail_connection_sector"].value("width_percent", -1) == 25);
+}

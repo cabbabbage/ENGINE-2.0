@@ -18,6 +18,11 @@ constexpr int kMinRoomDimension = 1;
 constexpr int kMaxRoomDimension = 4000;
 constexpr int kDefaultRoomMinDimension = 500;
 constexpr int kDefaultRoomMaxDimension = 4000;
+constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
+constexpr int kDefaultTrailSectorWidthPercent = 100;
+constexpr int kMinTrailSectorWidthPercent = 25;
+constexpr int kMaxTrailSectorWidthPercent = 100;
+constexpr double kDegreesFullRotation = 360.0;
 
 bool json_to_int(const nlohmann::json& value, int& out) {
     if (value.is_number_integer()) {
@@ -37,6 +42,90 @@ bool json_to_string(const nlohmann::json& value, std::string& out) {
     }
     out = value.get<std::string>();
     return true;
+}
+
+bool json_to_double(const nlohmann::json& value, double& out) {
+    if (value.is_number_float()) {
+        out = value.get<double>();
+        return true;
+    }
+    if (value.is_number_integer()) {
+        out = static_cast<double>(value.get<int>());
+        return true;
+    }
+    return false;
+}
+
+double normalize_direction_degrees(double value) {
+    if (!std::isfinite(value)) {
+        return kDefaultTrailSectorDirectionDeg;
+    }
+    double normalized = std::fmod(value, kDegreesFullRotation);
+    if (normalized < 0.0) {
+        normalized += kDegreesFullRotation;
+    }
+    if (normalized >= kDegreesFullRotation) {
+        normalized -= kDegreesFullRotation;
+    }
+    return normalized;
+}
+
+bool normalize_trail_connection_sector(nlohmann::json& entry, bool include_for_room_entries) {
+    bool changed = false;
+
+    if (!include_for_room_entries) {
+        if (entry.erase("trail_connection_sector") > 0) {
+            changed = true;
+        }
+        return changed;
+    }
+
+    nlohmann::json sector = nlohmann::json::object();
+    auto sector_it = entry.find("trail_connection_sector");
+    if (sector_it != entry.end() && sector_it->is_object()) {
+        sector = *sector_it;
+    }
+
+    double direction_deg = kDefaultTrailSectorDirectionDeg;
+    if (sector.contains("direction_deg")) {
+        (void)json_to_double(sector["direction_deg"], direction_deg);
+    }
+    direction_deg = normalize_direction_degrees(direction_deg);
+
+    int width_percent = kDefaultTrailSectorWidthPercent;
+    if (sector.contains("width_percent")) {
+        (void)json_to_int(sector["width_percent"], width_percent);
+    }
+    width_percent = std::clamp(width_percent, kMinTrailSectorWidthPercent, kMaxTrailSectorWidthPercent);
+
+    const bool has_sector_object = entry.contains("trail_connection_sector") && entry["trail_connection_sector"].is_object();
+    const bool has_direction =
+        has_sector_object &&
+        entry["trail_connection_sector"].contains("direction_deg") &&
+        (entry["trail_connection_sector"]["direction_deg"].is_number_float() ||
+         entry["trail_connection_sector"]["direction_deg"].is_number_integer());
+    const bool has_width =
+        has_sector_object &&
+        entry["trail_connection_sector"].contains("width_percent") &&
+        entry["trail_connection_sector"]["width_percent"].is_number_integer();
+
+    if (!has_sector_object || !has_direction || !has_width) {
+        changed = true;
+    } else {
+        const double existing_direction = normalize_direction_degrees(entry["trail_connection_sector"]["direction_deg"].get<double>());
+        const int existing_width = std::clamp(entry["trail_connection_sector"]["width_percent"].get<int>(),
+                                              kMinTrailSectorWidthPercent,
+                                              kMaxTrailSectorWidthPercent);
+        if (std::abs(existing_direction - direction_deg) > 1e-6 || existing_width != width_percent) {
+            changed = true;
+        }
+    }
+
+    entry["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", direction_deg},
+        {"width_percent", width_percent},
+    });
+    return changed;
 }
 
 void sanitize_dimension_pair(int& min_value, int& max_value) {
@@ -65,7 +154,7 @@ bool geometry_is_circle(const std::string& geometry) {
     return lowered == "circle";
 }
 
-bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_name) {
+bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_name, bool include_trail_connection_sector) {
     bool changed = false;
     if (!entry.is_object()) {
         entry = nlohmann::json::object();
@@ -218,10 +307,14 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
         changed = true;
     }
 
+    if (normalize_trail_connection_sector(entry, include_trail_connection_sector)) {
+        changed = true;
+    }
+
     return changed;
 }
 
-bool normalize_room_config_section(nlohmann::json& section) {
+bool normalize_room_config_section(nlohmann::json& section, bool include_trail_connection_sector) {
     if (!section.is_object()) {
         section = nlohmann::json::object();
         return true;
@@ -229,7 +322,7 @@ bool normalize_room_config_section(nlohmann::json& section) {
 
     bool changed = false;
     for (auto it = section.begin(); it != section.end(); ++it) {
-        if (normalize_room_config_entry(it.value(), it.key())) {
+        if (normalize_room_config_entry(it.value(), it.key(), include_trail_connection_sector)) {
             changed = true;
         }
     }
@@ -283,6 +376,10 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["is_boss"] = false;
     entry["inherits_map_assets"] = false;
     entry["spawn_groups"] = nlohmann::json::array();
+    entry["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", kDefaultTrailSectorDirectionDeg},
+        {"width_percent", kDefaultTrailSectorWidthPercent},
+    });
     return entry;
 }
 
@@ -664,6 +761,10 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_room["is_spawn"] = true;
     spawn_room["is_boss"] = false;
     spawn_room["inherits_map_assets"] = true;
+    spawn_room["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", kDefaultTrailSectorDirectionDeg},
+        {"width_percent", kDefaultTrailSectorWidthPercent},
+    });
     spawn_room["display_color"] = nlohmann::json::array({120, 170, 235, 255});
     spawn_room["areas"] = nlohmann::json::array({
         nlohmann::json::object({
@@ -769,10 +870,10 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
         changed = true;
     }
-    if (normalize_room_config_section(map_manifest["rooms_data"])) {
+    if (normalize_room_config_section(map_manifest["rooms_data"], true)) {
         changed = true;
     }
-    if (normalize_room_config_section(map_manifest["trails_data"])) {
+    if (normalize_room_config_section(map_manifest["trails_data"], false)) {
         changed = true;
     }
     if (!map_manifest.contains("map_name") ||

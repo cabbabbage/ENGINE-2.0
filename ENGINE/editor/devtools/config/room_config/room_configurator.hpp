@@ -32,6 +32,10 @@ class DMTextBox;
 class DMRangeSlider;
 class DMDropdown;
 class DMButton;
+class DMNumericStepper;
+class Widget;
+class StepperWidget;
+class ButtonWidget;
 
 class RoomConfigurator {
 public:
@@ -161,6 +165,7 @@ private:
     std::vector<std::string> room_tags_;
     std::vector<std::string> room_anti_tags_;
     bool tags_dirty_ = false;
+    bool trail_connection_sector_dirty_ = false;
 
     std::unique_ptr<DMTextBox> name_box_;
     std::unique_ptr<TextBoxWidget> name_widget_;
@@ -176,6 +181,13 @@ private:
     std::unique_ptr<SliderWidget> edge_widget_;
     std::unique_ptr<DMSlider> curvy_slider_;
     std::unique_ptr<SliderWidget> curvy_widget_;
+    std::unique_ptr<Widget> trail_connection_sector_widget_;
+    std::unique_ptr<DMNumericStepper> sector_direction_stepper_;
+    std::unique_ptr<StepperWidget> sector_direction_widget_;
+    std::unique_ptr<DMNumericStepper> sector_width_stepper_;
+    std::unique_ptr<StepperWidget> sector_width_widget_;
+    std::unique_ptr<DMButton> sector_reset_button_;
+    std::unique_ptr<ButtonWidget> sector_reset_widget_;
     std::unique_ptr<DMCheckbox> spawn_checkbox_;
     std::unique_ptr<CheckboxWidget> spawn_widget_;
     std::unique_ptr<DMCheckbox> boss_checkbox_;

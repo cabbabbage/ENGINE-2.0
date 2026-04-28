@@ -4419,15 +4419,17 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 if (!handle.has_final_screen_px) {
                     continue;
                 }
-                if (isolate_selected_anchor && handle.name != anchor_edit_.selected_anchor_name) {
-                    continue;
-                }
 
                 const bool selected = (handle.name == anchor_edit_.selected_anchor_name);
                 const bool hovered = !isolate_selected_anchor && (handle.name == anchor_edit_.hovered_anchor_name);
+                const bool subdued = isolate_selected_anchor && !selected;
 
                 if (handle.has_flat_screen_px) {
-                    SDL_SetRenderDrawColor(renderer, 80, 170, 255, 180);
+                    if (subdued) {
+                        SDL_SetRenderDrawColor(renderer, 130, 130, 130, 70);
+                    } else {
+                        SDL_SetRenderDrawColor(renderer, 80, 170, 255, 180);
+                    }
                     SDL_RenderLine(renderer,
                                    handle.flat_screen_px.x,
                                    handle.flat_screen_px.y,
@@ -4444,11 +4446,17 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 SDL_Color color{255, 165, 0, 235};
                 if (selected) {
                     color = SDL_Color{255, 255, 255, 255};
+                } else if (subdued) {
+                    color = SDL_Color{145, 145, 145, 105};
                 }
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
                 SDL_Rect box{cx - 4, cy - 4, 9, 9};
                 sdl_render::FillRect(renderer, &box);
-                SDL_SetRenderDrawColor(renderer, 24, 24, 24, 235);
+                if (subdued) {
+                    SDL_SetRenderDrawColor(renderer, 70, 70, 70, 110);
+                } else {
+                    SDL_SetRenderDrawColor(renderer, 24, 24, 24, 235);
+                }
                 sdl_render::Rect(renderer, &box);
 
                 if (hovered || selected) {
@@ -14864,6 +14872,16 @@ bool RoomEditor::duplicate_selected_anchor_in_current_frame() {
 
     if (!changed || duplicated_anchor_name.empty()) {
         return false;
+    }
+
+    std::shared_ptr<AssetInfo> target_info = anchor_edit_.target_asset ? anchor_edit_.target_asset->info : nullptr;
+    if (target_info) {
+        const nlohmann::json source_candidates =
+            target_info->anchor_point_child_candidate_candidates(source_anchor_name);
+        const bool source_orphan_on_end =
+            target_info->anchor_point_child_candidate_orphan_on_end(source_anchor_name);
+        target_info->upsert_anchor_point_child_candidate(duplicated_anchor_name, source_candidates);
+        target_info->set_anchor_point_child_candidate_orphan_on_end(duplicated_anchor_name, source_orphan_on_end);
     }
 
     anchor_edit_.selected_anchor_name = duplicated_anchor_name;

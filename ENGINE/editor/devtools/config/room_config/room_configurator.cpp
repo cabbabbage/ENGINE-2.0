@@ -1312,13 +1312,26 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
             return true;
         }
 
+        // If we cannot resolve a pointer panel (e.g. during transient relayout),
+        // fall back to the focused panel before broad panel dispatch.
+        bool focused_dispatched = false;
+        if ((pointer_event || wheel_event) && !pointer_panel) {
+            focused_dispatched = dispatch_to_panel(focused_panel_);
+            if (focused_dispatched) {
+                return true;
+            }
+        }
+
         // Non-pointer interactions still prefer focused panel semantics.
         if (!pointer_event && !wheel_event && dispatch_to_panel(focused_panel_)) {
             return true;
         }
 
         for (auto* panel : ordered_base_panels_) {
-            if (panel == pointer_panel || panel == focused_panel_) {
+            if (panel == pointer_panel) {
+                continue;
+            }
+            if (focused_dispatched && panel == focused_panel_) {
                 continue;
             }
             if (dispatch_to_panel(panel)) {
@@ -1671,6 +1684,9 @@ DockableCollapsible* RoomConfigurator::panel_at_point(SDL_Point p) const {
             continue;
         }
         SDL_Rect bounds = (i < ordered_panel_bounds_.size()) ? ordered_panel_bounds_[i] : panel->rect();
+        if (bounds.w <= 0 || bounds.h <= 0) {
+            bounds = panel->rect();
+        }
         if (bounds.w <= 0 || bounds.h <= 0) {
             continue;
         }
@@ -2248,9 +2264,6 @@ void RoomConfigurator::prepare_for_event(int screen_w, int screen_h) {
     ensure_base_panels();
     last_screen_w_ = use_w;
     last_screen_h_ = use_h;
-    if (container_) {
-        container_->prepare_layout(use_w, use_h);
-    }
     const bool panel_visible = container_ && container_->is_visible();
     SDL_Rect panel_work_area = work_area_;
     if (panel_work_area.w <= 0 || panel_work_area.h <= 0) {
@@ -2263,6 +2276,9 @@ void RoomConfigurator::prepare_for_event(int screen_w, int screen_h) {
                 panel->set_work_area(panel_work_area);
             }
         }
+    }
+    if (container_) {
+        container_->prepare_layout(use_w, use_h);
     }
 }
 

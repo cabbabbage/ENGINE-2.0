@@ -378,7 +378,7 @@
           "candidate": {
             "candidates": [
               {
-                "chance": 932,
+                "chance": 342,
                 "name": "null"
               },
               {
@@ -24724,9 +24724,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            242,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 101.0,
@@ -25084,9 +25084,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            242,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -25197,9 +25197,9 @@
           "camera_zoom_percent": 43,
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            242,
+            31,
+            32,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -25362,6 +25362,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-1d2fcba07670"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -1885,
+              "dz": -805,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10000,
+              "position": "Exact",
+              "priority": 5,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b49f73bbb9ae"
             }
           ],
           "trail_connection_sector": {

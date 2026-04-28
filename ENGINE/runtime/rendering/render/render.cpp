@@ -119,6 +119,42 @@ std::vector<std::filesystem::path> runtime_shader_manifest_candidates(const char
     return candidates;
 }
 
+std::filesystem::path runtime_project_root_path() {
+#ifdef PROJECT_ROOT
+    return std::filesystem::path(PROJECT_ROOT);
+#else
+    return std::filesystem::current_path();
+#endif
+}
+
+std::optional<float> project_depth_guide_screen_y(const WarpedScreenGrid& cam,
+                                                  float depth_distance,
+                                                  int screen_height) {
+    if (!(screen_height > 0) || !std::isfinite(depth_distance)) {
+        return std::nullopt;
+    }
+
+    const world::CameraProjectionParams projection = cam.projection_params();
+    const float depth_axis_sign =
+        render_depth::normalize_depth_axis_sign(static_cast<float>(projection.forward_z));
+    const float world_z = render_depth::world_z_from_depth_offset(
+        std::max(0.0f, depth_distance),
+        static_cast<float>(projection.anchor_world_z),
+        depth_axis_sign);
+
+    const SDL_FPoint center = cam.get_view_center_f();
+    SDL_FPoint screen{};
+    if (!cam.project_world_point(SDL_FPoint{center.x, 0.0f}, world_z, screen)) {
+        return std::nullopt;
+    }
+
+    const float y = cam.warp_floor_screen_y(0.0f, screen.y);
+    if (!std::isfinite(y) || y < 0.0f || y >= static_cast<float>(screen_height)) {
+        return std::nullopt;
+    }
+    return y;
+}
+
 inline std::int64_t quantize_depth(double depth) {
     const double scaled = std::floor(depth * kDepthBucketScale);
     const double min_value = static_cast<double>(std::numeric_limits<std::int64_t>::lowest());
@@ -1098,6 +1134,8 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 
 SceneRenderer::~SceneRenderer() {
     destroy_texture(scene_composite_tex_);
+    destroy_texture(scene_preblur_tex_);
+    destroy_far_backdrop_resources();
 }
 
 bool SceneRenderer::ensure_scene_target() {
@@ -1125,6 +1163,80 @@ bool SceneRenderer::ensure_scene_target() {
     return scene_composite_tex_ != nullptr;
 }
 
+bool SceneRenderer::ensure_far_backdrop_composite_target() {
+    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
+        return false;
+    }
+    if (scene_preblur_tex_) {
+        float w = 0.0f;
+        float h = 0.0f;
+        if (SDL_GetTextureSize(scene_preblur_tex_, &w, &h) &&
+            static_cast<int>(std::lround(w)) == screen_width_ &&
+            static_cast<int>(std::lround(h)) == screen_height_) {
+            return true;
+        }
+        destroy_texture(scene_preblur_tex_);
+    }
+    scene_preblur_tex_ = render_diagnostics::create_texture(renderer_,
+                                                            SDL_PIXELFORMAT_RGBA8888,
+                                                            SDL_TEXTUREACCESS_TARGET,
+                                                            screen_width_,
+                                                            screen_height_);
+    if (scene_preblur_tex_) {
+        SDL_SetTextureBlendMode(scene_preblur_tex_, SDL_BLENDMODE_BLEND);
+    }
+    return scene_preblur_tex_ != nullptr;
+}
+
+std::filesystem::path SceneRenderer::resolve_misc_content_path(const std::string& filename) const {
+    const std::filesystem::path project_root = runtime_project_root_path();
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(project_root);
+    roots.push_back(std::filesystem::current_path());
+    if (const char* base_path_raw = SDL_GetBasePath()) {
+        const std::filesystem::path base = std::filesystem::path(base_path_raw);
+        roots.push_back(base);
+        roots.push_back(base.parent_path());
+    }
+
+    for (const std::filesystem::path& root : roots) {
+        if (root.empty()) {
+            continue;
+        }
+        const std::filesystem::path candidate = (root / "resources" / "misc_content" / filename).lexically_normal();
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+bool SceneRenderer::ensure_far_backdrop_resources() {
+    if (!renderer_) {
+        return false;
+    }
+
+    if (!far_backdrop_sky_tex_) {
+        const std::filesystem::path sky_path = resolve_misc_content_path("sky.png");
+        if (!sky_path.empty()) {
+            far_backdrop_sky_tex_ = IMG_LoadTexture(renderer_, sky_path.string().c_str());
+        }
+    }
+    if (!far_backdrop_mountains_tex_) {
+        const std::filesystem::path mountains_path = resolve_misc_content_path("mountains.png");
+        if (!mountains_path.empty()) {
+            far_backdrop_mountains_tex_ = IMG_LoadTexture(renderer_, mountains_path.string().c_str());
+        }
+    }
+
+    return far_backdrop_sky_tex_ != nullptr && far_backdrop_mountains_tex_ != nullptr;
+}
+
+void SceneRenderer::destroy_far_backdrop_resources() {
+    destroy_texture(far_backdrop_sky_tex_);
+    destroy_texture(far_backdrop_mountains_tex_);
+}
+
 void SceneRenderer::invalidate_dynamic_boundary_system() {
     if (dynamic_boundary_system_) {
         dynamic_boundary_system_->invalidate_config();
@@ -1150,6 +1262,7 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
     screen_width_ = safe_w;
     screen_height_ = safe_h;
     destroy_texture(scene_composite_tex_);
+    destroy_texture(scene_preblur_tex_);
     if (floor_composer_) floor_composer_->set_output_dimensions(screen_width_, screen_height_);
     if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
     if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
@@ -2227,8 +2340,48 @@ void SceneRenderer::render() {
                                                     realism.front_layer_light_strength_multiplier,
                                                     realism.behind_layer_light_strength_multiplier)
         : render_pipeline::CompactLayerRenderResult{};
+
+    SDL_Texture* scene_for_blur = layer_render.final_texture;
+    if (scene_for_blur && ensure_far_backdrop_resources() && ensure_far_backdrop_composite_target()) {
+        if (const std::optional<float> cull_screen_y =
+                project_depth_guide_screen_y(cam, static_cast<float>(max_cull_depth), screen_height_)) {
+            if (render_diagnostics::set_render_target(renderer_, scene_preblur_tex_)) {
+                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+                SDL_RenderClear(renderer_);
+
+                auto draw_locked_width_bottom_aligned = [&](SDL_Texture* texture) {
+                    if (!texture) {
+                        return;
+                    }
+                    float tw = 0.0f;
+                    float th = 0.0f;
+                    if (!SDL_GetTextureSize(texture, &tw, &th) || tw <= 0.0f || th <= 0.0f || screen_width_ <= 0) {
+                        return;
+                    }
+                    const float scale = static_cast<float>(screen_width_) / tw;
+                    const int dst_h = static_cast<int>(std::lround(th * scale));
+                    const int dst_y = static_cast<int>(std::lround(*cull_screen_y)) - dst_h;
+                    const SDL_FRect dst{
+                        0.0f,
+                        static_cast<float>(dst_y),
+                        static_cast<float>(screen_width_),
+                        static_cast<float>(dst_h)};
+                    render_texture_utils::reset_texture_state(texture);
+                    SDL_RenderTexture(renderer_, texture, nullptr, &dst);
+                };
+
+                // Furthest back first: sky, then mountains, then runtime scene.
+                draw_locked_width_bottom_aligned(far_backdrop_sky_tex_);
+                draw_locked_width_bottom_aligned(far_backdrop_mountains_tex_);
+                render_texture_utils::draw_fullscreen_texture(renderer_, layer_render.final_texture);
+                scene_for_blur = scene_preblur_tex_;
+            }
+        }
+    }
+
     const render_pipeline::BlurCompositeResult blur_result = blur_chain_renderer_
-        ? blur_chain_renderer_->compose_gpu(layer_render.final_texture,
+        ? blur_chain_renderer_->compose_gpu(scene_for_blur,
                                             realism.depth_of_field_enabled,
                                             realism.blur_px,
                                             realism.radial_blur_px,

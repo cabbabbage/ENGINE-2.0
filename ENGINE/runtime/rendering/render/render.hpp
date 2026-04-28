@@ -301,6 +301,10 @@ private:
                   const std::string& map_id);
 
     bool ensure_scene_target();
+    bool ensure_far_backdrop_resources();
+    bool ensure_far_backdrop_composite_target();
+    std::filesystem::path resolve_misc_content_path(const std::string& filename) const;
+    void destroy_far_backdrop_resources();
     void collect_frame_geometry(const WarpedScreenGrid& cam,
                                 world::WorldGrid& grid,
                                 double focus_plane_world_z,
@@ -329,6 +333,9 @@ private:
     SDL_Color map_clear_color_{69, 101, 74, 255};
 
     SDL_Texture* scene_composite_tex_ = nullptr;
+    SDL_Texture* scene_preblur_tex_ = nullptr;
+    SDL_Texture* far_backdrop_sky_tex_ = nullptr;
+    SDL_Texture* far_backdrop_mountains_tex_ = nullptr;
     double map_radius_world_ = 0.0;
 
     std::unique_ptr<GeometryBatcher> geometry_batcher_;

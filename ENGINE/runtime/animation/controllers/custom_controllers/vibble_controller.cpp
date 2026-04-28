@@ -26,7 +26,7 @@ constexpr std::string_view kHandAnchorName = "hand";
 constexpr std::string_view kGunAssetName = "gun";
 constexpr std::string_view kInteractableTag = "interactable";
 constexpr std::string_view kCanCarryTag = "can_carry";
-constexpr int kInteractRadiusPx = 50;
+constexpr int kInteractRadiusPx = 150;
 
 std::string normalize_tag_token(std::string_view value) {
     return vibble::strings::to_lower_copy(vibble::strings::trim_copy(std::string{value}));

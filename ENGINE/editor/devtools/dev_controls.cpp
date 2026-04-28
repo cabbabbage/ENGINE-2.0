@@ -1015,6 +1015,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         apply_camera_area_render_flag();
     }
     if (room_editor_ && map_mode_ui_) {
+        map_mode_ui_->set_room_editor(room_editor_.get());
         room_editor_->set_shared_footer_bar(map_mode_ui_->get_footer_bar());
         room_editor_->set_map_dirty_callback([this](devmode::core::DevSaveCoordinator::Priority priority) {
             this->mark_map_dirty(priority);

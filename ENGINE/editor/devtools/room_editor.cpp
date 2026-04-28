@@ -21154,7 +21154,7 @@ void RoomEditor::ensure_room_configurator() {
         room_cfg_ui_ = std::make_unique<RoomConfigurator>();
     }
     if (room_cfg_ui_) {
-        room_cfg_ui_->set_room_metadata_only_mode(true);
+        room_cfg_ui_->set_room_metadata_only_mode(false);
         room_cfg_ui_->set_manifest_store(manifest_store_);
         room_cfg_ui_->set_assets(assets_);
         room_cfg_ui_->set_room_save_callback([this](bool immediate) {

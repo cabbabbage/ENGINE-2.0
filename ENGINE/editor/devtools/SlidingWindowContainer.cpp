@@ -174,6 +174,11 @@ void SlidingWindowContainer::set_visible(bool visible) {
     if (!visible_) {
         scroll_dragging_ = false;
         scrollbar_dragging_ = false;
+        DMWidgetsClearSliderScrollCaptures();
+    } else {
+        scroll_ = 0;
+        scroll_dragging_ = false;
+        scrollbar_dragging_ = false;
     }
     if (header_visibility_controller_) {
         header_visibility_controller_(visible_);
@@ -215,21 +220,7 @@ void SlidingWindowContainer::prepare_layout(int screen_w, int screen_h) const {
 bool SlidingWindowContainer::is_point_inside(int x, int y) const {
     if (!visible_) return false;
     SDL_Point p{x, y};
-
-    if (!header_visible_) {
-        const int padding = DMSpacing::panel_padding();
-        const int content_top = panel_.y + padding;
-        const int label_height = DMButton::height();
-        const int label_gap = DMSpacing::item_gap();
-        int scroll_start = content_top + (header_visible_ ? (label_height + label_gap) : 0);
-        SDL_Rect effective_panel = panel_;
-        effective_panel.y = scroll_start;
-        effective_panel.h = panel_.h - (scroll_start - panel_.y);
-        if (effective_panel.h < 0) effective_panel.h = 0;
-        return SDL_PointInRect(&p, &effective_panel);
-    }
-
-    return SDL_PointInRect(&p, &panel_);
+    return SDL_PointInRect(&p, &effective_panel_interaction_rect());
 }
 
 void SlidingWindowContainer::update(const Input& input, int screen_w, int screen_h) {
@@ -243,22 +234,9 @@ void SlidingWindowContainer::update(const Input& input, int screen_w, int screen
         (mx >= scroll_region_.x && mx < scroll_region_.x + scroll_region_.w && my >= scroll_region_.y && my < scroll_region_.y + scroll_region_.h);
     bool pointer_in_panel_area = false;
 
-    if (!header_visible_) {
-        const int padding = DMSpacing::panel_padding();
-        const int content_top = panel_.y + padding;
-        const int label_height = DMButton::height();
-        const int label_gap = DMSpacing::item_gap();
-        int scroll_start = content_top + (header_visible_ ? (label_height + label_gap) : 0);
-        SDL_Rect effective_panel = panel_;
-        effective_panel.y = scroll_start;
-        effective_panel.h = panel_.h - (scroll_start - panel_.y);
-        if (effective_panel.h < 0) effective_panel.h = 0;
-        pointer_in_panel_area =
-            (mx >= effective_panel.x && mx < effective_panel.x + effective_panel.w && my >= effective_panel.y && my < effective_panel.y + effective_panel.h);
-    } else {
-        pointer_in_panel_area =
-            (mx >= panel_.x && mx < panel_.x + panel_.w && my >= panel_.y && my < panel_.y + panel_.h);
-    }
+    const SDL_Rect interaction_rect = effective_panel_interaction_rect();
+    pointer_in_panel_area =
+        (mx >= interaction_rect.x && mx < interaction_rect.x + interaction_rect.w && my >= interaction_rect.y && my < interaction_rect.y + interaction_rect.h);
     if ((pointer_in_scroll || pointer_in_panel_area) && !DMWidgetsSliderScrollCaptured()) {
         int dy = input.getScrollY();
         if (dy != 0) {
@@ -331,20 +309,7 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
     bool pointer_inside_panel = false;
     if (pointer_event) {
 
-        if (!header_visible_) {
-            const int padding = DMSpacing::panel_padding();
-            const int content_top = panel_.y + padding;
-            const int label_height = DMButton::height();
-            const int label_gap = DMSpacing::item_gap();
-            int scroll_start = content_top + (header_visible_ ? (label_height + label_gap) : 0);
-            SDL_Rect effective_panel = panel_;
-            effective_panel.y = scroll_start;
-            effective_panel.h = panel_.h - (scroll_start - panel_.y);
-            if (effective_panel.h < 0) effective_panel.h = 0;
-            pointer_inside_panel = SDL_PointInRect(&pointer, &effective_panel);
-        } else {
-            pointer_inside_panel = SDL_PointInRect(&pointer, &panel_);
-        }
+        pointer_inside_panel = SDL_PointInRect(&pointer, &effective_panel_interaction_rect());
         pointer_inside = pointer_inside_panel;
         if (!pointer_inside && !scroll_dragging_ && !scrollbar_dragging_) {
             return false;
@@ -553,6 +518,21 @@ void SlidingWindowContainer::update_scroll_from_delta(int delta) {
     if (scroll_ != prev_scroll) {
         layout_dirty_ = true;
     }
+}
+
+SDL_Rect SlidingWindowContainer::effective_panel_interaction_rect() const {
+    if (header_visible_) {
+        return panel_;
+    }
+    if (scroll_region_.w > 0 && scroll_region_.h > 0) {
+        return scroll_region_;
+    }
+    const int padding = DMSpacing::panel_padding();
+    SDL_Rect effective_panel = panel_;
+    effective_panel.y = panel_.y + padding;
+    effective_panel.h = panel_.h - padding;
+    if (effective_panel.h < 0) effective_panel.h = 0;
+    return effective_panel;
 }
 
 void SlidingWindowContainer::layout(int screen_w, int screen_h) const {

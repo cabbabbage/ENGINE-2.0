@@ -60,6 +60,10 @@ CandidateEditorPieGraphWidget::CandidateEditorPieGraphWidget() {
     update_internal_layout();
 }
 
+CandidateEditorPieGraphWidget::~CandidateEditorPieGraphWidget() {
+    release_scroll_capture();
+}
+
 void CandidateEditorPieGraphWidget::set_rect(const SDL_Rect& r) {
     rect_ = r;
     update_internal_layout();

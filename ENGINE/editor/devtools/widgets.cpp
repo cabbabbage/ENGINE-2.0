@@ -150,6 +150,10 @@ void DMWidgetsSetSliderScrollCapture(const void* owner, bool capture) {
     set_slider_scroll_capture(owner, capture);
 }
 
+void DMWidgetsClearSliderScrollCaptures() {
+    g_slider_scroll_captures.clear();
+}
+
 SDL_Rect DMWidgetTooltipIconRect(const SDL_Rect& bounds) {
     SDL_Rect icon{
         bounds.x + std::max(0, bounds.w - kTooltipIconSize - kTooltipIconPadding), bounds.y + kTooltipIconPadding, kTooltipIconSize, kTooltipIconSize };
@@ -857,6 +861,11 @@ DMNumericStepper::DMNumericStepper(const std::string& label, int min_value, int 
     set_value(value);
 }
 
+DMNumericStepper::~DMNumericStepper() {
+    focused_ = false;
+    set_slider_scroll_capture(this, false);
+}
+
 int DMNumericStepper::clamp_value(int v) const {
     if (min_value_ > max_value_) {
         return v;
@@ -985,6 +994,16 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        const bool inside = SDL_PointInRect(&p, &rect_);
+        if (focused_ != inside) {
+            focused_ = inside;
+            set_slider_scroll_capture(this, focused_);
+        }
+        if (!inside) {
+            pressed_dec_ = false;
+            pressed_inc_ = false;
+            return false;
+        }
         update_hover(p);
         if (hovered_dec_) {
             pressed_dec_ = true;
@@ -996,6 +1015,10 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
         }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        if (!SDL_PointInRect(&p, &rect_) && focused_) {
+            focused_ = false;
+            set_slider_scroll_capture(this, false);
+        }
         update_hover(p);
         bool used = false;
         bool had_dec = pressed_dec_;
@@ -1016,6 +1039,9 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
         }
         return used || had_dec || had_inc;
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        if (!focused_) {
+            return false;
+        }
         SDL_Point mouse{0, 0};
         sdl_mouse_util::GetMouseState(&mouse.x, &mouse.y);
         if (!SDL_PointInRect(&mouse, &rect_)) {
@@ -1028,11 +1054,11 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
         if (delta == 0) {
             delta = static_cast<int>(std::round(e.wheel.y));
         }
-    if (delta == 0) {
-        return false;
+        if (delta == 0) {
+            return false;
+        }
+        return apply_delta(delta);
     }
-    return apply_delta(delta);
-}
     return false;
 }
 

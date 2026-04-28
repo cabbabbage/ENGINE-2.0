@@ -209,6 +209,7 @@ void DockableCollapsible::set_visible(bool v) {
         dragging_ = false;
         drag_exceeded_threshold_ = false;
         header_dragging_via_button_ = false;
+        DMWidgetsClearSliderScrollCaptures();
         DockManager::instance().notify_panel_closed(this);
         if (on_close_) on_close_();
     }

@@ -75,6 +75,7 @@ public:
 private:
     void layout(int screen_w, int screen_h) const;
     void update_scroll_from_delta(int delta);
+    SDL_Rect effective_panel_interaction_rect() const;
     void update_editor_interaction_block_state();
 
 private:

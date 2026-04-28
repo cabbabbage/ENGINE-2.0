@@ -795,6 +795,7 @@ public:
         pending_rebuild_ = false;
         pending_sync_ = false;
         pending_sync_spawn_id_.reset();
+        pending_remove_spawn_id_.reset();
         pie_callback_depth_ = 0;
 
         if (!ownership_label_.empty()) {
@@ -1139,7 +1140,7 @@ private:
             group.remove_button = std::make_unique<DMButton>("Remove", &DMStyles::WarnButton(), 90, DMButton::height());
             group.remove_button_widget = std::make_unique<ButtonWidget>(
                 group.remove_button.get(),
-                [this, spawn_id = group.spawn_id]() { this->remove_group(spawn_id); });
+                [this, spawn_id = group.spawn_id]() { this->queue_remove_group(spawn_id); });
 
             rows.push_back({group.resolution_widget.get(), group.remove_button_widget.get()});
             rows.push_back({group.jitter_widget.get()});
@@ -1258,6 +1259,13 @@ private:
             selectors.erase(it, selectors.end());
             notify_save(true);
         }
+    }
+
+    void queue_remove_group(const std::string& spawn_id) {
+        if (spawn_id.empty()) {
+            return;
+        }
+        pending_remove_spawn_id_ = spawn_id;
     }
 
     void update_group_resolution(const std::string& spawn_id, int parsed_value) {
@@ -1437,8 +1445,15 @@ private:
     bool pending_rebuild_ = false;
     bool pending_sync_ = false;
     std::optional<std::string> pending_sync_spawn_id_{};
+    std::optional<std::string> pending_remove_spawn_id_{};
 
     void apply_pending_refresh() {
+        if (pending_remove_spawn_id_ && !pending_remove_spawn_id_->empty()) {
+            const std::string spawn_id = *pending_remove_spawn_id_;
+            pending_remove_spawn_id_.reset();
+            remove_group(spawn_id);
+            return;
+        }
         if (pending_rebuild_) {
             pending_rebuild_ = false;
             pending_sync_ = false;

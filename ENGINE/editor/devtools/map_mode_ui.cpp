@@ -134,10 +134,7 @@ private:
         button_row.push_back(owned_widgets_.back().get());
 
         owned_widgets_.push_back(std::make_unique<ButtonWidget>(create_room_btn_.get(), [this]() {
-            if (preview_widget_) {
-                preview_widget_->create_new_room_entry();
-            }
-            trigger_save();
+            (void)preview_widget_;
         }));
         button_row.push_back(owned_widgets_.back().get());
 
@@ -1273,41 +1270,9 @@ void MapModeUI::ensure_room_configurator() {
 }
 
 void MapModeUI::open_room_configuration(const std::string& room_key, SlidingPanel return_panel) {
-    ensure_panels();
-    close_legacy_room_config_if_visible("open_room_configuration");
-    if (!room_editor_ || !assets_) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[MapModeUI] canonical room config open failed for '%s': RoomEditor unavailable",
-                    room_key.c_str());
-        return;
-    }
-
-    room_config_return_panel_ = return_panel;
-    update_room_config_header_controls();
-
-    active_room_config_key_ = room_key;
-    if (layers_panel_) {
-        layers_panel_->hide_details_panel();
-    }
-
-    Room* target_room = nullptr;
-    for (Room* room : assets_->rooms()) {
-        if (room && room->room_name == room_key) {
-            target_room = room;
-            break;
-        }
-    }
-    if (!target_room) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[MapModeUI] canonical room config open failed: room '%s' not found at runtime",
-                    room_key.c_str());
-        return;
-    }
-
-    assets_->set_editor_current_room(target_room);
-    room_editor_->set_current_room(target_room);
-    room_editor_->set_room_config_visible(true);
-    show_sliding_panel(SlidingPanel::None);
+    (void)room_key;
+    (void)return_panel;
+    close_legacy_room_config_if_visible("open_room_configuration_disabled");
 }
 
 void MapModeUI::close_room_configuration(bool show_rooms_list) {
@@ -1638,25 +1603,7 @@ void MapModeUI::create_room_from_layers_controls() {
 }
 
 void MapModeUI::create_room_from_panel(SlidingPanel return_panel) {
-    if (!map_info_ || !map_info_->is_object()) {
-        return;
-    }
-    std::string new_key;
-    mutate_map_data([&](manifest::MapData& map_data) {
-        nlohmann::json map_entry = map_data.to_manifest_entry();
-        new_key = map_layers::create_room_entry(map_entry);
-        if (new_key.empty()) {
-            return false;
-        }
-        map_data = manifest::MapData::from_manifest_entry(map_data.map_id, map_entry);
-        return true;
-    });
-    if (new_key.empty()) {
-        return;
-    }
-    handle_rooms_data_mutated(true);
-    open_room_configuration(new_key, return_panel);
-    auto_save_layers_data();
+    (void)return_panel;
 }
 
 void MapModeUI::begin_map_color_sampling(const utils::color::RangedColor&,

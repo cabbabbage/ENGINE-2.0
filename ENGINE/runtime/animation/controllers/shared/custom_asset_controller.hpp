@@ -1,5 +1,6 @@
 #pragma once
 #include "animation/controllers/shared/child_asset.hpp"
+#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "animation/controllers/shared/controller_game_context.hpp"
 #include "assets/asset/asset_controller.hpp"
 
@@ -11,6 +12,12 @@
 class Asset;
 class Assets;
 class Input;
+namespace animation_update {
+struct Attack;
+}
+namespace runtime::context {
+class GameRuntimeContext;
+}
 
 namespace animation_update::custom_controllers {
 
@@ -35,11 +42,18 @@ protected:
     Asset* self_ptr() const { return self_; }
     Assets* assets() const;
     const animation_update::custom_controllers::ControllerGameContext& game_context() const { return game_context_; }
+    runtime::context::GameRuntimeContext* mutable_runtime_game_context() const;
 
+    virtual void on_init();
     virtual void on_update(const Input& in);
+    virtual void on_attack(const animation_update::Attack& attack);
+    virtual void on_hit(const animation_update::Attack& attack);
+    virtual void on_death();
+    virtual void on_no_pending_attacks();
+    virtual animation_update::custom_controllers::AttackProcessingConfig attack_processing_config() const;
     virtual void on_process_pending_attacks(Asset& self);
-    virtual void on_parent_pre_delete(Asset& self);
-    virtual void on_child_orphaned(Asset& self, Asset* former_parent);
+    virtual void on_pre_delete_hook(Asset& self);
+    virtual void on_orphaned_hook(Asset& self, Asset* former_parent);
 
 private:
     friend class animation_update::custom_controllers::WanderControllerBehavior;

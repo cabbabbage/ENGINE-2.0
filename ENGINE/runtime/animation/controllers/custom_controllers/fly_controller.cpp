@@ -1,15 +1,7 @@
-// CONTROLLER_META_BEGIN
-// Controller: fly_controller
-// Asset: fly (type: object)
-// Available animations [1]:
-//   - default
-// Generated: 2026-04-10 02:16:39
-// CONTROLLER_META_END
-
-
-#include <iostream>
 #include "fly_controller.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/attack.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -17,7 +9,7 @@
 
 namespace {
 
-animation_update::custom_controllers::RandomOrbit3DControllerBehaviorConfig
+custom_controller_api::RandomOrbit3DControllerBehaviorConfig
 resolve_fly_orbit_behavior_config(Asset* self) {
     if (!self) {
         return runtime::config::make_default_fly_orbit_behavior_config();
@@ -55,35 +47,29 @@ void fly_controller::on_update(const Input& in) {
 }
 
 void fly_controller::on_process_pending_attacks(Asset& self_ref) {
-    (void)self_ref;
+    CustomAssetController::on_process_pending_attacks(self_ref);
+}
 
-    const auto pending_attacks = self_ref.process_pending_attacks();
-    if(pending_attacks.empty()) {
+void fly_controller::on_attack(const animation_update::Attack& attack) {
+    Asset* self = self_ptr();
+    if (!self) {
         return;
     }
-
-    for (const auto& attack : pending_attacks) {
-        if (attack.attacker_asset_name == "vibble_attack_1" || attack.attacker_asset_name == "vibble") {
-            if (Assets* owner_assets = self_ref.get_assets()) {
-                std::string room_name = self_ref.owning_room_name();
-                if (room_name.empty()) {
-                    if (Room* room = owner_assets->current_room()) {
-                        room_name = room->room_name;
-                    }
+    if (attack.attacker_asset_name == "vibble_attack_1" || attack.attacker_asset_name == "vibble") {
+        if (Assets* owner_assets = self->get_assets()) {
+            std::string room_name = self->owning_room_name();
+            if (room_name.empty()) {
+                if (Room* room = owner_assets->current_room()) {
+                    room_name = room->room_name;
                 }
-                owner_assets->mutable_game_context().set_room_fly_aggression(room_name, 20.0f);
             }
-
-            std::cout<<"fly_controller::on_process_pending_attacks called, transitioning to non-orbiting state."<<std::endl;
-
-
-            self_ref.anim_->cancel_all_movement();
-            self_ref.anim_->auto_move_3d({self_ref.world_x(), -10, self_ref.world_z()}, 0, std::nullopt, true);
-            orbiting = false;
-            return;    
-    
+            owner_assets->mutable_game_context().set_room_fly_aggression(room_name, 20.0f);
         }
 
-
+        if (self->anim_) {
+            self->anim_->cancel_all_movement();
+            self->anim_->auto_move_3d({self->world_x(), -10, self->world_z()}, 0, std::nullopt, true);
+        }
+        orbiting = false;
     }
 }

@@ -1,15 +1,7 @@
-// CONTROLLER_META_BEGIN
-// Controller: vibble_controller
-// Asset: vibble (type: object)
-// Available animations [1]:
-//   - default
-// Generated: 2026-03-17 23:48:57
-// CONTROLLER_META_END
-
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
 #include <SDL3/SDL.h>
 #include <chrono>
@@ -28,6 +20,7 @@ public:
 
 protected:
     void on_update(const Input& in) override;
+    custom_controller_api::AttackProcessingConfig attack_processing_config() const override;
     void on_process_pending_attacks(Asset& self) override;
 
 private:

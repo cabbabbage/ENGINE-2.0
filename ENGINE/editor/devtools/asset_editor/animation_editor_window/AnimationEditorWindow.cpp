@@ -34,6 +34,7 @@
 #include "AnimationInspectorPanel.hpp"
 #include "AnimationListContextMenu.hpp"
 #include "AnimationListPanel.hpp"
+#include "CustomControllerService.hpp"
 #include "EditorUIPrimitives.hpp"
 #include "AsyncTaskQueue.hpp"
 #include "AudioImporter.hpp"
@@ -535,6 +536,7 @@ AnimationEditorWindow::AnimationEditorWindow() {
     inspector_panel_->set_preview_provider(preview_provider_);
     configure_inspector_panel();
     list_context_menu_ = std::make_unique<AnimationListContextMenu>();
+    custom_controller_service_ = std::make_unique<CustomControllerService>();
 
     add_button_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 160, DMButton::height());
     controller_button_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 140, DMButton::height());
@@ -610,6 +612,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         asset_root_path_.clear();
     }
     asset_root_path_ = ensure_assets_storage(asset_root_path_, *info);
+    if (custom_controller_service_) {
+        custom_controller_service_->set_asset_root(asset_root_path_);
+    }
 
     process_auto_save();
 
@@ -668,6 +673,10 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         }
     } else {
         std::cerr << "[AnimationEditor] Manifest store unavailable; animations will not persist for '" << info->name << "'\n";
+    }
+    if (custom_controller_service_) {
+        custom_controller_service_->set_manifest_store(manifest_store_);
+        custom_controller_service_->set_manifest_asset_key(manifest_asset_key_);
     }
 
     if (manifest_transaction_) {
@@ -2274,6 +2283,9 @@ void AnimationEditorWindow::set_manifest_store(devmode::core::ManifestStore* sto
     }
     close_manifest_transaction();
     manifest_store_ = store;
+    if (custom_controller_service_) {
+        custom_controller_service_->set_manifest_store(store);
+    }
     if (inspector_panel_) {
         inspector_panel_->set_manifest_store(store);
     }
@@ -2592,11 +2604,10 @@ void AnimationEditorWindow::update_controller_button_label() {
 
 bool AnimationEditorWindow::does_controller_exist() const {
     auto info_ptr = info_.lock();
-    if (!info_ptr) return false;
+    if (!info_ptr || asset_root_path_.empty()) return false;
     std::string sanitized = sanitize_asset_name(info_ptr->name);
     if (sanitized.empty()) return false;
     std::string key = generate_controller_key(sanitized);
-
     std::filesystem::path controller_dir = "ENGINE/runtime/animation/controllers/custom_controllers";
     std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
     std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
@@ -2752,148 +2763,36 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
 
 void AnimationEditorWindow::add_controller() {
     auto info_ptr = info_.lock();
-    if (!info_ptr) {
+    if (!info_ptr || !custom_controller_service_) {
         set_status_message("No asset selected.", 180);
         return;
     }
-    std::string sanitized = sanitize_asset_name(info_ptr->name);
-    if (sanitized.empty()) {
-        set_status_message("Invalid asset name.", 180);
-        return;
-    }
-    std::string key = generate_controller_key(sanitized);
-    std::string class_name = generate_class_name(sanitized);
 
-    std::filesystem::path controller_dir = "ENGINE/runtime/animation/controllers/custom_controllers";
-    std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
-    std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
-
-    if (std::filesystem::exists(hpp_path) && std::filesystem::exists(cpp_path)) {
-        set_status_message("Controller already exists.", 180);
+    try {
+        custom_controller_service_->set_asset_root(asset_root_path_);
+        custom_controller_service_->set_manifest_store(manifest_store_);
+        custom_controller_service_->set_manifest_asset_key(manifest_asset_key_);
+        custom_controller_service_->create_new_controller(generate_controller_key(sanitize_asset_name(info_ptr->name)));
+        set_status_message("Controller created.", 240);
         update_controller_button_label();
-        return;
+    } catch (const std::exception& ex) {
+        set_status_message(std::string("Failed to create controller: ") + ex.what(), 240);
     }
-
-    std::filesystem::create_directories(controller_dir);
-
-    const std::string metadata = build_controller_metadata(key);
-
-    std::ostringstream hpp_builder;
-    hpp_builder << metadata
-                << "#pragma once\n"
-                << "#include \"animation/controllers/shared/custom_asset_controller.hpp\"\n"
-                << "\n"
-                << "class Asset;\n"
-                << "class Input;\n"
-                << "\n"
-                << "class " << class_name << " : public CustomAssetController {\n"
-                << "public:\n"
-                << "    explicit " << class_name << "(Asset* self);\n"
-                << "    ~" << class_name << "() override = default;\n"
-                << "\n"
-                << "protected:\n"
-                << "    void on_update(const Input& in) override;\n"
-                << "    void on_process_pending_attacks(Asset& self) override;\n"
-                << "};\n";
-    std::string hpp_content = hpp_builder.str();
-
-    std::ostringstream cpp_builder;
-    cpp_builder << metadata
-                << "#include \"" << key << ".hpp\"\n"
-                << "\n"
-                << "#include \"assets/asset/Asset.hpp\"\n"
-                << "#include \"assets/asset/animation.hpp\"\n"
-                << "#include \"assets/asset/asset_info.hpp\"\n"
-                << "#include \"animation/animation_update.hpp\"\n"
-                << "#include \"utils/input.hpp\"\n"
-                << "#include <string>\n"
-                << "\n"
-                << class_name << "::" << class_name << "(Asset* self)\n"
-                << "    : CustomAssetController(self) {}\n"
-                << "\n"
-                << "void " << class_name << "::on_update(const Input& ) {\n"
-                << "    Asset* self = self_ptr();\n"
-                << "    if (!self || !self->info || !self->anim_) return;\n"
-                << "\n"
-                << "    const std::string default_anim{ animation_update::detail::kDefaultAnimation };\n"
-                << "    auto it = self->info->animations.find(default_anim);\n"
-                << "    if (it != self->info->animations.end() && it->second.has_frames()) {\n"
-                << "        if (self->current_animation != default_anim || self->current_frame == nullptr) {\n"
-                << "            self->anim_->move(SDL_Point{0, 0}, default_anim);\n"
-                << "        }\n"
-                << "        return;\n"
-                << "    }\n"
-                << "\n"
-                << "    if (!self->info->animations.empty()) {\n"
-                << "        const auto& first = *self->info->animations.begin();\n"
-                << "        if (self->current_animation != first.first || self->current_frame == nullptr) {\n"
-                << "            self->anim_->move(SDL_Point{0, 0}, first.first);\n"
-                << "        }\n"
-                << "    }\n"
-                << "}\n"
-                << "\n"
-                << "void " << class_name << "::on_process_pending_attacks(Asset& self_ref) {\n"
-                << "    (void)self_ref;\n"
-                << "    Asset* self = self_ptr();\n"
-                << "    if (!self || !self->info || !self->anim_) return;\n"
-                << "    // TODO: implement attack handling if this asset uses attack queues.\n"
-                << "}\n";
-    std::string cpp_content = cpp_builder.str();
-
-    std::ofstream hpp_file(hpp_path);
-    if (!hpp_file) {
-        set_status_message("Failed to create .hpp file.", 180);
-        return;
-    }
-    hpp_file << hpp_content;
-    hpp_file.close();
-
-    std::ofstream cpp_file(cpp_path);
-    if (!cpp_file) {
-        set_status_message("Failed to create .cpp file.", 180);
-        return;
-    }
-    cpp_file << cpp_content;
-    cpp_file.close();
-
-    // Register the new controller with the factory so runtime lookups succeed.
-    ensure_controller_factory_registration(key, class_name);
-
-    set_status_message("Controller created.", 240);
-    update_controller_button_label();
 }
 
 void AnimationEditorWindow::open_controller() {
     auto info_ptr = info_.lock();
-    if (!info_ptr) {
+    if (!info_ptr || !custom_controller_service_) {
         set_status_message("No asset selected.", 180);
         return;
     }
-    std::string sanitized = sanitize_asset_name(info_ptr->name);
-    if (sanitized.empty()) {
-        set_status_message("Invalid asset name.", 180);
-        return;
-    }
-    std::string key = generate_controller_key(sanitized);
-    std::filesystem::path controller_dir = "ENGINE/runtime/animation/controllers/custom_controllers";
-    std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
-    if (!std::filesystem::exists(hpp_path)) {
-        set_status_message("Controller file does not exist.", 180);
-        return;
-    }
-    std::string class_name = generate_class_name(sanitized);
 
-    const std::string metadata = build_controller_metadata(key);
-    write_or_update_controller_metadata(hpp_path, metadata);
-    write_or_update_controller_metadata(controller_dir / (key + ".cpp"), metadata);
-    ensure_controller_factory_registration(key, class_name);
-
-    std::string cmd = "cmd /c start \"\" \"" + hpp_path.string() + "\"";
-    int result = std::system(cmd.c_str());
-    if (result != 0) {
-        set_status_message("Failed to open controller file.", 180);
-    } else {
+    try {
+        custom_controller_service_->set_asset_root(asset_root_path_);
+        custom_controller_service_->open_existing_controller(generate_controller_key(sanitize_asset_name(info_ptr->name)));
         set_status_message("Opened controller file.", 120);
+    } catch (const std::exception& ex) {
+        set_status_message(std::string("Failed to open controller: ") + ex.what(), 240);
     }
 }
 

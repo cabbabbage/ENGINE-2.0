@@ -1,5 +1,5 @@
 #include "frog_controller.hpp"
-#include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/animation_update.hpp"
 
 #include "animation/controllers/shared/controller_path_utils.hpp"
@@ -23,7 +23,7 @@ void frog_controller::on_update(const Input&) {
         return;
     }
 
-    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(ctx);
+    Asset* player = custom_controller_api::resolve_valid_player_target(ctx);
     if (!player) {
         return;
     }
@@ -40,13 +40,13 @@ void frog_controller::on_update(const Input&) {
         }
         const int visit_threshold = controller_utils::controller_visit_threshold(self, path);
         self->anim_->auto_move(path, visit_threshold);
-        animation_update::custom_controllers::dispatch_contact_attack(ctx);
+        custom_controller_api::dispatch_contact_attack(ctx);
         return;
     }
 
     self->anim_->auto_move(player);
 
-    animation_update::custom_controllers::dispatch_contact_attack(ctx);
+    custom_controller_api::dispatch_contact_attack(ctx);
 }
 
 void frog_controller::on_process_pending_attacks(Asset& self) {

@@ -1,5 +1,5 @@
 #include "davey_controller.hpp"
-#include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 
@@ -19,14 +19,14 @@ void davey_controller::on_update(const Input&) {
         return;
     }
 
-    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(ctx);
+    Asset* player = custom_controller_api::resolve_valid_player_target(ctx);
     if (!player) {
         return;
     }
 
     self->anim_->auto_move(player);
 
-    animation_update::custom_controllers::dispatch_contact_attack(ctx);
+    custom_controller_api::dispatch_contact_attack(ctx);
 }
 
 void davey_controller::on_process_pending_attacks(Asset& self) {

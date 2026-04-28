@@ -1,7 +1,7 @@
 #ifndef spider_CONTROLLER_HPP
 #define spider_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 
 class Asset;
 class Input;

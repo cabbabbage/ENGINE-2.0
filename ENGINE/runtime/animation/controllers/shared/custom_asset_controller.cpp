@@ -14,6 +14,7 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/attack.hpp"
 #include "animation/animation_tag_utils.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
@@ -65,6 +66,7 @@ bool should_use_auto_move_attack_dispatch(const Asset* self) {
 CustomAssetController::CustomAssetController(Asset* self)
     : self_(self) {
     initialize_anchor_candidate_children();
+    on_init();
 }
 
 CustomAssetController::~CustomAssetController() = default;
@@ -78,19 +80,49 @@ void CustomAssetController::update(const Input& in) {
 }
 
 void CustomAssetController::process_pending_attacks(Asset& self) {
+    const auto pending_attacks = self.process_pending_attacks();
+    if (pending_attacks.empty()) {
+        on_no_pending_attacks();
+        on_process_pending_attacks(self);
+        return;
+    }
+
+    orphan_eligible_children(self);
+    for (const auto& attack : pending_attacks) {
+        on_attack(attack);
+    }
+    const auto summary = custom_controllers::AttackProcessingHelper::process_attacks(
+        self,
+        pending_attacks,
+        attack_processing_config());
+    if (summary.died) {
+        on_death();
+    } else if (summary.took_damage) {
+        for (const auto& attack : pending_attacks) {
+            if (attack.payload.damage_amount > 0 || attack.damage_amount > 0) {
+                on_hit(attack);
+                break;
+            }
+        }
+    }
     on_process_pending_attacks(self);
 }
 
 void CustomAssetController::on_pre_delete(Asset& self) {
-    on_parent_pre_delete(self);
+    on_pre_delete_hook(self);
 }
 
 void CustomAssetController::on_orphaned(Asset& self, Asset* former_parent) {
-    on_child_orphaned(self, former_parent);
+    on_orphaned_hook(self, former_parent);
 }
 
 Assets* CustomAssetController::assets() const {
     return self_ ? self_->get_assets() : nullptr;
+}
+
+runtime::context::GameRuntimeContext* CustomAssetController::mutable_runtime_game_context() const {
+    Assets* owner_assets = assets();
+    return owner_assets ? &owner_assets->mutable_game_context() : nullptr;
 }
 
 void CustomAssetController::initialize_anchor_candidate_children() {
@@ -312,6 +344,8 @@ std::string CustomAssetController::owner_identity_for_anchor_candidates() const 
     return "asset";
 }
 
+void CustomAssetController::on_init() {}
+
 void CustomAssetController::on_update(const Input&) {
     Asset* self = self_ptr();
     if (self && self->info && self->anim_ && self->default_controller_animation_enforced()) {
@@ -332,18 +366,27 @@ void CustomAssetController::on_update(const Input&) {
     }
 }
 
-void CustomAssetController::on_process_pending_attacks(Asset& self) {
-    if (self.has_pending_attacks()) {
-        orphan_eligible_children(self);
-    }
-    custom_controllers::AttackProcessingHelper::process_pending_attacks(self);
+void CustomAssetController::on_attack(const animation_update::Attack&) {}
+
+void CustomAssetController::on_hit(const animation_update::Attack&) {}
+
+void CustomAssetController::on_death() {}
+
+void CustomAssetController::on_no_pending_attacks() {}
+
+custom_controllers::AttackProcessingConfig CustomAssetController::attack_processing_config() const {
+    return {};
 }
 
-void CustomAssetController::on_parent_pre_delete(Asset& self) {
+void CustomAssetController::on_process_pending_attacks(Asset& self) {
+    (void)self;
+}
+
+void CustomAssetController::on_pre_delete_hook(Asset& self) {
     orphan_eligible_children(self);
 }
 
-void CustomAssetController::on_child_orphaned(Asset& self, Asset* former_parent) {
+void CustomAssetController::on_orphaned_hook(Asset& self, Asset* former_parent) {
     (void)former_parent;
     Assets* owner_assets = self.get_assets();
     if (!owner_assets) {

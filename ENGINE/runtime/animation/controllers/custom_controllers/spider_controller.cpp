@@ -1,15 +1,9 @@
 #include "spider_controller.hpp"
-#include "animation/controllers/shared/custom_controller_update_utils.hpp"
-#include "animation/animation_update.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "assets/asset/Asset.hpp"
-#include <iostream>
-#include "animation/controllers/shared/attack_processing_helper.hpp"
-namespace animation_update::custom_controllers {}
-namespace custom_controllers = animation_update::custom_controllers;
 
 spider_controller::spider_controller(Asset* self)
     : CustomAssetController(self) {
-        std::cout<<"Spider Controller Connected";
     Asset* owner = self_ptr();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
@@ -23,7 +17,7 @@ void spider_controller::on_update(const Input& in) {
     if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
-    Asset* player = animation_update::custom_controllers::resolve_valid_player_target(ctx);
+    Asset* player = custom_controller_api::resolve_valid_player_target(ctx);
 
     if (!player) {
         return;
@@ -36,5 +30,5 @@ void spider_controller::on_update(const Input& in) {
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {
-    custom_controllers::AttackProcessingHelper::process_pending_attacks(self);
+    CustomAssetController::on_process_pending_attacks(self);
 }

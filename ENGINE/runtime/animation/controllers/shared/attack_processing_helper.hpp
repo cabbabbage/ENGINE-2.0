@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <string_view>
+#include <vector>
 
 namespace animation_update {
 struct Attack;
@@ -21,8 +22,18 @@ struct AttackProcessingConfig {
     std::string_view death_fallback_tag = "break";
 };
 
+struct AttackProcessingSummary {
+    bool had_pending_attacks = false;
+    bool took_damage = false;
+    bool died = false;
+};
+
 class AttackProcessingHelper {
 public:
+    static AttackProcessingSummary process_attacks(
+        Asset& self,
+        const std::vector<animation_update::Attack>& attacks,
+        const AttackProcessingConfig& config = AttackProcessingConfig{});
     static void process_pending_attacks(
         Asset& self,
         const AttackProcessingConfig& config = AttackProcessingConfig{});

@@ -23613,7 +23613,9 @@
               "max_instances": 1,
               "min_instances": 1,
               "name": "spawn",
-              "required_children": []
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "spawn"
             }
           ]
         },
@@ -23629,7 +23631,9 @@
               "max_instances": 3,
               "min_instances": 3,
               "name": "NewRoom",
-              "required_children": []
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "NewRoom"
             }
           ]
         }
@@ -23647,21 +23651,21 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
+            123,
             36,
-            119,
+            242,
             255
           ],
           "edge_smoothness": 2,
           "geometry": "Square",
           "inherits_map_assets": false,
           "is_boss": false,
-          "is_spawn": false,
           "max_height": 4000,
           "max_width": 2392,
           "min_height": 1812,
           "min_width": 1472,
           "name": "NewRoom",
+          "room_tags": [],
           "spawn_groups": [
             {
               "candidates": [
@@ -24054,21 +24058,21 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            85,
+            187,
             242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
           "geometry": "Square",
           "inherits_map_assets": true,
           "is_boss": false,
-          "is_spawn": true,
           "max_height": 4000,
           "max_width": 4000,
           "min_height": 4000,
           "min_width": 4000,
           "name": "spawn",
+          "room_tags": [],
           "spawn_groups": [
             {
               "candidates": [
@@ -24425,7 +24429,6 @@
           "geometry": "Line",
           "inherits_map_assets": false,
           "is_boss": false,
-          "is_spawn": false,
           "max_height": 1472,
           "max_width": 1472,
           "min_height": 1080,

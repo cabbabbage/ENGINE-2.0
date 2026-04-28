@@ -40,6 +40,7 @@ class PreviewProvider;
 class AsyncTaskQueue;
 class AudioImporter;
 class AnimationListContextMenu;
+class CustomControllerService;
 
 using DMButton = ::DMButton;
 using DMCheckbox = ::DMCheckbox;
@@ -208,6 +209,7 @@ class AnimationEditorWindow {
 
     Assets* assets_ = nullptr;
     Asset* target_asset_ = nullptr;
+    std::unique_ptr<CustomControllerService> custom_controller_service_;
 
 };
 

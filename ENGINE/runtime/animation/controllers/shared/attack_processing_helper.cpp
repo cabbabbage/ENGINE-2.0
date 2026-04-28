@@ -107,7 +107,15 @@ void AttackProcessingHelper::apply_knockback(Asset& self, SDL_Point delta) {
 void AttackProcessingHelper::process_pending_attacks(
     Asset& self,
     const AttackProcessingConfig& config) {
-    const auto pending_attacks = self.process_pending_attacks();
+    (void)process_attacks(self, self.process_pending_attacks(), config);
+}
+
+AttackProcessingSummary AttackProcessingHelper::process_attacks(
+    Asset& self,
+    const std::vector<animation_update::Attack>& pending_attacks,
+    const AttackProcessingConfig& config) {
+    AttackProcessingSummary summary{};
+    summary.had_pending_attacks = !pending_attacks.empty();
     bool took_damage = false;
     std::optional<SDL_Point> strongest_knockback{};
     for (const auto& attack : pending_attacks) {
@@ -145,27 +153,32 @@ void AttackProcessingHelper::process_pending_attacks(
     }
 
     if (self.runtime_health <= 0) {
+        summary.took_damage = took_damage;
+        summary.died = true;
         if (!try_play_death_animation(self, config)) {
             self.Delete();
         }
-        return;
+        return summary;
     }
 
     if (strongest_knockback.has_value()) {
+        summary.took_damage = took_damage;
         apply_knockback(self, *strongest_knockback);
-        return;
+        return summary;
     }
 
     if (!took_damage) {
-        return;
+        return summary;
     }
+    summary.took_damage = true;
     if (try_set_animation(self, config.hit_animation_id)) {
-        return;
+        return summary;
     }
     if (config.hit_fallback_animation_id.empty()) {
-        return;
+        return summary;
     }
     (void)try_set_animation(self, config.hit_fallback_animation_id);
+    return summary;
 }
 
 } // namespace animation_update::custom_controllers

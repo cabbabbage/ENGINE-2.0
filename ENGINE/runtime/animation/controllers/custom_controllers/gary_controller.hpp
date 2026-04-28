@@ -1,5 +1,5 @@
 #pragma once
-#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/controllers/shared/wander_controller_behavior.hpp"
 
 class Asset;

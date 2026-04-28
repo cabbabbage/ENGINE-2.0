@@ -1,16 +1,8 @@
-// CONTROLLER_META_BEGIN
-// Controller: vibble_controller
-// Asset: vibble (type: object)
-// Available animations [1]:
-//   - default
-// Generated: 2026-03-17 23:48:57
-// CONTROLLER_META_END
-
 #include "vibble_controller.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
-#include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
@@ -238,9 +230,9 @@ void vibble_controller::movement(const Input& input) {
 
 
     if (reverse_selected_animation) {
-        animation_update::custom_controllers::begin_reverse_current_animation_until_stop(player);
+        custom_controller_api::begin_reverse_current_animation_until_stop(player);
     } else {
-        animation_update::custom_controllers::stop_reverse_current_animation(player);
+        custom_controller_api::stop_reverse_current_animation(player);
     }
 
     if (has_pixel_motion) {
@@ -418,7 +410,7 @@ void vibble_controller::apply_idle_facing(const std::string& animation_id) {
     }
     const std::string resolved_animation =
         animation_id.empty() ? std::string{animation_update::detail::kDefaultAnimation} : animation_id;
-    animation_update::custom_controllers::stop_reverse_current_animation(player);
+    custom_controller_api::stop_reverse_current_animation(player);
     player->anim_->set_animation(resolved_animation);
 }
 
@@ -435,10 +427,14 @@ void vibble_controller::start_dash() {
 }
 
 void vibble_controller::on_process_pending_attacks(Asset& self) {
-    animation_update::custom_controllers::AttackProcessingConfig config;
+    CustomAssetController::on_process_pending_attacks(self);
+}
+
+custom_controller_api::AttackProcessingConfig vibble_controller::attack_processing_config() const {
+    custom_controller_api::AttackProcessingConfig config;
     config.hit_animation_id = "hit";
     config.death_animation_id = "die";
     config.hit_fallback_animation_id = animation_update::detail::kDefaultAnimation;
     config.death_fallback_tag = "break";
-    animation_update::custom_controllers::AttackProcessingHelper::process_pending_attacks(self, config);
+    return config;
 }

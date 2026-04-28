@@ -22,8 +22,9 @@ constexpr std::uint32_t kOrbitRefreshMaxFramesMad = 500;
 constexpr int kOrbitHeightMinOffset = 300;
 constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
-constexpr int kOrbitRadiusMin = 20;
-constexpr int kOrbitRadiusMax = 900;
+constexpr int kOrbitRadiusMin = 12;
+constexpr int kOrbitRadiusMax = 220;
+constexpr int kAggressiveOrbitRadius = 30;
 constexpr double kTwoPi = 6.28318530717958647692;
 constexpr std::uint64_t kGoldenRatio64 = 0x9e3779b97f4a7c15ULL;
 
@@ -228,9 +229,11 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
     } else if (context.player_is_valid() && context.resolved_player) {
         candidate = SDL_Point{
             context.resolved_player->world_x() +
-                static_cast<int>(std::lround(std::cos(context.frame_id * 0.1) * 50.0)),
+                static_cast<int>(std::lround(std::cos(context.frame_id * 0.1) *
+                                             static_cast<double>(kAggressiveOrbitRadius))),
             context.resolved_player->world_z() +
-                static_cast<int>(std::lround(std::sin(context.frame_id * 0.1) * 50.0))
+                static_cast<int>(std::lround(std::sin(context.frame_id * 0.1) *
+                                             static_cast<double>(kAggressiveOrbitRadius)))
         };
     } else {
         candidate = anchor;

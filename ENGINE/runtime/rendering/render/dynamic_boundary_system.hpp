@@ -51,6 +51,8 @@ public:
         int          world_z = 0;
         int          texture_w = 0;
         int          texture_h = 0;
+        float        spawn_tilt_degrees = 0.0f;
+        float        spawn_y_offset_px = 0.0f;
 
         int   boundary_type_index = 0;
         int   candidate_index = 0;
@@ -105,6 +107,8 @@ public:
         std::string resolved_asset_name;
         bool is_null = true;
         float size_variation_sample = 0.0f;
+        float spawn_tilt_degrees = 0.0f;
+        float spawn_y_offset_px = 0.0f;
     };
 
     struct FrameState {

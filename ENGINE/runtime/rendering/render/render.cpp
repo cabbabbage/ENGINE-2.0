@@ -1351,7 +1351,7 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         }
 
         const float half_width = sprite.world_width * 0.5f;
-        const float adjusted_y = base_screen.y + boundary_vertical_offset;
+        const float adjusted_y = base_screen.y + boundary_vertical_offset + sprite.spawn_y_offset_px;
         if (base_screen.x + half_width < -boundary_cull_margin ||
             base_screen.x - half_width > static_cast<float>(screen_width_) + boundary_cull_margin ||
             adjusted_y < -boundary_cull_margin ||
@@ -1370,6 +1370,18 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - sprite.world_height};
         vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
         vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
+        if (std::isfinite(sprite.spawn_tilt_degrees) && std::fabs(sprite.spawn_tilt_degrees) > 1e-4f) {
+            const float radians = sprite.spawn_tilt_degrees * (3.14159265358979323846f / 180.0f);
+            const float cos_v = std::cos(radians);
+            const float sin_v = std::sin(radians);
+            const SDL_FPoint pivot{base_screen.x, adjusted_y};
+            for (SDL_Vertex& vertex : vertices) {
+                const float local_x = vertex.position.x - pivot.x;
+                const float local_y = vertex.position.y - pivot.y;
+                vertex.position.x = pivot.x + local_x * cos_v - local_y * sin_v;
+                vertex.position.y = pivot.y + local_x * sin_v + local_y * cos_v;
+            }
+        }
         vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
         vertices[0].tex_coord = SDL_FPoint{pad_x, pad_y};
         vertices[1].tex_coord = SDL_FPoint{1.0f - pad_x, pad_y};

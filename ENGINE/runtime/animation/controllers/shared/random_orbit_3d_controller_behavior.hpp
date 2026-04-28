@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <random>
+#include <array>
 #include <vector>
 
 #include "core/axis_convention.hpp"
@@ -45,6 +46,8 @@ private:
 
     bool should_enter_orbit(const axis::WorldPos& self_pos) const;
     bool should_exit_orbit(const axis::WorldPos& self_pos) const;
+    double speed_multiplier() const;
+    void randomize_orbit_plane();
 
     axis::WorldPos blended_retarget_target() const;
     void calibrate_orbit_phase(const axis::WorldPos& self_pos, const axis::WorldPos& center);
@@ -73,6 +76,8 @@ private:
     double angular_velocity_ = 0.0;
     double approach_wave_phase_ = 0.0;
     double retarget_alpha_ = 1.0;
+    std::array<double, 3> orbit_plane_u_{1.0, 0.0, 0.0};
+    std::array<double, 3> orbit_plane_v_{0.0, 0.0, 1.0};
 };
 
 } // namespace animation_update::custom_controllers

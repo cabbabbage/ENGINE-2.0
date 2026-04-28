@@ -52,6 +52,25 @@ inline float clamp_unit_interval(float value, float fallback) {
     return std::clamp(value, 0.0f, 1.0f);
 }
 
+float sample_uniform_unit_from_hash(std::uint64_t key_hash, std::uint64_t salt) {
+    const std::uint64_t mixed = render_overlay::mix_uint64(key_hash, salt);
+    const std::uint32_t bucket = static_cast<std::uint32_t>(mixed & 0xFFFFFFFFull);
+    return static_cast<float>(bucket) / static_cast<float>(std::numeric_limits<std::uint32_t>::max());
+}
+
+float sample_range_from_hash(std::uint64_t key_hash, std::uint64_t salt, float min_value, float max_value) {
+    if (!std::isfinite(min_value)) min_value = 0.0f;
+    if (!std::isfinite(max_value)) max_value = 0.0f;
+    if (max_value < min_value) {
+        std::swap(min_value, max_value);
+    }
+    if (std::fabs(max_value - min_value) <= 1e-6f) {
+        return min_value;
+    }
+    const float t = sample_uniform_unit_from_hash(key_hash, salt);
+    return min_value + (max_value - min_value) * t;
+}
+
 inline SDL_Point rounded_world_point(const SDL_FPoint& point) {
     return SDL_Point{
         static_cast<int>(std::lround(point.x)),
@@ -620,6 +639,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         sprite.world_pos = assignment.world_pos;
         sprite.screen_pos = screen_pos;
         sprite.world_z = assignment.world_z;
+        sprite.spawn_tilt_degrees = assignment.assignment.spawn_tilt_degrees;
+        sprite.spawn_y_offset_px = assignment.assignment.spawn_y_offset_px;
         sprite.texture_w = frame_variant->width;
         sprite.texture_h = frame_variant->height;
         if (sprite.texture_w <= 0 || sprite.texture_h <= 0) {
@@ -754,6 +775,27 @@ const DynamicBoundarySystem::BoundaryAssignment& DynamicBoundarySystem::select_c
         assignment.resolved_asset_name = resolved->resolved_asset_name;
         assignment.is_null = false;
         assignment.size_variation_sample = sample_size_variation_from_hash(key_hash);
+        int tilt_min = std::clamp(resolved->info->tilt_range_min_deg, -180, 180);
+        int tilt_max = std::clamp(resolved->info->tilt_range_max_deg, -180, 180);
+        if (tilt_max < tilt_min) {
+            std::swap(tilt_min, tilt_max);
+        }
+        assignment.spawn_tilt_degrees = sample_range_from_hash(
+            key_hash,
+            0x9D8E4F6A21C3B5D7ull,
+            static_cast<float>(tilt_min),
+            static_cast<float>(tilt_max));
+
+        int y_min = std::clamp(resolved->info->y_pos_min, -50, 200);
+        int y_max = std::clamp(resolved->info->y_pos_max, -50, 200);
+        if (y_max < y_min) {
+            std::swap(y_min, y_max);
+        }
+        assignment.spawn_y_offset_px = sample_range_from_hash(
+            key_hash,
+            0x6A31BF4CE9D20587ull,
+            static_cast<float>(y_min),
+            static_cast<float>(y_max));
     }
 
     auto [inserted_it, inserted] = boundary_assignments_.emplace(key, std::move(assignment));

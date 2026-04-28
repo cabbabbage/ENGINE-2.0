@@ -80,6 +80,8 @@ bool same_config(const RandomOrbit3DControllerBehaviorConfig& lhs,
            lhs.approach_vertical_wave_px == rhs.approach_vertical_wave_px &&
            almost_equal(lhs.orbit_angular_velocity_radians, rhs.orbit_angular_velocity_radians) &&
            almost_equal(lhs.retarget_blend_step, rhs.retarget_blend_step) &&
+           almost_equal(lhs.non_aggressive_speed_multiplier, rhs.non_aggressive_speed_multiplier) &&
+           almost_equal(lhs.aggressive_speed_multiplier, rhs.aggressive_speed_multiplier) &&
            lhs.debug_enabled == rhs.debug_enabled &&
            lhs.override_non_locked == rhs.override_non_locked;
 }
@@ -103,6 +105,7 @@ RandomOrbit3DControllerBehavior::RandomOrbit3DControllerBehavior(
     orbit_radius_goal_ =
         std::max(24.0, static_cast<double>(config_.orbit_radius_px) * orbit_radius_jitter_(rng_));
     orbit_radius_current_ = std::max(24.0, static_cast<double>(config_.orbit_radius_px));
+    randomize_orbit_plane();
 
     if (!controller_) {
         return;
@@ -206,10 +209,11 @@ void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in) {
             self->anim_->auto_move_3d(
                 checkpoints, false, visited_thresh, resolution_override, config_.override_non_locked);
             if (!self->needs_target) {
+                const double speed = speed_multiplier();
                 orbit_angle_ = wrap_angle(
-                    orbit_angle_ + angular_velocity_ * static_cast<double>(checkpoints.size()));
+                    orbit_angle_ + (angular_velocity_ * speed) * static_cast<double>(checkpoints.size()));
                 orbit_radius_current_ += (orbit_radius_goal_ - orbit_radius_current_) * 0.25;
-                approach_wave_phase_ = wrap_angle(approach_wave_phase_ + 0.25);
+                approach_wave_phase_ = wrap_angle(approach_wave_phase_ + 0.25 * speed);
             }
         }
     } else {
@@ -223,7 +227,7 @@ void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in) {
             self->anim_->auto_move_3d(
                 checkpoints, false, visited_thresh, resolution_override, config_.override_non_locked);
             if (!self->needs_target) {
-                approach_wave_phase_ = wrap_angle(approach_wave_phase_ + 0.55);
+                approach_wave_phase_ = wrap_angle(approach_wave_phase_ + 0.55 * speed_multiplier());
                 if (phase_ == Phase::RetargetTransition && retarget_alpha_ >= 1.0) {
                     phase_ = Phase::Approach;
                 }
@@ -260,6 +264,7 @@ bool RandomOrbit3DControllerBehavior::ingest_target_snapshot(
         target_version_ = target_version;
         phase_ = Phase::Approach;
         retarget_alpha_ = 1.0;
+        randomize_orbit_plane();
         calibrate_orbit_phase(self_pos, target_);
         orbit_radius_current_ = std::max(24.0, planar_distance(self_pos, target_));
         return true;
@@ -270,6 +275,7 @@ bool RandomOrbit3DControllerBehavior::ingest_target_snapshot(
     target_version_ = target_version;
     phase_ = Phase::RetargetTransition;
     retarget_alpha_ = 0.0;
+    randomize_orbit_plane();
 
     const double angle_to_new_target = std::atan2(
         static_cast<double>(self_pos.z - target_.z),
@@ -348,6 +354,60 @@ bool RandomOrbit3DControllerBehavior::should_exit_orbit(const axis::WorldPos& se
         config_.orbit_exit_distance_px,
         std::max(config_.orbit_enter_distance_px, config_.orbit_radius_px + 32) + 40);
     return distance_3d(self_pos, target_) > static_cast<double>(exit_distance);
+}
+
+double RandomOrbit3DControllerBehavior::speed_multiplier() const {
+    if (!controller_) {
+        return std::max(0.1, config_.non_aggressive_speed_multiplier);
+    }
+    const auto& ctx = controller_->game_context();
+    const double configured = ctx.room_flies_aggressive()
+        ? config_.aggressive_speed_multiplier
+        : config_.non_aggressive_speed_multiplier;
+    return std::max(0.1, configured);
+}
+
+void RandomOrbit3DControllerBehavior::randomize_orbit_plane() {
+    std::uniform_real_distribution<double> unit01(0.0, 1.0);
+    const double phi = unit01(rng_) * kTau;
+    const double cos_theta = 1.0 - (2.0 * unit01(rng_));
+    const double sin_theta = std::sqrt(std::max(0.0, 1.0 - cos_theta * cos_theta));
+    const std::array<double, 3> normal{
+        std::cos(phi) * sin_theta,
+        cos_theta,
+        std::sin(phi) * sin_theta
+    };
+
+    std::array<double, 3> reference{0.0, 1.0, 0.0};
+    if (std::abs(normal[1]) > 0.9) {
+        reference = {1.0, 0.0, 0.0};
+    }
+
+    const std::array<double, 3> u_raw{
+        reference[1] * normal[2] - reference[2] * normal[1],
+        reference[2] * normal[0] - reference[0] * normal[2],
+        reference[0] * normal[1] - reference[1] * normal[0]
+    };
+    const double u_len = std::sqrt(u_raw[0] * u_raw[0] + u_raw[1] * u_raw[1] + u_raw[2] * u_raw[2]);
+    if (u_len <= 1e-6) {
+        orbit_plane_u_ = {1.0, 0.0, 0.0};
+        orbit_plane_v_ = {0.0, 0.0, 1.0};
+        return;
+    }
+    orbit_plane_u_ = {u_raw[0] / u_len, u_raw[1] / u_len, u_raw[2] / u_len};
+
+    const std::array<double, 3> v_raw{
+        normal[1] * orbit_plane_u_[2] - normal[2] * orbit_plane_u_[1],
+        normal[2] * orbit_plane_u_[0] - normal[0] * orbit_plane_u_[2],
+        normal[0] * orbit_plane_u_[1] - normal[1] * orbit_plane_u_[0]
+    };
+    const double v_len = std::sqrt(v_raw[0] * v_raw[0] + v_raw[1] * v_raw[1] + v_raw[2] * v_raw[2]);
+    if (v_len <= 1e-6) {
+        orbit_plane_u_ = {1.0, 0.0, 0.0};
+        orbit_plane_v_ = {0.0, 0.0, 1.0};
+        return;
+    }
+    orbit_plane_v_ = {v_raw[0] / v_len, v_raw[1] / v_len, v_raw[2] / v_len};
 }
 
 axis::WorldPos RandomOrbit3DControllerBehavior::blended_retarget_target() const {
@@ -442,6 +502,7 @@ std::vector<axis::WorldPos> RandomOrbit3DControllerBehavior::build_orbit_checkpo
         (orbit_radius_current_ <= 1.0 ? planar_distance(self_pos, target_) : orbit_radius_current_) +
             (desired_radius - orbit_radius_current_) * 0.25);
     const double vertical_amp = std::max(0.0, static_cast<double>(config_.orbit_vertical_amplitude_px));
+    const double speed = speed_multiplier();
 
     auto push_unique = [&](const axis::WorldPos& point) {
         if (!checkpoints.empty() && same_world_pos(checkpoints.back(), point)) {
@@ -451,11 +512,16 @@ std::vector<axis::WorldPos> RandomOrbit3DControllerBehavior::build_orbit_checkpo
     };
 
     for (int idx = 1; idx <= steps; ++idx) {
-        const double angle = orbit_angle_ + angular_velocity_ * static_cast<double>(idx);
+        const double angle = orbit_angle_ + (angular_velocity_ * speed) * static_cast<double>(idx);
+        const double cos_angle = std::cos(angle);
+        const double sin_angle = std::sin(angle);
+        const double vertical_wave = std::sin(angle + approach_wave_phase_ * 0.5) * vertical_amp;
+        const double radial_u = cos_angle * radius;
+        const double radial_v = sin_angle * radius;
         const axis::WorldPos point{
-            target_.x + static_cast<int>(std::lround(std::cos(angle) * radius)),
-            target_.y + static_cast<int>(std::lround(std::sin(angle + approach_wave_phase_ * 0.5) * vertical_amp)),
-            target_.z + static_cast<int>(std::lround(std::sin(angle) * radius))
+            target_.x + static_cast<int>(std::lround(orbit_plane_u_[0] * radial_u + orbit_plane_v_[0] * radial_v)),
+            target_.y + static_cast<int>(std::lround(orbit_plane_u_[1] * radial_u + orbit_plane_v_[1] * radial_v + vertical_wave)),
+            target_.z + static_cast<int>(std::lround(orbit_plane_u_[2] * radial_u + orbit_plane_v_[2] * radial_v))
         };
         push_unique(point);
     }

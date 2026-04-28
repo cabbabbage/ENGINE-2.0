@@ -15453,8 +15453,50 @@
           "attack_boxes": [
             []
           ],
+          "box_schema_version": 1,
           "hit_boxes": [
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -15510,6 +15552,51 @@
                 "scaling_method": "real_3d_point",
                 "texture_x": 6,
                 "texture_y": 5
+              }
+            ]
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
               }
             ]
           ],
@@ -15575,8 +15662,50 @@
           "attack_boxes": [
             []
           ],
+          "box_schema_version": 1,
           "hit_boxes": [
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -15635,6 +15764,51 @@
               }
             ]
           ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "locked": false,
           "on_end": "default",
           "source": {
@@ -15676,8 +15850,50 @@
           "attack_boxes": [
             []
           ],
+          "box_schema_version": 1,
           "hit_boxes": [
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -15739,8 +15955,50 @@
           "attack_boxes": [
             []
           ],
+          "box_schema_version": 1,
           "hit_boxes": [
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -15802,8 +16060,50 @@
           "attack_boxes": [
             []
           ],
+          "box_schema_version": 1,
           "hit_boxes": [
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -15865,8 +16165,50 @@
           "attack_boxes": [
             []
           ],
+          "box_schema_version": 1,
           "hit_boxes": [
-            []
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
+              }
+            ]
           ],
           "invert_x": false,
           "invert_y": false,
@@ -15922,6 +16264,51 @@
                 "scaling_method": "real_3d_point",
                 "texture_x": 6,
                 "texture_y": 5
+              }
+            ]
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 0,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 0
+                  },
+                  {
+                    "texture_x": 13,
+                    "texture_y": 10
+                  },
+                  {
+                    "texture_x": 0,
+                    "texture_y": 10
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 11,
+                "extrusion_forward": 10,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 0,
+                  "y": 0
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 10,
+                  "w": 13
+                },
+                "type": "hitbox"
               }
             ]
           ],
@@ -25923,10 +26310,10 @@
       "schema_version": 1,
       "trails_data": {
         "basic": {
-          "camera_center_dx": -255,
-          "camera_center_dz": -614,
-          "camera_height_px": 332,
-          "camera_tilt_deg": 31.7884521484375,
+          "camera_center_dx": 1372,
+          "camera_center_dz": -2411,
+          "camera_height_px": 369,
+          "camera_tilt_deg": 45.06768798828125,
           "camera_zoom_percent": 0,
           "curvyness": 10,
           "display_color": [

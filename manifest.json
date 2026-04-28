@@ -23616,10 +23616,26 @@
               "required_children": []
             }
           ]
+        },
+        {
+          "bounding_extent": 2330.3252991803524,
+          "level": 1,
+          "max_rooms": 3,
+          "min_rooms": 3,
+          "name": "layer_1",
+          "ring_radius": 10159.0,
+          "rooms": [
+            {
+              "max_instances": 3,
+              "min_instances": 3,
+              "name": "NewRoom",
+              "required_children": []
+            }
+          ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 10000
+        "min_edge_distance": 5000
       },
       "map_name": "forrest",
       "rooms_data": {
@@ -23631,9 +23647,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            124,
             242,
             36,
+            119,
             255
           ],
           "edge_smoothness": 2,
@@ -24038,9 +24054,9 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -24386,8 +24402,8 @@
             }
           ],
           "trail_connection_sector": {
-            "direction_deg": 0.0,
-            "width_percent": 100
+            "direction_deg": 180.0,
+            "width_percent": 60
           }
         }
       },

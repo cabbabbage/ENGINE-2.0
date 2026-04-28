@@ -176,3 +176,58 @@ TEST_CASE("normalize_map_manifest normalizes trail connection sector defaults an
 
     CHECK_FALSE(normalized.map_manifest["trails_data"]["trail_template"].contains("trail_connection_sector"));
 }
+
+TEST_CASE("normalize_map_manifest migrates legacy spawn fields to layer-0 authority") {
+    nlohmann::json map_manifest = manifest::build_default_map_manifest("spawn_migration_case");
+    map_manifest["schema_version"] = manifest::kMapSchemaVersion;
+    map_manifest["rooms_data"]["legacy_spawn"] = nlohmann::json::object({
+        {"name", "legacy_spawn"},
+        {"geometry", "Square"},
+        {"min_width", 400},
+        {"max_width", 400},
+        {"min_height", 400},
+        {"max_height", 400},
+        {"is_spawn", true}
+    });
+    map_manifest["map_layers"] = nlohmann::json::array({
+        nlohmann::json::object({
+            {"level", 0},
+            {"name", "layer_0"},
+            {"rooms", nlohmann::json::array({
+                nlohmann::json::object({
+                    {"source_type", "room_tag"},
+                    {"value", "forest"}
+                }),
+                nlohmann::json::object({
+                    {"source_type", "room_name"},
+                    {"value", "legacy_spawn"}
+                })
+            })}
+        })
+    });
+
+    const std::filesystem::path root = std::filesystem::path("C:/tmp/manifest_normalizer_test");
+    const manifest::MapManifestNormalizationResult normalized =
+        manifest::normalize_map_manifest(map_manifest, "spawn_migration_case", root);
+
+    REQUIRE(normalized.map_manifest["map_layers"].is_array());
+    REQUIRE(normalized.map_manifest["map_layers"].size() >= 1);
+    const nlohmann::json& layer0 = normalized.map_manifest["map_layers"][0];
+    REQUIRE(layer0.contains("rooms"));
+    REQUIRE(layer0["rooms"].is_array());
+    REQUIRE(layer0["rooms"].size() == 1);
+    CHECK(layer0["rooms"][0].value("source_type", std::string()) == "room_name");
+    CHECK(layer0["rooms"][0].value("min_instances", 0) == 1);
+    CHECK(layer0["rooms"][0].value("max_instances", 0) == 1);
+    CHECK(layer0.value("min_rooms", 0) == 1);
+    CHECK(layer0.value("max_rooms", 0) == 1);
+
+    bool found_legacy_spawn_flag = false;
+    for (auto it = normalized.map_manifest["rooms_data"].begin(); it != normalized.map_manifest["rooms_data"].end(); ++it) {
+        if (it.value().is_object() && it.value().contains("is_spawn")) {
+            found_legacy_spawn_flag = true;
+            break;
+        }
+    }
+    CHECK_FALSE(found_legacy_spawn_flag);
+}

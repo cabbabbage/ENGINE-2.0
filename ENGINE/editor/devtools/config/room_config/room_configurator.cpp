@@ -1,6 +1,7 @@
 #include "room_configurator.hpp"
 
 #include "DockableCollapsible.hpp"
+#include "core/AssetsManager.hpp"
 #include "dm_styles.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "tag_editor_widget.hpp"
@@ -164,6 +165,64 @@ bool append_unique(std::vector<std::string>& options, const std::string& value) 
     }
     options.push_back(value);
     return true;
+}
+
+std::vector<std::string> collect_room_tag_recommendations(const Assets* assets,
+                                                          const std::string& current_room_name) {
+    std::vector<std::string> recommendations;
+    if (!assets) {
+        return recommendations;
+    }
+    const nlohmann::json& map_info = assets->map_info_json();
+    if (!map_info.is_object()) {
+        return recommendations;
+    }
+    auto rooms_it = map_info.find("rooms_data");
+    if (rooms_it == map_info.end() || !rooms_it->is_object()) {
+        return recommendations;
+    }
+
+    auto add_tag = [&](const std::string& raw) {
+        std::string normalized = tag_utils::normalize(raw);
+        if (normalized.empty()) {
+            return;
+        }
+        if (std::find(recommendations.begin(), recommendations.end(), normalized) == recommendations.end()) {
+            recommendations.push_back(std::move(normalized));
+        }
+    };
+    auto add_from_array = [&](const nlohmann::json& arr) {
+        if (!arr.is_array()) {
+            return;
+        }
+        for (const auto& entry : arr) {
+            if (entry.is_string()) {
+                add_tag(entry.get<std::string>());
+            }
+        }
+    };
+
+    for (auto it = rooms_it->begin(); it != rooms_it->end(); ++it) {
+        if (it.key() == current_room_name || !it.value().is_object()) {
+            continue;
+        }
+        const auto& room_entry = it.value();
+        if (room_entry.contains("room_tags")) {
+            add_from_array(room_entry["room_tags"]);
+        }
+        if (room_entry.contains("tags")) {
+            const auto& section = room_entry["tags"];
+            if (section.is_array()) {
+                add_from_array(section);
+            } else if (section.is_object()) {
+                if (section.contains("include")) add_from_array(section["include"]);
+                if (section.contains("tags")) add_from_array(section["tags"]);
+            }
+        }
+    }
+
+    std::sort(recommendations.begin(), recommendations.end());
+    return recommendations;
 }
 
 class TrailConnectionSectorWidget final : public Widget {
@@ -464,7 +523,6 @@ struct RoomConfigurator::State {
     int curvyness = 2;
     double trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
     int trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
-    bool is_spawn = false;
     bool is_boss = false;
     bool inherits_assets = false;
 
@@ -544,10 +602,6 @@ struct RoomConfigurator::State {
             std::clamp(trail_connection_width_percent, kTrailSectorMinWidthPercent, kTrailSectorMaxWidthPercent);
         if (clamped_width != trail_connection_width_percent) {
             trail_connection_width_percent = clamped_width;
-            mutated = true;
-        }
-        if (is_spawn && is_boss) {
-            is_boss = false;
             mutated = true;
         }
         return mutated;
@@ -651,11 +705,6 @@ struct RoomConfigurator::State {
             }
         }
 
-        if (auto value = read_json_bool(src, "is_spawn")) {
-            is_spawn = *value;
-        } else {
-            is_spawn = false;
-        }
         if (auto value = read_json_bool(src, "is_boss")) {
             is_boss = *value;
         } else {
@@ -701,7 +750,6 @@ struct RoomConfigurator::State {
         if (!dest.is_object()) dest = nlohmann::json::object();
         dest["name"] = name;
         dest["geometry"] = geometry;
-        dest["is_spawn"] = is_spawn;
         dest["is_boss"] = is_boss;
         dest["inherits_map_assets"] = inherits_assets;
         dest["edge_smoothness"] = edge_smoothness;
@@ -753,7 +801,7 @@ nlohmann::json build_metadata_snapshot_json(const nlohmann::json& canonical_meta
         snapshot = canonical_metadata;
     }
     if (include_tags) {
-        snapshot["tags"] = sorted_strings_json(tags);
+        snapshot["room_tags"] = sorted_strings_json(tags);
         snapshot["anti_tags"] = sorted_strings_json(anti_tags);
     }
     return snapshot;
@@ -794,10 +842,10 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     if (include_trail_connection_sector) {
         copy_field("trail_connection_sector");
     }
-    copy_field("is_spawn");
     copy_field("is_boss");
     copy_field("inherits_map_assets");
     if (include_tags) {
+        copy_field("room_tags");
         copy_field("tags");
         copy_field("anti_tags");
     }
@@ -1131,7 +1179,6 @@ void RoomConfigurator::refresh_base_panel_rows() {
     if (types_panel_) {
         DockableCollapsible::Rows rows;
         DockableCollapsible::Row toggles;
-        if (spawn_widget_) toggles.push_back(spawn_widget_.get());
         if (boss_widget_) toggles.push_back(boss_widget_.get());
         if (inherit_widget_) toggles.push_back(inherit_widget_.get());
         if (!toggles.empty()) {
@@ -1382,7 +1429,6 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
             new_state.curvyness != state_->curvyness ||
             std::abs(new_state.trail_connection_direction_deg - state_->trail_connection_direction_deg) > 1e-6 ||
             new_state.trail_connection_width_percent != state_->trail_connection_width_percent ||
-            new_state.is_spawn != state_->is_spawn ||
             new_state.is_boss != state_->is_boss ||
             new_state.inherits_assets != state_->inherits_assets;
     }
@@ -1390,10 +1436,10 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     bool tags_changed = false;
     if (include_tags) {
         std::vector<std::string> prev_include = sorted_strings(room_tags_);
-        std::vector<std::string> prev_exclude = sorted_strings(room_anti_tags_);
+        std::vector<std::string> prev_exclude = is_trail_context_ ? sorted_strings(room_anti_tags_) : std::vector<std::string>{};
         load_tags_from_json(source_object);
         std::vector<std::string> include = sorted_strings(room_tags_);
-        std::vector<std::string> exclude = sorted_strings(room_anti_tags_);
+        std::vector<std::string> exclude = is_trail_context_ ? sorted_strings(room_anti_tags_) : std::vector<std::string>{};
         tags_changed = (include != prev_include) || (exclude != prev_exclude);
     }
 
@@ -1422,7 +1468,11 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
 
     nlohmann::json canonical_metadata = nlohmann::json::object();
     state_->apply_to_json(canonical_metadata, allow_height, false, include_trail_connection_sector);
-    nlohmann::json new_snapshot = build_metadata_snapshot_json(canonical_metadata, room_tags_, room_anti_tags_, include_tags);
+    nlohmann::json new_snapshot = build_metadata_snapshot_json(
+        canonical_metadata,
+        room_tags_,
+        is_trail_context_ ? room_anti_tags_ : std::vector<std::string>{},
+        include_tags);
     std::size_t new_snapshot_hash = hash_metadata_snapshot(new_snapshot);
     const bool snapshot_changed = (new_snapshot_hash != metadata_snapshot_hash_);
 
@@ -1739,14 +1789,6 @@ void RoomConfigurator::rebuild_rows_internal() {
     }
 
     if (!is_trail_context_) {
-        spawn_checkbox_ = std::make_unique<DMCheckbox>("Spawn", state_->is_spawn);
-        spawn_widget_ = std::make_unique<CheckboxWidget>(spawn_checkbox_.get());
-    } else {
-        spawn_checkbox_.reset();
-        spawn_widget_.reset();
-    }
-
-    if (!is_trail_context_) {
         boss_checkbox_ = std::make_unique<DMCheckbox>("Boss", state_->is_boss);
         boss_widget_ = std::make_unique<CheckboxWidget>(boss_checkbox_.get());
     } else {
@@ -1759,12 +1801,16 @@ void RoomConfigurator::rebuild_rows_internal() {
 
     if (!room_metadata_only_mode_) {
         tag_editor_ = std::make_unique<TagEditorWidget>();
-        tag_editor_->set_tags(room_tags_, room_anti_tags_);
+        tag_editor_->set_tags(room_tags_, is_trail_context_ ? room_anti_tags_ : std::vector<std::string>{});
+        if (!is_trail_context_) {
+            tag_editor_->set_recommended_tags(collect_room_tag_recommendations(assets_, state_ ? state_->name : std::string{}));
+        }
         tag_editor_->set_on_changed([this](const std::vector<std::string>& include,
                                            const std::vector<std::string>& exclude) {
-            if (include != room_tags_ || exclude != room_anti_tags_) {
+            const std::vector<std::string> normalized_exclude = is_trail_context_ ? exclude : std::vector<std::string>{};
+            if (include != room_tags_ || normalized_exclude != room_anti_tags_) {
                 room_tags_ = include;
-                room_anti_tags_ = exclude;
+                room_anti_tags_ = normalized_exclude;
                 tags_dirty_ = true;
                 this->request_container_layout();
             }
@@ -2016,14 +2062,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
-    if (spawn_checkbox_) {
-        bool value = spawn_checkbox_->value();
-        if (value != state_->is_spawn) {
-            state_->is_spawn = value;
-            changed = true;
-        }
-    }
-
     if (boss_checkbox_) {
         bool value = boss_checkbox_->value();
         if (value != state_->is_boss) {
@@ -2042,11 +2080,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
 
     if (state_->ensure_valid(allow_height, true)) {
         changed = true;
-    }
-
-    if (state_->is_spawn && state_->is_boss) {
-        state_->is_boss = false;
-        if (boss_checkbox_) boss_checkbox_->set_value(false);
     }
 
     if (trail_connection_sector_widget_) {
@@ -2083,7 +2116,11 @@ bool RoomConfigurator::sync_state_from_widgets() {
         const bool include_tags = !room_metadata_only_mode_;
         nlohmann::json canonical_metadata = nlohmann::json::object();
         state_->apply_to_json(canonical_metadata, allow_height, false, include_trail_connection_sector);
-        nlohmann::json new_snapshot = build_metadata_snapshot_json(canonical_metadata, room_tags_, room_anti_tags_, include_tags);
+        nlohmann::json new_snapshot = build_metadata_snapshot_json(
+            canonical_metadata,
+            room_tags_,
+            is_trail_context_ ? room_anti_tags_ : std::vector<std::string>{},
+            include_tags);
         std::size_t new_snapshot_hash = hash_metadata_snapshot(new_snapshot);
         if (new_snapshot_hash != metadata_snapshot_hash_) {
             if (!loaded_json_.is_object()) {
@@ -2207,44 +2244,62 @@ void RoomConfigurator::load_tags_from_json(const nlohmann::json& data) {
 };
 
     if (data.is_object()) {
+        if (data.contains("room_tags")) {
+            read_array(data["room_tags"], include);
+        }
         if (data.contains("tags")) {
             const auto& section = data["tags"];
             if (section.is_object()) {
                 if (section.contains("include")) read_array(section["include"], include);
                 if (section.contains("tags")) read_array(section["tags"], include);
-                if (section.contains("exclude")) read_array(section["exclude"], exclude);
-                if (section.contains("anti_tags")) read_array(section["anti_tags"], exclude);
+                if (is_trail_context_) {
+                    if (section.contains("exclude")) read_array(section["exclude"], exclude);
+                    if (section.contains("anti_tags")) read_array(section["anti_tags"], exclude);
+                }
             } else if (section.is_array()) {
                 read_array(section, include);
             }
         }
-        if (data.contains("anti_tags")) {
+        if (is_trail_context_ && data.contains("anti_tags")) {
             read_array(data["anti_tags"], exclude);
         }
     }
 
     room_tags_.assign(include.begin(), include.end());
-    room_anti_tags_.assign(exclude.begin(), exclude.end());
+    if (is_trail_context_) {
+        room_anti_tags_.assign(exclude.begin(), exclude.end());
+    } else {
+        room_anti_tags_.clear();
+    }
 }
 
 void RoomConfigurator::write_tags_to_json(nlohmann::json& object) const {
     if (!object.is_object()) {
         object = nlohmann::json::object();
     }
-    if (room_tags_.empty() && room_anti_tags_.empty()) {
-        object.erase("tags");
+    if (is_trail_context_) {
+        if (room_tags_.empty() && room_anti_tags_.empty()) {
+            object.erase("tags");
+            object.erase("anti_tags");
+            object.erase("room_tags");
+            return;
+        }
+
+        nlohmann::json section = nlohmann::json::object();
+        if (!room_tags_.empty()) {
+            section["include"] = room_tags_;
+        }
+        if (!room_anti_tags_.empty()) {
+            section["exclude"] = room_anti_tags_;
+        }
+        object["tags"] = std::move(section);
         object.erase("anti_tags");
+        object["room_tags"] = room_tags_;
         return;
     }
 
-    nlohmann::json section = nlohmann::json::object();
-    if (!room_tags_.empty()) {
-        section["include"] = room_tags_;
-    }
-    if (!room_anti_tags_.empty()) {
-        section["exclude"] = room_anti_tags_;
-    }
-    object["tags"] = std::move(section);
+    object["room_tags"] = room_tags_;
+    object.erase("tags");
     object.erase("anti_tags");
 }
 

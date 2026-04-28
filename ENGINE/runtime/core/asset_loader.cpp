@@ -443,6 +443,9 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                 throw std::runtime_error(
                     std::string("[AssetLoader] map_graph planning failed for map '") + map_id_ + "'.");
         }
+        map_boundary_data_ = bind_object_section("map_boundary_data");
+        rooms_data_        = bind_object_section("rooms_data");
+        trails_data_       = bind_object_section("trails_data");
 
         map_layers_ = graph_plan.resolved_layers;
         nlohmann::json resolved_layers_json = nlohmann::json::array();

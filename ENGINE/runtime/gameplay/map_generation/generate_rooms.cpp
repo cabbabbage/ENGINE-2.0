@@ -115,23 +115,11 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
     }
 
     if (map_layers_[0].rooms.empty()) {
-        std::string fallback_name = "spawn";
-        if (rooms_data.is_object()) {
-            for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
-                if (it.value().is_object() && it.value().value("is_spawn", false)) {
-                    fallback_name = it.key();
-                    break;
-                }
-            }
-        }
         RoomSpec rs;
-        rs.name = fallback_name;
+        rs.name = "Spawn";
         rs.max_instances = 1;
         map_layers_[0].rooms.push_back(rs);
-
-        vibble::log::warn(
-            std::string("[GenerateRooms] Layer 0 had no room spec. Using fallback root '") +
-            fallback_name + "'");
+        vibble::log::warn("[GenerateRooms] Layer 0 had no room spec. Using default root 'Spawn'.");
     }
 
     const auto& root_spec = map_layers_[0].rooms[0];
@@ -154,7 +142,6 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
         entry["min_height"] = diameter;
         entry["max_height"] = diameter;
         entry["edge_smoothness"] = 2;
-        entry["is_spawn"] = true;
         entry["is_boss"] = false;
         entry["inherits_map_assets"] = false;
         entry["spawn_groups"] = nlohmann::json::array();

@@ -1125,8 +1125,6 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out.erase("radius");
         out.erase("min_radius");
         out.erase("max_radius");
-        bool is_spawn = assets_json.value("is_spawn", false);
-        out["is_spawn"] = is_spawn;
 	out["is_boss"] = assets_json.value("is_boss", false);
 	out["inherits_map_assets"] = assets_json.value("inherits_map_assets", false);
         json spawn_groups = json::array();
@@ -1136,7 +1134,6 @@ nlohmann::json Room::create_static_room_json(std::string name) {
                 cx = c.x;
                 cy = c.y;
 	}
-        bool has_player_asset = false;
         for (const auto& uptr : assets) {
                 const Asset* a = uptr.get();
                 if (!a || !a->info) continue;
@@ -1157,21 +1154,6 @@ nlohmann::json Room::create_static_room_json(std::string name) {
                 entry["candidates"].push_back({{"name", "null"}, {"chance", 0}});
                 entry["candidates"].push_back({{"name", a->info->name}, {"chance", 100}});
                 spawn_groups.push_back(std::move(entry));
-                if (a->info->type == asset_types::player) {
-                        has_player_asset = true;
-                }
-        }
-        if (is_spawn && !has_player_asset) {
-                json davey_entry;
-                davey_entry["min_number"] = 1;
-                davey_entry["max_number"] = 1;
-                davey_entry["position"] = "Center";
-                davey_entry["enforce_spacing"] = false;
-                davey_entry["display_name"] = "Vibble";
-                davey_entry["candidates"] = json::array();
-                davey_entry["candidates"].push_back({{"name", "null"}, {"chance", 0}});
-                davey_entry["candidates"].push_back({{"name", "Vibble"}, {"chance", 100}});
-                spawn_groups.push_back(std::move(davey_entry));
         }
         out["spawn_groups"] = std::move(spawn_groups);
         return out;
@@ -1196,7 +1178,7 @@ const nlohmann::json& Room::assets_data() const {
 }
 
 bool Room::is_spawn_room() const {
-        return assets_json.value("is_spawn", false);
+        return false;
 }
 
 SDL_Color Room::display_color() const {

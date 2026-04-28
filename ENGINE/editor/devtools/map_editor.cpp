@@ -369,9 +369,17 @@ void MapEditor::apply_camera_to_bounds() {
 }
 
 Room* MapEditor::find_spawn_room() const {
-    if (!rooms_) return nullptr;
+    if (assets_) {
+        const std::vector<Room*> layer_zero_rooms = assets_->game_context().rooms_in_layer(0);
+        if (!layer_zero_rooms.empty() && layer_zero_rooms.front()) {
+            return layer_zero_rooms.front();
+        }
+    }
+    if (!rooms_) {
+        return nullptr;
+    }
     for (Room* room : *rooms_) {
-        if (room && room->is_spawn_room()) {
+        if (room && room->room_area) {
             return room;
         }
     }

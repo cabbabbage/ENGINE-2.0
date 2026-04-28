@@ -5207,7 +5207,6 @@ void DevControls::create_trail_template() {
         entry["min_height"] = 200;
         entry["max_height"] = 200;
         entry["inherits_map_assets"] = true;
-        entry["is_spawn"] = false;
         entry["is_boss"] = false;
         entry["edge_smoothness"] = 8;
         entry["curvyness"] = 4;
@@ -5367,9 +5366,15 @@ void DevControls::handle_map_selection() {
 }
 
 Room* DevControls::find_spawn_room() const {
+    if (assets_) {
+        const std::vector<Room*> layer_zero_rooms = assets_->game_context().rooms_in_layer(0);
+        if (!layer_zero_rooms.empty() && layer_zero_rooms.front()) {
+            return layer_zero_rooms.front();
+        }
+    }
     if (!rooms_) return nullptr;
     for (Room* room : *rooms_) {
-        if (room && room->is_spawn_room()) {
+        if (room && room->room_area) {
             return room;
         }
     }

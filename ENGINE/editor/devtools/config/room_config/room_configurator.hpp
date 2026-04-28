@@ -188,8 +188,6 @@ private:
     std::unique_ptr<StepperWidget> sector_width_widget_;
     std::unique_ptr<DMButton> sector_reset_button_;
     std::unique_ptr<ButtonWidget> sector_reset_widget_;
-    std::unique_ptr<DMCheckbox> spawn_checkbox_;
-    std::unique_ptr<CheckboxWidget> spawn_widget_;
     std::unique_ptr<DMCheckbox> boss_checkbox_;
     std::unique_ptr<CheckboxWidget> boss_widget_;
     std::unique_ptr<DMCheckbox> inherit_checkbox_;

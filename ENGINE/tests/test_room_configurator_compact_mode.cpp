@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <nlohmann/json.hpp>
 
 #include "config/room_config/room_configurator.hpp"
@@ -16,7 +17,6 @@ nlohmann::json square_room_fixture() {
         {"max_height", 1024},
         {"edge_smoothness", 4},
         {"curvyness", 3},
-        {"is_spawn", true},
         {"is_boss", false},
         {"inherits_map_assets", true},
         {"camera_height_px", 1450},
@@ -34,7 +34,6 @@ nlohmann::json circle_room_fixture() {
         {"max_radius", 320},
         {"edge_smoothness", 2},
         {"curvyness", 1},
-        {"is_spawn", false},
         {"is_boss", true},
         {"inherits_map_assets", false}
     });
@@ -58,7 +57,6 @@ TEST_CASE("RoomConfigurator compact mode preserves room metadata and existing ca
     CHECK(saved.value("max_height", 0) == 1024);
     CHECK(saved.value("edge_smoothness", 0) == 4);
     CHECK(saved.value("curvyness", 0) == 3);
-    CHECK(saved.value("is_spawn", false));
     CHECK_FALSE(saved.value("is_boss", true));
     CHECK(saved.value("inherits_map_assets", false));
     CHECK_FALSE(saved.contains("tags"));
@@ -87,7 +85,6 @@ TEST_CASE("RoomConfigurator compact mode migrates legacy radius to width and hei
     CHECK_FALSE(saved.contains("max_radius"));
     CHECK(saved.value("edge_smoothness", 0) == 2);
     CHECK(saved.value("curvyness", 0) == 1);
-    CHECK_FALSE(saved.value("is_spawn", true));
     CHECK(saved.value("is_boss", false));
     CHECK_FALSE(saved.value("inherits_map_assets", true));
 }
@@ -154,4 +151,26 @@ TEST_CASE("RoomConfigurator compact mode normalizes trail connection sector valu
     REQUIRE(saved["trail_connection_sector"].is_object());
     CHECK(saved["trail_connection_sector"].value("direction_deg", -1.0) == doctest::Approx(270.0));
     CHECK(saved["trail_connection_sector"].value("width_percent", -1) == 25);
+}
+
+TEST_CASE("RoomConfigurator room context writes canonical room_tags and drops anti-tag fields") {
+    RoomConfigurator configurator;
+
+    nlohmann::json source = square_room_fixture();
+    source["room_tags"] = nlohmann::json::array({"combat", "treasure"});
+    source["tags"] = nlohmann::json::object({
+        {"include", nlohmann::json::array({"legacy"})},
+        {"exclude", nlohmann::json::array({"deprecated"})}
+    });
+    source["anti_tags"] = nlohmann::json::array({"not_used"});
+
+    configurator.open(source);
+    const nlohmann::json saved = configurator.build_json();
+
+    REQUIRE(saved.contains("room_tags"));
+    REQUIRE(saved["room_tags"].is_array());
+    CHECK(std::find(saved["room_tags"].begin(), saved["room_tags"].end(), "combat") != saved["room_tags"].end());
+    CHECK(std::find(saved["room_tags"].begin(), saved["room_tags"].end(), "treasure") != saved["room_tags"].end());
+    CHECK_FALSE(saved.contains("tags"));
+    CHECK_FALSE(saved.contains("anti_tags"));
 }

@@ -394,6 +394,7 @@ bool MapLayersController::add_candidate_internal(int layer_index,
                                                  const std::string& value) {
     if (!validate_layer_index(layer_index)) return false;
     if (value.empty()) return false;
+    if (layer_index == 0 && source_type != "room_name") return false;
     auto* layer_json = layer(layer_index);
     if (!layer_json) return false;
     auto& rooms = (*layer_json)["rooms"];
@@ -558,10 +559,16 @@ bool MapLayersController::add_candidate_child(int layer_index, int candidate_ind
 
     bool child_layer_changed = false;
     auto child_it = std::find_if(child_rooms.begin(), child_rooms.end(), [&](const json& entry) {
-        return entry.is_object() && entry.value("name", std::string()) == child_room;
+        if (!entry.is_object()) return false;
+        const std::string source = entry.value("source_type", std::string("room_name"));
+        if (source != "room_name") return false;
+        const std::string value = entry.value("value", entry.value("name", std::string()));
+        return value == child_room;
     });
     if (child_it == child_rooms.end()) {
         json child_candidate = {
+            {"source_type", "room_name"},
+            {"value", child_room},
             {"name", child_room},
             {"min_instances", 0},
             {"max_instances", 1},
@@ -761,8 +768,8 @@ void MapLayersController::clamp_layer_counts(json& layer) const {
         }
         json& spawn_entry = rooms_ref[0];
         normalize_candidate_shape(spawn_entry);
+        spawn_entry["source_type"] = "room_name";
         if (spawn_entry.value("value", std::string()).empty()) {
-            spawn_entry["source_type"] = "room_name";
             spawn_entry["value"] = kDefaultSpawnRoomName;
             spawn_entry["name"] = kDefaultSpawnRoomName;
         }

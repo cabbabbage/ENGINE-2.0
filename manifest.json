@@ -23687,24 +23687,6 @@
               "value": "NewRoom"
             }
           ]
-        },
-        {
-          "bounding_extent": 2330.3252991803524,
-          "level": 3,
-          "max_rooms": 15,
-          "min_rooms": 7,
-          "name": "layer_3",
-          "ring_radius": 29481.0,
-          "rooms": [
-            {
-              "max_instances": 15,
-              "min_instances": 7,
-              "name": "NewRoom",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "NewRoom"
-            }
-          ]
         }
       ],
       "map_layers_settings": {
@@ -23720,9 +23702,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
             242,
-            115,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -24127,9 +24109,9 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            173,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -24196,6 +24178,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 1,
               "quantity": 1,
               "resolution": 9,
               "resolve_geometry_to_room_size": true,

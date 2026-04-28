@@ -1534,6 +1534,10 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
     const float min_fade_seconds = std::max(0.0f, realism.light_min_fade_seconds);
     const float fade_in_seconds = std::max(min_fade_seconds, std::max(0.0f, realism.light_fade_in_seconds));
     const float fade_out_seconds = std::max(min_fade_seconds, std::max(0.0f, realism.light_fade_out_seconds));
+    const float light_max_cull_depth = std::max(1.0f, realism.light_max_cull_depth);
+    const float distance_fade_start_ratio = std::clamp(realism.light_distance_fade_start_ratio, 0.0f, 0.999f);
+    const float distance_fade_start_depth = light_max_cull_depth * distance_fade_start_ratio;
+    const float distance_fade_span = std::max(32.0f, light_max_cull_depth - distance_fade_start_depth);
     const float dt_seconds = std::clamp(assets_->frame_delta_seconds(), 0.0f, 0.25f);
     const std::uint64_t frame_token = static_cast<std::uint64_t>(assets_->frame_id());
 
@@ -1679,6 +1683,21 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             ++runtime_light_culled_count_;
         }
 
+        const float light_depth_distance = static_cast<float>(std::fabs(
+            render_depth::depth_from_anchor(focus_plane_world_z, static_cast<double>(resolved->world_exact_z))));
+        float depth_fade_alpha = 0.0f;
+        if (std::isfinite(light_depth_distance) && light_depth_distance < light_max_cull_depth) {
+            if (light_depth_distance <= distance_fade_start_depth) {
+                depth_fade_alpha = 1.0f;
+            } else {
+                const float t = std::clamp((light_depth_distance - distance_fade_start_depth) / distance_fade_span,
+                                           0.0f,
+                                           1.0f);
+                const float smoothstep_t = t * t * (3.0f - 2.0f * t);
+                depth_fade_alpha = 1.0f - smoothstep_t;
+            }
+        }
+
         if (broadphase.light_id >= runtime_light_cache_.size()) {
             runtime_light_cache_.resize(static_cast<std::size_t>(broadphase.light_id) + 1);
         }
@@ -1687,7 +1706,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         cache_entry.last_seen_frame = frame_token;
         cache_entry.fade.last_seen_frame = frame_token;
 
-        const float target_intensity = enabled_and_overlapping ? light.intensity : 0.0f;
+        const float target_intensity = enabled_and_overlapping
+            ? light.intensity * depth_fade_alpha
+            : 0.0f;
         if (!fade_smoothing_enabled) {
             cache_entry.fade.intensity_current = target_intensity;
         } else {

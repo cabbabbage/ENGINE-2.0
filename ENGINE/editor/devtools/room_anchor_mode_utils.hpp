@@ -61,7 +61,7 @@ std::string make_unique_anchor_name(const std::string& desired_name,
                                     const std::vector<std::string>& existing_names,
                                     const std::string& excluded_name = {});
 
-std::string next_default_anchor_name(const std::vector<std::string>& existing_names);
+std::string next_default_anchor_name(const std::vector<std::string>& existing_names, AnchorPointOwner owner);
 
 SDL_Point default_anchor_position_for_frame(int frame_width, int frame_height);
 

@@ -781,6 +781,11 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     settings_.light_min_fade_seconds = std::min(settings_.light_min_fade_seconds, 2.0f);
     settings_.light_fade_in_seconds = std::max(settings_.light_fade_in_seconds, settings_.light_min_fade_seconds);
     settings_.light_fade_out_seconds = std::max(settings_.light_fade_out_seconds, settings_.light_min_fade_seconds);
+    if (!std::isfinite(settings_.light_distance_fade_start_ratio)) {
+        settings_.light_distance_fade_start_ratio = 0.8f;
+    }
+    settings_.light_distance_fade_start_ratio =
+        std::clamp(settings_.light_distance_fade_start_ratio, 0.0f, 0.999f);
     if (!std::isfinite(settings_.blur_px) || settings_.blur_px < 0.0f) {
         settings_.blur_px = 0.0f;
     }
@@ -1531,6 +1536,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
     read_float("light_fade_out_seconds", updated.light_fade_out_seconds, 0.0f, 5.0f);
     read_float("light_min_fade_seconds", updated.light_min_fade_seconds, 0.0f, 2.0f);
+    read_float("light_distance_fade_start_ratio", updated.light_distance_fade_start_ratio, 0.0f, 0.999f);
     read_bool("light_culling_debug_overlay", updated.light_culling_debug_overlay);
     const bool has_blur_px = read_float_present("blur_px", updated.blur_px, 0.0f, 128.0f);
     if (!has_blur_px) {
@@ -1621,6 +1627,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;
     result["light_fade_out_seconds"] = settings_.light_fade_out_seconds;
     result["light_min_fade_seconds"] = settings_.light_min_fade_seconds;
+    result["light_distance_fade_start_ratio"] = settings_.light_distance_fade_start_ratio;
     result["light_culling_debug_overlay"] = settings_.light_culling_debug_overlay;
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;

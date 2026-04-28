@@ -20026,6 +20026,13 @@
             "candidates": []
           },
           "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_1",
+          "candidates": {
+            "candidates": []
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -20033,40 +20040,30 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ]
           ],
@@ -21131,402 +21128,226 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ]
           ],
@@ -22696,402 +22517,226 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 137,
-                "texture_y": 317
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ],
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
-                "name": "eyes_oval_center",
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.6899999976158142,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 3910.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 162,
-                "texture_y": 184
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "neck_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 0,
-                "texture_y": 0
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "melee_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 403
-              },
-              {
-                "depth_offset": 0.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "hand_oval_center",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 365
+                "texture_x": 258,
+                "texture_y": 198
               }
             ]
           ],
@@ -24560,7 +24205,7 @@
       "camera_settings": {
         "base_height_px": 720.0,
         "behind_layer_light_strength_multiplier": 0.7199999690055847,
-        "blur_px": 1.4299999475479126,
+        "blur_px": 3.1599998474121094,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
@@ -24568,8 +24213,8 @@
         "dynamic_renderer_depth_efficiency_depth": 2037.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "front_layer_light_strength_multiplier": 1.0199999809265137,
-        "layer_depth_curve": 62.189998626708984,
-        "layer_depth_interval": 763.0,
+        "layer_depth_curve": 21.75,
+        "layer_depth_interval": 68.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -24585,7 +24230,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 11.479999542236328,
+        "radial_blur_px": 9.179999351501465,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -24724,9 +24369,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -25084,9 +24729,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
-            85,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -25190,16 +24835,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -2450,
-          "camera_center_dz": -2658,
-          "camera_height_px": 578,
-          "camera_tilt_deg": 28.29129981994629,
-          "camera_zoom_percent": 43,
+          "camera_center_dx": -2442,
+          "camera_center_dz": -3745,
+          "camera_height_px": 489,
+          "camera_tilt_deg": 29.5625057220459,
+          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,

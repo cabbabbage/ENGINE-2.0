@@ -14382,7 +14382,8 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
             bool frame_changed = false;
             for (const auto& anchor : frame->anchor_points) {
                 if (!devmode::room_anchor_mode::anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
-                    frame_changed = true;
+                    // Preserve anchors owned by other modes (for example oval center or non-light anchors while in light mode).
+                    deduped.push_back(anchor);
                     continue;
                 }
                 if (!seen_names.insert(anchor.name).second) {
@@ -14670,7 +14671,7 @@ bool RoomEditor::add_anchor_in_current_frame() {
             }
         }
     }
-    const std::string new_anchor_name = devmode::room_anchor_mode::next_default_anchor_name(existing_names);
+    const std::string new_anchor_name = devmode::room_anchor_mode::next_default_anchor_name(existing_names, owner);
     if (new_anchor_name.empty()) {
         return false;
     }
@@ -15244,10 +15245,10 @@ bool RoomEditor::add_oval_mapping() {
             existing_names.insert(mapping.name);
         }
     }
-    std::string name = "oval";
+    std::string name = "oval_anchorpoint_1";
     int suffix = 1;
     while (existing_names.find(name) != existing_names.end()) {
-        name = "oval_" + std::to_string(++suffix);
+        name = "oval_anchorpoint_" + std::to_string(++suffix);
     }
 
     AssetInfo::OvalAnchorMapping mapping{};

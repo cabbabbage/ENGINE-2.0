@@ -7,6 +7,7 @@
 namespace oval_anchor_math {
 
 constexpr float kPi = 3.14159265358979323846f;
+constexpr float kInherentAngleOffsetDegrees = 45.0f;
 
 inline float normalize_angle_degrees(float degrees) {
     if (!std::isfinite(degrees)) {
@@ -33,7 +34,8 @@ inline float angle_degrees_from_xz_vector(float x, float z) {
     if (!std::isfinite(x) || !std::isfinite(z)) {
         return 0.0f;
     }
-    return normalize_angle_degrees(static_cast<float>(std::atan2(z, x) * (180.0 / kPi)));
+    const float raw_angle = static_cast<float>(std::atan2(z, x) * (180.0 / kPi));
+    return normalize_angle_degrees(raw_angle - kInherentAngleOffsetDegrees);
 }
 
 inline int rounded_int(float value) {
@@ -60,7 +62,8 @@ inline void compute_xz_offsets_from_angle(float angle_degrees,
     const float clamped_height = (std::isfinite(height_radius_z) && height_radius_z > 0.0f)
         ? height_radius_z
         : 1.0f;
-    const float radians = normalize_angle_degrees(angle_degrees) * (kPi / 180.0f);
+    const float radians =
+        normalize_angle_degrees(angle_degrees + kInherentAngleOffsetDegrees) * (kPi / 180.0f);
     out_offset_x = rounded_int(std::cos(radians) * clamped_width);
     out_offset_z = rounded_int(std::sin(radians) * clamped_height);
 }

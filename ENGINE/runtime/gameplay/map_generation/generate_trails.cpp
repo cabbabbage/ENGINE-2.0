@@ -46,6 +46,7 @@ constexpr int kTrailContactGateIterations = 24;
 constexpr double kTrailContactGateStepWorldPx = 24.0;
 constexpr int kTrailRoutePairBudget = 256;
 constexpr double kRoomMarginDistanceWorldPx = 750.0;
+constexpr double kTrailEndpointContainmentSafetyWorldPx = 12.0;
 constexpr double kCurvyRouteAmplitudeScaleWorldPx = 24.0;
 constexpr double kCurvyRouteSampleSpacingBaseWorldPx = 140.0;
 constexpr double kCurvyRouteSampleSpacingMinWorldPx = 56.0;
@@ -116,6 +117,20 @@ enum class TrailFailureReason {
     NoValidSectorContacts,
     SectorBoundaryZoneViolation,
     RouteSearchBudgetExceeded,
+    EndpointContainmentFailedStart,
+    EndpointContainmentFailedEnd,
+};
+
+struct EndpointFrame {
+    SDL_Point contact{0, 0};
+    SDL_Point margin{0, 0};
+    Vec2 outward{1.0, 0.0};
+    double inside_depth = kTrailEndpointContainmentSafetyWorldPx;
+};
+
+struct EndpointAllowance {
+    double start_distance = 0.0;
+    double end_distance = 0.0;
 };
 
 struct TrailAttemptStats {
@@ -211,6 +226,8 @@ const char* failure_reason_name(TrailFailureReason reason) {
         case TrailFailureReason::NoValidSectorContacts: return "no_valid_sector_contacts";
         case TrailFailureReason::SectorBoundaryZoneViolation: return "sector_boundary_zone_violation";
         case TrailFailureReason::RouteSearchBudgetExceeded: return "route_search_budget_exceeded";
+        case TrailFailureReason::EndpointContainmentFailedStart: return "endpoint_containment_failed_start";
+        case TrailFailureReason::EndpointContainmentFailedEnd: return "endpoint_containment_failed_end";
         default: return "unknown";
     }
 }
@@ -1262,6 +1279,51 @@ SDL_Point room_margin_point(const SDL_Point& room_center, const SDL_Point& room_
     return to_point(margin);
 }
 
+EndpointFrame make_endpoint_frame(const SDL_Point& room_center,
+                                  const SDL_Point& room_edge_contact,
+                                  double inside_depth) {
+    EndpointFrame frame;
+    frame.contact = room_edge_contact;
+    frame.margin = room_margin_point(room_center, room_edge_contact);
+    frame.outward = normalize_or_default(subtract(to_vec2(room_edge_contact), to_vec2(room_center)), Vec2{1.0, 0.0});
+    frame.inside_depth = std::max(0.0, inside_depth);
+    return frame;
+}
+
+SDL_Point endpoint_inside_tip(const EndpointFrame& frame) {
+    return to_point(subtract(to_vec2(frame.contact), scale(frame.outward, frame.inside_depth)));
+}
+
+std::vector<SDL_Point> build_centerline_with_endpoint_frames(const EndpointFrame& start_frame,
+                                                             const std::vector<SDL_Point>& routed_points,
+                                                             const EndpointFrame& end_frame) {
+    std::vector<SDL_Point> points;
+    points.reserve(routed_points.size() + 6);
+    points.push_back(endpoint_inside_tip(start_frame));
+    points.push_back(start_frame.contact);
+    points.push_back(start_frame.margin);
+    points.insert(points.end(), routed_points.begin(), routed_points.end());
+    points.push_back(end_frame.margin);
+    points.push_back(end_frame.contact);
+    points.push_back(endpoint_inside_tip(end_frame));
+    return dedupe_consecutive_points(points);
+}
+
+double endpoint_required_depth_from_section(const TrailSection& section) {
+    const double half_width = std::max(0.0, length(subtract(section.left, section.right)) * 0.5);
+    return std::ceil(half_width + kTrailEndpointContainmentSafetyWorldPx);
+}
+
+bool endpoint_section_contained(const TrailSection& section, const Area* room_area) {
+    if (!room_area) {
+        return false;
+    }
+    const SDL_Point center = to_point(section.center);
+    const SDL_Point left = to_point(section.left);
+    const SDL_Point right = to_point(section.right);
+    return room_area->contains_point(center) && room_area->contains_point(left) && room_area->contains_point(right);
+}
+
 bool polyline_is_valid_for_route(const std::vector<SDL_Point>& points,
                                  Room* room_a,
                                  Room* room_b,
@@ -1526,10 +1588,15 @@ bool centerline_is_valid(Room* room_a,
                          const std::vector<RoomObstacle>& room_obstacles,
                          const std::vector<TrailObstacle>& existing_trails,
                          TrailAttemptStats* stats,
-                         bool allow_connected_room_interior) {
+                         bool allow_connected_room_interior,
+                         const EndpointAllowance& allowance = EndpointAllowance{}) {
+    const double total_distance = validation_samples.empty() ? 0.0 : validation_samples.back().distance;
     for (std::size_t i = 0; i < validation_samples.size(); ++i) {
         const CenterlineSample& sample = validation_samples[i];
         const SDL_Point point = to_point(sample.point);
+        const bool within_start_allowance = sample.distance <= std::max(0.0, allowance.start_distance) + 1e-6;
+        const bool within_end_allowance =
+            (total_distance - sample.distance) <= std::max(0.0, allowance.end_distance) + 1e-6;
         if (point_inside_blocking_room(point, room_a, room_b, room_obstacles)) {
             if (stats) {
                 ++stats->centerline_room_rejections;
@@ -1537,9 +1604,13 @@ bool centerline_is_valid(Room* room_a,
             }
             return false;
         }
-        if (point_inside_any_room(point, room_a ? room_a->room_area.get() : nullptr, room_b ? room_b->room_area.get() : nullptr)) {
+        const bool in_room_a = room_a && room_a->room_area && room_a->room_area->contains_point(point);
+        const bool in_room_b = room_b && room_b->room_area && room_b->room_area->contains_point(point);
+        if (in_room_a || in_room_b) {
             const bool endpoint_sample = (i == 0 || i + 1 == validation_samples.size());
-            if (!allow_connected_room_interior && !endpoint_sample) {
+            const bool in_allowed_endpoint_zone =
+                (in_room_a && within_start_allowance) || (in_room_b && within_end_allowance);
+            if (!allow_connected_room_interior && !endpoint_sample && !in_allowed_endpoint_zone) {
                 if (stats) {
                     ++stats->centerline_room_rejections;
                     stats->last_failure = TrailFailureReason::BlockedByRoom;
@@ -1549,6 +1620,9 @@ bool centerline_is_valid(Room* room_a,
             continue;
         }
         if (point_inside_existing_trail(point, existing_trails)) {
+            if (within_start_allowance || within_end_allowance) {
+                continue;
+            }
             if (stats) {
                 ++stats->centerline_trail_rejections;
                 stats->last_failure = TrailFailureReason::BlockedByTrail;
@@ -1814,7 +1888,8 @@ bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_p
                                       const std::vector<TrailObstacle>& existing_trails,
                                       std::mt19937& rng,
                                       TrailAttemptStats* stats,
-                                      TrailBuildResult* out_result) {
+                                      TrailBuildResult* out_result,
+                                      const EndpointAllowance& endpoint_allowance = EndpointAllowance{}) {
     if (!out_result) {
         if (stats) {
             stats->last_failure = TrailFailureReason::InvalidArgs;
@@ -1890,7 +1965,8 @@ bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_p
                              room_obstacles,
                              existing_trails,
                              stats,
-                             false)) {
+                             false,
+                             endpoint_allowance)) {
         return false;
     }
 
@@ -1966,6 +2042,7 @@ bool attempt_trail_connection(Room* a,
     const std::string name = config.value("name", trail_name.empty() ? std::string("trail_segment") : trail_name);
     const int routing_clearance_px = std::max(8, max_width / 2 + 12);
     const int gate_clearance_px = std::max(4, max_width / 3);
+    const double default_endpoint_depth = kTrailEndpointContainmentSafetyWorldPx;
 
     const SDL_Point a_center = a->room_area->get_center();
     const SDL_Point b_center = b->room_area->get_center();
@@ -2019,10 +2096,10 @@ bool attempt_trail_connection(Room* a,
         ++route_pair_attempts;
         const SDL_Point start_contact = a_contacts[pair.a_index];
         const SDL_Point end_contact = b_contacts[pair.b_index];
-        const SDL_Point start_margin = room_margin_point(a_center, start_contact);
-        const SDL_Point end_margin = room_margin_point(b_center, end_contact);
-        std::vector<SDL_Point> start_leg{start_contact, start_margin};
-        std::vector<SDL_Point> end_leg{end_margin, end_contact};
+        EndpointFrame start_frame = make_endpoint_frame(a_center, start_contact, default_endpoint_depth);
+        EndpointFrame end_frame = make_endpoint_frame(b_center, end_contact, default_endpoint_depth);
+        std::vector<SDL_Point> start_leg{start_frame.contact, start_frame.margin};
+        std::vector<SDL_Point> end_leg{end_frame.margin, end_frame.contact};
         if (!polyline_is_valid_for_anchor_exit(start_leg, a, a, b, room_obstacles, existing_trails, gate_clearance_px)) {
             continue;
         }
@@ -2032,7 +2109,7 @@ bool attempt_trail_connection(Room* a,
         saw_route_candidate = true;
 
         RouteSearchResult route = build_routed_polyline(
-            start_margin, end_margin, a, b, room_obstacles, existing_trails, routing_clearance_px);
+            start_frame.margin, end_frame.margin, a, b, room_obstacles, existing_trails, routing_clearance_px);
         if (route.budget_exhausted) {
             route_budget_exhausted = true;
             continue;
@@ -2044,7 +2121,7 @@ bool attempt_trail_connection(Room* a,
             continue;
         }
 
-        std::vector<SDL_Point> base_centerline = stitch_route_with_contacts(start_contact, route.points, end_contact);
+        std::vector<SDL_Point> base_centerline = build_centerline_with_endpoint_frames(start_frame, route.points, end_frame);
         if (base_centerline.size() < 2) {
             continue;
         }
@@ -2070,6 +2147,10 @@ bool attempt_trail_connection(Room* a,
                 required_distances.push_back(cumulative[cumulative.size() - 2]);
             }
 
+            EndpointAllowance allowance;
+            allowance.start_distance = start_frame.inside_depth + kRoomMarginDistanceWorldPx + 1.0;
+            allowance.end_distance = end_frame.inside_depth + kRoomMarginDistanceWorldPx + 1.0;
+
             layout_start = clock::now();
             if (!build_trail_layout_from_polyline(centerline_points,
                                                   min_width,
@@ -2082,7 +2163,59 @@ bool attempt_trail_connection(Room* a,
                                                   existing_trails,
                                                   rng,
                                                   stats,
-                                                  &build_result)) {
+                                                  &build_result,
+                                                  allowance)) {
+                continue;
+            }
+            if (build_result.sections.empty()) {
+                continue;
+            }
+            start_frame.inside_depth = endpoint_required_depth_from_section(build_result.sections.front());
+            end_frame.inside_depth = endpoint_required_depth_from_section(build_result.sections.back());
+            std::vector<SDL_Point> contained_centerline = build_centerline_with_endpoint_frames(start_frame, route.points, end_frame);
+            if (contained_centerline.size() < 2) {
+                continue;
+            }
+            if (!boundary_zones_respect_room_sectors(contained_centerline, a, b)) {
+                saw_boundary_zone_violation = true;
+                continue;
+            }
+            allowance.start_distance = start_frame.inside_depth + kRoomMarginDistanceWorldPx + 1.0;
+            allowance.end_distance = end_frame.inside_depth + kRoomMarginDistanceWorldPx + 1.0;
+            std::vector<double> contained_required;
+            const std::vector<double> contained_cumulative = build_polyline_cumulative_lengths(contained_centerline);
+            if (contained_cumulative.size() >= 4) {
+                contained_required.push_back(contained_cumulative[1]);
+                contained_required.push_back(contained_cumulative[contained_cumulative.size() - 2]);
+            }
+            if (!build_trail_layout_from_polyline(contained_centerline,
+                                                  min_width,
+                                                  max_width,
+                                                  curvyness,
+                                                  contained_required,
+                                                  a,
+                                                  b,
+                                                  room_obstacles,
+                                                  existing_trails,
+                                                  rng,
+                                                  stats,
+                                                  &build_result,
+                                                  allowance)) {
+                continue;
+            }
+            if (build_result.sections.empty()) {
+                continue;
+            }
+            if (!endpoint_section_contained(build_result.sections.front(), a->room_area.get())) {
+                if (stats) {
+                    stats->last_failure = TrailFailureReason::EndpointContainmentFailedStart;
+                }
+                continue;
+            }
+            if (!endpoint_section_contained(build_result.sections.back(), b->room_area.get())) {
+                if (stats) {
+                    stats->last_failure = TrailFailureReason::EndpointContainmentFailedEnd;
+                }
                 continue;
             }
             layout_end = clock::now();

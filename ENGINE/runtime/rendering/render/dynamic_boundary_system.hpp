@@ -149,6 +149,10 @@ public:
                                                      bool visible_after_efficiency,
                                                      double forward_depth_offset,
                                                      double efficiency_depth);
+    static bool  should_attempt_room_trail_promotion(int region_domain,
+                                                     bool has_registered_controller);
+    static bool  should_release_origin_slot_reservation(bool origin_slot_in_scope,
+                                                        bool promoted_asset_valid);
     static bool  should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio);
     static void  advance_frame_state(FrameState& frame_state,
                                      const std::vector<BoundaryFrame>& frames,
@@ -181,29 +185,14 @@ private:
     };
     std::unordered_map<BoundaryKey, DepthVisibilityState, BoundaryKeyHash> depth_visibility_states_;
     std::uint64_t depth_visibility_epoch_ = 0;
-    struct PromotionSlotKey {
-        int world_x = 0;
-        int world_z = 0;
-        int region_domain = 0;
-
-        bool operator==(const PromotionSlotKey& other) const noexcept {
-            return world_x == other.world_x &&
-                   world_z == other.world_z &&
-                   region_domain == other.region_domain;
-        }
+    struct PromotedBoundaryEntry {
+        BoundaryKey origin_slot_key{};
+        Asset* asset = nullptr;
+        std::string owner_room_name;
+        int owner_region_domain = 1; // 1 = room/trail
+        bool persistent = true;
     };
-    struct PromotionSlotKeyHash {
-        std::size_t operator()(const PromotionSlotKey& key) const noexcept {
-            return static_cast<std::size_t>(
-                render_overlay::hash_grid_cell(key.world_x,
-                                               key.world_z,
-                                               key.region_domain,
-                                               0,
-                                               0,
-                                               0));
-        }
-    };
-    std::unordered_map<PromotionSlotKey, Asset*, PromotionSlotKeyHash> promoted_boundary_assets_;
+    std::unordered_map<BoundaryKey, PromotedBoundaryEntry, BoundaryKeyHash> promoted_boundary_assets_;
     std::vector<BoundarySprite> active_boundary_sprites_;
     struct StaticCellAssignment {
         BoundaryKey key;

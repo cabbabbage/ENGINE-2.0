@@ -224,26 +224,20 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         return promoted && !promoted->dead && assets->contains_asset(promoted);
     };
     auto erase_promoted_slot = [&](auto it, bool delete_asset) {
-        Asset* promoted = it->second;
+        Asset* promoted = it->second.asset;
         if (delete_asset && promoted_asset_is_valid(promoted)) {
             promoted->Delete();
         }
         return promoted_boundary_assets_.erase(it);
     };
-    auto erase_promoted_slot_by_key = [&](const PromotionSlotKey& key, bool delete_asset) {
-        auto it = promoted_boundary_assets_.find(key);
-        if (it != promoted_boundary_assets_.end()) {
-            (void)erase_promoted_slot(it, delete_asset);
-        }
-    };
     for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
-        if (!promoted_asset_is_valid(it->second)) {
+        if (!promoted_asset_is_valid(it->second.asset)) {
             it = erase_promoted_slot(it, false);
             continue;
         }
         ++it;
     }
-    std::unordered_set<PromotionSlotKey, PromotionSlotKeyHash> visible_promotion_slots;
+    std::unordered_set<BoundaryKey, BoundaryKeyHash> active_origin_slots;
 
     const nlohmann::json& map_info = assets->map_info_json();
     const bool config_changed = refresh_boundary_config_revision(map_info);
@@ -495,63 +489,75 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         if (!candidate || candidate->is_null || candidate->frames.empty()) {
             continue;
         }
-        const PromotionSlotKey slot_key{
+        const SDL_Point assignment_world_point{
             static_cast<int>(std::lround(assignment.world_pos.x)),
-            assignment.world_z,
-            assignment.key.region_domain
+            assignment.world_z
         };
+        const auto& assignment_region = resolve_region_cache(assignment_world_point, rooms);
+        const std::string assignment_owner_room_name =
+            (assignment_region.owner ? assignment_region.owner->room_name : std::string{});
         const bool has_registered_controller =
             candidate->info &&
             ControllerFactory::has_registered_controller_for_asset_name(candidate->info->name);
-        if (has_registered_controller) {
+        if (should_attempt_room_trail_promotion(assignment.key.region_domain, has_registered_controller)) {
+            active_origin_slots.insert(assignment.key);
+            auto promoted_it = promoted_boundary_assets_.find(assignment.key);
+            if (promoted_it != promoted_boundary_assets_.end()) {
+                Asset* promoted = promoted_it->second.asset;
+                if (promoted_asset_is_valid(promoted)) {
+                    continue;
+                }
+                promoted_it = erase_promoted_slot(promoted_it, false);
+                (void)promoted_it;
+            }
             const bool allow_promotion = should_promote_controller_candidate(
                 true,
                 visible_after_efficiency,
                 forward_depth_offset,
                 depth_efficiency_depth);
             if (allow_promotion) {
-                visible_promotion_slots.insert(slot_key);
-                auto promoted_it = promoted_boundary_assets_.find(slot_key);
-                if (promoted_it != promoted_boundary_assets_.end()) {
-                    Asset* promoted = promoted_it->second;
-                    if (promoted_asset_is_valid(promoted)) {
-                        continue;
-                    }
-                    promoted_it = erase_promoted_slot(promoted_it, false);
-                    (void)promoted_it;
-                }
                 const std::string promoted_spawn_id = btype.spawn_id.empty()
                     ? std::string{}
                     : (btype.spawn_id + "::promoted::" +
-                       std::to_string(slot_key.world_x) + ":" +
-                       std::to_string(slot_key.world_z) + ":" +
-                       std::to_string(slot_key.region_domain));
+                       std::to_string(assignment.key.grid_x) + ":" +
+                       std::to_string(assignment.key.grid_y) + ":" +
+                       std::to_string(assignment.key.region_domain));
                 if (!promoted_spawn_id.empty()) {
                     if (Asset* existing = assets->find_asset_by_stable_id(promoted_spawn_id)) {
                         if (promoted_asset_is_valid(existing)) {
-                            promoted_boundary_assets_[slot_key] = existing;
+                            if (!assignment_owner_room_name.empty()) {
+                                existing->set_owning_room_name(assignment_owner_room_name);
+                            }
+                            promoted_boundary_assets_[assignment.key] = PromotedBoundaryEntry{
+                                assignment.key,
+                                existing,
+                                assignment_owner_room_name,
+                                assignment.key.region_domain,
+                                true};
                             continue;
                         }
                     }
                 }
-                const SDL_Point spawn_pos{
-                    static_cast<int>(std::lround(assignment.world_pos.x)),
-                    assignment.world_z
-                };
+                const SDL_Point spawn_pos = assignment_world_point;
                 Asset* promoted = assets->spawn_asset(assignment.assignment.resolved_asset_name, spawn_pos);
                 if (promoted) {
-                    promoted->spawn_method = "DynamicBoundaryPromoted";
+                    promoted->spawn_method = "DynamicBoundaryPromotedPersistent";
                     if (!promoted_spawn_id.empty()) {
                         promoted->spawn_id = promoted_spawn_id;
                     }
-                    promoted_boundary_assets_[slot_key] = promoted;
+                    if (!assignment_owner_room_name.empty()) {
+                        promoted->set_owning_room_name(assignment_owner_room_name);
+                    }
+                    promoted_boundary_assets_[assignment.key] = PromotedBoundaryEntry{
+                        assignment.key,
+                        promoted,
+                        assignment_owner_room_name,
+                        assignment.key.region_domain,
+                        true};
                     continue;
                 }
-            } else {
-                erase_promoted_slot_by_key(slot_key, true);
             }
-        } else {
-            erase_promoted_slot_by_key(slot_key, true);
+            continue;
         }
 
         SDL_FPoint screen_pos{};
@@ -656,9 +662,12 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             });
     }
 
+    const std::unordered_set<BoundaryKey, BoundaryKeyHash> scoped_origin_slots = active_origin_slots;
     for (auto it = promoted_boundary_assets_.begin(); it != promoted_boundary_assets_.end();) {
-        if (visible_promotion_slots.find(it->first) == visible_promotion_slots.end()) {
-            it = erase_promoted_slot(it, true);
+        const bool origin_slot_in_scope = (scoped_origin_slots.find(it->first) != scoped_origin_slots.end());
+        const bool promoted_valid = promoted_asset_is_valid(it->second.asset);
+        if (should_release_origin_slot_reservation(origin_slot_in_scope, promoted_valid)) {
+            it = erase_promoted_slot(it, false);
             continue;
         }
         ++it;
@@ -997,6 +1006,7 @@ bool DynamicBoundarySystem::refresh_boundary_config_revision(const nlohmann::jso
 }
 
 void DynamicBoundarySystem::clear_runtime_caches() {
+    promoted_boundary_assets_.clear();
     boundary_assignments_.clear();
     animation_states_.clear();
     depth_visibility_states_.clear();
@@ -1179,6 +1189,16 @@ bool DynamicBoundarySystem::should_promote_controller_candidate(bool has_registe
     }
     const double clamped_efficiency_depth = std::max(0.0, efficiency_depth);
     return forward_depth_offset >= 0.0 && forward_depth_offset <= clamped_efficiency_depth;
+}
+
+bool DynamicBoundarySystem::should_attempt_room_trail_promotion(int region_domain,
+                                                                bool has_registered_controller) {
+    return has_registered_controller && region_domain == 1;
+}
+
+bool DynamicBoundarySystem::should_release_origin_slot_reservation(bool origin_slot_in_scope,
+                                                                   bool promoted_asset_valid) {
+    return !origin_slot_in_scope || !promoted_asset_valid;
 }
 
 bool DynamicBoundarySystem::should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio) {

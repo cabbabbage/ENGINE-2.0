@@ -29,7 +29,7 @@ struct MapGraphPlan {
     bool valid = false;
     std::string spawn_room_name;
     int trail_endpoint_containment_safety_px = 12;
-    int trail_room_margin_px = 750;
+    int trail_room_margin_px = 5000;
     std::vector<LayerSpec> resolved_layers;
     std::vector<PlanNode> nodes;
     std::vector<PlanEdge> edges;

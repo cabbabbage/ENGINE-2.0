@@ -9,7 +9,7 @@ namespace {
 
 constexpr const char* kDefaultSpawnName = "Spawn";
 constexpr int kTrailEndpointContainmentSafetyPx = 12;
-constexpr int kTrailRoomMarginPx = 750;
+constexpr int kTrailRoomMarginPx = 5000;
 
 std::string normalize_tag_value(const std::string& raw) {
     std::string out;

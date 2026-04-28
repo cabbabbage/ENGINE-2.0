@@ -399,17 +399,18 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 42.0
+        "scale_percentage": 42.0,
+        "size_variation": 2.0
       },
       "start": "default",
       "starting_health": 200,
       "tags": [],
       "tillable": false,
-      "tilt_range_max_deg": 46,
-      "tilt_range_min_deg": -48,
+      "tilt_range_max_deg": 15,
+      "tilt_range_min_deg": -14,
       "weight_kg": 400.0,
       "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_pos_min": -15
     },
     "bench": {
       "anchor_point_child_candidates": [
@@ -24148,8 +24149,8 @@
                 }
               ],
               "display_name": "church",
-              "dx": -976,
-              "dz": -1432,
+              "dx": -864,
+              "dz": -1464,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24448,8 +24449,8 @@
                 }
               ],
               "display_name": "3_candles",
-              "dx": -13288,
-              "dz": -13288,
+              "dx": -680,
+              "dz": -112,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -24461,7 +24462,7 @@
               "position": "Exact",
               "priority": 11,
               "quantity": 1,
-              "resolution": 9,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-9b962c139b55"
@@ -24489,11 +24490,160 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 12,
               "quantity": 1,
               "resolution": 9,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-10cc306995fb"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -544,
+              "dz": -220,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 13,
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-35d11b30cd25"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "attack_speed"
+                }
+              ],
+              "display_name": "attack_speed",
+              "dx": -220,
+              "dz": -85,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 14,
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-57d87e52a5cd"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -193,
+              "dz": -247,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 15,
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-2b0165286717"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "attack_speed"
+                }
+              ],
+              "display_name": "attack_speed",
+              "dx": -13288,
+              "dz": -13288,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-3956e9bcb5c1"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "attack_speed"
+                }
+              ],
+              "display_name": "attack_speed",
+              "dx": -13288,
+              "dz": -13288,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-4e2215fd5dfe"
             }
           ],
           "trail_connection_sector": {

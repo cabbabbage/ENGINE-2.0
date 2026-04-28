@@ -39,6 +39,12 @@ class ButtonWidget;
 
 class RoomConfigurator {
 public:
+    struct SpawnGroupListItem {
+        std::string spawn_id;
+        std::string display_name;
+        std::string icon_label;
+    };
+
     RoomConfigurator();
     ~RoomConfigurator();
 
@@ -60,6 +66,10 @@ public:
     void set_manifest_store(class devmode::core::ManifestStore* store);
     void set_assets(Assets* assets);
     void set_room_save_callback(std::function<bool(bool immediate)> cb) { room_save_callback_ = std::move(cb); }
+    void set_spawn_groups_provider(std::function<std::vector<SpawnGroupListItem>()> provider);
+    void set_on_spawn_group_click(std::function<void(const std::string&)> cb);
+    void set_on_spawn_group_double_click(std::function<void(const std::string&)> cb);
+    void set_on_spawn_group_delete(std::function<bool(const std::string&)> cb);
     void set_room_metadata_only_mode(bool enabled);
     bool room_metadata_only_mode() const { return room_metadata_only_mode_; }
 
@@ -121,6 +131,7 @@ private:
     void reset_scroll();
     void ensure_base_panels();
     void refresh_base_panel_rows();
+    void refresh_spawn_group_rows_if_needed();
     void request_container_layout();
     void configure_container(SlidingWindowContainer& container);
     void clear_container_callbacks(SlidingWindowContainer& container);
@@ -197,6 +208,7 @@ private:
     std::unique_ptr<DockableCollapsible> geometry_panel_;
     std::unique_ptr<DockableCollapsible> tags_panel_;
     std::unique_ptr<DockableCollapsible> types_panel_;
+    std::unique_ptr<DockableCollapsible> spawn_groups_panel_;
     std::vector<DockableCollapsible*> ordered_base_panels_;
     mutable std::vector<SDL_Rect> ordered_panel_bounds_;
     std::unordered_map<const DockableCollapsible*, int> collapsible_height_cache_;
@@ -211,5 +223,12 @@ private:
     std::function<std::string(const std::string&, const std::string&)> on_room_renamed_;
     std::function<void(bool)> header_visibility_controller_{};
     std::function<void(Room*)> on_camera_changed_;
+    std::function<std::vector<SpawnGroupListItem>()> spawn_groups_provider_;
+    std::function<void(const std::string&)> on_spawn_group_click_;
+    std::function<void(const std::string&)> on_spawn_group_double_click_;
+    std::function<bool(const std::string&)> on_spawn_group_delete_;
+    std::vector<SpawnGroupListItem> spawn_group_rows_{};
+    std::size_t spawn_group_rows_hash_ = 0;
+    std::unique_ptr<Widget> spawn_group_list_widget_;
     bool room_metadata_only_mode_ = false;
 };

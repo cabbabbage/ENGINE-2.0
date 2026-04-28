@@ -2854,42 +2854,31 @@ void RoomEditor::update_ui(const Input& input) {
     if (library_ui_) {
         if (auto selected = library_ui_->consume_selection()) {
             last_selected_from_library_ = selected;
-            const bool had_pending_spawn = pending_spawn_world_pos_.has_value();
-            bool spawned_asset = false;
-            if (pending_spawn_world_pos_) {
-                SDL_Point world = *pending_spawn_world_pos_;
-                pending_spawn_world_pos_.reset();
-                if (current_room_ && assets_) {
-                    const bool inside_room = !current_room_->room_area ||
-                                             current_room_->room_area->contains_point(world);
-                    if (inside_room) {
-                        if (Asset* spawned = assets_->spawn_asset(selected->name, world)) {
-                            finalize_asset_drag(spawned, selected);
-                            clear_mouse_press_state(true);
-                            if (!select_asset_or_group(spawned)) {
-                                selected_assets_.clear();
-                                selected_assets_.push_back(spawned);
-                            }
-                            hovered_asset_ = selected_assets_.empty() ? spawned : selected_assets_.front();
-                            mark_highlight_dirty();
-                            update_highlighted_assets();
-                            sync_spawn_group_panel_with_selection();
-                            spawned_asset = true;
-                        }
-                    }
+            const bool had_pending_spawn = has_pending_library_placement();
+            Asset* spawned = nullptr;
+            const bool spawned_asset = commit_library_asset_placement(selected, spawned);
+            if (spawned_asset && spawned) {
+                if (!select_asset_or_group(spawned)) {
+                    selected_assets_.clear();
+                    selected_assets_.push_back(spawned);
                 }
+                hovered_asset_ = selected_assets_.empty() ? spawned : selected_assets_.front();
+                mark_highlight_dirty();
+                update_highlighted_assets();
+                sync_spawn_group_panel_with_selection();
             }
             if (!spawned_asset && !had_pending_spawn) {
-                pending_spawn_world_pos_.reset();
+                clear_library_placement();
                 open_asset_info_editor(selected);
             }
         }
 
         if (auto area_sel = library_ui_->consume_area_selection()) {
-            const bool had_pending_spawn = pending_spawn_world_pos_.has_value();
-            if (pending_spawn_world_pos_ && current_room_ && assets_) {
-                SDL_Point world = *pending_spawn_world_pos_;
-                pending_spawn_world_pos_.reset();
+            const bool had_pending_spawn = has_pending_library_placement();
+            const std::optional<SDL_Point> world_opt = resolve_pending_library_placement_world();
+            if (world_opt.has_value() && current_room_ && assets_) {
+                SDL_Point world = *world_opt;
+                clear_library_placement();
 
                 Room* src_room = nullptr;
                 for (Room* r : assets_->rooms()) {
@@ -2953,14 +2942,13 @@ void RoomEditor::update_ui(const Input& input) {
                     }
                 }
             } else if (!had_pending_spawn) {
-
-                pending_spawn_world_pos_.reset();
+                clear_library_placement();
             }
         }
     }
 
-    if (pending_spawn_world_pos_ && (!library_ui_ || !library_ui_->is_visible())) {
-        pending_spawn_world_pos_.reset();
+    if (has_pending_library_placement() && (!library_ui_ || !library_ui_->is_visible())) {
+        clear_library_placement();
     }
 
     if (room_cfg_ui_ && room_cfg_ui_->visible()) {
@@ -3192,6 +3180,14 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             return result;
         }
         if (library_ui_->handle_event(event)) {
+            if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+                event.button.button == SDL_BUTTON_LEFT) {
+                suppress_world_left_click_frames_ = std::max(suppress_world_left_click_frames_, 2);
+                clear_mouse_press_state(true);
+                if (input_) {
+                    input_->clearClickBuffer();
+                }
+            }
             result.handled = true;
             result.pointer_blocked = true;
             return result;
@@ -5306,7 +5302,7 @@ void RoomEditor::open_asset_library() {
 void RoomEditor::close_asset_library() {
     if (library_ui_) library_ui_->close();
     set_blocking_panel_visible(BlockingPanel::AssetLibrary, library_ui_ && library_ui_->is_visible());
-    pending_spawn_world_pos_.reset();
+    clear_library_placement();
 }
 
 bool RoomEditor::is_asset_library_open() const {
@@ -5537,12 +5533,7 @@ std::optional<SDL_Point> RoomEditor::resolve_pending_library_placement_world() c
     if (!pending_library_placement_) {
         return std::nullopt;
     }
-    const PendingLibraryPlacement& placement = *pending_library_placement_;
-    SDL_Point resolved = placement.world_point;
-    if (placement.snap_enabled && placement.snap_resolution > 0) {
-        resolved = snap_world_point_to_overlay_grid(resolved, placement.snap_resolution);
-    }
-    return resolved;
+    return pending_library_placement_->world_point;
 }
 
 bool RoomEditor::commit_library_asset_placement(const std::shared_ptr<AssetInfo>& info, Asset*& out_spawned_asset) {
@@ -5571,7 +5562,8 @@ bool RoomEditor::commit_library_asset_placement(const std::shared_ptr<AssetInfo>
         return false;
     }
 
-    finalize_asset_drag(spawned, info, &resolved_world);
+    const SDL_Point committed_spawned_world{spawned->world_x(), spawned->world_z()};
+    finalize_asset_drag(spawned, info, &committed_spawned_world);
     out_spawned_asset = spawned;
 
     clear_library_placement();
@@ -7909,10 +7901,10 @@ void RoomEditor::handle_click(const Input& input) {
         rclick_buffer_frames_ = 2;
 
         auto open_library_at = [&](const SDL_Point& point) {
-            pending_spawn_world_pos_ = point;
+            begin_library_placement(point);
             open_asset_library();
             if (!is_asset_library_open()) {
-                pending_spawn_world_pos_.reset();
+                clear_library_placement();
             }
         };
 
@@ -7947,7 +7939,7 @@ void RoomEditor::handle_click(const Input& input) {
         if (inside_room) {
             open_library_at(world_mouse);
         } else {
-            pending_spawn_world_pos_.reset();
+            clear_library_placement();
             open_asset_library();
         }
         return;

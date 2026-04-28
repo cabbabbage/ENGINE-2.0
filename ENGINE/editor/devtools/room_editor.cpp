@@ -5509,19 +5509,22 @@ void RoomEditor::pulse_active_modal_header() {
 }
 
 void RoomEditor::begin_library_placement(const SDL_Point& world_point) {
+    const int placement_resolution = current_grid_resolution();
+    const SDL_Point snapped_world_point = snap_world_point_to_overlay_grid(world_point, placement_resolution);
     PendingLibraryPlacement placement;
-    placement.world_point = world_point;
+    placement.world_point = snapped_world_point;
     placement.room_name = current_room_ ? current_room_->room_name : std::string{};
     placement.requested_at_ticks = SDL_GetTicks();
     placement.request_serial = ++pending_library_placement_serial_;
-    placement.snap_enabled = snap_to_grid_enabled_;
-    placement.snap_resolution = placement.snap_enabled ? current_grid_resolution() : 0;
+    placement.snap_enabled = true;
+    placement.snap_resolution = placement_resolution;
     pending_library_placement_ = std::move(placement);
-    pending_spawn_world_pos_ = world_point;
+    pending_spawn_world_pos_ = snapped_world_point;
     std::cerr << "[PLACEMENT_DEBUG] capture"
               << " serial=" << pending_library_placement_->request_serial
               << " room=\"" << pending_library_placement_->room_name << "\""
-              << " world=(" << world_point.x << "," << world_point.y << ")"
+              << " world_raw=(" << world_point.x << "," << world_point.y << ")"
+              << " world_snapped=(" << snapped_world_point.x << "," << snapped_world_point.y << ")"
               << " snap_enabled=" << (pending_library_placement_->snap_enabled ? 1 : 0)
               << " snap_resolution=" << pending_library_placement_->snap_resolution
               << "\n";

@@ -1,7 +1,7 @@
 #include "bomb_controller.hpp"
-#include "assets/asset/Asset.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/custom_controller_api.hpp"
+#include "assets/asset/Asset.hpp"
 
 bomb_controller::bomb_controller(Asset* self)
     : CustomAssetController(self) {
@@ -25,7 +25,7 @@ void bomb_controller::on_update(const Input& in) {
     }
 
     if (self->needs_target) {
-        self->anim_->auto_move_3d(player, 0, false);
+        self->anim_->auto_move(player);
     }
     CustomAssetController::on_update(in);
 }

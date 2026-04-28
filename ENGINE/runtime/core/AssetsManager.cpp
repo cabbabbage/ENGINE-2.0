@@ -2630,7 +2630,9 @@ std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
 
 world::GridPoint Assets::resolve_floor_world_point(SDL_Point world_pos, int resolution_layer) const {
     const int max_layer = world_grid_.max_resolution_layers();
-    const int requested_layer = (resolution_layer >= 0) ? resolution_layer : std::clamp(max_layer - map_grid_settings_.grid_resolution, 0, max_layer);
+    const int requested_layer = (resolution_layer >= 0)
+        ? resolution_layer
+        : vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution);
     const int layer = std::clamp(requested_layer, 0, max_layer);
 
     return world::GridPoint::make_virtual(world_pos.x, 0, world_pos.y, layer);
@@ -2695,7 +2697,13 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     Area spawn_area(owning_room,  0);
 
     int depth = 0;
-    auto uptr = std::make_unique<Asset>(info, spawn_area, world_pos, depth, std::string{}, std::string{}, map_grid_settings_.spacing());
+    auto uptr = std::make_unique<Asset>(info,
+                                        spawn_area,
+                                        world_pos,
+                                        depth,
+                                        std::string{},
+                                        std::string{},
+                                        vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution));
     Asset* raw = uptr.get();
     if (!raw) {
         return nullptr;
@@ -2710,6 +2718,14 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     if (world::GridPoint* registered_point = world_grid_.point_for_asset(raw)) {
         raw->cache_grid_residency(*registered_point);
     }
+    std::cerr << "[PLACEMENT_DEBUG] assets_spawn_asset"
+              << " name=\"" << name << "\""
+              << " requested_world=(" << world_pos.x << "," << world_pos.y << ")"
+              << " floor_world=(" << floor_point.world_x() << "," << floor_point.world_z() << ")"
+              << " floor_layer=" << floor_point.resolution_layer()
+              << " runtime_world=(" << (raw ? raw->world_x() : 0) << "," << (raw ? raw->world_z() : 0) << ")"
+              << " runtime_layer=" << (raw && raw->grid_point() ? raw->grid_point()->resolution_layer() : -1)
+              << "\n";
 
     queue_asset_dimension_update(raw);
     mark_grid_dirty();
@@ -2739,7 +2755,7 @@ std::unique_ptr<Asset> Assets::create_unattached_asset(const std::string& name, 
                                         depth,
                                         std::string{},
                                         std::string{},
-                                        map_grid_settings_.spacing());
+                                        vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution));
     if (!uptr) {
         return nullptr;
     }

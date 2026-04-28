@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "assets/asset/anchor_point.hpp"
+#include "assets/asset/asset_controller.hpp"
 
 class Asset;
 class Assets;
@@ -29,7 +30,7 @@ public:
     ChildAsset& operator=(ChildAsset&& other) noexcept;
 
     void destroy();
-    Asset* orphan();
+    Asset* orphan(std::optional<OrphanImpulse> impulse = std::nullopt);
     void hide();
     void unhide();
     void set_animation(const std::string& animation_name);

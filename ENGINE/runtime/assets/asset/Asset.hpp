@@ -89,7 +89,8 @@ class Asset {
     void rebuild_animation_runtime();
     void Delete();
     void notify_pre_delete();
-    void notify_orphaned(Asset* former_parent);
+    void notify_orphaned(Asset* former_parent, std::optional<OrphanImpulse> impulse = std::nullopt);
+    void notify_interact(Asset* instigator);
 
     bool is_finalized() const { return finalized_; }
     void on_scale_factor_changed();

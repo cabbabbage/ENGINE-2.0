@@ -7,11 +7,13 @@
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
+#include "utils/range_util.hpp"
 #include "utils/string_utils.hpp"
 #include <algorithm>
 #include <cmath>
-#include <unordered_set>
+#include <limits>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -20,6 +22,19 @@ constexpr std::string_view kMeleeChildAssetName = "vibble_attack_1";
 constexpr std::string_view kLegacyMeleeChildAssetName = "vibble_attack";
 constexpr std::string_view kMeleeAttackAnimation = "attack";
 constexpr std::string_view kMeleeAnchorName = "melee";
+constexpr std::string_view kHandAnchorName = "hand";
+constexpr std::string_view kGunAssetName = "gun";
+constexpr std::string_view kInteractableTag = "interactable";
+constexpr std::string_view kCanCarryTag = "can_carry";
+constexpr int kInteractRadiusPx = 50;
+
+std::string normalize_tag_token(std::string_view value) {
+    return vibble::strings::to_lower_copy(vibble::strings::trim_copy(std::string{value}));
+}
+
+bool normalized_tokens_equal(std::string_view left, std::string_view right) {
+    return normalize_tag_token(left) == normalize_tag_token(right);
+}
 
 std::vector<std::string> normalize_tag_list(const std::vector<std::string>& values) {
     std::vector<std::string> normalized;
@@ -140,6 +155,7 @@ void vibble_controller::movement(const Input& input) {
     const bool sprint =
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool dash_pressed = input.isScancodeDown(SDL_SCANCODE_SPACE);
+    const bool interact_pressed = input.isScancodeDown(SDL_SCANCODE_E);
     const bool melee_pressed = input.wasPressed(Input::LEFT);
 
     const vibble::player_direction::DirectionIntent direction_intent =
@@ -155,6 +171,24 @@ void vibble_controller::movement(const Input& input) {
                                    std::chrono::duration<float>(meleeCooldown));
         trigger_melee_child_attack_animation(*player);
     }
+
+    if (interact_pressed && !isInteracting) {
+        isInteracting = true;
+        interactFrames = 0;
+    }
+
+    if (isInteracting) {
+        if (interact_pressed) {
+            interactFrames++;
+        } else {
+            const int held_frames = interactFrames;
+            isInteracting = false;
+            interactFrames = 0;
+            process_interact(input, held_frames);
+        }
+    }
+
+
 
 
 
@@ -244,7 +278,7 @@ void vibble_controller::movement(const Input& input) {
 }
 
 void vibble_controller::on_update(const Input& input) {
-    
+    ensure_hand_defaults();
     movement(input);
     using namespace std::chrono;
     auto now = steady_clock::now();
@@ -428,6 +462,165 @@ void vibble_controller::start_dash() {
 
 void vibble_controller::on_process_pending_attacks(Asset& self) {
     CustomAssetController::on_process_pending_attacks(self);
+}
+
+bool vibble_controller::has_tag(const Asset& asset, std::string_view tag) const {
+    if (!asset.info) {
+        return false;
+    }
+    const std::string expected = normalize_tag_token(tag);
+    if (expected.empty()) {
+        return false;
+    }
+    if (asset.info->has_tag(expected)) {
+        return true;
+    }
+    for (const std::string& existing : asset.info->tags) {
+        if (normalize_tag_token(existing) == expected) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Asset* vibble_controller::find_closest_tagged_asset(std::string_view tag, int radius_px) const {
+    Asset* player = self_ptr();
+    Assets* owner_assets = assets();
+    if (!player || !owner_assets || radius_px <= 0) {
+        return nullptr;
+    }
+
+    const long long radius_sq = static_cast<long long>(radius_px) * static_cast<long long>(radius_px);
+    long long best_dist_sq = std::numeric_limits<long long>::max();
+    Asset* best = nullptr;
+    for (Asset* candidate : owner_assets->getActive()) {
+        if (!candidate || candidate == player || candidate->dead || !candidate->active || !candidate->info) {
+            continue;
+        }
+        if (!has_tag(*candidate, tag)) {
+            continue;
+        }
+        const long long dist_sq = Range::distance_sq(player, candidate);
+        if (dist_sq > radius_sq || dist_sq >= best_dist_sq) {
+            continue;
+        }
+        best_dist_sq = dist_sq;
+        best = candidate;
+    }
+    return best;
+}
+
+bool vibble_controller::is_carrying_non_gun() const {
+    if (!carried_child_.has_value()) {
+        return false;
+    }
+    if (!carried_child_->get_asset()) {
+        return false;
+    }
+    return !normalized_tokens_equal(carried_asset_name_, kGunAssetName);
+}
+
+void vibble_controller::ensure_hand_defaults() {
+    Asset* player = self_ptr();
+    if (!player) {
+        return;
+    }
+
+    if (!is_carrying_non_gun()) {
+        if (!gun_child_.has_value()) {
+            gun_child_.emplace(*player, std::string{kGunAssetName});
+        }
+        gun_child_->bind(std::string{kHandAnchorName});
+        gun_child_->unhide();
+        return;
+    }
+
+    if (gun_child_.has_value()) {
+        gun_child_->hide();
+    }
+}
+
+OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
+                                                     const Input& input,
+                                                     int held_frames) const {
+    float dir_x = 0.0f;
+    float dir_z = 0.0f;
+    if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
+        dir_x = static_cast<float>(mouse_world->x - player.world_x());
+        dir_z = static_cast<float>(mouse_world->y - player.world_z());
+    }
+    if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
+        const CardinalVector facing = cardinal_vector_for_animation(last_facing_animation_);
+        dir_x = static_cast<float>(facing.x);
+        dir_z = static_cast<float>(facing.y);
+    }
+    if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
+        dir_x = 1.0f;
+        dir_z = 0.0f;
+    }
+    const float length = std::sqrt(dir_x * dir_x + dir_z * dir_z);
+    if (length > 1e-4f) {
+        dir_x /= length;
+        dir_z /= length;
+    }
+
+    const int clamped_hold = std::clamp(held_frames, 1, 120);
+    const float force = 250.0f + static_cast<float>(clamped_hold) * 12.0f;
+    const float upward_force = 220.0f + static_cast<float>(clamped_hold) * 5.0f;
+    return OrphanImpulse{dir_x, dir_z, force, upward_force};
+}
+
+void vibble_controller::drop_carried_asset(const Input& input, int held_frames) {
+    Asset* player = self_ptr();
+    if (!player || !carried_child_.has_value()) {
+        return;
+    }
+    if (!is_carrying_non_gun()) {
+        return;
+    }
+
+    const OrphanImpulse impulse = build_throw_impulse(*player, input, held_frames);
+    (void)carried_child_->orphan(impulse);
+    carried_child_.reset();
+    carried_asset_name_.clear();
+    ensure_hand_defaults();
+}
+
+void vibble_controller::pickup_asset(Asset& player, Asset& target) {
+    if (!target.info) {
+        return;
+    }
+    carried_asset_name_ = target.info->name;
+    target.Delete();
+    carried_child_.reset();
+    carried_child_.emplace(player, carried_asset_name_);
+    carried_child_->bind(std::string{kHandAnchorName});
+    if (gun_child_.has_value()) {
+        gun_child_->hide();
+    }
+}
+
+void vibble_controller::process_interact(const Input& input, int held_frames) {
+    Asset* player = self_ptr();
+    if (!player) {
+        return;
+    }
+
+    if (Asset* interact_target = find_closest_tagged_asset(kInteractableTag, kInteractRadiusPx)) {
+        custom_controller_api::dispatch_interact(player, interact_target);
+        return;
+    }
+
+    if (Asset* carry_target = find_closest_tagged_asset(kCanCarryTag, kInteractRadiusPx)) {
+        if (is_carrying_non_gun()) {
+            drop_carried_asset(input, held_frames);
+        }
+        pickup_asset(*player, *carry_target);
+        return;
+    }
+
+    drop_carried_asset(input, held_frames);
+    ensure_hand_defaults();
 }
 
 custom_controller_api::AttackProcessingConfig vibble_controller::attack_processing_config() const {

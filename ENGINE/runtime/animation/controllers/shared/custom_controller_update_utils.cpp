@@ -45,6 +45,17 @@ void dispatch_contact_attack(Asset* self, Asset* player) {
     AttackDetectionHelper::send_attack_if_hit(self, player);
 }
 
+void dispatch_interact(const ControllerGameContext& context, Asset* target) {
+    dispatch_interact(context.self, target);
+}
+
+void dispatch_interact(Asset* instigator, Asset* target) {
+    if (!target || target == instigator || target->dead || !target->active) {
+        return;
+    }
+    target->notify_interact(instigator);
+}
+
 void begin_reverse_current_animation_until_stop(const ControllerGameContext& context) {
     begin_reverse_current_animation_until_stop(context.self);
 }

@@ -1888,13 +1888,23 @@ void Asset::notify_pre_delete() {
     }
 }
 
-void Asset::notify_orphaned(Asset* former_parent) {
+void Asset::notify_orphaned(Asset* former_parent, std::optional<OrphanImpulse> impulse) {
     if (!controller_ && assets_) {
         ControllerFactory cf(assets_);
         controller_ = cf.create_for_asset(this);
     }
     if (controller_) {
-        controller_->on_orphaned(*this, former_parent);
+        controller_->on_orphaned(*this, former_parent, impulse);
+    }
+}
+
+void Asset::notify_interact(Asset* instigator) {
+    if (!controller_ && assets_) {
+        ControllerFactory cf(assets_);
+        controller_ = cf.create_for_asset(this);
+    }
+    if (controller_) {
+        controller_->on_interact(*this, instigator);
     }
 }
 

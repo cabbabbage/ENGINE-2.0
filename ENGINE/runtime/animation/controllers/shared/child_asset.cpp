@@ -234,7 +234,7 @@ void ChildAsset::destroy() {
     auto_hidden_for_anchor_ = true;
 }
 
-Asset* ChildAsset::orphan() {
+Asset* ChildAsset::orphan(std::optional<OrphanImpulse> impulse) {
     Asset* orphaned = get_asset();
     if (!orphaned) {
         return nullptr;
@@ -262,6 +262,7 @@ Asset* ChildAsset::orphan() {
     last_tag_criteria_initialized_ = false;
     last_required_tags_.clear();
     last_excluded_tags_.clear();
+    orphaned->notify_orphaned(owner_, impulse);
     return orphaned;
 }
 

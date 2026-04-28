@@ -36,7 +36,10 @@ public:
     void update(const Input& in) final;
     void process_pending_attacks(Asset& self) final;
     void on_pre_delete(Asset& self) final;
-    void on_orphaned(Asset& self, Asset* former_parent) override;
+    void on_orphaned(Asset& self,
+                     Asset* former_parent,
+                     std::optional<OrphanImpulse> impulse = std::nullopt) override;
+    void on_interact(Asset& self, Asset* instigator) final;
 
 protected:
     Asset* self_ptr() const { return self_; }
@@ -53,7 +56,10 @@ protected:
     virtual animation_update::custom_controllers::AttackProcessingConfig attack_processing_config() const;
     virtual void on_process_pending_attacks(Asset& self);
     virtual void on_pre_delete_hook(Asset& self);
-    virtual void on_orphaned_hook(Asset& self, Asset* former_parent);
+    virtual void on_orphaned_hook(Asset& self,
+                                  Asset* former_parent,
+                                  std::optional<OrphanImpulse> impulse = std::nullopt);
+    virtual void on_interact_hook(Asset& self, Asset* instigator);
 
 private:
     friend class animation_update::custom_controllers::WanderControllerBehavior;
@@ -71,11 +77,13 @@ private:
 
     struct OrphanFallState {
         bool active = false;
-        int world_x = 0;
-        int world_z = 0;
+        double world_x = 0.0;
+        double world_z = 0.0;
         int resolution_layer = 0;
         double world_y = 0.0;
         double floor_y = 0.0;
+        double velocity_x = 0.0;
+        double velocity_z = 0.0;
         double velocity_y = 0.0;
         double restitution = 0.0;
     };

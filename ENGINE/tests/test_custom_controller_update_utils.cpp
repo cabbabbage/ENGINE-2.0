@@ -142,6 +142,7 @@ TEST_CASE("context-based helpers preserve null safety") {
         custom_controllers::build_controller_game_context(ctx.self, ctx.assets);
     CHECK(custom_controllers::resolve_valid_player_target(context) == nullptr);
     CHECK_NOTHROW(custom_controllers::dispatch_contact_attack(context));
+    CHECK_NOTHROW(custom_controllers::dispatch_interact(context, ctx.player));
 }
 
 TEST_CASE("reverse control helpers preserve null safety") {
@@ -154,6 +155,17 @@ TEST_CASE("reverse control helpers preserve null safety") {
     CHECK_NOTHROW(custom_controllers::begin_reverse_current_animation_until_stop(null_context));
     CHECK_NOTHROW(custom_controllers::begin_reverse_current_animation_to_default(null_context));
     CHECK_NOTHROW(custom_controllers::stop_reverse_current_animation(null_context));
+}
+
+TEST_CASE("interact helpers preserve null safety") {
+    ControllerAssets ctx;
+    CHECK_NOTHROW(custom_controllers::dispatch_interact(static_cast<Asset*>(nullptr), ctx.player));
+    CHECK_NOTHROW(custom_controllers::dispatch_interact(ctx.self, static_cast<Asset*>(nullptr)));
+    CHECK_NOTHROW(custom_controllers::dispatch_interact(ctx.self, ctx.self));
+
+    const custom_controllers::ControllerGameContext null_context =
+        custom_controllers::build_controller_game_context(nullptr, nullptr);
+    CHECK_NOTHROW(custom_controllers::dispatch_interact(null_context, ctx.player));
 }
 
 TEST_CASE("build_controller_game_context preserves prior orbit lifecycle snapshot when runtime data is unavailable") {

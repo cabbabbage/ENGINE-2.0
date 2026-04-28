@@ -3340,6 +3340,8 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     manifest_entry["can_invert"] = false;
     manifest_entry["tilt_range_min_deg"] = 0;
     manifest_entry["tilt_range_max_deg"] = 0;
+    manifest_entry["y_pos_min"] = 0;
+    manifest_entry["y_pos_max"] = 0;
     manifest_entry["size_settings"] = {
         {"scale_percentage", 100.0},
         {"size_variation", 0.0}
@@ -5041,12 +5043,11 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                                                 5)) {
                             continue;
                         }
-                        const int spawn_depth = info.resolve_spawn_depth(ctx.rng());
                         auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
                                                       candidate->info,
                                                       *area_ptr,
                                                       spawn_pos,
-                                                      spawn_depth,
+                                                      0,
                                                       info.spawn_id,
                                                       info.position);
                         if (!result) {

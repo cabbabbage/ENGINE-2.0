@@ -1258,6 +1258,8 @@ private:
     std::unordered_set<std::string> map_boundary_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;
+    bool spawn_membership_allows_room_selection(const std::string& spawn_id,
+                                                const std::string& owning_room_name) const;
     bool asset_belongs_to_room(const Asset* asset) const;
     std::optional<DynamicBoundaryProxyKey> selected_dynamic_boundary_proxy_{};
     std::optional<DynamicBoundaryProxyKey> hovered_dynamic_boundary_proxy_{};
@@ -1390,5 +1392,12 @@ struct RoomEditorTestAccess {
     static std::uint32_t delete_shortcut_stack_dispatch_count(const RoomEditor& editor);
     static std::uint32_t delete_shortcut_asset_delete_count(const RoomEditor& editor);
     static void reset_delete_shortcut_route_counters(RoomEditor& editor);
+    static void set_spawn_id_ownership_cache(RoomEditor& editor,
+                                             const std::vector<std::string>& room_spawn_ids,
+                                             const std::vector<std::string>& map_boundary_spawn_ids);
+    static int classify_spawn_group_ownership(const RoomEditor& editor, const std::string& spawn_id);
+    static bool spawn_membership_allows_room_selection(const RoomEditor& editor,
+                                                       const std::string& spawn_id,
+                                                       const std::string& owning_room_name);
 };
 #endif

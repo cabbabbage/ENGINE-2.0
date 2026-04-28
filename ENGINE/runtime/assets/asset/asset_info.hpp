@@ -92,6 +92,8 @@ class AssetInfo {
     int bounce_amount = 0;
     int tilt_range_min_deg = 0;
     int tilt_range_max_deg = 0;
+    int y_pos_min = 0;
+    int y_pos_max = 0;
     bool smooth_scaling = true;
     int original_canvas_width = 0;
     int original_canvas_height = 0;
@@ -242,6 +244,7 @@ class AssetInfo {
     void set_bounce_amount(int amount);
     int get_bounce_amount() const { return bounce_amount; }
     void set_tilt_range_degrees(int min_degrees, int max_degrees);
+    void set_y_position_range(int min_value, int max_value);
     void set_scale_filter(bool smooth);
     void set_tags(const std::vector<std::string> &t);
     void add_tag(const std::string &tag);

@@ -97,10 +97,6 @@ struct SpawnGroup {
     std::string area_name;
     SpawnMethodId method;
     MethodConfig method_config;
-    bool randomize_y = false;
-    int position_y = 0;
-    int min_y = 0;
-    int max_y = 0;
     std::vector<Candidate> candidates;
 };
 
@@ -137,19 +133,6 @@ inline SpawnGroup spawn_group_from_json(const nlohmann::json& entry) {
     group.id = vibble::spawn_group_codec::read_string_field(normalized, "spawn_id");
     group.display_name = vibble::spawn_group_codec::read_string_field(normalized, "display_name");
     group.area_name = vibble::spawn_group_codec::read_string_field(normalized, "area");
-    group.randomize_y = vibble::spawn_group_codec::read_bool_field(normalized, "randomize_y", false);
-    group.position_y = vibble::spawn_group_codec::read_int_field(
-        normalized, "position_y", vibble::spawn_group_codec::kDefaultPositionY);
-    group.min_y = vibble::spawn_group_codec::read_int_field(normalized, "min_y", group.position_y);
-    group.max_y = vibble::spawn_group_codec::read_int_field(normalized, "max_y", group.position_y);
-    if (group.max_y < group.min_y) {
-        std::swap(group.min_y, group.max_y);
-    }
-    if (!group.randomize_y) {
-        group.min_y = group.position_y;
-        group.max_y = group.position_y;
-    }
-
     switch_method(group, vibble::spawn_group_codec::normalize_method_from_entry(normalized));
 
     if (auto* perimeter = group.method_config.as_perimeter()) {
@@ -202,21 +185,10 @@ inline void apply_spawn_group_to_json(const SpawnGroup& group, nlohmann::json& e
     const std::string method =
         vibble::spawn_group_codec::normalize_method(group.method.empty() ? std::string{"Random"} : group.method);
     entry["position"] = method;
-    entry["randomize_y"] = group.randomize_y;
-    if (group.randomize_y) {
-        int min_y = group.min_y;
-        int max_y = group.max_y;
-        if (max_y < min_y) {
-            std::swap(min_y, max_y);
-        }
-        entry["min_y"] = min_y;
-        entry["max_y"] = max_y;
-        entry.erase("position_y");
-    } else {
-        entry["position_y"] = group.position_y;
-        entry.erase("min_y");
-        entry.erase("max_y");
-    }
+    entry.erase("randomize_y");
+    entry.erase("position_y");
+    entry.erase("min_y");
+    entry.erase("max_y");
 
     if (const auto* perimeter = group.method_config.as_perimeter()) {
         entry["min_number"] = perimeter->min_number;

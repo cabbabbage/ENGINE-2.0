@@ -750,32 +750,10 @@ struct SpawnGroupConfig::Entry {
         exact_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(std::move(exact_box),
             [this](const std::string& text) { on_exact_changed(text); }, false, editable_);
 
-        auto randomize_y_checkbox = std::make_unique<DMCheckbox>("Randomize Y", false);
-        randomize_y_widget_ = std::make_unique<CallbackCheckboxWidget>(
-            std::move(randomize_y_checkbox),
-            [this](bool value) { on_randomize_y_changed(value); },
-            editable_);
-
-        auto y_position_box = std::make_unique<DMTextBox>("Y Position", "");
-        y_position_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(
-            std::move(y_position_box),
-            [this](const std::string& text) { on_position_y_changed(text); },
-            false,
-            editable_);
-
-        auto min_y_box = std::make_unique<DMTextBox>("Min Y", "");
-        min_y_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(
-            std::move(min_y_box),
-            [this](const std::string& text) { on_min_y_changed(text); },
-            false,
-            editable_);
-
-        auto max_y_box = std::make_unique<DMTextBox>("Max Y", "");
-        max_y_widget_ = std::make_unique<SpawnGroupCallbackTextBoxWidget>(
-            std::move(max_y_box),
-            [this](const std::string& text) { on_max_y_changed(text); },
-            false,
-            editable_);
+        randomize_y_widget_.reset();
+        y_position_widget_.reset();
+        min_y_widget_.reset();
+        max_y_widget_.reset();
 
         auto resolution_slider = std::make_unique<DMSlider>("Grid Resolution (2^r px)", 0, vibble::grid::kMaxResolution, current_resolution_);
         resolution_slider->set_defer_commit_until_unfocus(false);

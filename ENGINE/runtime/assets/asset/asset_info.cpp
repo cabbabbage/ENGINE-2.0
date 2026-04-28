@@ -594,6 +594,10 @@ int clamp_tilt_degrees(int value) {
     return std::clamp(value, -180, 180);
 }
 
+int clamp_y_position_value(int value) {
+    return std::clamp(value, -50, 200);
+}
+
 std::optional<double> parse_number_like_json(const nlohmann::json& value) {
     if (value.is_number_float()) {
         return value.get<double>();
@@ -2444,6 +2448,13 @@ nlohmann::json AssetInfo::manifest_payload() const {
         }
         payload["tilt_range_min_deg"] = sanitized_tilt_min;
         payload["tilt_range_max_deg"] = sanitized_tilt_max;
+        int sanitized_y_min = clamp_y_position_value(y_pos_min);
+        int sanitized_y_max = clamp_y_position_value(y_pos_max);
+        if (sanitized_y_max < sanitized_y_min) {
+                std::swap(sanitized_y_min, sanitized_y_max);
+        }
+        payload["y_pos_min"] = sanitized_y_min;
+        payload["y_pos_max"] = sanitized_y_max;
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
@@ -2616,6 +2627,18 @@ void AssetInfo::set_tilt_range_degrees(int min_degrees, int max_degrees) {
         tilt_range_max_deg = sanitized_max;
         info_json_["tilt_range_min_deg"] = tilt_range_min_deg;
         info_json_["tilt_range_max_deg"] = tilt_range_max_deg;
+}
+
+void AssetInfo::set_y_position_range(int min_value, int max_value) {
+        int sanitized_min = clamp_y_position_value(min_value);
+        int sanitized_max = clamp_y_position_value(max_value);
+        if (sanitized_max < sanitized_min) {
+                std::swap(sanitized_min, sanitized_max);
+        }
+        y_pos_min = sanitized_min;
+        y_pos_max = sanitized_max;
+        info_json_["y_pos_min"] = y_pos_min;
+        info_json_["y_pos_max"] = y_pos_max;
 }
 
 void AssetInfo::set_scale_filter(bool smooth) {
@@ -3032,12 +3055,33 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 }
                 tilt_range_min_deg = tilt_min;
                 tilt_range_max_deg = tilt_max;
+                int y_min = 0;
+                int y_max = 0;
+                if (data.contains("y_pos_min")) {
+                        if (const auto parsed = parse_number_like_json(data["y_pos_min"])) {
+                                y_min = static_cast<int>(std::lround(*parsed));
+                        }
+                }
+                if (data.contains("y_pos_max")) {
+                        if (const auto parsed = parse_number_like_json(data["y_pos_max"])) {
+                                y_max = static_cast<int>(std::lround(*parsed));
+                        }
+                }
+                y_min = clamp_y_position_value(y_min);
+                y_max = clamp_y_position_value(y_max);
+                if (y_max < y_min) {
+                        std::swap(y_min, y_max);
+                }
+                y_pos_min = y_min;
+                y_pos_max = y_max;
         } catch (...) {
 
         }
         info_json_["bounce_amount"] = bounce_amount;
         info_json_["tilt_range_min_deg"] = tilt_range_min_deg;
         info_json_["tilt_range_max_deg"] = tilt_range_max_deg;
+        info_json_["y_pos_min"] = y_pos_min;
+        info_json_["y_pos_max"] = y_pos_max;
 
         if (is_vibble_asset_name(name) && oval_anchor_mappings.empty()) {
                 const std::vector<std::string> vibble_mapping_names{

@@ -2852,36 +2852,37 @@ void RoomEditor::update_ui(const Input& input) {
     }
 
     if (library_ui_) {
-if (auto selected = library_ui_->consume_selection()) {
-    last_selected_from_library_ = selected;
-    const bool had_pending_spawn = pending_spawn_world_pos_.has_value();
-    bool spawned_asset = false;
-    if (pending_spawn_world_pos_) {
-        SDL_Point world = *pending_spawn_world_pos_;
-        pending_spawn_world_pos_.reset();
-        if (current_room_ && assets_) {
-            bool inside_room = !current_room_->room_area ||
-                               current_room_->room_area->contains_point(world);
-            if (inside_room) {
-                if (Asset* spawned = assets_->spawn_asset(selected->name, world)) {
-                    finalize_asset_drag(spawned, selected);
-                    selected_assets_.clear();
-                    selected_assets_.push_back(spawned);
-                    if (hovered_asset_ != spawned) {
-                        hovered_asset_ = spawned;
+        if (auto selected = library_ui_->consume_selection()) {
+            last_selected_from_library_ = selected;
+            const bool had_pending_spawn = pending_spawn_world_pos_.has_value();
+            bool spawned_asset = false;
+            if (pending_spawn_world_pos_) {
+                SDL_Point world = *pending_spawn_world_pos_;
+                pending_spawn_world_pos_.reset();
+                if (current_room_ && assets_) {
+                    const bool inside_room = !current_room_->room_area ||
+                                             current_room_->room_area->contains_point(world);
+                    if (inside_room) {
+                        if (Asset* spawned = assets_->spawn_asset(selected->name, world)) {
+                            finalize_asset_drag(spawned, selected);
+                            clear_mouse_press_state(true);
+                            if (!select_asset_or_group(spawned)) {
+                                selected_assets_.clear();
+                                selected_assets_.push_back(spawned);
+                            }
+                            hovered_asset_ = selected_assets_.empty() ? spawned : selected_assets_.front();
+                            mark_highlight_dirty();
+                            update_highlighted_assets();
+                            sync_spawn_group_panel_with_selection();
+                            spawned_asset = true;
+                        }
                     }
-                    mark_highlight_dirty();
-                    update_highlighted_assets();
-                    sync_spawn_group_panel_with_selection();
-                    spawned_asset = true;
                 }
             }
-        }
-    }
-    if (!spawned_asset && !had_pending_spawn) {
-        pending_spawn_world_pos_.reset();
-        open_asset_info_editor(selected);
-    }
+            if (!spawned_asset && !had_pending_spawn) {
+                pending_spawn_world_pos_.reset();
+                open_asset_info_editor(selected);
+            }
         }
 
         if (auto area_sel = library_ui_->consume_area_selection()) {
@@ -5549,16 +5550,17 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
     entry["candidates"].push_back({{"name", info->name}, {"chance", 100}});
 
     arr.push_back(entry);
-    save_current_room_assets_json();
-
-    asset->spawn_id     = spawn_id;
-    asset->spawn_method = "Exact";
+    asset->spawn_id = spawn_id;
+    asset->spawn_method = vibble::spawn_group_codec::normalize_method(
+        entry.value("position", std::string{"Exact"}),
+        "Exact");
 
     if (asset) {
         refresh_asset_spatial_entry(assets_->getView(), asset);
         ensure_spatial_index(assets_->getView());
     }
 
+    save_current_room_assets_json();
     mark_highlight_dirty();
 
     active_spawn_group_id_ = spawn_id;
@@ -6071,6 +6073,7 @@ Asset* RoomEditor::selected_asset_within_interaction_radius(SDL_Point screen_poi
     int best_screen_y = std::numeric_limits<int>::max();
     for (Asset* asset : selected_assets_) {
         if (!asset || asset->dead) continue;
+        if (!asset_belongs_to_room(asset)) continue;
         SDL_Rect bounds{0, 0, 0, 0};
         int screen_y = 0;
         bool have_bounds = false;
@@ -6945,6 +6948,9 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
                                       const SDL_Rect& rect,
                                       int screen_y) {
             if (!asset) return;
+            if (!asset_belongs_to_room(asset)) {
+                return;
+            }
             if (!asset_matches_selection_filter(asset)) {
                 return;
             }
@@ -7477,6 +7483,9 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
                                   const SDL_Rect& rect,
                                   int screen_y) {
         if (!asset) return;
+        if (!asset_belongs_to_room(asset)) {
+            return;
+        }
         if (!asset_matches_selection_filter(asset)) {
             return;
         }
@@ -7509,6 +7518,9 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
 
     for (Asset* asset : *source_assets) {
         if (!asset) continue;
+        if (!asset_belongs_to_room(asset)) {
+            continue;
+        }
         if (!asset_matches_selection_filter(asset)) {
             continue;
         }
@@ -22956,26 +22968,29 @@ bool RoomEditor::is_room_spawn_id(const std::string& spawn_id) const {
     return room_spawn_ids_.find(spawn_id) != room_spawn_ids_.end();
 }
 
-bool RoomEditor::asset_belongs_to_room(const Asset* asset) const {
-    if (!asset) return false;
-    // Boundary assets are always accessible in selection modes
-    const auto ownership = classify_asset_ownership(asset);
-    if (ownership == devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
-        return true;
+bool RoomEditor::spawn_membership_allows_room_selection(const std::string& spawn_id,
+                                                        const std::string& owning_room_name) const {
+    if (!spawn_id.empty()) {
+        const auto ownership = classify_spawn_group_ownership(spawn_id);
+        if (ownership == devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
+            return true;
+        }
     }
-    // If no current room, only boundary assets are eligible
     if (!current_room_) {
         return false;
     }
-    // Check if the asset belongs to the current room by spawn_id
-    if (!asset->spawn_id.empty() && room_spawn_ids_.find(asset->spawn_id) != room_spawn_ids_.end()) {
+    if (!spawn_id.empty() && room_spawn_ids_.find(spawn_id) != room_spawn_ids_.end()) {
         return true;
     }
-    // Check by owning room name
-    if (!asset->owning_room_name().empty() && asset->owning_room_name() == current_room_->room_name) {
+    if (!owning_room_name.empty() && owning_room_name == current_room_->room_name) {
         return true;
     }
     return false;
+}
+
+bool RoomEditor::asset_belongs_to_room(const Asset* asset) const {
+    if (!asset) return false;
+    return spawn_membership_allows_room_selection(asset->spawn_id, asset->owning_room_name());
 }
 
 void RoomEditor::handle_spawn_config_change(const nlohmann::json& entry) {
@@ -23250,6 +23265,8 @@ void RoomEditor::process_pending_spawn_group_work() {
     }
 
     ScopedBoolOverride processing_guard(processing_pending_spawn_group_work_);
+    std::unordered_set<std::string> respawned_spawn_ids;
+    std::unordered_set<std::string> notified_spawn_ids;
 
     constexpr int kMaxPasses = 8;
     for (int pass = 0; pass < kMaxPasses; ++pass) {
@@ -23288,10 +23305,15 @@ void RoomEditor::process_pending_spawn_group_work() {
                 }
             }
 
-            if (work.needs_respawn && effective_entry.is_object()) {
+            if (work.needs_respawn &&
+                effective_entry.is_object() &&
+                respawned_spawn_ids.insert(work.spawn_id).second) {
                 respawn_spawn_group(effective_entry);
             }
-            if (work.needs_map_notify && effective_entry.is_object() && assets_) {
+            if (work.needs_map_notify &&
+                effective_entry.is_object() &&
+                assets_ &&
+                notified_spawn_ids.insert(work.spawn_id).second) {
                 assets_->notify_spawn_group_config_changed(effective_entry);
             }
 
@@ -24592,5 +24614,26 @@ std::uint32_t RoomEditorTestAccess::delete_shortcut_asset_delete_count(const Roo
 void RoomEditorTestAccess::reset_delete_shortcut_route_counters(RoomEditor& editor) {
     editor.test_delete_shortcut_stack_dispatch_count_ = 0;
     editor.test_delete_shortcut_asset_delete_count_ = 0;
+}
+
+void RoomEditorTestAccess::set_spawn_id_ownership_cache(
+    RoomEditor& editor,
+    const std::vector<std::string>& room_spawn_ids,
+    const std::vector<std::string>& map_boundary_spawn_ids) {
+    editor.room_spawn_ids_.clear();
+    editor.map_boundary_spawn_ids_.clear();
+    editor.room_spawn_ids_.insert(room_spawn_ids.begin(), room_spawn_ids.end());
+    editor.map_boundary_spawn_ids_.insert(map_boundary_spawn_ids.begin(), map_boundary_spawn_ids.end());
+}
+
+int RoomEditorTestAccess::classify_spawn_group_ownership(const RoomEditor& editor, const std::string& spawn_id) {
+    return static_cast<int>(editor.classify_spawn_group_ownership(spawn_id));
+}
+
+bool RoomEditorTestAccess::spawn_membership_allows_room_selection(
+    const RoomEditor& editor,
+    const std::string& spawn_id,
+    const std::string& owning_room_name) {
+    return editor.spawn_membership_allows_room_selection(spawn_id, owning_room_name);
 }
 #endif

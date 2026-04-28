@@ -24,7 +24,6 @@ constexpr int kPerimeterMinNumber = 2;
 constexpr int kEdgeInsetPercentMin = 0;
 constexpr int kEdgeInsetPercentMax = 200;
 constexpr int kEdgeInsetPercentDefault = 100;
-constexpr int kDefaultPositionY = 0;
 
 struct CandidateDefaults {
     std::string name = "null";
@@ -364,23 +363,10 @@ inline bool sanitize_perimeter_edge_fields(nlohmann::json& entry) {
     if (!entry.is_object()) return false;
 
     bool changed = false;
-    const bool randomize_y = read_bool_field(entry, "randomize_y", false);
-    int position_y = read_int_field(entry, "position_y", kDefaultPositionY);
-    int min_y = read_int_field(entry, "min_y", position_y);
-    int max_y = read_int_field(entry, "max_y", position_y);
-    if (max_y < min_y) {
-        std::swap(min_y, max_y);
-    }
-    changed = detail::set_field(entry, "randomize_y", randomize_y) || changed;
-    if (randomize_y) {
-        changed = detail::set_field(entry, "min_y", min_y) || changed;
-        changed = detail::set_field(entry, "max_y", max_y) || changed;
-        changed = detail::erase_field(entry, "position_y") || changed;
-    } else {
-        changed = detail::set_field(entry, "position_y", position_y) || changed;
-        changed = detail::erase_field(entry, "min_y") || changed;
-        changed = detail::erase_field(entry, "max_y") || changed;
-    }
+    changed = detail::erase_field(entry, "randomize_y") || changed;
+    changed = detail::erase_field(entry, "position_y") || changed;
+    changed = detail::erase_field(entry, "min_y") || changed;
+    changed = detail::erase_field(entry, "max_y") || changed;
 
     const std::string method = normalize_method_from_entry(entry);
     changed = detail::set_field(entry, "position", method) || changed;
@@ -501,23 +487,10 @@ inline bool ensure_spawn_group_entry_defaults(nlohmann::json& entry,
     const bool force_flipped = read_bool_field(entry, "force_flipped", false);
     changed = detail::set_field(entry, "force_flipped", force_flipped) || changed;
 
-    const bool randomize_y = read_bool_field(entry, "randomize_y", false);
-    int position_y = read_int_field(entry, "position_y", kDefaultPositionY);
-    int min_y = read_int_field(entry, "min_y", position_y);
-    int max_y = read_int_field(entry, "max_y", position_y);
-    if (max_y < min_y) {
-        std::swap(min_y, max_y);
-    }
-    changed = detail::set_field(entry, "randomize_y", randomize_y) || changed;
-    if (randomize_y) {
-        changed = detail::set_field(entry, "min_y", min_y) || changed;
-        changed = detail::set_field(entry, "max_y", max_y) || changed;
-        changed = detail::erase_field(entry, "position_y") || changed;
-    } else {
-        changed = detail::set_field(entry, "position_y", position_y) || changed;
-        changed = detail::erase_field(entry, "min_y") || changed;
-        changed = detail::erase_field(entry, "max_y") || changed;
-    }
+    changed = detail::erase_field(entry, "randomize_y") || changed;
+    changed = detail::erase_field(entry, "position_y") || changed;
+    changed = detail::erase_field(entry, "min_y") || changed;
+    changed = detail::erase_field(entry, "max_y") || changed;
 
     if (sanitize_spawn_group_candidates(entry, defaults.default_candidate)) {
         changed = true;

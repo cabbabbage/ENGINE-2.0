@@ -457,12 +457,11 @@ void AssetSpawner::spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
                                 continue;
                         }
 
-                        const int spawn_depth = spawn_info->resolve_spawn_depth(local_rng);
                         Asset* spawned = context.spawnAsset(candidate->resolved_asset_name,
                                                             candidate->info,
                                                             *owner->room_area,
                                                             spawn_pos,
-                                                            spawn_depth,
+                                                            0,
                                                             spawn_info->spawn_id,
                                                             "MapWide");
                         if (spawned) {
@@ -686,12 +685,11 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                                                 5)) {
                                                 continue;
                                         }
-                                        const int spawn_depth = queue_item.resolve_spawn_depth(batch_ctx.rng());
                                         auto* result = batch_ctx.spawnAsset(candidate->resolved_asset_name,
                                                                             candidate->info,
                                                                             area,
                                                                             spawn_pos,
-                                                                            spawn_depth,
+                                                                            0,
                                                                             queue_item.spawn_id,
                                                                             queue_item.position);
                                         if (!result) {
@@ -912,12 +910,11 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
                                 continue;
                         }
 
-                        const int spawn_depth = queue_item.resolve_spawn_depth(ctx.rng());
                         auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
                                                       candidate->info,
                                                       area,
                                                       spawn_pos,
-                                                      spawn_depth,
+                                                      0,
                                                       queue_item.spawn_id,
                                                       queue_item.position);
                         if (result) {

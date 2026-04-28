@@ -139,6 +139,10 @@ private:
 
     std::shared_ptr<AssetInfo> pending_selection_{};
     std::optional<AreaRef> pending_area_selection_{};
+    bool selection_dispatched_this_update_ = false;
+    bool area_selection_dispatched_this_update_ = false;
+    bool refresh_tiles_in_progress_ = false;
+    bool refresh_tiles_queued_ = false;
     bool multi_select_mode_ = false;
     std::unordered_set<std::string> multi_select_selection_;
 

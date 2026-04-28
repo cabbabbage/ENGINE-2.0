@@ -95,6 +95,24 @@ static double sample_spawn_tilt_degrees(const std::shared_ptr<AssetInfo>& info)
         return static_cast<double>(dist(asset_rng()));
 }
 
+static int sample_spawn_y_position(const std::shared_ptr<AssetInfo>& info)
+{
+        if (!info) {
+                return 0;
+        }
+        int min_y = std::clamp(info->y_pos_min, -50, 200);
+        int max_y = std::clamp(info->y_pos_max, -50, 200);
+        if (max_y < min_y) {
+                std::swap(min_y, max_y);
+        }
+        if (min_y == max_y) {
+                return min_y;
+        }
+        std::uniform_int_distribution<int> dist(min_y, max_y);
+        std::lock_guard<std::mutex> lock(asset_rng_mutex());
+        return dist(asset_rng());
+}
+
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
 
@@ -876,6 +894,13 @@ void Asset::finalize_setup() {
         refresh_anchor_point_cache_from_frame();
         refresh_runtime_box_cache_from_frame();
         refresh_runtime_floor_boxes_cache();
+
+        const int resolved_world_y = sample_spawn_y_position(info);
+        if (assets_) {
+                move_to_world_position(world_x(), resolved_world_y, world_z());
+        } else {
+                set_provisional_grid_point(world_x(), resolved_world_y, world_z(), grid_resolution);
+        }
 
         finalized_ = true;
 }

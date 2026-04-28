@@ -24610,6 +24610,7 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 16,
               "quantity": 1,
               "resolution": 9,
               "resolve_geometry_to_room_size": true,
@@ -24639,11 +24640,129 @@
               "origional_height": 4000,
               "origional_width": 4000,
               "position": "Exact",
+              "priority": 17,
               "quantity": 1,
               "resolution": 9,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-4e2215fd5dfe"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "bone"
+                }
+              ],
+              "display_name": "bone",
+              "dx": -13288,
+              "dz": -13288,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "priority": 18,
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-65dee31c0b88"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "axe_in_stump"
+                }
+              ],
+              "display_name": "axe_in_stump",
+              "dx": -13288,
+              "dz": -13288,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-1d5cb3872348"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -13288,
+              "dz": -13288,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-001e4a1c1d72"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "attack_speed"
+                }
+              ],
+              "display_name": "attack_speed",
+              "dx": -13288,
+              "dz": -13288,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 4000,
+              "origional_width": 4000,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-eb3a3b55c6d3"
             }
           ],
           "trail_connection_sector": {

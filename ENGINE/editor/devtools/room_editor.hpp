@@ -390,6 +390,7 @@ private:
     void reorder_spawn_group_internal(const std::string& spawn_id, size_t target_index);
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
     void open_spawn_group_floating_panel(const std::string& spawn_id, std::optional<SDL_Point> screen_anchor = std::nullopt);
+    void focus_camera_on_spawn_group(const std::string& spawn_id);
     void apply_spawn_group_floating_layout(bool reset_scroll = false);
     void reopen_room_configurator();
     void notify_room_assets_saved();

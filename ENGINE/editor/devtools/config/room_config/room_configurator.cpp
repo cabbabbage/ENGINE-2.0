@@ -225,6 +225,229 @@ std::vector<std::string> collect_room_tag_recommendations(const Assets* assets,
     return recommendations;
 }
 
+std::size_t hash_spawn_group_rows(const std::vector<RoomConfigurator::SpawnGroupListItem>& rows) {
+    std::size_t seed = rows.size();
+    auto combine = [&seed](const std::string& value) {
+        seed ^= std::hash<std::string>{}(value) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    };
+    for (const auto& row : rows) {
+        combine(row.spawn_id);
+        combine(row.display_name);
+        combine(row.icon_label);
+    }
+    return seed;
+}
+
+class SpawnGroupListWidget final : public Widget {
+public:
+    using ClickCallback = std::function<void(const std::string&)>;
+    using DeleteCallback = std::function<bool(const std::string&)>;
+
+    SpawnGroupListWidget(ClickCallback on_click,
+                         ClickCallback on_double_click,
+                         DeleteCallback on_delete)
+        : on_click_(std::move(on_click)),
+          on_double_click_(std::move(on_double_click)),
+          on_delete_(std::move(on_delete)) {}
+
+    void set_rows(std::vector<RoomConfigurator::SpawnGroupListItem> rows) {
+        rows_ = std::move(rows);
+        max_scroll_ = std::max(0, static_cast<int>(rows_.size()) * kRowHeight - content_height());
+        scroll_px_ = std::clamp(scroll_px_, 0, max_scroll_);
+    }
+
+    void set_rect(const SDL_Rect& r) override {
+        rect_ = r;
+        max_scroll_ = std::max(0, static_cast<int>(rows_.size()) * kRowHeight - content_height());
+        scroll_px_ = std::clamp(scroll_px_, 0, max_scroll_);
+    }
+
+    const SDL_Rect& rect() const override { return rect_; }
+
+    int height_for_width(int) const override { return kPreferredHeight; }
+
+    bool wants_full_row() const override { return true; }
+
+    bool handle_event(const SDL_Event& e) override {
+        if (rect_.w <= 0 || rect_.h <= 0) {
+            return false;
+        }
+        if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+            SDL_Point p = SDL_Point{
+                static_cast<int>(std::lround(e.wheel.mouse_x)),
+                static_cast<int>(std::lround(e.wheel.mouse_y))
+            };
+            if (!SDL_PointInRect(&p, &rect_)) {
+                return false;
+            }
+            const int delta = -e.wheel.y * kWheelStepPx;
+            if (delta != 0) {
+                scroll_px_ = std::clamp(scroll_px_ + delta, 0, max_scroll_);
+            }
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+            if (!SDL_PointInRect(&p, &rect_)) {
+                return false;
+            }
+            const int row_index = row_index_at_point(p);
+            if (row_index < 0 || row_index >= static_cast<int>(rows_.size())) {
+                return true;
+            }
+            const auto& row = rows_[static_cast<std::size_t>(row_index)];
+            if (row.spawn_id.empty()) {
+                return true;
+            }
+            if (point_in_delete_button(row_index, p)) {
+                if (on_delete_) {
+                    on_delete_(row.spawn_id);
+                }
+                return true;
+            }
+            const Uint32 now = SDL_GetTicks();
+            const bool is_double_click = !last_clicked_id_.empty() &&
+                                         last_clicked_id_ == row.spawn_id &&
+                                         now >= last_click_time_ms_ &&
+                                         (now - last_click_time_ms_) <= kDoubleClickMs;
+            last_clicked_id_ = row.spawn_id;
+            last_click_time_ms_ = now;
+            if (is_double_click) {
+                if (on_double_click_) {
+                    on_double_click_(row.spawn_id);
+                }
+            } else if (on_click_) {
+                on_click_(row.spawn_id);
+            }
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+            if (SDL_PointInRect(&p, &rect_)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void render(SDL_Renderer* renderer) const override {
+        if (!renderer || rect_.w <= 0 || rect_.h <= 0) {
+            return;
+        }
+        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 120);
+        sdl_render::FillRect(renderer, &rect_);
+        SDL_Rect clip = rect_;
+        SDL_SetRenderClipRect(renderer, &clip);
+
+        const int first_row = std::max(0, scroll_px_ / kRowHeight);
+        const int last_row = std::min(static_cast<int>(rows_.size()) - 1,
+                                      (scroll_px_ + content_height()) / kRowHeight + 1);
+        for (int i = first_row; i <= last_row; ++i) {
+            if (i < 0 || i >= static_cast<int>(rows_.size())) {
+                continue;
+            }
+            SDL_Rect row_rect = row_rect_for_index(i);
+            const bool even = (i % 2) == 0;
+            SDL_Color row_bg = even ? SDL_Color{34, 34, 34, 180} : SDL_Color{40, 40, 40, 180};
+            SDL_SetRenderDrawColor(renderer, row_bg.r, row_bg.g, row_bg.b, row_bg.a);
+            sdl_render::FillRect(renderer, &row_rect);
+
+            SDL_SetRenderDrawColor(renderer, 66, 66, 66, 200);
+            SDL_RenderLine(renderer, row_rect.x, row_rect.y + row_rect.h - 1, row_rect.x + row_rect.w, row_rect.y + row_rect.h - 1);
+
+            const auto& row = rows_[static_cast<std::size_t>(i)];
+            const std::string icon = row.icon_label.empty() ? "?" : row.icon_label;
+            const std::string label = row.display_name.empty() ? row.spawn_id : row.display_name;
+            render_text(renderer, icon, row_rect.x + kRowPadX, row_rect.y + 6, SDL_Color{170, 205, 255, 255}, 12);
+            render_text(renderer, label, row_rect.x + kRowPadX + kIconWidth, row_rect.y + 6, DMStyles::Label().color, 13);
+
+            SDL_Rect del = delete_button_rect_for_row(i);
+            SDL_SetRenderDrawColor(renderer, 110, 48, 48, 220);
+            sdl_render::FillRect(renderer, &del);
+            SDL_SetRenderDrawColor(renderer, 168, 88, 88, 230);
+            SDL_RenderLine(renderer, del.x, del.y, del.x + del.w - 1, del.y);
+            SDL_RenderLine(renderer, del.x, del.y, del.x, del.y + del.h - 1);
+            SDL_RenderLine(renderer, del.x + del.w - 1, del.y, del.x + del.w - 1, del.y + del.h - 1);
+            SDL_RenderLine(renderer, del.x, del.y + del.h - 1, del.x + del.w - 1, del.y + del.h - 1);
+            render_text(renderer, "X", del.x + 7, del.y + 3, SDL_Color{255, 220, 220, 255}, 12);
+        }
+
+        SDL_SetRenderClipRect(renderer, nullptr);
+    }
+
+private:
+    static constexpr int kPreferredHeight = 220;
+    static constexpr int kRowHeight = 30;
+    static constexpr int kRowPadX = 8;
+    static constexpr int kIconWidth = 28;
+    static constexpr int kDeleteWidth = 24;
+    static constexpr int kDeleteHeight = 20;
+    static constexpr int kWheelStepPx = 22;
+    static constexpr Uint32 kDoubleClickMs = 300;
+
+    int content_height() const { return std::max(0, rect_.h); }
+
+    SDL_Rect row_rect_for_index(int index) const {
+        const int y = rect_.y + (index * kRowHeight) - scroll_px_;
+        return SDL_Rect{rect_.x, y, rect_.w, kRowHeight};
+    }
+
+    SDL_Rect delete_button_rect_for_row(int index) const {
+        SDL_Rect row = row_rect_for_index(index);
+        return SDL_Rect{
+            row.x + row.w - kDeleteWidth - 8,
+            row.y + (row.h - kDeleteHeight) / 2,
+            kDeleteWidth,
+            kDeleteHeight
+        };
+    }
+
+    bool point_in_delete_button(int row_index, SDL_Point p) const {
+        SDL_Rect del = delete_button_rect_for_row(row_index);
+        return SDL_PointInRect(&p, &del);
+    }
+
+    int row_index_at_point(SDL_Point p) const {
+        const int local_y = p.y - rect_.y + scroll_px_;
+        if (local_y < 0) return -1;
+        return local_y / kRowHeight;
+    }
+
+    static void render_text(SDL_Renderer* renderer,
+                            const std::string& text,
+                            int x,
+                            int y,
+                            SDL_Color color,
+                            int font_size) {
+        if (text.empty()) return;
+        TTF_Font* font = TTF_OpenFont(DMStyles::Label().font_path.c_str(), font_size);
+        if (!font) return;
+        SDL_Surface* surface = ttf_util::RenderTextBlended(font, text.c_str(), color);
+        if (!surface) {
+            TTF_CloseFont(font);
+            return;
+        }
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+        if (texture) {
+            SDL_Rect dst{x, y, surface->w, surface->h};
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
+            SDL_DestroyTexture(texture);
+        }
+        SDL_DestroySurface(surface);
+        TTF_CloseFont(font);
+    }
+
+    SDL_Rect rect_{0, 0, 0, 0};
+    std::vector<RoomConfigurator::SpawnGroupListItem> rows_{};
+    ClickCallback on_click_{};
+    ClickCallback on_double_click_{};
+    DeleteCallback on_delete_{};
+    std::string last_clicked_id_{};
+    Uint32 last_click_time_ms_ = 0;
+    int scroll_px_ = 0;
+    int max_scroll_ = 0;
+};
+
 class TrailConnectionSectorWidget final : public Widget {
 public:
     using ChangeCallback = std::function<void(double direction_deg, int width_percent)>;
@@ -866,6 +1089,27 @@ void RoomConfigurator::set_room_metadata_only_mode(bool enabled) {
     request_rebuild();
 }
 
+void RoomConfigurator::set_spawn_groups_provider(std::function<std::vector<SpawnGroupListItem>()> provider) {
+    spawn_groups_provider_ = std::move(provider);
+    spawn_group_rows_hash_ = 0;
+    request_rebuild();
+}
+
+void RoomConfigurator::set_on_spawn_group_click(std::function<void(const std::string&)> cb) {
+    on_spawn_group_click_ = std::move(cb);
+    request_rebuild();
+}
+
+void RoomConfigurator::set_on_spawn_group_double_click(std::function<void(const std::string&)> cb) {
+    on_spawn_group_double_click_ = std::move(cb);
+    request_rebuild();
+}
+
+void RoomConfigurator::set_on_spawn_group_delete(std::function<bool(const std::string&)> cb) {
+    on_spawn_group_delete_ = std::move(cb);
+    request_rebuild();
+}
+
 void RoomConfigurator::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
 }
@@ -901,6 +1145,7 @@ void RoomConfigurator::set_bounds(const SDL_Rect& bounds) {
     if (geometry_panel_) geometry_panel_->set_work_area(applied);
     if (tags_panel_) tags_panel_->set_work_area(applied);
     if (types_panel_) types_panel_->set_work_area(applied);
+    if (spawn_groups_panel_) spawn_groups_panel_->set_work_area(applied);
     request_container_layout();
 }
 
@@ -910,6 +1155,7 @@ void RoomConfigurator::set_work_area(const SDL_Rect& bounds) {
     if (geometry_panel_) geometry_panel_->set_work_area(bounds);
     if (tags_panel_) tags_panel_->set_work_area(bounds);
     if (types_panel_) types_panel_->set_work_area(bounds);
+    if (spawn_groups_panel_) spawn_groups_panel_->set_work_area(bounds);
     request_container_layout();
 }
 
@@ -1118,6 +1364,7 @@ void RoomConfigurator::ensure_base_panels() {
     const std::string geometry_title = is_trail_context_ ? "Trail Geometry" : "Room Geometry";
     const std::string tags_title = is_trail_context_ ? "Trail Tags" : "Room Tags";
     const std::string types_title = is_trail_context_ ? "Trail Types" : "Room Types";
+    const std::string spawn_groups_title = "Spawn Groups";
 
     ensure_panel(geometry_panel_, "geometry", geometry_title);
     if (!room_metadata_only_mode_) {
@@ -1126,6 +1373,7 @@ void RoomConfigurator::ensure_base_panels() {
         tags_panel_->set_visible(false);
     }
     ensure_panel(types_panel_, "types", types_title);
+    ensure_panel(spawn_groups_panel_, "spawn_groups", spawn_groups_title);
 }
 
 void RoomConfigurator::refresh_base_panel_rows() {
@@ -1182,7 +1430,62 @@ void RoomConfigurator::refresh_base_panel_rows() {
             ordered_base_panels_.push_back(types_panel_.get());
         }
     }
+
+    if (spawn_groups_panel_ && spawn_group_list_widget_) {
+        DockableCollapsible::Rows rows;
+        rows.push_back({spawn_group_list_widget_.get()});
+        spawn_groups_panel_->set_rows(rows);
+        spawn_groups_panel_->set_visible(true);
+        ordered_base_panels_.push_back(spawn_groups_panel_.get());
+    } else if (spawn_groups_panel_) {
+        spawn_groups_panel_->set_rows({});
+        spawn_groups_panel_->set_visible(false);
+    }
     apply_panel_focus_states();
+}
+
+void RoomConfigurator::refresh_spawn_group_rows_if_needed() {
+    std::vector<SpawnGroupListItem> rows;
+    if (spawn_groups_provider_) {
+        rows = spawn_groups_provider_();
+    } else if (room_) {
+        auto& root = room_->assets_data();
+        auto it = root.find("spawn_groups");
+        if (it != root.end() && it->is_array()) {
+            rows.reserve(it->size());
+            for (const auto& entry : *it) {
+                if (!entry.is_object()) continue;
+                SpawnGroupListItem item{};
+                item.spawn_id = entry.value("spawn_id", std::string{});
+                item.display_name = entry.value("display_name", std::string{});
+                if (item.display_name.empty()) {
+                    item.display_name = item.spawn_id;
+                }
+                if (entry.contains("candidates") && entry["candidates"].is_array() && !entry["candidates"].empty()) {
+                    const auto& candidate = entry["candidates"][0];
+                    if (candidate.is_object()) {
+                        std::string asset_name = candidate.value("name", std::string{});
+                        if (!asset_name.empty()) {
+                            item.icon_label = asset_name.substr(0, std::min<std::size_t>(2, asset_name.size()));
+                        }
+                    }
+                }
+                rows.push_back(std::move(item));
+            }
+        }
+    }
+
+    const std::size_t next_hash = hash_spawn_group_rows(rows);
+    if (next_hash == spawn_group_rows_hash_ && rows.size() == spawn_group_rows_.size()) {
+        return;
+    }
+    spawn_group_rows_hash_ = next_hash;
+    spawn_group_rows_ = rows;
+    if (auto* widget = dynamic_cast<SpawnGroupListWidget*>(spawn_group_list_widget_.get())) {
+        widget->set_rows(spawn_group_rows_);
+    }
+    refresh_base_panel_rows();
+    request_container_layout();
 }
 
 void RoomConfigurator::request_container_layout() {
@@ -1791,6 +2094,26 @@ void RoomConfigurator::rebuild_rows_internal() {
     inherit_checkbox_ = std::make_unique<DMCheckbox>("Inherit Map Assets", state_->inherits_assets);
     inherit_widget_ = std::make_unique<CheckboxWidget>(inherit_checkbox_.get());
 
+    spawn_group_list_widget_ = std::make_unique<SpawnGroupListWidget>(
+        [this](const std::string& spawn_id) {
+            if (on_spawn_group_click_) {
+                on_spawn_group_click_(spawn_id);
+            }
+        },
+        [this](const std::string& spawn_id) {
+            if (on_spawn_group_double_click_) {
+                on_spawn_group_double_click_(spawn_id);
+            }
+        },
+        [this](const std::string& spawn_id) -> bool {
+            if (!on_spawn_group_delete_) {
+                return false;
+            }
+            const bool removed = on_spawn_group_delete_(spawn_id);
+            refresh_spawn_group_rows_if_needed();
+            return removed;
+        });
+
     if (!room_metadata_only_mode_) {
         tag_editor_ = std::make_unique<TagEditorWidget>();
         tag_editor_->set_tags(room_tags_, is_trail_context_ ? room_anti_tags_ : std::vector<std::string>{});
@@ -1815,6 +2138,7 @@ void RoomConfigurator::rebuild_rows_internal() {
     }
 
     refresh_base_panel_rows();
+    refresh_spawn_group_rows_if_needed();
 
     if (force_collapse_sections) {
         for (auto* panel : ordered_base_panels_) {
@@ -1836,6 +2160,7 @@ void RoomConfigurator::update(const Input& input, int screen_w, int screen_h) {
         rebuild_rows();
     }
     ensure_base_panels();
+    refresh_spawn_group_rows_if_needed();
     const bool panel_visible = container_ && container_->is_visible();
     SDL_Rect panel_work_area = work_area_;
     if (panel_work_area.w <= 0 || panel_work_area.h <= 0) {
@@ -1878,6 +2203,7 @@ void RoomConfigurator::prepare_for_event(int screen_w, int screen_h) {
         return;
     }
     ensure_base_panels();
+    refresh_spawn_group_rows_if_needed();
     last_screen_w_ = use_w;
     last_screen_h_ = use_h;
     if (container_) {

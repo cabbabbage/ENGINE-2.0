@@ -5518,6 +5518,13 @@ void RoomEditor::begin_library_placement(const SDL_Point& world_point) {
     placement.snap_resolution = placement.snap_enabled ? current_grid_resolution() : 0;
     pending_library_placement_ = std::move(placement);
     pending_spawn_world_pos_ = world_point;
+    std::cerr << "[PLACEMENT_DEBUG] capture"
+              << " serial=" << pending_library_placement_->request_serial
+              << " room=\"" << pending_library_placement_->room_name << "\""
+              << " world=(" << world_point.x << "," << world_point.y << ")"
+              << " snap_enabled=" << (pending_library_placement_->snap_enabled ? 1 : 0)
+              << " snap_resolution=" << pending_library_placement_->snap_resolution
+              << "\n";
 }
 
 void RoomEditor::clear_library_placement() {
@@ -5539,30 +5546,77 @@ std::optional<SDL_Point> RoomEditor::resolve_pending_library_placement_world() c
 bool RoomEditor::commit_library_asset_placement(const std::shared_ptr<AssetInfo>& info, Asset*& out_spawned_asset) {
     out_spawned_asset = nullptr;
     if (!info || !assets_ || !current_room_ || !pending_library_placement_) {
+        std::cerr << "[PLACEMENT_DEBUG] commit_abort missing_prereq"
+                  << " has_info=" << (info ? 1 : 0)
+                  << " has_assets=" << (assets_ ? 1 : 0)
+                  << " has_room=" << (current_room_ ? 1 : 0)
+                  << " has_pending=" << (pending_library_placement_ ? 1 : 0)
+                  << "\n";
         return false;
     }
 
     const PendingLibraryPlacement placement = *pending_library_placement_;
+    std::cerr << "[PLACEMENT_DEBUG] commit_begin"
+              << " serial=" << placement.request_serial
+              << " room_capture=\"" << placement.room_name << "\""
+              << " room_current=\"" << current_room_->room_name << "\""
+              << " click_world=(" << placement.world_point.x << "," << placement.world_point.y << ")"
+              << " asset=\"" << info->name << "\""
+              << "\n";
     if (!placement.room_name.empty() && current_room_->room_name != placement.room_name) {
+        std::cerr << "[PLACEMENT_DEBUG] commit_abort room_mismatch"
+                  << " serial=" << placement.request_serial
+                  << " captured=\"" << placement.room_name << "\""
+                  << " current=\"" << current_room_->room_name << "\""
+                  << "\n";
         return false;
     }
 
     const std::optional<SDL_Point> resolved_opt = resolve_pending_library_placement_world();
     if (!resolved_opt.has_value()) {
+        std::cerr << "[PLACEMENT_DEBUG] commit_abort no_resolved_world"
+                  << " serial=" << placement.request_serial
+                  << "\n";
         return false;
     }
     const SDL_Point resolved_world = *resolved_opt;
     const bool inside_room = !current_room_->room_area || current_room_->room_area->contains_point(resolved_world);
     if (!inside_room) {
+        std::cerr << "[PLACEMENT_DEBUG] commit_abort outside_room"
+                  << " serial=" << placement.request_serial
+                  << " resolved_world=(" << resolved_world.x << "," << resolved_world.y << ")"
+                  << "\n";
         return false;
     }
 
     Asset* spawned = assets_->spawn_asset(info->name, resolved_world);
     if (!spawned) {
+        std::cerr << "[PLACEMENT_DEBUG] commit_abort spawn_asset_failed"
+                  << " serial=" << placement.request_serial
+                  << " resolved_world=(" << resolved_world.x << "," << resolved_world.y << ")"
+                  << " asset=\"" << info->name << "\""
+                  << "\n";
         return false;
     }
 
-    const SDL_Point committed_spawned_world{spawned->world_x(), spawned->world_z()};
+    SDL_Point committed_spawned_world = resolved_world;
+    const bool spawned_has_grid_point = spawned->grid_point() != nullptr;
+    if (spawned_has_grid_point) {
+        committed_spawned_world = SDL_Point{spawned->world_x(), spawned->world_z()};
+    } else {
+        // Ensure immediate visual/world consistency when a newly spawned asset has no resolved grid point yet.
+        spawned->move_to_world_position(resolved_world.x, 0, resolved_world.y);
+        if (spawned->grid_point()) {
+            committed_spawned_world = SDL_Point{spawned->world_x(), spawned->world_z()};
+        }
+    }
+    std::cerr << "[PLACEMENT_DEBUG] commit_spawned"
+              << " serial=" << placement.request_serial
+              << " requested_world=(" << resolved_world.x << "," << resolved_world.y << ")"
+              << " has_grid_point=" << (spawned_has_grid_point ? 1 : 0)
+              << " spawned_world=(" << committed_spawned_world.x << "," << committed_spawned_world.y << ")"
+              << " asset=\"" << info->name << "\""
+              << "\n";
     finalize_asset_drag(spawned, info, &committed_spawned_world);
     out_spawned_asset = spawned;
 
@@ -5636,6 +5690,16 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
     active_spawn_group_id_ = spawn_id;
     refresh_spawn_group_config_ui();
     rebuild_room_spawn_id_cache();
+
+    std::cerr << "[PLACEMENT_DEBUG] spawn_group_written"
+              << " spawn_id=\"" << spawn_id << "\""
+              << " display_name=\"" << info->name << "\""
+              << " committed_world=(" << committed.x << "," << committed.y << ")"
+              << " room_center=(" << center.x << "," << center.y << ")"
+              << " dx=" << entry.value("dx", 0)
+              << " dz=" << entry.value("dz", 0)
+              << " asset_runtime_world=(" << asset->world_x() << "," << asset->world_z() << ")"
+              << "\n";
 }
 
 void RoomEditor::toggle_room_config() {
@@ -21105,6 +21169,78 @@ void RoomEditor::ensure_room_configurator() {
 
         room_cfg_ui_->set_work_area(DockManager::instance().usableRect());
         room_cfg_ui_->set_blocks_editor_interactions(false);
+        room_cfg_ui_->set_spawn_groups_provider([this]() {
+            std::vector<RoomConfigurator::SpawnGroupListItem> rows;
+            if (!current_room_) {
+                return rows;
+            }
+            auto& root = current_room_->assets_data();
+            auto& arr = ensure_spawn_groups_array(root);
+            rows.reserve(arr.size());
+            for (const auto& entry : arr) {
+                if (!entry.is_object()) {
+                    continue;
+                }
+                RoomConfigurator::SpawnGroupListItem item{};
+                item.spawn_id = entry.value("spawn_id", std::string{});
+                item.display_name = entry.value("display_name", std::string{});
+                if (item.display_name.empty()) {
+                    item.display_name = item.spawn_id.empty() ? std::string{"Spawn Group"} : item.spawn_id;
+                }
+                std::unordered_map<std::string, double> weight_by_name;
+                if (entry.contains("candidates") && entry["candidates"].is_array()) {
+                    for (const auto& candidate : entry["candidates"]) {
+                        if (!candidate.is_object()) continue;
+                        const std::string name = candidate.value("name", std::string{});
+                        if (name.empty()) continue;
+                        double weight = 1.0;
+                        if (candidate.contains("chance")) {
+                            if (candidate["chance"].is_number()) {
+                                weight = candidate["chance"].get<double>();
+                            } else if (candidate["chance"].is_string()) {
+                                try {
+                                    weight = std::stod(candidate["chance"].get<std::string>());
+                                } catch (...) {
+                                    weight = 1.0;
+                                }
+                            }
+                        }
+                        weight_by_name[name] += std::max(0.0, weight);
+                    }
+                }
+                std::string best_name;
+                double best_weight = -1.0;
+                for (const auto& pair : weight_by_name) {
+                    if (pair.second > best_weight) {
+                        best_weight = pair.second;
+                        best_name = pair.first;
+                    }
+                }
+                if (!best_name.empty()) {
+                    item.icon_label = best_name.substr(0, std::min<std::size_t>(2, best_name.size()));
+                    for (char& ch : item.icon_label) {
+                        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+                    }
+                } else {
+                    item.icon_label = "??";
+                }
+                rows.push_back(std::move(item));
+            }
+            return rows;
+        });
+        room_cfg_ui_->set_on_spawn_group_click([this](const std::string& spawn_id) {
+            focus_camera_on_spawn_group(spawn_id);
+        });
+        room_cfg_ui_->set_on_spawn_group_double_click([this](const std::string& spawn_id) {
+            open_spawn_group_editor_by_id(spawn_id);
+        });
+        room_cfg_ui_->set_on_spawn_group_delete([this](const std::string& spawn_id) {
+            const bool deleted = delete_spawn_group_internal(spawn_id);
+            if (deleted) {
+                refresh_spawn_group_config_ui();
+            }
+            return deleted;
+        });
         room_cfg_ui_->set_on_close([this]() {
             room_config_dock_open_ = false;
             set_camera_settings_lock(false);
@@ -22973,6 +23109,93 @@ void RoomEditor::open_spawn_group_floating_panel(const std::string& spawn_id, st
         "spawn_group_panel");
 }
 
+void RoomEditor::focus_camera_on_spawn_group(const std::string& spawn_id) {
+    if (spawn_id.empty() || !assets_ || !current_room_) {
+        return;
+    }
+
+    SDL_Point center = get_room_center();
+    bool found = false;
+
+    const std::vector<Asset*>* source_assets = selection_asset_source();
+    if (source_assets) {
+        long long sum_x = 0;
+        long long sum_y = 0;
+        int count = 0;
+        for (Asset* asset : *source_assets) {
+            if (!asset || asset->dead || !asset_belongs_to_room(asset)) {
+                continue;
+            }
+            if (asset->spawn_id != spawn_id) {
+                continue;
+            }
+            sum_x += asset->world_x();
+            sum_y += asset->world_z();
+            ++count;
+        }
+        if (count > 0) {
+            center.x = static_cast<int>(sum_x / count);
+            center.y = static_cast<int>(sum_y / count);
+            found = true;
+        }
+    }
+
+    if (!found) {
+        if (nlohmann::json* entry = find_spawn_entry(spawn_id)) {
+            std::string method = entry->value("position", std::string{});
+            if (method == "Exact Position") {
+                method = "Exact";
+            }
+            if (method == "Perimeter") {
+                if (auto overlay = compute_perimeter_overlay_for_spawn(spawn_id)) {
+                    center = overlay->center;
+                    found = true;
+                }
+            } else if (method == "Edge") {
+                if (auto path = compute_edge_path_for_spawn(spawn_id); path && !path->empty()) {
+                    long long sum_x = 0;
+                    long long sum_y = 0;
+                    int count = 0;
+                    for (const auto& p : *path) {
+                        sum_x += p.x;
+                        sum_y += p.y;
+                        ++count;
+                    }
+                    if (count > 0) {
+                        center.x = static_cast<int>(sum_x / count);
+                        center.y = static_cast<int>(sum_y / count);
+                        found = true;
+                    }
+                }
+            } else if (method == "Exact" || method == "Percent") {
+                auto [room_w, room_h] = get_room_dimensions();
+                if (method == "Exact") {
+                    int stored_dx = entry->value("dx", 0);
+                    int stored_dz = entry->value("dz", 0);
+                    int orig_w = std::max(1, entry->value("origional_width", std::max(1, room_w)));
+                    int orig_h = std::max(1, entry->value("origional_height", std::max(1, room_h)));
+                    RelativeRoomPosition relative(SDL_Point{stored_dx, stored_dz}, orig_w, orig_h);
+                    SDL_Point scaled = relative.scaled_offset(std::max(1, room_w), std::max(1, room_h));
+                    center.x += scaled.x;
+                    center.y += scaled.y;
+                    found = true;
+                } else {
+                    const int px = std::clamp(entry->value("p_x_min", 0), -100, 100);
+                    const int py = std::clamp(entry->value("p_y_min", 0), -100, 100);
+                    center.x += static_cast<int>(std::lround((static_cast<double>(std::max(1, room_w)) * 0.5) * (static_cast<double>(px) / 100.0)));
+                    center.y += static_cast<int>(std::lround((static_cast<double>(std::max(1, room_h)) * 0.5) * (static_cast<double>(py) / 100.0)));
+                    found = true;
+                }
+            }
+        }
+    }
+
+    WarpedScreenGrid& cam = assets_->getView();
+    cam.set_manual_height_override(true);
+    cam.set_focus_override(center);
+    mark_spatial_index_dirty();
+}
+
 void RoomEditor::reopen_room_configurator() {
     if (spawn_group_callback_in_progress_ && !processing_pending_spawn_group_work_) {
         enqueue_spawn_group_ui_refresh(true, false);
@@ -23425,6 +23648,20 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     if (!entry.is_object()) return;
     std::string spawn_id = entry.value("spawn_id", std::string{});
     if (spawn_id.empty()) return;
+    auto num_or_zero = [](const nlohmann::json& obj, const char* key) -> double {
+        auto it = obj.find(key);
+        if (it == obj.end() || !it->is_number()) {
+            return 0.0;
+        }
+        return it->get<double>();
+    };
+    std::cerr << "[PLACEMENT_DEBUG] respawn_begin"
+              << " spawn_id=\"" << spawn_id << "\""
+              << " position=\"" << entry.value("position", std::string{}) << "\""
+              << " dx=" << num_or_zero(entry, "dx")
+              << " dz=" << num_or_zero(entry, "dz")
+              << " room=\"" << current_room_->room_name << "\""
+              << "\n";
 
 #if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
     ++test_respawn_spawn_group_call_count_;
@@ -23451,6 +23688,10 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     std::vector<nlohmann::json> sources{root};
     AssetSpawnPlanner planner(sources, *current_room_->room_area, assets_->library());
     const auto& queue = planner.get_spawn_queue();
+    std::cerr << "[PLACEMENT_DEBUG] respawn_plan"
+              << " spawn_id=\"" << spawn_id << "\""
+              << " queue_size=" << queue.size()
+              << "\n";
     if (!queue.empty()) {
         std::unordered_map<std::string, std::shared_ptr<AssetInfo>> asset_info_library = assets_->library().all();
         std::vector<std::unique_ptr<Asset>> spawned;
@@ -23494,6 +23735,28 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
         integrate_spawned_assets(spawned);
         checker.reset_session();
     }
+    int spawned_count_for_group = 0;
+    if (assets_) {
+        for (Asset* asset : assets_->all) {
+            if (!asset || asset->dead) {
+                continue;
+            }
+            if (asset->spawn_id == spawn_id) {
+                ++spawned_count_for_group;
+                if (spawned_count_for_group <= 5) {
+                    std::cerr << "[PLACEMENT_DEBUG] respawn_asset"
+                              << " spawn_id=\"" << spawn_id << "\""
+                              << " world=(" << asset->world_x() << "," << asset->world_z() << ")"
+                              << " name=\"" << (asset->info ? asset->info->name : std::string{}) << "\""
+                              << "\n";
+                }
+            }
+        }
+    }
+    std::cerr << "[PLACEMENT_DEBUG] respawn_end"
+              << " spawn_id=\"" << spawn_id << "\""
+              << " alive_assets_for_group=" << spawned_count_for_group
+              << "\n";
 
     const Area* old_area_copy = current_room_->room_area.get();
     const double old_area_size = old_area_copy ? old_area_copy->get_size() : 0.0;

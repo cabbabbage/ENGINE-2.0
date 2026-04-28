@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <optional>
 
 namespace animation_update::custom_controllers {
@@ -13,28 +12,35 @@ namespace animation_update::custom_controllers {
 namespace {
 
 constexpr float kZeroTolerance = 1e-4f;
-constexpr char kHitAnimationId[] = "hit";
-constexpr char kDieAnimationId[] = "die";
+
+bool try_set_animation(Asset& self, std::string_view animation_id) {
+    if (!self.anim_ || !self.info || animation_id.empty()) {
+        return false;
+    }
+    const std::string animation_key{animation_id};
+    if (self.info->animations.find(animation_key) == self.info->animations.end()) {
+        return false;
+    }
+    self.anim_->set_animation(animation_key);
+    return self.current_animation == animation_key;
+}
 
 } // namespace
 
-bool AttackProcessingHelper::try_play_death_animation(Asset& self) {
+bool AttackProcessingHelper::try_play_death_animation(
+    Asset& self,
+    const AttackProcessingConfig& config) {
     if (!self.info || !self.anim_) {
         return false;
     }
 
-    auto try_animation = [&self](const char* animation_id) {
-        if (self.info->animations.find(animation_id) == self.info->animations.end()) {
-            return false;
-        }
-        self.anim_->set_animation(animation_id);
-        return self.current_animation == animation_id;
-    };
-
-    if (try_animation(kDieAnimationId)) {
+    if (try_set_animation(self, config.death_animation_id)) {
         return true;
     }
-    return self.anim_->set_animation_by_tags({"break"}, {});
+    if (!config.death_fallback_tag.empty()) {
+        return self.anim_->set_animation_by_tags({std::string{config.death_fallback_tag}}, {});
+    }
+    return false;
 }
 
 bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
@@ -98,17 +104,38 @@ void AttackProcessingHelper::apply_knockback(Asset& self, SDL_Point delta) {
     self.anim_->move(delta, animation_update::detail::kDefaultAnimation, true, true);
 }
 
-void AttackProcessingHelper::process_pending_attacks(Asset& self) {
-    const auto pending_attacks = self.process_pending_attacks();
+void AttackProcessingHelper::process_pending_attacks(
+    Asset& self,
+    const AttackProcessingConfig& config) {
+    (void)process_attacks(self, self.process_pending_attacks(), config);
+}
+
+AttackProcessingSummary AttackProcessingHelper::process_attacks(
+    Asset& self,
+    const std::vector<animation_update::Attack>& pending_attacks,
+    const AttackProcessingConfig& config) {
+    AttackProcessingSummary summary{};
+    summary.had_pending_attacks = !pending_attacks.empty();
     bool took_damage = false;
     std::optional<SDL_Point> strongest_knockback{};
     for (const auto& attack : pending_attacks) {
         const int applied_damage = std::max(0, attack.payload.damage_amount);
-        self.runtime_health -= applied_damage;
+        self.runtime_health = std::max(0, self.runtime_health - applied_damage);
         took_damage = took_damage || applied_damage > 0;
         SDL_Point candidate_knockback{};
-        if (!compute_knockback_delta(self, attack, candidate_knockback)) {
+        if (!compute_knockback_delta(
+                self,
+                attack,
+                candidate_knockback,
+                config.max_knockback_distance,
+                config.max_damage_for_knockback)) {
             continue;
+        }
+        if (config.knockback_scale > 0.0f && std::abs(config.knockback_scale - 1.0f) > kZeroTolerance) {
+            candidate_knockback.x = static_cast<int>(std::round(
+                static_cast<float>(candidate_knockback.x) * config.knockback_scale));
+            candidate_knockback.y = static_cast<int>(std::round(
+                static_cast<float>(candidate_knockback.y) * config.knockback_scale));
         }
         if (!strongest_knockback.has_value()) {
             strongest_knockback = candidate_knockback;
@@ -125,21 +152,33 @@ void AttackProcessingHelper::process_pending_attacks(Asset& self) {
         }
     }
 
-    if (self.runtime_health < 0) {
-        if (!try_play_death_animation(self)) {
+    if (self.runtime_health <= 0) {
+        summary.took_damage = took_damage;
+        summary.died = true;
+        if (!try_play_death_animation(self, config)) {
             self.Delete();
         }
-        return;
+        return summary;
     }
 
     if (strongest_knockback.has_value()) {
+        summary.took_damage = took_damage;
         apply_knockback(self, *strongest_knockback);
-        return;
+        return summary;
     }
 
-    if (took_damage && self.info && self.info->animations.find(kHitAnimationId) != self.info->animations.end()) {
-        self.set_current_animation(kHitAnimationId);
+    if (!took_damage) {
+        return summary;
     }
+    summary.took_damage = true;
+    if (try_set_animation(self, config.hit_animation_id)) {
+        return summary;
+    }
+    if (config.hit_fallback_animation_id.empty()) {
+        return summary;
+    }
+    (void)try_set_animation(self, config.hit_fallback_animation_id);
+    return summary;
 }
 
 } // namespace animation_update::custom_controllers

@@ -1,6 +1,7 @@
 #include "animation_runtime.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <string>
 #include <unordered_set>
@@ -24,7 +25,10 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include <iostream>
 #include "animation_update.hpp"
+#include "animation/animation_tag_utils.hpp"
+#include "animation/attack_validation.hpp"
 #include "utils/transform_smoothing.hpp"
+#include "unstick_utils.hpp"
 
 namespace {
 template <typename Fn>
@@ -71,24 +75,41 @@ bool same_point(SDL_Point lhs, SDL_Point rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y;
 }
 
-std::vector<SDL_Point> build_escape_directions(SDL_Point primary) {
-    std::vector<SDL_Point> dirs;
-    dirs.reserve(5);
-    auto add = [&](SDL_Point d) {
-        if (d.x == 0 && d.y == 0) return;
-        for (const auto& e : dirs) { if (e.x == d.x && e.y == d.y) return; }
-        dirs.push_back(d);
-    };
-    if (primary.x == 0 && primary.y == 0) {
-        dirs = {{1,0},{-1,0},{0,1},{0,-1}};
-    } else {
-        add(primary);
-        add({primary.x, 0});
-        add({0, primary.y});
-        add({primary.y, -primary.x});
-        add({-primary.y, primary.x});
+template <typename Fn>
+bool visit_impassable_neighbors_for_segment(const Asset& asset,
+                                            SDL_Point from,
+                                            SDL_Point to,
+                                            Fn&& fn) {
+    const Assets* assets = asset.get_assets();
+    if (!assets) {
+        return false;
     }
-    return dirs;
+
+    std::vector<const Assets::FrameCollisionEntry*> entries;
+    const int base_search_radius =
+        (asset.info && asset.info->NeighborSearchRadius > 0) ? asset.info->NeighborSearchRadius : 0;
+
+    const SDL_Point self_center = asset.world_xz_point();
+    const std::int64_t dx_from = static_cast<std::int64_t>(from.x) - static_cast<std::int64_t>(self_center.x);
+    const std::int64_t dy_from = static_cast<std::int64_t>(from.y) - static_cast<std::int64_t>(self_center.y);
+    const std::int64_t dx_to = static_cast<std::int64_t>(to.x) - static_cast<std::int64_t>(self_center.x);
+    const std::int64_t dy_to = static_cast<std::int64_t>(to.y) - static_cast<std::int64_t>(self_center.y);
+    const std::int64_t max_dist_sq =
+        std::max(dx_from * dx_from + dy_from * dy_from, dx_to * dx_to + dy_to * dy_to);
+    const int segment_coverage_radius = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(max_dist_sq))));
+    const int query_radius = std::max(base_search_radius, segment_coverage_radius);
+
+    assets->query_impassable_entries(asset, query_radius, entries);
+
+    for (const Assets::FrameCollisionEntry* entry : entries) {
+        if (!entry) {
+            continue;
+        }
+        if (fn(entry, entry->asset, entry->area, entry->bottom_middle)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 int resolve_effective_grid_resolution(const Asset* self,
@@ -102,6 +123,73 @@ int resolve_effective_grid_resolution(const Asset* self,
     }
     return grid_service.default_resolution();
 }
+
+enum class HorizontalFacingIntent {
+    Unknown = 0,
+    Left,
+    Right,
+};
+
+HorizontalFacingIntent facing_intent_for_delta_x(int delta_x, int deadzone_px) {
+    const int clamped_deadzone = std::max(0, deadzone_px);
+    if (delta_x > clamped_deadzone) {
+        return HorizontalFacingIntent::Right;
+    }
+    if (delta_x < -clamped_deadzone) {
+        return HorizontalFacingIntent::Left;
+    }
+    return HorizontalFacingIntent::Unknown;
+}
+
+std::string lower_ascii_copy(const std::string& value) {
+    std::string out = value;
+    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return out;
+}
+
+HorizontalFacingIntent attack_facing_intent(const std::vector<std::string>& tags,
+                                            const std::string& animation_id) {
+    const bool has_left_tag = animation_update::tag_utils::has_normalized_tag(tags, "left");
+    const bool has_right_tag = animation_update::tag_utils::has_normalized_tag(tags, "right");
+    if (has_left_tag != has_right_tag) {
+        return has_right_tag ? HorizontalFacingIntent::Right : HorizontalFacingIntent::Left;
+    }
+
+    const std::string lowered_id = lower_ascii_copy(animation_id);
+    const bool id_has_left = lowered_id.find("left") != std::string::npos;
+    const bool id_has_right = lowered_id.find("right") != std::string::npos;
+    if (id_has_left != id_has_right) {
+        return id_has_right ? HorizontalFacingIntent::Right : HorizontalFacingIntent::Left;
+    }
+
+    return HorizontalFacingIntent::Unknown;
+}
+
+int attack_facing_match_score_impl(const std::vector<std::string>& animation_tags,
+                                   const std::string& animation_id,
+                                   int target_delta_x,
+                                   int deadzone_px) {
+    const HorizontalFacingIntent target_intent = facing_intent_for_delta_x(target_delta_x, deadzone_px);
+    const HorizontalFacingIntent attack_intent = attack_facing_intent(animation_tags, animation_id);
+    if (target_intent == HorizontalFacingIntent::Unknown || attack_intent == HorizontalFacingIntent::Unknown) {
+        return 0;
+    }
+    return target_intent == attack_intent ? 1 : -1;
+}
+
+} // namespace
+
+namespace animation_runtime::test_hooks {
+
+int attack_facing_match_score(const std::vector<std::string>& animation_tags,
+                              const std::string& animation_id,
+                              int target_delta_x,
+                              int deadzone_px) {
+    return attack_facing_match_score_impl(animation_tags, animation_id, target_delta_x, deadzone_px);
+}
+
 }
 
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
@@ -121,11 +209,349 @@ bool AnimationRuntime::consume_replan_attempt_budget() {
     return true;
 }
 
+std::uint32_t AnimationRuntime::resolve_frame_id_for_cooldown() {
+    if (assets_owner_) {
+        return assets_owner_->frame_id();
+    }
+    ++local_runtime_frame_id_;
+    if (local_runtime_frame_id_ == 0) {
+        ++local_runtime_frame_id_;
+    }
+    return local_runtime_frame_id_;
+}
+
+bool AnimationRuntime::attacking_enabled_for_self() const {
+    if (!self_ || !self_->info) {
+        return false;
+    }
+    if (asset_types::canonicalize(self_->info->type) != asset_types::enemy) {
+        return false;
+    }
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        (void)animation_id;
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AnimationRuntime::attacking_enabled_for_active_plan() const {
+    if (!attacking_enabled_for_self()) {
+        return false;
+    }
+    if (!planner_iface_) {
+        return true;
+    }
+    return planner_iface_->auto_move_attacking_enabled_;
+}
+
+Asset* AnimationRuntime::resolve_asset_by_stable_id(const std::string& stable_id) const {
+    if (stable_id.empty() || !assets_owner_) {
+        return nullptr;
+    }
+    for (Asset* candidate : assets_owner_->getActive()) {
+        if (!candidate || candidate == self_ || candidate->dead || !candidate->active) {
+            continue;
+        }
+        if (animation_update::detail::stable_asset_id(*candidate) == stable_id) {
+            return candidate;
+        }
+    }
+    Asset* player = assets_owner_->game_context().player();
+    if (!player) {
+        player = assets_owner_->player;
+    }
+    if (player && player != self_ && player->active && !player->dead &&
+        animation_update::detail::stable_asset_id(*player) == stable_id) {
+        return player;
+    }
+    return nullptr;
+}
+
+std::vector<std::string> AnimationRuntime::attack_animation_candidates() const {
+    std::vector<std::string> out;
+    if (!self_ || !self_->info) {
+        return out;
+    }
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        if (!animation.has_frames()) {
+            continue;
+        }
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            out.push_back(animation_id);
+        }
+    }
+    return out;
+}
+
+std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
+    std::vector<Asset*> out;
+    if (!self_ || !assets_owner_) {
+        return out;
+    }
+
+    if (planner_iface_ && planner_iface_->pending_engagement_target_asset_id_.has_value()) {
+        if (Asset* engagement_target =
+                resolve_asset_by_stable_id(*planner_iface_->pending_engagement_target_asset_id_)) {
+            if (engagement_target->isHitboxEnabled()) {
+                out.push_back(engagement_target);
+            }
+        }
+    }
+
+    if (planner_iface_) {
+        const std::optional<std::string> engagement_target_id =
+            planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D
+                ? planner_iface_->plan_.engagement_target_asset_id
+                : planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D
+                      ? planner_iface_->plan3d_.engagement_target_asset_id
+                      : std::nullopt;
+        if (engagement_target_id.has_value()) {
+            if (Asset* engagement_target = resolve_asset_by_stable_id(*engagement_target_id)) {
+                if (engagement_target->isHitboxEnabled() &&
+                    std::find(out.begin(), out.end(), engagement_target) == out.end()) {
+                    out.push_back(engagement_target);
+                }
+            }
+        }
+    }
+
+    Asset* player = assets_owner_->game_context().player();
+    if (!player) {
+        player = assets_owner_->player;
+    }
+    if (player && player != self_ && player->active && !player->dead && player->isHitboxEnabled()) {
+        out.push_back(player);
+    }
+
+    for (Asset* candidate : assets_owner_->getActive()) {
+        if (!candidate || candidate == self_ || candidate->dead || !candidate->active || !candidate->isHitboxEnabled()) {
+            continue;
+        }
+        if (std::find(out.begin(), out.end(), candidate) != out.end()) {
+            continue;
+        }
+        out.push_back(candidate);
+    }
+    return out;
+}
+
+bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
+    const bool committed_cycle_boundary = current_animation_is_attack() && committed_attack_target_asset_id_.has_value();
+    if (committed_cycle_boundary) {
+        clear_attack_commitment();
+    }
+    if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
+        return false;
+    }
+    const std::uint32_t frame_id = resolve_frame_id_for_cooldown();
+    if (!committed_cycle_boundary &&
+        next_attack_cycle_eval_frame_ != 0 &&
+        frame_id < next_attack_cycle_eval_frame_) {
+        return false;
+    }
+
+    const auto targets = attack_candidate_targets();
+    if (targets.empty()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
+        return false;
+    }
+    const auto attack_candidates = attack_animation_candidates();
+    if (attack_candidates.empty()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
+        return false;
+    }
+
+    struct RankedChoice {
+        animation_update::AttackValidation::AttackWindowScore score =
+            animation_update::AttackValidation::AttackWindowScore::Miss;
+        int facing_score = -2;
+        std::string animation_id{};
+        std::string target_asset_id{};
+    } best{};
+    bool has_best = false;
+
+    auto better_choice = [](const RankedChoice& candidate, const RankedChoice& current_best) {
+        const int candidate_score = static_cast<int>(candidate.score);
+        const int best_score = static_cast<int>(current_best.score);
+        if (candidate_score != best_score) {
+            return candidate_score > best_score;
+        }
+        if (candidate.facing_score != current_best.facing_score) {
+            return candidate.facing_score > current_best.facing_score;
+        }
+        if (candidate.target_asset_id != current_best.target_asset_id) {
+            return candidate.target_asset_id < current_best.target_asset_id;
+        }
+        return candidate.animation_id < current_best.animation_id;
+    };
+
+    constexpr int kAttackFacingDeadzonePx = 6;
+
+    for (Asset* target : targets) {
+        const std::string target_id = animation_update::detail::stable_asset_id(*target);
+        if (target_id.empty()) {
+            continue;
+        }
+        const int target_delta_x = target->world_x() - self_->world_x();
+        for (const std::string& attack_animation_id : attack_candidates) {
+            const auto evaluation =
+                animation_update::AttackValidation::evaluate_attack_window(
+                    *self_,
+                    *target,
+                    attack_animation_id,
+                    8);
+            if (evaluation.score == animation_update::AttackValidation::AttackWindowScore::Miss) {
+                continue;
+            }
+
+            int facing_score = 0;
+            const auto attack_it = self_->info->animations.find(attack_animation_id);
+            if (attack_it != self_->info->animations.end()) {
+                facing_score =
+                    attack_facing_match_score_impl(attack_it->second.tags,
+                                                   attack_animation_id,
+                                                   target_delta_x,
+                                                   kAttackFacingDeadzonePx);
+            }
+
+            RankedChoice candidate{};
+            candidate.score = evaluation.score;
+            candidate.facing_score = facing_score;
+            candidate.animation_id = attack_animation_id;
+            candidate.target_asset_id = target_id;
+            if (!has_best || better_choice(candidate, best)) {
+                best = std::move(candidate);
+                has_best = true;
+            }
+        }
+    }
+
+    if (!has_best || best.animation_id.empty() || best.target_asset_id.empty()) {
+        if (committed_cycle_boundary && current_animation_is_attack()) {
+            switch_to(animation_update::detail::kDefaultAnimation,
+                      path_index_for(animation_update::detail::kDefaultAnimation));
+        }
+        return false;
+    }
+    committed_attack_target_asset_id_ = best.target_asset_id;
+    committed_attack_animation_id_ = best.animation_id;
+    committed_attack_last_dispatched_frame_index_ = -1;
+    committed_attack_last_payload_id_.clear();
+    switch_to(best.animation_id, 0);
+    next_attack_cycle_eval_frame_ = frame_id + kAttackCycleDebounceFrames;
+    return true;
+}
+
+bool AnimationRuntime::current_animation_is_attack() const {
+    if (!self_ || !self_->info) {
+        return false;
+    }
+    const auto it = self_->info->animations.find(self_->current_animation);
+    if (it == self_->info->animations.end()) {
+        return false;
+    }
+    return animation_update::tag_utils::has_normalized_tag(it->second.tags, "attack");
+}
+
+bool AnimationRuntime::auto_attack_commitment_active() const {
+    if (!self_ || !self_->info || !current_animation_is_attack()) {
+        return false;
+    }
+    if (committed_attack_target_asset_id_.has_value()) {
+        return true;
+    }
+    return !committed_attack_animation_id_.empty() &&
+           committed_attack_animation_id_ == self_->current_animation;
+}
+
+void AnimationRuntime::clear_attack_commitment() {
+    committed_attack_target_asset_id_ = std::nullopt;
+    committed_attack_animation_id_.clear();
+    committed_attack_last_dispatched_frame_index_ = -1;
+    committed_attack_last_payload_id_.clear();
+}
+
+void AnimationRuntime::dispatch_active_attack_payload() {
+    if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
+        clear_attack_commitment();
+        return;
+    }
+    if (!current_animation_is_attack()) {
+        return;
+    }
+    if (!committed_attack_target_asset_id_.has_value()) {
+        return;
+    }
+
+    Asset* target = resolve_asset_by_stable_id(*committed_attack_target_asset_id_);
+    if (!target || !target->active || target->dead || !target->isHitboxEnabled()) {
+        clear_attack_commitment();
+        return;
+    }
+
+    const auto attack_opt = animation_update::AttackValidation::compute_attack_if_hit(*self_, *target);
+    if (!attack_opt.has_value()) {
+        return;
+    }
+
+    const animation_update::Attack& attack = *attack_opt;
+    if (attack.source_frame_index == committed_attack_last_dispatched_frame_index_ &&
+        attack.attack_payload_id == committed_attack_last_payload_id_) {
+        return;
+    }
+
+    target->send_attack(attack);
+    committed_attack_last_dispatched_frame_index_ = attack.source_frame_index;
+    committed_attack_last_payload_id_ = attack.attack_payload_id;
+}
+
+bool AnimationRuntime::committed_attack_execution_active() const {
+    if (!self_ || !self_->info) {
+        return false;
+    }
+    const auto it = self_->info->animations.find(self_->current_animation);
+    if (it == self_->info->animations.end()) {
+        return false;
+    }
+    const Animation& anim = it->second;
+    return anim.locked && animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+}
+
+animation_update::detail::PathBlockingContext AnimationRuntime::active_path_blocking_context() const {
+    animation_update::detail::PathBlockingContext context;
+    if (!planner_iface_) {
+        return context;
+    }
+    if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D) {
+        context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    } else if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D) {
+        context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+    }
+    context.allow_engagement_target_overlap =
+        context.engagement_target_asset_id.has_value() && committed_attack_execution_active();
+    return context;
+}
+
 void AnimationRuntime::set_planner(AnimationUpdate* planner) {
     if (planner_iface_ && planner_iface_ != planner) {
         planner_iface_->set_runtime(nullptr);
     }
     planner_iface_ = planner;
+    if (!planner_iface_) {
+        clear_attack_commitment();
+    }
     if (planner_iface_) {
         planner_iface_->set_runtime(this);
     }
@@ -241,6 +667,11 @@ void AnimationRuntime::update() {
         }
     }
 
+    if (freeze_for_frame_editor) {
+        dispatch_active_attack_payload();
+        return;
+    }
+
     if (!freeze_for_frame_editor && !movement_blocked_for_dev_mode && !movement_disabled_for_asset) {
         (void)planner_iface_->consume_input_event();
     }
@@ -271,6 +702,7 @@ void AnimationRuntime::update() {
                 ? executor_.tick_3d(*this, planner_iface_->plan3d_, stride_index_, stride_frame_counter_)
                 : executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_);
             if (consumed) {
+                dispatch_active_attack_payload();
                 return;
             }
         }
@@ -279,6 +711,7 @@ void AnimationRuntime::update() {
             const auto& req = planner_iface_->pending_move_;
             if (!should_defer_for_non_locked(req.override_non_locked)) {
                 apply_pending_move();
+                dispatch_active_attack_payload();
                 return;
             }
         }
@@ -286,12 +719,19 @@ void AnimationRuntime::update() {
             const auto& req3d = planner_iface_->pending_move_3d_;
             if (!should_defer_for_non_locked(req3d.override_non_locked)) {
                 apply_pending_move_3d();
+                dispatch_active_attack_payload();
                 return;
             }
         }
     }
 
-    advance(self_->current_frame);
+    const bool cycle_boundary_before_advance =
+        self_->current_frame && self_->current_frame->next == nullptr;
+    (void)advance(self_->current_frame);
+    if (cycle_boundary_before_advance) {
+        (void)maybe_trigger_attack_on_cycle_boundary();
+    }
+    dispatch_active_attack_payload();
 }
 
 void AnimationRuntime::apply_pending_move() {
@@ -304,8 +744,9 @@ void AnimationRuntime::apply_pending_move() {
     const SDL_Point to{ from.x + world_delta.x, from.y + world_delta.y };
 
     SDL_Point final_position = from;
+    const auto block_context = active_path_blocking_context();
     if (world_delta.x != 0 || world_delta.y != 0) {
-        if (!path_blocked(from, to, self_, nullptr)) {
+        if (!path_blocked(from, to, self_, nullptr, block_context)) {
             final_position = to;
         } else {
             const int steps = std::max(std::abs(world_delta.x), std::abs(world_delta.y));
@@ -320,7 +761,7 @@ void AnimationRuntime::apply_pending_move() {
                     accum_y += step_y;
                     SDL_Point candidate{ static_cast<int>(std::round(accum_x)), static_cast<int>(std::round(accum_y)) };
                     if (candidate.x == current.x && candidate.y == current.y) continue;
-                    if (path_blocked(current, candidate, self_, nullptr)) break;
+                    if (path_blocked(current, candidate, self_, nullptr, block_context)) break;
                     final_position = candidate;
                     current        = candidate;
                 }
@@ -385,10 +826,11 @@ void AnimationRuntime::apply_pending_move_3d() {
     };
 
     axis::WorldPos final_position = from;
+    const auto block_context = active_path_blocking_context();
     if (world_delta.x != 0 || world_delta.y != 0 || world_delta.z != 0) {
         const world::GridPoint gp_from = world::GridPoint::make_virtual(from.x, from.y, from.z, self_->grid_resolution);
         const world::GridPoint gp_to = world::GridPoint::make_virtual(to.x, to.y, to.z, self_->grid_resolution);
-        if (!path_blocked(gp_from, gp_to, self_, nullptr)) {
+        if (!path_blocked(gp_from, gp_to, self_, nullptr, block_context)) {
             final_position = to;
         } else {
             const int steps = std::max({ std::abs(world_delta.x), std::abs(world_delta.y), std::abs(world_delta.z) });
@@ -416,7 +858,7 @@ void AnimationRuntime::apply_pending_move_3d() {
                         world::GridPoint::make_virtual(current.x, current.y, current.z, self_->grid_resolution);
                     const world::GridPoint candidate_gp =
                         world::GridPoint::make_virtual(candidate.x, candidate.y, candidate.z, self_->grid_resolution);
-                    if (path_blocked(current_gp, candidate_gp, self_, nullptr)) {
+                    if (path_blocked(current_gp, candidate_gp, self_, nullptr, block_context)) {
                         break;
                     }
                     final_position = candidate;
@@ -477,8 +919,10 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
 
     const bool is_player = self_->info && self_->info->type == asset_types::player;
     const bool reverse_command_active = reverse_mode_applies_to_current_animation();
-    const bool static_blocked = self_->static_frame && !reverse_command_active;
-    const bool locked_blocked = anim->locked && !reverse_command_active;
+    const bool committed_attack_follow_through =
+        auto_attack_commitment_active() && current_animation_is_attack();
+    const bool static_blocked = self_->static_frame && !reverse_command_active && !committed_attack_follow_through;
+    const bool locked_blocked = anim->locked && !reverse_command_active && !committed_attack_follow_through;
     bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || lock_on_end_active_);
     bool has_overriding_plan = false;
     if (planner_iface_) {
@@ -649,6 +1093,15 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     AnimationFrame* new_frame = anim.get_first_frame(path_index);
     self_->current_animation = it->first;
     self_->current_frame     = new_frame;
+    const bool switched_to_attack =
+        animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+    if (!switched_to_attack) {
+        clear_attack_commitment();
+    } else if (committed_attack_animation_id_ != self_->current_animation) {
+        committed_attack_animation_id_ = self_->current_animation;
+        committed_attack_last_dispatched_frame_index_ = -1;
+        committed_attack_last_payload_id_.clear();
+    }
     {
         const bool is_player = self_->info && self_->info->type == asset_types::player;
         self_->static_frame  = is_player ? false : (anim.is_frozen() || anim.locked);
@@ -735,7 +1188,8 @@ bool AnimationRuntime::point_in_impassable(SDL_Point pt, const Asset* ignored) c
 bool AnimationRuntime::path_blocked(const world::GridPoint& from,
                                     const world::GridPoint& to,
                                     const Asset* ignored,
-                                    std::vector<const Asset*>* blockers) const {
+                                    std::vector<const Asset*>* blockers,
+                                    const animation_update::detail::PathBlockingContext& context) const {
     if (!self_ || !self_->info) {
         return false;
     }
@@ -746,10 +1200,13 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         return true;
     }
     bool blocked = false;
-    visit_impassable_neighbors(*self_, [&](const Assets::FrameCollisionEntry* entry,
-                                           const Asset* neighbor,
-                                           const Area& area,
-                                           const world::GridPoint& neighbor_bottom) {
+    visit_impassable_neighbors_for_segment(*self_,
+                                           from.to_sdl_point(),
+                                           to.to_sdl_point(),
+                                           [&](const Assets::FrameCollisionEntry* entry,
+                                               const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
         if (!neighbor || neighbor == self_ || neighbor == ignored || !neighbor->info) {
             return false;
         }
@@ -758,14 +1215,20 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         }
         const bool contains_from = area.contains_point(bottom_from.to_sdl_point());
         const bool contains_to   = area.contains_point(dest_bottom.to_sdl_point());
-        const bool touches_segment = animation_update::detail::segment_hits_area(from, to, area);
+        const std::string neighbor_id = animation_update::detail::stable_asset_id(*neighbor);
+        const bool is_engagement_target =
+            context.allow_engagement_target_overlap &&
+            context.engagement_target_asset_id.has_value() &&
+            !neighbor_id.empty() &&
+            neighbor_id == *context.engagement_target_asset_id;
+        const bool touches_segment =
+            !is_engagement_target && animation_update::detail::segment_hits_area(from, to, area);
         bool overlaps = false;
         if (!contains_from && !contains_to && !touches_segment) {
-            const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-            if (overlap_check) {
-                overlaps = animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) <
-                           animation_update::detail::kOverlapDistanceSq;
-            }
+            const int overlap_distance_sq =
+                animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, context);
+            overlaps = overlap_distance_sq > 0 &&
+                       animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) < overlap_distance_sq;
         }
         if (!(contains_from || contains_to || touches_segment || overlaps)) {
             return false;
@@ -785,12 +1248,13 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
 bool AnimationRuntime::path_blocked(SDL_Point from,
                                     SDL_Point to,
                                     const Asset* ignored,
-                                    std::vector<const Asset*>* blockers) const {
+                                    std::vector<const Asset*>* blockers,
+                                    const animation_update::detail::PathBlockingContext& context) const {
     const int world_y = self_ ? self_->world_y() : 0;
     const int layer = self_ ? self_->grid_resolution : 0;
     const world::GridPoint gp_from = world::grid_math::from_sdl(from, world_y, layer);
     const world::GridPoint gp_to   = world::grid_math::from_sdl(to, world_y, layer);
-    return path_blocked(gp_from, gp_to, ignored, blockers);
+    return path_blocked(gp_from, gp_to, ignored, blockers, context);
 }
 
 bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
@@ -799,8 +1263,19 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     if (!self_ || !self_->info) {
         return false;
     }
+    const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
+    std::vector<const Assets::FrameCollisionEntry*> runtime_entries;
+    const int search_radius = (self_->info && self_->info->NeighborSearchRadius > 0) ? self_->info->NeighborSearchRadius : 0;
+    if (assets) {
+        assets->query_impassable_entries(*self_, search_radius, runtime_entries);
+        if (blockers.empty() && animation::unstick::push_out_of_impassable(*self_, assets, runtime_entries)) {
+            return true;
+        }
+    }
+
     world::GridPoint bottom_from = animation_update::detail::bottom_middle_for(*self_, from);
     world::GridPoint bottom_to   = animation_update::detail::bottom_middle_for(*self_, to);
+    const auto block_context = active_path_blocking_context();
     SDL_Point push{0, 0};
     std::vector<const Asset*> blocking_neighbors = blockers;
     if (blocking_neighbors.empty()) {
@@ -816,11 +1291,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             const bool touches_segment = animation_update::detail::segment_hits_area(from, to, area);
             bool overlaps = false;
             if (!contains_from && !contains_to && !touches_segment) {
-                const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-                if (overlap_check) {
-                    overlaps = animation_update::detail::distance_sq(bottom_from, neighbor_bottom) <
-                               animation_update::detail::kOverlapDistanceSq;
-                }
+                const int overlap_distance_sq =
+                    animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, block_context);
+                overlaps = overlap_distance_sq > 0 &&
+                           animation_update::detail::distance_sq(bottom_from, neighbor_bottom) < overlap_distance_sq;
             }
             if (!(contains_from || contains_to || touches_segment || overlaps)) {
                 return false;
@@ -858,7 +1332,11 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     }
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    std::vector<SDL_Point> directions = build_escape_directions(primary);
+    std::vector<SDL_Point> directions;
+    directions = {primary, {primary.x, 0}, {0, primary.y}, {primary.y, -primary.x}, {-primary.y, primary.x}};
+    directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
+    directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
+    if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
     const auto inside_disallowed = [&](const world::GridPoint& bottom) {
         bool blocked = false;
         const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
@@ -998,6 +1476,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     world::GridPoint target = world::grid_math::from_sdl(target_sdl, world_y, layer);
     world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
     const world::GridPoint start_point = world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer);
+    const auto block_context = active_path_blocking_context();
     SDL_Point push{0, 0};
     std::vector<const Asset*> influencing_neighbors;
     auto consider_neighbor = [&](const Asset* neighbor,
@@ -1007,10 +1486,10 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         bool relevant = area.contains_point(bottom_target.to_sdl_point()) ||
                         animation_update::detail::segment_hits_area(start_point, target, area);
         if (!relevant) {
-            const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-            if (overlap_check) {
-                relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < animation_update::detail::kOverlapDistanceSq;
-            }
+            const int overlap_distance_sq =
+                animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, block_context);
+            relevant = overlap_distance_sq > 0 &&
+                       animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < overlap_distance_sq;
         }
         if (!relevant) return;
         SDL_Point center = area.get_center();
@@ -1049,7 +1528,11 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     }
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    std::vector<SDL_Point> directions = build_escape_directions(primary);
+    std::vector<SDL_Point> directions;
+    directions = {primary, {primary.x, 0}, {0, primary.y}, {primary.y, -primary.x}, {-primary.y, primary.x}};
+    directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
+    directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
+    if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
     std::vector<SDL_Point> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan_.sanitized_checkpoints.size(); ++i) {
         tail.push_back(planner_iface_->plan_.sanitized_checkpoints[i]);
@@ -1064,10 +1547,13 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
             budget_exhausted = true;
             return false;
         }
-        auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_);
+        CollisionQueryContext collision_context;
+        collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+        auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_, &collision_context);
         if (sanitized.empty()) return false;
-        Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+        Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
+        new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
         if (new_plan.strides.empty()) return false;
         planner_iface_->plan_ = std::move(new_plan);
         planner_iface_->final_dest = planner_iface_->plan_.final_dest;
@@ -1126,6 +1612,7 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
     world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
     const world::GridPoint start_point =
         world::GridPoint::make_virtual(self_->world_x(), self_->world_y(), self_->world_z(), self_->grid_resolution);
+    const auto block_context = active_path_blocking_context();
 
     SDL_Point push{ 0, 0 };
     std::vector<const Asset*> influencing_neighbors;
@@ -1139,11 +1626,10 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
         bool relevant = area.contains_point(bottom_target.to_sdl_point()) ||
                         animation_update::detail::segment_hits_area(start_point, target, area);
         if (!relevant) {
-            const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
-            if (overlap_check) {
-                relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) <
-                           animation_update::detail::kOverlapDistanceSq;
-            }
+            const int overlap_distance_sq =
+                animation_update::detail::overlap_distance_sq_for_pair(*self_, *neighbor, block_context);
+            relevant = overlap_distance_sq > 0 &&
+                       animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < overlap_distance_sq;
         }
         if (!relevant) {
             return;
@@ -1187,7 +1673,11 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
 
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    std::vector<SDL_Point> directions = build_escape_directions(primary);
+    std::vector<SDL_Point> directions;
+    directions = {primary, {primary.x, 0}, {0, primary.y}, {primary.y, -primary.x}, {-primary.y, primary.x}};
+    directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
+    directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
+    if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
 
     std::vector<axis::WorldPos> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan3d_.sanitized_checkpoints.size(); ++i) {
@@ -1211,8 +1701,12 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
             return false;
         }
 
-        Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+        CollisionQueryContext collision_context;
+        collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+        Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
+        new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+        new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
         if (new_plan.strides.empty()) {
             return false;
         }
@@ -1332,12 +1826,16 @@ bool AnimationRuntime::replan_to_destination() {
     if (!consume_replan_attempt_budget()) {
         return false;
     }
-    auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
+    CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_, &collision_context);
     if (sanitized.empty()) {
         return false;
     }
-    Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+    Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
     new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
+    new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
     if (new_plan.strides.empty()) {
         return false;
     }
@@ -1382,13 +1880,17 @@ bool AnimationRuntime::replan_to_destination_3d() {
     if (!consume_replan_attempt_budget()) {
         return false;
     }
+    CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
     auto sanitized = sanitizer_3d_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
     if (sanitized.empty()) {
         return false;
     }
 
-    Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid());
+    Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
     new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
+    new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+    new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
     if (new_plan.strides.empty()) {
         return false;
     }

@@ -102,16 +102,18 @@ void RoomFloorBoxToolsPanel::set_floor_box_names(const std::vector<std::string>&
         box_buttons_.push_back(std::make_unique<DMButton>(name, &DMStyles::ListButton(), 220, DMButton::height()));
     }
     if (selected_box_index_ < 0 || selected_box_index_ >= static_cast<int>(box_names_.size())) {
-        selected_box_index_ = box_names_.empty() ? -1 : 0;
+        selected_box_index_ = -1;
     }
     layout_dirty_ = true;
 }
 
 void RoomFloorBoxToolsPanel::set_selection(int box_index) {
-    if (selected_box_index_ == box_index) {
+    const int bounded_box =
+        (box_index >= 0 && box_index < static_cast<int>(box_names_.size())) ? box_index : -1;
+    if (selected_box_index_ == bounded_box) {
         return;
     }
-    selected_box_index_ = box_index;
+    selected_box_index_ = bounded_box;
     layout_dirty_ = true;
 }
 
@@ -161,6 +163,10 @@ void RoomFloorBoxToolsPanel::set_recommendation_pool(const std::vector<std::stri
 
 void RoomFloorBoxToolsPanel::set_on_select(SelectCallback callback) {
     on_select_ = std::move(callback);
+}
+
+void RoomFloorBoxToolsPanel::set_on_context_click(ContextClickCallback callback) {
+    on_context_click_ = std::move(callback);
 }
 
 void RoomFloorBoxToolsPanel::set_on_add(AddCallback callback) {
@@ -261,6 +267,18 @@ bool RoomFloorBoxToolsPanel::handle_event(const SDL_Event& event) {
         if (!row_visible) {
             continue;
         }
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            event.button.button == SDL_BUTTON_RIGHT &&
+            point_in_rect(pointer_x, pointer_y, row_rect)) {
+            handled = true;
+            selected_box_index_ = static_cast<int>(i);
+            if (on_select_) {
+                on_select_(selected_box_index_);
+            }
+            if (on_context_click_) {
+                on_context_click_(selected_box_index_, SDL_Point{pointer_x, pointer_y});
+            }
+        }
         if (button->handle_event(event)) {
             handled = true;
             if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
@@ -282,7 +300,7 @@ bool RoomFloorBoxToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    if (delete_button_ && delete_button_->handle_event(event)) {
+    if (has_selected_box && delete_button_ && delete_button_->handle_event(event)) {
         handled = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
             event.button.button == SDL_BUTTON_LEFT &&
@@ -430,15 +448,15 @@ void RoomFloorBoxToolsPanel::render(SDL_Renderer* renderer) const {
         SDL_SetRenderClipRect(renderer, nullptr);
     }
 
+    const bool has_selected_box = selected_box_index_ >= 0 &&
+                                  selected_box_index_ < static_cast<int>(box_names_.size());
     if (add_button_) {
         add_button_->render(renderer);
     }
-    if (delete_button_) {
+    if (has_selected_box && delete_button_) {
         delete_button_->render(renderer);
     }
 
-    const bool has_selected_box = selected_box_index_ >= 0 &&
-                                  selected_box_index_ < static_cast<int>(box_names_.size());
     if (has_selected_box) {
         DMFontCache::instance().draw_text(renderer, label_style, "Floor Box Properties", detail_title_rect_.x, detail_title_rect_.y);
         if (name_textbox_) {
@@ -550,7 +568,9 @@ void RoomFloorBoxToolsPanel::update_layout() const {
     int controls_height = 0;
     controls_height += DMButton::height();
     controls_height += kSectionGap;
-    controls_height += DMButton::height();
+    if (has_selected_box) {
+        controls_height += DMButton::height();
+    }
     if (has_selected_box) {
         controls_height += kSectionGap + kLineHeight + row_gap;
         controls_height += text_h + row_gap; // name
@@ -575,8 +595,12 @@ void RoomFloorBoxToolsPanel::update_layout() const {
     int y = list_clip_rect_.y + list_clip_rect_.h + kSectionGap;
     if (add_button_) add_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
     y += DMButton::height() + kSectionGap;
-    if (delete_button_) delete_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
-    y += DMButton::height() + kSectionGap;
+    if (has_selected_box && delete_button_) {
+        delete_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+        y += DMButton::height() + kSectionGap;
+    } else if (delete_button_) {
+        delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+    }
 
     if (has_selected_box) {
         detail_title_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};
@@ -840,3 +864,22 @@ std::string RoomFloorBoxToolsPanel::format_float(float value) {
     }
     return text;
 }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+bool RoomFloorBoxToolsPanelTestAccess::delete_button_visible(RoomFloorBoxToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return false;
+    }
+    const SDL_Rect rect = panel.delete_button_->rect();
+    return rect.w > 0 && rect.h > 0;
+}
+
+SDL_Rect RoomFloorBoxToolsPanelTestAccess::delete_button_rect(RoomFloorBoxToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return SDL_Rect{0, 0, 0, 0};
+    }
+    return panel.delete_button_->rect();
+}
+#endif

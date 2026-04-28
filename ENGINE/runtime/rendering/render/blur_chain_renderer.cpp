@@ -6,16 +6,14 @@
 #include <vector>
 
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 
 namespace {
 
 constexpr float kBlurEpsilon = 1.0e-4f;
 
 void destroy_texture(SDL_Texture*& texture) {
-    if (texture) {
-        SDL_DestroyTexture(texture);
-        texture = nullptr;
-    }
+    render_diagnostics::destroy_texture(texture);
 }
 
 float sanitized_non_negative(float value) {
@@ -78,11 +76,11 @@ bool BlurChainRenderer::ensure_target(SDL_Texture*& texture) {
         destroy_texture(texture);
     }
 
-    texture = SDL_CreateTexture(renderer_,
-                                SDL_PIXELFORMAT_RGBA8888,
-                                SDL_TEXTUREACCESS_TARGET,
-                                screen_width_,
-                                screen_height_);
+    texture = render_diagnostics::create_texture(renderer_,
+                                                 SDL_PIXELFORMAT_RGBA8888,
+                                                 SDL_TEXTUREACCESS_TARGET,
+                                                 screen_width_,
+                                                 screen_height_);
     if (!texture) {
         return false;
     }
@@ -103,7 +101,9 @@ void BlurChainRenderer::clear_target(SDL_Texture* texture) const {
         return;
     }
 
-    SDL_SetRenderTarget(renderer_, texture);
+    if (!render_diagnostics::set_render_target(renderer_, texture)) {
+        return;
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
     SDL_RenderClear(renderer_);
@@ -115,11 +115,13 @@ bool BlurChainRenderer::copy_texture(SDL_Texture* src, SDL_Texture* dst) const {
     }
 
     clear_target(dst);
-    SDL_SetRenderTarget(renderer_, dst);
+    if (!render_diagnostics::set_render_target(renderer_, dst)) {
+        return false;
+    }
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
-    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
     return true;
 }
 
@@ -128,11 +130,28 @@ bool BlurChainRenderer::composite_texture_over(SDL_Texture* src, SDL_Texture* ds
         return false;
     }
 
-    SDL_SetRenderTarget(renderer_, dst);
+    if (!render_diagnostics::set_render_target(renderer_, dst)) {
+        return false;
+    }
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
-    SDL_RenderTexture(renderer_, src, nullptr, nullptr);
+    render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
+    return true;
+}
+
+bool BlurChainRenderer::composite_texture_modulate_over(SDL_Texture* src, SDL_Texture* dst) const {
+    if (!renderer_ || !src || !dst) {
+        return false;
+    }
+
+    if (!render_diagnostics::set_render_target(renderer_, dst)) {
+        return false;
+    }
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_MOD);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+    render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
     return true;
 }
 
@@ -164,34 +183,50 @@ bool BlurChainRenderer::blur_step(SDL_Texture* src,
                                            quality_scale);
 }
 
-std::vector<int> BlurChainRenderer::build_repeat_schedule(std::size_t chain_size, int total_pass_budget) {
+std::vector<int> BlurChainRenderer::build_repeat_schedule(const std::vector<int>& chain,
+                                                          const render_pipeline::LayerRenderResult& layer_render,
+                                                          int total_pass_budget) {
+    const std::size_t chain_size = chain.size();
     if (chain_size == 0 || total_pass_budget <= 0) {
         return {};
     }
 
     std::vector<int> schedule(chain_size, 0);
-    const std::size_t pass_count = static_cast<std::size_t>(std::max(0, total_pass_budget));
+    const int player_layer = layer_render.player_layer_index;
+    std::vector<float> weights(chain_size, 1.0f);
+    float total_weight = 0.0f;
+    for (std::size_t i = 0; i < chain_size; ++i) {
+        const int layer_index = chain[i];
+        const float distance = std::fabs(static_cast<float>(layer_index - player_layer));
+        weights[i] = std::max(0.25f, distance);
+        total_weight += weights[i];
+    }
+    if (!(std::isfinite(total_weight) && total_weight > 0.0f)) {
+        total_weight = static_cast<float>(chain_size);
+        std::fill(weights.begin(), weights.end(), 1.0f);
+    }
 
-    for (std::size_t pass_index = 0; pass_index < pass_count; ++pass_index) {
-        std::size_t slot =
-            std::min(chain_size - 1,
-                     ((pass_index + 1) * chain_size) / (pass_count + 1));
-
-        if (chain_size > 1) {
-            slot = std::max<std::size_t>(1, slot);
+    int assigned = 0;
+    for (std::size_t i = 0; i < chain_size; ++i) {
+        const float normalized = weights[i] / total_weight;
+        const int repeats = static_cast<int>(std::floor(normalized * static_cast<float>(total_pass_budget)));
+        schedule[i] = std::max(0, repeats);
+        assigned += schedule[i];
+    }
+    while (assigned < total_pass_budget) {
+        std::size_t best = 0;
+        float best_score = -1.0f;
+        for (std::size_t i = 0; i < chain_size; ++i) {
+            const float target = (weights[i] / total_weight) * static_cast<float>(total_pass_budget);
+            const float deficit = target - static_cast<float>(schedule[i]);
+            if (deficit > best_score) {
+                best_score = deficit;
+                best = i;
+            }
         }
-
-        ++schedule[slot];
+        ++schedule[best];
+        ++assigned;
     }
-
-    if (chain_size == 1 && schedule[0] == 0 && total_pass_budget > 0) {
-        schedule[0] = 1;
-    }
-
-    if (chain_size > 1 && schedule.back() == 0 && total_pass_budget > 0) {
-        ++schedule.back();
-    }
-
     return schedule;
 }
 
@@ -236,30 +271,11 @@ float BlurChainRenderer::compute_quality_scale(int screen_width,
                                                int screen_height,
                                                float blur_px,
                                                float radial_blur_px) {
-    const float safe_blur_px = sanitized_non_negative(blur_px);
-    const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
-    const float max_radius = std::max(safe_blur_px, safe_radial_blur_px);
-    const int min_dim = std::max(1, std::min(screen_width, screen_height));
-
-    if (max_radius <= 2.0f || min_dim <= 540) {
-        return 1.0f;
-    }
-    if (max_radius <= 6.0f) {
-        return 0.92f;
-    }
-    if (max_radius <= 12.0f) {
-        return 0.84f;
-    }
-    if (max_radius <= 24.0f) {
-        return 0.72f;
-    }
-    if (min_dim <= 720) {
-        return 0.62f;
-    }
-    return 0.54f;
+    return render_internal::dof_quality_scale(screen_width, screen_height, blur_px, radial_blur_px);
 }
 
 bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
+                                      const render_pipeline::LayerRenderResult& layer_render,
                                       const std::vector<SDL_Texture*>& layer_textures,
                                       SDL_Texture* seed_texture,
                                       SDL_Texture* output_texture,
@@ -296,7 +312,7 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
     const int total_pass_budget =
         blur_enabled ? compute_total_pass_budget(chain.size(), blur_px, radial_blur_px) : 0;
     const std::vector<int> repeat_schedule =
-        blur_enabled ? build_repeat_schedule(chain.size(), total_pass_budget) : std::vector<int>{};
+        blur_enabled ? build_repeat_schedule(chain, layer_render, total_pass_budget) : std::vector<int>{};
 
     for (std::size_t step = 0; step < chain.size(); ++step) {
         const int layer_index = chain[step];
@@ -309,24 +325,45 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
             continue;
         }
 
-        if (!copy_texture(layer_texture, temp)) {
-            return false;
+        const int repeat_count =
+            (step < repeat_schedule.size()) ? std::max(0, repeat_schedule[step]) : 0;
+        if (!initialized && repeat_count == 0) {
+            if (!copy_texture(layer_texture, accum)) {
+                return false;
+            }
+            initialized = true;
+            out_has_content = true;
+            continue;
         }
 
-        if (!initialized) {
-            if (!copy_texture(temp, accum)) {
+        if (repeat_count > 0) {
+            if (!copy_texture(layer_texture, temp)) {
+                return false;
+            }
+            if (!initialized) {
+                if (!copy_texture(temp, accum)) {
+                    return false;
+                }
+                initialized = true;
+            } else {
+                if (!composite_texture_over(temp, accum)) {
+                    return false;
+                }
+            }
+        } else if (!initialized) {
+            if (!copy_texture(layer_texture, accum)) {
                 return false;
             }
             initialized = true;
         } else {
-            if (!composite_texture_over(temp, accum)) {
+            // השאר עותקי ping-pong שמורים למעברי טשטוש אמיתיים; אחרת בצע קומפוזיציה ישירה.
+            // התנהגות שכבת השחקן חייבת להישאר מוגבלת לסידור ולקומפוזיציה בלבד, בלי להשפיע על סמנטיקת תאורה.
+            if (!composite_texture_over(layer_texture, accum)) {
                 return false;
             }
         }
         out_has_content = true;
 
-        const int repeat_count =
-            (step < repeat_schedule.size()) ? std::max(0, repeat_schedule[step]) : 0;
         for (int pass = 0; pass < repeat_count; ++pass) {
             if (!blur_step(accum,
                            temp,
@@ -351,6 +388,7 @@ bool BlurChainRenderer::compose_chain(const std::vector<int>& chain,
 render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
     const render_pipeline::LayerRenderResult& layer_render,
     SDL_Texture* background_seed,
+    SDL_Texture* floor_dark_mask,
     bool depth_of_field_enabled,
     float blur_px,
     float radial_blur_px,
@@ -388,12 +426,24 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
                     layer_render.player_layer_index),
         background_chain.end());
 
+    SDL_Texture* prepared_background_seed = background_seed;
+    if (background_seed && floor_dark_mask) {
+        if (!copy_texture(background_seed, chain_temp_tex_)) {
+            return result;
+        }
+        if (!composite_texture_modulate_over(floor_dark_mask, chain_temp_tex_)) {
+            return result;
+        }
+        prepared_background_seed = chain_temp_tex_;
+    }
+
     bool background_has_content = false;
     bool foreground_has_content = false;
 
     if (!compose_chain(background_chain,
+                       layer_render,
                        layer_render.final_layer_textures,
-                       background_seed,
+                       prepared_background_seed,
                        background_mid_tex_,
                        chain_temp_tex_,
                        blur_enabled,
@@ -405,6 +455,7 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
         return result;
     }
 
+    // הטיפול בשכבת השחקן הוא לקומפוזיציה בלבד, ואסור שישפיע על הטיה או שיוך של תאורה.
     if (SDL_Texture* player_layer_texture = find_player_layer_texture(layer_render)) {
         if (!background_has_content) {
             if (!copy_texture(player_layer_texture, background_mid_tex_)) {
@@ -419,6 +470,7 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
     }
 
     if (!compose_chain(foreground_chain,
+                       layer_render,
                        layer_render.final_layer_textures,
                        nullptr,
                        foreground_mid_tex_,
@@ -437,3 +489,52 @@ render_pipeline::BlurCompositeResult BlurChainRenderer::compose(
     result.foreground_mid = foreground_has_content ? foreground_mid_tex_ : nullptr;
     return result;
 }
+
+render_pipeline::BlurCompositeResult BlurChainRenderer::compose_gpu(SDL_Texture* scene_texture,
+                                                                    bool depth_of_field_enabled,
+                                                                    float blur_px,
+                                                                    float radial_blur_px,
+                                                                    SDL_FPoint optical_center) {
+    render_pipeline::BlurCompositeResult result{};
+    if (!renderer_ || !scene_texture) {
+        return result;
+    }
+    if (!ensure_targets()) {
+        return result;
+    }
+
+    const float safe_blur_px = sanitized_non_negative(blur_px);
+    const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
+    const bool blur_enabled =
+        render_internal::dof_blur_chain_enabled(depth_of_field_enabled,
+                                                safe_blur_px,
+                                                safe_radial_blur_px);
+
+    if (!blur_enabled) {
+        if (!copy_texture(scene_texture, background_mid_tex_)) {
+            return result;
+        }
+        result.valid = true;
+        result.background_mid = background_mid_tex_;
+        result.foreground_mid = nullptr;
+        return result;
+    }
+
+    const float blur_quality_scale =
+        compute_quality_scale(screen_width_, screen_height_, safe_blur_px, safe_radial_blur_px);
+    if (!blur_step(scene_texture,
+                   background_mid_tex_,
+                   blur_work_tex_,
+                   safe_blur_px,
+                   optical_center,
+                   safe_radial_blur_px,
+                   blur_quality_scale)) {
+        return result;
+    }
+
+    result.valid = true;
+    result.background_mid = background_mid_tex_;
+    result.foreground_mid = nullptr;
+    return result;
+}
+

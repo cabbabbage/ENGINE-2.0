@@ -108,13 +108,13 @@ Asset* SpawnContext::spawnTiledAsset(const std::string& name,
         if (std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) {
                 scale = static_cast<double>(info->scale_factor);
         }
-        int tile_w = std::max(1, static_cast<int>(std::lround(static_cast<double>(raw_w) * scale)));
-        int tile_h = std::max(1, static_cast<int>(std::lround(static_cast<double>(raw_h) * scale)));
-        const int spacing = map_grid_settings_.spacing();
-        if (spacing > 0) {
-                tile_w = spacing;
-                tile_h = spacing;
-        }
+        const int fallback_step = std::max(
+            1,
+            static_cast<int>(std::lround(
+                static_cast<double>(std::max(raw_w, raw_h)) * scale)));
+        const int tile_step = resolve_tiled_asset_step_px(map_grid_settings_, fallback_step);
+        int tile_w = tile_step;
+        int tile_h = tile_step;
 
         if (tile_w <= 0 || tile_h <= 0) {
                 return spawnAssetInternal(name, info, area, pos, depth, spawn_id, spawn_method, std::nullopt);

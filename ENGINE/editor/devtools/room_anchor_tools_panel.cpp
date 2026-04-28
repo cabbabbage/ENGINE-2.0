@@ -28,6 +28,7 @@ constexpr int kLightCardPadding = 6;
 constexpr int kHeaderHeight = 24;
 constexpr int kLineHeight = 18;
 constexpr int kColorTextboxGap = 6;
+constexpr int kLightSwatchHeight = 14;
 
 const std::vector<std::string>& scaling_method_options() {
     static const std::vector<std::string> options{
@@ -110,12 +111,12 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     depth_textbox_ = std::make_unique<DMTextBox>("Depth Offset", "0");
     rotation_slider_ = std::make_unique<DMSlider>("Rotation Degrees", -360, 360, 0);
     hidden_checkbox_ = std::make_unique<DMCheckbox>("Hidden", false);
+    orphan_on_end_checkbox_ = std::make_unique<DMCheckbox>("Orphan On End", true);
     advanced_options_button_ = std::make_unique<DMButton>("Advanced Options (Show)", &DMStyles::ListButton(), 180, DMButton::height());
     flip_horizontal_checkbox_ = std::make_unique<DMCheckbox>("Flip Horizontal", true);
     flip_vertical_checkbox_ = std::make_unique<DMCheckbox>("Flip Vertical", true);
     resolve_x_checkbox_ = std::make_unique<DMCheckbox>("Resolve X", true);
     scaling_method_dropdown_ = std::make_unique<DMDropdown>("Scaling Method", scaling_method_options(), 0);
-    light_enabled_checkbox_ = std::make_unique<DMCheckbox>("Light Enabled", true);
     light_color_r_textbox_ = std::make_unique<DMTextBox>("Color R", "255");
     light_color_g_textbox_ = std::make_unique<DMTextBox>("Color G", "236");
     light_color_b_textbox_ = std::make_unique<DMTextBox>("Color B", "196");
@@ -125,7 +126,6 @@ RoomAnchorToolsPanel::RoomAnchorToolsPanel() {
     light_falloff_slider_ = std::make_unique<DMSlider>("Falloff", 5, 800, 180);
     light_shadow_strength_slider_ = std::make_unique<DMSlider>("Shadow Strength", 0, 100, 82);
     light_cast_shadows_checkbox_ = std::make_unique<DMCheckbox>("Cast Shadows", true);
-    onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
     delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), 120, DMButton::height());
     apply_next_frame_button_ = std::make_unique<DMButton>("Copy To Next Frame", &DMStyles::PrimaryButton(), 170, DMButton::height());
     apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
@@ -194,10 +194,17 @@ std::string format_color_channel(int value) {
 }
 
 void RoomAnchorToolsPanel::set_selected_anchor(const std::string& name) {
-    if (selected_anchor_name_ == name) {
+    std::string normalized = name;
+    if (!normalized.empty()) {
+        const bool exists = std::find(anchor_names_.begin(), anchor_names_.end(), normalized) != anchor_names_.end();
+        if (!exists) {
+            normalized.clear();
+        }
+    }
+    if (selected_anchor_name_ == normalized) {
         return;
     }
-    selected_anchor_name_ = name;
+    selected_anchor_name_ = std::move(normalized);
     if (!rename_textbox_->is_editing()) {
         rename_textbox_->set_value(selected_anchor_name_);
     }
@@ -223,6 +230,9 @@ void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
     if (hidden_checkbox_) {
         hidden_checkbox_->set_value(values.hidden);
     }
+    if (orphan_on_end_checkbox_) {
+        orphan_on_end_checkbox_->set_value(values.orphan_on_end);
+    }
     if (flip_horizontal_checkbox_) {
         flip_horizontal_checkbox_->set_value(values.flip_horizontal);
     }
@@ -246,9 +256,7 @@ void RoomAnchorToolsPanel::set_light_editor_mode(bool enabled) {
 }
 
 void RoomAnchorToolsPanel::set_light_values(const LightValues& values) {
-    if (light_enabled_checkbox_) {
-        light_enabled_checkbox_->set_value(values.enabled);
-    }
+    (void)values.enabled;
     if (light_color_r_textbox_ && !light_color_r_textbox_->is_editing()) {
         light_color_r_textbox_->set_value(format_color_channel(values.color_r));
     }
@@ -276,16 +284,6 @@ void RoomAnchorToolsPanel::set_light_values(const LightValues& values) {
     if (light_cast_shadows_checkbox_) {
         light_cast_shadows_checkbox_->set_value(values.cast_shadows);
     }
-}
-
-void RoomAnchorToolsPanel::set_onion_skin_enabled(bool enabled) {
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_value(enabled);
-    }
-}
-
-bool RoomAnchorToolsPanel::onion_skin_enabled() const {
-    return onion_skin_checkbox_ ? onion_skin_checkbox_->value() : false;
 }
 
 void RoomAnchorToolsPanel::set_on_select(SelectCallback callback) {
@@ -316,10 +314,6 @@ void RoomAnchorToolsPanel::set_on_propagate(PropagateCallback callback) {
     on_propagate_ = std::move(callback);
 }
 
-void RoomAnchorToolsPanel::set_on_onion_skin_toggle(OnionSkinToggleCallback callback) {
-    on_onion_skin_toggle_ = std::move(callback);
-}
-
 void RoomAnchorToolsPanel::set_on_open_candidates(OpenCandidatesCallback callback) {
     on_open_candidates_ = std::move(callback);
 }
@@ -331,6 +325,7 @@ RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values()
     values.flip_vertical = flip_vertical_checkbox_ ? flip_vertical_checkbox_->value() : true;
     values.rotation_degrees = rotation_slider_ ? static_cast<float>(rotation_slider_->value()) : 0.0f;
     values.hidden = hidden_checkbox_ ? hidden_checkbox_->value() : false;
+    values.orphan_on_end = orphan_on_end_checkbox_ ? orphan_on_end_checkbox_->value() : true;
     values.resolve_x = resolve_x_checkbox_ ? resolve_x_checkbox_->value() : true;
     values.scaling_method = dropdown_index_to_scaling_method(
         scaling_method_dropdown_ ? scaling_method_dropdown_->selected() : 0);
@@ -346,7 +341,7 @@ RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values()
 RoomAnchorToolsPanel::LightValues RoomAnchorToolsPanel::collect_light_values() const {
     LightValues values{};
     values.has_light_data = light_editor_mode_;
-    values.enabled = light_enabled_checkbox_ ? light_enabled_checkbox_->value() : false;
+    values.enabled = true;
     values.color_r = std::clamp(parse_int_or(light_color_r_textbox_ ? light_color_r_textbox_->value() : "255", 255), 0, 255);
     values.color_g = std::clamp(parse_int_or(light_color_g_textbox_ ? light_color_g_textbox_->value() : "236", 236), 0, 255);
     values.color_b = std::clamp(parse_int_or(light_color_b_textbox_ ? light_color_b_textbox_->value() : "196", 196), 0, 255);
@@ -428,7 +423,11 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
                 on_select_(selected_anchor_name_);
             }
             if (on_open_candidates_) {
-                on_open_candidates_(selected_anchor_name_, SDL_Point{pointer_x, pointer_y}, row_rect);
+                const devmode::CandidateSourceContext source_context =
+                    light_editor_mode_ ? devmode::CandidateSourceContext::AnchorLight
+                                       : devmode::CandidateSourceContext::AnchorNonLight;
+                on_open_candidates_(
+                    selected_anchor_name_, SDL_Point{pointer_x, pointer_y}, row_rect, source_context);
             }
             return true;
         }
@@ -457,17 +456,6 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    if (onion_skin_checkbox_) {
-        const bool before = onion_skin_checkbox_->value();
-        if (onion_skin_checkbox_->handle_event(event)) {
-            handled = true;
-            const bool after = onion_skin_checkbox_->value();
-            if (before != after && on_onion_skin_toggle_) {
-                on_onion_skin_toggle_(after);
-            }
-        }
-    }
-
     bool rename_changed = false;
     if (has_selected_anchor && rename_textbox_ && rename_textbox_->handle_event(event)) {
         handled = true;
@@ -488,6 +476,11 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         details_changed = true;
     }
     if (has_selected_anchor && hidden_checkbox_ && hidden_checkbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_anchor && !light_editor_mode_ &&
+        orphan_on_end_checkbox_ && orphan_on_end_checkbox_->handle_event(event)) {
         handled = true;
         details_changed = true;
     }
@@ -525,10 +518,6 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
 
     bool light_changed = false;
     const bool light_controls_visible = light_editor_mode_ && has_selected_anchor;
-    if (light_controls_visible && light_enabled_checkbox_ && light_enabled_checkbox_->handle_event(event)) {
-        handled = true;
-        light_changed = true;
-    }
     if (light_controls_visible && light_color_r_textbox_ && light_color_r_textbox_->handle_event(event)) {
         handled = true;
         light_changed = true;
@@ -572,7 +561,7 @@ bool RoomAnchorToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
     }
 
-    if (!handled && delete_button_ && delete_button_->handle_event(event)) {
+    if (!handled && has_selected_anchor && delete_button_ && delete_button_->handle_event(event)) {
         handled = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
             event.button.button == SDL_BUTTON_LEFT &&
@@ -653,7 +642,7 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                                       header_rect_.y);
 
     if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0) {
-        const SDL_Color light_bg = DMStyles::PanelBG();
+        const SDL_Color light_bg = dm_draw::LightenColor(DMStyles::PanelBG(), 0.03f);
         dm_draw::DrawBeveledRect(renderer,
                                  light_panel_rect_,
                                  DMStyles::CornerRadius(),
@@ -670,6 +659,18 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                                           "Light Tools",
                                           light_header_rect_.x,
                                           light_header_rect_.y);
+        DMLabelStyle helper_style = label_style;
+        helper_style.font_size = std::max(10, label_style.font_size - 2);
+        helper_style.color = SDL_Color{
+            static_cast<Uint8>(std::clamp(static_cast<int>(label_style.color.r) + 14, 0, 255)),
+            static_cast<Uint8>(std::clamp(static_cast<int>(label_style.color.g) + 14, 0, 255)),
+            static_cast<Uint8>(std::clamp(static_cast<int>(label_style.color.b) + 14, 0, 255)),
+            label_style.color.a};
+        DMFontCache::instance().draw_text(renderer,
+                                          helper_style,
+                                          "Ctrl+C duplicates selected light",
+                                          light_helper_rect_.x,
+                                          light_helper_rect_.y);
     }
 
     SDL_SetRenderDrawColor(renderer, 20, 24, 30, 180);
@@ -693,9 +694,6 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
 
     if (add_button_) {
         add_button_->render(renderer);
-    }
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->render(renderer);
     }
     const bool has_selected_anchor = !selected_anchor_name_.empty();
     if (has_selected_anchor && rename_textbox_) {
@@ -723,6 +721,9 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
         if (rotation_slider_) {
             rotation_slider_->render(renderer);
         }
+        if (!light_editor_mode_ && orphan_on_end_checkbox_) {
+            orphan_on_end_checkbox_->render(renderer);
+        }
         if (hidden_checkbox_) {
             hidden_checkbox_->render(renderer);
         }
@@ -745,7 +746,7 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
         }
         if (light_editor_mode_) {
             if (light_card_rect_.w > 0 && light_card_rect_.h > 0) {
-                const SDL_Color light_fill = dm_draw::LightenColor(DMStyles::PanelBG(), 0.04f);
+                const SDL_Color light_fill = dm_draw::LightenColor(DMStyles::PanelBG(), 0.06f);
                 dm_draw::DrawBeveledRect(renderer,
                                          light_card_rect_,
                                          DMStyles::CornerRadius(),
@@ -759,8 +760,17 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
                 dm_draw::DrawRoundedOutline(renderer, light_card_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
             }
             DMFontCache::instance().draw_text(renderer, label_style, "Light Attachment", light_title_rect_.x, light_title_rect_.y);
-            if (light_enabled_checkbox_) {
-                light_enabled_checkbox_->render(renderer);
+            if (light_swatch_rect_.w > 0 && light_swatch_rect_.h > 0) {
+                const LightValues values = collect_light_values();
+                const SDL_Color swatch_color{
+                    static_cast<Uint8>(std::clamp(values.color_r, 0, 255)),
+                    static_cast<Uint8>(std::clamp(values.color_g, 0, 255)),
+                    static_cast<Uint8>(std::clamp(values.color_b, 0, 255)),
+                    static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(values.opacity * 2.55f)), 0, 255))
+                };
+                SDL_SetRenderDrawColor(renderer, swatch_color.r, swatch_color.g, swatch_color.b, swatch_color.a);
+                sdl_render::FillRect(renderer, &light_swatch_rect_);
+                dm_draw::DrawRoundedOutline(renderer, light_swatch_rect_, 3, 1, DMStyles::Border());
             }
             if (light_color_r_textbox_) {
                 light_color_r_textbox_->render(renderer);
@@ -791,7 +801,7 @@ void RoomAnchorToolsPanel::render(SDL_Renderer* renderer) const {
             }
         }
     }
-    if (delete_button_) {
+    if (has_selected_anchor && delete_button_) {
         delete_button_->render(renderer);
     }
     if (apply_next_frame_button_) {
@@ -869,7 +879,9 @@ void RoomAnchorToolsPanel::update_layout() const {
         scaling_method_dropdown_ ? scaling_method_dropdown_->preferred_height(controls_width) : DMDropdown::height();
     const int rotation_h = rotation_slider_ ? rotation_slider_->preferred_height(controls_width) : DMSlider::height();
     const int hidden_h = hidden_checkbox_ ? DMCheckbox::height() : 0;
-    const int light_enabled_h = light_enabled_checkbox_ ? DMCheckbox::height() : 0;
+    const bool show_orphan_on_end = !light_editor_mode_;
+    const int orphan_on_end_h =
+        (show_orphan_on_end && orphan_on_end_checkbox_) ? DMCheckbox::height() : 0;
     const int light_panel_controls_width = std::max(0, light_panel_rect_.w - kPanelPadding * 2);
     const int light_color_h = light_color_r_textbox_
         ? light_color_r_textbox_->preferred_height(light_panel_controls_width)
@@ -893,8 +905,6 @@ void RoomAnchorToolsPanel::update_layout() const {
     int controls_height = 0;
     controls_height += DMButton::height();                          // add
     controls_height += kSectionGap;
-    controls_height += DMCheckbox::height();                        // onion skin
-    controls_height += kSectionGap;
     if (has_selected_anchor) {
         controls_height += rename_h;                                // rename text
         controls_height += kSectionGap;
@@ -904,6 +914,10 @@ void RoomAnchorToolsPanel::update_layout() const {
         controls_height += row_gap;
         controls_height += rotation_h;
         controls_height += row_gap;
+        if (show_orphan_on_end) {
+            controls_height += orphan_on_end_h;
+            controls_height += row_gap;
+        }
         controls_height += hidden_h;
         controls_height += row_gap;
         controls_height += advanced_button_h;
@@ -917,8 +931,10 @@ void RoomAnchorToolsPanel::update_layout() const {
         }
         controls_height += kSectionGap;
     }
-    controls_height += DMButton::height();                          // delete
-    controls_height += kSectionGap;
+    if (has_selected_anchor) {
+        controls_height += DMButton::height();                      // delete
+        controls_height += kSectionGap;
+    }
     controls_height += DMButton::height();                          // copy next
     controls_height += row_gap;
     controls_height += DMButton::height();                          // copy animation
@@ -945,10 +961,6 @@ void RoomAnchorToolsPanel::update_layout() const {
     if (add_button_) {
         add_button_->set_rect(SDL_Rect{controls_x, add_y, controls_width, DMButton::height()});
     }
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, DMCheckbox::height()});
-        row_y += DMCheckbox::height() + kSectionGap;
-    }
     if (rename_textbox_) {
         if (has_selected_anchor) {
             rename_textbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, rename_h});
@@ -968,6 +980,12 @@ void RoomAnchorToolsPanel::update_layout() const {
         if (rotation_slider_) {
             rotation_slider_->set_rect(SDL_Rect{controls_x, row_y, controls_width, rotation_h});
             row_y += rotation_h + row_gap;
+        }
+        if (show_orphan_on_end && orphan_on_end_checkbox_) {
+            orphan_on_end_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, orphan_on_end_h});
+            row_y += orphan_on_end_h + row_gap;
+        } else if (orphan_on_end_checkbox_) {
+            orphan_on_end_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (hidden_checkbox_) {
             hidden_checkbox_->set_rect(SDL_Rect{controls_x, row_y, controls_width, hidden_h});
@@ -1056,6 +1074,9 @@ void RoomAnchorToolsPanel::update_layout() const {
         if (hidden_checkbox_) {
             hidden_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
+        if (orphan_on_end_checkbox_) {
+            orphan_on_end_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
         if (advanced_options_button_) {
             advanced_options_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
@@ -1068,18 +1089,30 @@ void RoomAnchorToolsPanel::update_layout() const {
         advanced_card_rect_ = SDL_Rect{0, 0, 0, 0};
     }
 
+    light_helper_rect_ = SDL_Rect{0, 0, 0, 0};
+    light_swatch_rect_ = SDL_Rect{0, 0, 0, 0};
+    if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0) {
+        light_helper_rect_ = SDL_Rect{
+            light_header_rect_.x,
+            light_header_rect_.y + kLineHeight,
+            light_header_rect_.w,
+            kLineHeight};
+    }
+
     if (light_editor_mode_ && light_panel_rect_.w > 0 && light_panel_rect_.h > 0 && has_selected_anchor) {
         const int light_controls_x = light_panel_rect_.x + kPanelPadding;
         const int light_controls_w = std::max(0, light_panel_rect_.w - kPanelPadding * 2);
-        int light_row_y = light_header_rect_.y + light_header_rect_.h + kSectionGap;
+        int light_row_y = light_helper_rect_.y + light_helper_rect_.h + kSectionGap;
         light_title_rect_ = SDL_Rect{light_controls_x, light_row_y, light_controls_w, kLineHeight};
         light_row_y += kLineHeight + row_gap;
 
         const int light_card_top = light_row_y;
-        if (light_enabled_checkbox_) {
-            light_enabled_checkbox_->set_rect(SDL_Rect{light_controls_x, light_row_y, light_controls_w, light_enabled_h});
-            light_row_y += light_enabled_h + row_gap;
-        }
+        light_swatch_rect_ = SDL_Rect{
+            light_controls_x,
+            light_row_y,
+            light_controls_w,
+            kLightSwatchHeight};
+        light_row_y += kLightSwatchHeight + row_gap;
 
         const int split_width = std::max(0, light_controls_w - (kColorTextboxGap * 2));
         const int col_width = split_width / 3;
@@ -1132,10 +1165,9 @@ void RoomAnchorToolsPanel::update_layout() const {
             std::max(0, card_bottom_y - card_top_y)};
     } else {
         light_title_rect_ = SDL_Rect{0, 0, 0, 0};
+        light_helper_rect_ = SDL_Rect{0, 0, 0, 0};
+        light_swatch_rect_ = SDL_Rect{0, 0, 0, 0};
         light_card_rect_ = SDL_Rect{0, 0, 0, 0};
-        if (light_enabled_checkbox_) {
-            light_enabled_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
         if (light_color_r_textbox_) {
             light_color_r_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
@@ -1165,11 +1197,16 @@ void RoomAnchorToolsPanel::update_layout() const {
         }
     }
 
-    if (delete_button_) {
+    if (has_selected_anchor && delete_button_) {
         delete_button_->set_rect(SDL_Rect{controls_x, row_y, controls_width, DMButton::height()});
+    } else if (delete_button_) {
+        delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
 
-    int copy_y = row_y + DMButton::height() + kSectionGap;
+    int copy_y = row_y;
+    if (has_selected_anchor) {
+        copy_y += DMButton::height() + kSectionGap;
+    }
     if (apply_next_frame_button_) {
         apply_next_frame_button_->set_rect(SDL_Rect{controls_x, copy_y, controls_width, DMButton::height()});
     }
@@ -1223,3 +1260,22 @@ bool RoomAnchorToolsPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {
     SDL_Point point{x, y};
     return SDL_PointInRect(&point, &rect);
 }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+bool RoomAnchorToolsPanelTestAccess::delete_button_visible(RoomAnchorToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return false;
+    }
+    const SDL_Rect rect = panel.delete_button_->rect();
+    return rect.w > 0 && rect.h > 0;
+}
+
+SDL_Rect RoomAnchorToolsPanelTestAccess::delete_button_rect(RoomAnchorToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return SDL_Rect{0, 0, 0, 0};
+    }
+    return panel.delete_button_->rect();
+}
+#endif

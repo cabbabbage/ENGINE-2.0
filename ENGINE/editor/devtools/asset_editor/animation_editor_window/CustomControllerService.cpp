@@ -71,8 +71,8 @@ void CustomControllerService::set_asset_root(const std::filesystem::path& asset_
         throw std::runtime_error("Unable to locate ENGINE directory from " + asset_root_.string());
     }
 
-    controller_dir_ = engine_root_ / "src" / "animation" / "controllers" / "custom_controllers";
-    controller_factory_cpp_ = engine_root_ / "src" / "assets" / "asset" / "controller_factory.cpp";
+    controller_dir_ = engine_root_ / "runtime" / "animation" / "controllers" / "custom_controllers";
+    controller_factory_cpp_ = engine_root_ / "runtime" / "assets" / "asset" / "controller_factory.cpp";
 }
 
 void CustomControllerService::set_manifest_store(devmode::core::ManifestStore* store) {
@@ -124,12 +124,16 @@ void CustomControllerService::open_existing_controller(const std::string& contro
     std::filesystem::path header_path = controller_dir_ / (base_name + ".hpp");
     std::filesystem::path source_path = controller_dir_ / (base_name + ".cpp");
 
-    if (std::filesystem::exists(header_path, ec)) {
+    const bool has_header = std::filesystem::exists(header_path, ec);
+    ec.clear();
+    const bool has_source = std::filesystem::exists(source_path, ec);
+    if (has_header) {
         open_in_default_editor(header_path);
-        return;
     }
-    if (std::filesystem::exists(source_path, ec)) {
+    if (has_source) {
         open_in_default_editor(source_path);
+    }
+    if (has_header || has_source) {
         return;
     }
 
@@ -247,7 +251,7 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
 
         hpp << "#ifndef " << guard << "\n";
         hpp << "#define " << guard << "\n\n";
-        hpp << "#include \"animation/controllers/shared/custom_asset_controller.hpp\"\n\n";
+        hpp << "#include \"animation/controllers/shared/custom_controller_api.hpp\"\n\n";
         hpp << "class Asset;\n";
         hpp << "class Input;\n\n";
         hpp << "class " << class_name << " : public CustomAssetController {\n\n";
@@ -256,7 +260,14 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         hpp << "    ~" << class_name << "() override = default;\n";
         hpp << "\n";
         hpp << "protected:\n";
+        hpp << "    void on_init() override;\n";
         hpp << "    void on_update(const Input& in) override;\n";
+        hpp << "    void on_attack(const animation_update::Attack& attack) override;\n";
+        hpp << "    void on_hit(const animation_update::Attack& attack) override;\n";
+        hpp << "    void on_death() override;\n";
+        hpp << "    void on_no_pending_attacks() override;\n";
+        hpp << "    void on_orphaned_hook(Asset& self, Asset* former_parent) override;\n";
+        hpp << "    void on_pre_delete_hook(Asset& self) override;\n";
         hpp << "    void on_process_pending_attacks(Asset& self) override;\n";
         hpp << "};\n\n";
         hpp << "#endif\n";
@@ -270,12 +281,18 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
 
         cpp << "#include \"" << base_name << ".hpp\"\n\n";
         cpp << "#include \"assets/asset/Asset.hpp\"\n";
+        cpp << "#include \"animation/attack.hpp\"\n";
         cpp << "#include \"core/AssetsManager.hpp\"\n";
         cpp << "#include \"map_generation/room.hpp\"\n\n";
+        cpp << "#include <vector>\n\n";
         cpp << class_name << "::" << class_name << "(Asset* self)\n";
         cpp << "    : CustomAssetController(self) {\n";
         cpp << "}\n\n";
-        cpp << "void " << class_name << "::on_update(const Input& ) {\n";
+        cpp << "void " << class_name << "::on_init() {\n";
+        cpp << "    CustomAssetController::on_init();\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_update(const Input& in) {\n";
+        cpp << "    CustomAssetController::on_update(in);\n";
         cpp << "    Asset* self = self_ptr();\n";
         cpp << "    if (!self) {\n";
         cpp << "        return;\n";
@@ -290,8 +307,26 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         cpp << "    (void)trigger_areas;\n";
         cpp << "}\n";
         cpp << "\n";
+        cpp << "void " << class_name << "::on_attack(const animation_update::Attack& attack) {\n";
+        cpp << "    CustomAssetController::on_attack(attack);\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_hit(const animation_update::Attack& attack) {\n";
+        cpp << "    CustomAssetController::on_hit(attack);\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_death() {\n";
+        cpp << "    CustomAssetController::on_death();\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_no_pending_attacks() {\n";
+        cpp << "    CustomAssetController::on_no_pending_attacks();\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_orphaned_hook(Asset& self, Asset* former_parent) {\n";
+        cpp << "    CustomAssetController::on_orphaned_hook(self, former_parent);\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_pre_delete_hook(Asset& self) {\n";
+        cpp << "    CustomAssetController::on_pre_delete_hook(self);\n";
+        cpp << "}\n\n";
         cpp << "void " << class_name << "::on_process_pending_attacks(Asset& self_ref) {\n";
-        cpp << "    (void)self_ref;\n";
+        cpp << "    CustomAssetController::on_process_pending_attacks(self_ref);\n";
         cpp << "}\n";
     }
 }
@@ -390,6 +425,7 @@ void CustomControllerService::ensure_controller_factory_registration(const std::
 void CustomControllerService::update_asset_metadata(const std::string& base_name,
                                                     const std::string& animation_id,
                                                     const std::string& binding_reference) const {
+    (void)binding_reference;
     if (!manifest_store_) {
         throw std::runtime_error("Manifest store is not configured for custom controller updates.");
     }

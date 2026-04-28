@@ -37,6 +37,7 @@ void GameRuntimeContext::begin_frame(Assets* assets,
     player_ = player;
     camera_view_ = camera_view;
     runtime_config_ = runtime_config;
+    map_graph_.set_current_room(current_room_);
     prune_expired_room_fly_aggression();
 }
 
@@ -82,6 +83,35 @@ const RoomFlyAggressionState* GameRuntimeContext::room_fly_aggression_state(
         return nullptr;
     }
     return &it->second;
+}
+
+void GameRuntimeContext::rebuild_runtime_map_graph(const std::vector<Room*>& rooms) {
+    map_graph_.build_from_rooms(rooms);
+    map_graph_.set_current_room(current_room_);
+}
+
+std::vector<Room*> GameRuntimeContext::connected_rooms(Room* room) const {
+    return map_graph_.connected_rooms(room);
+}
+
+Room* GameRuntimeContext::parent_room(Room* room) const {
+    return map_graph_.parent_room(room);
+}
+
+std::vector<Room*> GameRuntimeContext::child_rooms(Room* room) const {
+    return map_graph_.child_rooms(room);
+}
+
+std::vector<Room*> GameRuntimeContext::rooms_in_layer(int layer) const {
+    return map_graph_.rooms_in_layer(layer);
+}
+
+bool GameRuntimeContext::are_rooms_connected(Room* a, Room* b) const {
+    return map_graph_.are_connected(a, b);
+}
+
+Room* GameRuntimeContext::trail_between(Room* a, Room* b) const {
+    return map_graph_.trail_between(a, b);
 }
 
 void GameRuntimeContext::prune_expired_room_fly_aggression() {

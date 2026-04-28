@@ -1,62 +1,17 @@
 #include "rendering/render/layer_submission_builder.hpp"
 
+#include "rendering/render/layer_depth_bins.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 namespace {
-
-constexpr int kMaxDofLayers = 512;
-constexpr int kMaxLayersPerSide = kMaxDofLayers / 2;
-
-std::vector<double> build_linear_depth_edges(double max_depth, double base_layer_interval) {
-    std::vector<double> edges;
-    edges.reserve(static_cast<std::size_t>(kMaxLayersPerSide + 1));
-    edges.push_back(0.0);
-    while (edges.back() < max_depth && static_cast<int>(edges.size()) - 1 < kMaxLayersPerSide) {
-        const double distance = edges.back();
-        const double next_distance = std::min(max_depth, distance + base_layer_interval);
-        if (next_distance <= distance) {
-            break;
-        }
-        edges.push_back(next_distance);
-    }
-    if (edges.size() == 1) {
-        edges.push_back(max_depth);
-    } else if (edges.back() < max_depth) {
-        edges.back() = max_depth;
-    }
-    return edges;
-}
-
-std::vector<double> build_background_depth_edges(double max_depth,
-                                                 double base_layer_interval,
-                                                 double depth_curve) {
-    std::vector<double> edges;
-    edges.reserve(static_cast<std::size_t>(kMaxLayersPerSide + 1));
-    edges.push_back(0.0);
-    while (edges.back() < max_depth && static_cast<int>(edges.size()) - 1 < kMaxLayersPerSide) {
-        const double distance = edges.back();
-        const double t = std::clamp(distance / std::max(1.0, max_depth), 0.0, 1.0);
-        const double growth = 1.0 + depth_curve * t * t;
-        const double step = std::max(1.0, base_layer_interval * growth);
-        const double next_distance = std::min(max_depth, distance + step);
-        if (next_distance <= distance) {
-            break;
-        }
-        edges.push_back(next_distance);
-    }
-    if (edges.size() == 1) {
-        edges.push_back(max_depth);
-    } else if (edges.back() < max_depth) {
-        edges.back() = max_depth;
-    }
-    return edges;
-}
 
 int depth_to_layer_index(double depth,
                          double max_cull_depth,
@@ -105,8 +60,13 @@ double layer_midpoint_depth(int layer_idx,
 }
 
 void expand_layer_bounds(render_pipeline::LayerSubmission& layer,
-                         const std::array<SDL_Vertex, 4>& vertices) {
-    for (const SDL_Vertex& vertex : vertices) {
+                         const SDL_Vertex* vertices,
+                         int vertex_count) {
+    if (!vertices || vertex_count <= 0) {
+        return;
+    }
+    for (int i = 0; i < vertex_count; ++i) {
+        const SDL_Vertex& vertex = vertices[i];
         if (!std::isfinite(vertex.position.x) || !std::isfinite(vertex.position.y)) {
             continue;
         }
@@ -115,6 +75,38 @@ void expand_layer_bounds(render_pipeline::LayerSubmission& layer,
         layer.bounds_max_x = std::max(layer.bounds_max_x, vertex.position.x);
         layer.bounds_max_y = std::max(layer.bounds_max_y, vertex.position.y);
     }
+}
+
+struct MaterialRegistryKey {
+    SDL_Texture* texture = nullptr;
+    SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+
+    bool operator==(const MaterialRegistryKey& other) const {
+        return texture == other.texture && blend_mode == other.blend_mode;
+    }
+};
+
+struct MaterialRegistryKeyHash {
+    std::size_t operator()(const MaterialRegistryKey& key) const {
+        const std::size_t texture_hash = std::hash<SDL_Texture*>{}(key.texture);
+        const std::size_t blend_hash = std::hash<int>{}(static_cast<int>(key.blend_mode));
+        return texture_hash ^ (blend_hash + 0x9e3779b9u + (texture_hash << 6) + (texture_hash >> 2));
+    }
+};
+
+std::uint32_t resolve_material_index(
+    const MaterialRegistryKey& key,
+    std::unordered_map<MaterialRegistryKey, std::uint32_t, MaterialRegistryKeyHash>& registry,
+    render_pipeline::LayerBuildResult& result) {
+    const auto it = registry.find(key);
+    if (it != registry.end()) {
+        return it->second;
+    }
+
+    const std::uint32_t next_index = static_cast<std::uint32_t>(result.materials.size());
+    result.materials.push_back(render_pipeline::DrawMaterial{key.texture, key.blend_mode});
+    registry.emplace(key, next_index);
+    return next_index;
 }
 
 } // namespace
@@ -130,16 +122,23 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
     const double depth_curve = std::max(0.0, static_cast<double>(realism.layer_depth_curve));
 
     const std::vector<double> foreground_depth_edges =
-        build_linear_depth_edges(safe_max_cull_depth, base_layer_interval);
+        render_depth::build_linear_depth_edges(safe_max_cull_depth, base_layer_interval);
     const std::vector<double> background_depth_edges =
-        build_background_depth_edges(safe_max_cull_depth, base_layer_interval, depth_curve);
+        render_depth::build_background_depth_edges(safe_max_cull_depth, base_layer_interval, depth_curve);
 
     const int foreground_layer_count = std::max(1, static_cast<int>(foreground_depth_edges.size()) - 1);
     const int background_layer_count = std::max(1, static_cast<int>(background_depth_edges.size()) - 1);
     const int layer_count = foreground_layer_count + background_layer_count;
+    const std::size_t estimated_draw_count = geometry_batcher.item_count();
 
     result.layer_count = layer_count;
     result.layers.resize(static_cast<std::size_t>(layer_count));
+    result.packed_vertices.reserve(estimated_draw_count * GeometryBatcher::kMaxVerticesPerItem);
+    result.packed_indices.reserve(estimated_draw_count * GeometryBatcher::kMaxIndicesPerItem);
+    result.packets.reserve(estimated_draw_count);
+    result.gpu_packets.reserve(estimated_draw_count);
+    result.materials.reserve(std::min<std::size_t>(estimated_draw_count, 256));
+    std::unordered_map<MaterialRegistryKey, std::uint32_t, MaterialRegistryKeyHash> material_registry;
 
     const int center_split_layer_index = std::clamp(
         depth_to_layer_index(0.0,
@@ -188,7 +187,7 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
         }
 
         auto& layer = result.layers[static_cast<std::size_t>(layer_idx)];
-        if (layer.draws.empty()) {
+        if (layer.packet_indices.empty()) {
             const double midpoint = layer_midpoint_depth(layer_idx,
                                                          foreground_layer_count,
                                                          layer_count,
@@ -203,26 +202,71 @@ render_pipeline::LayerBuildResult LayerSubmissionBuilder::build(const GeometryBa
             layer.bounds_max_y = -std::numeric_limits<float>::infinity();
         }
 
-        render_pipeline::GeometryLayerDrawItem copy{};
-        copy.texture = item.texture;
-        copy.blend_mode = item.blend_mode;
-        copy.vertices[0] = item.vertices[0];
-        copy.vertices[1] = item.vertices[1];
-        copy.vertices[2] = item.vertices[2];
-        copy.vertices[3] = item.vertices[3];
-        copy.depth = item.depth;
-        layer.draws.push_back(copy);
+        const MaterialRegistryKey material_key{item.texture, item.blend_mode};
+        const std::uint32_t material_index = resolve_material_index(material_key, material_registry, result);
+        if (item.vertex_count <= 0 || item.index_count <= 0) {
+            return;
+        }
+        const std::uint32_t vertex_offset = static_cast<std::uint32_t>(result.packed_vertices.size());
+        for (int vi = 0; vi < item.vertex_count; ++vi) {
+            result.packed_vertices.push_back(item.vertices[vi]);
+        }
+
+        const std::uint32_t index_offset = static_cast<std::uint32_t>(result.packed_indices.size());
+        for (int ii = 0; ii < item.index_count; ++ii) {
+            result.packed_indices.push_back(static_cast<int>(vertex_offset + item.indices[ii]));
+        }
+
+        render_pipeline::DrawPacket packet{};
+        const float packet_depth = std::isfinite(item.depth)
+            ? static_cast<float>(item.depth)
+            : static_cast<float>(layer.representative_depth);
+        packet.vertex_offset = vertex_offset;
+        packet.vertex_count = static_cast<std::uint32_t>(item.vertex_count);
+        packet.index_offset = index_offset;
+        packet.index_count = static_cast<std::uint32_t>(item.index_count);
+        packet.material_index = material_index;
+        packet.layer_index = static_cast<std::uint32_t>(layer_idx);
+        packet.light_cluster_index = static_cast<std::uint32_t>(layer_idx);
+        packet.depth = packet_depth;
+        const std::uint32_t packet_index = static_cast<std::uint32_t>(result.packets.size());
+        result.packets.push_back(packet);
+        result.gpu_packets.push_back(render_pipeline::GpuDrawPacketRecord{
+            packet.index_offset,
+            packet.index_count,
+            packet.vertex_offset,
+            packet.vertex_count,
+            packet.material_index,
+            packet.layer_index,
+            packet.light_cluster_index,
+            packet.depth});
+
+        layer.packet_indices.push_back(packet_index);
+        if (layer.command_ranges.empty() ||
+            layer.command_ranges.back().material_index != material_index ||
+            layer.command_ranges.back().index_offset + layer.command_ranges.back().index_count != index_offset) {
+            layer.command_ranges.push_back(render_pipeline::DrawCommandRange{
+                material_index,
+                index_offset,
+                packet.index_count,
+                packet_index,
+                1});
+        } else {
+            render_pipeline::DrawCommandRange& range = layer.command_ranges.back();
+            range.index_count += packet.index_count;
+            range.packet_count += 1;
+        }
 
         if (std::isfinite(item.depth)) {
             layer.depth_min = std::min(layer.depth_min, item.depth);
             layer.depth_max = std::max(layer.depth_max, item.depth);
         }
-        expand_layer_bounds(layer, copy.vertices);
+        expand_layer_bounds(layer, item.vertices, item.vertex_count);
     });
 
     for (int i = 0; i < layer_count; ++i) {
         auto& layer = result.layers[static_cast<std::size_t>(i)];
-        if (layer.draws.empty()) {
+        if (layer.packet_indices.empty() && layer.draws.empty()) {
             continue;
         }
         if (!std::isfinite(layer.depth_min) || !std::isfinite(layer.depth_max)) {

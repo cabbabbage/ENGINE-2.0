@@ -24,6 +24,7 @@ public:
     Mode mode() const { return mode_; }
 
     void set_tags(const std::vector<std::string>& tags, const std::vector<std::string>& anti_tags);
+    void set_recommended_tags(const std::vector<std::string>& tags);
     void set_subject_asset_name(const std::string& asset_name);
 
     std::vector<std::string> tags() const;
@@ -109,6 +110,7 @@ private:
     std::set<std::string> anti_tags_;
     std::vector<std::string> recommended_tags_;
     std::vector<std::string> recommended_anti_;
+    std::vector<std::string> external_recommended_tags_;
 
     mutable SDL_Rect tags_label_rect_{0,0,0,0};
     mutable SDL_Rect anti_label_rect_{0,0,0,0};

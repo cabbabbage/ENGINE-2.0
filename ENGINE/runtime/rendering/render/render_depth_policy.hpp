@@ -4,19 +4,35 @@
 
 #include <cmath>
 
-// Render depth policy constants and helpers.
+// קבועים וכלי עזר למדיניות עומק הרינדור.
 //
-// The engine treats world space as a right-handed system: X moves right, Y is height and upward displacement,
-// and Z represents forward/depth relative to the camera. World.Z drives draw-order sorting while world.Y
-// tracks vertical placement/perspective offsets (e.g. how tall an object sits above the terrain).
+// המנוע מתייחס למרחב העולם כמערכת ימנית: X נע ימינה, Y הוא גובה והיסט כלפי מעלה,
+// ו-Z מייצג קדימה או עומק ביחס למצלמה. World.Z קובע את סדר הציור בעוד world.Y
+// עוקב אחר מיקום אנכי והיסטי פרספקטיבה (למשל כמה גבוה אובייקט נמצא מעל הקרקע).
 //
-// This file centralizes that policy so renderers can read the same axis definitions and keep depth math
-// consistent with the canonical axis orientation.
+// קובץ זה מרכז את המדיניות כדי ש-renderers יקראו את אותן הגדרות צירים וישמרו על חישובי עומק
+// עקביים עם כיוון הצירים הקנוני.
 
 namespace render_depth {
 
 static constexpr axis::Axis kVerticalPlacementAxis = axis::Axis::Y;
 static constexpr axis::Axis kOrderingAxis = axis::Axis::Z;
+
+inline float normalize_depth_axis_sign(float sign) {
+    constexpr float kDepthAxisForwardEpsilon = 1.0e-5f;
+    if (!std::isfinite(sign) || std::fabs(sign) < kDepthAxisForwardEpsilon) {
+        return 1.0f;
+    }
+    return sign >= 0.0f ? 1.0f : -1.0f;
+}
+
+inline float world_z_from_depth_offset(float depth_offset, float anchor_world_z, float depth_axis_sign) {
+    if (!std::isfinite(depth_offset) || !std::isfinite(anchor_world_z)) {
+        return anchor_world_z;
+    }
+    const float sign = normalize_depth_axis_sign(depth_axis_sign);
+    return anchor_world_z + depth_offset * sign;
+}
 
 inline double depth_from_anchor(double anchor_depth, double object_depth, double bias = 0.0) {
     return anchor_depth - object_depth + bias;
@@ -30,3 +46,4 @@ inline double bias_for_quantized_depth(double exact_object_depth, double quantiz
 }
 
 } // namespace render_depth
+

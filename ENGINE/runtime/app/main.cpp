@@ -1,5 +1,6 @@
 #include "main.hpp"
 #include "app/bootstrap.hpp"
+#include "app/frame_pacing.hpp"
 #include "utils/text_style.hpp"
 #include "ui/main_menu.hpp"
 #include "ui/menu_ui.hpp"
@@ -11,6 +12,7 @@
 #include "assets/asset/asset_library.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/engine_renderer.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 #include "AssetsManager.hpp"
 #include "utils/input.hpp"
 #include "audio/audio_engine.hpp"
@@ -103,6 +105,57 @@ bool env_flag_enabled(const char* name, bool default_value) {
         return default_value;
 }
 
+int env_int_clamped(const char* name, int default_value, int min_value, int max_value) {
+        const int safe_min = std::min(min_value, max_value);
+        const int safe_max = std::max(min_value, max_value);
+        const int safe_default = std::clamp(default_value, safe_min, safe_max);
+        if (!name || !*name) {
+                return safe_default;
+        }
+        const char* raw = std::getenv(name);
+        if (!raw || !*raw) {
+                return safe_default;
+        }
+        try {
+                const int value = std::stoi(raw);
+                return std::clamp(value, safe_min, safe_max);
+        } catch (...) {
+                return safe_default;
+        }
+}
+
+void show_gpu_required_dialog_and_wait(SDL_Window* window, const std::string& details) {
+        const SDL_MessageBoxButtonData buttons[] = {
+                {
+                        SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,
+                        0,
+                        "I understand"
+                }
+        };
+
+        std::string message =
+                "This game now requires a compatible GPU renderer.\n"
+                "No CPU/software fallback is available.\n"
+                "Press \"I understand\" to exit.";
+        if (!details.empty()) {
+                message += "\n\nDetails:\n" + details;
+        }
+
+        SDL_MessageBoxData data{};
+        data.flags = SDL_MESSAGEBOX_ERROR;
+        data.window = window;
+        data.title = "GPU Required";
+        data.message = message.c_str();
+        data.numbuttons = 1;
+        data.buttons = buttons;
+        data.colorScheme = nullptr;
+
+        int button_id = -1;
+        if (!SDL_ShowMessageBox(&data, &button_id)) {
+                vibble::log::warn(std::string("[Main] Failed to show GPU-required message box: ") + SDL_GetError());
+        }
+}
+
 bool is_resize_or_scale_event(Uint32 event_type) {
         switch (event_type) {
         case SDL_EVENT_WINDOW_RESIZED:
@@ -181,6 +234,7 @@ void MainApp::init() {
 }
 
 void MainApp::setup() {
+        startup_abort_requested_ = false;
         std::srand(static_cast<unsigned int>(std::time(nullptr)));
 
         SDL_Renderer* renderer = raw_renderer();
@@ -212,11 +266,13 @@ void MainApp::setup() {
                         std::unique_ptr<loading_status::ScopedNotifier> scoped_loading_notifier;
                         if (loading_screen_ && renderer) {
                                 scoped_loading_notifier = std::make_unique<loading_status::ScopedNotifier>(
-                                        [this, renderer](const std::string& status) {
+                                        [this](const std::string& status) {
                                                 try {
                                                         loading_screen_->set_status(status);
                                                         loading_screen_->draw_frame();
-                                                        SDL_RenderPresent(renderer);
+                                                        if (renderer_) {
+                                                                renderer_->present();
+                                                        }
                                                 } catch (...) {
                                                 }
                                                 SDL_Event ev;
@@ -226,7 +282,9 @@ void MainApp::setup() {
 
                                 loading_screen_->set_status("Preparing...");
                                 loading_screen_->draw_frame();
-                                SDL_RenderPresent(renderer);
+                                if (renderer_) {
+                                        renderer_->present();
+                                }
                                 SDL_Event ev;
                                 while (SDL_PollEvent(&ev)) {}
                         }
@@ -311,6 +369,14 @@ void MainApp::setup() {
                                 []() {
                                         vibble::log::warn("[MainApp] No player asset found. Launching in Dev Mode.");
                                 });
+                        if (loading_screen_) {
+                                loading_screen_->deactivate();
+                        }
+                        if (renderer_) {
+                                renderer_->begin_frame(SDL_Color{0, 0, 0, 255});
+                                renderer_->end_frame();
+                                renderer_->present();
+                        }
                         AudioEngine::instance().update();
                 },
                 [](const std::exception& e) {
@@ -318,11 +384,13 @@ void MainApp::setup() {
                 });
 }
 
+void MainApp::run_startup_stabilization() {
+        // Smooth-startup warmup path removed.
+}
+
 void MainApp::game_loop() {
-        constexpr double TARGET_FPS = 10.0;
-        constexpr double TARGET_FRAME_SECONDS = 1.0 / TARGET_FPS;
         const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
-        const double target_counts  = TARGET_FRAME_SECONDS * perf_frequency;
+        const double target_counts  = app::frame_pacing::target_frame_counts(perf_frequency);
 
         double idle_counts_accum = 0.0;
         int idle_frame_counter   = 0;
@@ -331,6 +399,7 @@ void MainApp::game_loop() {
         SDL_Event e;
 
         vibble::log::info("[MainApp] Game loop started.");
+        vibble::log::info("[MainApp] Frame pacing target: " + app::frame_pacing::target_summary());
 
         while (!quit) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
@@ -369,17 +438,15 @@ void MainApp::game_loop() {
                         input_->update();
                 }
 
-                const Uint64 frame_end = SDL_GetPerformanceCounter();
-                const double work_counts = static_cast<double>(frame_end - frame_begin);
-
-                if (work_counts < target_counts) {
-                        const double remaining_counts = target_counts - work_counts;
+                const double remaining_counts =
+                        app::frame_pacing::remaining_frame_counts(frame_begin,
+                                                                  target_counts,
+                                                                  perf_frequency);
+                if (remaining_counts > 0.0) {
                         idle_counts_accum += remaining_counts;
                         ++idle_frame_counter;
-                        const double remaining_ms = (remaining_counts * 1000.0) / perf_frequency;
-                        if (remaining_ms >= 1.0) {
-                                SDL_Delay(static_cast<Uint32>(remaining_ms));
-                        }
+                        app::frame_pacing::delay_from_remaining_counts(remaining_counts,
+                                                                       perf_frequency);
                 }
 
                 if (idle_frame_counter >= IDLE_REPORT_INTERVAL) {
@@ -494,6 +561,13 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         }
 
         std::ostringstream frame_line;
+        const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+        const std::string backend_name = !stats.backend_name.empty()
+            ? stats.backend_name
+            : (renderer_ ? renderer_->caps().renderer_name : std::string("unknown"));
+        const std::string present_mode = !stats.present_mode.empty()
+            ? stats.present_mode
+            : (renderer_ ? renderer_->present_mode_name() : std::string("unknown"));
         frame_line << "[RenderDiag][" << (loop_label ? loop_label : "loop")
                    << "] frame=" << frame_diagnostics_counter_
                    << " window=" << window_w << "x" << window_h
@@ -508,7 +582,40 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                    << " depth_culled=" << depth_culled
                    << " nodes=" << frustum_nodes
                    << " branches_skipped=" << frustum_skipped
-                   << " postprocess=" << postprocess_text;
+                   << " postprocess=" << postprocess_text
+                   << " frame_cpu_ms=" << stats.frame_cpu_ms
+                   << " render_thread_cpu_ms=" << stats.render_thread_cpu_ms
+                   << " draw_submission_ms=" << stats.draw_submission_cpu_ms
+                   << " present_block_ms=" << stats.present_block_ms
+                   << " present_interval_ms=" << (stats.present_interval_known ? stats.present_interval_ms : -1.0)
+                   << " pass_count=" << stats.render_pass_count
+                   << " copy_pass_count=" << stats.copy_pass_count
+                   << " compute_pass_count=" << stats.compute_pass_count
+                   << " draw_calls=" << stats.draw_call_count
+                   << " rt_switches=" << stats.render_target_switch_count
+                   << " tex_create=" << stats.texture_create_count
+                   << " tex_destroy=" << stats.texture_destroy_count
+                   << " gpu_buf_create=" << stats.gpu_buffer_create_count
+                   << " gpu_buf_destroy=" << stats.gpu_buffer_destroy_count
+                   << " cpu_light_gather_ms=" << stats.cpu_light_gather_ms
+                   << " cpu_light_mask_ms=" << stats.cpu_light_mask_generation_ms
+                   << " gpu_light_tiles=" << stats.gpu_light_tile_assignments
+                   << " gpu_light_naive=" << stats.gpu_light_naive_evaluations
+                   << " gpu_light_tiled=" << stats.gpu_light_tiled_evaluations
+                   << " pipeline_cache_hits=" << stats.gpu_pipeline_cache_hits
+                   << " pipeline_cache_misses=" << stats.gpu_pipeline_cache_misses
+                   << " pipeline_cache_hit_rate=" << stats.gpu_pipeline_cache_hit_rate
+                   << " sdl_target_calls=" << stats.sdl_renderer_target_call_count
+                   << " sdl_draw_calls=" << stats.sdl_renderer_draw_call_count
+                   << " present_calls=" << stats.present_call_count
+                   << " gpu_failed_frames=" << stats.gpu_failed_frame_count
+                   << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)
+                   << " backend=" << backend_name
+                   << " present_mode=" << present_mode;
+        if (stats.texture_memory_known) {
+                frame_line << " texture_mem_mb="
+                           << static_cast<double>(stats.texture_memory_bytes) / (1024.0 * 1024.0);
+        }
         vibble::log::debug(frame_line.str());
 
         if (output_h > 0 && std::abs(target_h - output_h / 2) <= 1) {
@@ -728,10 +835,13 @@ void run(SDL_Window* window,
         SDL_SetRenderTarget(renderer, nullptr);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
-        SDL_RenderPresent(renderer);
+        engine_renderer.present();
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {}
     }
+    const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
+    const double target_counts = app::frame_pacing::target_frame_counts(perf_frequency);
+    vibble::log::info("[Main] Shared frame pacing target: " + app::frame_pacing::target_summary());
 
     manifest::ManifestData manifest_data;
     try {
@@ -796,6 +906,7 @@ void run(SDL_Window* window,
             SDL_Event e;
             bool choosing = true;
             while (choosing) {
+                const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 while (SDL_PollEvent(&e)) {
                     if (renderer) {
                         // Keep menu pointer input in renderer-space coordinates.
@@ -841,8 +952,13 @@ void run(SDL_Window* window,
                 SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 SDL_RenderClear(renderer);
                 menu->render();
-                SDL_RenderPresent(renderer);
-                SDL_Delay(16);
+                engine_renderer.present();
+                const double remaining_counts =
+                    app::frame_pacing::remaining_frame_counts(frame_begin,
+                                                              target_counts,
+                                                              perf_frequency);
+                app::frame_pacing::delay_from_remaining_counts(remaining_counts,
+                                                               perf_frequency);
             }
         }
 
@@ -920,7 +1036,10 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<EngineRenderer> engine_renderer = EngineRenderer::Create(window, true);
         if (!engine_renderer) {
-                vibble::log::error("[Main] Failed to initialize renderer after all fallbacks.");
+                const std::string gpu_error = SDL_GetError();
+                vibble::log::error(std::string("[Main] Failed to initialize required GPU renderer: ") +
+                                   (gpu_error.empty() ? "unknown error" : gpu_error));
+                show_gpu_required_dialog_and_wait(window, gpu_error);
                 SDL_DestroyWindow(window);
                 TTF_Quit();
                 SDL_Quit();
@@ -937,15 +1056,28 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
+        if (!engine_renderer->runtime_gpu_supported()) {
+                vibble::log::error("[Main] Renderer initialization did not produce a GPU backend.");
+                show_gpu_required_dialog_and_wait(window, "No compatible GPU backend was available.");
+                engine_renderer.reset();
+                SDL_DestroyWindow(window);
+                TTF_Quit();
+                SDL_Quit();
+                return 1;
+        }
+
         switch (engine_renderer->quality_tier()) {
         case RenderQualityTier::GPU:
                 vibble::log::info("[Main] Render quality tier: GPU (full effects).");
                 break;
-        case RenderQualityTier::Accelerated:
-                vibble::log::info("[Main] Render quality tier: Accelerated (reduced effects).");
-                break;
-        case RenderQualityTier::Software:
-                vibble::log::info("[Main] Render quality tier: Software (minimal effects).");
+        default:
+                vibble::log::error("[Main] Non-GPU render quality tier detected; exiting because GPU is required.");
+                show_gpu_required_dialog_and_wait(window, "This build only supports GPU rendering.");
+                engine_renderer.reset();
+                SDL_DestroyWindow(window);
+                TTF_Quit();
+                SDL_Quit();
+                return 1;
                 break;
         }
 

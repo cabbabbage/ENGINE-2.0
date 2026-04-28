@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -218,6 +219,62 @@ TEST_CASE("2D GetBestPath behavior remains unchanged") {
     CHECK(plan.final_dest.x > asset->world_x());
 }
 
+TEST_CASE("Path planners exclude attack-tagged animations from locomotion candidates") {
+    Animation attack_anim = make_single_path_animation(100, 0, 0);
+    attack_anim.tags = {" Attack "};
+
+    const auto asset = make_test_asset(
+        {
+            {"default", make_single_path_animation(0, 0, 0)},
+            {"walk_right", make_single_path_animation(10, 0, 0)},
+            {"slash", attack_anim},
+        },
+        "default");
+
+    REQUIRE(asset != nullptr);
+
+    const auto buckets_2d = get_best_path::test_hooks::classify_animation_tag_buckets(*asset);
+    CHECK(std::find(buckets_2d.locomotion_animation_ids.begin(),
+                    buckets_2d.locomotion_animation_ids.end(),
+                    "slash") == buckets_2d.locomotion_animation_ids.end());
+    CHECK(std::find(buckets_2d.attack_animation_ids.begin(),
+                    buckets_2d.attack_animation_ids.end(),
+                    "slash") != buckets_2d.attack_animation_ids.end());
+
+    GetBestPath planner_2d;
+    const Plan plan_2d = planner_2d(*asset, {SDL_Point{30, 0}}, 0, vibble::grid::global_grid());
+    REQUIRE_FALSE(plan_2d.strides.empty());
+    CHECK(plan_2d.strides.front().animation_id == "walk_right");
+}
+
+TEST_CASE("3D planner keeps attack bucket separate from locomotion candidates") {
+    Animation attack_anim = make_single_path_animation(0, 0, 8);
+    attack_anim.tags = {"\tattack\t"};
+
+    const auto asset = make_test_asset(
+        {
+            {"default", make_single_path_animation(0, 0, 0)},
+            {"lift", make_single_path_animation(0, 4, 0)},
+            {"punch", attack_anim},
+        },
+        "default");
+
+    REQUIRE(asset != nullptr);
+
+    const auto buckets_3d = get_best_path_3d::test_hooks::classify_animation_tag_buckets(*asset);
+    CHECK(std::find(buckets_3d.locomotion_animation_ids.begin(),
+                    buckets_3d.locomotion_animation_ids.end(),
+                    "punch") == buckets_3d.locomotion_animation_ids.end());
+    CHECK(std::find(buckets_3d.attack_animation_ids.begin(),
+                    buckets_3d.attack_animation_ids.end(),
+                    "punch") != buckets_3d.attack_animation_ids.end());
+
+    GetBestPath3D planner_3d;
+    const Plan3D plan_3d = planner_3d(*asset, {axis::WorldPos{0, 12, 0}}, 0, vibble::grid::global_grid());
+    REQUIRE_FALSE(plan_3d.strides.empty());
+    CHECK(plan_3d.strides.front().animation_id == "lift");
+}
+
 TEST_CASE("auto_move applies global retry cooldown after zero-target no-stride planning") {
     auto asset = make_test_asset(
         {
@@ -249,4 +306,48 @@ TEST_CASE("auto_move applies global retry cooldown after zero-target no-stride p
         updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::None;
     CHECK(resumed_with_plan_or_fallback);
     CHECK_FALSE(asset->needs_target);
+}
+
+
+TEST_CASE("GetBestPath3D fallback rejects collision-blocked options") {
+    const auto asset = make_test_asset(
+        {
+            {"default", make_single_path_animation(0, 0, 0)},
+            {"right", make_single_path_animation(10, 0, 0)},
+        },
+        "default");
+
+    REQUIRE(asset != nullptr);
+
+    auto blocker_info = std::make_shared<AssetInfo>("blocker_3d_asset");
+    Area blocker_area("blocker_3d_area", 0);
+    Asset blocker(blocker_info,
+                  blocker_area,
+                  SDL_Point{8, 0},
+                  0,
+                  std::string{},
+                  std::string{},
+                  0);
+    blocker.move_to_world_position(8, 0, 0, 0);
+
+    std::vector<Area::Point> points{
+        SDL_Point{4, -4}, SDL_Point{14, -4}, SDL_Point{14, 4}, SDL_Point{4, 4}
+    };
+    Assets::FrameCollisionEntry blocked_entry;
+    blocked_entry.asset = &blocker;
+    blocked_entry.area = Area("blocked_3d", points, 0);
+    blocked_entry.world_center = blocked_entry.area.get_center();
+    blocked_entry.bottom_middle = world::GridPoint::make_virtual(blocked_entry.world_center.x,
+                                                                  0,
+                                                                  blocked_entry.world_center.y,
+                                                                  0);
+
+    CollisionQueryContext context;
+    context.loaded = true;
+    context.entries.push_back(&blocked_entry);
+
+    GetBestPath3D planner;
+    const Plan3D plan = planner(*asset, {axis::WorldPos{20, 0, 0}}, 0, vibble::grid::global_grid(), &context);
+
+    CHECK(plan.strides.empty());
 }

@@ -106,11 +106,12 @@ TEST_CASE("Extrusion endpoints are symmetric around flat anchor point") {
 
     anchor_points::AnchorWorldPoint3 near_point{};
     anchor_points::AnchorWorldPoint3 far_point{};
-    REQUIRE(anchor_points::build_symmetric_camera_ray_extrusion(asset,
-                                                                flat,
-                                                                extrusion,
-                                                                near_point,
-                                                                far_point));
+    REQUIRE(anchor_points::build_asymmetric_camera_ray_extrusion(asset,
+                                                                 flat,
+                                                                 extrusion,
+                                                                 extrusion,
+                                                                 near_point,
+                                                                 far_point));
     REQUIRE(near_point.valid);
     REQUIRE(far_point.valid);
 

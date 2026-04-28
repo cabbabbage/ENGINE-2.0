@@ -4,6 +4,8 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
@@ -13,9 +15,14 @@ namespace {
 
 constexpr int kDefaultSpawnRadius = 1500;
 constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 4000;
+constexpr int kMaxRoomDimension = 40000;
 constexpr int kDefaultRoomMinDimension = 500;
-constexpr int kDefaultRoomMaxDimension = 4000;
+constexpr int kDefaultRoomMaxDimension = 40000;
+constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
+constexpr int kDefaultTrailSectorWidthPercent = 100;
+constexpr int kMinTrailSectorWidthPercent = 25;
+constexpr int kMaxTrailSectorWidthPercent = 100;
+constexpr double kDegreesFullRotation = 360.0;
 
 bool json_to_int(const nlohmann::json& value, int& out) {
     if (value.is_number_integer()) {
@@ -35,6 +42,90 @@ bool json_to_string(const nlohmann::json& value, std::string& out) {
     }
     out = value.get<std::string>();
     return true;
+}
+
+bool json_to_double(const nlohmann::json& value, double& out) {
+    if (value.is_number_float()) {
+        out = value.get<double>();
+        return true;
+    }
+    if (value.is_number_integer()) {
+        out = static_cast<double>(value.get<int>());
+        return true;
+    }
+    return false;
+}
+
+double normalize_direction_degrees(double value) {
+    if (!std::isfinite(value)) {
+        return kDefaultTrailSectorDirectionDeg;
+    }
+    double normalized = std::fmod(value, kDegreesFullRotation);
+    if (normalized < 0.0) {
+        normalized += kDegreesFullRotation;
+    }
+    if (normalized >= kDegreesFullRotation) {
+        normalized -= kDegreesFullRotation;
+    }
+    return normalized;
+}
+
+bool normalize_trail_connection_sector(nlohmann::json& entry, bool include_for_room_entries) {
+    bool changed = false;
+
+    if (!include_for_room_entries) {
+        if (entry.erase("trail_connection_sector") > 0) {
+            changed = true;
+        }
+        return changed;
+    }
+
+    nlohmann::json sector = nlohmann::json::object();
+    auto sector_it = entry.find("trail_connection_sector");
+    if (sector_it != entry.end() && sector_it->is_object()) {
+        sector = *sector_it;
+    }
+
+    double direction_deg = kDefaultTrailSectorDirectionDeg;
+    if (sector.contains("direction_deg")) {
+        (void)json_to_double(sector["direction_deg"], direction_deg);
+    }
+    direction_deg = normalize_direction_degrees(direction_deg);
+
+    int width_percent = kDefaultTrailSectorWidthPercent;
+    if (sector.contains("width_percent")) {
+        (void)json_to_int(sector["width_percent"], width_percent);
+    }
+    width_percent = std::clamp(width_percent, kMinTrailSectorWidthPercent, kMaxTrailSectorWidthPercent);
+
+    const bool has_sector_object = entry.contains("trail_connection_sector") && entry["trail_connection_sector"].is_object();
+    const bool has_direction =
+        has_sector_object &&
+        entry["trail_connection_sector"].contains("direction_deg") &&
+        (entry["trail_connection_sector"]["direction_deg"].is_number_float() ||
+         entry["trail_connection_sector"]["direction_deg"].is_number_integer());
+    const bool has_width =
+        has_sector_object &&
+        entry["trail_connection_sector"].contains("width_percent") &&
+        entry["trail_connection_sector"]["width_percent"].is_number_integer();
+
+    if (!has_sector_object || !has_direction || !has_width) {
+        changed = true;
+    } else {
+        const double existing_direction = normalize_direction_degrees(entry["trail_connection_sector"]["direction_deg"].get<double>());
+        const int existing_width = std::clamp(entry["trail_connection_sector"]["width_percent"].get<int>(),
+                                              kMinTrailSectorWidthPercent,
+                                              kMaxTrailSectorWidthPercent);
+        if (std::abs(existing_direction - direction_deg) > 1e-6 || existing_width != width_percent) {
+            changed = true;
+        }
+    }
+
+    entry["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", direction_deg},
+        {"width_percent", width_percent},
+    });
+    return changed;
 }
 
 void sanitize_dimension_pair(int& min_value, int& max_value) {
@@ -63,7 +154,7 @@ bool geometry_is_circle(const std::string& geometry) {
     return lowered == "circle";
 }
 
-bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_name) {
+bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_name, bool include_trail_connection_sector) {
     bool changed = false;
     if (!entry.is_object()) {
         entry = nlohmann::json::object();
@@ -185,9 +276,11 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
             changed = true;
         }
     };
-    normalize_bool("is_spawn", false);
     normalize_bool("is_boss", false);
     normalize_bool("inherits_map_assets", false);
+    if (entry.erase("is_spawn") > 0) {
+        changed = true;
+    }
 
     int edge_smoothness = 2;
     if (entry.contains("edge_smoothness")) {
@@ -216,10 +309,14 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
         changed = true;
     }
 
+    if (normalize_trail_connection_sector(entry, include_trail_connection_sector)) {
+        changed = true;
+    }
+
     return changed;
 }
 
-bool normalize_room_config_section(nlohmann::json& section) {
+bool normalize_room_config_section(nlohmann::json& section, bool include_trail_connection_sector) {
     if (!section.is_object()) {
         section = nlohmann::json::object();
         return true;
@@ -227,7 +324,7 @@ bool normalize_room_config_section(nlohmann::json& section) {
 
     bool changed = false;
     for (auto it = section.begin(); it != section.end(); ++it) {
-        if (normalize_room_config_entry(it.value(), it.key())) {
+        if (normalize_room_config_entry(it.value(), it.key(), include_trail_connection_sector)) {
             changed = true;
         }
     }
@@ -277,10 +374,13 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["min_height"] = diameter;
     entry["max_height"] = diameter;
     entry["edge_smoothness"] = 2;
-    entry["is_spawn"] = true;
     entry["is_boss"] = false;
     entry["inherits_map_assets"] = false;
     entry["spawn_groups"] = nlohmann::json::array();
+    entry["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", kDefaultTrailSectorDirectionDeg},
+        {"width_percent", kDefaultTrailSectorWidthPercent},
+    });
     return entry;
 }
 
@@ -350,68 +450,347 @@ nlohmann::json make_batch_spawn_group(const std::string& map_name,
     return group;
 }
 
-std::string infer_spawn_room_name(nlohmann::json& rooms_data, bool& changed) {
+void normalize_layer_candidate_entry(nlohmann::json& candidate, bool& changed) {
+    if (!candidate.is_object()) {
+        candidate = nlohmann::json::object();
+        changed = true;
+    }
+
+    std::string source_type = candidate.value("source_type", std::string());
+    if (source_type != "room_name" && source_type != "room_tag") {
+        source_type = "room_name";
+        changed = true;
+    }
+
+    std::string value = candidate.value("value", std::string());
+    if (value.empty()) {
+        if (candidate.contains("name") && candidate["name"].is_string()) {
+            value = candidate["name"].get<std::string>();
+            changed = true;
+        }
+    }
+
+    int min_instances = 0;
+    if (candidate.contains("min_instances") && candidate["min_instances"].is_number_integer()) {
+        min_instances = std::max(0, candidate["min_instances"].get<int>());
+    }
+    int max_instances = 1;
+    if (candidate.contains("max_instances") && candidate["max_instances"].is_number_integer()) {
+        max_instances = std::max(0, candidate["max_instances"].get<int>());
+    }
+    if (max_instances < min_instances) {
+        max_instances = min_instances;
+        changed = true;
+    }
+
+    if (!candidate.contains("required_children") || !candidate["required_children"].is_array()) {
+        candidate["required_children"] = nlohmann::json::array();
+        changed = true;
+    }
+
+    candidate["source_type"] = source_type;
+    candidate["value"] = value;
+    candidate["name"] = value; // compatibility mirror
+    candidate["min_instances"] = min_instances;
+    candidate["max_instances"] = max_instances;
+}
+
+bool ensure_spawn_room_via_layer_zero(nlohmann::json& map_manifest, const std::string& map_id) {
+    bool changed = false;
+    nlohmann::json& rooms_data = map_manifest["rooms_data"];
     if (!rooms_data.is_object()) {
         rooms_data = nlohmann::json::object();
         changed = true;
     }
 
-    for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
-        if (it.value().is_object()) {
-            bool is_spawn = false;
-            if (it.value().contains("is_spawn")) {
-                if (it.value()["is_spawn"].is_boolean()) {
-                    is_spawn = it.value()["is_spawn"].get<bool>();
-                } else if (it.value()["is_spawn"].is_number_integer()) {
-                    is_spawn = it.value()["is_spawn"].get<int>() != 0;
-                }
-            }
-            if (is_spawn) {
-                return it.key();
-            }
-        }
+    if (!map_manifest.contains("map_layers") || !map_manifest["map_layers"].is_array()) {
+        map_manifest["map_layers"] = nlohmann::json::array();
+        changed = true;
+    }
+    nlohmann::json& layers = map_manifest["map_layers"];
+    if (layers.empty()) {
+        layers.push_back(nlohmann::json::object());
+        changed = true;
     }
 
-    if (rooms_data.contains("spawn")) {
-        if (!rooms_data["spawn"].is_object()) {
-            rooms_data["spawn"] = make_default_spawn_room("spawn");
+    for (std::size_t i = 0; i < layers.size(); ++i) {
+        if (!layers[i].is_object()) {
+            layers[i] = nlohmann::json::object();
             changed = true;
         }
-        return "spawn";
+        layers[i]["level"] = static_cast<int>(i);
+        if (!layers[i].contains("name") || !layers[i]["name"].is_string()) {
+            layers[i]["name"] = std::string("layer_") + std::to_string(i);
+            changed = true;
+        }
+        if (!layers[i].contains("rooms") || !layers[i]["rooms"].is_array()) {
+            layers[i]["rooms"] = nlohmann::json::array();
+            changed = true;
+        }
     }
 
-    rooms_data["spawn"] = make_default_spawn_room("spawn");
-    changed = true;
-    return "spawn";
+    nlohmann::json& layer0 = layers[0];
+    nlohmann::json& layer0_rooms = layer0["rooms"];
+    for (auto& candidate : layer0_rooms) {
+        normalize_layer_candidate_entry(candidate, changed);
+    }
+
+    bool valid_layer0 = !layer0_rooms.empty() &&
+                        layer0_rooms[0].is_object() &&
+                        layer0_rooms[0].value("source_type", std::string()) == "room_name" &&
+                        layer0_rooms[0].value("value", std::string()).size() > 0;
+    if (!valid_layer0) {
+        nlohmann::json spawn_candidate = nlohmann::json::object({
+            {"source_type", "room_name"},
+            {"value", std::string("Spawn")},
+            {"name", std::string("Spawn")},
+            {"min_instances", 1},
+            {"max_instances", 1},
+            {"required_children", nlohmann::json::array()}
+        });
+        layer0_rooms = nlohmann::json::array({std::move(spawn_candidate)});
+        changed = true;
+    }
+    if (layer0_rooms.size() > 1) {
+        layer0_rooms.erase(layer0_rooms.begin() + 1, layer0_rooms.end());
+        changed = true;
+    }
+
+    nlohmann::json& spawn_candidate = layer0_rooms[0];
+    normalize_layer_candidate_entry(spawn_candidate, changed);
+    spawn_candidate["source_type"] = "room_name";
+    spawn_candidate["min_instances"] = 1;
+    spawn_candidate["max_instances"] = 1;
+    layer0["min_rooms"] = 1;
+    layer0["max_rooms"] = 1;
+
+    std::string spawn_room_name = spawn_candidate.value("value", std::string("Spawn"));
+    if (spawn_room_name.empty()) {
+        spawn_room_name = "Spawn";
+        spawn_candidate["value"] = spawn_room_name;
+        spawn_candidate["name"] = spawn_room_name;
+        changed = true;
+    }
+
+    if (!rooms_data.contains(spawn_room_name) || !rooms_data[spawn_room_name].is_object()) {
+        rooms_data[spawn_room_name] = make_default_spawn_room(spawn_room_name);
+        changed = true;
+    }
+    rooms_data[spawn_room_name]["name"] = spawn_room_name;
+    if (!rooms_data[spawn_room_name].contains("room_tags") || !rooms_data[spawn_room_name]["room_tags"].is_array()) {
+        rooms_data[spawn_room_name]["room_tags"] = nlohmann::json::array();
+        changed = true;
+    }
+    rooms_data[spawn_room_name].erase("is_spawn");
+
+    for (auto& room_entry : rooms_data.items()) {
+        if (room_entry.value().is_object()) {
+            if (room_entry.value().erase("is_spawn") > 0) {
+                changed = true;
+            }
+            if (!room_entry.value().contains("room_tags") || !room_entry.value()["room_tags"].is_array()) {
+                room_entry.value()["room_tags"] = nlohmann::json::array();
+                changed = true;
+            }
+        }
+    }
+
+    if (!map_id.empty()) {
+        layer0["name"] = layer0.value("name", std::string("layer_0"));
+    }
+
+    return changed;
 }
 
-bool ensure_map_layers(nlohmann::json& map_manifest, const std::string& map_id) {
-    nlohmann::json& rooms_data = map_manifest["rooms_data"];
-    bool changed = false;
-    const std::string spawn_name = infer_spawn_room_name(rooms_data, changed);
+struct AssetNameCanonicalLookup {
+    std::unordered_map<std::string, std::string> unique_by_normalized_name;
+    std::unordered_set<std::string> ambiguous_normalized_names;
+};
 
-    auto layers_it = map_manifest.find("map_layers");
-    const bool missing_or_empty =
-        (layers_it == map_manifest.end()) ||
-        !layers_it->is_array() ||
-        layers_it->empty();
-
-    if (!missing_or_empty) {
-        return changed;
+std::string normalize_asset_lookup_token(const std::string& raw_name) {
+    std::string normalized;
+    normalized.reserve(raw_name.size());
+    for (unsigned char ch : raw_name) {
+        if (std::isalnum(ch) != 0) {
+            normalized.push_back(static_cast<char>(std::tolower(ch)));
+        }
     }
 
-    nlohmann::json inferred_layer = nlohmann::json::object();
-    inferred_layer["level"] = 0;
-    inferred_layer["max_rooms"] = 1;
-    inferred_layer["rooms"] = nlohmann::json::array({
-        nlohmann::json::object({
-            {"name", spawn_name.empty() ? std::string("spawn") : spawn_name},
-            {"max_instances", 1}
-        })
-    });
-    map_manifest["map_layers"] = nlohmann::json::array({std::move(inferred_layer)});
-    changed = true;
+    constexpr const char* kTypo = "backround";
+    constexpr const char* kCorrect = "background";
+    std::string::size_type pos = 0;
+    while ((pos = normalized.find(kTypo, pos)) != std::string::npos) {
+        normalized.replace(pos, std::char_traits<char>::length(kTypo), kCorrect);
+        pos += std::char_traits<char>::length(kCorrect);
+    }
+    return normalized;
+}
 
+AssetNameCanonicalLookup build_asset_name_lookup(const nlohmann::json* asset_catalog) {
+    AssetNameCanonicalLookup lookup;
+    if (!asset_catalog || !asset_catalog->is_object()) {
+        return lookup;
+    }
+
+    for (auto it = asset_catalog->begin(); it != asset_catalog->end(); ++it) {
+        const std::string canonical_name = it.key();
+        if (canonical_name.empty()) {
+            continue;
+        }
+        const std::string normalized = normalize_asset_lookup_token(canonical_name);
+        if (normalized.empty()) {
+            continue;
+        }
+
+        if (lookup.ambiguous_normalized_names.find(normalized) != lookup.ambiguous_normalized_names.end()) {
+            continue;
+        }
+
+        const auto existing = lookup.unique_by_normalized_name.find(normalized);
+        if (existing == lookup.unique_by_normalized_name.end()) {
+            lookup.unique_by_normalized_name.emplace(normalized, canonical_name);
+            continue;
+        }
+
+        if (existing->second != canonical_name) {
+            lookup.unique_by_normalized_name.erase(existing);
+            lookup.ambiguous_normalized_names.insert(normalized);
+        }
+    }
+
+    return lookup;
+}
+
+bool normalize_candidate_asset_name(nlohmann::json& candidate,
+                                    const AssetNameCanonicalLookup& lookup) {
+    if (!candidate.is_object()) {
+        return false;
+    }
+    auto name_it = candidate.find("name");
+    if (name_it == candidate.end() || !name_it->is_string()) {
+        return false;
+    }
+
+    const std::string current_name = name_it->get<std::string>();
+    if (current_name.empty()) {
+        return false;
+    }
+
+    std::string current_lower = current_name;
+    std::transform(current_lower.begin(), current_lower.end(), current_lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (current_lower == "null") {
+        return false;
+    }
+
+    const std::string normalized = normalize_asset_lookup_token(current_name);
+    if (normalized.empty()) {
+        return false;
+    }
+
+    if (lookup.ambiguous_normalized_names.find(normalized) != lookup.ambiguous_normalized_names.end()) {
+        return false;
+    }
+
+    const auto canonical_it = lookup.unique_by_normalized_name.find(normalized);
+    if (canonical_it == lookup.unique_by_normalized_name.end()) {
+        return false;
+    }
+
+    if (canonical_it->second == current_name) {
+        return false;
+    }
+
+    *name_it = canonical_it->second;
+    return true;
+}
+
+bool normalize_spawn_group_candidates(nlohmann::json& group,
+                                      const AssetNameCanonicalLookup& lookup) {
+    if (!group.is_object()) {
+        return false;
+    }
+
+    auto candidates_it = group.find("candidates");
+    if (candidates_it == group.end() || !candidates_it->is_array()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (auto& candidate : *candidates_it) {
+        if (normalize_candidate_asset_name(candidate, lookup)) {
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool normalize_spawn_group_array(nlohmann::json& owner,
+                                 const char* key,
+                                 const AssetNameCanonicalLookup& lookup) {
+    if (!owner.is_object()) {
+        return false;
+    }
+
+    auto groups_it = owner.find(key);
+    if (groups_it == owner.end() || !groups_it->is_array()) {
+        return false;
+    }
+
+    bool changed = false;
+    for (auto& group : *groups_it) {
+        if (normalize_spawn_group_candidates(group, lookup)) {
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
+                                      const nlohmann::json* asset_catalog) {
+    const AssetNameCanonicalLookup lookup = build_asset_name_lookup(asset_catalog);
+    if (lookup.unique_by_normalized_name.empty()) {
+        return false;
+    }
+
+    bool changed = false;
+
+    if (normalize_spawn_group_array(map_manifest, "candidate_selectors", lookup)) {
+        changed = true;
+    }
+
+    if (map_manifest.contains("map_boundary_data") && map_manifest["map_boundary_data"].is_object()) {
+        nlohmann::json& map_boundary_data = map_manifest["map_boundary_data"];
+        if (normalize_spawn_group_array(map_boundary_data, "candidate_selectors", lookup)) {
+            changed = true;
+        }
+        if (normalize_spawn_group_array(map_boundary_data, "spawn_groups", lookup)) {
+            changed = true;
+        }
+    }
+
+    auto normalize_room_like_section = [&](const char* section_name) {
+        auto section_it = map_manifest.find(section_name);
+        if (section_it == map_manifest.end() || !section_it->is_object()) {
+            return;
+        }
+
+        for (auto section_entry_it = section_it->begin(); section_entry_it != section_it->end(); ++section_entry_it) {
+            if (!section_entry_it.value().is_object()) {
+                continue;
+            }
+            if (normalize_spawn_group_array(section_entry_it.value(), "spawn_groups", lookup)) {
+                changed = true;
+            }
+            if (normalize_spawn_group_array(section_entry_it.value(), "candidate_selectors", lookup)) {
+                changed = true;
+            }
+        }
+    };
+
+    normalize_room_like_section("rooms_data");
+    normalize_room_like_section("trails_data");
     return changed;
 }
 
@@ -428,9 +807,12 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     layer["min_rooms"] = 1;
     layer["max_rooms"] = 1;
     nlohmann::json spawn_spec = nlohmann::json::object();
-    spawn_spec["name"] = "spawn";
+    spawn_spec["source_type"] = "room_name";
+    spawn_spec["value"] = "Spawn";
+    spawn_spec["name"] = "Spawn";
     spawn_spec["min_instances"] = 1;
     spawn_spec["max_instances"] = 1;
+    spawn_spec["required_children"] = nlohmann::json::array();
     layer["rooms"] = nlohmann::json::array({spawn_spec});
     map_info["map_layers"] = nlohmann::json::array({layer});
 
@@ -446,7 +828,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"edge_smoothness", 2},
             {"geometry", "Line"},
             {"inherits_map_assets", false},
-            {"is_spawn", false},
             {"is_boss", false},
             {"min_width", 400},
             {"max_width", 800},
@@ -459,7 +840,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     map_info["map_layers_settings"] = nlohmann::json::object({{"min_edge_distance", 200}});
 
     nlohmann::json spawn_room = nlohmann::json::object();
-    spawn_room["name"] = "spawn";
+    spawn_room["name"] = "Spawn";
     spawn_room["geometry"] = "Circle";
     spawn_room["min_width"] = diameter;
     spawn_room["max_width"] = diameter;
@@ -467,9 +848,12 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_room["max_height"] = diameter;
     spawn_room["edge_smoothness"] = 2;
     spawn_room["curvyness"] = 2;
-    spawn_room["is_spawn"] = true;
     spawn_room["is_boss"] = false;
     spawn_room["inherits_map_assets"] = true;
+    spawn_room["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", kDefaultTrailSectorDirectionDeg},
+        {"width_percent", kDefaultTrailSectorWidthPercent},
+    });
     spawn_room["display_color"] = nlohmann::json::array({120, 170, 235, 255});
     spawn_room["areas"] = nlohmann::json::array({
         nlohmann::json::object({
@@ -488,9 +872,10 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_room["spawn_groups"] = nlohmann::json::array({
         make_room_spawn_group(map_name, "Vibble", "Vibble")
     });
+    spawn_room["room_tags"] = nlohmann::json::array();
 
     map_info["rooms_data"] = nlohmann::json::object();
-    map_info["rooms_data"]["spawn"] = std::move(spawn_room);
+    map_info["rooms_data"]["Spawn"] = std::move(spawn_room);
     // Camera runtime defaults:
     // - transition_damping: dt-stable response speed (1/seconds)
     // - max_camera_velocity: world-pixel velocity cap to prevent jitter/overshoot
@@ -515,7 +900,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"player_soft_leash_px", 220.0},
         {"player_hard_leash_px", 360.0}
     });
-    map_info["map_grid_settings"] = nlohmann::json::object({{"grid_resolution", 6}});
+    map_info["map_grid_settings"] = nlohmann::json::object({{"grid_resolution", 8}});
     map_info["audio"] = nlohmann::json::object({
         {"music", nlohmann::json::object({
             {"content_root", (std::filesystem::path("content") / map_name / "music").generic_string()},
@@ -530,7 +915,8 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
 
 MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifest,
                                                       const std::string& map_id,
-                                                      const std::filesystem::path& manifest_root) {
+                                                      const std::filesystem::path& manifest_root,
+                                                      const nlohmann::json* asset_catalog) {
     MapManifestNormalizationResult result;
     bool changed = false;
 
@@ -568,13 +954,16 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         changed = true;
     }
 
-    if (ensure_map_layers(map_manifest, map_id)) {
+    if (ensure_spawn_room_via_layer_zero(map_manifest, map_id)) {
         changed = true;
     }
-    if (normalize_room_config_section(map_manifest["rooms_data"])) {
+    if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
         changed = true;
     }
-    if (normalize_room_config_section(map_manifest["trails_data"])) {
+    if (normalize_room_config_section(map_manifest["rooms_data"], true)) {
+        changed = true;
+    }
+    if (normalize_room_config_section(map_manifest["trails_data"], false)) {
         changed = true;
     }
     if (!map_manifest.contains("map_name") ||
@@ -628,7 +1017,8 @@ MapManifestBootstrapResult bootstrap_map_manifest(const ManifestData& manifest_d
         std::filesystem::path(manifest::manifest_path()).parent_path();
     MapManifestNormalizationResult normalized = normalize_map_manifest(std::move(map_manifest_json),
                                                                        map_id,
-                                                                       manifest_root);
+                                                                       manifest_root,
+                                                                       &manifest_data.assets);
 
     bootstrap.map_manifest = std::move(normalized.map_manifest);
     bootstrap.resolved_content_root = std::move(normalized.resolved_content_root);

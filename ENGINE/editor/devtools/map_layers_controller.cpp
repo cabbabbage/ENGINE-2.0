@@ -3,6 +3,7 @@
 #include "map_layers_common.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "tag_utils.hpp"
 #include "utils/display_color.hpp"
 
 #include <SDL3/SDL.h>
@@ -20,9 +21,69 @@ using nlohmann::json;
 
 namespace {
 constexpr int kDefaultRoomRangeMax = 64;
-constexpr const char* kSpawnRoomName = "spawn";
+constexpr const char* kDefaultSpawnRoomName = "Spawn";
 using map_layers::clamp_candidate_max;
 using map_layers::clamp_candidate_min;
+
+bool candidate_source_is_room_name(const json& candidate) {
+    std::string source_type = candidate.value("source_type", std::string());
+    if (source_type.empty()) {
+        return true;
+    }
+    return source_type == "room_name";
+}
+
+std::string candidate_room_name_value(const json& candidate) {
+    std::string value = candidate.value("value", std::string());
+    if (!value.empty()) {
+        return value;
+    }
+    return candidate.value("name", std::string());
+}
+
+std::vector<std::string> collect_room_tags(const json& room_entry) {
+    std::vector<std::string> tags;
+    auto add_tag = [&](const std::string& raw) {
+        std::string normalized = tag_utils::normalize(raw);
+        if (normalized.empty()) {
+            return;
+        }
+        if (std::find(tags.begin(), tags.end(), normalized) == tags.end()) {
+            tags.push_back(std::move(normalized));
+        }
+    };
+
+    if (!room_entry.is_object()) {
+        return tags;
+    }
+
+    auto add_from_array = [&](const json& arr) {
+        if (!arr.is_array()) {
+            return;
+        }
+        for (const auto& entry : arr) {
+            if (entry.is_string()) {
+                add_tag(entry.get<std::string>());
+            }
+        }
+    };
+
+    if (room_entry.contains("room_tags")) {
+        add_from_array(room_entry["room_tags"]);
+    }
+
+    if (room_entry.contains("tags")) {
+        const auto& tags_section = room_entry["tags"];
+        if (tags_section.is_array()) {
+            add_from_array(tags_section);
+        } else if (tags_section.is_object()) {
+            if (tags_section.contains("include")) add_from_array(tags_section["include"]);
+            if (tags_section.contains("tags")) add_from_array(tags_section["tags"]);
+        }
+    }
+
+    return tags;
+}
 }
 
 namespace map_layers {
@@ -156,6 +217,24 @@ std::vector<std::string> MapLayersController::available_rooms() const {
     return result;
 }
 
+std::vector<std::string> MapLayersController::available_room_tags() const {
+    std::vector<std::string> result;
+    if (!map_info_) return result;
+    const auto rooms_it = map_info_->find("rooms_data");
+    if (rooms_it == map_info_->end() || !rooms_it->is_object()) return result;
+
+    for (auto it = rooms_it->begin(); it != rooms_it->end(); ++it) {
+        const std::vector<std::string> room_tags = collect_room_tags(it.value());
+        for (const std::string& tag : room_tags) {
+            if (std::find(result.begin(), result.end(), tag) == result.end()) {
+                result.push_back(tag);
+            }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
+}
+
 double MapLayersController::min_edge_distance() const {
     if (!map_info_) {
         return static_cast<double>(map_layers::kDefaultMinEdgeDistance);
@@ -263,13 +342,7 @@ int MapLayersController::duplicate_layer(int index) {
         rooms = json::array();
     }
     for (auto& entry : rooms) {
-        if (!entry.is_object()) entry = json::object();
-        if (!entry.contains("name")) entry["name"] = "";
-        if (!entry.contains("min_instances")) entry["min_instances"] = 0;
-        if (!entry.contains("max_instances")) entry["max_instances"] = 1;
-        if (!entry.contains("required_children") || !entry["required_children"].is_array()) {
-            entry["required_children"] = json::array();
-        }
+        normalize_candidate_shape(entry);
     }
 
     const int insert_index = std::min(index + 1, static_cast<int>(arr.size()));
@@ -294,25 +367,53 @@ bool MapLayersController::rename_layer(int index, const std::string& name) {
     return true;
 }
 
-bool MapLayersController::add_candidate(int layer_index, const std::string& room_name) {
+void MapLayersController::normalize_candidate_shape(json& candidate) {
+    if (!candidate.is_object()) {
+        candidate = json::object();
+    }
+    std::string source_type = candidate.value("source_type", std::string());
+    if (source_type != "room_name" && source_type != "room_tag") {
+        source_type = "room_name";
+    }
+    std::string value = candidate.value("value", std::string());
+    if (value.empty()) {
+        value = candidate.value("name", std::string());
+    }
+    if (!candidate.contains("min_instances")) candidate["min_instances"] = 0;
+    if (!candidate.contains("max_instances")) candidate["max_instances"] = 1;
+    if (!candidate.contains("required_children") || !candidate["required_children"].is_array()) {
+        candidate["required_children"] = json::array();
+    }
+    candidate["source_type"] = source_type;
+    candidate["value"] = value;
+    candidate["name"] = value; // Backward-compat mirror.
+}
+
+bool MapLayersController::add_candidate_internal(int layer_index,
+                                                 const std::string& source_type,
+                                                 const std::string& value) {
     if (!validate_layer_index(layer_index)) return false;
+    if (value.empty()) return false;
+    if (layer_index == 0 && source_type != "room_name") return false;
     auto* layer_json = layer(layer_index);
     if (!layer_json) return false;
     auto& rooms = (*layer_json)["rooms"];
     if (!rooms.is_array()) rooms = json::array();
-    if (room_name.empty()) return false;
+
     if (layer_index == 0) {
         std::string previous_name;
-        if (!rooms.empty() && rooms[0].is_object()) {
-            previous_name = rooms[0].value("name", std::string());
+        if (!rooms.empty() && rooms[0].is_object() && candidate_source_is_room_name(rooms[0])) {
+            previous_name = candidate_room_name_value(rooms[0]);
         }
 
         json candidate = {
-            {"name", kSpawnRoomName},
+            {"source_type", source_type},
+            {"value", value},
+            {"name", value},
             {"min_instances", 1},
             {"max_instances", 1},
             {"required_children", json::array()}
-};
+        };
 
         if (!rooms.empty() && rooms[0].is_object()) {
             json& spawn_entry = rooms[0];
@@ -325,27 +426,40 @@ bool MapLayersController::add_candidate(int layer_index, const std::string& room
 
         rooms = json::array({candidate});
         clamp_layer_counts(*layer_json);
-        if (!previous_name.empty() && previous_name != kSpawnRoomName) {
+        if (source_type == "room_name" && !previous_name.empty() && previous_name != value) {
             if (map_info_) {
-                map_layers::rename_room_references_in_layers(*map_info_, previous_name, kSpawnRoomName);
+                map_layers::rename_room_references_in_layers(*map_info_, previous_name, value);
             }
         }
-        ensure_spawn_room_data(previous_name);
+        if (source_type == "room_name") {
+            ensure_spawn_room_data(previous_name);
+        }
         mark_dirty();
         notify();
         return true;
     }
+
     json candidate = {
-        {"name", room_name},
+        {"source_type", source_type},
+        {"value", value},
+        {"name", value},
         {"min_instances", 0},
         {"max_instances", 1},
         {"required_children", json::array()}
-};
+    };
     rooms.push_back(std::move(candidate));
     clamp_layer_counts(*layer_json);
     mark_dirty();
     notify();
     return true;
+}
+
+bool MapLayersController::add_candidate(int layer_index, const std::string& room_name) {
+    return add_candidate_internal(layer_index, "room_name", room_name);
+}
+
+bool MapLayersController::add_candidate_tag(int layer_index, const std::string& room_tag) {
+    return add_candidate_internal(layer_index, "room_tag", room_tag);
 }
 
 bool MapLayersController::remove_candidate(int layer_index, int candidate_index) {
@@ -445,10 +559,16 @@ bool MapLayersController::add_candidate_child(int layer_index, int candidate_ind
 
     bool child_layer_changed = false;
     auto child_it = std::find_if(child_rooms.begin(), child_rooms.end(), [&](const json& entry) {
-        return entry.is_object() && entry.value("name", std::string()) == child_room;
+        if (!entry.is_object()) return false;
+        const std::string source = entry.value("source_type", std::string("room_name"));
+        if (source != "room_name") return false;
+        const std::string value = entry.value("value", entry.value("name", std::string()));
+        return value == child_room;
     });
     if (child_it == child_rooms.end()) {
         json child_candidate = {
+            {"source_type", "room_name"},
+            {"value", child_room},
             {"name", child_room},
             {"min_instances", 0},
             {"max_instances", 1},
@@ -577,13 +697,7 @@ void MapLayersController::ensure_layer_indices() {
         clamp_layer_counts(layer_json);
         auto& rooms = layer_json["rooms"];
         for (auto& candidate : rooms) {
-            if (!candidate.is_object()) candidate = json::object();
-            if (!candidate.contains("name")) candidate["name"] = "";
-            if (!candidate.contains("min_instances")) candidate["min_instances"] = 0;
-            if (!candidate.contains("max_instances")) candidate["max_instances"] = 0;
-            if (!candidate.contains("required_children") || !candidate["required_children"].is_array()) {
-                candidate["required_children"] = json::array();
-            }
+            normalize_candidate_shape(candidate);
             int min_inst = clamp_candidate_min(candidate.value("min_instances", 0));
             int max_inst = clamp_candidate_max(min_inst, candidate.value("max_instances", min_inst));
             candidate["min_instances"] = min_inst;
@@ -635,15 +749,17 @@ void MapLayersController::clamp_layer_counts(json& layer) const {
     if (level == 0) {
         std::string previous_name;
         if (!rooms_ref.empty()) {
-            if (rooms_ref[0].is_object()) {
-                previous_name = rooms_ref[0].value("name", std::string());
+            if (rooms_ref[0].is_object() && candidate_source_is_room_name(rooms_ref[0])) {
+                previous_name = candidate_room_name_value(rooms_ref[0]);
             } else if (rooms_ref[0].is_string()) {
                 previous_name = rooms_ref[0].get<std::string>();
             }
         }
         if (rooms_ref.empty() || !rooms_ref[0].is_object()) {
             json candidate = {
-                {"name", kSpawnRoomName},
+                {"source_type", "room_name"},
+                {"value", kDefaultSpawnRoomName},
+                {"name", kDefaultSpawnRoomName},
                 {"min_instances", 1},
                 {"max_instances", 1},
                 {"required_children", json::array()}
@@ -651,10 +767,12 @@ void MapLayersController::clamp_layer_counts(json& layer) const {
             rooms_ref = json::array({candidate});
         }
         json& spawn_entry = rooms_ref[0];
-        if (!spawn_entry.is_object()) {
-            spawn_entry = json::object();
+        normalize_candidate_shape(spawn_entry);
+        spawn_entry["source_type"] = "room_name";
+        if (spawn_entry.value("value", std::string()).empty()) {
+            spawn_entry["value"] = kDefaultSpawnRoomName;
+            spawn_entry["name"] = kDefaultSpawnRoomName;
         }
-        spawn_entry["name"] = kSpawnRoomName;
         spawn_entry["min_instances"] = 1;
         spawn_entry["max_instances"] = 1;
         auto& required = spawn_entry["required_children"];
@@ -666,12 +784,18 @@ void MapLayersController::clamp_layer_counts(json& layer) const {
         }
         layer["min_rooms"] = 1;
         layer["max_rooms"] = 1;
-        if (!previous_name.empty() && previous_name != kSpawnRoomName) {
+        std::string current_name;
+        if (candidate_source_is_room_name(spawn_entry)) {
+            current_name = candidate_room_name_value(spawn_entry);
+        }
+        if (!previous_name.empty() && !current_name.empty() && previous_name != current_name) {
             if (map_info_) {
-                map_layers::rename_room_references_in_layers(*map_info_, previous_name, kSpawnRoomName);
+                map_layers::rename_room_references_in_layers(*map_info_, previous_name, current_name);
             }
         }
-        ensure_spawn_room_data(previous_name);
+        if (candidate_source_is_room_name(spawn_entry)) {
+            ensure_spawn_room_data(previous_name);
+        }
         return;
     }
 
@@ -711,55 +835,42 @@ void MapLayersController::ensure_spawn_room_data(const std::string& previous_nam
         rooms_data = json::object();
     }
 
-    const std::string prev = previous_name;
-
-    auto move_entry = [&](const std::string& source_key) {
-        auto it = rooms_data.find(source_key);
-        if (it == rooms_data.end() || !it->is_object()) {
-            return false;
-        }
-        json entry = *it;
-        rooms_data.erase(it);
-        entry["name"] = kSpawnRoomName;
-        entry["is_spawn"] = true;
-        rooms_data[kSpawnRoomName] = std::move(entry);
-        return true;
-};
-
-    if (rooms_data.contains(kSpawnRoomName)) {
-        json& spawn_entry = rooms_data[kSpawnRoomName];
-        if (!spawn_entry.is_object()) {
-            spawn_entry = json::object();
-        }
-        spawn_entry["name"] = kSpawnRoomName;
-        spawn_entry["is_spawn"] = true;
-        if (!prev.empty() && prev != kSpawnRoomName) {
-            rooms_data.erase(prev);
-        }
-        return;
-    }
-
-    if (!prev.empty() && prev != kSpawnRoomName) {
-        if (move_entry(prev)) {
-            return;
-        }
-    }
-
-    for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
-        if (!it->is_object()) {
-            continue;
-        }
-        if (it->value("is_spawn", false)) {
-            const std::string key = it.key();
-            if (move_entry(key)) {
-                return;
+    std::string spawn_room_name = kDefaultSpawnRoomName;
+    const auto layers_it = map_info_->find("map_layers");
+    if (layers_it != map_info_->end() && layers_it->is_array() && !layers_it->empty() && (*layers_it)[0].is_object()) {
+        const auto rooms_it = (*layers_it)[0].find("rooms");
+        if (rooms_it != (*layers_it)[0].end() && rooms_it->is_array() && !rooms_it->empty() && (*rooms_it)[0].is_object()) {
+            const json& candidate = (*rooms_it)[0];
+            if (candidate_source_is_room_name(candidate)) {
+                std::string candidate_name = candidate_room_name_value(candidate);
+                if (!candidate_name.empty()) {
+                    spawn_room_name = candidate_name;
+                }
             }
-            break;
         }
     }
 
-    json spawn_entry = json::object();
-    spawn_entry["name"] = kSpawnRoomName;
-    spawn_entry["is_spawn"] = true;
-    rooms_data[kSpawnRoomName] = std::move(spawn_entry);
+    const std::string prev = previous_name;
+    auto ensure_room_entry = [&](const std::string& key) {
+        json& entry = rooms_data[key];
+        if (!entry.is_object()) {
+            entry = json::object();
+        }
+        entry["name"] = key;
+        entry.erase("is_spawn");
+        if (!entry.contains("room_tags") || !entry["room_tags"].is_array()) {
+            entry["room_tags"] = json::array();
+        }
+        if (!entry.contains("spawn_groups") || !entry["spawn_groups"].is_array()) {
+            entry["spawn_groups"] = json::array();
+        }
+    };
+
+    if (!prev.empty() && prev != spawn_room_name && rooms_data.contains(prev) && rooms_data[prev].is_object() &&
+        !rooms_data.contains(spawn_room_name)) {
+        rooms_data[spawn_room_name] = rooms_data[prev];
+        rooms_data.erase(prev);
+    }
+
+    ensure_room_entry(spawn_room_name);
 }

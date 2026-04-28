@@ -43,6 +43,37 @@ void hash_append_int(std::uint64_t& hash, int value) {
     hash_append_bytes(hash, &value, sizeof(value));
 }
 
+std::uint64_t deterministic_binding_sort_key(const Asset* owner,
+                                             const Asset* child_asset,
+                                             std::string_view anchor_name) {
+    std::uint64_t hash = 1469598103934665603ull;
+    hash_append_string(hash, anchor_name);
+
+    if (owner) {
+        hash_append_string(hash, owner->spawn_id);
+        if (owner->info) {
+            hash_append_string(hash, owner->info->name);
+        }
+        hash_append_int(hash, owner->world_x());
+        hash_append_int(hash, owner->world_y());
+        hash_append_int(hash, owner->world_z());
+        hash_append_int(hash, owner->grid_resolution);
+    }
+
+    if (child_asset) {
+        hash_append_string(hash, child_asset->spawn_id);
+        if (child_asset->info) {
+            hash_append_string(hash, child_asset->info->name);
+        }
+        hash_append_int(hash, child_asset->world_x());
+        hash_append_int(hash, child_asset->world_y());
+        hash_append_int(hash, child_asset->world_z());
+        hash_append_int(hash, child_asset->grid_resolution);
+    }
+
+    return hash;
+}
+
 } // namespace
 
 AnchorBoundAssetHelper& AnchorBoundAssetHelper::instance() {
@@ -63,6 +94,7 @@ void AnchorBoundAssetHelper::register_child(Asset* owner,
         child_asset,
         anchor_name,
         child_frame_index(child_asset)};
+    ++bindings_version_;
 }
 
 void AnchorBoundAssetHelper::unregister_child(Asset* child_asset) {
@@ -74,6 +106,7 @@ void AnchorBoundAssetHelper::unregister_child(Asset* child_asset) {
         pending_children_.erase(it->second.child);
     }
     bindings_.erase(child_asset);
+    ++bindings_version_;
 }
 
 bool AnchorBoundAssetHelper::is_child_bound(const Asset* child_asset) const {
@@ -123,9 +156,10 @@ void AnchorBoundAssetHelper::notify_anchor_changed(Asset* owner, const std::stri
     }
 }
 
-bool AnchorBoundAssetHelper::flush_pending_updates() {
+AnchorBoundAssetHelper::FlushResult AnchorBoundAssetHelper::flush_pending_updates_detailed() {
+    FlushResult result{};
     if (flush_in_progress_) {
-        return false;
+        return result;
     }
 
     for (auto& [child_asset, record] : bindings_) {
@@ -141,42 +175,65 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
     }
 
     if (pending_children_.empty()) {
-        return false;
+        return result;
     }
 
+    struct FlushGuard {
+        bool& flag;
+        ~FlushGuard() { flag = false; }
+    };
+
     flush_in_progress_ = true;
-    bool changed = false;
-    while (!pending_children_.empty()) {
-        auto deterministic_sort_key = [&](const BindingRecord& record) {
-            std::uint64_t hash = 1469598103934665603ull;
-            hash_append_string(hash, record.anchor_name);
+    FlushGuard guard{flush_in_progress_};
 
-            if (record.owner) {
-                hash_append_string(hash, record.owner->spawn_id);
-                if (record.owner->info) {
-                    hash_append_string(hash, record.owner->info->name);
-                }
-                hash_append_int(hash, record.owner->world_x());
-                hash_append_int(hash, record.owner->world_y());
-                hash_append_int(hash, record.owner->world_z());
-                hash_append_int(hash, record.owner->grid_resolution);
+    struct BindingSnapshot {
+        Asset* owner = nullptr;
+        Asset* child_asset = nullptr;
+        std::uint64_t sort_key = 0;
+    };
+
+    std::unordered_map<ChildAsset*, BindingSnapshot> binding_by_child;
+    std::unordered_map<Asset*, ChildAsset*> child_by_asset;
+    std::uint64_t cached_binding_version = 0;
+    auto rebuild_binding_maps_if_needed = [&]() {
+        if (cached_binding_version == bindings_version_) {
+            return;
+        }
+
+        binding_by_child.clear();
+        child_by_asset.clear();
+        binding_by_child.reserve(bindings_.size() * 2);
+        child_by_asset.reserve(bindings_.size() * 2);
+        for (const auto& [child_asset, record] : bindings_) {
+            (void)child_asset;
+            if (!record.child) {
+                continue;
             }
 
+            binding_by_child[record.child] = BindingSnapshot{
+                record.owner,
+                record.child_asset,
+                deterministic_binding_sort_key(record.owner,
+                                               record.child_asset,
+                                               record.anchor_name)};
             if (record.child_asset) {
-                hash_append_string(hash, record.child_asset->spawn_id);
-                if (record.child_asset->info) {
-                    hash_append_string(hash, record.child_asset->info->name);
-                }
-                hash_append_int(hash, record.child_asset->world_x());
-                hash_append_int(hash, record.child_asset->world_y());
-                hash_append_int(hash, record.child_asset->world_z());
-                hash_append_int(hash, record.child_asset->grid_resolution);
+                child_by_asset[record.child_asset] = record.child;
             }
+        }
+        cached_binding_version = bindings_version_;
+    };
 
-            return hash;
-        };
+    std::vector<ChildAsset*> wave;
+    std::unordered_set<ChildAsset*> wave_lookup;
+    std::vector<anchor_binding_order::Node> nodes;
+    std::unordered_map<std::uintptr_t, ChildAsset*> child_by_id;
 
-        std::vector<ChildAsset*> wave;
+    while (!pending_children_.empty()) {
+        ++result.wave_count;
+
+        rebuild_binding_maps_if_needed();
+
+        wave.clear();
         wave.reserve(pending_children_.size());
         for (ChildAsset* child : pending_children_) {
             if (child) {
@@ -184,8 +241,12 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
             }
         }
         pending_children_.clear();
+        result.children_considered += wave.size();
+        if (wave.empty()) {
+            continue;
+        }
 
-        std::unordered_set<ChildAsset*> wave_lookup;
+        wave_lookup.clear();
         wave_lookup.reserve(wave.size() * 2);
         for (ChildAsset* child : wave) {
             if (child) {
@@ -193,37 +254,22 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
             }
         }
 
-        std::unordered_map<ChildAsset*, const BindingRecord*> record_by_child;
-        record_by_child.reserve(bindings_.size() * 2);
-        std::unordered_map<Asset*, ChildAsset*> child_by_asset;
-        child_by_asset.reserve(bindings_.size() * 2);
-        for (const auto& [child_asset, record] : bindings_) {
-            (void)child_asset;
-            if (!record.child) {
-                continue;
-            }
-            record_by_child[record.child] = &record;
-            if (record.child_asset) {
-                child_by_asset[record.child_asset] = record.child;
-            }
-        }
-
-        std::vector<anchor_binding_order::Node> nodes;
+        nodes.clear();
         nodes.reserve(wave.size());
-        std::unordered_map<std::uintptr_t, ChildAsset*> child_by_id;
+        child_by_id.clear();
         child_by_id.reserve(wave.size() * 2);
         for (ChildAsset* child : wave) {
             if (!child) {
                 continue;
             }
-            const auto record_it = record_by_child.find(child);
-            if (record_it == record_by_child.end()) {
+            const auto binding_it = binding_by_child.find(child);
+            if (binding_it == binding_by_child.end()) {
                 continue;
             }
-            const BindingRecord* record = record_it->second;
+            const BindingSnapshot& binding = binding_it->second;
             std::optional<std::uintptr_t> depends_on{};
-            if (record->owner) {
-                const auto owner_child_it = child_by_asset.find(record->owner);
+            if (binding.owner) {
+                const auto owner_child_it = child_by_asset.find(binding.owner);
                 if (owner_child_it != child_by_asset.end() &&
                     owner_child_it->second &&
                     owner_child_it->second != child &&
@@ -236,7 +282,7 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
             nodes.push_back(anchor_binding_order::Node{
                 id,
                 depends_on,
-                deterministic_sort_key(*record)});
+                binding.sort_key});
             child_by_id[id] = child;
         }
 
@@ -246,7 +292,14 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
             if (child_it == child_by_id.end() || !child_it->second) {
                 continue;
             }
-            changed = child_it->second->update() || changed;
+            const ChildAsset::UpdateResult child_result = child_it->second->update_detailed();
+            result.any_change = result.any_change || child_result.any_change;
+            result.needs_repass = result.needs_repass || child_result.needs_repass;
+            result.needs_traversal_refresh =
+                result.needs_traversal_refresh || child_result.needs_traversal_refresh;
+            if (child_result.any_change) {
+                ++result.children_updated;
+            }
         }
     }
 
@@ -255,8 +308,11 @@ bool AnchorBoundAssetHelper::flush_pending_updates() {
         record.last_child_frame_index = child_frame_index(record.child_asset);
     }
 
-    flush_in_progress_ = false;
-    return changed;
+    return result;
+}
+
+bool AnchorBoundAssetHelper::flush_pending_updates() {
+    return flush_pending_updates_detailed().any_change;
 }
 
 } // namespace anchor_bound_asset_helper

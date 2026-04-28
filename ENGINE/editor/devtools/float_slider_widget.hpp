@@ -21,6 +21,7 @@ public:
     void set_on_value_changed(ChangeCallback cb);
 
     void set_value(float v);
+    void set_range(float min_val, float max_val);
 
     float value() const { return current_value_; }
 

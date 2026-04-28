@@ -16,6 +16,7 @@
 #include "dev_footer_bar.hpp"
 
 class Assets;
+class RoomEditor;
 namespace devmode::core {
 class ManifestStore;
 class SaveManager;
@@ -79,6 +80,7 @@ public:
     void set_sliding_headers_hidden(bool hidden);
     void set_dev_sliding_headers_hidden(bool hidden);
     void set_mode_button_sets(std::vector<HeaderButtonConfig> map_buttons, std::vector<HeaderButtonConfig> room_buttons);
+    void set_room_editor(RoomEditor* room_editor);
     void set_header_mode(HeaderMode mode);
     void set_button_state(const std::string& id, bool active);
     void set_button_state(HeaderMode mode, const std::string& id, bool active);
@@ -103,7 +105,6 @@ private:
     void configure_footer_buttons();
     void sync_footer_button_states();
     void update_footer_visibility();
-    bool save_all_now(devmode::core::DevSaveCoordinator::Priority priority) const;
     enum class PanelType { None, Layers, Grid };
     enum class SlidingPanel { None, RoomConfig, RoomsList, LayerControls };
     void set_active_panel(PanelType panel);
@@ -136,6 +137,7 @@ private:
     void mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority priority =
                                  devmode::core::DevSaveCoordinator::Priority::Debounced);
     void update_room_config_header_controls();
+    void close_legacy_room_config_if_visible(const char* reason);
     void begin_map_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_map_color_sampling(bool silent = false);
     void complete_map_color_sampling(SDL_Color color);
@@ -178,6 +180,7 @@ private:
     std::vector<DockableCollapsible*> floating_panels_;
     std::function<void(HeaderMode)> on_mode_changed_;
     std::unique_ptr<RoomConfigurator> room_configurator_;
+    RoomEditor* room_editor_ = nullptr;
     std::string active_room_config_key_;
     SlidingPanel active_sliding_panel_ = SlidingPanel::None;
     SlidingPanel room_config_return_panel_ = SlidingPanel::RoomsList;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -19,7 +20,9 @@ struct Plan {
     std::vector<Stride>    strides;
     SDL_Point              final_dest{0, 0};
     SDL_Point              world_start{0, 0};
+    std::optional<std::string> engagement_target_asset_id{};
     bool                   override_non_locked = true;
+    bool                   attacking_enabled = false;
 };
 
 struct Plan3D {
@@ -27,5 +30,7 @@ struct Plan3D {
     std::vector<Stride>         strides;
     axis::WorldPos              final_dest{0, 0, 0};
     axis::WorldPos              world_start{0, 0, 0};
+    std::optional<std::string>  engagement_target_asset_id{};
     bool                        override_non_locked = true;
+    bool                        attacking_enabled = false;
 };

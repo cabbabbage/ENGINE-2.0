@@ -8,9 +8,13 @@
 #include "assets/asset/animation.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
+#include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_payload_utils.hpp"
+#include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_editor.hpp"
+#include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
+#include "room_editor_payload_contract_test_helper.hpp"
 
 namespace {
 
@@ -43,9 +47,42 @@ AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_na
     return mapping;
 }
 
+void check_unchanged_key_bytes(const nlohmann::json& before,
+                               const nlohmann::json& after,
+                               const std::vector<std::string>& changed_keys) {
+    const auto snapshot_before = room_editor_test_payload_contract::snapshot_key_bytes(before);
+    const auto snapshot_after = room_editor_test_payload_contract::snapshot_key_bytes(after);
+    const auto keys = room_editor_test_payload_contract::unchanged_keys_excluding(before, changed_keys);
+    for (const auto& key : keys) {
+        INFO("key=" << key);
+        auto before_it = snapshot_before.find(key);
+        auto after_it = snapshot_after.find(key);
+        REQUIRE(before_it != snapshot_before.end());
+        REQUIRE(after_it != snapshot_after.end());
+        CHECK(before_it->second == after_it->second);
+    }
+}
+
+template <typename TPanel>
+void dispatch_left_click(TPanel& panel, int x, int y) {
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = x;
+    down.button.y = y;
+    panel.handle_event(down);
+
+    SDL_Event up{};
+    up.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    up.button.button = SDL_BUTTON_LEFT;
+    up.button.x = x;
+    up.button.y = y;
+    panel.handle_event(up);
+}
+
 }  // namespace
 
-TEST_CASE("Anchor and light mode mutations stay isolated by point ownership") {
+TEST_CASE("Anchor and light mode mutations are isolated by ownership") {
     std::vector<DisplacedAssetAnchorPoint> points{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
@@ -88,54 +125,27 @@ TEST_CASE("Anchor and light mode mutations stay isolated by point ownership") {
 }
 
 TEST_CASE("Hitbox and attack box payload writers keep unrelated editor keys untouched") {
-    nlohmann::json payload = nlohmann::json::object({
-        {"anchor_points", nlohmann::json::array({nlohmann::json::array()})},
-        {"movement", nlohmann::json::array({nlohmann::json::array({0, 0, 0})})},
-        {"movement_total", nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0.0}})},
-        {"oval_anchor_mappings", nlohmann::json::array()},
-        {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
-        {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
-    });
-
-    const nlohmann::json anchor_points_before = payload["anchor_points"];
-    const nlohmann::json movement_before = payload["movement"];
-    const nlohmann::json movement_total_before = payload["movement_total"];
-    const nlohmann::json oval_before = payload["oval_anchor_mappings"];
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json payload_before = payload;
 
     const std::vector<std::string> names;
     const std::vector<animation_update::FrameHitBox> hit_boxes{
         devmode::room_box_payload::make_default_hit_box(names, 64, 64)};
     REQUIRE(devmode::room_box_payload::write_hit_box_frame_to_payload(payload, 1, 0, hit_boxes));
 
-    CHECK(payload["anchor_points"] == anchor_points_before);
-    CHECK(payload["movement"] == movement_before);
-    CHECK(payload["movement_total"] == movement_total_before);
-    CHECK(payload["oval_anchor_mappings"] == oval_before);
+    check_unchanged_key_bytes(payload_before, payload, {"hit_boxes", "box_schema_version"});
 
     const std::vector<animation_update::FrameAttackBox> attack_boxes{
         devmode::room_box_payload::make_default_attack_box(names, 64, 64)};
+    const nlohmann::json before_attack_write = payload;
     REQUIRE(devmode::room_box_payload::write_attack_box_frame_to_payload(payload, 1, 0, attack_boxes));
 
-    CHECK(payload["anchor_points"] == anchor_points_before);
-    CHECK(payload["movement"] == movement_before);
-    CHECK(payload["movement_total"] == movement_total_before);
-    CHECK(payload["oval_anchor_mappings"] == oval_before);
+    check_unchanged_key_bytes(before_attack_write, payload, {"attack_boxes", "box_schema_version"});
 }
 
 TEST_CASE("Movement payload updates keep anchor and box editor keys unchanged") {
-    nlohmann::json payload = nlohmann::json::object({
-        {"anchor_points", nlohmann::json::array({nlohmann::json::array()})},
-        {"hit_boxes", nlohmann::json::array({nlohmann::json::array()})},
-        {"attack_boxes", nlohmann::json::array({nlohmann::json::array()})},
-        {"oval_anchor_mappings", nlohmann::json::array()},
-        {"movement", nlohmann::json::array({nlohmann::json::array({0, 0, 0})})},
-        {"movement_total", nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0.0}})},
-    });
-
-    const nlohmann::json anchor_before = payload["anchor_points"];
-    const nlohmann::json hit_before = payload["hit_boxes"];
-    const nlohmann::json attack_before = payload["attack_boxes"];
-    const nlohmann::json oval_before = payload["oval_anchor_mappings"];
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json before = payload;
 
     std::vector<devmode::room_movement_payload::MovementFrame> frames(2);
     frames[1].dx = 3.0f;
@@ -144,12 +154,59 @@ TEST_CASE("Movement payload updates keep anchor and box editor keys unchanged") 
 
     const nlohmann::json updated = devmode::room_movement_payload::build_payload_from_frames(frames, payload);
 
-    CHECK(updated["anchor_points"] == anchor_before);
-    CHECK(updated["hit_boxes"] == hit_before);
-    CHECK(updated["attack_boxes"] == attack_before);
-    CHECK(updated["oval_anchor_mappings"] == oval_before);
+    check_unchanged_key_bytes(before, updated, {"movement", "movement_total"});
     CHECK(updated["movement"].is_array());
     CHECK(updated["movement_total"].is_object());
+}
+
+TEST_CASE("Anchor payload writer keeps unrelated mixed payload keys byte-equal") {
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json before = payload;
+
+    const std::vector<DisplacedAssetAnchorPoint> replacement{
+        DisplacedAssetAnchorPoint{"edited", 10, 11, 12.5f}
+    };
+    REQUIRE(devmode::room_anchor_mode::write_anchor_frame_to_payload(payload, 1, 0, replacement));
+
+    check_unchanged_key_bytes(before, payload, {"anchor_points"});
+}
+
+TEST_CASE("Writer precondition failures do not partially mutate mixed payload") {
+    const std::vector<std::string> names;
+    const std::vector<animation_update::FrameHitBox> hit_boxes{
+        devmode::room_box_payload::make_default_hit_box(names, 64, 64)};
+    const std::vector<animation_update::FrameAttackBox> attack_boxes{
+        devmode::room_box_payload::make_default_attack_box(names, 64, 64)};
+    const std::vector<DisplacedAssetAnchorPoint> anchors{
+        DisplacedAssetAnchorPoint{"edited", 2, 3, 4.0f}
+    };
+
+    SUBCASE("anchor writer rejects invalid frame bounds atomically") {
+        nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+        const std::string before = payload.dump();
+        CHECK_FALSE(devmode::room_anchor_mode::write_anchor_frame_to_payload(payload, 0, 0, anchors));
+        CHECK(payload.dump() == before);
+        CHECK_FALSE(devmode::room_anchor_mode::write_anchor_frame_to_payload(payload, 1, 4, anchors));
+        CHECK(payload.dump() == before);
+    }
+
+    SUBCASE("hit writer rejects invalid frame bounds atomically") {
+        nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+        const std::string before = payload.dump();
+        CHECK_FALSE(devmode::room_box_payload::write_hit_box_frame_to_payload(payload, 0, 0, hit_boxes));
+        CHECK(payload.dump() == before);
+        CHECK_FALSE(devmode::room_box_payload::write_hit_box_frame_to_payload(payload, 1, 3, hit_boxes));
+        CHECK(payload.dump() == before);
+    }
+
+    SUBCASE("attack writer rejects invalid frame bounds atomically") {
+        nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+        const std::string before = payload.dump();
+        CHECK_FALSE(devmode::room_box_payload::write_attack_box_frame_to_payload(payload, 0, 0, attack_boxes));
+        CHECK(payload.dump() == before);
+        CHECK_FALSE(devmode::room_box_payload::write_attack_box_frame_to_payload(payload, 1, 3, attack_boxes));
+        CHECK(payload.dump() == before);
+    }
 }
 
 TEST_CASE("Oval mapping updates do not rewrite animation payload keys from other editors") {
@@ -175,6 +232,333 @@ TEST_CASE("Oval mapping updates do not rewrite animation payload keys from other
 }
 
 #if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+TEST_CASE("RoomEditor candidate source validation blocks cross-domain contexts") {
+    RoomEditor editor(nullptr, 1280, 720);
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_anchor());
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_non_light()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_light()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_floor_box()));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_light());
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_light()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_non_light()));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_floor_box());
+    CHECK(RoomEditorTestAccess::validate_floor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_floor_box()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_floor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_anchor_light()));
+}
+
+TEST_CASE("RoomEditor oval candidate source requires explicit center or point selection") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_oval());
+
+    RoomEditorTestAccess::set_oval_candidate_selection(editor, true, -1);
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_point()));
+
+    RoomEditorTestAccess::set_oval_candidate_selection(editor, false, 0);
+    CHECK(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_point()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+
+    RoomEditorTestAccess::set_oval_candidate_selection(editor, false, -1);
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_point()));
+    CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
+        editor, RoomEditorTestAccess::candidate_source_oval_center()));
+}
+
+TEST_CASE("RoomEditor delete confirmation cancel path produces zero mutation") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 0);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_floor_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
+TEST_CASE("RoomEditor delete confirmation confirm path mutates once when scope is valid") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_anchor(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete confirmation confirm path succeeds in light mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_light(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete confirmation confirm path succeeds for hitbox and attack modes") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool hitbox_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(hitbox_result);
+    CHECK(apply_calls == 1);
+
+    apply_calls = 0;
+    const bool attack_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_attack_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(attack_result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete confirmation blocks zero affected scope") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_anchor(),
+        true,
+        true,
+        0,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
+TEST_CASE("RoomEditor delete confirmation blocks stale selection at confirmation time") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        true,
+        false,
+        1,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
+TEST_CASE("RoomEditor delete confirmation remains valid when transient UI selection drifts") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_with_transient_ui_drift(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        true,
+        1,
+        apply_calls);
+    CHECK(result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete confirmation blocks when snapshot target no longer exists") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 1);
+
+    int apply_calls = 0;
+    const bool result = RoomEditorTestAccess::execute_delete_confirmation_with_transient_ui_drift(
+        editor,
+        RoomEditorTestAccess::mode_hitbox(),
+        false,
+        1,
+        apply_calls);
+    CHECK_FALSE(result);
+    CHECK(apply_calls == 0);
+}
+
+TEST_CASE("RoomEditor delete confirmation dont-ask-again is session scoped per mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 2);
+
+    int apply_calls = 0;
+    const bool first_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_attack_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(first_result);
+    CHECK(apply_calls == 1);
+    CHECK(RoomEditorTestAccess::delete_confirmation_disabled_for_mode(
+        editor, RoomEditorTestAccess::mode_attack_box()));
+
+    RoomEditorTestAccess::set_delete_confirm_callback_for_tests(editor, 0);
+    apply_calls = 0;
+    const bool second_result = RoomEditorTestAccess::execute_delete_confirmation_flow(
+        editor,
+        RoomEditorTestAccess::mode_attack_box(),
+        true,
+        true,
+        1,
+        apply_calls);
+    CHECK(second_result);
+    CHECK(apply_calls == 1);
+}
+
+TEST_CASE("RoomEditor delete persistence remains configured for immediate flush") {
+    CHECK(RoomEditorTestAccess::delete_persist_priority_for_tests() ==
+          static_cast<int>(devmode::core::DevSaveCoordinator::Priority::Immediate));
+    CHECK(RoomEditorTestAccess::delete_persist_flush_now_for_tests());
+}
+
+TEST_CASE("RoomEditor delete shortcut routes to stack-mode delete path in stack editor mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_delete_shortcut_route_counters(editor);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_hitbox());
+
+    RoomEditorTestAccess::invoke_delete_shortcut(editor, true, false);
+
+    CHECK(RoomEditorTestAccess::delete_shortcut_stack_dispatch_count(editor) == 1);
+    CHECK(RoomEditorTestAccess::delete_shortcut_asset_delete_count(editor) == 0);
+}
+
+TEST_CASE("RoomEditor delete shortcut routes to asset delete path in normal mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_delete_shortcut_route_counters(editor);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_normal());
+
+    RoomEditorTestAccess::invoke_delete_shortcut(editor, true, false);
+
+    CHECK(RoomEditorTestAccess::delete_shortcut_stack_dispatch_count(editor) == 0);
+    CHECK(RoomEditorTestAccess::delete_shortcut_asset_delete_count(editor) == 1);
+}
+
+TEST_CASE("RoomBoxToolsPanel delete button is selection-gated and stale click safe") {
+    RoomBoxToolsPanel panel(RoomBoxToolsPanel::Kind::HitBox);
+    panel.set_visible(true);
+    panel.set_screen_dimensions(1280, 720);
+    panel.set_system_enabled(true);
+    panel.set_box_names({"Box A", "Box B"});
+
+    CHECK_FALSE(RoomBoxToolsPanelTestAccess::delete_button_visible(panel));
+
+    panel.set_selection(0, 0);
+    REQUIRE(RoomBoxToolsPanelTestAccess::delete_button_visible(panel));
+    const SDL_Rect stale_delete_rect = RoomBoxToolsPanelTestAccess::delete_button_rect(panel);
+
+    int delete_calls = 0;
+    panel.set_on_delete([&delete_calls]() { ++delete_calls; });
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+
+    panel.clear_selection();
+    CHECK_FALSE(RoomBoxToolsPanelTestAccess::delete_button_visible(panel));
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+}
+
+TEST_CASE("RoomFloorBoxToolsPanel delete button is selection-gated and stale click safe") {
+    RoomFloorBoxToolsPanel panel;
+    panel.set_visible(true);
+    panel.set_screen_dimensions(1280, 720);
+    panel.set_system_enabled(true);
+    panel.set_floor_box_names({"Floor A"});
+
+    CHECK_FALSE(RoomFloorBoxToolsPanelTestAccess::delete_button_visible(panel));
+
+    panel.set_selection(0);
+    REQUIRE(RoomFloorBoxToolsPanelTestAccess::delete_button_visible(panel));
+    const SDL_Rect stale_delete_rect = RoomFloorBoxToolsPanelTestAccess::delete_button_rect(panel);
+
+    int delete_calls = 0;
+    panel.set_on_delete([&delete_calls]() { ++delete_calls; });
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+
+    panel.clear_selection();
+    CHECK_FALSE(RoomFloorBoxToolsPanelTestAccess::delete_button_visible(panel));
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+}
+
+TEST_CASE("RoomAnchorToolsPanel delete button is selection-gated and stale click safe") {
+    RoomAnchorToolsPanel panel;
+    panel.set_visible(true);
+    panel.set_screen_dimensions(1280, 720);
+    panel.set_anchor_names({"Anchor A"});
+
+    CHECK_FALSE(RoomAnchorToolsPanelTestAccess::delete_button_visible(panel));
+
+    panel.set_selected_anchor("Anchor A");
+    REQUIRE(RoomAnchorToolsPanelTestAccess::delete_button_visible(panel));
+    const SDL_Rect stale_delete_rect = RoomAnchorToolsPanelTestAccess::delete_button_rect(panel);
+
+    int delete_calls = 0;
+    panel.set_on_delete([&delete_calls]() { ++delete_calls; });
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+
+    panel.set_selected_anchor("");
+    CHECK_FALSE(RoomAnchorToolsPanelTestAccess::delete_button_visible(panel));
+    dispatch_left_click(panel,
+                        stale_delete_rect.x + stale_delete_rect.w / 2,
+                        stale_delete_rect.y + stale_delete_rect.h / 2);
+    CHECK(delete_calls == 1);
+}
+
 TEST_CASE("RoomEditor queues re-entrant subview requests while transition is in progress") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_subview_change_in_progress(editor, true);
@@ -227,41 +611,36 @@ TEST_CASE("RoomEditor defers animation-editor closed fallback transition to upda
     CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_animation_editor());
 }
 
-TEST_CASE("RoomEditor opens spawn-group panel only on double left-click for same asset") {
+TEST_CASE("RoomEditor opens spawn-group panel only on double left-click for same spawn group") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::reset_click_tracking(editor);
 
-    int asset_a = 1;
-    int asset_b = 2;
-
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1000));
+        editor, "spawn_a", true, 1000));
     CHECK(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1200));
+        editor, "spawn_a", true, 1200));
 
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1605));
+        editor, "spawn_a", true, 1605));
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_b, true, 1700));
+        editor, "spawn_b", true, 1700));
 }
 
-TEST_CASE("RoomEditor click tracking ignores non-spawn assets and resets on null identity") {
+TEST_CASE("RoomEditor click tracking ignores non-spawn groups and resets on empty spawn id") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::reset_click_tracking(editor);
 
-    int asset_a = 1;
-
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, false, 1000));
+        editor, "spawn_a", false, 1000));
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1100));
+        editor, "spawn_a", true, 1100));
     CHECK(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1250));
+        editor, "spawn_a", true, 1250));
 
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, nullptr, true, 1300));
+        editor, "", true, 1300));
     CHECK_FALSE(RoomEditorTestAccess::should_open_spawn_group_panel_for_click(
-        editor, &asset_a, true, 1350));
+        editor, "spawn_a", true, 1350));
 }
 
 TEST_CASE("RoomEditor selection sync with snap enabled does not trigger spawn-group snapping") {
@@ -330,6 +709,39 @@ TEST_CASE("RoomEditor spawn-group edits queue deferred work while callback scope
     CHECK(RoomEditorTestAccess::respawn_spawn_group_call_count(editor) == 0);
 }
 
+TEST_CASE("RoomEditor spawn-group deferred queue coalesces repeated edits for same spawn id") {
+    RoomEditor editor(nullptr, 1280, 720);
+
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", true, true, true, true);
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", true, false, false, false);
+    RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", false, true, false, true);
+
+    CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 1);
+
+    RoomEditorTestAccess::process_pending_spawn_group_work(editor);
+    CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 0);
+}
+
+TEST_CASE("RoomEditor ownership classification keeps room and boundary domains isolated") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_spawn_id_ownership_cache(editor, {"room_spawn"}, {"boundary_spawn"});
+
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, "room_spawn") ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::Room));
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, "boundary_spawn") ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::MapBoundary));
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, "other_spawn") ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::Other));
+}
+
+TEST_CASE("RoomEditor spawn membership gating allows boundary ownership without room containment checks") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_spawn_id_ownership_cache(editor, {"room_spawn"}, {"boundary_spawn"});
+
+    CHECK(RoomEditorTestAccess::spawn_membership_allows_room_selection(editor, "boundary_spawn", ""));
+    CHECK_FALSE(RoomEditorTestAccess::spawn_membership_allows_room_selection(editor, "other_spawn", ""));
+}
+
 TEST_CASE("RoomEditor processes and clears deferred spawn-group queue work") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::enqueue_spawn_group_work(editor, "spawn_a", false, true, false, false);
@@ -340,5 +752,64 @@ TEST_CASE("RoomEditor processes and clears deferred spawn-group queue work") {
     RoomEditorTestAccess::process_pending_spawn_group_work(editor);
 
     CHECK(RoomEditorTestAccess::pending_spawn_group_work_size(editor) == 0);
+}
+
+TEST_CASE("RoomEditor extrusion drag resolution is side-locked and clamps to min depth one") {
+    const int base_forward = 8;
+    const int base_backward = 6;
+    const float start_half_separation = 10.0f;
+
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              true, -5, start_half_separation, base_forward, base_backward) == 1);
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              true, 20, start_half_separation, base_forward, base_backward) == 16);
+
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              false, 5, start_half_separation, base_forward, base_backward) == 1);
+    CHECK(RoomEditorTestAccess::resolve_extrusion_drag_value(
+              false, -20, start_half_separation, base_forward, base_backward) == 12);
+}
+
+TEST_CASE("RoomEditor blocks camera interaction while hitbox extrusion handle is dragging") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_hitbox());
+    RoomEditorTestAccess::set_hitbox_dragging_extrusion(editor, true);
+
+    CHECK(RoomEditorTestAccess::editor_interaction_is_dragging(editor));
+    CHECK(RoomEditorTestAccess::editor_interaction_camera_blocked(editor));
+}
+
+TEST_CASE("RoomEditor blocks camera interaction while attack-box extrusion handle is dragging") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_attack_box());
+    RoomEditorTestAccess::set_attack_box_dragging_extrusion(editor, true);
+
+    CHECK(RoomEditorTestAccess::editor_interaction_is_dragging(editor));
+    CHECK(RoomEditorTestAccess::editor_interaction_camera_blocked(editor));
+}
+
+TEST_CASE("RoomEditor mode ownership policy isolates editor domains") {
+    RoomEditor editor(nullptr, 1280, 720);
+    const int hitbox = RoomEditorTestAccess::mode_hitbox();
+    const int attack = RoomEditorTestAccess::mode_attack_box();
+    const int movement = RoomEditorTestAccess::mode_movement();
+
+    CHECK(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, hitbox));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, attack));
+    CHECK(RoomEditorTestAccess::mode_owns_attack_domain(editor, attack));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_attack_domain(editor, hitbox));
+    CHECK(RoomEditorTestAccess::mode_owns_movement_domain(editor, movement));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_oval_domain(editor, hitbox));
+}
+
+TEST_CASE("RoomEditor mode-switch domain checks prevent leakage between hitbox and attack") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_hitbox());
+    CHECK(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, RoomEditorTestAccess::mode_hitbox()));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_attack_domain(editor, RoomEditorTestAccess::mode_hitbox()));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_attack_box());
+    CHECK(RoomEditorTestAccess::mode_owns_attack_domain(editor, RoomEditorTestAccess::mode_attack_box()));
+    CHECK_FALSE(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, RoomEditorTestAccess::mode_attack_box()));
 }
 #endif

@@ -63,6 +63,32 @@ Animation make_single_frame_animation(std::initializer_list<std::string> tags) {
     return animation;
 }
 
+Animation make_single_frame_attack_animation(std::initializer_list<std::string> tags,
+                                             int box_x,
+                                             int box_y,
+                                             int box_w,
+                                             int box_h) {
+    Animation animation{};
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.push_back(AnimationFrame{});
+    path.front().is_first = true;
+    path.front().is_last = true;
+
+    animation_update::FrameAttackBox box{};
+    box.id = "attack_box_id";
+    box.name = "attack_box";
+    box.type = "attack_box";
+    box.enabled = true;
+    box.payload.damage_amount = 5;
+    box.payload.payload_id = "attack_box_id";
+    box.set_position_and_size(box_x, box_y, box_w, box_h);
+    path.front().set_attack_boxes({box});
+
+    animation.tags.assign(tags.begin(), tags.end());
+    return animation;
+}
+
 } // namespace
 
 TEST_CASE("attack dispatch enqueues attacker metadata, damage, and attack type") {
@@ -274,4 +300,39 @@ TEST_CASE("knockback uses payload hitback distance when configured") {
     REQUIRE(AttackProcessingHelper::compute_knockback_delta(*self_ptr, incoming, delta, 50.0f, 100));
     CHECK(delta.x == 30);
     CHECK(delta.y == 0);
+}
+
+TEST_CASE("evaluate_attack_window uses candidate animation metadata for non-current attacks") {
+    auto attacker = test_child_asset_runtime::make_test_asset("attacker", 0, 0, 0, 0);
+    auto target = test_child_asset_runtime::make_test_asset("target", 0, 0, 0, 0);
+    Asset* attacker_ptr = attacker.get();
+    Asset* target_ptr = target.get();
+    REQUIRE(attacker_ptr != nullptr);
+    REQUIRE(target_ptr != nullptr);
+    REQUIRE(attacker_ptr->info != nullptr);
+
+    attacker_ptr->info->attack_box_enabled = true;
+    target_ptr->info->hitbox_enabled = true;
+    attacker_ptr->info->animations["attack_left"] =
+        make_single_frame_attack_animation({"attack", "left"}, 8, 4, 12, 12);
+    attacker_ptr->info->animations["attack_right"] =
+        make_single_frame_attack_animation({"attack", "right"}, 500, 500, 8, 8);
+    attacker_ptr->current_animation = "attack_left";
+    attacker_ptr->current_frame = attacker_ptr->info->animations["attack_left"].get_first_frame(0);
+
+    // Simulate current-frame runtime volume overlap so pre-fix behavior would falsely score
+    // "attack_right" as a hit by reusing current attack volumes.
+    attacker_ptr->test_set_current_attack_box_volumes(
+        {make_box(12.0f, 0.0f, 10.0f, 4.0f, 5, "attack_box")});
+    target_ptr->test_set_current_hit_box_volumes(
+        {make_box(12.0f, 0.0f, 10.0f, 3.0f, 0, "hit")});
+
+    const auto right_eval =
+        animation_update::AttackValidation::evaluate_attack_window(
+            *attacker_ptr,
+            *target_ptr,
+            "attack_right",
+            8);
+
+    CHECK(right_eval.score == animation_update::AttackValidation::AttackWindowScore::Miss);
 }

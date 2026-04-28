@@ -44,6 +44,27 @@ std::string room_display_label(const std::string& room_key) {
     return room_key;
 }
 
+std::string candidate_display_label(const std::string& source_type, const std::string& value) {
+    const std::string label = room_display_label(value);
+    if (source_type == "room_tag") {
+        return "[Tag] " + label;
+    }
+    return "[Room] " + label;
+}
+
+std::string encode_tag_selector_option(const std::string& tag) {
+    return std::string("#tag:") + tag;
+}
+
+bool decode_tag_selector_option(const std::string& option, std::string& out_tag) {
+    constexpr const char* kPrefix = "#tag:";
+    if (option.rfind(kPrefix, 0) != 0) {
+        return false;
+    }
+    out_tag = option.substr(std::char_traits<char>::length(kPrefix));
+    return !out_tag.empty();
+}
+
 }
 
 MapLayerControlsDisplay::MapLayerControlsDisplay()
@@ -546,13 +567,27 @@ void MapLayerControlsDisplay::rebuild_content() const {
             }
             CandidateRow row;
             row.candidate_index = static_cast<int>(i);
-            row.room_key = entry.value("name", std::string{});
-            row.display_label = room_display_label(row.room_key);
+            row.source_type = entry.value("source_type", std::string("room_name"));
+            if (row.source_type != "room_name" && row.source_type != "room_tag") {
+                row.source_type = "room_name";
+            }
+            row.candidate_value = entry.value("value", std::string{});
+            if (row.candidate_value.empty()) {
+                row.candidate_value = entry.value("name", std::string{});
+            }
+            row.room_key = row.candidate_value;
+            row.display_label = candidate_display_label(row.source_type, row.candidate_value);
             row.min_instances = entry.value("min_instances", 0);
             row.max_instances = entry.value("max_instances", 0);
-            row.remove_button = std::make_unique<DMButton>(std::string(DMIcons::Close()), &DMStyles::DeleteButton(), kRemoveButtonWidth, DMButton::height());
-            row.range_slider = std::make_unique<DMRangeSlider>(0, map_layers::kCandidateRangeMax, row.min_instances, row.max_instances);
-            row.range_slider->set_defer_commit_until_unfocus(true);
+            if (selected_layer_index_ == 0) {
+                row.display_label = std::string("[Spawn] ") + room_display_label(row.candidate_value);
+                row.min_instances = 1;
+                row.max_instances = 1;
+            } else {
+                row.remove_button = std::make_unique<DMButton>(std::string(DMIcons::Close()), &DMStyles::DeleteButton(), kRemoveButtonWidth, DMButton::height());
+                row.range_slider = std::make_unique<DMRangeSlider>(0, map_layers::kCandidateRangeMax, row.min_instances, row.max_instances);
+                row.range_slider->set_defer_commit_until_unfocus(true);
+            }
 
             const auto required_it = entry.find("required_children");
             if (required_it != entry.end() && required_it->is_array()) {
@@ -594,11 +629,24 @@ void MapLayerControlsDisplay::rebuild_available_rooms() const {
     }
 
     available_rooms_ = controller_->available_rooms();
+    available_tags_ = controller_->available_room_tags();
     filtered_rooms_ = available_rooms_;
+    if (selected_layer_index_ != 0) {
+        for (const std::string& tag : available_tags_) {
+            filtered_rooms_.push_back(encode_tag_selector_option(tag));
+        }
+    }
     if (!candidates_.empty()) {
         filtered_rooms_.erase(std::remove_if(filtered_rooms_.begin(), filtered_rooms_.end(), [this](const std::string& name) {
                                    return std::any_of(candidates_.begin(), candidates_.end(), [&](const CandidateRow& row) {
-                                       return row.room_key == name;
+                                       if (row.source_type == "room_tag") {
+                                           std::string tag;
+                                           if (decode_tag_selector_option(name, tag)) {
+                                               return row.candidate_value == tag;
+                                           }
+                                           return false;
+                                       }
+                                       return row.candidate_value == name;
                                    });
                                }),
                                filtered_rooms_.end());
@@ -661,7 +709,15 @@ void MapLayerControlsDisplay::on_room_selected(const std::string& room_key) {
     if (!controller_ || selected_layer_index_ < 0) {
         return;
     }
-    if (controller_->add_candidate(selected_layer_index_, room_key)) {
+    std::string tag_value;
+    const bool is_tag = decode_tag_selector_option(room_key, tag_value);
+    if (selected_layer_index_ == 0 && is_tag) {
+        return;
+    }
+    const bool added = is_tag
+                           ? controller_->add_candidate_tag(selected_layer_index_, tag_value)
+                           : controller_->add_candidate(selected_layer_index_, room_key);
+    if (added) {
         mark_dirty();
         notify_change();
     }

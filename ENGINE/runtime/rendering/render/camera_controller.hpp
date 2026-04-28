@@ -18,7 +18,7 @@ struct CameraParams {
 
 namespace camera_math {
     inline constexpr float kDefaultCameraTiltDeg = 60.0f;
-    // Normalize tilts to [0,360) so we can support full rotations without clamping.
+    // מנרמלים הטיות לטווח [0,360) כדי לאפשר סיבובים מלאים בלי הגבלת תחום.
     inline constexpr float kMaxSupportedCameraTiltDeg = 360.0f;
 
     CameraParams sanitize_camera_params(const CameraParams& raw, double fallback_height_px);
@@ -118,3 +118,4 @@ private:
 
     State state_{};
 };
+

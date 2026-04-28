@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include "rendering/render/scaling_logic.hpp"
+#include "rendering/render/grid_overlay.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
 
 #include <cstdint>
@@ -20,6 +21,7 @@ class WarpedScreenGrid;
 class AssetLibrary;
 class Assets;
 class AssetInfo;
+class Asset;
 namespace world {
 class WorldGrid;
 }
@@ -34,7 +36,7 @@ public:
 
     struct BoundaryFrame {
         std::vector<BoundaryFrameVariant> variants;
-        float duration_ms = 41.67f;  // ~24 fps default
+        float duration_ms = 41.67f;  // ברירת מחדל של כ-24 פריימים לשנייה
     };
 
     struct BoundarySprite {
@@ -78,7 +80,7 @@ public:
 
     struct BoundaryKey {
         int group = 0;
-        int region_domain = 0;  // 0 = boundary, 1 = room/trail
+        int region_domain = 0;  // 0 = גבול, 1 = חדר/שובל
         int resolution_layer = 0;
         int grid_x = 0;
         int grid_y = 0;
@@ -133,6 +135,25 @@ public:
     static float max_random_jitter();
     static float sample_size_variation_from_hash(std::uint64_t key_hash);
     static float compute_effective_base_scale(const AssetInfo& info, float size_variation_sample);
+    static float compute_depth_efficiency_keep_ratio(double depth_distance,
+                                                     double max_cull_depth,
+                                                     double efficiency_depth,
+                                                     float min_density_ratio);
+    static double compute_forward_depth_offset(double depth_from_anchor, float depth_axis_sign);
+    static float depth_efficiency_sample_from_hash(std::uint64_t key_hash);
+    static bool  evaluate_depth_efficiency_visibility(float deterministic_sample,
+                                                      float keep_ratio,
+                                                      bool was_visible,
+                                                      float hysteresis_width = 0.05f);
+    static bool  should_promote_controller_candidate(bool has_registered_controller,
+                                                     bool visible_after_efficiency,
+                                                     double forward_depth_offset,
+                                                     double efficiency_depth);
+    static bool  should_keep_depth_efficiency_sample(std::uint64_t key_hash, float keep_ratio);
+    static void  advance_frame_state(FrameState& frame_state,
+                                     const std::vector<BoundaryFrame>& frames,
+                                     float delta_ms,
+                                     bool freeze_animation);
 
     bool is_initialized() const { return initialized_; }
     void invalidate_config();
@@ -154,6 +175,35 @@ private:
     std::size_t room_trail_catalog_signature_ = std::numeric_limits<std::size_t>::max();
     std::unordered_map<BoundaryKey, BoundaryAssignment, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
+    struct DepthVisibilityState {
+        bool visible = true;
+        std::uint64_t last_seen_epoch = 0;
+    };
+    std::unordered_map<BoundaryKey, DepthVisibilityState, BoundaryKeyHash> depth_visibility_states_;
+    std::uint64_t depth_visibility_epoch_ = 0;
+    struct PromotionSlotKey {
+        int world_x = 0;
+        int world_z = 0;
+        int region_domain = 0;
+
+        bool operator==(const PromotionSlotKey& other) const noexcept {
+            return world_x == other.world_x &&
+                   world_z == other.world_z &&
+                   region_domain == other.region_domain;
+        }
+    };
+    struct PromotionSlotKeyHash {
+        std::size_t operator()(const PromotionSlotKey& key) const noexcept {
+            return static_cast<std::size_t>(
+                render_overlay::hash_grid_cell(key.world_x,
+                                               key.world_z,
+                                               key.region_domain,
+                                               0,
+                                               0,
+                                               0));
+        }
+    };
+    std::unordered_map<PromotionSlotKey, Asset*, PromotionSlotKeyHash> promoted_boundary_assets_;
     std::vector<BoundarySprite> active_boundary_sprites_;
     struct StaticCellAssignment {
         BoundaryKey key;

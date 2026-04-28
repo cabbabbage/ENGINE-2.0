@@ -42,8 +42,8 @@ TEST_CASE("Dev mode animation policy advances runtime-updated assets outside fra
         true, false, false, false));
 }
 
-TEST_CASE("Dev mode animation policy keeps frame editor target-only") {
-    CHECK(runtime::dev_mode_policy::should_advance_animation_for_asset(
+TEST_CASE("Dev mode animation policy blocks auto-advance while frame editor session is active") {
+    CHECK_FALSE(runtime::dev_mode_policy::should_advance_animation_for_asset(
         true, true, true, true));
     CHECK_FALSE(runtime::dev_mode_policy::should_advance_animation_for_asset(
         true, true, true, false));

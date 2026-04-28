@@ -66,8 +66,17 @@ inline void rename_room_references_in_layers(nlohmann::json& map_info,
                 continue;
             }
 
-            if (entry.value("name", std::string()) == old_name) {
-                entry["name"] = new_name;
+            std::string source_type = entry.value("source_type", std::string());
+            std::string value = entry.value("value", std::string());
+            if (source_type.empty()) {
+                // Legacy candidate shape.
+                value = entry.value("name", std::string());
+                source_type = "room_name";
+            }
+            if (source_type == "room_name" && value == old_name) {
+                entry["source_type"] = "room_name";
+                entry["value"] = new_name;
+                entry["name"] = new_name; // Backward-compat mirror for older editor/runtime readers.
             }
 
             auto& children = entry["required_children"];

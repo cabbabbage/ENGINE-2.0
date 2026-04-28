@@ -7,6 +7,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/core/save_orchestrator.hpp"
 
 namespace devmode::core {
 
@@ -29,6 +30,7 @@ public:
 
     void set_manifest_store(ManifestStore* store);
     void set_save_coordinator(DevSaveCoordinator* coordinator);
+    void set_save_status_sink(SaveOrchestrator::StatusSink sink);
 
     void register_saveable(Saveable saveable);
     void unregister_saveable(const std::string& id);
@@ -37,6 +39,10 @@ public:
     bool has_dirty_saveables() const;
     bool save_dirty(DevSaveCoordinator::Priority priority,
                     const std::string& reason = {});
+
+    bool save_dirty_with_reason(DevSaveCoordinator::Priority priority,
+                                SaveOrchestrator::Reason reason,
+                                const std::string& label = {});
 
     bool persist_map_entry(const std::string& map_id,
                            nlohmann::json payload,
@@ -47,11 +53,17 @@ public:
 private:
     bool request_manifest_flush(DevSaveCoordinator::Priority priority,
                                 const std::string& reason);
+    bool persist_map_entry_direct(const std::string& map_id,
+                                  nlohmann::json payload,
+                                  DevSaveCoordinator::Priority priority,
+                                  const std::string& flush_reason,
+                                  std::function<void()> on_success);
 
     ManifestStore* store_ = nullptr;
     DevSaveCoordinator* coordinator_ = nullptr;
     std::vector<Saveable> saveables_;
     bool batch_save_active_ = false;
+    SaveOrchestrator orchestrator_;
 };
 
 }

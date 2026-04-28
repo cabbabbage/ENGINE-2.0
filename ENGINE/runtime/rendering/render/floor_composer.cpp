@@ -2,15 +2,18 @@
 
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/chunk.hpp"
+#include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <unordered_map>
 
 namespace {
@@ -18,10 +21,7 @@ namespace {
 constexpr float kQuadEpsilon = 1.0e-5f;
 
 void destroy_texture(SDL_Texture*& texture) {
-    if (texture) {
-        SDL_DestroyTexture(texture);
-        texture = nullptr;
-    }
+    render_diagnostics::destroy_texture(texture);
 }
 
 bool project_floor_point_to_screen(const WarpedScreenGrid& cam,
@@ -54,8 +54,6 @@ bool project_floor_grid_point_to_screen(const WarpedScreenGrid& cam,
         return false;
     }
 
-    out_screen.x = std::floor(out_screen.x);
-    out_screen.y = std::floor(out_screen.y);
     return true;
 }
 
@@ -141,8 +139,36 @@ struct CachedGroundTileProjection {
     SDL_Texture* texture = nullptr;
     SDL_Rect world_rect{0, 0, 0, 0};
     std::uint64_t camera_state_version = 0;
+    std::uint64_t last_touched_frame = 0;
     std::array<SDL_Vertex, 4> vertices{};
     bool valid = false;
+};
+
+struct GroundTileCacheKey {
+    int chunk_i = 0;
+    int chunk_j = 0;
+    std::uint64_t tile_texture_revision = 0;
+    std::uint32_t tile_index = 0;
+
+    bool operator==(const GroundTileCacheKey& other) const {
+        return chunk_i == other.chunk_i &&
+               chunk_j == other.chunk_j &&
+               tile_texture_revision == other.tile_texture_revision &&
+               tile_index == other.tile_index;
+    }
+};
+
+struct GroundTileCacheKeyHash {
+    std::size_t operator()(const GroundTileCacheKey& key) const {
+        const std::uint64_t h0 = static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.chunk_i));
+        const std::uint64_t h1 = static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.chunk_j));
+        const std::uint64_t h2 = key.tile_texture_revision;
+        const std::uint64_t h3 = key.tile_index;
+        std::size_t seed = static_cast<std::size_t>(h0 ^ (h1 << 32));
+        seed ^= static_cast<std::size_t>(h2 + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+        seed ^= static_cast<std::size_t>(h3 + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+        return seed;
+    }
 };
 
 bool cached_ground_tile_projection_matches(const CachedGroundTileProjection& entry,
@@ -160,16 +186,161 @@ bool cached_ground_tile_projection_matches(const CachedGroundTileProjection& ent
            entry.world_rect.h == world_rect.h;
 }
 
-std::unordered_map<const void*, CachedGroundTileProjection>& ground_tile_projection_cache() {
-    static std::unordered_map<const void*, CachedGroundTileProjection> cache;
+std::unordered_map<GroundTileCacheKey, CachedGroundTileProjection, GroundTileCacheKeyHash>& ground_tile_projection_cache() {
+    static std::unordered_map<GroundTileCacheKey, CachedGroundTileProjection, GroundTileCacheKeyHash> cache;
     return cache;
 }
 
-void maybe_prune_ground_tile_projection_cache() {
+void maybe_prune_ground_tile_projection_cache(std::uint64_t current_frame_marker) {
     auto& cache = ground_tile_projection_cache();
-    if (cache.size() > 65536) {
+    constexpr std::uint64_t kMaxStaleFrames = 120;
+    for (auto it = cache.begin(); it != cache.end();) {
+        const CachedGroundTileProjection& entry = it->second;
+        if (!entry.valid || (current_frame_marker > entry.last_touched_frame &&
+                             (current_frame_marker - entry.last_touched_frame) > kMaxStaleFrames)) {
+            it = cache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (cache.size() > 131072) {
         cache.clear();
     }
+}
+
+bool project_room_world_point_to_floor_screen(const WarpedScreenGrid& cam,
+                                              const SDL_Point& world_point,
+                                              SDL_FPoint& out_screen) {
+    return project_floor_point_to_screen(
+        cam,
+        static_cast<float>(world_point.x),
+        static_cast<float>(world_point.y),
+        out_screen);
+}
+
+void draw_room_and_trail_geometry_overlay(SDL_Renderer* renderer,
+                                          const WarpedScreenGrid& cam,
+                                          const std::vector<Room*>& rooms) {
+    if (!renderer || rooms.empty()) {
+        return;
+    }
+
+    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (const Room* room : rooms) {
+        if (!room || !room->room_area) {
+            continue;
+        }
+        const std::vector<SDL_Point>& points = room->room_area->get_points();
+        if (points.size() < 2) {
+            continue;
+        }
+
+        const SDL_Color base = room->display_color();
+        SDL_SetRenderDrawColor(renderer, base.r, base.g, base.b, 224);
+        for (std::size_t i = 0; i < points.size(); ++i) {
+            const SDL_Point& a = points[i];
+            const SDL_Point& b = points[(i + 1) % points.size()];
+            SDL_FPoint sa{};
+            SDL_FPoint sb{};
+            if (!project_room_world_point_to_floor_screen(cam, a, sa) ||
+                !project_room_world_point_to_floor_screen(cam, b, sb)) {
+                continue;
+            }
+            SDL_RenderLine(renderer, sa.x, sa.y, sb.x, sb.y);
+        }
+    }
+
+    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+}
+
+void draw_grid_overlay_points(SDL_Renderer* renderer,
+                              const WarpedScreenGrid& cam,
+                              int grid_cell_size_px) {
+    if (!renderer || grid_cell_size_px <= 0) {
+        return;
+    }
+
+    float mouse_x = 0.0f;
+    float mouse_y = 0.0f;
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    const SDL_FPoint mouse_world = cam.screen_to_map(SDL_Point{
+        static_cast<int>(std::lround(mouse_x)),
+        static_cast<int>(std::lround(mouse_y))});
+    if (!std::isfinite(mouse_world.x) || !std::isfinite(mouse_world.y)) {
+        return;
+    }
+
+    const int cell = std::max(1, grid_cell_size_px);
+    auto snap_axis = [cell](float value) -> int {
+        const long double ratio = static_cast<long double>(value) / static_cast<long double>(cell);
+        const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
+        return static_cast<int>(std::clamp<long long>(snapped, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
+    };
+    const SDL_Point center_world{snap_axis(mouse_world.x), snap_axis(mouse_world.y)};
+
+    constexpr int kGridPointSizePx = 2;
+    constexpr int kGridPointHalf = kGridPointSizePx / 2;
+    constexpr int kHighlightPointSizePx = 4;
+    constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
+
+    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+
+    auto [view_min_x, view_min_z, view_max_x, view_max_z] = cam.get_current_view().get_bounds();
+    const float view_world_w = std::max(1.0f, static_cast<float>(std::abs(view_max_x - view_min_x)));
+    const float view_world_h = std::max(1.0f, static_cast<float>(std::abs(view_max_z - view_min_z)));
+    const float base_view_span = std::min(view_world_w, view_world_h);
+    // Keep a stable on-screen footprint by basing radius on current visible world span.
+    const float radius_world = std::max(static_cast<float>(cell * 4), base_view_span * 0.11f);
+    const int radius_cells = std::max(4, static_cast<int>(std::ceil(radius_world / static_cast<float>(cell))));
+    const float radius_sq = radius_world * radius_world;
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int gy = -radius_cells; gy <= radius_cells; ++gy) {
+        for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
+            const float dx = static_cast<float>(gx * cell);
+            const float dy = static_cast<float>(gy * cell);
+            const float dist_sq = dx * dx + dy * dy;
+            if (dist_sq > radius_sq) {
+                continue;
+            }
+
+            const SDL_Point world_point{center_world.x + gx * cell, center_world.y + gy * cell};
+            SDL_FPoint screen_point{};
+            if (!project_room_world_point_to_floor_screen(cam, world_point, screen_point)) {
+                continue;
+            }
+
+            const float dist = std::sqrt(std::max(0.0f, dist_sq));
+            const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);
+            const Uint8 alpha = static_cast<Uint8>(std::lround(24.0f + (1.0f - edge_t) * 156.0f));
+            const bool is_cursor_intersection = (gx == 0 && gy == 0);
+            if (is_cursor_intersection) {
+                SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
+            } else {
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+            }
+
+            const int px = static_cast<int>(std::lround(screen_point.x));
+            const int py = static_cast<int>(std::lround(screen_point.y));
+            const SDL_FRect point_rect{
+                static_cast<float>(px - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
+                static_cast<float>(py - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
+                static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx),
+                static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx)};
+            SDL_RenderFillRect(renderer, &point_rect);
+        }
+    }
+
+    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
 }
 
 } // namespace
@@ -179,6 +350,7 @@ GridTileRenderer::GridTileRenderer(Assets* assets)
 
 void GridTileRenderer::invalidate_texture_cache() {
     texture_size_cache_.clear();
+    ground_tile_projection_cache().clear();
 }
 
 bool GridTileRenderer::fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size) {
@@ -233,7 +405,10 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
         return;
     }
 
-    maybe_prune_ground_tile_projection_cache();
+    static std::uint64_t frame_marker = 0;
+    ++frame_marker;
+
+    maybe_prune_ground_tile_projection_cache(frame_marker);
     auto& cache = ground_tile_projection_cache();
     const std::uint64_t camera_version = cam.camera_state_version();
     const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
@@ -244,12 +419,20 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
             continue;
         }
 
+        const std::uint64_t tile_revision = chunk->tile_texture_revision;
+        std::uint32_t tile_index = 0;
         for (const auto& tile : chunk->tiles) {
             if (!tile.texture || tile.world_rect.w <= 0 || tile.world_rect.h <= 0) {
+                ++tile_index;
                 continue;
             }
 
-            const void* tile_key = static_cast<const void*>(&tile);
+            const GroundTileCacheKey tile_key{
+                chunk->i,
+                chunk->j,
+                tile_revision,
+                tile_index
+            };
             auto it = cache.find(tile_key);
             const bool reuse =
                 it != cache.end() &&
@@ -265,6 +448,7 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
                 verts[1] = it->second.vertices[1];
                 verts[2] = it->second.vertices[2];
                 verts[3] = it->second.vertices[3];
+                it->second.last_touched_frame = frame_marker;
             } else {
                 SDL_Point tl{tile.world_rect.x, tile.world_rect.y};
                 SDL_Point tr{tile.world_rect.x + tile.world_rect.w, tile.world_rect.y};
@@ -286,6 +470,10 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
                 if (!fetch_texture_size(tile.texture, tex_size)) {
                     continue;
                 }
+                const float inv_w = (tex_size.x > 0.0f) ? (1.0f / tex_size.x) : 0.0f;
+                const float inv_h = (tex_size.y > 0.0f) ? (1.0f / tex_size.y) : 0.0f;
+                const float pad_x = std::clamp(0.5f * inv_w, 0.0f, 0.49f);
+                const float pad_y = std::clamp(0.5f * inv_h, 0.0f, 0.49f);
 
                 verts[0].position = points[0];
                 verts[1].position = points[1];
@@ -294,16 +482,17 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
                 for (auto& v : verts) {
                     v.color = white;
                 }
-                verts[0].tex_coord = SDL_FPoint{0.0f, 0.0f};
-                verts[1].tex_coord = SDL_FPoint{tex_size.x, 0.0f};
-                verts[2].tex_coord = SDL_FPoint{tex_size.x, tex_size.y};
-                verts[3].tex_coord = SDL_FPoint{0.0f, tex_size.y};
+                verts[0].tex_coord = SDL_FPoint{pad_x, pad_y};
+                verts[1].tex_coord = SDL_FPoint{1.0f - pad_x, pad_y};
+                verts[2].tex_coord = SDL_FPoint{1.0f - pad_x, 1.0f - pad_y};
+                verts[3].tex_coord = SDL_FPoint{pad_x, 1.0f - pad_y};
 
                 auto& entry = cache[tile_key];
                 entry.renderer = renderer;
                 entry.texture = tile.texture;
                 entry.world_rect = tile.world_rect;
                 entry.camera_state_version = camera_version;
+                entry.last_touched_frame = frame_marker;
                 entry.vertices[0] = verts[0];
                 entry.vertices[1] = verts[1];
                 entry.vertices[2] = verts[2];
@@ -314,15 +503,18 @@ void GridTileRenderer::render(SDL_Renderer* renderer,
             if (batcher) {
                 batcher->addQuad(tile.texture, verts, indices, SDL_BLENDMODE_BLEND, 1000000.0);
             } else {
-                SDL_RenderGeometry(renderer, tile.texture, verts, 4, indices, 6);
+                render_diagnostics::render_geometry(renderer, tile.texture, verts, 4, indices, 6);
             }
+            ++tile_index;
         }
     }
 }
 
 FloorComposer::FloorComposer(SDL_Renderer* renderer, Assets* assets)
     : renderer_(renderer),
-      tile_renderer_(assets) {}
+      assets_(assets),
+      tile_renderer_(assets),
+      gpu_light_field_processor_(renderer) {}
 
 FloorComposer::~FloorComposer() {
     destroy_owned_textures();
@@ -332,6 +524,7 @@ void FloorComposer::destroy_owned_textures() {
     destroy_texture(floor_base_texture_);
     destroy_texture(floor_light_mask_texture_);
     destroy_texture(floor_light_falloff_texture_);
+    destroy_texture(floor_overlay_texture_);
 }
 
 void FloorComposer::set_output_dimensions(int screen_width, int screen_height) {
@@ -345,6 +538,7 @@ void FloorComposer::set_output_dimensions(int screen_width, int screen_height) {
     screen_height_ = safe_h;
     destroy_texture(floor_base_texture_);
     destroy_texture(floor_light_mask_texture_);
+    destroy_texture(floor_overlay_texture_);
 }
 
 bool FloorComposer::ensure_sized_target(SDL_Texture*& texture) {
@@ -363,11 +557,11 @@ bool FloorComposer::ensure_sized_target(SDL_Texture*& texture) {
         destroy_texture(texture);
     }
 
-    texture = SDL_CreateTexture(renderer_,
-                                SDL_PIXELFORMAT_RGBA8888,
-                                SDL_TEXTUREACCESS_TARGET,
-                                screen_width_,
-                                screen_height_);
+    texture = render_diagnostics::create_texture(renderer_,
+                                                 SDL_PIXELFORMAT_RGBA8888,
+                                                 SDL_TEXTUREACCESS_TARGET,
+                                                 screen_width_,
+                                                 screen_height_);
     if (!texture) {
         return false;
     }
@@ -379,7 +573,9 @@ void FloorComposer::clear_target(SDL_Texture* texture) {
     if (!renderer_ || !texture) {
         return;
     }
-    SDL_SetRenderTarget(renderer_, texture);
+    if (!render_diagnostics::set_render_target(renderer_, texture)) {
+        return;
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
     SDL_RenderClear(renderer_);
@@ -419,11 +615,11 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
     }
 
     constexpr int kTextureSize = 192;
-    SDL_Texture* texture = SDL_CreateTexture(renderer_,
-                                             SDL_PIXELFORMAT_RGBA8888,
-                                             SDL_TEXTUREACCESS_STREAMING,
-                                             kTextureSize,
-                                             kTextureSize);
+    SDL_Texture* texture = render_diagnostics::create_texture(renderer_,
+                                                              SDL_PIXELFORMAT_RGBA8888,
+                                                              SDL_TEXTUREACCESS_STREAMING,
+                                                              kTextureSize,
+                                                              kTextureSize);
     if (!texture) {
         return nullptr;
     }
@@ -431,7 +627,7 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
     void* pixels = nullptr;
     int pitch = 0;
     if (!SDL_LockTexture(texture, nullptr, &pixels, &pitch) || !pixels || pitch <= 0) {
-        SDL_DestroyTexture(texture);
+        render_diagnostics::destroy_texture(texture);
         return nullptr;
     }
 
@@ -439,7 +635,7 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
     const SDL_PixelFormatDetails* pixel_format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_RGBA8888);
     if (!pixel_format) {
         SDL_UnlockTexture(texture);
-        SDL_DestroyTexture(texture);
+        render_diagnostics::destroy_texture(texture);
         return nullptr;
     }
 
@@ -468,14 +664,18 @@ SDL_Texture* FloorComposer::ensure_floor_light_falloff_texture() {
     return floor_light_falloff_texture_;
 }
 
-SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
-                                    const world::WorldGrid& grid,
-                                    const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-                                    bool runtime_lighting_enabled,
-                                    double max_cull_depth,
-                                    SDL_Color clear_color,
-                                    bool render_floor_tiles) {
-    if (!renderer_ || !ensure_sized_target(floor_base_texture_) || !ensure_sized_target(floor_light_mask_texture_)) {
+SDL_Texture* FloorComposer::compose_gpu(const WarpedScreenGrid& cam,
+                                        const world::WorldGrid& grid,
+                                        const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                                        bool runtime_lighting_enabled,
+                                        double max_cull_depth,
+                                        SDL_Color clear_color,
+                                        bool render_floor_tiles) {
+    has_floor_dark_mask_ = false;
+    if (!renderer_ ||
+        !ensure_sized_target(floor_base_texture_) ||
+        !ensure_sized_target(floor_light_mask_texture_) ||
+        !ensure_sized_target(floor_overlay_texture_)) {
         return nullptr;
     }
 
@@ -485,7 +685,9 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
     SDL_Rect floor_clip{0, floor_top, screen_width_, floor_height};
 
     clear_target(floor_base_texture_);
-    SDL_SetRenderTarget(renderer_, floor_base_texture_);
+    if (!render_diagnostics::set_render_target(renderer_, floor_base_texture_)) {
+        return nullptr;
+    }
     if (floor_height > 0) {
         SDL_SetRenderClipRect(renderer_, &floor_clip);
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -498,12 +700,169 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
         SDL_SetRenderClipRect(renderer_, nullptr);
     }
 
+    clear_target(floor_overlay_texture_);
+    if (render_diagnostics::set_render_target(renderer_, floor_overlay_texture_)) {
+        if (floor_height > 0) {
+            SDL_SetRenderClipRect(renderer_, &floor_clip);
+            if (assets_ && assets_->is_dev_mode()) {
+                draw_room_and_trail_geometry_overlay(renderer_, cam, assets_->rooms());
+                if (assets_->dev_grid_overlay_enabled()) {
+                    draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
+                }
+            }
+            SDL_SetRenderClipRect(renderer_, nullptr);
+        }
+    }
+
+    if (!runtime_lighting_enabled) {
+        return floor_base_texture_;
+    }
+
+    std::vector<LayerEffectProcessor::GpuRadialLight> gpu_lights;
+    gpu_lights.reserve(runtime_lights.size());
+    const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth));
+    for (const auto& light : runtime_lights) {
+        if (!light.has_floor_projection ||
+            !std::isfinite(light.floor_world_x) ||
+            !std::isfinite(light.floor_world_z) ||
+            !std::isfinite(light.world_height) ||
+            !std::isfinite(light.floor_screen_center.x) ||
+            !std::isfinite(light.floor_screen_center.y)) {
+            continue;
+        }
+
+        const float abs_depth = std::fabs(light.world_z);
+        if (abs_depth > floor_light_cull_depth) {
+            continue;
+        }
+
+        const render_internal::FloorLightContact contact =
+            render_internal::resolve_floor_light_contact(light.floor_world_x,
+                                                         light.floor_world_z,
+                                                         light.floor_world_x,
+                                                         light.floor_world_z,
+                                                         light.world_height);
+        if (!contact.valid) {
+            continue;
+        }
+
+        const float radius_world = std::max(1.0f, light.radius_world > 0.0f ? light.radius_world : light.radius_px);
+        const float height_weight = render_internal::floor_light_height_weight(contact.world_height, radius_world);
+        const float height_spread = render_internal::floor_light_height_spread_scale(contact.world_height, radius_world);
+
+        float radius_x_px = 0.0f;
+        float radius_y_px = 0.0f;
+        if (!render_internal::sample_floor_light_footprint_axes_px(cam,
+                                                                   contact,
+                                                                   light.floor_screen_center,
+                                                                   radius_world,
+                                                                   height_spread,
+                                                                   radius_x_px,
+                                                                   radius_y_px)) {
+            continue;
+        }
+
+        const float depth_weight = render_internal::floor_light_depth_weight(abs_depth, floor_light_cull_depth);
+        const float opacity = std::clamp(light.opacity > 0.0f ? light.opacity : 1.0f, 0.0f, 1.0f);
+        const float effective_intensity = light.intensity * depth_weight * height_weight;
+        if (!std::isfinite(effective_intensity) || effective_intensity < 0.02f) {
+            continue;
+        }
+
+        LayerEffectProcessor::GpuRadialLight draw{};
+        draw.center = light.floor_screen_center;
+        draw.color = light.color;
+        draw.radius_x_px = std::max(1.0f, radius_x_px);
+        draw.radius_y_px = std::max(1.0f, radius_y_px);
+        draw.intensity = effective_intensity;
+        draw.opacity = opacity;
+        draw.falloff = std::max(0.05f, light.falloff);
+        gpu_lights.push_back(draw);
+    }
+
+    if (!gpu_light_field_processor_.render_gpu_light_field(floor_light_mask_texture_,
+                                                           SDL_Color{36, 38, 42, 255},
+                                                           gpu_lights,
+                                                           SDL_BLENDMODE_ADD)) {
+        return floor_base_texture_;
+    }
+
+    if (floor_top > 0) {
+        if (!render_diagnostics::set_render_target(renderer_, floor_light_mask_texture_)) {
+            return floor_base_texture_;
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
+        SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
+        const SDL_FRect top_rect{
+            0.0f,
+            0.0f,
+            static_cast<float>(screen_width_),
+            static_cast<float>(floor_top)};
+        SDL_RenderFillRect(renderer_, &top_rect);
+    }
+
+    has_floor_dark_mask_ = true;
+    return floor_base_texture_;
+}
+
+SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
+                                    const world::WorldGrid& grid,
+                                    const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                                    bool runtime_lighting_enabled,
+                                    double max_cull_depth,
+                                    SDL_Color clear_color,
+                                    bool render_floor_tiles) {
+    has_floor_dark_mask_ = false;
+    if (!renderer_ ||
+        !ensure_sized_target(floor_base_texture_) ||
+        !ensure_sized_target(floor_light_mask_texture_) ||
+        !ensure_sized_target(floor_overlay_texture_)) {
+        return nullptr;
+    }
+
+    const float horizon_y = compute_horizon_screen_y(cam);
+    const int floor_top = std::clamp(static_cast<int>(std::floor(horizon_y)), 0, screen_height_);
+    const int floor_height = std::max(0, screen_height_ - floor_top);
+    SDL_Rect floor_clip{0, floor_top, screen_width_, floor_height};
+
+    clear_target(floor_base_texture_);
+    if (!render_diagnostics::set_render_target(renderer_, floor_base_texture_)) {
+        return nullptr;
+    }
+    if (floor_height > 0) {
+        SDL_SetRenderClipRect(renderer_, &floor_clip);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer_, clear_color.r, clear_color.g, clear_color.b, 255);
+        const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
+        SDL_RenderFillRect(renderer_, &full_rect);
+        if (render_floor_tiles) {
+            tile_renderer_.render(renderer_, cam, grid, nullptr);
+        }
+        SDL_SetRenderClipRect(renderer_, nullptr);
+    }
+
+    clear_target(floor_overlay_texture_);
+    if (render_diagnostics::set_render_target(renderer_, floor_overlay_texture_)) {
+        if (floor_height > 0) {
+            SDL_SetRenderClipRect(renderer_, &floor_clip);
+            if (assets_ && assets_->is_dev_mode()) {
+                draw_room_and_trail_geometry_overlay(renderer_, cam, assets_->rooms());
+                if (assets_->dev_grid_overlay_enabled()) {
+                    draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
+                }
+            }
+            SDL_SetRenderClipRect(renderer_, nullptr);
+        }
+    }
+
     if (!runtime_lighting_enabled) {
         return floor_base_texture_;
     }
 
     clear_target(floor_light_mask_texture_);
-    SDL_SetRenderTarget(renderer_, floor_light_mask_texture_);
+    if (!render_diagnostics::set_render_target(renderer_, floor_light_mask_texture_)) {
+        return floor_base_texture_;
+    }
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     if (floor_height > 0) {
         SDL_SetRenderClipRect(renderer_, &floor_clip);
@@ -511,7 +870,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
         const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(screen_width_), static_cast<float>(screen_height_)};
         SDL_RenderFillRect(renderer_, &full_rect);
 
-        const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth * 0.5));
+        const float floor_light_cull_depth = static_cast<float>(std::max(1.0, max_cull_depth));
         SDL_Texture* falloff_texture = ensure_floor_light_falloff_texture();
         if (falloff_texture) {
             SDL_SetTextureBlendMode(falloff_texture, SDL_BLENDMODE_ADD);
@@ -592,7 +951,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
                     radius_y_px * 2.0f
                 };
                 for (int pass = 0; pass < pass_count; ++pass) {
-                    SDL_RenderTexture(renderer_, falloff_texture, nullptr, &dst_rect);
+                    render_diagnostics::render_texture(renderer_, falloff_texture, nullptr, &dst_rect);
                 }
             }
 
@@ -602,12 +961,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
 
         SDL_SetRenderClipRect(renderer_, nullptr);
     }
-
-    SDL_SetRenderTarget(renderer_, floor_base_texture_);
-    SDL_SetTextureBlendMode(floor_light_mask_texture_, SDL_BLENDMODE_MOD);
-    SDL_SetTextureAlphaMod(floor_light_mask_texture_, 255);
-    SDL_SetTextureColorMod(floor_light_mask_texture_, 255, 255, 255);
-    SDL_RenderTexture(renderer_, floor_light_mask_texture_, nullptr, nullptr);
+    has_floor_dark_mask_ = true;
 
     return floor_base_texture_;
 }

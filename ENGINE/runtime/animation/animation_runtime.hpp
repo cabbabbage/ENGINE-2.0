@@ -16,6 +16,7 @@
 #include "get_best_path.hpp"
 #include "get_best_path_3d.hpp"
 #include "movement_plan_executor.hpp"
+#include "animation_update.hpp"
 #include "gameplay/world/grid_point.hpp"
 
 namespace vibble::grid {
@@ -49,8 +50,16 @@ public:
     std::size_t path_index_for(const std::string& anim_id) const;
 
     vibble::grid::Grid& grid() const;
-    bool path_blocked(const world::GridPoint& from, const world::GridPoint& to, const Asset* ignored, std::vector<const Asset*>* blockers = nullptr) const;
-    bool path_blocked(SDL_Point from, SDL_Point to, const Asset* ignored, std::vector<const Asset*>* blockers = nullptr) const;
+    bool path_blocked(const world::GridPoint& from,
+                      const world::GridPoint& to,
+                      const Asset* ignored,
+                      std::vector<const Asset*>* blockers = nullptr,
+                      const animation_update::detail::PathBlockingContext& context = {}) const;
+    bool path_blocked(SDL_Point from,
+                      SDL_Point to,
+                      const Asset* ignored,
+                      std::vector<const Asset*>* blockers = nullptr,
+                      const animation_update::detail::PathBlockingContext& context = {}) const;
     bool handle_blocked_path(const world::GridPoint& from, const world::GridPoint& to, const std::vector<const Asset*>& blockers);
     bool handle_blocked_path(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     void mark_progress_toward_checkpoints();
@@ -67,6 +76,8 @@ public:
     void set_debug_enabled(bool enabled);
 
     bool has_active_plan() const;
+    bool auto_attack_commitment_active() const;
+    bool maybe_trigger_attack_on_cycle_boundary();
 
 private:
     int        effective_grid_resolution(std::optional<int> override_resolution) const;
@@ -82,6 +93,8 @@ private:
     bool       replan_to_destination();
     bool       replan_to_destination_3d();
     bool       consume_replan_attempt_budget();
+    animation_update::detail::PathBlockingContext active_path_blocking_context() const;
+    bool       committed_attack_execution_active() const;
     float      parent_world_z() const;
 
     void       apply_pending_move();
@@ -90,6 +103,15 @@ private:
     void       activate_reverse_playback(ReversePlaybackMode mode);
     AnimationFrame* last_frame_for(const Animation& anim, std::size_t path_index) const;
     bool       reverse_mode_applies_to_current_animation() const;
+    bool       attacking_enabled_for_self() const;
+    std::vector<std::string> attack_animation_candidates() const;
+    std::vector<Asset*> attack_candidate_targets() const;
+    std::uint32_t resolve_frame_id_for_cooldown();
+    bool attacking_enabled_for_active_plan() const;
+    Asset* resolve_asset_by_stable_id(const std::string& stable_id) const;
+    bool current_animation_is_attack() const;
+    void dispatch_active_attack_payload();
+    void clear_attack_commitment();
 
 private:
     friend class MovementPlanExecutor;
@@ -119,6 +141,22 @@ private:
     std::uint32_t replan_budget_frame_id_ = 0;
     int replan_attempts_this_frame_ = 0;
     static constexpr int kMaxReplanAttemptsPerFrame = 3;
+    std::uint32_t local_runtime_frame_id_ = 0;
+    std::uint32_t next_attack_cycle_eval_frame_ = 0;
+    static constexpr std::uint32_t kAttackCycleDebounceFrames = 8;
+    std::optional<std::string> committed_attack_target_asset_id_ = std::nullopt;
+    std::string committed_attack_animation_id_{};
+    int committed_attack_last_dispatched_frame_index_ = -1;
+    std::string committed_attack_last_payload_id_{};
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }
 };
+
+namespace animation_runtime::test_hooks {
+
+int attack_facing_match_score(const std::vector<std::string>& animation_tags,
+                              const std::string& animation_id,
+                              int target_delta_x,
+                              int deadzone_px = 6);
+
+} // namespace animation_runtime::test_hooks

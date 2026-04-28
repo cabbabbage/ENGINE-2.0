@@ -190,9 +190,7 @@ void CameraUIPanel::sync_from_camera() {
     const auto& settings = cam.get_settings();
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
-    if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
-    if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
-    if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
+    sync_debug_controls_from_settings(settings);
     if (front_layer_light_strength_multiplier_slider_) {
         front_layer_light_strength_multiplier_slider_->set_value(settings.front_layer_light_strength_multiplier);
     }
@@ -215,6 +213,21 @@ void CameraUIPanel::sync_from_camera() {
 
     // Initialize the global camera height bounds used by DevCameraControls
     DevCameraHeightBounds::set(static_cast<double>(saved_min), static_cast<double>(saved_max));
+}
+
+void CameraUIPanel::sync_debug_controls_from_settings(const WarpedScreenGrid::RealismSettings& settings) {
+    if (max_cull_depth_slider_) max_cull_depth_slider_->set_value(settings.max_cull_depth);
+    if (dynamic_renderer_depth_efficiency_depth_slider_) {
+        dynamic_renderer_depth_efficiency_depth_slider_->set_range(0.0f, settings.max_cull_depth);
+        dynamic_renderer_depth_efficiency_depth_slider_->set_value(
+            settings.dynamic_renderer_depth_efficiency_depth);
+    }
+    if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
+        dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_value(
+            settings.dynamic_renderer_depth_efficiency_min_density_ratio);
+    }
+    if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
+    if (layer_depth_curve_slider_) layer_depth_curve_slider_->set_value(settings.layer_depth_curve);
 }
 
 void CameraUIPanel::build_ui() {
@@ -255,6 +268,28 @@ void CameraUIPanel::build_ui() {
     max_cull_depth_slider_ = std::make_unique<FloatSliderWidget>("Max Cull Depth", 1.0f, 50000.0f, 1.0f, defaults.max_cull_depth, 0);
     max_cull_depth_slider_->set_tooltip("Maximum depth considered for scene layers and light falloff. Higher values add distant detail but can increase rendering work.");
     max_cull_depth_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    dynamic_renderer_depth_efficiency_depth_slider_ = std::make_unique<FloatSliderWidget>(
+        "Dynamic Efficiency Depth",
+        0.0f,
+        std::max(1.0f, defaults.max_cull_depth),
+        1.0f,
+        defaults.dynamic_renderer_depth_efficiency_depth,
+        0);
+    dynamic_renderer_depth_efficiency_depth_slider_->set_tooltip(
+        "World depth where dynamic boundary thinning and animation freeze begin.");
+    dynamic_renderer_depth_efficiency_depth_slider_->set_on_value_changed(
+        [this](float) { on_control_value_changed(); });
+    dynamic_renderer_depth_efficiency_min_density_ratio_slider_ = std::make_unique<FloatSliderWidget>(
+        "Dynamic Efficiency Min Density",
+        0.0f,
+        1.0f,
+        0.01f,
+        defaults.dynamic_renderer_depth_efficiency_min_density_ratio,
+        2);
+    dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_tooltip(
+        "Relative spawn density floor at Max Cull Depth after distance-based thinning.");
+    dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_on_value_changed(
+        [this](float) { on_control_value_changed(); });
     layer_depth_interval_slider_ = std::make_unique<FloatSliderWidget>(
         "Layer Depth Interval",
         1.0f,
@@ -435,6 +470,12 @@ void CameraUIPanel::rebuild_rows() {
     if (debug_section_widget_) rows.push_back({ debug_section_widget_.get() });
     if (debug_section_expanded_) {
         if (max_cull_depth_slider_) rows.push_back({ max_cull_depth_slider_.get() });
+        if (dynamic_renderer_depth_efficiency_depth_slider_) {
+            rows.push_back({ dynamic_renderer_depth_efficiency_depth_slider_.get() });
+        }
+        if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
+            rows.push_back({ dynamic_renderer_depth_efficiency_min_density_ratio_slider_.get() });
+        }
         if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
         if (layer_depth_curve_slider_) rows.push_back({ layer_depth_curve_slider_.get() });
     }
@@ -459,6 +500,17 @@ void CameraUIPanel::apply_settings_if_needed() {
 
     if (min_render_size_slider_) updated.min_visible_screen_ratio = min_render_size_slider_->value();
     if (max_cull_depth_slider_) updated.max_cull_depth = max_cull_depth_slider_->value();
+    if (dynamic_renderer_depth_efficiency_depth_slider_) {
+        updated.dynamic_renderer_depth_efficiency_depth = std::clamp(
+            dynamic_renderer_depth_efficiency_depth_slider_->value(),
+            0.0f,
+            std::max(1.0f, updated.max_cull_depth));
+        dynamic_renderer_depth_efficiency_depth_slider_->set_range(0.0f, std::max(1.0f, updated.max_cull_depth));
+    }
+    if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
+        updated.dynamic_renderer_depth_efficiency_min_density_ratio =
+            dynamic_renderer_depth_efficiency_min_density_ratio_slider_->value();
+    }
     if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
     if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
     if (front_layer_light_strength_multiplier_slider_) {
@@ -477,6 +529,10 @@ void CameraUIPanel::apply_settings_if_needed() {
     const bool realism_changed =
         float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio) ||
         float_changed(updated.max_cull_depth, current.max_cull_depth) ||
+        float_changed(updated.dynamic_renderer_depth_efficiency_depth,
+                      current.dynamic_renderer_depth_efficiency_depth) ||
+        float_changed(updated.dynamic_renderer_depth_efficiency_min_density_ratio,
+                      current.dynamic_renderer_depth_efficiency_min_density_ratio) ||
         float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
         float_changed(updated.front_layer_light_strength_multiplier, current.front_layer_light_strength_multiplier) ||
@@ -530,6 +586,4 @@ void CameraUIPanel::apply_settings_if_needed() {
         dirty_callback_();
     }
 }
-
-
 

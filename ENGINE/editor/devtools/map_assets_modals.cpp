@@ -197,25 +197,7 @@ constexpr int kMapWidePositionJitterMin = 0;
 constexpr int kMapWidePositionJitterMax = 500;
 
 bool ensure_null_candidate_entry(json& entry) {
-    if (!entry.is_object()) return false;
-    auto it = entry.find("candidates");
-    if (it == entry.end() || !it->is_array()) {
-        entry["candidates"] = json::array();
-        it = entry.find("candidates");
-    }
-    if (it == entry.end() || !it->is_array()) {
-        return false;
-    }
-    for (const auto& candidate : *it) {
-        if (candidate_is_null_entry(candidate)) {
-            return false;
-        }
-    }
-    json null_candidate = json::object();
-    null_candidate["name"] = std::string{kNullCandidateName};
-    null_candidate["chance"] = 0;
-    it->push_back(std::move(null_candidate));
-    return true;
+    return vibble::spawn_group_codec::sanitize_spawn_group_candidates(entry);
 }
 
 bool is_pointer_or_wheel_event(const SDL_Event& e) {
@@ -634,10 +616,16 @@ private:
 
     void remove_candidate(int index) {
         if (!entry_ || index < 0) return;
+        ensure_null_candidate_entry(*entry_);
         auto& candidates = (*entry_)["candidates"];
         if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) return;
+        if (vibble::spawn_group_codec::is_null_candidate_entry(
+                candidates[static_cast<std::size_t>(index)])) {
+            return;
+        }
         auto it = candidates.begin() + static_cast<json::difference_type>(index);
         candidates.erase(it);
+        ensure_null_candidate_entry(*entry_);
         notify_save(true);
     }
 
@@ -807,6 +795,7 @@ public:
         pending_rebuild_ = false;
         pending_sync_ = false;
         pending_sync_spawn_id_.reset();
+        pending_remove_spawn_id_.reset();
         pie_callback_depth_ = 0;
 
         if (!ownership_label_.empty()) {
@@ -1151,7 +1140,7 @@ private:
             group.remove_button = std::make_unique<DMButton>("Remove", &DMStyles::WarnButton(), 90, DMButton::height());
             group.remove_button_widget = std::make_unique<ButtonWidget>(
                 group.remove_button.get(),
-                [this, spawn_id = group.spawn_id]() { this->remove_group(spawn_id); });
+                [this, spawn_id = group.spawn_id]() { this->queue_remove_group(spawn_id); });
 
             rows.push_back({group.resolution_widget.get(), group.remove_button_widget.get()});
             rows.push_back({group.jitter_widget.get()});
@@ -1272,6 +1261,13 @@ private:
         }
     }
 
+    void queue_remove_group(const std::string& spawn_id) {
+        if (spawn_id.empty()) {
+            return;
+        }
+        pending_remove_spawn_id_ = spawn_id;
+    }
+
     void update_group_resolution(const std::string& spawn_id, int parsed_value) {
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
@@ -1342,10 +1338,16 @@ private:
         PieCallbackGuard guard(this);
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry || index < 0) return;
+        ensure_null_candidate_entry(*entry);
         auto& candidates = (*entry)["candidates"];
         if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) return;
+        if (vibble::spawn_group_codec::is_null_candidate_entry(
+                candidates[static_cast<std::size_t>(index)])) {
+            return;
+        }
         auto it = candidates.begin() + static_cast<json::difference_type>(index);
         candidates.erase(it);
+        ensure_null_candidate_entry(*entry);
         notify_save(false, &spawn_id);
     }
 
@@ -1377,25 +1379,8 @@ private:
             }
         }
 
-        bool has_non_null_candidate = false;
-        std::vector<size_t> null_indices;
-        for (size_t i = 0; i < candidates.size(); ++i) {
-            std::string name = trim_copy(candidate_name_from_json(candidates[i]));
-            if (is_null_candidate_name(name)) {
-                null_indices.push_back(i);
-            } else if (!name.empty()) {
-                has_non_null_candidate = true;
-            }
-        }
-
-        if (!has_non_null_candidate && !null_indices.empty()) {
-            candidates[null_indices.front()] = candidate;
-            for (size_t i = 1; i < null_indices.size(); ++i) {
-                candidates[null_indices[i]] = json::object({{"name", "null"}, {"chance", 0}});
-            }
-        } else {
-            candidates.push_back(std::move(candidate));
-        }
+        candidates.push_back(std::move(candidate));
+        ensure_null_candidate_entry(*entry);
         notify_save(false, &spawn_id);
     }
 
@@ -1460,8 +1445,15 @@ private:
     bool pending_rebuild_ = false;
     bool pending_sync_ = false;
     std::optional<std::string> pending_sync_spawn_id_{};
+    std::optional<std::string> pending_remove_spawn_id_{};
 
     void apply_pending_refresh() {
+        if (pending_remove_spawn_id_ && !pending_remove_spawn_id_->empty()) {
+            const std::string spawn_id = *pending_remove_spawn_id_;
+            pending_remove_spawn_id_.reset();
+            remove_group(spawn_id);
+            return;
+        }
         if (pending_rebuild_) {
             pending_rebuild_ = false;
             pending_sync_ = false;

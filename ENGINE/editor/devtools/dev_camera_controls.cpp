@@ -134,8 +134,12 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
         pan_drag_pending_ = false;
     }
 
-    if (pan_blocked && !panning_) {
+    if (pan_blocked) {
+        panning_ = false;
+        tilting_ = false;
         pan_drag_pending_ = false;
+        has_last_pan_center_ = false;
+        pan_start_world_point_ = std::nullopt;
     }
 
     if (tilting_) {

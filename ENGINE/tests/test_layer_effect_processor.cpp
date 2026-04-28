@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "rendering/render/layer_effect_processor.hpp"
+#include "rendering/render/layer_stack_renderer.hpp"
+#include "rendering/render/render_pipeline_types.hpp"
 
 namespace {
 
@@ -291,6 +293,18 @@ bool supports_sum_blend() {
         SDL_BLENDFACTOR_ONE,
         SDL_BLENDOPERATION_ADD);
     return sum != SDL_BLENDMODE_INVALID;
+}
+
+render_pipeline::GeometryLayerDrawItem make_fullscreen_draw(SDL_Texture* texture, float width, float height) {
+    render_pipeline::GeometryLayerDrawItem draw{};
+    draw.texture = texture;
+    draw.blend_mode = SDL_BLENDMODE_BLEND;
+    const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
+    draw.vertices[0] = SDL_Vertex{SDL_FPoint{0.0f, 0.0f}, white, SDL_FPoint{0.0f, 0.0f}};
+    draw.vertices[1] = SDL_Vertex{SDL_FPoint{width, 0.0f}, white, SDL_FPoint{1.0f, 0.0f}};
+    draw.vertices[2] = SDL_Vertex{SDL_FPoint{width, height}, white, SDL_FPoint{1.0f, 1.0f}};
+    draw.vertices[3] = SDL_Vertex{SDL_FPoint{0.0f, height}, white, SDL_FPoint{0.0f, 1.0f}};
+    return draw;
 }
 
 } // namespace
@@ -688,3 +702,340 @@ TEST_CASE("LayerEffectProcessor applies lighting") {
     SDL_DestroyTexture(base);
 }
 
+TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(32, 32);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 1;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0};
+    build.layers.resize(1);
+    build.layers[0].depth_min = -4.0;
+    build.layers[0].depth_max = 4.0;
+    build.layers[0].representative_depth = 0.0;
+    build.layers[0].bounds_min_x = 8.0f;
+    build.layers[0].bounds_min_y = 8.0f;
+    build.layers[0].bounds_max_x = 24.0f;
+    build.layers[0].bounds_max_y = 24.0f;
+
+    LayerEffectProcessor::RuntimeLight frame_one_light{};
+    frame_one_light.stable_light_id = 42;
+    frame_one_light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    frame_one_light.intensity = 1.0f;
+    frame_one_light.radius_px = 12.0f;
+    frame_one_light.world_z = 0.0f;
+
+    const render_pipeline::LayerRenderResult frame_one = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{frame_one_light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(frame_one.valid);
+    REQUIRE(frame_one.owning_body_lights.size() == 1);
+    CHECK(frame_one.owning_body_lights[0].size() == 1);
+
+    LayerEffectProcessor::RuntimeLight frame_two_light = frame_one_light;
+    frame_two_light.screen_center = SDL_FPoint{34.0f, 16.0f};
+    frame_two_light.radius_px = 8.0f;
+
+    const render_pipeline::LayerRenderResult frame_two_same_id = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(frame_two_same_id.valid);
+    REQUIRE(frame_two_same_id.owning_body_lights.size() == 1);
+    CHECK(frame_two_same_id.owning_body_lights[0].empty());
+
+    LayerEffectProcessor::RuntimeLight frame_two_changed_id = frame_two_light;
+    frame_two_changed_id.stable_light_id = 4242;
+
+    const render_pipeline::LayerRenderResult frame_two_new_id = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_changed_id},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(frame_two_new_id.valid);
+    REQUIRE(frame_two_new_id.owning_body_lights.size() == 1);
+    CHECK(frame_two_new_id.owning_body_lights[0].empty());
+}
+
+TEST_CASE("LayerStackRenderer light assignment is invariant to player_layer_index changes") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(32, 32);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 2;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0, 1};
+    build.layers.resize(2);
+    build.layers[0].depth_min = -4.0;
+    build.layers[0].depth_max = 4.0;
+    build.layers[0].representative_depth = 0.0;
+    build.layers[0].bounds_min_x = 4.0f;
+    build.layers[0].bounds_min_y = 4.0f;
+    build.layers[0].bounds_max_x = 28.0f;
+    build.layers[0].bounds_max_y = 28.0f;
+    build.layers[1].depth_min = 15.0;
+    build.layers[1].depth_max = 25.0;
+    build.layers[1].representative_depth = 20.0;
+    build.layers[1].bounds_min_x = 4.0f;
+    build.layers[1].bounds_min_y = 4.0f;
+    build.layers[1].bounds_max_x = 28.0f;
+    build.layers[1].bounds_max_y = 28.0f;
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.stable_light_id = 123;
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.intensity = 1.0f;
+    light.radius_px = 8.0f;
+    light.radius_world = 6.0f;
+    light.world_z = 3.0f;
+
+    const render_pipeline::LayerRenderResult player_front = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(player_front.valid);
+    REQUIRE(player_front.owning_body_lights.size() == 2);
+
+    build.player_layer_index = 1;
+    const render_pipeline::LayerRenderResult player_back = stack_renderer.render(
+        build,
+        std::vector<LayerEffectProcessor::RuntimeLight>{light},
+        false,
+        1.0f,
+        1.0f);
+    REQUIRE(player_back.valid);
+    REQUIRE(player_back.owning_body_lights.size() == 2);
+
+    CHECK(player_front.owning_body_lights[0].size() == player_back.owning_body_lights[0].size());
+    CHECK(player_front.owning_body_lights[1].size() == player_back.owning_body_lights[1].size());
+}
+
+TEST_CASE("LayerStackRenderer applies front multiplier for screen-overlapping lights in front of layer depth") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 32;
+    constexpr int kH = 32;
+    SDL_Texture* sprite = create_target_texture(renderer, kW, kH);
+    REQUIRE(sprite != nullptr);
+    REQUIRE(clear_texture(renderer, sprite, SDL_Color{168, 168, 168, 255}));
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(kW, kH);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 1;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0};
+    build.layers.resize(1);
+    build.layers[0].depth_min = 100.0;
+    build.layers[0].depth_max = 120.0;
+    build.layers[0].representative_depth = 110.0;
+    build.layers[0].bounds_min_x = 0.0f;
+    build.layers[0].bounds_min_y = 0.0f;
+    build.layers[0].bounds_max_x = static_cast<float>(kW);
+    build.layers[0].bounds_max_y = static_cast<float>(kH);
+    build.layers[0].draws.push_back(make_fullscreen_draw(sprite, static_cast<float>(kW), static_cast<float>(kH)));
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.color = SDL_Color{255, 255, 255, 255};
+    light.intensity = 0.65f;
+    light.radius_px = 12.0f;
+    light.radius_world = 8.0f;
+    light.falloff = 1.5f;
+    light.world_z = 0.0f;
+
+    std::uint64_t light_id = 1;
+    auto sample_luminance = [&](float front_multiplier, float behind_multiplier) -> int {
+        LayerEffectProcessor::RuntimeLight sampled = light;
+        sampled.stable_light_id = light_id++;
+        const render_pipeline::LayerRenderResult rendered = stack_renderer.render(
+            build,
+            std::vector<LayerEffectProcessor::RuntimeLight>{sampled},
+            true,
+            front_multiplier,
+            behind_multiplier);
+        REQUIRE(rendered.valid);
+        REQUIRE(rendered.final_layer_textures.size() == 1);
+        SDL_Color center{};
+        REQUIRE(read_pixel(renderer, rendered.final_layer_textures[0], 16, 16, center));
+        return luminance_u8(center);
+    };
+
+    const int low_front = sample_luminance(0.10f, 0.20f);
+    const int high_front = sample_luminance(2.00f, 0.20f);
+    CHECK(high_front > low_front + 8);
+
+    SDL_DestroyTexture(sprite);
+}
+
+TEST_CASE("LayerStackRenderer applies behind multiplier for screen-overlapping lights behind layer depth") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 32;
+    constexpr int kH = 32;
+    SDL_Texture* sprite = create_target_texture(renderer, kW, kH);
+    REQUIRE(sprite != nullptr);
+    REQUIRE(clear_texture(renderer, sprite, SDL_Color{168, 168, 168, 255}));
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(kW, kH);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 1;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0};
+    build.layers.resize(1);
+    build.layers[0].depth_min = -130.0;
+    build.layers[0].depth_max = -100.0;
+    build.layers[0].representative_depth = -115.0;
+    build.layers[0].bounds_min_x = 0.0f;
+    build.layers[0].bounds_min_y = 0.0f;
+    build.layers[0].bounds_max_x = static_cast<float>(kW);
+    build.layers[0].bounds_max_y = static_cast<float>(kH);
+    build.layers[0].draws.push_back(make_fullscreen_draw(sprite, static_cast<float>(kW), static_cast<float>(kH)));
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.color = SDL_Color{255, 255, 255, 255};
+    light.intensity = 0.65f;
+    light.radius_px = 12.0f;
+    light.radius_world = 8.0f;
+    light.falloff = 1.5f;
+    light.world_z = 220.0f;
+
+    std::uint64_t light_id = 11;
+    auto sample_luminance = [&](float front_multiplier, float behind_multiplier) -> int {
+        LayerEffectProcessor::RuntimeLight sampled = light;
+        sampled.stable_light_id = light_id++;
+        const render_pipeline::LayerRenderResult rendered = stack_renderer.render(
+            build,
+            std::vector<LayerEffectProcessor::RuntimeLight>{sampled},
+            true,
+            front_multiplier,
+            behind_multiplier);
+        REQUIRE(rendered.valid);
+        REQUIRE(rendered.final_layer_textures.size() == 1);
+        SDL_Color center{};
+        REQUIRE(read_pixel(renderer, rendered.final_layer_textures[0], 16, 16, center));
+        return luminance_u8(center);
+    };
+
+    const int low_behind = sample_luminance(0.20f, 0.10f);
+    const int high_behind = sample_luminance(0.20f, 2.00f);
+    CHECK(high_behind > low_behind + 8);
+
+    SDL_DestroyTexture(sprite);
+}
+
+TEST_CASE("LayerStackRenderer equal-depth lights use front multiplier") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+    if (!supports_alpha_preserving_pipeline_blends()) {
+        return;
+    }
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    REQUIRE(renderer != nullptr);
+
+    constexpr int kW = 32;
+    constexpr int kH = 32;
+    SDL_Texture* sprite = create_target_texture(renderer, kW, kH);
+    REQUIRE(sprite != nullptr);
+    REQUIRE(clear_texture(renderer, sprite, SDL_Color{168, 168, 168, 255}));
+
+    LayerStackRenderer stack_renderer(renderer);
+    stack_renderer.set_output_dimensions(kW, kH);
+
+    render_pipeline::LayerBuildResult build{};
+    build.valid = true;
+    build.layer_count = 1;
+    build.player_layer_index = 0;
+    build.non_empty_layers = {0};
+    build.layers.resize(1);
+    build.layers[0].depth_min = 100.0;
+    build.layers[0].depth_max = 120.0;
+    build.layers[0].representative_depth = 110.0;
+    build.layers[0].bounds_min_x = 0.0f;
+    build.layers[0].bounds_min_y = 0.0f;
+    build.layers[0].bounds_max_x = static_cast<float>(kW);
+    build.layers[0].bounds_max_y = static_cast<float>(kH);
+    build.layers[0].draws.push_back(make_fullscreen_draw(sprite, static_cast<float>(kW), static_cast<float>(kH)));
+
+    LayerEffectProcessor::RuntimeLight light{};
+    light.screen_center = SDL_FPoint{16.0f, 16.0f};
+    light.color = SDL_Color{255, 255, 255, 255};
+    light.intensity = 0.65f;
+    light.radius_px = 6.0f;
+    light.radius_world = 6.0f;
+    light.falloff = 1.5f;
+    light.world_z = 110.0f;
+
+    std::uint64_t light_id = 21;
+    auto sample_luminance = [&](float front_multiplier, float behind_multiplier) -> int {
+        LayerEffectProcessor::RuntimeLight sampled = light;
+        sampled.stable_light_id = light_id++;
+        const render_pipeline::LayerRenderResult rendered = stack_renderer.render(
+            build,
+            std::vector<LayerEffectProcessor::RuntimeLight>{sampled},
+            true,
+            front_multiplier,
+            behind_multiplier);
+        REQUIRE(rendered.valid);
+        REQUIRE(rendered.final_layer_textures.size() == 1);
+        SDL_Color center{};
+        REQUIRE(read_pixel(renderer, rendered.final_layer_textures[0], 16, 16, center));
+        return luminance_u8(center);
+    };
+
+    const int front_selected = sample_luminance(2.00f, 0.10f);
+    const int behind_selected = sample_luminance(0.10f, 2.00f);
+    CHECK(front_selected > behind_selected + 8);
+
+    SDL_DestroyTexture(sprite);
+}

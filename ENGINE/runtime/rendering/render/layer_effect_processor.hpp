@@ -3,12 +3,14 @@
 #include <SDL3/SDL.h>
 
 #include <array>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
 class LayerEffectProcessor {
 public:
     struct RuntimeLight {
+        std::uint64_t stable_light_id = 0;
         SDL_FPoint screen_center{0.0f, 0.0f};
         SDL_Color color{255, 255, 255, 255};
         float intensity = 0.0f;
@@ -38,6 +40,16 @@ public:
         bool lighting_applied = false;
     };
 
+    struct GpuRadialLight {
+        SDL_FPoint center{0.0f, 0.0f};
+        SDL_Color color{255, 255, 255, 255};
+        float radius_x_px = 0.0f;
+        float radius_y_px = 0.0f;
+        float intensity = 0.0f;
+        float opacity = 1.0f;
+        float falloff = 1.0f;
+    };
+
     explicit LayerEffectProcessor(SDL_Renderer* renderer = nullptr)
         : renderer_(renderer) {}
     ~LayerEffectProcessor();
@@ -64,6 +76,11 @@ public:
                                      const LayerLightingParams& lighting_params,
                                      const std::vector<RuntimeLight>& lights,
                                      const LayerScratchTextures& scratch_textures);
+
+    bool render_gpu_light_field(SDL_Texture* output_texture,
+                                SDL_Color ambient_color,
+                                const std::vector<GpuRadialLight>& lights,
+                                SDL_BlendMode blend_mode = SDL_BLENDMODE_ADD) const;
 
 private:
     struct BlurKernelCache {

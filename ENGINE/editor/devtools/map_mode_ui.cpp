@@ -11,6 +11,7 @@
 #include "map_layers_panel.hpp"
 #include "map_rooms_display.hpp"
 #include "config/room_config/room_configurator.hpp"
+#include "room_editor.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "SlidingWindowContainer.hpp"
 #include "core/AssetsManager.hpp"
@@ -351,6 +352,10 @@ DevFooterBar* MapModeUI::get_footer_bar() const {
     return footer_bar_.get();
 }
 
+void MapModeUI::set_room_editor(RoomEditor* room_editor) {
+    room_editor_ = room_editor;
+}
+
 void MapModeUI::collect_sliding_container_rects(std::vector<SDL_Rect>& out) const {
     auto append_container = [&out](const SlidingWindowContainer* container) {
         if (!container || !container->is_visible()) {
@@ -366,12 +371,6 @@ void MapModeUI::collect_sliding_container_rects(std::vector<SDL_Rect>& out) cons
     append_container(rooms_list_container_.get());
     append_container(layer_controls_container_.get());
 
-    if (room_configurator_ && room_configurator_->visible()) {
-        const SDL_Rect& rect = room_configurator_->panel_rect();
-        if (rect.w > 0 && rect.h > 0) {
-            out.push_back(rect);
-        }
-    }
 }
 
 SDL_Rect MapModeUI::sanitize_sliding_area(const SDL_Rect& bounds) const {
@@ -426,10 +425,6 @@ void MapModeUI::apply_sliding_area_bounds() {
         layers_panel_->set_embedded_bounds(left_bounds);
     }
 
-    if (room_configurator_) {
-        room_configurator_->set_work_area(work_area);
-        room_configurator_->set_bounds(right_bounds);
-    }
     if (room_config_container_) {
         room_config_container_->set_panel_bounds_override(right_bounds);
     }
@@ -722,7 +717,7 @@ void MapModeUI::ensure_panels() {
                     break;
             }
 
-            const bool room_config_open = room_configurator_ && room_configurator_->visible();
+            const bool room_config_open = room_editor_ && room_editor_->is_room_config_open();
             if (room_config_open) {
                 if (room_config_return_panel_ != desired_panel) {
                     room_config_return_panel_ = desired_panel;
@@ -820,7 +815,7 @@ void MapModeUI::ensure_panels() {
         });
     }
 
-    ensure_room_configurator();
+    close_legacy_room_config_if_visible("ensure_panels");
 
     if (!layers_preview_panel_) {
         layers_preview_panel_ = std::make_unique<MapLayersPreviewPanel>(kDefaultPanelX + 352, kDefaultPanelY + 48);
@@ -923,18 +918,6 @@ void MapModeUI::configure_footer_buttons() {
 };
             buttons.push_back(std::move(layers_btn));
         }
-
-        DevFooterBar::Button save_btn;
-        save_btn.id = "save";
-        save_btn.label = "Save";
-        save_btn.group = FooterButtonGroup::Actions;
-        save_btn.momentary = true;
-        save_btn.style_override = &DMStyles::SecondaryButton();
-        save_btn.active_style_override = &DMStyles::AccentButton();
-        save_btn.on_toggle = [this](bool) {
-            this->save_all_now(devmode::core::DevSaveCoordinator::Priority::Immediate);
-        };
-        buttons.push_back(std::move(save_btn));
 
         append_custom(room_mode_buttons_, HeaderMode::Room);
     }
@@ -1050,12 +1033,6 @@ void MapModeUI::update(const Input& input) {
         sync_footer_button_states();
     }
 
-    if (room_configurator_ && room_configurator_->visible()) {
-        room_configurator_->update(input, screen_w_, screen_h_);
-    }
-    if (room_config_container_ && room_config_container_->is_visible()) {
-        room_config_container_->update(input, screen_w_, screen_h_);
-    }
     if (rooms_list_container_ && rooms_list_container_->is_visible()) {
         rooms_list_container_->update(input, screen_w_, screen_h_);
     }
@@ -1091,9 +1068,6 @@ bool MapModeUI::handle_event(const SDL_Event& e) {
             default:
                 break;
         }
-    }
-    if (room_config_container_ && room_config_container_->is_visible() && room_config_container_->handle_event(e)) {
-        return true;
     }
     if (rooms_list_container_ && rooms_list_container_->is_visible() && rooms_list_container_->handle_event(e)) {
         return true;
@@ -1138,9 +1112,6 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
         if (panel->is_visible()) {
             panel->render(renderer);
         }
-    }
-    if (room_config_container_ && room_config_container_->is_visible()) {
-        room_config_container_->render(renderer, screen_w_, screen_h_);
     }
     if (rooms_list_container_ && rooms_list_container_->is_visible()) {
         rooms_list_container_->render(renderer, screen_w_, screen_h_);
@@ -1275,9 +1246,7 @@ void MapModeUI::show_sliding_panel(SlidingPanel panel, bool) {
 
     switch (panel) {
         case SlidingPanel::RoomConfig:
-            if (room_config_container_) {
-                room_config_container_->open();
-            }
+            // Room config is now owned by RoomEditor; keep map-mode container disabled.
             active_sliding_panel_ = SlidingPanel::RoomConfig;
             break;
         case SlidingPanel::RoomsList:
@@ -1300,102 +1269,53 @@ void MapModeUI::show_sliding_panel(SlidingPanel panel, bool) {
 }
 
 void MapModeUI::ensure_room_configurator() {
-    if (!room_configurator_) {
-        room_configurator_ = std::make_unique<RoomConfigurator>();
-    }
-    if (room_configurator_) {
-
-        room_configurator_->set_header_visibility_controller([this](bool visible) {
-            this->set_dev_sliding_headers_hidden(visible);
-        });
-        room_configurator_->set_on_close([this]() {
-            active_room_config_key_.clear();
-            if (rooms_display_) {
-                rooms_display_->refresh();
-            }
-            this->show_sliding_panel(room_config_return_panel_);
-        });
-        room_configurator_->set_blocks_editor_interactions(false);
-        room_configurator_->set_on_camera_changed([this](Room* room) {
-            if (assets_) {
-                if (!room || room == assets_->current_room()) {
-                    assets_->getView().set_manual_height_override(false);
-                    assets_->getView().set_manual_zoom_override(false);
-                    assets_->mark_camera_dirty();
-                }
-            }
-        });
-        room_configurator_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired) {
-            return this->rename_active_room(old_name, desired);
-        });
-    }
-    if (!room_config_container_) {
-        room_config_container_ = std::make_unique<SlidingWindowContainer>();
-        if (room_config_container_) {
-            room_config_container_->set_header_visible(true);
-            room_config_container_->set_scrollbar_visible(true);
-
-            room_config_container_->set_header_visibility_controller([this](bool visible) {
-                this->set_dev_sliding_headers_hidden(visible);
-            });
-            room_config_container_->set_blocks_editor_interactions(false);
-        }
-    }
-    if (room_config_container_) {
-        room_config_container_->set_close_button_enabled(true);
-    }
-    if (room_configurator_ && room_config_container_) {
-        room_configurator_->attach_container(room_config_container_.get());
-        apply_sliding_area_bounds();
-    }
+    close_legacy_room_config_if_visible("ensure_room_configurator");
     update_room_config_header_controls();
 }
 
 void MapModeUI::open_room_configuration(const std::string& room_key, SlidingPanel return_panel) {
     ensure_panels();
-    ensure_room_configurator();
-    if (!room_configurator_ || !map_info_) {
+    close_legacy_room_config_if_visible("open_room_configuration");
+    if (!room_editor_ || !assets_) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[MapModeUI] canonical room config open failed for '%s': RoomEditor unavailable",
+                    room_key.c_str());
         return;
     }
 
     room_config_return_panel_ = return_panel;
     update_room_config_header_controls();
 
-    nlohmann::json& map_info = *map_info_;
-    nlohmann::json& rooms = map_info["rooms_data"];
-    if (!rooms.is_object()) {
-        rooms = nlohmann::json::object();
-    }
-    nlohmann::json& room_entry = rooms[room_key];
-    if (!room_entry.is_object()) {
-        room_entry = nlohmann::json::object();
-        room_entry["name"] = room_key;
-    }
-
     active_room_config_key_ = room_key;
     if (layers_panel_) {
         layers_panel_->hide_details_panel();
     }
 
-    auto on_change = [this]() {
-        sync_active_room_runtime_data();
-        mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
-        if (layers_panel_) {
-            layers_panel_->mark_dirty(true);
+    Room* target_room = nullptr;
+    for (Room* room : assets_->rooms()) {
+        if (room && room->room_name == room_key) {
+            target_room = room;
+            break;
         }
-        if (rooms_display_) {
-            rooms_display_->refresh();
-        }
-};
-    apply_sliding_area_bounds();
-    room_configurator_->open(room_entry, on_change);
-    show_sliding_panel(SlidingPanel::RoomConfig);
+    }
+    if (!target_room) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[MapModeUI] canonical room config open failed: room '%s' not found at runtime",
+                    room_key.c_str());
+        return;
+    }
+
+    assets_->set_editor_current_room(target_room);
+    room_editor_->set_current_room(target_room);
+    room_editor_->set_room_config_visible(true);
+    show_sliding_panel(SlidingPanel::None);
 }
 
 void MapModeUI::close_room_configuration(bool show_rooms_list) {
-    if (room_configurator_) {
-        room_configurator_->close();
+    if (room_editor_) {
+        room_editor_->close_room_config();
     }
+    close_legacy_room_config_if_visible("close_room_configuration");
     active_room_config_key_.clear();
     if (show_rooms_list) {
         room_config_return_panel_ = SlidingPanel::RoomsList;
@@ -1420,9 +1340,6 @@ bool MapModeUI::is_point_inside(int x, int y) const {
     if (layers_panel_ && layers_panel_->is_visible() && layers_panel_->is_point_inside(x, y)) {
         return true;
     }
-    if (room_config_container_ && room_config_container_->is_visible() && room_config_container_->is_point_inside(x, y)) {
-        return true;
-    }
     if (rooms_list_container_ && rooms_list_container_->is_visible() && rooms_list_container_->is_point_inside(x, y)) {
         return true;
     }
@@ -1441,7 +1358,6 @@ bool MapModeUI::is_any_panel_visible() const {
         }
         if (panel->is_visible()) return true;
     }
-    if (room_config_container_ && room_config_container_->is_visible()) return true;
     if (rooms_list_container_ && rooms_list_container_->is_visible()) return true;
     if (layer_controls_container_ && layer_controls_container_->is_visible()) return true;
     return layers_panel_ && layers_panel_->is_visible();
@@ -1458,18 +1374,6 @@ bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priorit
         return true;
     }
     return false;
-}
-
-bool MapModeUI::save_all_now(devmode::core::DevSaveCoordinator::Priority priority) const {
-    if (!save_manager_) {
-        std::cerr << "[MapModeUI] Save requested but SaveManager is unavailable\n";
-        return false;
-    }
-    const bool saved = save_manager_->save_dirty(priority, "Dev footer save all");
-    if (!saved) {
-        std::cerr << "[MapModeUI] Save request completed with no dirty entries\n";
-    }
-    return saved;
 }
 
 bool MapModeUI::mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator) {
@@ -1609,11 +1513,27 @@ std::string MapModeUI::rename_active_room(const std::string& old_name, const std
 
 
 void MapModeUI::update_room_config_header_controls() {
-    if (!room_config_container_) {
-        return;
+    if (room_config_container_) {
+        room_config_container_->set_close_button_enabled(true);
+        room_config_container_->clear_header_navigation_button();
     }
-    room_config_container_->set_close_button_enabled(true);
-    room_config_container_->clear_header_navigation_button();
+}
+
+void MapModeUI::close_legacy_room_config_if_visible(const char* reason) {
+    bool closed_any = false;
+    if (room_configurator_ && room_configurator_->visible()) {
+        room_configurator_->close();
+        closed_any = true;
+    }
+    if (room_config_container_ && room_config_container_->is_visible()) {
+        room_config_container_->close();
+        closed_any = true;
+    }
+    if (closed_any) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[MapModeUI] closed legacy non-canonical room-config UI (%s)",
+                    reason ? reason : "unknown");
+    }
 }
 
 void MapModeUI::delete_active_room_spawn_group(const std::string& spawn_id) {

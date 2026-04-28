@@ -1,7 +1,7 @@
 #ifndef FROG_CONTROLLER_HPP
 #define FROG_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 
 #include <SDL3/SDL.h>
 

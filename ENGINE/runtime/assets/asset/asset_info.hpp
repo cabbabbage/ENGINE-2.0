@@ -89,6 +89,11 @@ class AssetInfo {
     float scale_factor;
     float size_variation_percent = 0.0f;
     float weight_kg = 0.0f;
+    int bounce_amount = 0;
+    int tilt_range_min_deg = 0;
+    int tilt_range_max_deg = 0;
+    int y_pos_min = 0;
+    int y_pos_max = 0;
     bool smooth_scaling = true;
     int original_canvas_width = 0;
     int original_canvas_height = 0;
@@ -100,6 +105,7 @@ class AssetInfo {
     struct AnchorChildPointCandidate {
         std::string anchor_point_name;
         nlohmann::json candidates = nlohmann::json::object();
+        bool orphan_on_end = true;
     };
     std::vector<AnchorChildPointCandidate> anchor_point_child_candidates;
 
@@ -132,6 +138,11 @@ class AssetInfo {
     std::vector<OvalAnchorMapping> oval_anchor_mappings;
 
     struct FloorBox {
+        struct CandidatePayload {
+            nlohmann::json candidates = nlohmann::json::array();
+            int grid_resolution = 4;
+        };
+
         std::string id;
         std::string name;
         float position_x = 0.0f;
@@ -140,15 +151,30 @@ class AssetInfo {
         float depth = 0.0f;
         bool enabled = true;
         std::vector<std::string> tags;
+        std::optional<CandidatePayload> candidate;
+    };
+
+    struct ImpassableShapePoint {
+        int x = 0;
+        int y = 0;
+    };
+
+    struct ImpassableShape {
+        std::string id;
+        std::string name;
+        bool enabled = true;
+        std::vector<ImpassableShapePoint> points;
+
+        bool valid() const { return enabled && points.size() >= 3; }
     };
 
     bool movement_enabled = false;
     bool attack_box_enabled = false;
     bool hitbox_enabled = false;
-    bool impassable_box_enabled = false;
+    bool impassable_enabled = false;
     bool floor_boxes_enabled = false;
     std::vector<FloorBox> floor_boxes;
-    std::vector<animation_update::FrameHitBox> impassable_boxes;
+    std::vector<ImpassableShape> impassable_shapes;
     std::vector<float>  scale_variants;
     struct NamedArea {
         struct RenderFrame {
@@ -215,6 +241,10 @@ class AssetInfo {
     void set_size_variation_percentage(float percent);
     void set_weight_kg(float weight);
     float get_weight_kg() const { return weight_kg; }
+    void set_bounce_amount(int amount);
+    int get_bounce_amount() const { return bounce_amount; }
+    void set_tilt_range_degrees(int min_degrees, int max_degrees);
+    void set_y_position_range(int min_value, int max_value);
     void set_scale_filter(bool smooth);
     void set_tags(const std::vector<std::string> &t);
     void add_tag(const std::string &tag);
@@ -234,6 +264,8 @@ class AssetInfo {
     void set_anchor_point_child_candidates_payload(const nlohmann::json& candidates);
     nlohmann::json anchor_point_child_candidates_payload() const;
     nlohmann::json anchor_point_child_candidate_candidates(const std::string& anchor_point_name) const;
+    bool anchor_point_child_candidate_orphan_on_end(const std::string& anchor_point_name) const;
+    bool set_anchor_point_child_candidate_orphan_on_end(const std::string& anchor_point_name, bool orphan_on_end);
     bool upsert_anchor_point_child_candidate(const std::string& anchor_point_name, const nlohmann::json& candidates);
     bool rename_anchor_point_child_candidate(const std::string& old_name, const std::string& new_name);
     bool remove_anchor_point_child_candidate(const std::string& anchor_point_name);
@@ -266,11 +298,11 @@ class AssetInfo {
     bool is_movement_enabled() const { return movement_enabled; }
     bool is_hitbox_enabled() const { return hitbox_enabled; }
     bool is_attack_box_enabled() const { return attack_box_enabled; }
-    bool is_impassable_box_enabled() const { return impassable_box_enabled; }
+    bool is_impassable_box_enabled() const { return impassable_enabled; }
     bool is_floor_boxes_enabled() const { return floor_boxes_enabled; }
     const std::vector<FloorBox>& floor_boxes_payload() const { return floor_boxes; }
-    const std::vector<animation_update::FrameHitBox>& impassable_boxes_payload() const {
-        return impassable_boxes;
+    const std::vector<ImpassableShape>& impassable_shapes_payload() const {
+        return impassable_shapes;
     }
 
     std::vector<std::string> animation_names() const;

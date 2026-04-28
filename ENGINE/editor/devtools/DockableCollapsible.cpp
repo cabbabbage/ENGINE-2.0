@@ -209,6 +209,7 @@ void DockableCollapsible::set_visible(bool v) {
         dragging_ = false;
         drag_exceeded_threshold_ = false;
         header_dragging_via_button_ = false;
+        DMWidgetsClearSliderScrollCaptures();
         DockManager::instance().notify_panel_closed(this);
         if (on_close_) on_close_();
     }
@@ -458,6 +459,7 @@ void DockableCollapsible::set_position_internal(int x, int y, bool from_layout_m
 
     if (from_layout_manager) {
         update_geometry_after_move();
+        invalidate_layout(true);
         return;
     }
 

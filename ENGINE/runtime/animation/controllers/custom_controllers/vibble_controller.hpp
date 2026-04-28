@@ -1,20 +1,13 @@
-// CONTROLLER_META_BEGIN
-// Controller: vibble_controller
-// Asset: vibble (type: object)
-// Available animations [1]:
-//   - default
-// Generated: 2026-03-17 23:48:57
-// CONTROLLER_META_END
-
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
 #include <SDL3/SDL.h>
 #include <chrono>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 class Asset;
@@ -28,6 +21,7 @@ public:
 
 protected:
     void on_update(const Input& in) override;
+    custom_controller_api::AttackProcessingConfig attack_processing_config() const override;
     void on_process_pending_attacks(Asset& self) override;
 
 private:
@@ -51,6 +45,15 @@ private:
     static CardinalVector cardinal_vector_for_animation(const std::string& animation_id);
     void apply_idle_facing(const std::string& animation_id);
     void start_dash();
+    void process_interact(const Input& input, int held_frames);
+    void ensure_hand_defaults();
+    Asset* find_closest_tagged_asset(std::string_view tag, int radius_px) const;
+    bool has_tag(const Asset& asset, std::string_view tag) const;
+    bool is_carrying_non_gun() const;
+    void drop_carried_asset(const Input& input, int held_frames);
+    void pickup_asset(Asset& player, Asset& target);
+    OrphanImpulse build_throw_impulse(const Asset& player, const Input& input, int held_frames) const;
+    void update_world_carried_asset_pose();
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
@@ -62,6 +65,8 @@ private:
     bool isDashing  = false;
     float dashingPower = 10.0f;
     float dashingTime = 0.05f;
+    int interactFrames = 0;
+    bool isInteracting = false;
     float dashingCooldown = 1.0f;
     std::chrono::steady_clock::time_point dashEndTime;
     std::chrono::steady_clock::time_point cooldownEndTime;
@@ -74,6 +79,10 @@ private:
     float subpixel_x_ = 0.0f;
     float subpixel_y_ = 0.0f;
     std::string last_facing_animation_ = "default";
+    std::optional<ChildAsset> gun_child_;
+    std::optional<ChildAsset> carried_child_;
+    Asset* carried_world_asset_ = nullptr;
+    std::string carried_asset_name_;
 };
 
 #endif

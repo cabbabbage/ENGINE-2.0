@@ -22,6 +22,7 @@
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
 #include "movement_rotation.hpp"
+#include "animation_tag_utils.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "movement_target_utils.hpp"
 #include "core/AssetsManager.hpp"
@@ -105,6 +106,28 @@ int bounded_step_toward(int delta, int max_step) {
     return (delta > 0) ? magnitude : -magnitude;
 }
 
+
+int furthest_checkpoint_distance_xz(SDL_Point start, const std::vector<SDL_Point>& checkpoints) {
+    int furthest_sq = 0;
+    for (const SDL_Point& checkpoint : checkpoints) {
+        const int dx = checkpoint.x - start.x;
+        const int dz = checkpoint.y - start.y;
+        furthest_sq = std::max(furthest_sq, dx * dx + dz * dz);
+    }
+    return static_cast<int>(std::lround(std::sqrt(static_cast<double>(furthest_sq))));
+}
+
+int furthest_checkpoint_distance_xz(const axis::WorldPos& start,
+                                    const std::vector<axis::WorldPos>& checkpoints) {
+    int furthest_sq = 0;
+    for (const axis::WorldPos& checkpoint : checkpoints) {
+        const int dx = checkpoint.x - start.x;
+        const int dz = checkpoint.z - start.z;
+        furthest_sq = std::max(furthest_sq, dx * dx + dz * dz);
+    }
+    return static_cast<int>(std::lround(std::sqrt(static_cast<double>(furthest_sq))));
+}
+
 std::vector<std::string> normalize_tag_list(const std::vector<std::string>& input) {
     std::vector<std::string> normalized;
     normalized.reserve(input.size());
@@ -132,6 +155,16 @@ std::mt19937& tag_selection_rng() {
 }
 
 namespace animation_update::detail {
+
+std::string stable_asset_id(const Asset& asset) {
+    if (!asset.spawn_id.empty()) {
+        return asset.spawn_id;
+    }
+    if (asset.info) {
+        return asset.info->name;
+    }
+    return std::string{};
+}
 
 bool should_consider_overlap(const Asset& self, const Asset& other) {
     if (!self.info || !other.info) {
@@ -162,6 +195,42 @@ bool should_consider_overlap(const Asset& self, const Asset& other) {
     }
 
     return false;
+}
+
+int overlap_distance_sq_for_pair(const Asset& self,
+                                 const Asset& other,
+                                 const PathBlockingContext& context) {
+    if (!should_consider_overlap(self, other)) {
+        return 0;
+    }
+
+    constexpr int kEnemyEnemySpacingPx = 56;
+    constexpr int kEnemyNpcSpacingPx = 44;
+    constexpr int kDefaultSpacingPx = 40;
+    constexpr int kEngagementTargetSpacingPx = 18;
+
+    const std::string self_type = self.info ? asset_types::canonicalize(self.info->type) : std::string{};
+    const std::string other_type = other.info ? asset_types::canonicalize(other.info->type) : std::string{};
+
+    if (context.engagement_target_asset_id.has_value()) {
+        const std::string other_id = stable_asset_id(other);
+        if (!other_id.empty() && other_id == *context.engagement_target_asset_id) {
+            if (context.allow_engagement_target_overlap) {
+                return 0;
+            }
+            return kEngagementTargetSpacingPx * kEngagementTargetSpacingPx;
+        }
+    }
+
+    if (self_type == asset_types::enemy && other_type == asset_types::enemy) {
+        return kEnemyEnemySpacingPx * kEnemyEnemySpacingPx;
+    }
+    if ((self_type == asset_types::enemy && other_type == asset_types::npc) ||
+        (self_type == asset_types::npc && other_type == asset_types::enemy)) {
+        return kEnemyNpcSpacingPx * kEnemyNpcSpacingPx;
+    }
+
+    return kDefaultSpacingPx * kDefaultSpacingPx;
 }
 
 int distance_sq(const world::GridPoint& a, const world::GridPoint& b) {
@@ -354,7 +423,8 @@ AnimationUpdate::AnimationUpdate(Asset* self, Assets* assets)
 void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
                                 int visited_thresh_px,
                                 std::optional<int> checkpoint_resolution,
-                                bool override_non_locked) {
+                                bool override_non_locked,
+                                AutoMoveCombatOverrides combat_overrides) {
     if (!self_) {
         return;
     }
@@ -366,6 +436,11 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
         clear_movement_plan();
         return;
     }
+    if (should_defer_auto_move_for_committed_attack()) {
+        return;
+    }
+    auto_move_attacking_enabled_ =
+        resolve_auto_move_combat_options(combat_overrides).attacking_enabled;
     SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, world_checkpoint);
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
@@ -373,12 +448,13 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
         return;
     }
     std::vector<SDL_Point> rel{ delta };
-    auto_move(rel, visited_thresh_px, checkpoint_resolution, override_non_locked);
+    auto_move(rel, visited_thresh_px, checkpoint_resolution, override_non_locked, combat_overrides);
 }
 
 void AnimationUpdate::auto_move(Asset* target_asset,
                                 int visited_thresh_px,
-                                bool override_non_locked) {
+                                bool override_non_locked,
+                                AutoMoveCombatOverrides combat_overrides) {
     if (!self_ || !target_asset) {
         return;
     }
@@ -390,9 +466,14 @@ void AnimationUpdate::auto_move(Asset* target_asset,
         clear_movement_plan();
         return;
     }
+    if (should_defer_auto_move_for_committed_attack()) {
+        return;
+    }
     if (self_) {
         self_->target_reached = false;
     }
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
     const SDL_Point checkpoint = animation_update::movement_targets::world_checkpoint(*target_asset);
     SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, checkpoint);
     if (delta.x == 0 && delta.y == 0) {
@@ -402,13 +483,18 @@ void AnimationUpdate::auto_move(Asset* target_asset,
         }
         return;
     }
-    auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked);
+    const std::string target_asset_id = animation_update::detail::stable_asset_id(*target_asset);
+    pending_engagement_target_asset_id_ =
+        target_asset_id.empty() ? std::nullopt : std::make_optional(target_asset_id);
+    auto_move(checkpoint, visited_thresh_px, std::nullopt, override_non_locked, combat_overrides);
+    pending_engagement_target_asset_id_ = std::nullopt;
 }
 
 void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
                                    int            visited_thresh_px,
                                    std::optional<int> checkpoint_resolution,
-                                   bool           override_non_locked) {
+                                   bool           override_non_locked,
+                                   AutoMoveCombatOverrides combat_overrides) {
     if (!self_) {
         return;
     }
@@ -420,6 +506,11 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
         clear_movement_plan();
         return;
     }
+    if (should_defer_auto_move_for_committed_attack()) {
+        return;
+    }
+    auto_move_attacking_enabled_ =
+        resolve_auto_move_combat_options(combat_overrides).attacking_enabled;
 
     const axis::WorldPos delta =
         animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, world_checkpoint);
@@ -433,25 +524,66 @@ void AnimationUpdate::auto_move_3d(axis::WorldPos world_checkpoint,
                  true,
                  visited_thresh_px,
                  checkpoint_resolution,
-                 override_non_locked);
+                 override_non_locked,
+                 combat_overrides);
+}
+
+void AnimationUpdate::auto_move_3d(Asset* target_asset,
+                                   int visited_thresh_px,
+                                   bool override_non_locked,
+                                   AutoMoveCombatOverrides combat_overrides) {
+    if (!self_ || !target_asset) {
+        return;
+    }
+    if (!self_->isMovementEnabled()) {
+        clear_movement_plan();
+        return;
+    }
+    if (movement_blocked_by_dev_mode(assets_owner_)) {
+        clear_movement_plan();
+        return;
+    }
+    if (should_defer_auto_move_for_committed_attack()) {
+        return;
+    }
+
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
+    self_->target_reached = false;
+    const axis::WorldPos checkpoint = animation_update::movement_targets::world_checkpoint_3d(*target_asset);
+    const axis::WorldPos delta = animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, checkpoint);
+    if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
+        self_->target_reached = true;
+        self_->needs_target = true;
+        return;
+    }
+
+    const std::string target_asset_id = animation_update::detail::stable_asset_id(*target_asset);
+    pending_engagement_target_asset_id_ =
+        target_asset_id.empty() ? std::nullopt : std::make_optional(target_asset_id);
+    auto_move_3d(checkpoint, visited_thresh_px, std::nullopt, override_non_locked, combat_overrides);
+    pending_engagement_target_asset_id_ = std::nullopt;
 }
 
 void AnimationUpdate::auto_move_3d_relative(axis::WorldPos rel_delta,
                                             int            visited_thresh_px,
                                             std::optional<int> checkpoint_resolution,
-                                            bool           override_non_locked) {
+                                            bool           override_non_locked,
+                                            AutoMoveCombatOverrides combat_overrides) {
     auto_move_3d(std::vector<axis::WorldPos>{ rel_delta },
                  true,
                  visited_thresh_px,
                  checkpoint_resolution,
-                 override_non_locked);
+                 override_non_locked,
+                 combat_overrides);
 }
 
 void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoints,
                                    bool                               relative_checkpoints,
                                    int                                visited_thresh_px,
                                    std::optional<int>                 checkpoint_resolution,
-                                   bool                               override_non_locked) {
+                                   bool                               override_non_locked,
+                                   AutoMoveCombatOverrides            combat_overrides) {
     if (!self_) {
         return;
     }
@@ -461,6 +593,9 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
+        return;
+    }
+    if (should_defer_auto_move_for_committed_attack()) {
         return;
     }
 
@@ -477,6 +612,8 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     if (self_) {
         self_->target_reached = false;
     }
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const int resolution = effective_grid_resolution(checkpoint_resolution);
@@ -519,11 +656,18 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
 
     const std::vector<axis::WorldPos> requested_absolute = absolute;
+    CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    collision_context.set_furthest_checkpoint_distance_px(
+        furthest_checkpoint_distance_xz(axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() },
+                                        requested_absolute));
     const std::vector<axis::WorldPos> sanitized_checkpoints =
         sanitizer_3d_.sanitize(*self_, requested_absolute, visited_thresh_);
-    plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid());
+    plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
     plan3d_.world_start = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.override_non_locked = override_non_locked;
+    plan3d_.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    plan3d_.attacking_enabled = combat_options.attacking_enabled;
     final_dest_3d = plan3d_.final_dest;
 
     // 3D plan runs in its own mode and must not reuse stale 2D plan state.
@@ -531,6 +675,8 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     plan_.sanitized_checkpoints.clear();
     plan_.final_dest = self_->world_xz_point();
     plan_.world_start = self_->world_xz_point();
+    plan_.engagement_target_asset_id = std::nullopt;
+    plan_.attacking_enabled = false;
     final_dest = plan_.final_dest;
 
     if (debug_logging) {
@@ -618,7 +764,8 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
 void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
                                 int visited_thresh_px,
                                 std::optional<int> checkpoint_resolution,
-                                bool override_non_locked) {
+                                bool override_non_locked,
+                                AutoMoveCombatOverrides combat_overrides) {
     if (!self_) {
         return;
     }
@@ -628,6 +775,9 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
     if (movement_blocked_by_dev_mode(assets_owner_)) {
         clear_movement_plan();
+        return;
+    }
+    if (should_defer_auto_move_for_committed_attack()) {
         return;
     }
 
@@ -642,6 +792,8 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
+    const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    auto_move_attacking_enabled_ = combat_options.attacking_enabled;
     const int resolution = effective_grid_resolution(checkpoint_resolution);
     visited_thresh_      = std::max(0, visited_thresh_px);
     if (resolution > 0) {
@@ -671,17 +823,26 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     const std::vector<SDL_Point> requested_absolute = absolute;
-    const std::vector<SDL_Point> sanitized_checkpoints = sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_);
-    plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid());
+    CollisionQueryContext collision_context;
+    collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    collision_context.set_furthest_checkpoint_distance_px(
+        furthest_checkpoint_distance_xz(self_->world_xz_point(), requested_absolute));
+    const std::vector<SDL_Point> sanitized_checkpoints =
+        sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_, &collision_context);
+    plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
     final_dest = plan_.final_dest;
     plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
+    plan_.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    plan_.attacking_enabled = combat_options.attacking_enabled;
 
     // 2D plan runs in its own mode and must not reuse stale 3D plan state.
     plan3d_.strides.clear();
     plan3d_.sanitized_checkpoints.clear();
     plan3d_.final_dest = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.world_start = plan3d_.final_dest;
+    plan3d_.engagement_target_asset_id = std::nullopt;
+    plan3d_.attacking_enabled = false;
     final_dest_3d = plan3d_.final_dest;
 
     if (debug_logging) {
@@ -848,7 +1009,9 @@ void AnimationUpdate::clear_movement_plan() {
     plan_.sanitized_checkpoints.clear();
     plan_.final_dest = self_ ? self_->world_xz_point() : SDL_Point{ 0, 0 };
     plan_.world_start = plan_.final_dest;
+    plan_.engagement_target_asset_id = std::nullopt;
     plan_.override_non_locked = true;
+    plan_.attacking_enabled = false;
     final_dest = plan_.final_dest;
 
     plan3d_.strides.clear();
@@ -857,10 +1020,13 @@ void AnimationUpdate::clear_movement_plan() {
         ? axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() }
         : axis::WorldPos{ 0, 0, 0 };
     plan3d_.world_start = plan3d_.final_dest;
+    plan3d_.engagement_target_asset_id = std::nullopt;
     plan3d_.override_non_locked = true;
+    plan3d_.attacking_enabled = false;
     final_dest_3d = plan3d_.final_dest;
 
     active_plan_mode_ = ActivePlanMode::None;
+    auto_move_attacking_enabled_ = false;
     input_event_ = true;
     clear_plan_retry_cooldown();
 
@@ -964,6 +1130,35 @@ int AnimationUpdate::effective_grid_resolution(std::optional<int> override_resol
     return resolve_effective_grid_resolution(self_, grid(), override_resolution);
 }
 
+AnimationUpdate::AutoMoveCombatOptions AnimationUpdate::resolve_auto_move_combat_options(
+    AutoMoveCombatOverrides overrides) const {
+    AutoMoveCombatOptions options;
+    if (!self_ || !self_->info) {
+        return options;
+    }
+
+    bool has_attack_animation = false;
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        (void)animation_id;
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            has_attack_animation = true;
+            break;
+        }
+    }
+
+    const std::string asset_type = asset_types::canonicalize(self_->info->type);
+    options.attacking_enabled = (asset_type == asset_types::enemy && has_attack_animation);
+    if (overrides.attacking_enabled.has_value()) {
+        options.attacking_enabled = *overrides.attacking_enabled;
+    }
+
+    return options;
+}
+
+bool AnimationUpdate::should_defer_auto_move_for_committed_attack() const {
+    return runtime_ && runtime_->auto_attack_commitment_active();
+}
+
 void AnimationUpdate::set_animation(const std::string& animation_id) {
     if (!self_ || !self_->info || !runtime_) {
         return;
@@ -990,10 +1185,11 @@ std::optional<std::string> AnimationUpdate::resolve_animation_by_tags(
         if (!animation.has_frames()) {
             continue;
         }
+        const std::vector<std::string> normalized_tags = normalize_tag_list(animation.tags);
 
         bool excluded_match = false;
         for (const std::string& exclude_tag : excluded) {
-            if (std::find(animation.tags.begin(), animation.tags.end(), exclude_tag) != animation.tags.end()) {
+            if (std::find(normalized_tags.begin(), normalized_tags.end(), exclude_tag) != normalized_tags.end()) {
                 excluded_match = true;
                 break;
             }
@@ -1004,7 +1200,7 @@ std::optional<std::string> AnimationUpdate::resolve_animation_by_tags(
 
         bool required_match = true;
         for (const std::string& required_tag : required) {
-            if (std::find(animation.tags.begin(), animation.tags.end(), required_tag) == animation.tags.end()) {
+            if (std::find(normalized_tags.begin(), normalized_tags.end(), required_tag) == normalized_tags.end()) {
                 required_match = false;
                 break;
             }

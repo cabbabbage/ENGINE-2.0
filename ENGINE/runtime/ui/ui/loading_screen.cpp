@@ -17,10 +17,23 @@ LoadingScreen::LoadingScreen(SDL_Renderer* renderer, int screen_w, int screen_h)
 : renderer_(renderer), screen_w_(screen_w), screen_h_(screen_h) {}
 
 LoadingScreen::~LoadingScreen() {
+        release_texture();
+}
+
+void LoadingScreen::release_texture() {
         if (current_texture_) {
                 SDL_DestroyTexture(current_texture_);
                 current_texture_ = nullptr;
         }
+        current_texture_path_.clear();
+}
+
+void LoadingScreen::deactivate() {
+        active_ = false;
+        selected_image_path_.clear();
+        message_.clear();
+        status_text_.clear();
+        release_texture();
 }
 
 fs::path LoadingScreen::project_root() const {
@@ -135,11 +148,8 @@ void LoadingScreen::render_justified_text(TTF_Font* font, const std::string& tex
 }
 
 void LoadingScreen::init() {
-        if (current_texture_) {
-                SDL_DestroyTexture(current_texture_);
-                current_texture_ = nullptr;
-                current_texture_path_.clear();
-        }
+        active_ = true;
+        release_texture();
 
         selected_image_path_.clear();
         message_.clear();
@@ -162,17 +172,16 @@ void LoadingScreen::set_status(std::string status) {
 }
 
 void LoadingScreen::draw_frame() {
+        if (!active_ || !renderer_) {
+                return;
+        }
 
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
         SDL_RenderClear(renderer_);
 
         if (!selected_image_path_.empty()) {
                 if (!current_texture_ || selected_image_path_ != current_texture_path_) {
-                        if (current_texture_) {
-                                SDL_DestroyTexture(current_texture_);
-                                current_texture_ = nullptr;
-                                current_texture_path_.clear();
-                        }
+                        release_texture();
                         SDL_Texture* tex = IMG_LoadTexture(renderer_, selected_image_path_.string().c_str());
                         if (tex) {
                                 current_texture_ = tex;
@@ -180,9 +189,12 @@ void LoadingScreen::draw_frame() {
                         }
                 }
         } else if (current_texture_) {
-                SDL_DestroyTexture(current_texture_);
-                current_texture_ = nullptr;
-                current_texture_path_.clear();
+                release_texture();
+        }
+
+        if (current_texture_) {
+                SDL_Rect dst = coverDest(current_texture_);
+                sdl_render::Texture(renderer_, current_texture_, nullptr, &dst);
         }
 
         const std::string mono_font = ui_fonts::monospace();
@@ -208,11 +220,6 @@ void LoadingScreen::draw_frame() {
                         draw_text(status_font, status_text_, sx, sy, white);
                         TTF_CloseFont(status_font);
                 }
-        }
-
-        if (current_texture_) {
-                SDL_Rect dst = coverDest(current_texture_);
-                sdl_render::Texture(renderer_, current_texture_, nullptr, &dst);
         }
 
         const bool has_message = !message_.empty();

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "animation_update.hpp"
+#include "animation_tag_utils.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -15,21 +16,7 @@
 
 namespace {
 
-using CollisionEntryRef3D = const Assets::FrameCollisionEntry*;
-
-std::vector<CollisionEntryRef3D> gather_collision_entries(const Asset& self) {
-    std::vector<CollisionEntryRef3D> entries;
-    const Assets* assets = self.get_assets();
-    if (!assets) {
-        return entries;
-    }
-
-    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
-        ? self.info->NeighborSearchRadius
-        : 0;
-    assets->query_impassable_entries(self, search_radius, entries);
-    return entries;
-}
+using CollisionEntryRef3D = CollisionQueryContext::CollisionEntryRef;
 
 world::GridPoint as_grid_point(const axis::WorldPos& pos, int resolution_layer) {
     return world::GridPoint::make_virtual(pos.x, pos.y, pos.z, resolution_layer);
@@ -39,7 +26,8 @@ bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
                   const std::vector<CollisionEntryRef3D>& collisions,
                   const Asset& self,
-                  const Assets* assets_owner) {
+                  const Assets* assets_owner,
+                  const animation_update::detail::PathBlockingContext& context) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
     const world::GridPoint dest_bottom  = animation_update::detail::bottom_middle_for(self, to);
 
@@ -56,14 +44,20 @@ bool blocked_step(const world::GridPoint& from,
             continue;
         }
 
-        if (animation_update::detail::segment_hits_area(from, to, entry->area)) {
+        const std::string other_id = animation_update::detail::stable_asset_id(*other);
+        const bool is_engagement_target =
+            context.allow_engagement_target_overlap &&
+            context.engagement_target_asset_id.has_value() &&
+            !other_id.empty() &&
+            other_id == *context.engagement_target_asset_id;
+        if (!is_engagement_target && animation_update::detail::segment_hits_area(from, to, entry->area)) {
             return true;
         }
 
-        bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
-        if (overlap_check &&
-            animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) <
-                animation_update::detail::kOverlapDistanceSq) {
+        const int overlap_distance_sq =
+            animation_update::detail::overlap_distance_sq_for_pair(self, *other, context);
+        if (overlap_distance_sq > 0 &&
+            animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) < overlap_distance_sq) {
             return true;
         }
     }
@@ -80,10 +74,15 @@ struct AnimationDescriptor3D {
     int frame_count = 0;
 };
 
-std::vector<AnimationDescriptor3D> gather_movement_animations_3d(const Asset& self) {
-    std::vector<AnimationDescriptor3D> result;
+struct MovementAnimationBuckets3D {
+    std::vector<AnimationDescriptor3D> locomotion;
+    std::vector<AnimationDescriptor3D> attack;
+};
+
+MovementAnimationBuckets3D gather_movement_animations_3d(const Asset& self) {
+    MovementAnimationBuckets3D buckets;
     if (!self.info || !self.isMovementEnabled()) {
-        return result;
+        return buckets;
     }
 
     for (const auto& [id, anim] : self.info->animations) {
@@ -109,11 +108,16 @@ std::vector<AnimationDescriptor3D> gather_movement_animations_3d(const Asset& se
                 continue;
             }
 
-            result.push_back(AnimationDescriptor3D{ id, &anim, path_index, frames, anim.locked, frame_count });
+            AnimationDescriptor3D descriptor{ id, &anim, path_index, frames, anim.locked, frame_count };
+            if (animation_update::tag_utils::has_normalized_tag(anim.tags, "attack")) {
+                buckets.attack.push_back(std::move(descriptor));
+            } else {
+                buckets.locomotion.push_back(std::move(descriptor));
+            }
         }
     }
 
-    return result;
+    return buckets;
 }
 
 struct CandidateStride3D {
@@ -131,7 +135,8 @@ struct CandidateStride3D {
 Plan3D GetBestPath3D::operator()(const Asset& self,
                                  const std::vector<axis::WorldPos>& sanitized_checkpoints,
                                  int visited_thresh_px,
-                                 const vibble::grid::Grid& grid) const {
+                                 const vibble::grid::Grid& grid,
+                                 CollisionQueryContext* collision_context) const {
     Plan3D plan;
     plan.sanitized_checkpoints = sanitized_checkpoints;
     plan.world_start = axis::WorldPos{ self.world_x(), self.world_y(), self.world_z() };
@@ -145,10 +150,17 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     }
 
     const int resolution_layer = self.grid_resolution;
-    const auto collisions = gather_collision_entries(self);
+    CollisionQueryContext local_collision_context;
+    CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
+    const auto& collisions = context.collisions_for(self);
     const Assets* assets = self.get_assets();
+    const animation_update::detail::PathBlockingContext blocking_context{
+        context.engagement_target_asset_id,
+        false
+    };
     const long long visited_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
-    const auto movement_anims = gather_movement_animations_3d(self);
+    const MovementAnimationBuckets3D animation_buckets = gather_movement_animations_3d(self);
+    const auto& movement_anims = animation_buckets.locomotion;
 
     axis::WorldPos cursor = plan.world_start;
     bool aborted = false;
@@ -184,7 +196,7 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
 
                         const world::GridPoint simulated_gp = as_grid_point(simulated, resolution_layer);
                         const world::GridPoint next_gp = as_grid_point(next_pos, resolution_layer);
-                        if (blocked_step(simulated_gp, next_gp, collisions, self, assets)) {
+                        if (blocked_step(simulated_gp, next_gp, collisions, self, assets, blocking_context)) {
                             blocked = true;
                             break;
                         }
@@ -238,12 +250,22 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                     const int min_frames = descriptor.locked ? max_frames : 1;
                     for (int frames = min_frames; frames <= max_frames; ++frames) {
                         axis::WorldPos simulated = cursor;
+                        bool blocked = false;
                         for (int i = 0; i < frames; ++i) {
                             const AnimationFrame& frame = (*descriptor.frames)[i];
                             const axis::WorldPos delta = animation_update::detail::frame_world_delta_3d(frame, self, grid);
-                            simulated.x += delta.x;
-                            simulated.y += delta.y;
-                            simulated.z += delta.z;
+                            const axis::WorldPos next_pos{ simulated.x + delta.x, simulated.y + delta.y, simulated.z + delta.z };
+                            const world::GridPoint simulated_gp = as_grid_point(simulated, resolution_layer);
+                            const world::GridPoint next_gp = as_grid_point(next_pos, resolution_layer);
+                            if (blocked_step(simulated_gp, next_gp, collisions, self, assets, blocking_context)) {
+                                blocked = true;
+                                break;
+                            }
+                            simulated = next_pos;
+                        }
+
+                        if (blocked) {
+                            continue;
                         }
 
                         const long long dist_sq = animation_update::detail::distance_sq_3d(simulated, checkpoint);
@@ -304,3 +326,23 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
 
     return plan;
 }
+
+namespace get_best_path_3d::test_hooks {
+
+AnimationTagBuckets3D classify_animation_tag_buckets(const Asset& self) {
+    AnimationTagBuckets3D result;
+    const MovementAnimationBuckets3D buckets = gather_movement_animations_3d(self);
+    result.locomotion_animation_ids.reserve(buckets.locomotion.size());
+    result.attack_animation_ids.reserve(buckets.attack.size());
+
+    for (const auto& descriptor : buckets.locomotion) {
+        result.locomotion_animation_ids.push_back(descriptor.id);
+    }
+    for (const auto& descriptor : buckets.attack) {
+        result.attack_animation_ids.push_back(descriptor.id);
+    }
+
+    return result;
+}
+
+} // namespace get_best_path_3d::test_hooks

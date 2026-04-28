@@ -158,6 +158,7 @@ public:
                            MapPersistOptions options = {});
     bool update_map_entry(const std::string& map_id, const nlohmann::json& payload);
     const nlohmann::json* find_map_entry(const std::string& map_id) const;
+    bool has_pending_write() const { return has_pending_manifest_write(); }
 
     ScopedWriteGuard scoped_guard(std::string reason = {});
     void set_require_write_guard(bool required, bool fail_on_violation = false);

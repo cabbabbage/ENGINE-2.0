@@ -18,6 +18,7 @@ namespace devmode::core { class ManifestStore; }
 class CandidateEditorPieGraphWidget : public Widget {
 public:
     CandidateEditorPieGraphWidget();
+    ~CandidateEditorPieGraphWidget() override;
 
     void set_rect(const SDL_Rect& r) override;
     const SDL_Rect& rect() const override;

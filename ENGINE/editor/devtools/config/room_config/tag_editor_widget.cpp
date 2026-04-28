@@ -384,6 +384,25 @@ void TagEditorWidget::set_tags(const std::vector<std::string>& tags,
     mark_dirty();
 }
 
+void TagEditorWidget::set_recommended_tags(const std::vector<std::string>& tags) {
+    std::set<std::string> unique;
+    for (const auto& value : tags) {
+        auto normalized = normalize(value);
+        if (normalized.empty()) {
+            continue;
+        }
+        unique.insert(std::move(normalized));
+    }
+    std::vector<std::string> normalized_tags(unique.begin(), unique.end());
+    if (normalized_tags == external_recommended_tags_) {
+        return;
+    }
+    external_recommended_tags_ = std::move(normalized_tags);
+    refresh_recommendations();
+    rebuild_buttons();
+    mark_dirty();
+}
+
 void TagEditorWidget::set_subject_asset_name(const std::string& asset_name) {
     if (subject_asset_name_ == asset_name) {
         return;
@@ -649,6 +668,7 @@ void TagEditorWidget::refresh_recommendations() {
     }
 
     std::set<std::string> candidates(TagLibrary::instance().tags().begin(), TagLibrary::instance().tags().end());
+    candidates.insert(external_recommended_tags_.begin(), external_recommended_tags_.end());
     for (const auto& [value, _] : stats) {
         candidates.insert(value);
     }
@@ -1298,6 +1318,13 @@ void TagEditorWidget::refresh_recommendations_asset_mode() {
 
         recommendation_context_scores_[candidate] = score;
         recommendation_popularity_[candidate] = popularity;
+    }
+    for (const auto& candidate : external_recommended_tags_) {
+        if (candidate.empty()) {
+            continue;
+        }
+        recommendation_context_scores_.try_emplace(candidate, 0.05);
+        recommendation_popularity_.try_emplace(candidate, 1);
     }
 
     rebuild_recommended_from_search();

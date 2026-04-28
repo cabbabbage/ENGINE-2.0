@@ -207,7 +207,7 @@ std::unique_ptr<Asset> WorldGrid::extract_asset(Asset* a) {
     }
 
     auto resid_it = residency_.find(a);
-    Chunk* chunk = (resid_it != residency_.end()) ? resid_it->second : nullptr;
+    Chunk* chunk = (resid_it != residency_.end()) ? resid_it->second.chunk : nullptr;
 
     std::unique_ptr<Asset> owned = detach_asset_from_grid_point(a, *gp, true);
     if (chunk) {
@@ -250,7 +250,7 @@ Asset* WorldGrid::remove_asset(Asset* a) {
 
     auto it = residency_.find(a);
     if (it != residency_.end()) {
-        remove_from_chunk(a, it->second);
+        remove_from_chunk(a, it->second.chunk);
         residency_.erase(it);
     }
 
@@ -688,26 +688,16 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     const GridCoord chunk_index{i, k};
     Chunk& chunk = chunks_.ensure(chunk_index.x, chunk_index.z, r_chunk_, origin_);
 
-    auto ensure_asset_in_chunk = [&]() {
-        auto it = std::find(chunk.assets.begin(), chunk.assets.end(), raw);
-        if (it == chunk.assets.end()) {
-            chunk.assets.push_back(raw);
-        }
-};
-
     auto existing = residency_.find(raw);
     if (existing != residency_.end()) {
-        Chunk* previous = existing->second;
+        Chunk* previous = existing->second.chunk;
         if (previous == &chunk) {
-            ensure_asset_in_chunk();
+            debug_assert_residency_integrity(raw);
             return raw;
         }
         remove_from_chunk(raw, previous);
-        existing->second = &chunk;
-    } else {
-        residency_[raw] = &chunk;
     }
-    ensure_asset_in_chunk();
+    add_to_chunk(raw, chunk);
 
     GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.y, new_key.layer);
     attach_asset_to_grid_point(std::move(a), point);
@@ -742,10 +732,75 @@ void WorldGrid::remove_from_chunk(Asset* a, Chunk* c) {
     if (!a || !c) {
         return;
     }
-    auto it = std::find(c->assets.begin(), c->assets.end(), a);
-    if (it != c->assets.end()) {
-        c->assets.erase(it);
+    auto it = residency_.find(a);
+    if (it == residency_.end()) {
+        return;
     }
+    Residency& residency = it->second;
+    if (residency.chunk != c) {
+        return;
+    }
+
+    SDL_assert(residency.index_in_chunk_assets < c->assets.size());
+    if (residency.index_in_chunk_assets >= c->assets.size()) {
+        return;
+    }
+    SDL_assert(c->assets[residency.index_in_chunk_assets] == a);
+    if (c->assets[residency.index_in_chunk_assets] != a) {
+        return;
+    }
+
+    const std::size_t removed_index = residency.index_in_chunk_assets;
+    const std::size_t last_index = c->assets.size() - 1;
+    Asset* moved_tail = c->assets[last_index];
+    if (removed_index != last_index) {
+        c->assets[removed_index] = moved_tail;
+    }
+    c->assets.pop_back();
+
+    if (removed_index != last_index && moved_tail) {
+        auto moved_it = residency_.find(moved_tail);
+        SDL_assert(moved_it != residency_.end());
+        if (moved_it != residency_.end()) {
+            moved_it->second.chunk = c;
+            moved_it->second.index_in_chunk_assets = removed_index;
+        }
+    }
+}
+
+void WorldGrid::add_to_chunk(Asset* a, Chunk& c) {
+    if (!a) {
+        return;
+    }
+    const std::size_t index = c.assets.size();
+    c.assets.push_back(a);
+    residency_[a] = Residency{&c, index};
+    debug_assert_residency_integrity(a);
+}
+
+void WorldGrid::debug_assert_residency_integrity(Asset* a) const {
+#ifndef NDEBUG
+    if (!a) {
+        return;
+    }
+    auto it = residency_.find(a);
+    SDL_assert(it != residency_.end());
+    if (it == residency_.end()) {
+        return;
+    }
+    const Residency& residency = it->second;
+    SDL_assert(residency.chunk != nullptr);
+    if (!residency.chunk) {
+        return;
+    }
+    SDL_assert(residency.index_in_chunk_assets < residency.chunk->assets.size());
+    if (residency.index_in_chunk_assets >= residency.chunk->assets.size()) {
+        return;
+    }
+    SDL_assert(residency.chunk->assets[residency.index_in_chunk_assets] == a);
+#else
+    (void)a;
+#endif
 }
 
 Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos) {
@@ -784,7 +839,7 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     Chunk* previous = nullptr;
     auto existing = residency_.find(a);
     if (existing != residency_.end()) {
-        previous = existing->second;
+        previous = existing->second.chunk;
     } else {
         previous = chunks_.find(old_i, old_k);
     }
@@ -828,10 +883,9 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         if (previous) {
             remove_from_chunk(a, previous);
         }
-        if (std::find(target.assets.begin(), target.assets.end(), a) == target.assets.end()) {
-            target.assets.push_back(a);
-        }
-        residency_[a] = &target;
+        add_to_chunk(a, target);
+    } else {
+        debug_assert_residency_integrity(a);
     }
     prune_empty_points();
 

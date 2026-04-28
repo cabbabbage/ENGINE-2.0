@@ -21,11 +21,13 @@
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
+#include "devtools/room_candidate_source_context.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
 #include "devtools/room_oval_tools_panel.hpp"
 #include "devtools/room_selection_filter_utils.hpp"
 #include "assets/asset/anchor_point.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "animation/combat_geometry.hpp"
 #include "core/axis_convention.hpp"
 #include "utils/input.hpp"
@@ -53,6 +55,8 @@ class RoomOvalPointChildEditorPanel;
 class RoomFloorBoxToolsPanel;
 class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
+class DMSlider;
+class SliderWidget;
 class DevFooterBar;
 class DevControls;
 namespace animation_update { struct AttackPayload; }
@@ -122,7 +126,7 @@ public:
     bool has_active_modal() const;
     void pulse_active_modal_header();
 
-    void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info);
+    void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info, const SDL_Point* committed_world_pos = nullptr);
 
     void toggle_room_config();
     void open_room_config();
@@ -158,6 +162,8 @@ protected:
 
 private:
     enum class AssetEditorSubview;
+    enum class EditorMode;
+    enum class OwnershipDomain;
 
     void begin_area_drag_session(const std::string& area_name, const SDL_Point& world_mouse);
     void update_area_drag_session(const SDL_Point& world_mouse);
@@ -176,6 +182,19 @@ private:
     bool regenerate_geometry(Room* room);
     nlohmann::json* find_area_entry_json(Room* room, const std::string& area_name) const;
     void ensure_area_anchor_spawn_entry(Room* room, const std::string& area_name);
+    struct PendingLibraryPlacement {
+        SDL_Point world_point{0, 0};
+        std::string room_name;
+        Uint32 requested_at_ticks = 0;
+        std::uint64_t request_serial = 0;
+        bool snap_enabled = false;
+        int snap_resolution = 0;
+    };
+    void begin_library_placement(const SDL_Point& world_point);
+    void clear_library_placement();
+    bool has_pending_library_placement() const;
+    std::optional<SDL_Point> resolve_pending_library_placement_world() const;
+    bool commit_library_asset_placement(const std::shared_ptr<AssetInfo>& info, Asset*& out_spawned_asset);
     enum class BlockingPanel {
         Camera,
         MapLayers,
@@ -257,7 +276,7 @@ private:
     void apply_asset_scale_live_update(Asset* asset, int scale_percent);
     bool select_asset_or_group(Asset* asset);
     Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
-    bool should_open_spawn_group_panel_for_click(const void* asset_identity,
+    bool should_open_spawn_group_panel_for_click(const std::string& spawn_id,
                                                  bool has_spawn_group,
                                                  Uint32 click_time_ms);
     bool delete_selected_asset_or_group();
@@ -272,6 +291,7 @@ private:
     bool should_enable_mouse_controls() const;
     void handle_shortcuts(const Input& input);
     void handle_delete_shortcut(const Input& input);
+    bool delete_selected_stack_editor_entity();
     void set_focus_asset(Asset* asset, bool from_asset_info);
     void set_focus_spawn_group(const std::string& spawn_id);
     void clear_focus();
@@ -370,6 +390,8 @@ private:
     void reorder_spawn_group_internal(const std::string& spawn_id, size_t target_index);
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
     void open_spawn_group_floating_panel(const std::string& spawn_id, std::optional<SDL_Point> screen_anchor = std::nullopt);
+    void focus_camera_on_spawn_group(const std::string& spawn_id);
+    void apply_spawn_group_floating_layout(bool reset_scroll = false);
     void reopen_room_configurator();
     void notify_room_assets_saved();
     bool enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority);
@@ -555,7 +577,10 @@ private:
     void refresh_anchor_candidate_editor_widget();
     void update_anchor_candidate_editor_search(const Input& input);
     void layout_anchor_candidate_editor_popup();
-    void open_anchor_candidate_editor(const std::string& anchor_name, SDL_Point click_point, const SDL_Rect& row_rect);
+    void open_anchor_candidate_editor(const std::string& anchor_name,
+                                      SDL_Point click_point,
+                                      const SDL_Rect& row_rect,
+                                      devmode::CandidateSourceContext source_context);
     void close_anchor_candidate_editor();
     Asset* active_anchor_candidate_target_asset() const;
     bool anchor_candidate_editor_mode_active() const;
@@ -567,6 +592,27 @@ private:
                                        bool flush_now,
                                        const char* reason,
                                        const char* flush_tag);
+    void sync_floor_box_candidate_editor();
+    void refresh_floor_box_candidate_editor_widget();
+    void update_floor_box_candidate_editor_search(const Input& input);
+    void layout_floor_box_candidate_editor_popup();
+    void open_floor_box_candidate_editor(int box_index,
+                                         SDL_Point click_point,
+                                         devmode::CandidateSourceContext source_context);
+    void close_floor_box_candidate_editor();
+    bool floor_box_candidate_editor_mode_active() const;
+    bool floor_box_candidate_target_exists() const;
+    bool handle_floor_box_candidate_editor_event(const SDL_Event& event);
+    void render_floor_box_candidate_editor(SDL_Renderer* renderer) const;
+    bool mutate_floor_box_candidate_entry(const std::function<bool(nlohmann::json&)>& mutator,
+                                          devmode::core::DevSaveCoordinator::Priority priority,
+                                          bool flush_now,
+                                          const char* reason,
+                                          const char* flush_tag);
+    bool validate_anchor_candidate_source_context(devmode::CandidateSourceContext source_context,
+                                                  const char* operation) const;
+    bool validate_floor_candidate_source_context(devmode::CandidateSourceContext source_context,
+                                                 const char* operation) const;
     std::vector<std::string> canonical_anchor_names_for_eligible_animations(const AssetInfo& info) const;
     bool reconcile_anchor_child_candidates_with_eligible_names(const std::shared_ptr<AssetInfo>& target_info,
                                                                bool& changed);
@@ -576,6 +622,10 @@ private:
     void sync_attack_payload_editor();
     void sync_floor_box_tools_panel();
     void ensure_anchor_selection_valid();
+    bool mode_owns_domain(EditorMode mode, OwnershipDomain domain) const;
+    bool active_mode_owns_domain(OwnershipDomain domain) const;
+    bool log_rejected_domain_mutation(const char* operation, OwnershipDomain domain) const;
+    void reconcile_mode_ownership_state(EditorMode previous_mode);
     bool anchor_visible_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
     bool anchor_mutable_in_current_mode(const DisplacedAssetAnchorPoint& anchor) const;
     bool anchor_name_exists_across_eligible_animations(const std::shared_ptr<AssetInfo>& target_info,
@@ -633,6 +683,7 @@ private:
     bool update_anchor_depth(const std::string& anchor_name, float delta_world);
     bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
     bool add_anchor_in_current_frame();
+    bool duplicate_selected_anchor_in_current_frame();
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
     bool delete_selected_anchor_in_current_frame();
     bool add_oval_mapping();
@@ -679,16 +730,10 @@ private:
                                                int radius_px,
                                                int& out_corner_index,
                                                int& out_point_index) const;
-    int find_impassable_box_corner_at_screen_point(SDL_Point screen_point,
-                                                   int radius_px,
-                                                   int& out_corner_index,
-                                                   int& out_point_index) const;
     int find_hitbox_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
-    int find_impassable_box_rotation_handle_at_screen_point(SDL_Point screen_point) const;
     int find_hitbox_body_at_screen_point(SDL_Point screen_point) const;
     int find_attack_box_body_at_screen_point(SDL_Point screen_point) const;
-    int find_impassable_box_body_at_screen_point(SDL_Point screen_point) const;
     int find_floor_box_corner_at_screen_point(SDL_Point screen_point,
                                               int radius_px,
                                               int& out_corner_index) const;
@@ -698,11 +743,14 @@ private:
     bool handle_impassable_box_mode_mouse_input(const Input& input);
     bool handle_floor_box_mode_mouse_input(const Input& input);
     bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
-                                     devmode::core::DevSaveCoordinator::Priority priority);
+                                     devmode::core::DevSaveCoordinator::Priority priority,
+                                     bool flush_now = false);
     bool mutate_attack_box_current_frame(const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
-                                         devmode::core::DevSaveCoordinator::Priority priority);
-    bool mutate_impassable_boxes(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
-                                 devmode::core::DevSaveCoordinator::Priority priority);
+                                         devmode::core::DevSaveCoordinator::Priority priority,
+                                         bool flush_now = false);
+    bool mutate_impassable_shapes(const std::function<bool(std::vector<AssetInfo::ImpassableShape>&)>& mutator,
+                                  devmode::core::DevSaveCoordinator::Priority priority,
+                                  bool flush_now = false);
     bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
     bool persist_impassable_boxes(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
@@ -712,19 +760,17 @@ private:
     bool drag_impassable_box_corner_to_screen(int box_index, int point_index, SDL_Point screen_point);
     bool begin_hitbox_box_drag(int box_index, SDL_Point screen_point);
     bool begin_attack_box_drag(int box_index, SDL_Point screen_point);
-    bool begin_impassable_box_drag(int box_index, SDL_Point screen_point);
     bool begin_hitbox_rotation_drag(int box_index, SDL_Point screen_point);
     bool begin_attack_box_rotation_drag(int box_index, SDL_Point screen_point);
-    bool begin_impassable_box_rotation_drag(int box_index, SDL_Point screen_point);
     bool drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point);
     bool drag_attack_box_to_screen(int box_index, SDL_Point screen_point);
-    bool drag_impassable_box_to_screen(int box_index, SDL_Point screen_point);
     bool drag_hitbox_rotation_to_screen(int box_index, SDL_Point screen_point);
     bool drag_attack_box_rotation_to_screen(int box_index, SDL_Point screen_point);
-    bool drag_impassable_box_rotation_to_screen(int box_index, SDL_Point screen_point);
     bool add_hitbox_in_current_frame();
     bool add_attack_box_in_current_frame();
     bool add_impassable_box();
+    bool increment_selected_impassable_point_count();
+    bool decrement_selected_impassable_point_count();
     bool delete_selected_hitbox_in_current_frame();
     bool delete_selected_attack_box_in_current_frame();
     bool delete_selected_impassable_box();
@@ -736,6 +782,29 @@ private:
     bool apply_attack_payload_editor_update(const animation_update::AttackPayload& payload);
     bool add_floor_box();
     bool delete_selected_floor_box();
+    struct DeleteIntentSummary {
+        EditorMode mode = EditorMode::Normal;
+        const char* domain_label = "";
+        const char* entity_type = "";
+        const char* scope_label = "";
+        int affected_count = 0;
+    };
+    enum class DeleteConfirmResult {
+        Cancel,
+        Confirm,
+        ConfirmDontAskAgain,
+    };
+    static constexpr devmode::core::DevSaveCoordinator::Priority kDeletePersistPriority =
+        devmode::core::DevSaveCoordinator::Priority::Immediate;
+    static constexpr bool kDeletePersistFlushNow = true;
+    static std::size_t editor_mode_index(EditorMode mode);
+    std::string delete_mode_label(EditorMode mode) const;
+    bool mode_delete_confirmation_disabled(EditorMode mode) const;
+    void set_mode_delete_confirmation_disabled(EditorMode mode, bool disabled);
+    DeleteConfirmResult prompt_delete_confirmation(const DeleteIntentSummary& summary);
+    bool execute_delete_with_confirmation(const DeleteIntentSummary& summary,
+                                          const std::function<bool()>& validate_selection,
+                                          const std::function<bool()>& perform_delete);
     bool apply_floor_box_panel_detail_update(const RoomFloorBoxToolsPanel::DetailValues& values);
     bool persist_floor_boxes(devmode::core::DevSaveCoordinator::Priority priority,
                              bool flush_now,
@@ -744,6 +813,8 @@ private:
     bool drag_floor_box_corner_to_screen(int box_index, int corner_index, SDL_Point screen_point);
     bool begin_floor_box_drag(int box_index, SDL_Point screen_point);
     bool drag_floor_box_to_screen(int box_index, SDL_Point screen_point);
+    nlohmann::json floor_box_candidate_entry_json_for_index(int box_index) const;
+    static int sanitize_floor_box_candidate_grid_resolution(int value);
     std::vector<std::string> floor_box_recommendation_pool() const;
 
     struct AssetSpatialEntry {
@@ -801,6 +872,18 @@ private:
         AttackBoxEdit,
         ImpassableBoxEdit,
         FloorBoxEdit,
+    };
+
+    enum class OwnershipDomain {
+        AnchorNonLight,
+        AnchorLight,
+        OvalMappingAndPoints,
+        AnchorPointChildCandidates,
+        Movement,
+        HitBoxes,
+        AttackBoxes,
+        ImpassableGeometry,
+        FloorBoxCandidates,
     };
 
     enum class AssetEditorSubview {
@@ -862,7 +945,6 @@ private:
         std::string dragging_anchor_name;
         bool point_selected = false;
         bool dragging = false;
-        bool onion_skin_enabled = false;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
@@ -914,12 +996,26 @@ private:
         bool open = false;
         std::string anchor_name;
         Asset* target_asset = nullptr;
+        devmode::CandidateSourceContext source_context = devmode::CandidateSourceContext::AnchorNonLight;
         SDL_Point open_point{0, 0};
         SDL_Rect anchor_row_rect{0, 0, 0, 0};
         std::unique_ptr<DockableCollapsible> panel{};
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
     };
     AnchorCandidateEditorState anchor_candidate_editor_;
+
+    struct FloorBoxCandidateEditorState {
+        bool open = false;
+        Asset* target_asset = nullptr;
+        int box_index = -1;
+        devmode::CandidateSourceContext source_context = devmode::CandidateSourceContext::FloorBox;
+        SDL_Point open_point{0, 0};
+        std::unique_ptr<DockableCollapsible> panel{};
+        std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
+        std::unique_ptr<DMSlider> resolution_slider{};
+        std::unique_ptr<SliderWidget> resolution_widget{};
+    };
+    FloorBoxCandidateEditorState floor_box_candidate_editor_;
 
     struct MovementEditState {
         Asset* target_asset = nullptr;
@@ -948,6 +1044,11 @@ private:
     MovementEditState movement_edit_;
 
     struct BoxEditState {
+        enum class ExtrusionHandleSide {
+            None,
+            Front,
+            Back,
+        };
         Asset* target_asset = nullptr;
         std::string animation_id;
         int frame_index = 0;
@@ -961,8 +1062,10 @@ private:
         bool dragging_corner = false;
         bool dragging_box = false;
         bool dragging_rotation = false;
+        bool dragging_extrusion_handle = false;
         bool hovered_rotation_handle = false;
-        bool onion_skin_enabled = false;
+        ExtrusionHandleSide hovered_extrusion_handle = ExtrusionHandleSide::None;
+        ExtrusionHandleSide dragging_extrusion_handle_side = ExtrusionHandleSide::None;
         int drag_reference_point_index = -1;
         int drag_reference_corner_index = -1;
         SDL_FPoint drag_reference_screen_offset{0.0f, 0.0f};
@@ -970,6 +1073,13 @@ private:
         SDL_FPoint rotation_drag_center_screen{0.0f, 0.0f};
         float rotation_drag_start_angle_degrees = 0.0f;
         float rotation_drag_start_box_rotation_degrees = 0.0f;
+        int extrusion_drag_start_forward = 1;
+        int extrusion_drag_start_backward = 1;
+        float extrusion_drag_start_axis_center_x = 0.0f;
+        float extrusion_drag_start_axis_center_y = 0.0f;
+        float extrusion_drag_axis_unit_x = 0.0f;
+        float extrusion_drag_axis_unit_y = 1.0f;
+        float extrusion_drag_start_half_separation = 0.0f;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
@@ -1027,6 +1137,8 @@ private:
     bool asset_info_panel_visible_ = false;
 
     std::array<bool, static_cast<size_t>(BlockingPanel::Count)> blocking_panel_visible_{};
+    std::array<bool, static_cast<std::size_t>(EditorMode::FloorBoxEdit) + 1> suppress_delete_confirmation_by_mode_{};
+    std::function<DeleteConfirmResult(const DeleteIntentSummary&)> delete_confirm_callback_{};
 
     Asset* hovered_asset_ = nullptr;
     Asset* hovered_anchor_asset_ = nullptr;
@@ -1080,7 +1192,7 @@ private:
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;
     int hover_miss_frames_ = 0;
-    const void* last_click_asset_ = nullptr;
+    std::string last_click_spawn_id_{};
     Uint32 last_click_time_ms_ = 0;
     MousePressState mouse_press_state_{};
     int suppress_world_left_click_frames_ = 0;
@@ -1093,9 +1205,13 @@ private:
     bool pending_spawn_group_room_config_reopen_ = false;
     bool pending_spawn_group_selection_resync_ = false;
     std::optional<SDL_Point> pending_spawn_world_pos_{};
+    std::optional<PendingLibraryPlacement> pending_library_placement_{};
+    std::uint64_t pending_library_placement_serial_ = 0;
     std::optional<std::string> active_spawn_group_id_{};
     std::uint64_t room_assets_edit_version_ = 0;
     bool suppress_spawn_group_close_clear_ = false;
+    bool spawn_group_panel_single_entry_mode_ = false;
+    std::optional<std::string> spawn_group_panel_single_entry_id_{};
     std::unique_ptr<SpawnGroupConfig> spawn_group_panel_{};
 
     bool area_dragging_ = false;
@@ -1158,6 +1274,8 @@ private:
     std::unordered_set<std::string> map_boundary_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;
+    bool spawn_membership_allows_room_selection(const std::string& spawn_id,
+                                                const std::string& owning_room_name) const;
     bool asset_belongs_to_room(const Asset* asset) const;
     std::optional<DynamicBoundaryProxyKey> selected_dynamic_boundary_proxy_{};
     std::optional<DynamicBoundaryProxyKey> hovered_dynamic_boundary_proxy_{};
@@ -1170,6 +1288,8 @@ private:
 #if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
     std::uint32_t test_snap_spawn_group_to_resolution_call_count_ = 0;
     std::uint32_t test_respawn_spawn_group_call_count_ = 0;
+    std::uint32_t test_delete_shortcut_stack_dispatch_count_ = 0;
+    std::uint32_t test_delete_shortcut_asset_delete_count_ = 0;
     friend struct RoomEditorTestAccess;
 #endif
 
@@ -1191,10 +1311,40 @@ struct RoomEditorTestAccess {
     static int subview_asset_info();
     static int subview_animation_editor();
     static int subview_anchor();
+    static int mode_normal();
+    static int mode_anchor();
+    static int mode_light();
+    static int mode_oval();
+    static int mode_floor_box();
+    static int mode_movement();
+    static int mode_hitbox();
+    static int mode_attack_box();
+    static int candidate_source_anchor_non_light();
+    static int candidate_source_anchor_light();
+    static int candidate_source_oval_point();
+    static int candidate_source_oval_center();
+    static int candidate_source_floor_box();
+    static bool mode_owns_hitbox_domain(const RoomEditor& editor, int mode);
+    static bool mode_owns_attack_domain(const RoomEditor& editor, int mode);
+    static bool mode_owns_movement_domain(const RoomEditor& editor, int mode);
+    static bool mode_owns_oval_domain(const RoomEditor& editor, int mode);
+    static bool validate_anchor_candidate_source(const RoomEditor& editor, int source_context);
+    static bool validate_floor_candidate_source(const RoomEditor& editor, int source_context);
+    static void set_oval_candidate_selection(RoomEditor& editor, bool center_selected, int selected_point_index);
 
     static int active_subview(const RoomEditor& editor);
     static void set_active_subview(RoomEditor& editor, int subview);
     static void set_subview_change_in_progress(RoomEditor& editor, bool in_progress);
+    static void set_editor_mode(RoomEditor& editor, int mode);
+    static void set_hitbox_dragging_extrusion(RoomEditor& editor, bool dragging);
+    static void set_attack_box_dragging_extrusion(RoomEditor& editor, bool dragging);
+    static bool editor_interaction_is_dragging(const RoomEditor& editor);
+    static bool editor_interaction_camera_blocked(const RoomEditor& editor);
+    static int resolve_extrusion_drag_value(bool dragging_back_side,
+                                            int axis_offset_px,
+                                            float start_half_separation,
+                                            int start_forward,
+                                            int start_backward);
 
     static bool has_pending_subview_request(const RoomEditor& editor);
     static int pending_subview(const RoomEditor& editor);
@@ -1212,7 +1362,7 @@ struct RoomEditorTestAccess {
     static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
     static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);
     static bool should_open_spawn_group_panel_for_click(RoomEditor& editor,
-                                                        const void* asset_identity,
+                                                        const std::string& spawn_id,
                                                         bool has_spawn_group,
                                                         std::uint32_t click_time_ms);
     static void reset_click_tracking(RoomEditor& editor);
@@ -1229,6 +1379,21 @@ struct RoomEditorTestAccess {
     static int drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
     static void set_spawn_group_callback_in_progress(RoomEditor& editor, bool in_progress);
     static bool spawn_group_callback_in_progress(const RoomEditor& editor);
+    static void set_delete_confirm_callback_for_tests(RoomEditor& editor, int confirm_result);
+    static bool execute_delete_confirmation_flow(RoomEditor& editor,
+                                                 int mode,
+                                                 bool validate_before_confirm,
+                                                 bool validate_after_confirm,
+                                                 int affected_count,
+                                                 int& out_apply_calls);
+    static bool execute_delete_confirmation_with_transient_ui_drift(RoomEditor& editor,
+                                                                    int mode,
+                                                                    bool snapshot_target_exists,
+                                                                    int affected_count,
+                                                                    int& out_apply_calls);
+    static bool delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode);
+    static int delete_persist_priority_for_tests();
+    static bool delete_persist_flush_now_for_tests();
     static void enqueue_spawn_group_work(RoomEditor& editor,
                                          const std::string& spawn_id,
                                          bool needs_respawn,
@@ -1239,5 +1404,16 @@ struct RoomEditorTestAccess {
     static void process_pending_spawn_group_work(RoomEditor& editor);
     static std::uint32_t respawn_spawn_group_call_count(const RoomEditor& editor);
     static void reset_respawn_spawn_group_call_count(RoomEditor& editor);
+    static void invoke_delete_shortcut(RoomEditor& editor, bool delete_pressed, bool escape_pressed);
+    static std::uint32_t delete_shortcut_stack_dispatch_count(const RoomEditor& editor);
+    static std::uint32_t delete_shortcut_asset_delete_count(const RoomEditor& editor);
+    static void reset_delete_shortcut_route_counters(RoomEditor& editor);
+    static void set_spawn_id_ownership_cache(RoomEditor& editor,
+                                             const std::vector<std::string>& room_spawn_ids,
+                                             const std::vector<std::string>& map_boundary_spawn_ids);
+    static int classify_spawn_group_ownership(const RoomEditor& editor, const std::string& spawn_id);
+    static bool spawn_membership_allows_room_selection(const RoomEditor& editor,
+                                                       const std::string& spawn_id,
+                                                       const std::string& owning_room_name);
 };
 #endif

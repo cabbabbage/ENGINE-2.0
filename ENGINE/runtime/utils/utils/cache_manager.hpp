@@ -14,6 +14,16 @@ using json = nlohmann::json;
 
 namespace CacheManager {
 
+    enum class TextureSemantic {
+        Color,
+        NormalMap
+    };
+
+    struct TextureUploadOptions {
+        TextureSemantic semantic = TextureSemantic::Color;
+        bool enable_mipmaps = true;
+    };
+
     struct BundleFrameLayer {
         int width = 0;
         int height = 0;
@@ -50,7 +60,9 @@ namespace CacheManager {
 
     SDL_Surface* load_surface(const std::string& path);
 
-    SDL_Texture* surface_to_texture(SDL_Renderer* renderer, SDL_Surface* surface);
+    SDL_Texture* surface_to_texture(SDL_Renderer* renderer,
+                                    SDL_Surface* surface,
+                                    const TextureUploadOptions& options = TextureUploadOptions{});
 
     bool save_bundle(const std::string& bundle_path, const BundleData& data);
     bool load_bundle(const std::string& bundle_path, BundleData& out_data);

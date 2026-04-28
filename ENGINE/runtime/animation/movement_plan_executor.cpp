@@ -101,7 +101,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
 
     if (delta.x != 0 || delta.y != 0) {
         std::vector<const Asset*> blockers;
-        if (up.path_blocked(from, to, self, &blockers)) {
+        if (up.path_blocked(from, to, self, &blockers, up.active_path_blocking_context())) {
             if (up.handle_blocked_path(from, to, blockers)) {
                 return true;
             }
@@ -119,16 +119,23 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
 
     ++stride_frame_counter;
     bool stride_complete = stride_frame_counter >= stride.frames;
-
-    if (!stride_complete) {
-        if (!up.advance(self->current_frame)) {
-            stride_complete = true;
-            self->current_frame = anim.get_first_frame(current_path);
+    const bool cycle_boundary_before_advance =
+        self->current_frame && self->current_frame->next == nullptr;
+    const bool advanced = up.advance(self->current_frame);
+    if (!advanced) {
+        if (self->dead) {
+            plan.strides.clear();
+            stride_index = 0;
+            stride_frame_counter = 0;
+            return false;
         }
-    } else {
-        if (!up.advance(self->current_frame)) {
-            self->current_frame = anim.get_first_frame(current_path);
-        }
+        self->current_frame = anim.get_first_frame(current_path);
+    }
+    if (cycle_boundary_before_advance && up.maybe_trigger_attack_on_cycle_boundary()) {
+        plan.strides.clear();
+        stride_index = 0;
+        stride_frame_counter = 0;
+        return false;
     }
 
     if (stride_complete) {
@@ -246,7 +253,7 @@ bool MovementPlanExecutor::tick_3d(AnimationRuntime& up, Plan3D& plan,
         const world::GridPoint from_gp = world::GridPoint::make_virtual(from.x, from.y, from.z, self->grid_resolution);
         const world::GridPoint to_gp = world::GridPoint::make_virtual(to.x, to.y, to.z, self->grid_resolution);
         std::vector<const Asset*> blockers;
-        if (up.path_blocked(from_gp, to_gp, self, &blockers)) {
+        if (up.path_blocked(from_gp, to_gp, self, &blockers, up.active_path_blocking_context())) {
             if (up.handle_blocked_path(from_gp, to_gp, blockers)) {
                 return true;
             }
@@ -262,16 +269,23 @@ bool MovementPlanExecutor::tick_3d(AnimationRuntime& up, Plan3D& plan,
 
     ++stride_frame_counter;
     bool stride_complete = stride_frame_counter >= stride.frames;
-
-    if (!stride_complete) {
-        if (!up.advance(self->current_frame)) {
-            stride_complete = true;
-            self->current_frame = anim.get_first_frame(current_path);
+    const bool cycle_boundary_before_advance =
+        self->current_frame && self->current_frame->next == nullptr;
+    const bool advanced = up.advance(self->current_frame);
+    if (!advanced) {
+        if (self->dead) {
+            plan.strides.clear();
+            stride_index = 0;
+            stride_frame_counter = 0;
+            return false;
         }
-    } else {
-        if (!up.advance(self->current_frame)) {
-            self->current_frame = anim.get_first_frame(current_path);
-        }
+        self->current_frame = anim.get_first_frame(current_path);
+    }
+    if (cycle_boundary_before_advance && up.maybe_trigger_attack_on_cycle_boundary()) {
+        plan.strides.clear();
+        stride_index = 0;
+        stride_frame_counter = 0;
+        return false;
     }
 
     if (stride_complete) {

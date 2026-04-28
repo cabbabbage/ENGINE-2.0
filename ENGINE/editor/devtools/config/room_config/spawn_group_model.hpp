@@ -133,7 +133,6 @@ inline SpawnGroup spawn_group_from_json(const nlohmann::json& entry) {
     group.id = vibble::spawn_group_codec::read_string_field(normalized, "spawn_id");
     group.display_name = vibble::spawn_group_codec::read_string_field(normalized, "display_name");
     group.area_name = vibble::spawn_group_codec::read_string_field(normalized, "area");
-
     switch_method(group, vibble::spawn_group_codec::normalize_method_from_entry(normalized));
 
     if (auto* perimeter = group.method_config.as_perimeter()) {
@@ -186,6 +185,10 @@ inline void apply_spawn_group_to_json(const SpawnGroup& group, nlohmann::json& e
     const std::string method =
         vibble::spawn_group_codec::normalize_method(group.method.empty() ? std::string{"Random"} : group.method);
     entry["position"] = method;
+    entry.erase("randomize_y");
+    entry.erase("position_y");
+    entry.erase("min_y");
+    entry.erase("max_y");
 
     if (const auto* perimeter = group.method_config.as_perimeter()) {
         entry["min_number"] = perimeter->min_number;

@@ -574,6 +574,119 @@ TEST_CASE("Child anchor residual stays stable across horizontal movement with ex
     }
 }
 
+TEST_CASE("ChildAsset update_detailed classifies world transform changes as repass + traversal refresh") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 20, 30, 40, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 2, 3, 4, 0, 0, 0.0f, true});
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    Asset* spawned = child.get_asset();
+    REQUIRE(spawned != nullptr);
+
+    owner->move_to_world_position(35, 30, 55, 0);
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 8, 6, 5, 0, 0, 0.0f, true});
+    const ChildAsset::UpdateResult result = child.update_detailed();
+
+    CHECK(result.any_change);
+    CHECK(result.world_transform_changed);
+    CHECK(result.needs_repass);
+    CHECK(result.needs_traversal_refresh);
+    CHECK(spawned->world_x() == owner->world_x() + 8);
+    CHECK(spawned->world_y() == owner->world_y() + 6);
+    CHECK(spawned->world_z() == owner->world_z() + 5);
+}
+
+TEST_CASE("ChildAsset update_detailed classifies visual-only anchor changes without repass") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 50, 60, 70, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 2, 1, 0, 0, 0.0f, true});
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    REQUIRE(child.get_asset() != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 3, 2, 1, 0, 0, 1.75f, true});
+    const ChildAsset::UpdateResult result = child.update_detailed();
+
+    CHECK(result.any_change);
+    CHECK_FALSE(result.world_transform_changed);
+    CHECK_FALSE(result.visibility_or_membership_changed);
+    CHECK(result.visual_only_changed);
+    CHECK_FALSE(result.needs_repass);
+    CHECK_FALSE(result.needs_traversal_refresh);
+}
+
+TEST_CASE("ChildAsset update_detailed classifies visibility changes as traversal refresh only") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 15, 25, 35, 0));
+    REQUIRE(owner != nullptr);
+
+    AnchorSpec anchor{};
+    anchor.name = "eyes";
+    anchor.offset_x = 2;
+    anchor.offset_y = 2;
+    anchor.offset_z = 2;
+    anchor.exists = true;
+    anchor.hidden = false;
+    test_child_asset_runtime::set_anchor(*owner, anchor);
+
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    REQUIRE(child.get_asset() != nullptr);
+
+    anchor.hidden = true;
+    test_child_asset_runtime::set_anchor(*owner, anchor);
+    const ChildAsset::UpdateResult result = child.update_detailed();
+
+    CHECK(result.any_change);
+    CHECK_FALSE(result.world_transform_changed);
+    CHECK(result.visibility_or_membership_changed);
+    CHECK_FALSE(result.needs_repass);
+    CHECK(result.needs_traversal_refresh);
+}
+
+TEST_CASE("AnchorBoundAssetHelper detailed flush reports convergence signals and metrics") {
+    AssetsScope assets_scope;
+    Asset* owner = test_child_asset_runtime::attach_owned_asset(
+        assets_scope.assets,
+        test_child_asset_runtime::make_test_asset("vibble", 10, 20, 30, 0));
+    REQUIRE(owner != nullptr);
+
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 4, 5, 6, 0, 0, 0.0f, true});
+    ChildAsset child(*owner, "vibble_eyes");
+    child.bind("eyes");
+    Asset* spawned = child.get_asset();
+    REQUIRE(spawned != nullptr);
+
+    owner->move_to_world_position(18, 20, 37, 0);
+    test_child_asset_runtime::set_anchor(*owner, AnchorSpec{"eyes", 6, 7, 8, 0, 0, 0.0f, true});
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(owner, "eyes");
+
+    const auto result =
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates_detailed();
+    CHECK(result.any_change);
+    CHECK(result.needs_repass);
+    CHECK(result.needs_traversal_refresh);
+    CHECK(result.wave_count >= 1);
+    CHECK(result.children_considered >= 1);
+    CHECK(result.children_updated >= 1);
+
+    const auto second =
+        anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().flush_pending_updates_detailed();
+    CHECK_FALSE(second.any_change);
+    CHECK_FALSE(second.needs_repass);
+    CHECK_FALSE(second.needs_traversal_refresh);
+}
+
 TEST_CASE("ChildAsset controller retry recreates child after one failed spawn attempt") {
     AssetsScope assets_scope;
     Asset* owner = test_child_asset_runtime::attach_owned_asset(

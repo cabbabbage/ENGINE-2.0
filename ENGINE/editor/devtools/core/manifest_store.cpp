@@ -540,7 +540,10 @@ void ManifestStore::ensure_asset_container() {
     if (!manifest_cache_.contains("assets") || !manifest_cache_["assets"].is_object()) {
         manifest_cache_["assets"] = nlohmann::json::object();
     }
-    if (!manifest_cache_.contains("maps")) {
+    if (!manifest_cache_.contains("maps") || !manifest_cache_["maps"].is_object()) {
+        if (manifest_cache_.contains("maps") && !manifest_cache_["maps"].is_object()) {
+            std::cerr << "[ManifestStore] manifest.maps expected object. Resetting to empty object.\n";
+        }
         manifest_cache_["maps"] = nlohmann::json::object();
     }
 }

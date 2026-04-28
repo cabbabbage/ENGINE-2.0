@@ -34,7 +34,16 @@ namespace animation_update::detail {
 inline constexpr const char kDefaultAnimation[] = "default";
 inline constexpr int        kOverlapDistanceSq  = 40 * 40;
 
+struct PathBlockingContext {
+    std::optional<std::string> engagement_target_asset_id = std::nullopt;
+    bool allow_engagement_target_overlap = false;
+};
+
+std::string stable_asset_id(const Asset& asset);
 bool should_consider_overlap(const Asset& self, const Asset& other);
+int overlap_distance_sq_for_pair(const Asset& self,
+                                 const Asset& other,
+                                 const PathBlockingContext& context = {});
 int  distance_sq(const world::GridPoint& a, const world::GridPoint& b);
 int  distance_sq(SDL_Point a, SDL_Point b);
 long long distance_sq_3d(const world::GridPoint& a, const world::GridPoint& b);
@@ -54,6 +63,14 @@ bool segment_leaves_playable_area(const Assets* assets, SDL_Point from, SDL_Poin
 
 class AnimationUpdate {
 public:
+    struct AutoMoveCombatOptions {
+        bool attacking_enabled = false;
+    };
+
+    struct AutoMoveCombatOverrides {
+        std::optional<bool> attacking_enabled = std::nullopt;
+    };
+
     enum class ReversePlaybackCommand {
         None,
         ReverseUntilStopCurrentAnimation,
@@ -70,16 +87,18 @@ public:
     void set_debug_enabled(bool enabled);
     bool debug_enabled() const;
 
-    void auto_move(const std::vector<SDL_Point>& rel_checkpoints, int visited_thresh_px, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
-    void auto_move(SDL_Point world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
-    void auto_move(Asset* target_asset, int visited_thresh_px = 0, bool override_non_locked = true);
-    void auto_move_3d(axis::WorldPos world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
-    void auto_move_3d_relative(axis::WorldPos rel_delta, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
+    void auto_move(const std::vector<SDL_Point>& rel_checkpoints, int visited_thresh_px, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move(SDL_Point world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move(Asset* target_asset, int visited_thresh_px = 0, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move_3d(axis::WorldPos world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move_3d(Asset* target_asset, int visited_thresh_px = 0, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
+    void auto_move_3d_relative(axis::WorldPos rel_delta, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true, AutoMoveCombatOverrides combat_overrides = {});
     void auto_move_3d(const std::vector<axis::WorldPos>& checkpoints,
                       bool                               relative_checkpoints,
                       int                                visited_thresh_px,
                       std::optional<int>                 checkpoint_resolution = std::nullopt,
-                      bool                               override_non_locked   = true);
+                      bool                               override_non_locked   = true,
+                      AutoMoveCombatOverrides            combat_overrides      = {});
 
     int visit_threshold_px() const { return visited_thresh_; }
 
@@ -148,6 +167,7 @@ private:
     PathSanitizer3D sanitizer_3d_{};
     GetBestPath3D   planner_3d_{};
     ActivePlanMode  active_plan_mode_ = ActivePlanMode::None;
+    bool            auto_move_attacking_enabled_ = false;
 
     bool         input_event_ = false;
     bool         move_pending_ = false;
@@ -156,6 +176,7 @@ private:
     MoveRequest3D pending_move_3d_{};
     ReversePlaybackCommand pending_reverse_command_ = ReversePlaybackCommand::None;
     bool        debug_enabled_ = false;
+    std::optional<std::string> pending_engagement_target_asset_id_ = std::nullopt;
     std::uint32_t next_plan_retry_frame_ = 0;
     std::uint32_t local_plan_frame_counter_ = 0;
     static constexpr std::uint32_t kPlanRetryCooldownFrames = 4;
@@ -167,4 +188,6 @@ private:
 
     vibble::grid::Grid& grid() const;
     int effective_grid_resolution(std::optional<int> override_resolution) const;
+    AutoMoveCombatOptions resolve_auto_move_combat_options(AutoMoveCombatOverrides overrides = {}) const;
+    bool should_defer_auto_move_for_committed_attack() const;
 };

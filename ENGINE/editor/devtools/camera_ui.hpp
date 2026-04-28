@@ -33,7 +33,9 @@ public:
     void render(SDL_Renderer* renderer) const;
 
     void sync_from_camera();
+    void sync_debug_controls_from_settings(const WarpedScreenGrid::RealismSettings& settings);
     void set_dirty_callback(std::function<void()> callback);
+    bool is_debug_section_expanded() const { return debug_section_expanded_; }
 
 
 
@@ -62,6 +64,8 @@ private:
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> boundary_min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
+    std::unique_ptr<FloatSliderWidget> dynamic_renderer_depth_efficiency_depth_slider_;
+    std::unique_ptr<FloatSliderWidget> dynamic_renderer_depth_efficiency_min_density_ratio_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
     std::unique_ptr<FloatSliderWidget> front_layer_light_strength_multiplier_slider_;

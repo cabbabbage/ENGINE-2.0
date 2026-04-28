@@ -49,6 +49,15 @@ public:
                          double max_cull_depth,
                          SDL_Color clear_color,
                          bool render_floor_tiles);
+    SDL_Texture* compose_gpu(const WarpedScreenGrid& cam,
+                             const world::WorldGrid& grid,
+                             const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
+                             bool runtime_lighting_enabled,
+                             double max_cull_depth,
+                             SDL_Color clear_color,
+                             bool render_floor_tiles);
+    SDL_Texture* floor_dark_mask_texture() const { return has_floor_dark_mask_ ? floor_light_mask_texture_ : nullptr; }
+    SDL_Texture* floor_overlay_texture() const { return floor_overlay_texture_; }
 
 private:
     bool ensure_sized_target(SDL_Texture*& texture);
@@ -58,11 +67,15 @@ private:
     void destroy_owned_textures();
 
     SDL_Renderer* renderer_ = nullptr;
+    Assets* assets_ = nullptr;
     GridTileRenderer tile_renderer_;
+    LayerEffectProcessor gpu_light_field_processor_;
     int screen_width_ = 1;
     int screen_height_ = 1;
 
     SDL_Texture* floor_base_texture_ = nullptr;
     SDL_Texture* floor_light_mask_texture_ = nullptr;
     SDL_Texture* floor_light_falloff_texture_ = nullptr;
+    SDL_Texture* floor_overlay_texture_ = nullptr;
+    bool has_floor_dark_mask_ = false;
 };

@@ -34,6 +34,7 @@
 #include "AnimationInspectorPanel.hpp"
 #include "AnimationListContextMenu.hpp"
 #include "AnimationListPanel.hpp"
+#include "CustomControllerService.hpp"
 #include "EditorUIPrimitives.hpp"
 #include "AsyncTaskQueue.hpp"
 #include "AudioImporter.hpp"
@@ -520,7 +521,6 @@ nlohmann::json snapshot_from_asset_info(const AssetInfo& info) {
 namespace animation_editor {
 
 AnimationEditorWindow::AnimationEditorWindow() {
-    live_frame_editor_token_ = std::make_shared<LiveFrameEditorToken>();
     document_ = std::make_shared<AnimationDocument>();
     document_->set_on_saved_callback([this]() { this->handle_document_saved(); });
     preview_provider_ = std::make_shared<PreviewProvider>();
@@ -536,6 +536,7 @@ AnimationEditorWindow::AnimationEditorWindow() {
     inspector_panel_->set_preview_provider(preview_provider_);
     configure_inspector_panel();
     list_context_menu_ = std::make_unique<AnimationListContextMenu>();
+    custom_controller_service_ = std::make_unique<CustomControllerService>();
 
     add_button_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 160, DMButton::height());
     controller_button_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 140, DMButton::height());
@@ -611,6 +612,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         asset_root_path_.clear();
     }
     asset_root_path_ = ensure_assets_storage(asset_root_path_, *info);
+    if (custom_controller_service_) {
+        custom_controller_service_->set_asset_root(asset_root_path_);
+    }
 
     process_auto_save();
 
@@ -669,6 +673,10 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         }
     } else {
         std::cerr << "[AnimationEditor] Manifest store unavailable; animations will not persist for '" << info->name << "'\n";
+    }
+    if (custom_controller_service_) {
+        custom_controller_service_->set_manifest_store(manifest_store_);
+        custom_controller_service_->set_manifest_asset_key(manifest_asset_key_);
     }
 
     if (manifest_transaction_) {
@@ -748,7 +756,9 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                                 document_ && document_->animation_ids().size() == 1 && document_->animation_ids().front() == "default";
 
     if (seeded_default) {
-        document_->save_to_file();
+        orchestrated_save(devmode::core::SaveOrchestrator::Reason::HotReload,
+                          manifest_asset_key_.empty() ? std::string("animation-editor") : manifest_asset_key_,
+                          [this]() { document_->save_to_file(); return true; });
     } else if (document_) {
         document_->consume_dirty_flag();
     }
@@ -796,7 +806,6 @@ void AnimationEditorWindow::clear_info() {
     asset_root_path_.clear();
     close_manifest_transaction();
     close_defaults_modal();
-    live_frame_editor_session_active_ = false;
     document_->load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, {});
     document_->consume_dirty_flag();
     preview_provider_->invalidate_all();
@@ -917,7 +926,7 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_source_png_sequence_picker([this]() { return this->pick_png_sequence(); });
     inspector_panel_->set_source_status_callback([this](const std::string& message) { this->set_status_message(message); });
     inspector_panel_->set_frame_edit_callback({});
-    inspector_panel_->set_frame_mode_edit_callback([this](const std::string& id, FrameEditorLaunchMode mode) { this->open_frame_editor(id, mode); });
+    inspector_panel_->set_frame_mode_edit_callback({});
     inspector_panel_->set_navigate_to_animation_callback([this](const std::string& id) {
         this->select_animation(std::optional<std::string>{id}, true);
     });
@@ -1365,8 +1374,10 @@ void AnimationEditorWindow::refresh_inspector_animation_callback() {
             return;
         }
         if (document_) {
-            if (!document_->save_to_file_checked(true)) {
-                const std::string manifest_key = document_->manifest_asset_key_debug();
+            const std::string manifest_key = document_->manifest_asset_key_debug();
+            if (!orchestrated_save(devmode::core::SaveOrchestrator::Reason::StateChange,
+                                   manifest_key.empty() ? std::string("animation-editor") : manifest_key,
+                                   [this]() { return document_->save_to_file_checked(true); })) {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                             "AnimationEditorWindow: fallback save failed for animation '%s' (manifest key: '%s').",
                             animation_id.c_str(),
@@ -2143,92 +2154,6 @@ void AnimationEditorWindow::handle_create_defaults() {
     close_defaults_modal();
 }
 
-Asset* AnimationEditorWindow::resolve_frame_editor_asset() {
-    if (target_asset_) {
-        return target_asset_;
-    }
-    if (!assets_) {
-        return nullptr;
-    }
-    auto info = info_.lock();
-    if (!info) {
-        return nullptr;
-    }
-    const std::string context_name_lower = animation_editor::strings::to_lower_copy(info->name);
-    auto matches_context = [&](Asset* candidate) -> bool {
-        if (!candidate || !candidate->info) {
-            return false;
-        }
-        if (candidate->info == info) {
-            return true;
-        }
-        if (context_name_lower.empty() || candidate->info->name.empty()) {
-            return false;
-        }
-        return animation_editor::strings::to_lower_copy(candidate->info->name) == context_name_lower;
-};
-    auto pick_from = [&](const std::vector<Asset*>& candidates) -> Asset* {
-        for (Asset* candidate : candidates) {
-            if (matches_context(candidate)) {
-                return candidate;
-            }
-        }
-        return nullptr;
-};
-
-    if (Asset* hovered = assets_->get_hovered_asset(); hovered && matches_context(hovered)) {
-        return hovered;
-    }
-    if (Asset* from_selection = pick_from(assets_->get_selected_assets())) {
-        return from_selection;
-    }
-    if (Asset* from_highlight = pick_from(assets_->get_highlighted_assets())) {
-        return from_highlight;
-    }
-    if (Asset* from_active = pick_from(assets_->getActive())) {
-        return from_active;
-    }
-    return nullptr;
-}
-
-void AnimationEditorWindow::open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode) {
-    if (animation_id.empty() || !document_) {
-        return;
-    }
-    if (mode == FrameEditorLaunchMode::Movement) {
-        set_status_message("Movement editing moved to the in-room asset stack. Open Asset Info on a room asset and press Tab.", 300);
-        return;
-    }
-    if (!assets_) {
-        set_status_message("Live Frame Editor is only available inside the room editor.", 240);
-        return;
-    }
-    Asset* runtime_asset = resolve_frame_editor_asset();
-    if (!runtime_asset) {
-        set_status_message("Select an in-room asset to edit frames in-scene.", 240);
-        return;
-    }
-    target_asset_ = runtime_asset;
-    live_frame_editor_session_active_ = true;
-    std::weak_ptr<LiveFrameEditorToken> host_token = live_frame_editor_token_;
-    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id, mode,
-        [this, host_token](const std::string& closed_animation_id) {
-            if (host_token.expired()) return;
-            this->on_live_frame_editor_closed(closed_animation_id);
-        });
-    set_visible(false, false );
-}
-
-void AnimationEditorWindow::on_live_frame_editor_closed(const std::string& animation_id) {
-    live_frame_editor_session_active_ = false;
-    preview_provider_->invalidate_all();
-    set_visible(true);
-    if (!animation_id.empty()) {
-        focus_animation(animation_id);
-    }
-    set_status_message("Frame editor updated.", 180);
-}
-
 void AnimationEditorWindow::create_animation_via_prompt() {
     const char* input = tinyfd_inputBox("Create Animation", "Enter new animation identifier", "animation");
     if (!input) return;
@@ -2311,7 +2236,9 @@ void AnimationEditorWindow::reload_document() {
     const bool seeded_default = snapshot_was_empty && document_ && document_->animation_ids().size() == 1 && document_->animation_ids().front() == "default";
 
     if (seeded_default) {
-        document_->save_to_file();
+        orchestrated_save(devmode::core::SaveOrchestrator::Reason::HotReload,
+                          manifest_asset_key_.empty() ? std::string("animation-editor") : manifest_asset_key_,
+                          [this]() { document_->save_to_file(); return true; });
     } else if (document_) {
         document_->consume_dirty_flag();
     }
@@ -2340,7 +2267,9 @@ void AnimationEditorWindow::process_auto_save() {
         return;
     }
 
-    document_->save_to_file_checked(true);
+    (void)orchestrated_save(devmode::core::SaveOrchestrator::Reason::AutoSave,
+                            manifest_asset_key_.empty() ? std::string("animation-editor") : manifest_asset_key_,
+                            [this]() { return document_->save_to_file_checked(true); });
     if (using_manifest_store_) {
         set_status_message("Animations auto-saved.", 180);
     }
@@ -2354,6 +2283,9 @@ void AnimationEditorWindow::set_manifest_store(devmode::core::ManifestStore* sto
     }
     close_manifest_transaction();
     manifest_store_ = store;
+    if (custom_controller_service_) {
+        custom_controller_service_->set_manifest_store(store);
+    }
     if (inspector_panel_) {
         inspector_panel_->set_manifest_store(store);
     }
@@ -2520,6 +2452,23 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
     return committed;
 }
 
+
+bool AnimationEditorWindow::orchestrated_save(devmode::core::SaveOrchestrator::Reason reason,
+                                              const std::string& document_id,
+                                              const std::function<bool()>& write) {
+    devmode::core::SaveOrchestrator::Request request;
+    request.document_id = document_id.empty() ? std::string("animation-editor") : document_id;
+    request.reason = reason;
+    request.atomic_write = write;
+    request.disk_available_check = []() { return true; };
+    request.checksum = []() { return std::size_t{0}; };
+    const auto result = save_orchestrator_.save(request);
+    if (!result.success && result.conflict) {
+        set_status_message("Conflict detected", 240);
+    }
+    return result.success;
+}
+
 std::optional<std::string> AnimationEditorWindow::resolve_manifest_key(const AssetInfo& info) const {
     if (!manifest_store_) {
         return std::nullopt;
@@ -2655,11 +2604,10 @@ void AnimationEditorWindow::update_controller_button_label() {
 
 bool AnimationEditorWindow::does_controller_exist() const {
     auto info_ptr = info_.lock();
-    if (!info_ptr) return false;
+    if (!info_ptr || asset_root_path_.empty()) return false;
     std::string sanitized = sanitize_asset_name(info_ptr->name);
     if (sanitized.empty()) return false;
     std::string key = generate_controller_key(sanitized);
-
     std::filesystem::path controller_dir = "ENGINE/runtime/animation/controllers/custom_controllers";
     std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
     std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
@@ -2815,148 +2763,36 @@ void AnimationEditorWindow::ensure_controller_factory_registration(const std::st
 
 void AnimationEditorWindow::add_controller() {
     auto info_ptr = info_.lock();
-    if (!info_ptr) {
+    if (!info_ptr || !custom_controller_service_) {
         set_status_message("No asset selected.", 180);
         return;
     }
-    std::string sanitized = sanitize_asset_name(info_ptr->name);
-    if (sanitized.empty()) {
-        set_status_message("Invalid asset name.", 180);
-        return;
-    }
-    std::string key = generate_controller_key(sanitized);
-    std::string class_name = generate_class_name(sanitized);
 
-    std::filesystem::path controller_dir = "ENGINE/runtime/animation/controllers/custom_controllers";
-    std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
-    std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
-
-    if (std::filesystem::exists(hpp_path) && std::filesystem::exists(cpp_path)) {
-        set_status_message("Controller already exists.", 180);
+    try {
+        custom_controller_service_->set_asset_root(asset_root_path_);
+        custom_controller_service_->set_manifest_store(manifest_store_);
+        custom_controller_service_->set_manifest_asset_key(manifest_asset_key_);
+        custom_controller_service_->create_new_controller(generate_controller_key(sanitize_asset_name(info_ptr->name)));
+        set_status_message("Controller created.", 240);
         update_controller_button_label();
-        return;
+    } catch (const std::exception& ex) {
+        set_status_message(std::string("Failed to create controller: ") + ex.what(), 240);
     }
-
-    std::filesystem::create_directories(controller_dir);
-
-    const std::string metadata = build_controller_metadata(key);
-
-    std::ostringstream hpp_builder;
-    hpp_builder << metadata
-                << "#pragma once\n"
-                << "#include \"animation/controllers/shared/custom_asset_controller.hpp\"\n"
-                << "\n"
-                << "class Asset;\n"
-                << "class Input;\n"
-                << "\n"
-                << "class " << class_name << " : public CustomAssetController {\n"
-                << "public:\n"
-                << "    explicit " << class_name << "(Asset* self);\n"
-                << "    ~" << class_name << "() override = default;\n"
-                << "\n"
-                << "protected:\n"
-                << "    void on_update(const Input& in) override;\n"
-                << "    void on_process_pending_attacks(Asset& self) override;\n"
-                << "};\n";
-    std::string hpp_content = hpp_builder.str();
-
-    std::ostringstream cpp_builder;
-    cpp_builder << metadata
-                << "#include \"" << key << ".hpp\"\n"
-                << "\n"
-                << "#include \"assets/asset/Asset.hpp\"\n"
-                << "#include \"assets/asset/animation.hpp\"\n"
-                << "#include \"assets/asset/asset_info.hpp\"\n"
-                << "#include \"animation/animation_update.hpp\"\n"
-                << "#include \"utils/input.hpp\"\n"
-                << "#include <string>\n"
-                << "\n"
-                << class_name << "::" << class_name << "(Asset* self)\n"
-                << "    : CustomAssetController(self) {}\n"
-                << "\n"
-                << "void " << class_name << "::on_update(const Input& ) {\n"
-                << "    Asset* self = self_ptr();\n"
-                << "    if (!self || !self->info || !self->anim_) return;\n"
-                << "\n"
-                << "    const std::string default_anim{ animation_update::detail::kDefaultAnimation };\n"
-                << "    auto it = self->info->animations.find(default_anim);\n"
-                << "    if (it != self->info->animations.end() && it->second.has_frames()) {\n"
-                << "        if (self->current_animation != default_anim || self->current_frame == nullptr) {\n"
-                << "            self->anim_->move(SDL_Point{0, 0}, default_anim);\n"
-                << "        }\n"
-                << "        return;\n"
-                << "    }\n"
-                << "\n"
-                << "    if (!self->info->animations.empty()) {\n"
-                << "        const auto& first = *self->info->animations.begin();\n"
-                << "        if (self->current_animation != first.first || self->current_frame == nullptr) {\n"
-                << "            self->anim_->move(SDL_Point{0, 0}, first.first);\n"
-                << "        }\n"
-                << "    }\n"
-                << "}\n"
-                << "\n"
-                << "void " << class_name << "::on_process_pending_attacks(Asset& self_ref) {\n"
-                << "    (void)self_ref;\n"
-                << "    Asset* self = self_ptr();\n"
-                << "    if (!self || !self->info || !self->anim_) return;\n"
-                << "    // TODO: implement attack handling if this asset uses attack queues.\n"
-                << "}\n";
-    std::string cpp_content = cpp_builder.str();
-
-    std::ofstream hpp_file(hpp_path);
-    if (!hpp_file) {
-        set_status_message("Failed to create .hpp file.", 180);
-        return;
-    }
-    hpp_file << hpp_content;
-    hpp_file.close();
-
-    std::ofstream cpp_file(cpp_path);
-    if (!cpp_file) {
-        set_status_message("Failed to create .cpp file.", 180);
-        return;
-    }
-    cpp_file << cpp_content;
-    cpp_file.close();
-
-    // Register the new controller with the factory so runtime lookups succeed.
-    ensure_controller_factory_registration(key, class_name);
-
-    set_status_message("Controller created.", 240);
-    update_controller_button_label();
 }
 
 void AnimationEditorWindow::open_controller() {
     auto info_ptr = info_.lock();
-    if (!info_ptr) {
+    if (!info_ptr || !custom_controller_service_) {
         set_status_message("No asset selected.", 180);
         return;
     }
-    std::string sanitized = sanitize_asset_name(info_ptr->name);
-    if (sanitized.empty()) {
-        set_status_message("Invalid asset name.", 180);
-        return;
-    }
-    std::string key = generate_controller_key(sanitized);
-    std::filesystem::path controller_dir = "ENGINE/runtime/animation/controllers/custom_controllers";
-    std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
-    if (!std::filesystem::exists(hpp_path)) {
-        set_status_message("Controller file does not exist.", 180);
-        return;
-    }
-    std::string class_name = generate_class_name(sanitized);
 
-    const std::string metadata = build_controller_metadata(key);
-    write_or_update_controller_metadata(hpp_path, metadata);
-    write_or_update_controller_metadata(controller_dir / (key + ".cpp"), metadata);
-    ensure_controller_factory_registration(key, class_name);
-
-    std::string cmd = "cmd /c start \"\" \"" + hpp_path.string() + "\"";
-    int result = std::system(cmd.c_str());
-    if (result != 0) {
-        set_status_message("Failed to open controller file.", 180);
-    } else {
+    try {
+        custom_controller_service_->set_asset_root(asset_root_path_);
+        custom_controller_service_->open_existing_controller(generate_controller_key(sanitize_asset_name(info_ptr->name)));
         set_status_message("Opened controller file.", 120);
+    } catch (const std::exception& ex) {
+        set_status_message(std::string("Failed to open controller: ") + ex.what(), 240);
     }
 }
 

@@ -2,34 +2,151 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <unordered_map>
 #include <vector>
-#include <cstdint>
 
 #include <SDL3/SDL.h>
 
 #include "assets/asset/Asset.hpp"
-#include "assets/asset/asset_types.hpp"
-#include "gameplay/world/tiling/grid_tile.hpp"
-#include "utils/map_grid_settings.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "gameplay/world/chunk.hpp"
+#include "gameplay/world/tiling/grid_tile.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "utils/grid.hpp"
+#include "utils/log.hpp"
+#include "utils/map_grid_settings.hpp"
 
 namespace {
 
-constexpr float kTileResolutionScale = 0.5f;
-
 struct ChunkTileAsset {
-    Asset*       asset        = nullptr;
-    SDL_Rect     sprite_world{0, 0, 0, 0};
-    SDL_Texture* texture      = nullptr;
-    int          texture_w    = 0;
-    int          texture_h    = 0;
-    bool         flipped      = false;
+    Asset*                  asset = nullptr;
+    Asset::TilingInfo       tiling{};
+    SDL_Rect                sprite_world{0, 0, 0, 0};
+    SDL_Texture*            texture = nullptr;
+    SDL_Rect                source_rect{0, 0, 0, 0};
+    int                     texture_w = 0;
+    int                     texture_h = 0;
+    bool                    smooth_scaling = false;
+    bool                    flipped = false;
 };
+
+struct ResolvedFrameData {
+    SDL_Texture* texture = nullptr;
+    SDL_Rect     source_rect{0, 0, 0, 0};
+    int          frame_w = 0;
+    int          frame_h = 0;
+    int          texture_w = 0;
+    int          texture_h = 0;
+};
+
+struct ChunkDrawContribution {
+    const ChunkTileAsset* ctx = nullptr;
+    SDL_Rect world_overlap{0, 0, 0, 0};
+};
+
+static SDL_Rect clamp_to_texture_bounds(SDL_Rect rect, int texture_w, int texture_h) {
+    SDL_Rect invalid{0, 0, 0, 0};
+    if (texture_w <= 0 || texture_h <= 0 || rect.w <= 0 || rect.h <= 0) {
+        return invalid;
+    }
+
+    const int x0 = std::clamp(rect.x, 0, texture_w - 1);
+    const int y0 = std::clamp(rect.y, 0, texture_h - 1);
+    const int x1 = std::clamp(rect.x + rect.w, x0 + 1, texture_w);
+    const int y1 = std::clamp(rect.y + rect.h, y0 + 1, texture_h);
+
+    SDL_Rect out{};
+    out.x = x0;
+    out.y = y0;
+    out.w = std::max(1, x1 - x0);
+    out.h = std::max(1, y1 - y0);
+    return out;
+}
+
+static bool resolve_current_frame_data(const Asset* asset, ResolvedFrameData& out) {
+    out = ResolvedFrameData{};
+    if (!asset) {
+        return false;
+    }
+
+    const FrameVariant* selected_variant = nullptr;
+    SDL_Texture* texture = nullptr;
+    if (const AnimationFrame* frame = asset->current_animation_frame()) {
+        if (!frame->variants.empty()) {
+            const int variant_idx = std::clamp(asset->current_variant_index, 0, static_cast<int>(frame->variants.size()) - 1);
+            selected_variant = &frame->variants[static_cast<std::size_t>(variant_idx)];
+            texture = selected_variant->get_base_texture();
+        }
+    }
+    if (!texture) {
+        texture = asset->get_current_frame();
+    }
+    if (!texture) {
+        return false;
+    }
+
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+        return false;
+    }
+
+    const int tex_w = static_cast<int>(std::lround(tex_wf));
+    const int tex_h = static_cast<int>(std::lround(tex_hf));
+    if (tex_w <= 0 || tex_h <= 0) {
+        return false;
+    }
+
+    SDL_Rect source_rect{0, 0, tex_w, tex_h};
+    if (selected_variant && selected_variant->source_rect.w > 0 && selected_variant->source_rect.h > 0) {
+        source_rect = clamp_to_texture_bounds(selected_variant->source_rect, tex_w, tex_h);
+    }
+
+    out.texture = texture;
+    out.source_rect = source_rect;
+    out.frame_w = source_rect.w;
+    out.frame_h = source_rect.h;
+    out.texture_w = tex_w;
+    out.texture_h = tex_h;
+    return out.frame_w > 0 && out.frame_h > 0;
+}
+
+static SDL_Point resolve_asset_dimensions(const Asset* asset) {
+    if (!asset) {
+        return SDL_Point{1, 1};
+    }
+
+    ResolvedFrameData frame_data{};
+    if (resolve_current_frame_data(asset, frame_data)) {
+        return SDL_Point{std::max(1, frame_data.frame_w), std::max(1, frame_data.frame_h)};
+    }
+
+    int width = asset->width();
+    int height = asset->height();
+
+    if ((width <= 0 || height <= 0) && asset->info) {
+        width = std::max(width, asset->info->original_canvas_width);
+        height = std::max(height, asset->info->original_canvas_height);
+    }
+
+    if (width <= 0 || height <= 0) {
+        SDL_Texture* texture = asset->get_current_frame();
+        if (texture) {
+            float tex_wf = 0.0f;
+            float tex_hf = 0.0f;
+            if (SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+                width = static_cast<int>(std::lround(tex_wf));
+                height = static_cast<int>(std::lround(tex_hf));
+            }
+        }
+    }
+
+    return SDL_Point{std::max(1, width), std::max(1, height)};
+}
 
 static int floor_div_int(int value, int step) {
     if (step == 0) {
@@ -52,39 +169,37 @@ static std::uint64_t chunk_key(int i, int j) {
     return (static_cast<std::uint64_t>(hi) << 32) | static_cast<std::uint64_t>(lo);
 }
 
-static int reduce_tile_step(int step) {
-    if (step <= 0) {
-        return 1;
+static int resolve_asset_tile_step(const Asset* asset, const MapGridSettings& settings) {
+    if (!asset || !asset->info) {
+        return resolve_tiled_asset_step_px(settings, 1);
     }
-    const int scaled = static_cast<int>(std::lround(static_cast<double>(step) * kTileResolutionScale));
-    return std::max(1, scaled);
+
+    const SDL_Point sprite_dims = resolve_asset_dimensions(asset);
+    double scale = 1.0;
+    if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
+        scale = static_cast<double>(asset->info->scale_factor);
+    }
+    const int fallback_step = std::max(
+        1,
+        static_cast<int>(std::lround(static_cast<double>(std::max(sprite_dims.x, sprite_dims.y)) * scale)));
+    return resolve_tiled_asset_step_px(settings, fallback_step);
 }
 
-static int tile_step_from_settings(const MapGridSettings& settings) {
-    return reduce_tile_step(std::max(1, settings.spacing()));
-}
-
-static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset,
-                                                                 const MapGridSettings& grid_settings) {
+static std::optional<Asset::TilingInfo> compute_fallback_tiling_for_asset(const Asset* asset,
+                                                                           const MapGridSettings& grid_settings) {
     if (!asset || !asset->info || !asset->info->tillable) {
         return std::nullopt;
     }
 
-    int step = tile_step_from_settings(grid_settings);
+    const int step = resolve_asset_tile_step(asset, grid_settings);
     if (step <= 0) {
-        const int raw_w = std::max(1, asset->info->original_canvas_width);
-        const int raw_h = std::max(1, asset->info->original_canvas_height);
-        double scale = 1.0;
-        if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
-            scale = static_cast<double>(asset->info->scale_factor);
-        }
-        step = reduce_tile_step(std::max(1, static_cast<int>(std::lround(static_cast<double>(std::max(raw_w, raw_h)) * scale))));
+        return std::nullopt;
     }
-    step = std::max(1, step);
 
     const SDL_Point world_pos{ asset->world_x(), asset->world_z() };
-    const int base_w = std::max(1, asset->info->original_canvas_width);
-    const int base_h = std::max(1, asset->info->original_canvas_height);
+    const SDL_Point sprite_dims = resolve_asset_dimensions(asset);
+    const int base_w = sprite_dims.x;
+    const int base_h = sprite_dims.y;
     double scale = 1.0;
     if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
         scale = static_cast<double>(asset->info->scale_factor);
@@ -101,12 +216,12 @@ static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* as
         if (step_ <= 0) return value;
         const double scaled = std::floor(static_cast<double>(value) / static_cast<double>(step_));
         return static_cast<int>(scaled * static_cast<double>(step_));
-};
+    };
     auto align_up = [](int value, int step_) {
         if (step_ <= 0) return value;
         const double scaled = std::ceil(static_cast<double>(value) / static_cast<double>(step_));
         return static_cast<int>(scaled * static_cast<double>(step_));
-};
+    };
 
     const int origin_x = align_down(left, step);
     const int origin_y = align_down(top, step);
@@ -114,15 +229,29 @@ static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* as
     const int limit_y  = align_up(bottom, step);
 
     Asset::TilingInfo tiling{};
-    tiling.enabled     = true;
-    tiling.tile_size   = SDL_Point{ step, step };
+    tiling.enabled = true;
+    tiling.tile_size = SDL_Point{ step, step };
     tiling.grid_origin = SDL_Point{ origin_x, origin_y };
-    tiling.anchor      = SDL_Point{ align_down(world_pos.x, step) + step / 2,
-                                    align_down(world_pos.y, step) + step / 2 };
+    tiling.anchor = SDL_Point{
+        align_down(world_pos.x, step) + step / 2,
+        align_down(world_pos.y, step) + step / 2
+    };
+
     const int coverage_w = std::max(step, limit_x - origin_x);
     const int coverage_h = std::max(step, limit_y - origin_y);
     tiling.coverage = SDL_Rect{ origin_x, origin_y, coverage_w, coverage_h };
     return tiling.is_valid() ? std::optional<Asset::TilingInfo>(tiling) : std::nullopt;
+}
+
+static std::optional<Asset::TilingInfo> resolve_tiling_for_asset(const Asset* asset,
+                                                                  const MapGridSettings& grid_settings) {
+    if (!asset || !asset->info || !asset->info->tillable) {
+        return std::nullopt;
+    }
+    if (asset->tiling_info() && asset->tiling_info()->is_valid()) {
+        return asset->tiling_info();
+    }
+    return compute_fallback_tiling_for_asset(asset, grid_settings);
 }
 
 static std::optional<SDL_Rect> compute_sprite_world_rect(const Asset* asset) {
@@ -130,8 +259,9 @@ static std::optional<SDL_Rect> compute_sprite_world_rect(const Asset* asset) {
         return std::nullopt;
     }
 
-    const int base_w = std::max(1, asset->info->original_canvas_width);
-    const int base_h = std::max(1, asset->info->original_canvas_height);
+    const SDL_Point sprite_dims = resolve_asset_dimensions(asset);
+    const int base_w = sprite_dims.x;
+    const int base_h = sprite_dims.y;
     double scale     = 1.0;
     if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
         scale = static_cast<double>(asset->info->scale_factor);
@@ -150,8 +280,15 @@ static std::optional<SDL_Rect> compute_sprite_world_rect(const Asset* asset) {
 
 static SDL_Rect compute_source_rect(const ChunkTileAsset& ctx, const SDL_Rect& sprite_overlap) {
     SDL_Rect invalid{0, 0, 0, 0};
-    if (!ctx.texture || ctx.texture_w <= 0 || ctx.texture_h <= 0 || sprite_overlap.w <= 0 || sprite_overlap.h <= 0 ||
-        ctx.sprite_world.w <= 0 || ctx.sprite_world.h <= 0) {
+    if (!ctx.texture ||
+        ctx.texture_w <= 0 ||
+        ctx.texture_h <= 0 ||
+        ctx.source_rect.w <= 0 ||
+        ctx.source_rect.h <= 0 ||
+        sprite_overlap.w <= 0 ||
+        sprite_overlap.h <= 0 ||
+        ctx.sprite_world.w <= 0 ||
+        ctx.sprite_world.h <= 0) {
         return invalid;
     }
 
@@ -175,20 +312,25 @@ static SDL_Rect compute_source_rect(const ChunkTileAsset& ctx, const SDL_Rect& s
         end_u   = flipped_end;
     }
 
-    const double tex_start_x = start_u * static_cast<double>(ctx.texture_w);
-    const double tex_end_x   = end_u * static_cast<double>(ctx.texture_w);
-    const double tex_start_y = start_v * static_cast<double>(ctx.texture_h);
-    const double tex_end_y   = end_v * static_cast<double>(ctx.texture_h);
+    const int src_left = ctx.source_rect.x;
+    const int src_top = ctx.source_rect.y;
+    const int src_right = ctx.source_rect.x + ctx.source_rect.w;
+    const int src_bottom = ctx.source_rect.y + ctx.source_rect.h;
+
+    const double tex_start_x = static_cast<double>(src_left) + start_u * static_cast<double>(ctx.source_rect.w);
+    const double tex_end_x   = static_cast<double>(src_left) + end_u * static_cast<double>(ctx.source_rect.w);
+    const double tex_start_y = static_cast<double>(src_top) + start_v * static_cast<double>(ctx.source_rect.h);
+    const double tex_end_y   = static_cast<double>(src_top) + end_v * static_cast<double>(ctx.source_rect.h);
 
     int sx  = static_cast<int>(std::floor(tex_start_x));
     int sy  = static_cast<int>(std::floor(tex_start_y));
     int sx2 = static_cast<int>(std::ceil(tex_end_x));
     int sy2 = static_cast<int>(std::ceil(tex_end_y));
 
-    sx  = std::clamp(sx, 0, std::max(0, ctx.texture_w - 1));
-    sy  = std::clamp(sy, 0, std::max(0, ctx.texture_h - 1));
-    sx2 = std::min(std::max(sx + 1, sx2), ctx.texture_w);
-    sy2 = std::min(std::max(sy + 1, sy2), ctx.texture_h);
+    sx  = std::clamp(sx, src_left, std::max(src_left, src_right - 1));
+    sy  = std::clamp(sy, src_top, std::max(src_top, src_bottom - 1));
+    sx2 = std::min(std::max(sx + 1, sx2), src_right);
+    sy2 = std::min(std::max(sy + 1, sy2), src_bottom);
 
     SDL_Rect src{};
     src.x = sx;
@@ -198,7 +340,7 @@ static SDL_Rect compute_source_rect(const ChunkTileAsset& ctx, const SDL_Rect& s
     return src;
 }
 
-}
+} // namespace
 
 namespace loader_tiles {
 
@@ -206,47 +348,50 @@ void build_grid_tiles(SDL_Renderer* renderer,
                       world::WorldGrid& grid,
                       const MapGridSettings& settings,
                       const std::vector<Asset*>& all_assets) {
-    if (!renderer) return;
+    if (!renderer) {
+        return;
+    }
 
-    const int step       = tile_step_from_settings(settings);
+    const auto build_begin = std::chrono::steady_clock::now();
     const int chunk_step = 1 << std::clamp(grid.grid_resolution(), 0, vibble::grid::kMaxResolution);
     if (chunk_step <= 0) {
         return;
     }
     const SDL_Point grid_origin = grid.origin().to_sdl_point();
 
-    std::vector<ChunkTileAsset>                        asset_contexts;
+    std::vector<ChunkTileAsset> asset_contexts;
     asset_contexts.reserve(all_assets.size());
     std::unordered_map<std::uint64_t, std::vector<const ChunkTileAsset*>> chunk_tilers;
 
     for (Asset* a : all_assets) {
-        if (!a || !a->info || !a->info->tillable) continue;
-        auto tiling = compute_tiling_for_asset(a, settings);
-        if (!tiling || !tiling->is_valid()) continue;
-        auto sprite_world = compute_sprite_world_rect(a);
-        if (!sprite_world) continue;
-
-        SDL_Texture* texture = a->get_current_frame();
-        if (!texture) continue;
-
-        float tex_wf = 0.0f;
-        float tex_hf = 0.0f;
-        if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+        if (!a || !a->info || !a->info->tillable) {
             continue;
         }
-        const int tex_w = static_cast<int>(std::lround(tex_wf));
-        const int tex_h = static_cast<int>(std::lround(tex_hf));
-        if (tex_w <= 0 || tex_h <= 0) {
+
+        auto tiling = resolve_tiling_for_asset(a, settings);
+        if (!tiling || !tiling->is_valid()) {
+            continue;
+        }
+        auto sprite_world = compute_sprite_world_rect(a);
+        if (!sprite_world) {
+            continue;
+        }
+
+        ResolvedFrameData frame_data{};
+        if (!resolve_current_frame_data(a, frame_data)) {
             continue;
         }
 
         ChunkTileAsset ctx{};
-        ctx.asset        = a;
+        ctx.asset = a;
+        ctx.tiling = *tiling;
         ctx.sprite_world = *sprite_world;
-        ctx.texture      = texture;
-        ctx.texture_w    = tex_w;
-        ctx.texture_h    = tex_h;
-        ctx.flipped      = a->flipped;
+        ctx.texture = frame_data.texture;
+        ctx.source_rect = frame_data.source_rect;
+        ctx.texture_w = frame_data.texture_w;
+        ctx.texture_h = frame_data.texture_h;
+        ctx.smooth_scaling = a->info ? a->info->smooth_scaling : false;
+        ctx.flipped = a->flipped;
 
         asset_contexts.push_back(ctx);
         const ChunkTileAsset* stored_ctx = &asset_contexts.back();
@@ -267,15 +412,26 @@ void build_grid_tiles(SDL_Renderer* renderer,
     }
 
     std::vector<world::Chunk*> chunks = grid.all_chunks();
-    if (chunks.empty()) return;
+    if (chunks.empty()) {
+        return;
+    }
+
+    std::size_t chunks_with_tiles = 0;
+    std::size_t chunk_textures_created = 0;
+    std::size_t total_draw_contributions = 0;
+    std::uint64_t total_texture_bytes = 0;
 
     for (world::Chunk* chunk : chunks) {
-        if (!chunk) continue;
+        if (!chunk) {
+            continue;
+        }
 
         chunk->releaseTileTextures();
 
         const SDL_Rect bounds = chunk->world_bounds.to_sdl_rect();
-        if (bounds.w <= 0 || bounds.h <= 0) continue;
+        if (bounds.w <= 0 || bounds.h <= 0) {
+            continue;
+        }
 
         const auto tiler_it = chunk_tilers.find(chunk_key(chunk->i, chunk->j));
         if (tiler_it == chunk_tilers.end() || tiler_it->second.empty()) {
@@ -283,84 +439,97 @@ void build_grid_tiles(SDL_Renderer* renderer,
         }
         const auto& tilers = tiler_it->second;
 
-        auto align_down = [](int value, int step_) {
-            const double scaled = std::floor(static_cast<double>(value) / static_cast<double>(step_));
-            return static_cast<int>(scaled * static_cast<double>(step_));
-};
-        auto align_up = [](int value, int step_) {
-            const double scaled = std::ceil(static_cast<double>(value) / static_cast<double>(step_));
-            return static_cast<int>(scaled * static_cast<double>(step_));
-};
-        const int x0 = align_down(bounds.x, step);
-        const int y0 = align_down(bounds.y, step);
-        const int x1 = align_up(bounds.x + bounds.w, step);
-        const int y1 = align_up(bounds.y + bounds.h, step);
-
-        for (int y = y0; y < y1; y += step) {
-            for (int x = x0; x < x1; x += step) {
-                SDL_Rect tile_world{ x, y, step, step };
-
-                bool any = false;
-                for (const ChunkTileAsset* ctx : tilers) {
-                    if (!ctx) continue;
-                    SDL_Rect sprite_inter{};
-                    if (SDL_GetRectIntersection(&ctx->sprite_world, &tile_world, &sprite_inter) && sprite_inter.w > 0 &&
-                        sprite_inter.h > 0) {
-                        any = true;
-                        break;
-                    }
-                }
-                if (!any) continue;
-
-                SDL_Texture* tile_tex = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA32), SDL_TEXTUREACCESS_TARGET, tile_world.w, tile_world.h);
-                if (!tile_tex) continue;
-                SDL_SetTextureBlendMode(tile_tex, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(tile_tex, SDL_SCALEMODE_LINEAR);
-                SDL_Texture* prev = SDL_GetRenderTarget(renderer);
-                if (!SDL_SetRenderTarget(renderer, tile_tex)) {
-                    SDL_DestroyTexture(tile_tex);
-                    SDL_SetRenderTarget(renderer, prev);
-                    continue;
-                }
-
-                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-                SDL_RenderClear(renderer);
-
-                for (const ChunkTileAsset* ctx : tilers) {
-                    if (!ctx) continue;
-                    SDL_Rect sprite_inter{};
-                    if (!SDL_GetRectIntersection(&ctx->sprite_world, &tile_world, &sprite_inter) || sprite_inter.w <= 0 ||
-                        sprite_inter.h <= 0) {
-                        continue;
-                    }
-
-                    SDL_Rect dest{
-                        sprite_inter.x - tile_world.x,
-                        sprite_inter.y - tile_world.y,
-                        sprite_inter.w,
-                        sprite_inter.h
-};
-                    SDL_Rect src = compute_source_rect(*ctx, sprite_inter);
-                    if (src.w <= 0 || src.h <= 0) {
-                        continue;
-                    }
-
-                    sdl_render::Texture(renderer, ctx->texture, &src, &dest);
-                }
-
-                SDL_SetRenderTarget(renderer, prev);
-
-                GridTile tile{};
-                tile.world_rect = tile_world;
-                tile.texture    = tile_tex;
-                chunk->tiles.push_back(tile);
+        std::vector<ChunkDrawContribution> contributions;
+        contributions.reserve(tilers.size());
+        bool any_smooth = false;
+        for (const ChunkTileAsset* ctx : tilers) {
+            if (!ctx || !ctx->texture) {
+                continue;
             }
+
+            SDL_Rect bounds_overlap{};
+            if (!SDL_GetRectIntersection(&ctx->sprite_world, &bounds, &bounds_overlap) ||
+                bounds_overlap.w <= 0 || bounds_overlap.h <= 0) {
+                continue;
+            }
+
+            SDL_Rect clipped_overlap{};
+            if (!SDL_GetRectIntersection(&bounds_overlap, &ctx->tiling.coverage, &clipped_overlap) ||
+                clipped_overlap.w <= 0 || clipped_overlap.h <= 0) {
+                continue;
+            }
+
+            contributions.push_back(ChunkDrawContribution{ctx, clipped_overlap});
+            any_smooth = any_smooth || ctx->smooth_scaling;
         }
+
+        if (contributions.empty()) {
+            continue;
+        }
+
+        SDL_Texture* chunk_tex = SDL_CreateTexture(
+            renderer,
+            static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA32),
+            SDL_TEXTUREACCESS_TARGET,
+            bounds.w,
+            bounds.h);
+        if (!chunk_tex) {
+            continue;
+        }
+        ++chunk_textures_created;
+        total_texture_bytes += static_cast<std::uint64_t>(bounds.w) *
+                               static_cast<std::uint64_t>(bounds.h) * 4ull;
+
+        SDL_SetTextureBlendMode(chunk_tex, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(chunk_tex, any_smooth ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+
+        SDL_Texture* prev = SDL_GetRenderTarget(renderer);
+        if (!SDL_SetRenderTarget(renderer, chunk_tex)) {
+            SDL_DestroyTexture(chunk_tex);
+            SDL_SetRenderTarget(renderer, prev);
+            continue;
+        }
+
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+        SDL_RenderClear(renderer);
+
+        for (const ChunkDrawContribution& draw : contributions) {
+            if (!draw.ctx) {
+                continue;
+            }
+
+            SDL_Rect dest{
+                draw.world_overlap.x - bounds.x,
+                draw.world_overlap.y - bounds.y,
+                draw.world_overlap.w,
+                draw.world_overlap.h
+            };
+            SDL_Rect src = compute_source_rect(*draw.ctx, draw.world_overlap);
+            if (src.w <= 0 || src.h <= 0) {
+                continue;
+            }
+            sdl_render::Texture(renderer, draw.ctx->texture, &src, &dest);
+            ++total_draw_contributions;
+        }
+
+        SDL_SetRenderTarget(renderer, prev);
+
+        GridTile tile{};
+        tile.world_rect = bounds;
+        tile.texture = chunk_tex;
+        chunk->tiles.push_back(tile);
+        ++chunks_with_tiles;
     }
+
+    const auto build_end = std::chrono::steady_clock::now();
+    const auto build_ms = std::chrono::duration_cast<std::chrono::milliseconds>(build_end - build_begin).count();
+    vibble::log::info(
+        std::string("[TileBuilder] Chunk tile build: chunks_with_tiles=") + std::to_string(chunks_with_tiles) +
+        ", chunk_textures=" + std::to_string(chunk_textures_created) +
+        ", draw_contributions=" + std::to_string(total_draw_contributions) +
+        ", texture_bytes=" + std::to_string(total_texture_bytes) +
+        ", elapsed_ms=" + std::to_string(build_ms));
 }
 
-}
-
-
-
+} // namespace loader_tiles

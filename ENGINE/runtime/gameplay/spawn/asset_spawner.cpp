@@ -7,10 +7,12 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
@@ -65,6 +67,38 @@ Room* resolve_owner(SDL_Point world_point, const std::vector<std::unique_ptr<Roo
         }
     }
     return fallback;
+}
+
+int floor_box_grid_resolution_or_default(int resolution) {
+    return std::clamp(vibble::grid::clamp_resolution(resolution), 2, 8);
+}
+
+std::optional<Area> make_floor_box_spawn_area(const Asset& owner, const Asset::RuntimeFloorBox& box) {
+    const float half_width = std::max(0.0f, box.width * 0.5f);
+    const float half_depth = std::max(0.0f, box.depth * 0.5f);
+    if (half_width <= 0.0f || half_depth <= 0.0f) {
+        return std::nullopt;
+    }
+
+    const float center_x = static_cast<float>(owner.world_x()) + box.position_x;
+    const float center_z = static_cast<float>(owner.world_z()) + box.position_z;
+    const int min_x = static_cast<int>(std::floor(center_x - half_width));
+    const int max_x = static_cast<int>(std::ceil(center_x + half_width));
+    const int min_z = static_cast<int>(std::floor(center_z - half_depth));
+    const int max_z = static_cast<int>(std::ceil(center_z + half_depth));
+    if (max_x <= min_x || max_z <= min_z) {
+        return std::nullopt;
+    }
+
+    std::vector<SDL_Point> polygon{
+        SDL_Point{min_x, min_z},
+        SDL_Point{max_x, min_z},
+        SDL_Point{max_x, max_z},
+        SDL_Point{min_x, max_z},
+    };
+    Area area("floor_box_spawn", polygon);
+    area.set_type("floor_box_spawn");
+    return area;
 }
 
 }
@@ -169,6 +203,8 @@ void AssetSpawner::spawn(Room& room) {
         } catch (...) {
 
         }
+
+        run_floor_box_candidate_spawning();
 
         current_room_ = nullptr;
         room.add_room_assets(std::move(all_));
@@ -681,6 +717,121 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                 }
         }
         checker_.reset_session();
+}
+
+void AssetSpawner::run_floor_box_candidate_spawning() {
+        if (!asset_library_ || all_.empty()) {
+                return;
+        }
+
+        vibble::grid::Grid& grid_service = vibble::grid::global_grid();
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView catalog{&asset_info_library_, false};
+
+        std::vector<Asset*> owner_snapshot;
+        owner_snapshot.reserve(all_.size());
+        for (const auto& asset_uptr : all_) {
+                if (asset_uptr) {
+                        owner_snapshot.push_back(asset_uptr.get());
+                }
+        }
+
+        for (Asset* owner : owner_snapshot) {
+                if (!owner || !owner->info || !owner->isFloorBoxesEnabled()) {
+                        continue;
+                }
+
+                const auto& floor_boxes = owner->getFloorBoxes();
+                if (floor_boxes.empty()) {
+                        continue;
+                }
+
+                for (const auto& floor_box : floor_boxes) {
+                        if (!floor_box.enabled || !floor_box.candidate.has_value()) {
+                                continue;
+                        }
+                        if (!floor_box.candidate->has_positive_non_null_candidate) {
+                                continue;
+                        }
+
+                        std::optional<Area> box_area = make_floor_box_spawn_area(*owner, floor_box);
+                        if (!box_area.has_value()) {
+                                continue;
+                        }
+
+                        const int grid_resolution =
+                            floor_box_grid_resolution_or_default(floor_box.candidate->grid_resolution);
+                        vibble::grid::Occupancy occupancy(*box_area, grid_resolution, grid_service);
+                        std::vector<vibble::grid::Occupancy::Vertex*> vertices = occupancy.vertices_in_area(*box_area);
+                        if (vertices.empty()) {
+                                continue;
+                        }
+
+                        const SDL_Point owner_anchor_world = grid_service.snap_to_vertex(owner->world_xz_point(), grid_resolution);
+                        Check floor_checker(false);
+                        floor_checker.begin_session(grid_service, grid_resolution);
+                        SpawnContext ctx(rng_,
+                                         floor_checker,
+                                         exclusion_zones,
+                                         asset_info_library_,
+                                         all_,
+                                         asset_library_,
+                                         grid_service,
+                                         &occupancy);
+                        ctx.set_map_grid_settings(map_grid_settings_);
+                        ctx.set_spawn_resolution(grid_resolution);
+                        ctx.set_clip_area(nullptr);
+                        ctx.set_trail_areas({});
+
+                        for (auto* vertex : vertices) {
+                                if (!vertex) {
+                                        continue;
+                                }
+                                if (vertex->world.x == owner_anchor_world.x &&
+                                    vertex->world.y == owner_anchor_world.y) {
+                                        continue;
+                                }
+
+                                const auto candidate = floor_box.candidate->candidates.pick_random(
+                                    rng_,
+                                    catalog,
+                                    vibble::spawn::ZeroWeightPolicy::NoSelection);
+                                if (!candidate || candidate->is_null || !candidate->info ||
+                                    candidate->resolved_asset_name.empty()) {
+                                        continue;
+                                }
+
+                                const SDL_Point spawn_pos = vertex->world;
+                                const auto spawn_gp = ctx.to_grid_point(spawn_pos);
+                                if (ctx.checker().check(candidate->info,
+                                                        spawn_gp,
+                                                        ctx.exclusion_zones(),
+                                                        ctx.all_assets(),
+                                                        true,
+                                                        false,
+                                                        false,
+                                                        false,
+                                                        5)) {
+                                        continue;
+                                }
+
+                                Asset* spawned = ctx.spawnAsset(candidate->resolved_asset_name,
+                                                                candidate->info,
+                                                                *box_area,
+                                                                spawn_pos,
+                                                                0,
+                                                                std::string{},
+                                                                "FloorBox");
+                                if (!spawned) {
+                                        continue;
+                                }
+                                if (current_room_) {
+                                        spawned->set_owning_room_name(current_room_->room_name);
+                                }
+                                ctx.checker().register_asset(spawned, false, false);
+                        }
+                        floor_checker.reset_session();
+                }
+        }
 }
 
 void AssetSpawner::run_edge_spawning(const Area& area) {

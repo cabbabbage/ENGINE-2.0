@@ -20,10 +20,16 @@ public:
 
     render_pipeline::BlurCompositeResult compose(const render_pipeline::LayerRenderResult& layer_render,
                                                  SDL_Texture* background_seed,
+                                                 SDL_Texture* floor_dark_mask,
                                                  bool depth_of_field_enabled,
                                                  float blur_px,
                                                  float radial_blur_px,
                                                  SDL_FPoint optical_center);
+    render_pipeline::BlurCompositeResult compose_gpu(SDL_Texture* scene_texture,
+                                                     bool depth_of_field_enabled,
+                                                     float blur_px,
+                                                     float radial_blur_px,
+                                                     SDL_FPoint optical_center);
 
 private:
     bool ensure_targets();
@@ -32,6 +38,7 @@ private:
     void clear_target(SDL_Texture* texture) const;
     bool copy_texture(SDL_Texture* src, SDL_Texture* dst) const;
     bool composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const;
+    bool composite_texture_modulate_over(SDL_Texture* src, SDL_Texture* dst) const;
 
     bool blur_step(SDL_Texture* src,
                    SDL_Texture* dst,
@@ -41,7 +48,9 @@ private:
                    float radial_blur_px,
                    float quality_scale) const;
 
-    static std::vector<int> build_repeat_schedule(std::size_t chain_size, int total_pass_budget);
+    static std::vector<int> build_repeat_schedule(const std::vector<int>& chain,
+                                                  const render_pipeline::LayerRenderResult& layer_render,
+                                                  int total_pass_budget);
     static int compute_total_pass_budget(std::size_t chain_size,
                                          float blur_px,
                                          float radial_blur_px);
@@ -51,6 +60,7 @@ private:
                                        float radial_blur_px);
 
     bool compose_chain(const std::vector<int>& chain,
+                       const render_pipeline::LayerRenderResult& layer_render,
                        const std::vector<SDL_Texture*>& layer_textures,
                        SDL_Texture* seed_texture,
                        SDL_Texture* output_texture,

@@ -211,7 +211,7 @@ void CameraController::set_target_params(const CameraParams& params) {
 }
 
 void CameraController::set_params(const CameraParams& params) {
-    // Explicit calls are treated as debug/teleport-style overrides and may snap immediately.
+    // קריאות מפורשות מטופלות כעקיפות בסגנון דיבאג או טלפורט, ויכולות לקפוץ מיידית.
     smoothed_ = camera_math::sanitize_camera_params(params, fallback_height_px_);
     target_ = smoothed_;
     manual_scale_ = smoothed_.height_px;
@@ -386,3 +386,4 @@ void CameraController::sync_state() {
     state_.transition_state = transition_state_debug_;
     state_.transition_blend_factor = transition_blend_factor_debug_;
 }
+

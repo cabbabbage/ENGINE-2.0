@@ -187,11 +187,11 @@ TEST_CASE("Layer light strength multipliers split front and behind depths indepe
     constexpr float kBehindMultiplier = 0.45f;
 
     const float front_side =
-        render_internal::apply_layer_light_strength_bias(kBaseIntensity, -16.0, kFrontMultiplier, kBehindMultiplier);
+        render_internal::apply_layer_light_strength_bias(kBaseIntensity, -1, kFrontMultiplier, kBehindMultiplier);
     const float boundary_side =
-        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 0.0, kFrontMultiplier, kBehindMultiplier);
+        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 0, kFrontMultiplier, kBehindMultiplier);
     const float behind_side =
-        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 16.0, kFrontMultiplier, kBehindMultiplier);
+        render_internal::apply_layer_light_strength_bias(kBaseIntensity, 1, kFrontMultiplier, kBehindMultiplier);
 
     CHECK(front_side == doctest::Approx(kBaseIntensity * kFrontMultiplier));
     CHECK(boundary_side == doctest::Approx(kBaseIntensity * kFrontMultiplier));
@@ -332,14 +332,11 @@ TEST_CASE("Layer light overlap requires depth overlap even when screen footprint
     light.radius_world = 16.0f;
     light.world_z = 200.0f;
 
-    const bool overlaps = render_internal::light_overlaps_layer_slice(
-        light,
-        -10.0,
-        10.0,
-        0.0f,
-        0.0f,
-        100.0f,
-        100.0f);
+    const bool overlaps = render_internal::light_overlaps_layer_slice(light,
+                                                                       render_internal::light_depth_interval(light),
+                                                                       render_internal::DepthInterval{-10.0, 10.0},
+                                                                       render_internal::ScreenAabb{18.0f, 18.0f, 82.0f, 82.0f},
+                                                                       render_internal::ScreenAabb{0.0f, 0.0f, 100.0f, 100.0f});
     CHECK_FALSE(overlaps);
 }
 
@@ -350,14 +347,11 @@ TEST_CASE("Layer light overlap requires coverage overlap even when depth slice o
     light.radius_world = 30.0f;
     light.world_z = 4.0f;
 
-    const bool overlaps = render_internal::light_overlaps_layer_slice(
-        light,
-        -10.0,
-        10.0,
-        0.0f,
-        0.0f,
-        100.0f,
-        100.0f);
+    const bool overlaps = render_internal::light_overlaps_layer_slice(light,
+                                                                       render_internal::light_depth_interval(light),
+                                                                       render_internal::DepthInterval{-10.0, 10.0},
+                                                                       render_internal::ScreenAabb{392.0f, 392.0f, 408.0f, 408.0f},
+                                                                       render_internal::ScreenAabb{0.0f, 0.0f, 100.0f, 100.0f});
     CHECK_FALSE(overlaps);
 }
 
@@ -368,14 +362,11 @@ TEST_CASE("Layer light overlap accepts depth and coverage intersection") {
     light.radius_world = 20.0f;
     light.world_z = 5.0f;
 
-    const bool overlaps = render_internal::light_overlaps_layer_slice(
-        light,
-        -10.0,
-        10.0,
-        40.0f,
-        40.0f,
-        120.0f,
-        120.0f);
+    const bool overlaps = render_internal::light_overlaps_layer_slice(light,
+                                                                       render_internal::light_depth_interval(light),
+                                                                       render_internal::DepthInterval{-10.0, 10.0},
+                                                                       render_internal::ScreenAabb{46.0f, 36.0f, 94.0f, 84.0f},
+                                                                       render_internal::ScreenAabb{40.0f, 40.0f, 120.0f, 120.0f});
     CHECK(overlaps);
 }
 
@@ -386,14 +377,11 @@ TEST_CASE("Layer light overlap accepts inside-layer center when depth overlaps")
     light.radius_world = 18.0f;
     light.world_z = -3.0f;
 
-    const bool overlaps = render_internal::light_overlaps_layer_slice(
-        light,
-        -20.0,
-        10.0,
-        32.0f,
-        32.0f,
-        96.0f,
-        96.0f);
+    const bool overlaps = render_internal::light_overlaps_layer_slice(light,
+                                                                       render_internal::light_depth_interval(light),
+                                                                       render_internal::DepthInterval{-20.0, 10.0},
+                                                                       render_internal::ScreenAabb{52.0f, 52.0f, 76.0f, 76.0f},
+                                                                       render_internal::ScreenAabb{32.0f, 32.0f, 96.0f, 96.0f});
     CHECK(overlaps);
 }
 
@@ -404,31 +392,39 @@ TEST_CASE("Layer light overlap rejects invalid geometry inputs") {
     light.radius_world = 20.0f;
     light.world_z = 0.0f;
 
-    CHECK_FALSE(render_internal::light_overlaps_layer_slice(
-        light,
-        std::numeric_limits<double>::quiet_NaN(),
-        10.0,
-        0.0f,
-        0.0f,
-        100.0f,
-        100.0f));
+    CHECK_FALSE(render_internal::light_overlaps_layer_slice(light,
+                                                             render_internal::light_depth_interval(light),
+                                                             render_internal::DepthInterval{std::numeric_limits<double>::quiet_NaN(), 10.0},
+                                                             render_internal::ScreenAabb{30.0f, 30.0f, 70.0f, 70.0f},
+                                                             render_internal::ScreenAabb{0.0f, 0.0f, 100.0f, 100.0f}));
 
-    CHECK_FALSE(render_internal::light_overlaps_layer_slice(
-        light,
-        -10.0,
-        10.0,
-        100.0f,
-        0.0f,
-        0.0f,
-        100.0f));
+    CHECK_FALSE(render_internal::light_overlaps_layer_slice(light,
+                                                             render_internal::light_depth_interval(light),
+                                                             render_internal::DepthInterval{-10.0, 10.0},
+                                                             render_internal::ScreenAabb{30.0f, 30.0f, 70.0f, 70.0f},
+                                                             render_internal::ScreenAabb{100.0f, 0.0f, 0.0f, 100.0f}));
 
     light.screen_center.x = std::numeric_limits<float>::quiet_NaN();
-    CHECK_FALSE(render_internal::light_overlaps_layer_slice(
-        light,
-        -10.0,
-        10.0,
-        0.0f,
-        0.0f,
-        100.0f,
-        100.0f));
+    CHECK_FALSE(render_internal::light_overlaps_layer_slice(light,
+                                                             render_internal::light_depth_interval(light),
+                                                             render_internal::DepthInterval{-10.0, 10.0},
+                                                             render_internal::ScreenAabb{30.0f, 30.0f, 70.0f, 70.0f},
+                                                             render_internal::ScreenAabb{0.0f, 0.0f, 100.0f, 100.0f}));
+}
+
+TEST_CASE("Interval comparison classifies front behind and touching overlap consistently") {
+    const render_internal::DepthInterval layer{10.0, 20.0};
+    CHECK(render_internal::compare_depth_intervals_signed(render_internal::DepthInterval{0.0, 9.0}, layer) < 0);
+    CHECK(render_internal::compare_depth_intervals_signed(render_internal::DepthInterval{21.0, 30.0}, layer) > 0);
+    CHECK(render_internal::compare_depth_intervals_signed(render_internal::DepthInterval{5.0, 10.0}, layer) == 0);
+    CHECK(render_internal::compare_depth_intervals_signed(render_internal::DepthInterval{20.0, 25.0}, layer) == 0);
+}
+
+TEST_CASE("Same light can classify differently against narrow and wide depth layers") {
+    LayerEffectProcessor::RuntimeLight light{};
+    light.world_z = 25.0f;
+    light.radius_world = 5.0f;
+    const render_internal::DepthInterval light_interval = render_internal::light_depth_interval(light);
+    CHECK(render_internal::compare_depth_intervals_signed(light_interval, render_internal::DepthInterval{0.0, 10.0}) > 0);
+    CHECK(render_internal::compare_depth_intervals_signed(light_interval, render_internal::DepthInterval{0.0, 25.0}) == 0);
 }

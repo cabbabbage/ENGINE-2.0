@@ -52,8 +52,8 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
             enabled_label = "Attack Boxes Enabled";
             break;
         case Kind::ImpassableBox:
-            add_label = "Add Impassable Box";
-            enabled_label = "Impassable Boxes Enabled";
+            add_label = "Add Impassable Shape";
+            enabled_label = "Impassable Shapes Enabled";
             break;
     }
     add_button_ = std::make_unique<DMButton>(add_label,
@@ -65,10 +65,28 @@ RoomBoxToolsPanel::RoomBoxToolsPanel(Kind kind)
     apply_animation_button_ = std::make_unique<DMButton>("Copy To Animation", &DMStyles::PrimaryButton(), 170, DMButton::height());
     apply_asset_button_ = std::make_unique<DMButton>("Copy To Asset", &DMStyles::PrimaryButton(), 170, DMButton::height());
     name_textbox_ = std::make_unique<DMTextBox>("Name", "");
-    extrusion_textbox_ = std::make_unique<DMTextBox>("Extrusion", "0");
+    extrusion_forward_textbox_ = std::make_unique<DMTextBox>("Extrusion Forward", "1");
+    extrusion_backward_textbox_ = std::make_unique<DMTextBox>("Extrusion Backward", "1");
     damage_textbox_ = std::make_unique<DMTextBox>("Damage", "0");
+    if (kind_ == Kind::ImpassableBox) {
+        point_count_stepper_ = std::make_unique<DMNumericStepper>("Points", 3, 4096, 3);
+        point_count_stepper_->set_step(1);
+        point_count_stepper_->set_on_change([this](int requested_value) {
+            if (requested_value > point_count_) {
+                if (on_increment_point_count_) {
+                    on_increment_point_count_();
+                }
+            } else if (requested_value < point_count_) {
+                if (on_decrement_point_count_) {
+                    on_decrement_point_count_();
+                }
+            }
+            if (point_count_stepper_) {
+                point_count_stepper_->set_value(std::max(3, point_count_));
+            }
+        });
+    }
     system_enabled_checkbox_ = std::make_unique<DMCheckbox>(enabled_label, false);
-    onion_skin_checkbox_ = std::make_unique<DMCheckbox>("Show onion skin (prev/next)", false);
 }
 
 RoomBoxToolsPanel::~RoomBoxToolsPanel() = default;
@@ -116,23 +134,26 @@ void RoomBoxToolsPanel::set_box_names(const std::vector<std::string>& names) {
         box_buttons_.push_back(std::make_unique<DMButton>(name, &DMStyles::ListButton(), 220, DMButton::height()));
     }
     if (selected_box_index_ < 0 || selected_box_index_ >= static_cast<int>(box_names_.size())) {
-        selected_box_index_ = box_names_.empty() ? -1 : 0;
+        selected_box_index_ = -1;
+        selected_corner_index_ = -1;
     }
     layout_dirty_ = true;
 }
 
 void RoomBoxToolsPanel::set_selection(int box_index, int corner_index) {
-    const int bounded_corner = std::clamp(corner_index, 0, 3);
-    if (selected_box_index_ == box_index && selected_corner_index_ == bounded_corner) {
+    const int bounded_box =
+        (box_index >= 0 && box_index < static_cast<int>(box_names_.size())) ? box_index : -1;
+    const int bounded_corner = (bounded_box >= 0) ? std::clamp(corner_index, 0, 3) : -1;
+    if (selected_box_index_ == bounded_box && selected_corner_index_ == bounded_corner) {
         return;
     }
-    selected_box_index_ = box_index;
+    selected_box_index_ = bounded_box;
     selected_corner_index_ = bounded_corner;
     layout_dirty_ = true;
 }
 
 void RoomBoxToolsPanel::clear_selection() {
-    set_selection(-1, 0);
+    set_selection(-1, -1);
 }
 
 void RoomBoxToolsPanel::set_name_text(const std::string& value) {
@@ -145,22 +166,15 @@ void RoomBoxToolsPanel::set_detail_values(const DetailValues& values) {
     if (name_textbox_ && !name_textbox_->is_editing()) {
         name_textbox_->set_value(values.name);
     }
-    if (extrusion_textbox_ && !extrusion_textbox_->is_editing()) {
-        extrusion_textbox_->set_value(std::to_string(values.extrusion));
+    if (extrusion_forward_textbox_ && !extrusion_forward_textbox_->is_editing()) {
+        extrusion_forward_textbox_->set_value(std::to_string(values.extrusion_forward));
+    }
+    if (extrusion_backward_textbox_ && !extrusion_backward_textbox_->is_editing()) {
+        extrusion_backward_textbox_->set_value(std::to_string(values.extrusion_backward));
     }
     if (damage_textbox_ && !damage_textbox_->is_editing()) {
         damage_textbox_->set_value(std::to_string(values.damage));
     }
-}
-
-void RoomBoxToolsPanel::set_onion_skin_enabled(bool enabled) {
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_value(enabled);
-    }
-}
-
-bool RoomBoxToolsPanel::onion_skin_enabled() const {
-    return onion_skin_checkbox_ ? onion_skin_checkbox_->value() : false;
 }
 
 void RoomBoxToolsPanel::set_system_enabled(bool enabled) {
@@ -178,6 +192,19 @@ void RoomBoxToolsPanel::set_propagation_visible(bool visible) {
         return;
     }
     propagation_visible_ = visible;
+    layout_dirty_ = true;
+}
+
+void RoomBoxToolsPanel::set_point_count(int count) {
+    const int clamped = std::max(0, count);
+    if (point_count_ == clamped) {
+        return;
+    }
+    point_count_ = clamped;
+    if (point_count_stepper_) {
+        point_count_stepper_->set_range(3, std::max(4096, std::max(3, point_count_)));
+        point_count_stepper_->set_value(std::max(3, point_count_));
+    }
     layout_dirty_ = true;
 }
 
@@ -201,18 +228,25 @@ void RoomBoxToolsPanel::set_on_propagate(PropagateCallback callback) {
     on_propagate_ = std::move(callback);
 }
 
-void RoomBoxToolsPanel::set_on_onion_skin_toggle(OnionSkinToggleCallback callback) {
-    on_onion_skin_toggle_ = std::move(callback);
-}
-
 void RoomBoxToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCallback callback) {
     on_system_enabled_toggle_ = std::move(callback);
+}
+
+void RoomBoxToolsPanel::set_on_increment_point_count(IncrementPointCountCallback callback) {
+    on_increment_point_count_ = std::move(callback);
+}
+
+void RoomBoxToolsPanel::set_on_decrement_point_count(DecrementPointCountCallback callback) {
+    on_decrement_point_count_ = std::move(callback);
 }
 
 RoomBoxToolsPanel::DetailValues RoomBoxToolsPanel::collect_detail_values() const {
     DetailValues values;
     values.name = name_textbox_ ? name_textbox_->value() : std::string{};
-    values.extrusion = parse_int_or(extrusion_textbox_ ? extrusion_textbox_->value() : std::string{}, 0);
+    values.extrusion_forward =
+        parse_int_or(extrusion_forward_textbox_ ? extrusion_forward_textbox_->value() : std::string{}, 1);
+    values.extrusion_backward =
+        parse_int_or(extrusion_backward_textbox_ ? extrusion_backward_textbox_->value() : std::string{}, 1);
     values.damage = parse_int_or(damage_textbox_ ? damage_textbox_->value() : std::string{}, 0);
     return values;
 }
@@ -308,23 +342,12 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    if (delete_button_ && delete_button_->handle_event(event)) {
+    if (has_selected_box && delete_button_ && delete_button_->handle_event(event)) {
         handled = true;
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
             event.button.button == SDL_BUTTON_LEFT &&
             on_delete_) {
             on_delete_();
-        }
-    }
-
-    if (onion_skin_checkbox_) {
-        const bool before = onion_skin_checkbox_->value();
-        if (onion_skin_checkbox_->handle_event(event)) {
-            handled = true;
-            const bool after = onion_skin_checkbox_->value();
-            if (before != after && on_onion_skin_toggle_) {
-                on_onion_skin_toggle_(after);
-            }
         }
     }
 
@@ -362,7 +385,17 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
         details_changed = true;
     }
-    if (has_selected_box && extrusion_textbox_ && extrusion_textbox_->handle_event(event)) {
+    if (has_selected_box &&
+        kind_ != Kind::ImpassableBox &&
+        extrusion_forward_textbox_ &&
+        extrusion_forward_textbox_->handle_event(event)) {
+        handled = true;
+        details_changed = true;
+    }
+    if (has_selected_box &&
+        kind_ != Kind::ImpassableBox &&
+        extrusion_backward_textbox_ &&
+        extrusion_backward_textbox_->handle_event(event)) {
         handled = true;
         details_changed = true;
     }
@@ -371,16 +404,25 @@ bool RoomBoxToolsPanel::handle_event(const SDL_Event& event) {
         handled = true;
         details_changed = true;
     }
+    if (has_selected_box &&
+        kind_ == Kind::ImpassableBox &&
+        point_count_stepper_ &&
+        point_count_stepper_->handle_event(event)) {
+        handled = true;
+    }
     if (details_changed && on_apply_) {
         on_apply_(collect_detail_values());
         handled = true;
     }
 
     const bool name_editing = name_textbox_ && name_textbox_->is_editing();
-    const bool extrusion_editing = extrusion_textbox_ && extrusion_textbox_->is_editing();
+    const bool extrusion_forward_editing =
+        kind_ != Kind::ImpassableBox && extrusion_forward_textbox_ && extrusion_forward_textbox_->is_editing();
+    const bool extrusion_backward_editing =
+        kind_ != Kind::ImpassableBox && extrusion_backward_textbox_ && extrusion_backward_textbox_->is_editing();
     const bool damage_editing = kind_ == Kind::AttackBox && damage_textbox_ && damage_textbox_->is_editing();
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) &&
-        (name_editing || extrusion_editing || damage_editing)) {
+        (name_editing || extrusion_forward_editing || extrusion_backward_editing || damage_editing)) {
         handled = true;
     }
 
@@ -421,7 +463,7 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
             title = "Attack Box Editor";
             break;
         case Kind::ImpassableBox:
-            title = "Impassable Box Editor";
+            title = "Impassable Shape Editor";
             break;
     }
     DMFontCache::instance().draw_text(renderer, label_style, title, header_rect_.x, header_rect_.y);
@@ -455,32 +497,38 @@ void RoomBoxToolsPanel::render(SDL_Renderer* renderer) const {
         SDL_SetRenderClipRect(renderer, nullptr);
     }
 
+    const bool has_selected_box = selected_box_index_ >= 0 &&
+                                  selected_box_index_ < static_cast<int>(box_names_.size());
     if (add_button_) {
         add_button_->render(renderer);
     }
-    if (delete_button_) {
+    if (has_selected_box && delete_button_) {
         delete_button_->render(renderer);
     }
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->render(renderer);
-    }
-    const bool has_selected_box = selected_box_index_ >= 0 &&
-                                  selected_box_index_ < static_cast<int>(box_names_.size());
     if (has_selected_box) {
-        DMFontCache::instance().draw_text(renderer, label_style, "Box Properties", detail_title_rect_.x, detail_title_rect_.y);
-        DMFontCache::instance().draw_text(renderer,
-                                          label_style,
-                                          "Selected Corner: " + std::string(corner_label_for_index(selected_corner_index_)),
-                                          corner_label_rect_.x,
-                                          corner_label_rect_.y);
+        const std::string detail_label = (kind_ == Kind::ImpassableBox) ? "Shape Properties" : "Box Properties";
+        DMFontCache::instance().draw_text(renderer, label_style, detail_label, detail_title_rect_.x, detail_title_rect_.y);
+        if (kind_ != Kind::ImpassableBox) {
+            DMFontCache::instance().draw_text(renderer,
+                                              label_style,
+                                              "Selected Corner: " + std::string(corner_label_for_index(selected_corner_index_)),
+                                              corner_label_rect_.x,
+                                              corner_label_rect_.y);
+        }
         if (name_textbox_) {
             name_textbox_->render(renderer);
         }
-        if (extrusion_textbox_) {
-            extrusion_textbox_->render(renderer);
+        if (kind_ != Kind::ImpassableBox && extrusion_forward_textbox_) {
+            extrusion_forward_textbox_->render(renderer);
+        }
+        if (kind_ != Kind::ImpassableBox && extrusion_backward_textbox_) {
+            extrusion_backward_textbox_->render(renderer);
         }
         if (kind_ == Kind::AttackBox && damage_textbox_) {
             damage_textbox_->render(renderer);
+        }
+        if (kind_ == Kind::ImpassableBox && point_count_stepper_) {
+            point_count_stepper_->render(renderer);
         }
     }
     if (propagation_visible_) {
@@ -541,20 +589,23 @@ void RoomBoxToolsPanel::update_layout() const {
         if (name_textbox_) {
             name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (extrusion_textbox_) {
-            extrusion_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (extrusion_forward_textbox_) {
+            extrusion_forward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (extrusion_backward_textbox_) {
+            extrusion_backward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (point_count_stepper_) {
+            point_count_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (add_button_) {
             add_button_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (delete_button_) {
             delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
-        }
-        if (onion_skin_checkbox_) {
-            onion_skin_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (apply_next_frame_button_) {
             apply_next_frame_button_->set_rect(SDL_Rect{0, 0, 0, 0});
@@ -578,27 +629,41 @@ void RoomBoxToolsPanel::update_layout() const {
     const int controls_w = std::max(0, panel_rect_.w - (kPanelPadding * 2));
     const int row_gap = 6;
     const int name_h = name_textbox_ ? name_textbox_->preferred_height(controls_w) : DMTextBox::height();
-    const int extrusion_h = extrusion_textbox_ ? extrusion_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int extrusion_forward_h =
+        extrusion_forward_textbox_ ? extrusion_forward_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int extrusion_backward_h =
+        extrusion_backward_textbox_ ? extrusion_backward_textbox_->preferred_height(controls_w) : DMTextBox::height();
     const int damage_h = damage_textbox_ ? damage_textbox_->preferred_height(controls_w) : DMTextBox::height();
+    const int point_stepper_h = point_count_stepper_ ? point_count_stepper_->preferred_height(controls_w) : DMNumericStepper::height();
     const bool has_selected_box = selected_box_index_ >= 0 &&
                                   selected_box_index_ < static_cast<int>(box_names_.size());
 
     int controls_height = 0;
     controls_height += DMButton::height();                               // add
     controls_height += kSectionGap;
-    controls_height += DMButton::height();                               // delete
-    controls_height += kSectionGap;
-    controls_height += DMCheckbox::height();                             // onion skin
+    if (has_selected_box) {
+        controls_height += DMButton::height();                           // delete
+        controls_height += kSectionGap;
+    }
     if (has_selected_box) {
         controls_height += kSectionGap;
         controls_height += kLineHeight;                                  // details title
         controls_height += row_gap;
-        controls_height += kLineHeight;                                  // corner label
-        controls_height += row_gap;
+        if (kind_ != Kind::ImpassableBox) {
+            controls_height += kLineHeight;                              // corner label
+            controls_height += row_gap;
+        }
         controls_height += name_h;                                       // name
         controls_height += row_gap;
-        controls_height += extrusion_h;                                  // extrusion
-        controls_height += row_gap;
+        if (kind_ == Kind::ImpassableBox) {
+            controls_height += point_stepper_h;                          // points
+            controls_height += row_gap;
+        } else {
+            controls_height += extrusion_forward_h;                      // extrusion forward
+            controls_height += row_gap;
+            controls_height += extrusion_backward_h;                     // extrusion backward
+            controls_height += row_gap;
+        }
         if (kind_ == Kind::AttackBox) {
             controls_height += damage_h;                                 // damage
             controls_height += row_gap;
@@ -625,29 +690,52 @@ void RoomBoxToolsPanel::update_layout() const {
         add_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
     }
     y += DMButton::height() + kSectionGap;
-    if (delete_button_) {
+    if (has_selected_box && delete_button_) {
         delete_button_->set_rect(SDL_Rect{controls_x, y, controls_w, DMButton::height()});
+        y += DMButton::height() + kSectionGap;
+    } else if (delete_button_) {
+        delete_button_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
-    y += DMButton::height() + kSectionGap;
-    if (onion_skin_checkbox_) {
-        onion_skin_checkbox_->set_rect(SDL_Rect{controls_x, y, controls_w, DMCheckbox::height()});
-    }
-    y += DMCheckbox::height() + kSectionGap;
+    y += kSectionGap;
 
     if (has_selected_box) {
         detail_title_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};
         y += kLineHeight + row_gap;
-        corner_label_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};
-        y += kLineHeight + row_gap;
+        if (kind_ != Kind::ImpassableBox) {
+            corner_label_rect_ = SDL_Rect{controls_x, y, controls_w, kLineHeight};
+            y += kLineHeight + row_gap;
+        } else {
+            corner_label_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
 
         if (name_textbox_) {
             name_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, name_h});
         }
         y += name_h + row_gap;
-        if (extrusion_textbox_) {
-            extrusion_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, extrusion_h});
+        if (kind_ == Kind::ImpassableBox) {
+            if (point_count_stepper_) {
+                point_count_stepper_->set_rect(SDL_Rect{controls_x, y, controls_w, point_stepper_h});
+            }
+            y += point_stepper_h + row_gap;
+            if (extrusion_forward_textbox_) {
+                extrusion_forward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            if (extrusion_backward_textbox_) {
+                extrusion_backward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+        } else {
+            if (extrusion_forward_textbox_) {
+                extrusion_forward_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, extrusion_forward_h});
+            }
+            y += extrusion_forward_h + row_gap;
+            if (extrusion_backward_textbox_) {
+                extrusion_backward_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, extrusion_backward_h});
+            }
+            y += extrusion_backward_h + row_gap;
+            if (point_count_stepper_) {
+                point_count_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
         }
-        y += extrusion_h + row_gap;
         if (kind_ == Kind::AttackBox && damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{controls_x, y, controls_w, damage_h});
             y += damage_h + row_gap;
@@ -658,11 +746,17 @@ void RoomBoxToolsPanel::update_layout() const {
         if (name_textbox_) {
             name_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
-        if (extrusion_textbox_) {
-            extrusion_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (extrusion_forward_textbox_) {
+            extrusion_forward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (extrusion_backward_textbox_) {
+            extrusion_backward_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         if (damage_textbox_) {
             damage_textbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (point_count_stepper_) {
+            point_count_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
 
@@ -729,3 +823,22 @@ bool RoomBoxToolsPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {
     SDL_Point point{x, y};
     return SDL_PointInRect(&point, &rect);
 }
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+bool RoomBoxToolsPanelTestAccess::delete_button_visible(RoomBoxToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return false;
+    }
+    const SDL_Rect rect = panel.delete_button_->rect();
+    return rect.w > 0 && rect.h > 0;
+}
+
+SDL_Rect RoomBoxToolsPanelTestAccess::delete_button_rect(RoomBoxToolsPanel& panel) {
+    panel.update_layout();
+    if (!panel.delete_button_) {
+        return SDL_Rect{0, 0, 0, 0};
+    }
+    return panel.delete_button_->rect();
+}
+#endif

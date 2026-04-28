@@ -1,10 +1,12 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include "devtools/room_anchor_mode_utils.hpp"
+#include "room_editor_payload_contract_test_helper.hpp"
 
 namespace {
 
@@ -104,6 +106,32 @@ TEST_CASE("Anchor mode payload write normalizes frame count and writes current f
     CHECK(payload["anchor_points"][3].is_array());
 }
 
+TEST_CASE("Anchor mode mixed payload contract preserves untouched keys and fails atomically on invalid bounds") {
+    nlohmann::json payload = room_editor_test_payload_contract::make_full_mixed_animation_payload();
+    const nlohmann::json before = payload;
+
+    const std::vector<DisplacedAssetAnchorPoint> replacement{
+        DisplacedAssetAnchorPoint{"edited", 10, 11, 12.5f}
+    };
+    REQUIRE(write_anchor_frame_to_payload(payload, 1, 0, replacement));
+
+    const auto keys = room_editor_test_payload_contract::unchanged_keys_excluding(before, {"anchor_points"});
+    const auto before_snapshot = room_editor_test_payload_contract::snapshot_key_bytes(before);
+    const auto after_snapshot = room_editor_test_payload_contract::snapshot_key_bytes(payload);
+    for (const auto& key : keys) {
+        INFO("key=" << key);
+        REQUIRE(before_snapshot.find(key) != before_snapshot.end());
+        REQUIRE(after_snapshot.find(key) != after_snapshot.end());
+        CHECK(before_snapshot.at(key) == after_snapshot.at(key));
+    }
+
+    const std::string stable_after_success = payload.dump();
+    CHECK_FALSE(write_anchor_frame_to_payload(payload, 0, 0, replacement));
+    CHECK(payload.dump() == stable_after_success);
+    CHECK_FALSE(write_anchor_frame_to_payload(payload, 1, 3, replacement));
+    CHECK(payload.dump() == stable_after_success);
+}
+
 TEST_CASE("Anchor mode serialization preserves scaling method tokens") {
     std::vector<DisplacedAssetAnchorPoint> anchors;
 
@@ -160,7 +188,7 @@ TEST_CASE("Anchor mode payload normalization enforces exact frame count") {
     CHECK(payload["anchor_points"].size() == 3);
 }
 
-TEST_CASE("Anchor mode ownership filters keep anchor and light points isolated") {
+TEST_CASE("Anchor mode ownership isolates light and non-light anchors") {
     std::vector<DisplacedAssetAnchorPoint> anchors{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
@@ -178,15 +206,15 @@ TEST_CASE("Anchor mode ownership filters keep anchor and light points isolated")
     CHECK(anchor_visible_in_mode(anchors[0],
                                  devmode::room_anchor_mode::AnchorPointOwner::NonLight,
                                  is_reserved_name));
-    CHECK(!anchor_visible_in_mode(anchors[0],
-                                  devmode::room_anchor_mode::AnchorPointOwner::Light,
-                                  is_reserved_name));
+    CHECK_FALSE(anchor_visible_in_mode(anchors[0],
+                                       devmode::room_anchor_mode::AnchorPointOwner::Light,
+                                       is_reserved_name));
     CHECK(anchor_visible_in_mode(anchors[1],
                                  devmode::room_anchor_mode::AnchorPointOwner::Light,
                                  is_reserved_name));
-    CHECK(!anchor_visible_in_mode(anchors[1],
-                                  devmode::room_anchor_mode::AnchorPointOwner::NonLight,
-                                  is_reserved_name));
+    CHECK_FALSE(anchor_visible_in_mode(anchors[1],
+                                       devmode::room_anchor_mode::AnchorPointOwner::NonLight,
+                                       is_reserved_name));
     CHECK(!anchor_mutable_in_mode(anchors[4],
                                   devmode::room_anchor_mode::AnchorPointOwner::NonLight,
                                   is_reserved_name));
@@ -195,13 +223,15 @@ TEST_CASE("Anchor mode ownership filters keep anchor and light points isolated")
                                   is_reserved_name));
 }
 
-TEST_CASE("Anchor mode rename and delete only affect points owned by active mode") {
+TEST_CASE("Anchor mode rename and delete respect ownership split for same names") {
     std::vector<DisplacedAssetAnchorPoint> anchors{
         DisplacedAssetAnchorPoint{"shared", 1, 2, 0.0f},
         DisplacedAssetAnchorPoint{"shared", 3, 4, 0.0f},
+        DisplacedAssetAnchorPoint{"shared", 7, 8, 0.0f},
         DisplacedAssetAnchorPoint{"other", 5, 6, 0.0f},
     };
     anchors[1].has_light_data = true;
+    anchors[2].has_light_data = true;
 
     const auto is_reserved_name = [](const std::string&) {
         return false;
@@ -215,7 +245,8 @@ TEST_CASE("Anchor mode rename and delete only affect points owned by active mode
 
     CHECK(anchors[0].name == "anchor_renamed");
     CHECK(anchors[1].name == "shared");
-    CHECK(anchors[2].name == "other");
+    CHECK(anchors[2].name == "shared");
+    CHECK(anchors[3].name == "other");
 
     REQUIRE(delete_anchor_in_mode(anchors,
                                   "shared",
@@ -223,12 +254,20 @@ TEST_CASE("Anchor mode rename and delete only affect points owned by active mode
                                   is_reserved_name));
 
     CHECK(anchors.size() == 2);
+    CHECK(anchors[0].name == "anchor_renamed");
+    CHECK(!anchors[0].has_light_data);
+    CHECK(anchors[1].name == "other");
+    CHECK(find_anchor_in_mode(anchors,
+                              "other",
+                              devmode::room_anchor_mode::AnchorPointOwner::NonLight,
+                              is_reserved_name) != nullptr);
     CHECK(find_anchor_in_mode(anchors,
                               "anchor_renamed",
                               devmode::room_anchor_mode::AnchorPointOwner::NonLight,
                               is_reserved_name) != nullptr);
-    CHECK(find_anchor_in_mode(anchors,
-                              "shared",
-                              devmode::room_anchor_mode::AnchorPointOwner::Light,
-                              is_reserved_name) == nullptr);
+    const auto remaining_light_it = std::find_if(
+        anchors.begin(), anchors.end(), [](const DisplacedAssetAnchorPoint& anchor) {
+            return anchor.name == "shared" && anchor.has_light_data;
+        });
+    CHECK(remaining_light_it == anchors.end());
 }

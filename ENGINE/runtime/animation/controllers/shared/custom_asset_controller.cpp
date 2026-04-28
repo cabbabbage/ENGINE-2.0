@@ -1,7 +1,9 @@
 #include "custom_asset_controller.hpp"
 
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <functional>
 #include <string>
 #include <unordered_set>
@@ -10,7 +12,10 @@
 #include "assets/asset/animation.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/attack.hpp"
+#include "animation/animation_tag_utils.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "core/AssetsManager.hpp"
@@ -25,6 +30,15 @@ namespace {
 
 constexpr std::uint64_t kGoldenRatio = 0x9e3779b97f4a7c15ULL;
 constexpr int kAnchorCandidateSpawnRetryLimit = 60;
+constexpr double kOrphanGravityUnitsPerSec2 = 2400.0;
+constexpr double kOrphanMaxDtSeconds = 1.0 / 20.0;
+constexpr double kOrphanMinBounceSpeed = 60.0;
+constexpr double kOrphanRestitutionMax = 0.75;
+constexpr double kOrphanSettleSpeed = 20.0;
+constexpr double kOrphanHorizontalDampingPer60Hz = 0.90;
+constexpr double kOrphanHorizontalBounceFriction = 0.65;
+constexpr double kOrphanSettleHorizontalSpeed = 18.0;
+constexpr double kOrphanMinImpulseDirection = 1e-4;
 
 std::uint64_t mix_hash(std::uint64_t seed, std::uint64_t value) {
     seed ^= value + kGoldenRatio + (seed << 6) + (seed >> 2);
@@ -35,11 +49,28 @@ std::uint64_t hash_signed_int(int value) {
     return static_cast<std::uint64_t>(static_cast<std::int64_t>(value));
 }
 
+bool should_use_auto_move_attack_dispatch(const Asset* self) {
+    if (!self || !self->info) {
+        return false;
+    }
+    if (asset_types::canonicalize(self->info->type) != asset_types::enemy) {
+        return false;
+    }
+    for (const auto& [animation_id, animation] : self->info->animations) {
+        (void)animation_id;
+        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 CustomAssetController::CustomAssetController(Asset* self)
     : self_(self) {
     initialize_anchor_candidate_children();
+    on_init();
 }
 
 CustomAssetController::~CustomAssetController() = default;
@@ -48,15 +79,60 @@ void CustomAssetController::update(const Input& in) {
     game_context_ = custom_controllers::build_controller_game_context(self_, assets(), &fly_orbit_target_state_);
     fly_orbit_target_state_ = game_context_.fly_orbit_target;
     tick_anchor_candidate_attachments();
+    tick_orphan_fall_state();
     on_update(in);
 }
 
 void CustomAssetController::process_pending_attacks(Asset& self) {
+    const auto pending_attacks = self.process_pending_attacks();
+    if (pending_attacks.empty()) {
+        on_no_pending_attacks();
+        on_process_pending_attacks(self);
+        return;
+    }
+
+    orphan_eligible_children(self);
+    for (const auto& attack : pending_attacks) {
+        on_attack(attack);
+    }
+    const auto summary = custom_controllers::AttackProcessingHelper::process_attacks(
+        self,
+        pending_attacks,
+        attack_processing_config());
+    if (summary.died) {
+        on_death();
+    } else if (summary.took_damage) {
+        for (const auto& attack : pending_attacks) {
+            if (attack.payload.damage_amount > 0 || attack.damage_amount > 0) {
+                on_hit(attack);
+                break;
+            }
+        }
+    }
     on_process_pending_attacks(self);
+}
+
+void CustomAssetController::on_pre_delete(Asset& self) {
+    on_pre_delete_hook(self);
+}
+
+void CustomAssetController::on_orphaned(Asset& self,
+                                        Asset* former_parent,
+                                        std::optional<OrphanImpulse> impulse) {
+    on_orphaned_hook(self, former_parent, impulse);
+}
+
+void CustomAssetController::on_interact(Asset& self, Asset* instigator) {
+    on_interact_hook(self, instigator);
 }
 
 Assets* CustomAssetController::assets() const {
     return self_ ? self_->get_assets() : nullptr;
+}
+
+runtime::context::GameRuntimeContext* CustomAssetController::mutable_runtime_game_context() const {
+    Assets* owner_assets = assets();
+    return owner_assets ? &owner_assets->mutable_game_context() : nullptr;
 }
 
 void CustomAssetController::initialize_anchor_candidate_children() {
@@ -98,11 +174,7 @@ void CustomAssetController::initialize_anchor_candidate_children() {
 
         const vibble::spawn::RuntimeCandidates runtime_candidates =
             vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
-        if (runtime_candidates.empty()) {
-            vibble::log::warn(std::string("[CustomAssetController] Empty explicit anchor candidates for anchor '") +
-                              anchor_name + "' on asset '" + self_->info->name + "'");
-            continue;
-        }
+
 
         const auto resolved = runtime_candidates.pick_hashed(
             anchor_candidate_hash(anchor_name),
@@ -119,6 +191,8 @@ void CustomAssetController::initialize_anchor_candidate_children() {
         attachment.resolved_asset_name = resolved->resolved_asset_name;
         attachment.remaining_spawn_retries = kAnchorCandidateSpawnRetryLimit;
         attachment.exhausted = false;
+        attachment.orphan_on_end = self_->info->anchor_point_child_candidate_orphan_on_end(anchor_name);
+        attachment.orphaned = false;
         attachment.child.emplace(*self_, attachment.resolved_asset_name);
         attachment.child->bind(attachment.anchor_name);
         anchor_candidate_children_.push_back(std::move(attachment));
@@ -161,6 +235,8 @@ void CustomAssetController::initialize_anchor_candidate_children() {
         attachment.resolved_asset_name = fallback_asset_name;
         attachment.remaining_spawn_retries = kAnchorCandidateSpawnRetryLimit;
         attachment.exhausted = false;
+        attachment.orphan_on_end = true;
+        attachment.orphaned = false;
         attachment.child.emplace(*self_, attachment.resolved_asset_name);
         attachment.child->bind(attachment.anchor_name);
         anchor_candidate_children_.push_back(std::move(attachment));
@@ -169,6 +245,9 @@ void CustomAssetController::initialize_anchor_candidate_children() {
 
 void CustomAssetController::tick_anchor_candidate_attachments() {
     for (auto& attachment : anchor_candidate_children_) {
+        if (attachment.orphaned) {
+            continue;
+        }
         if (!attachment.child.has_value()) {
             continue;
         }
@@ -197,6 +276,74 @@ void CustomAssetController::tick_anchor_candidate_attachments() {
     }
 }
 
+void CustomAssetController::orphan_eligible_children(Asset& owner) {
+    for (auto& attachment : anchor_candidate_children_) {
+        if (attachment.orphaned || !attachment.orphan_on_end || !attachment.child.has_value()) {
+            continue;
+        }
+
+        Asset* orphaned_child = attachment.child->orphan();
+        if (!orphaned_child) {
+            continue;
+        }
+        attachment.orphaned = true;
+    }
+}
+
+void CustomAssetController::tick_orphan_fall_state() {
+    if (!orphan_fall_state_.active || !self_ || self_->dead) {
+        return;
+    }
+
+    const double dt = std::clamp(
+        static_cast<double>(self_->frame_delta_seconds_clamped()),
+        1.0 / 240.0,
+        kOrphanMaxDtSeconds);
+
+    orphan_fall_state_.velocity_y -= kOrphanGravityUnitsPerSec2 * dt;
+    orphan_fall_state_.world_x += orphan_fall_state_.velocity_x * dt;
+    orphan_fall_state_.world_z += orphan_fall_state_.velocity_z * dt;
+    orphan_fall_state_.world_y += orphan_fall_state_.velocity_y * dt;
+    const double horizontal_damping = std::pow(kOrphanHorizontalDampingPer60Hz, dt * 60.0);
+    orphan_fall_state_.velocity_x *= horizontal_damping;
+    orphan_fall_state_.velocity_z *= horizontal_damping;
+
+    const double floor_y = orphan_fall_state_.floor_y;
+    if (orphan_fall_state_.world_y <= floor_y) {
+        orphan_fall_state_.world_y = floor_y;
+        const double impact_speed = std::abs(orphan_fall_state_.velocity_y);
+        const double rebound_speed = impact_speed * orphan_fall_state_.restitution;
+        if (rebound_speed > kOrphanMinBounceSpeed) {
+            orphan_fall_state_.velocity_y = rebound_speed;
+            orphan_fall_state_.velocity_x *= kOrphanHorizontalBounceFriction;
+            orphan_fall_state_.velocity_z *= kOrphanHorizontalBounceFriction;
+        } else {
+            orphan_fall_state_.velocity_y = 0.0;
+        }
+    }
+
+    const double horizontal_speed = std::hypot(orphan_fall_state_.velocity_x, orphan_fall_state_.velocity_z);
+    orphan_fall_state_.active =
+        orphan_fall_state_.world_y > floor_y + 0.5 ||
+        std::abs(orphan_fall_state_.velocity_y) > kOrphanSettleSpeed ||
+        horizontal_speed > kOrphanSettleHorizontalSpeed;
+
+    if (!orphan_fall_state_.active &&
+        std::abs(orphan_fall_state_.world_y - floor_y) <= 0.5 &&
+        std::abs(orphan_fall_state_.velocity_y) <= kOrphanSettleSpeed &&
+        horizontal_speed <= kOrphanSettleHorizontalSpeed) {
+        orphan_fall_state_.world_y = floor_y;
+        orphan_fall_state_.velocity_x = 0.0;
+        orphan_fall_state_.velocity_z = 0.0;
+        orphan_fall_state_.velocity_y = 0.0;
+    }
+
+    self_->move_to_world_position(static_cast<int>(std::lround(orphan_fall_state_.world_x)),
+                                  static_cast<int>(std::lround(orphan_fall_state_.world_y)),
+                                  static_cast<int>(std::lround(orphan_fall_state_.world_z)),
+                                  orphan_fall_state_.resolution_layer);
+}
+
 std::uint64_t CustomAssetController::anchor_candidate_hash(const std::string& anchor_name) const {
     std::uint64_t hash = mix_hash(std::hash<std::string>{}(owner_identity_for_anchor_candidates()),
                                   std::hash<std::string>{}(anchor_name));
@@ -222,6 +369,8 @@ std::string CustomAssetController::owner_identity_for_anchor_candidates() const 
     return "asset";
 }
 
+void CustomAssetController::on_init() {}
+
 void CustomAssetController::on_update(const Input&) {
     Asset* self = self_ptr();
     if (self && self->info && self->anim_ && self->default_controller_animation_enforced()) {
@@ -235,11 +384,94 @@ void CustomAssetController::on_update(const Input&) {
         }
     }
 
-    if (self && !self->current_attack_box_volumes().empty()) {
+    if (self &&
+        !self->current_attack_box_volumes().empty() &&
+        !should_use_auto_move_attack_dispatch(self)) {
         custom_controllers::AttackDetectionHelper::send_attacks_to_active_targets(self, assets());
     }
 }
 
+void CustomAssetController::on_attack(const animation_update::Attack&) {}
+
+void CustomAssetController::on_hit(const animation_update::Attack&) {}
+
+void CustomAssetController::on_death() {}
+
+void CustomAssetController::on_no_pending_attacks() {}
+
+custom_controllers::AttackProcessingConfig CustomAssetController::attack_processing_config() const {
+    return {};
+}
+
 void CustomAssetController::on_process_pending_attacks(Asset& self) {
-    custom_controllers::AttackProcessingHelper::process_pending_attacks(self);
+    (void)self;
+}
+
+void CustomAssetController::on_pre_delete_hook(Asset& self) {
+    orphan_eligible_children(self);
+}
+
+void CustomAssetController::on_orphaned_hook(Asset& self,
+                                             Asset* former_parent,
+                                             std::optional<OrphanImpulse> impulse) {
+    (void)former_parent;
+    Assets* owner_assets = self.get_assets();
+    if (!owner_assets) {
+        return;
+    }
+
+    const world::GridPoint floor_point =
+        owner_assets->resolve_floor_world_point(SDL_Point{self.world_x(), self.world_z()}, self.grid_resolution);
+
+    orphan_fall_state_.world_x = static_cast<double>(self.world_x());
+    orphan_fall_state_.world_z = static_cast<double>(self.world_z());
+    orphan_fall_state_.resolution_layer = self.grid_resolution;
+    orphan_fall_state_.world_y = static_cast<double>(self.world_y());
+    orphan_fall_state_.floor_y = static_cast<double>(floor_point.world_y());
+    orphan_fall_state_.velocity_x = 0.0;
+    orphan_fall_state_.velocity_z = 0.0;
+    orphan_fall_state_.velocity_y = 0.0;
+    if (impulse.has_value()) {
+        const double impulse_force = std::max(0.0, static_cast<double>(impulse->force));
+        const double raw_x = static_cast<double>(impulse->direction_x);
+        const double raw_z = static_cast<double>(impulse->direction_z);
+        const double length = std::hypot(raw_x, raw_z);
+        if (length > kOrphanMinImpulseDirection) {
+            orphan_fall_state_.velocity_x = (raw_x / length) * impulse_force;
+            orphan_fall_state_.velocity_z = (raw_z / length) * impulse_force;
+        }
+        orphan_fall_state_.velocity_y = std::max(0.0, static_cast<double>(impulse->upward_force));
+    }
+
+    const int bounce_amount = self.info ? std::clamp(self.info->bounce_amount, 0, 100) : 0;
+    orphan_fall_state_.restitution =
+        (static_cast<double>(bounce_amount) / 100.0) * kOrphanRestitutionMax;
+    orphan_fall_state_.active =
+        orphan_fall_state_.world_y > orphan_fall_state_.floor_y + 0.5 ||
+        std::abs(orphan_fall_state_.velocity_y) > kOrphanSettleSpeed ||
+        std::hypot(orphan_fall_state_.velocity_x, orphan_fall_state_.velocity_z) >
+            kOrphanSettleHorizontalSpeed;
+
+    if (!orphan_fall_state_.active) {
+        orphan_fall_state_.world_y = orphan_fall_state_.floor_y;
+        self.move_to_world_position(static_cast<int>(std::lround(orphan_fall_state_.world_x)),
+                                    static_cast<int>(std::lround(orphan_fall_state_.world_y)),
+                                    static_cast<int>(std::lround(orphan_fall_state_.world_z)),
+                                    orphan_fall_state_.resolution_layer);
+    }
+}
+
+void CustomAssetController::on_interact_hook(Asset& self, Asset* instigator) {
+    (void)instigator;
+    if (!self.anim_ || !self.info) {
+        return;
+    }
+
+    if (self.anim_->set_animation_by_tags({"interact"}, {})) {
+        return;
+    }
+    const auto interact_animation = self.info->animations.find("interact");
+    if (interact_animation != self.info->animations.end() && interact_animation->second.has_frames()) {
+        self.anim_->set_animation("interact");
+    }
 }

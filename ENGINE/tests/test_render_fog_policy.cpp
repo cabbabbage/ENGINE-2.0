@@ -132,3 +132,13 @@ TEST_CASE("Render chain pass equalization excludes player boundary from backgrou
     CHECK(std::accumulate(background_repeats.begin(), background_repeats.end(), 0) == static_cast<int>(target_passes));
     CHECK(std::accumulate(foreground_repeats.begin(), foreground_repeats.end(), 0) == static_cast<int>(target_passes));
 }
+
+TEST_CASE("DoF quality scale threshold radii remain stable at 2 6 12 and 24 px") {
+    constexpr int kW = 1920;
+    constexpr int kH = 1080;
+    CHECK(render_internal::dof_quality_scale(kW, kH, 2.0f, 0.0f) == doctest::Approx(1.0f));
+    CHECK(render_internal::dof_quality_scale(kW, kH, 6.0f, 0.0f) == doctest::Approx(0.92f));
+    CHECK(render_internal::dof_quality_scale(kW, kH, 12.0f, 0.0f) == doctest::Approx(0.84f));
+    CHECK(render_internal::dof_quality_scale(kW, kH, 24.0f, 0.0f) == doctest::Approx(0.72f));
+    CHECK(render_internal::dof_quality_scale(kW, kH, 25.0f, 0.0f) == doctest::Approx(0.54f));
+}

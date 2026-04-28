@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "rendering/render/render_diagnostics.hpp"
 #include "utils/log.hpp"
 
 #ifdef _WIN32
@@ -159,7 +160,7 @@ std::string wide_to_utf8(const wchar_t* input) {
     }
     std::string output(static_cast<size_t>(required_size), '\0');
     WideCharToMultiByte(CP_UTF8, 0, input, -1, output.data(), required_size, nullptr, nullptr);
-    output.pop_back();  // Remove trailing NUL terminator.
+    output.pop_back();  // הסר תו NUL מסיים.
     return output;
 }
 
@@ -293,9 +294,9 @@ GpuSelectionContext detect_gpu_selection_context() {
 
 void log_gpu_selection_context(const GpuSelectionContext& context) {
     std::ostringstream drivers;
-    drivers << "[EngineRenderer] Available GPU drivers:";
+    drivers << "[EngineRenderer] דרייברי GPU זמינים:";
     if (context.available_gpu_drivers.empty()) {
-        drivers << " none";
+        drivers << " אין";
     } else {
         for (const std::string& driver : context.available_gpu_drivers) {
             drivers << ' ' << driver;
@@ -305,24 +306,24 @@ void log_gpu_selection_context(const GpuSelectionContext& context) {
 
 #ifdef _WIN32
     if (context.detected_gpus.empty()) {
-        vibble::log::warn("[EngineRenderer] DXGI GPU detection returned no adapters.");
+        vibble::log::warn("[EngineRenderer] זיהוי GPU דרך DXGI לא מצא מתאמים.");
     } else {
         for (size_t i = 0; i < context.detected_gpus.size(); ++i) {
             const SystemGpuInfo& gpu = context.detected_gpus[i];
             std::ostringstream line;
             line << "[EngineRenderer] GPU[" << i << "] "
                  << (gpu.name.empty() ? std::string("<unknown>") : gpu.name)
-                 << " Vendor=0x" << std::hex << gpu.vendor_id << std::dec
-                 << " Dedicated=" << format_memory_mb(gpu.dedicated_video_memory)
-                 << " Shared=" << format_memory_mb(gpu.shared_system_memory)
-                 << " Type=" << (gpu.is_software ? "software" : (gpu.likely_dedicated ? "dedicated" : "integrated"));
+                 << " ספק=0x" << std::hex << gpu.vendor_id << std::dec
+                 << " ייעודי=" << format_memory_mb(gpu.dedicated_video_memory)
+                 << " משותף=" << format_memory_mb(gpu.shared_system_memory)
+                 << " סוג=" << (gpu.is_software ? "תוכנה" : (gpu.likely_dedicated ? "ייעודי" : "משולב"));
             vibble::log::info(line.str());
         }
     }
 
     if (!context.preferred_gpu_name.empty()) {
-        vibble::log::info("[EngineRenderer] Preferred GPU candidate: " + context.preferred_gpu_name +
-                          (context.has_dedicated_preference ? " [dedicated]" : " [integrated]"));
+        vibble::log::info("[EngineRenderer] מועמד GPU מועדף: " + context.preferred_gpu_name +
+                          (context.has_dedicated_preference ? " [ייעודי]" : " [משולב]"));
     }
 #endif
 }
@@ -339,7 +340,7 @@ std::vector<const char*> gpu_driver_attempt_order(const GpuSelectionContext& con
         }
     }
 #endif
-    order.push_back(nullptr);  // Let SDL pick.
+    order.push_back(nullptr);  // תן ל-SDL לבחור.
     return order;
 }
 
@@ -375,8 +376,8 @@ SDL_Renderer* create_renderer_with_properties(SDL_PropertiesID props, const char
     SDL_Renderer* renderer = SDL_CreateRendererWithProperties(props);
     SDL_DestroyProperties(props);
     if (!renderer) {
-        vibble::log::error(std::string("[EngineRenderer] Failed to create renderer (") +
-                           (context ? context : "unknown") + "): " + SDL_GetError());
+        vibble::log::error(std::string("[EngineRenderer] יצירת renderer נכשלה (") +
+                           (context ? context : "לא ידוע") + "): " + SDL_GetError());
     }
     return renderer;
 }
@@ -425,7 +426,33 @@ RenderBackendType classify_backend(SDL_Renderer* renderer, RenderBackendType hin
 } // namespace
 
 EngineRenderer::EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, RenderQualityTier tier, SDL_Window* window)
-    : renderer_(renderer), window_(window), caps_(std::move(caps)), quality_tier_(tier) {}
+    : renderer_(renderer), window_(window), caps_(std::move(caps)), quality_tier_(tier) {
+    present_mode_name_ = caps_.vsync_enabled ? "vsync" : "immediate";
+
+    if (caps_.backend_type == RenderBackendType::GPU && renderer_) {
+        SDL_PropertiesID props = SDL_GetRendererProperties(renderer_);
+        SDL_GPUDevice* gpu_device = props
+            ? static_cast<SDL_GPUDevice*>(SDL_GetPointerProperty(props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr))
+            : nullptr;
+        if (gpu_device) {
+            std::string format_error;
+            has_gpu_format_policy_ = GpuFormatPolicyResolver::Resolve(gpu_device,
+                                                                       false,
+                                                                       gpu_format_policy_,
+                                                                       format_error);
+            if (has_gpu_format_policy_) {
+                vibble::log::info("[EngineRenderer] GPU format policy: albedo=" +
+                                  std::to_string(static_cast<int>(gpu_format_policy_.albedo_format)) +
+                                  " light=" + std::to_string(static_cast<int>(gpu_format_policy_.light_accumulation_format)) +
+                                  " mask=" + std::to_string(static_cast<int>(gpu_format_policy_.mask_format)) +
+                                  " depth=" + std::to_string(static_cast<int>(gpu_format_policy_.depth_format)) +
+                                  " samples=" + std::to_string(static_cast<int>(gpu_format_policy_.sample_count)));
+            } else {
+                vibble::log::error("[EngineRenderer] GPU format policy probe failed: " + format_error);
+            }
+        }
+    }
+}
 
 EngineRenderer::~EngineRenderer() {
     if (renderer_) {
@@ -463,7 +490,7 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
             vibble::log::warn("[EngineRenderer] GPU backend " + hint_label +
                               " selected '" + selected_gpu_name +
                               "' instead of preferred dedicated GPU '" + gpu_context.preferred_gpu_name +
-                              "'. Trying next backend.");
+                              "'; trying next backend.");
             if (!has_deferred_gpu_attempt) {
                 deferred_gpu_attempt = attempt;
                 has_deferred_gpu_attempt = true;
@@ -479,7 +506,7 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
 
     if (!gpu_attempt.renderer && has_deferred_gpu_attempt) {
         gpu_attempt = deferred_gpu_attempt;
-        vibble::log::warn("[EngineRenderer] Falling back to best available GPU renderer despite dedicated preference.");
+        vibble::log::warn("[EngineRenderer] Using best available GPU renderer despite dedicated preference.");
     }
 
     if (!gpu_attempt.renderer && !gpu_failures.empty()) {
@@ -494,59 +521,22 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
     if (gpu_attempt.renderer) {
         auto tier = choose_quality_tier(gpu_attempt.caps);
         log_caps(gpu_attempt.caps);
-        return std::unique_ptr<EngineRenderer>(new EngineRenderer(gpu_attempt.renderer, gpu_attempt.caps, tier, window));
-    }
-    if (!gpu_attempt.failure_reason.empty()) {
-        vibble::log::warn("[EngineRenderer] GPU renderer unavailable, falling back to accelerated 2D. Reason: " +
-                          gpu_attempt.failure_reason);
-    }
-
-    AttemptResult accel_attempt{};
-#ifdef _WIN32
-    if (gpu_context.has_dedicated_preference) {
-        AttemptResult d3d12_attempt = try_create_accelerated(window, prefer_vsync, "direct3d12");
-        if (d3d12_attempt.renderer) {
-            accel_attempt = d3d12_attempt;
-        } else if (!d3d12_attempt.failure_reason.empty()) {
-            accel_attempt.failure_reason = d3d12_attempt.failure_reason;
+        std::unique_ptr<EngineRenderer> candidate(
+            new EngineRenderer(gpu_attempt.renderer, gpu_attempt.caps, tier, window));
+        if (!candidate->has_gpu_format_policy_) {
+            vibble::log::error("[EngineRenderer] GPU renderer failed strict startup format policy checks.");
+            candidate.reset();
+        } else {
+            return candidate;
         }
     }
-#endif
-    if (!accel_attempt.renderer) {
-        AttemptResult auto_attempt = try_create_accelerated(window, prefer_vsync, nullptr);
-        if (auto_attempt.renderer) {
-            accel_attempt = auto_attempt;
-        } else if (!auto_attempt.failure_reason.empty()) {
-            if (!accel_attempt.failure_reason.empty()) {
-                accel_attempt.failure_reason += " | ";
-            }
-            accel_attempt.failure_reason += auto_attempt.failure_reason;
-        }
-    }
-    if (accel_attempt.renderer) {
-        auto tier = choose_quality_tier(accel_attempt.caps);
-        log_caps(accel_attempt.caps);
-        return std::unique_ptr<EngineRenderer>(new EngineRenderer(accel_attempt.renderer, accel_attempt.caps, tier, window));
-    }
-    if (!accel_attempt.failure_reason.empty()) {
-        vibble::log::warn("[EngineRenderer] Accelerated renderer unavailable, falling back to software. Reason: " +
-                          accel_attempt.failure_reason);
-    }
 
-    AttemptResult software_attempt = try_create_software(window);
-    if (software_attempt.renderer) {
-        auto tier = choose_quality_tier(software_attempt.caps);
-        log_caps(software_attempt.caps);
-        return std::unique_ptr<EngineRenderer>(new EngineRenderer(software_attempt.renderer, software_attempt.caps, tier, window));
+    if (gpu_attempt.failure_reason.empty()) {
+        gpu_attempt.failure_reason = "GPU renderer initialization failed for all driver attempts.";
     }
-
-    vibble::log::error("[EngineRenderer] Failed to create any renderer. GPU failure: " +
-                       gpu_attempt.failure_reason +
-                       " | Accelerated failure: " + accel_attempt.failure_reason +
-                       " | Software failure: " + software_attempt.failure_reason);
+    vibble::log::error("[EngineRenderer] GPU renderer required but unavailable: " + gpu_attempt.failure_reason);
     return nullptr;
 }
-
 void EngineRenderer::begin_frame(const SDL_Color& clear_color) {
     if (!renderer_) return;
     SDL_SetRenderTarget(renderer_, nullptr);
@@ -556,12 +546,33 @@ void EngineRenderer::begin_frame(const SDL_Color& clear_color) {
 }
 
 void EngineRenderer::end_frame() {
-    // Placeholder for backend-specific flushes if needed later.
+    // מקום שמור ל-flush ייעודי ל-backend אם יידרש בהמשך.
 }
 
 void EngineRenderer::present() {
     if (renderer_) {
+        render_diagnostics::note_present_call();
+        const std::uint64_t perf_frequency = SDL_GetPerformanceFrequency();
+        const std::uint64_t present_begin = SDL_GetPerformanceCounter();
         SDL_RenderPresent(renderer_);
+        const std::uint64_t present_end = SDL_GetPerformanceCounter();
+
+        const double present_block_ms =
+            (perf_frequency > 0 && present_end >= present_begin)
+                ? (static_cast<double>(present_end - present_begin) * 1000.0 /
+                   static_cast<double>(perf_frequency))
+                : 0.0;
+
+        bool interval_known = false;
+        double present_interval_ms = 0.0;
+        if (perf_frequency > 0 && last_present_counter_ != 0 && present_begin >= last_present_counter_) {
+            present_interval_ms =
+                (static_cast<double>(present_begin - last_present_counter_) * 1000.0) /
+                static_cast<double>(perf_frequency);
+            interval_known = true;
+        }
+        last_present_counter_ = present_end;
+        render_diagnostics::set_present_pacing(present_block_ms, present_interval_ms, interval_known);
     }
 }
 
@@ -598,7 +609,7 @@ EngineRenderer::AttemptResult EngineRenderer::try_create_gpu(SDL_Window* window,
                                                              const char* gpu_driver_hint) {
     AttemptResult attempt{};
 
-    // Force the high-performance preference before each GPU renderer attempt.
+    // כפה העדפת ביצועים גבוהה לפני כל ניסיון ליצור renderer של GPU.
     SDL_SetHint(SDL_HINT_RENDER_GPU_LOW_POWER, "0");
     if (gpu_driver_hint && gpu_driver_hint[0]) {
         SDL_SetHint(SDL_HINT_GPU_DRIVER, gpu_driver_hint);
@@ -628,58 +639,6 @@ EngineRenderer::AttemptResult EngineRenderer::try_create_gpu(SDL_Window* window,
     return attempt;
 }
 
-EngineRenderer::AttemptResult EngineRenderer::try_create_accelerated(SDL_Window* window,
-                                                                     bool prefer_vsync,
-                                                                     const char* renderer_name_hint) {
-    AttemptResult attempt{};
-
-    // Prefer explicit vsync selection via properties; allow SDL to pick the driver.
-    SDL_PropertiesID props = SDL_CreateProperties();
-    if (!props ||
-        !SDL_SetPointerProperty(props, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, window) ||
-        !SDL_SetNumberProperty(props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, prefer_vsync ? 1 : 0)) {
-        attempt.failure_reason = "Failed to configure accelerated renderer properties: " + safe_string(SDL_GetError());
-        if (props) SDL_DestroyProperties(props);
-        return attempt;
-    }
-
-    if (renderer_name_hint && renderer_name_hint[0] &&
-        !SDL_SetStringProperty(props, SDL_PROP_RENDERER_CREATE_NAME_STRING, renderer_name_hint)) {
-        attempt.failure_reason = "Failed to set accelerated renderer hint: " + safe_string(SDL_GetError());
-        SDL_DestroyProperties(props);
-        return attempt;
-    }
-
-    const std::string context_label = std::string("accelerated/") + driver_hint_label(renderer_name_hint);
-    attempt.renderer = create_renderer_with_properties(props, context_label.c_str());
-    if (!attempt.renderer) {
-        attempt.failure_reason = safe_string(SDL_GetError());
-        return attempt;
-    }
-
-    SDL_SetDefaultTextureScaleMode(attempt.renderer, SDL_SCALEMODE_LINEAR);
-    attempt.caps = build_caps(attempt.renderer, RenderBackendType::Render2D);
-    return attempt;
-}
-
-EngineRenderer::AttemptResult EngineRenderer::try_create_software(SDL_Window* window) {
-    AttemptResult attempt{};
-
-    SDL_Surface* window_surface = SDL_GetWindowSurface(window);
-    if (!window_surface) {
-        attempt.failure_reason = "[software] SDL_GetWindowSurface failed: " + safe_string(SDL_GetError());
-        return attempt;
-    }
-
-    attempt.renderer = SDL_CreateSoftwareRenderer(window_surface);
-    if (!attempt.renderer) {
-        attempt.failure_reason = safe_string(SDL_GetError());
-        return attempt;
-    }
-
-    attempt.caps = build_caps(attempt.renderer, RenderBackendType::Software);
-    return attempt;
-}
 
 RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, RenderBackendType backend_type) {
     RenderCaps caps{};
@@ -697,7 +656,7 @@ RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, RenderBackendType 
 
     caps.supports_render_targets = probe_render_target_support(renderer);
     caps.supports_texture_scale_modes = probe_texture_scale_mode(renderer);
-    caps.supports_blend_modes = true; // SDL renderers support blend modes; keep flag for completeness.
+    caps.supports_blend_modes = true; // renderers של SDL תומכים במצבי ערבוב; הדגל נשמר לשלמות.
 
     return caps;
 }
@@ -720,11 +679,11 @@ void EngineRenderer::log_caps(const RenderCaps& caps) {
     case RenderBackendType::Render2D: oss << "Render2D"; break;
     case RenderBackendType::Software: oss << "Software"; break;
     }
-    oss << " Name=" << caps.renderer_name
-        << " MaxTex=" << caps.max_texture_size
-        << " RT=" << (caps.supports_render_targets ? "yes" : "no")
-        << " ScaleMode=" << (caps.supports_texture_scale_modes ? "yes" : "no")
-        << " VSync=" << (caps.vsync_enabled ? "on" : "off")
-        << " Software=" << (caps.is_software ? "yes" : "no");
+    oss << " שם=" << caps.renderer_name
+        << " מקס_טקסטורה=" << caps.max_texture_size
+        << " RT=" << (caps.supports_render_targets ? "כן" : "לא")
+        << " מצב_סקייל=" << (caps.supports_texture_scale_modes ? "כן" : "לא")
+        << " VSync=" << (caps.vsync_enabled ? "פועל" : "כבוי")
+        << " תוכנה=" << (caps.is_software ? "כן" : "לא");
     vibble::log::info(oss.str());
 }

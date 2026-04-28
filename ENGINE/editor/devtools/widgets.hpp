@@ -32,6 +32,7 @@ void DMWidgetTooltipResetHover(DMWidgetTooltipState& state);
 
 bool DMWidgetsSliderScrollCaptured();
 void DMWidgetsSetSliderScrollCapture(const void* owner, bool capture);
+void DMWidgetsClearSliderScrollCaptures();
 
 class DMButton {
 public:
@@ -132,6 +133,7 @@ private:
 class DMNumericStepper {
 public:
     DMNumericStepper(const std::string& label, int min_value, int max_value, int value);
+    ~DMNumericStepper();
     void set_rect(const SDL_Rect& r);
     const SDL_Rect& rect() const { return rect_; }
     void set_value(int v);
@@ -173,6 +175,7 @@ private:
     bool hovered_value_ = false;
     bool pressed_dec_ = false;
     bool pressed_inc_ = false;
+    bool focused_ = false;
     std::function<void(int)> on_change_{};
     DMWidgetTooltipState* tooltip_state_ = nullptr;
 };
@@ -186,6 +189,9 @@ public:
     void set_rect(const SDL_Rect& r);
     const SDL_Rect& rect() const { return rect_; }
     void set_value(int v);
+    void set_min_value(int v);
+    void set_max_value(int v);
+    void set_range(int min_value, int max_value);
     int value() const { return value_; }
     int displayed_value() const;
     void set_defer_commit_until_unfocus(bool defer) {

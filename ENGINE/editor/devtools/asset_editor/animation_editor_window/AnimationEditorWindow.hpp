@@ -10,6 +10,7 @@
 
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/core/save_orchestrator.hpp"
 #include "devtools/widgets.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -39,6 +40,7 @@ class PreviewProvider;
 class AsyncTaskQueue;
 class AudioImporter;
 class AnimationListContextMenu;
+class CustomControllerService;
 
 using DMButton = ::DMButton;
 using DMCheckbox = ::DMCheckbox;
@@ -76,10 +78,8 @@ class AnimationEditorWindow {
     void set_assets(Assets* assets) { assets_ = assets; }
     void set_target_asset(Asset* asset) { target_asset_ = asset; }
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
-    void on_live_frame_editor_closed(const std::string& animation_id);
 
   FRAME_EDITOR_ACCESS:
-    struct LiveFrameEditorToken {};
     void handle_document_saved();
     void layout_children();
     void ensure_layout() const;
@@ -127,13 +127,14 @@ class AnimationEditorWindow {
                                                   int dy,
                                                   int dz,
                                                   bool invert_frames_horizontal) const;
-    void open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode);
-    Asset* resolve_frame_editor_asset();
     void create_animation_via_prompt();
     void reload_document();
     void process_auto_save();
     void close_manifest_transaction();
     bool persist_manifest_payload(const nlohmann::json& payload, bool finalize = false);
+    bool orchestrated_save(devmode::core::SaveOrchestrator::Reason reason,
+                           const std::string& document_id,
+                           const std::function<bool()>& write);
     std::optional<std::string> resolve_manifest_key(const AssetInfo& info) const;
 
     std::optional<std::filesystem::path> pick_folder() const;
@@ -189,9 +190,6 @@ class AnimationEditorWindow {
     SDL_Rect status_rect_{0, 0, 0, 0};
     std::string status_message_;
     int status_timer_frames_ = 0;
-    bool live_frame_editor_session_active_ = false;
-    // Expires when the window is destroyed to invalidate callbacks.
-    std::shared_ptr<LiveFrameEditorToken> live_frame_editor_token_;
     mutable SDL_Texture* inspector_background_cache_ = nullptr;
     mutable SDL_Rect inspector_background_cache_rect_{0, 0, 0, 0};
     mutable bool inspector_background_dirty_ = true;
@@ -207,9 +205,11 @@ class AnimationEditorWindow {
     std::string manifest_asset_key_;
     bool using_manifest_store_ = false;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
+    devmode::core::SaveOrchestrator save_orchestrator_;
 
     Assets* assets_ = nullptr;
     Asset* target_asset_ = nullptr;
+    std::unique_ptr<CustomControllerService> custom_controller_service_;
 
 };
 

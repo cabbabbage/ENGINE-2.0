@@ -14,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <cstdint>
+#include <cstddef>
 #include <limits>
 #include <utility>
 #include <string>
@@ -122,6 +123,7 @@ public:
     void query_impassable_entries(const Asset& self,
                                   int search_radius,
                                   std::vector<const FrameCollisionEntry*>& out) const;
+    int max_impassable_query_radius() const;
     void mark_collision_context_dirty() {
         frame_collision_context_dirty_ = true;
         frame_collision_query_cache_.clear();
@@ -130,6 +132,12 @@ public:
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
     float frame_delta_seconds_clamped() const;
     std::uint32_t frame_id() const { return frame_id_; }
+    bool has_pending_initial_rebuild() const { return pending_initial_rebuild_; }
+    std::size_t last_runtime_convergence_iterations() const { return last_runtime_convergence_stats_.iterations; }
+    std::size_t last_runtime_convergence_traversal_refreshes() const { return last_runtime_convergence_stats_.traversal_refresh_count; }
+    std::size_t last_runtime_convergence_waves() const { return last_runtime_convergence_stats_.wave_count; }
+    std::size_t last_runtime_convergence_children_updated() const { return last_runtime_convergence_stats_.children_updated; }
+    bool last_runtime_convergence_converged() const { return last_runtime_convergence_stats_.converged; }
 
     void render_overlays(SDL_Renderer* renderer);
     SDL_Renderer* renderer() const;
@@ -247,6 +255,8 @@ public:
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }
+    bool dev_grid_overlay_enabled() const;
+    int dev_grid_overlay_cell_size_px() const;
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
 
@@ -294,6 +304,8 @@ private:
     void addAsset(const std::string& name, SDL_Point g);
     void update_filtered_active_assets();
     bool asset_matches_focus_filter(const Asset* asset) const;
+    void rebuild_focus_filter_closure();
+    void mark_focus_filter_closure_dirty();
     void ensure_dev_controls();
     void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
@@ -401,6 +413,25 @@ private:
         float width = 0.0f;
         float height = 0.0f;
     };
+    struct RuntimeConvergencePassResult {
+        bool any_change = false;
+        bool needs_repass = false;
+        bool needs_traversal_refresh = false;
+        std::size_t wave_count = 0;
+        std::size_t children_considered = 0;
+        std::size_t children_updated = 0;
+    };
+    struct RuntimeConvergenceFrameStats {
+        std::size_t iterations = 0;
+        std::size_t traversal_refresh_count = 0;
+        std::size_t wave_count = 0;
+        std::size_t children_considered = 0;
+        std::size_t children_updated = 0;
+        bool converged = false;
+        double stage_ms = 0.0;
+        double pass_ms = 0.0;
+        double refresh_ms = 0.0;
+    };
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
     std::vector<Asset*> asset_dimension_update_queue_;
     std::unordered_set<Asset*> asset_dimension_update_lookup_;
@@ -410,6 +441,8 @@ private:
         std::uint64_t processed_anchor_revision = 0;
         std::uint64_t processed_camera_state_version = 0;
         int processed_frame_index = std::numeric_limits<int>::min();
+        Asset::RuntimeImpassableGeometrySignature processed_impassable_signature{};
+        bool processed_impassable_signature_initialized = false;
         std::uint32_t non_player_update_visit_epoch = 0;
     };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
@@ -420,6 +453,8 @@ private:
     std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
     std::uint32_t non_player_update_visit_epoch_ = 0;
+    std::size_t startup_non_player_update_cursor_ = 0;
+    std::size_t startup_runtime_pass_cursor_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
     std::uint32_t last_runtime_convergence_warning_frame_id_ = std::numeric_limits<std::uint32_t>::max();
@@ -427,6 +462,7 @@ private:
     std::uint32_t frame_rebuild_request_count_ = 0;
     std::uint32_t frame_rebuild_execution_count_ = 0;
     bool frame_rebuild_metrics_initialized_ = false;
+    RuntimeConvergenceFrameStats last_runtime_convergence_stats_{};
 
     bool pending_initial_rebuild_ = false;
     bool post_runtime_traversal_refresh_pending_ = false;
@@ -484,12 +520,13 @@ private:
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
     std::uint64_t next_anchor_invalidation_version();
-    bool run_active_runtime_single_pass(bool include_audio_update = true);
+    RuntimeConvergencePassResult run_active_runtime_single_pass(bool include_audio_update = true);
     void run_active_runtime_single_pass_for_asset(Asset* asset,
                                                   const SDL_Point& camera_focus,
                                                   std::uint64_t camera_state_version,
                                                   float camera_anchor_world_z,
                                                   float depth_axis_sign);
+    void run_camera_trap_escape_pass();
     bool capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out_relative_path);
     bool screenshot_create_task_button_active(Uint32 now_ticks) const;
     void render_screenshot_create_task_button(SDL_Renderer* renderer, Uint32 now_ticks);
@@ -527,6 +564,8 @@ private:
     bool focus_filter_active_ = false;
     Asset* focus_filter_asset_ = nullptr;
     std::string focus_filter_spawn_id_;
+    std::unordered_set<const Asset*> focus_filter_closure_;
+    bool focus_filter_closure_dirty_ = true;
     std::uint64_t focus_filter_version_ = 0;
     runtime::context::GameRuntimeContext game_context_{};
 };

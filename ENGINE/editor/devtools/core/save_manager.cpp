@@ -14,6 +14,19 @@ namespace {
 constexpr const char* kMapPersistGuardReason = "SaveManager::persist_map_entry";
 constexpr const char* kManifestFlushIntentKey = "save-manager:manifest-flush";
 constexpr const char* kManifestFlushLabel = "Manifest flush";
+
+SaveOrchestrator::Reason map_reason_from_label(const std::string& reason) {
+    if (reason.find("focus") != std::string::npos) {
+        return SaveOrchestrator::Reason::FocusChange;
+    }
+    if (reason.find("reload") != std::string::npos) {
+        return SaveOrchestrator::Reason::HotReload;
+    }
+    if (reason.find("auto") != std::string::npos) {
+        return SaveOrchestrator::Reason::AutoSave;
+    }
+    return SaveOrchestrator::Reason::StateChange;
+}
 }
 
 void SaveManager::set_manifest_store(ManifestStore* store) {
@@ -33,6 +46,10 @@ void SaveManager::set_manifest_store(ManifestStore* store) {
 
 void SaveManager::set_save_coordinator(DevSaveCoordinator* coordinator) {
     coordinator_ = coordinator;
+}
+
+void SaveManager::set_save_status_sink(SaveOrchestrator::StatusSink sink) {
+    orchestrator_.set_status_sink(std::move(sink));
 }
 
 void SaveManager::register_saveable(Saveable saveable) {
@@ -96,6 +113,19 @@ bool SaveManager::request_manifest_flush(DevSaveCoordinator::Priority priority,
 
     store_->flush();
     return true;
+}
+
+bool SaveManager::save_dirty_with_reason(DevSaveCoordinator::Priority priority,
+                                     SaveOrchestrator::Reason reason,
+                                     const std::string& label) {
+    SaveOrchestrator::Request request;
+    request.document_id = "save-manager";
+    request.reason = reason;
+    request.atomic_write = [this, priority, label]() {
+        return this->save_dirty(priority, label);
+    };
+    auto result = orchestrator_.save(request);
+    return result.success;
 }
 
 bool SaveManager::save_dirty(DevSaveCoordinator::Priority priority, const std::string& reason) {
@@ -184,21 +214,11 @@ bool SaveManager::save_dirty(DevSaveCoordinator::Priority priority, const std::s
     return any_saved;
 }
 
-bool SaveManager::persist_map_entry(const std::string& map_id,
-                                    nlohmann::json payload,
-                                    DevSaveCoordinator::Priority priority,
-                                    const std::string& label,
-                                    std::function<void()> on_success) {
-    if (map_id.empty()) {
-        std::cerr << "[SaveManager] Map identifier is empty; cannot persist map entry\n";
-        return false;
-    }
-
-    if (!store_) {
-        std::cerr << "[SaveManager] Manifest store unavailable; cannot persist map entry\n";
-        return false;
-    }
-
+bool SaveManager::persist_map_entry_direct(const std::string& map_id,
+                                           nlohmann::json payload,
+                                           DevSaveCoordinator::Priority priority,
+                                           const std::string& flush_reason,
+                                           std::function<void()> on_success) {
     ManifestStore::MapPersistOptions write_options;
     write_options.flush = false;
     write_options.guard_reason = kMapPersistGuardReason;
@@ -214,7 +234,6 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         return true;
     }
 
-    const std::string flush_reason = label.empty() ? std::string("Map ") + map_id : label;
     if (priority == DevSaveCoordinator::Priority::Immediate) {
         store_->flush();
         if (coordinator_) {
@@ -225,6 +244,52 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
     }
 
     return true;
+}
+
+bool SaveManager::persist_map_entry(const std::string& map_id,
+                                    nlohmann::json payload,
+                                    DevSaveCoordinator::Priority priority,
+                                    const std::string& label,
+                                    std::function<void()> on_success) {
+    if (map_id.empty()) {
+        std::cerr << "[SaveManager] Map identifier is empty; cannot persist map entry\n";
+        return false;
+    }
+
+    if (!store_) {
+        std::cerr << "[SaveManager] Manifest store unavailable; cannot persist map entry\n";
+        return false;
+    }
+
+    const std::string flush_reason = label.empty() ? std::string("Map ") + map_id : label;
+
+    if (batch_save_active_) {
+        return persist_map_entry_direct(map_id,
+                                        std::move(payload),
+                                        priority,
+                                        flush_reason,
+                                        std::move(on_success));
+    }
+
+    SaveOrchestrator::Request request;
+    request.document_id = map_id;
+    request.reason = map_reason_from_label(flush_reason);
+    request.conflict_check = [this, map_id]() {
+        return store_ && store_->find_map_entry(map_id) != nullptr && store_->has_pending_write();
+    };
+    request.disk_available_check = []() {
+        return true;
+    };
+    request.atomic_write = [this, map_id, payload = std::move(payload), priority, flush_reason, on_success]() mutable {
+        return persist_map_entry_direct(map_id,
+                                        std::move(payload),
+                                        priority,
+                                        flush_reason,
+                                        std::move(on_success));
+    };
+
+    auto result = orchestrator_.save(request);
+    return result.success;
 }
 
 }

@@ -1,26 +1,19 @@
-// CONTROLLER_META_BEGIN
-// Controller: vibble_controller
-// Asset: vibble (type: object)
-// Available animations [1]:
-//   - default
-// Generated: 2026-03-17 23:48:57
-// CONTROLLER_META_END
-
 #include "vibble_controller.hpp"
 #include "animation/animation_update.hpp"
-#include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
-#include "animation/controllers/shared/custom_controller_update_utils.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
+#include "utils/range_util.hpp"
 #include "utils/string_utils.hpp"
 #include <algorithm>
 #include <cmath>
-#include <unordered_set>
+#include <limits>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -29,6 +22,19 @@ constexpr std::string_view kMeleeChildAssetName = "vibble_attack_1";
 constexpr std::string_view kLegacyMeleeChildAssetName = "vibble_attack";
 constexpr std::string_view kMeleeAttackAnimation = "attack";
 constexpr std::string_view kMeleeAnchorName = "melee";
+constexpr std::string_view kHandAnchorName = "hand";
+constexpr std::string_view kGunAssetName = "gun";
+constexpr std::string_view kInteractableTag = "interactable";
+constexpr std::string_view kCanCarryTag = "can_carry";
+constexpr int kInteractRadiusPx = 150;
+
+std::string normalize_tag_token(std::string_view value) {
+    return vibble::strings::to_lower_copy(vibble::strings::trim_copy(std::string{value}));
+}
+
+bool normalized_tokens_equal(std::string_view left, std::string_view right) {
+    return normalize_tag_token(left) == normalize_tag_token(right);
+}
 
 std::vector<std::string> normalize_tag_list(const std::vector<std::string>& values) {
     std::vector<std::string> normalized;
@@ -149,6 +155,7 @@ void vibble_controller::movement(const Input& input) {
     const bool sprint =
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool dash_pressed = input.isScancodeDown(SDL_SCANCODE_SPACE);
+    const bool interact_pressed = input.isScancodeDown(SDL_SCANCODE_E);
     const bool melee_pressed = input.wasPressed(Input::LEFT);
 
     const vibble::player_direction::DirectionIntent direction_intent =
@@ -164,6 +171,24 @@ void vibble_controller::movement(const Input& input) {
                                    std::chrono::duration<float>(meleeCooldown));
         trigger_melee_child_attack_animation(*player);
     }
+
+    if (interact_pressed && !isInteracting) {
+        isInteracting = true;
+        interactFrames = 0;
+    }
+
+    if (isInteracting) {
+        if (interact_pressed) {
+            interactFrames++;
+        } else {
+            const int held_frames = interactFrames;
+            isInteracting = false;
+            interactFrames = 0;
+            process_interact(input, held_frames);
+        }
+    }
+
+
 
 
 
@@ -239,9 +264,9 @@ void vibble_controller::movement(const Input& input) {
 
 
     if (reverse_selected_animation) {
-        animation_update::custom_controllers::begin_reverse_current_animation_until_stop(player);
+        custom_controller_api::begin_reverse_current_animation_until_stop(player);
     } else {
-        animation_update::custom_controllers::stop_reverse_current_animation(player);
+        custom_controller_api::stop_reverse_current_animation(player);
     }
 
     if (has_pixel_motion) {
@@ -253,8 +278,9 @@ void vibble_controller::movement(const Input& input) {
 }
 
 void vibble_controller::on_update(const Input& input) {
-    
+    ensure_hand_defaults();
     movement(input);
+    update_world_carried_asset_pose();
     using namespace std::chrono;
     auto now = steady_clock::now();
 
@@ -419,7 +445,7 @@ void vibble_controller::apply_idle_facing(const std::string& animation_id) {
     }
     const std::string resolved_animation =
         animation_id.empty() ? std::string{animation_update::detail::kDefaultAnimation} : animation_id;
-    animation_update::custom_controllers::stop_reverse_current_animation(player);
+    custom_controller_api::stop_reverse_current_animation(player);
     player->anim_->set_animation(resolved_animation);
 }
 
@@ -436,69 +462,250 @@ void vibble_controller::start_dash() {
 }
 
 void vibble_controller::on_process_pending_attacks(Asset& self) {
-    using namespace animation_update;
+    CustomAssetController::on_process_pending_attacks(self);
+}
 
-    if (!self.info || !self.current_animation_frame() || self.dead || !self.active) {
-        return;
+bool vibble_controller::has_tag(const Asset& asset, std::string_view tag) const {
+    if (!asset.info) {
+        return false;
+    }
+    const std::string expected = normalize_tag_token(tag);
+    if (expected.empty()) {
+        return false;
+    }
+    if (asset.info->has_tag(expected)) {
+        return true;
+    }
+    for (const std::string& existing : asset.info->tags) {
+        if (normalize_tag_token(existing) == expected) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Asset* vibble_controller::find_closest_tagged_asset(std::string_view tag, int radius_px) const {
+    Asset* player = self_ptr();
+    Assets* owner_assets = assets();
+    if (!player || !owner_assets || radius_px <= 0) {
+        return nullptr;
     }
 
-    Assets* assets = self.get_assets();
-    if (!assets) {
-        return;
-    }
-
-    const auto& active_assets = assets->getActive();
-
-    for (Asset* target : active_assets) {
-        if (!target || target == &self || !target->info || !target->current_animation_frame() ||
-            target->dead || !target->active) {
+    const long long radius_sq = static_cast<long long>(radius_px) * static_cast<long long>(radius_px);
+    long long best_dist_sq = std::numeric_limits<long long>::max();
+    Asset* best = nullptr;
+    for (Asset* candidate : owner_assets->getActive()) {
+        if (!candidate || candidate == player || candidate->dead || !candidate->active || !candidate->info) {
             continue;
         }
-
-        auto attack_opt = AttackValidation::compute_attack_if_hit(self, *target);
-
-        if (attack_opt.has_value()) {
-            target->send_attack(*attack_opt);
+        if (candidate == carried_world_asset_) {
+            continue;
         }
+        if (!has_tag(*candidate, tag)) {
+            continue;
+        }
+        const long long dist_sq = Range::distance_sq(player, candidate);
+        if (dist_sq > radius_sq || dist_sq >= best_dist_sq) {
+            continue;
+        }
+        best_dist_sq = dist_sq;
+        best = candidate;
     }
+    return best;
+}
 
-    const auto pending_attacks = self.process_pending_attacks();
-    if (pending_attacks.empty()) {
+bool vibble_controller::is_carrying_non_gun() const {
+    if (carried_world_asset_ && !carried_world_asset_->dead) {
+        return !normalized_tokens_equal(carried_asset_name_, kGunAssetName);
+    }
+    if (!carried_child_.has_value()) {
+        return false;
+    }
+    if (!carried_child_->get_asset()) {
+        return false;
+    }
+    return !normalized_tokens_equal(carried_asset_name_, kGunAssetName);
+}
+
+void vibble_controller::ensure_hand_defaults() {
+    Asset* player = self_ptr();
+    if (!player) {
         return;
     }
 
-    std::optional<SDL_Point> bump_delta;
-    auto consider_knockback = [&](const animation_update::Attack& attack) {
-        SDL_Point candidate_delta{};
-        if (!animation_update::custom_controllers::AttackProcessingHelper::compute_knockback_delta(self, attack, candidate_delta)) {
-            return;
+    if (!is_carrying_non_gun()) {
+        if (!gun_child_.has_value()) {
+            gun_child_.emplace(*player, std::string{kGunAssetName});
         }
-        if (!bump_delta.has_value()) {
-            bump_delta = candidate_delta;
-            return;
-        }
-        const int candidate_sq = candidate_delta.x * candidate_delta.x + candidate_delta.y * candidate_delta.y;
-        const int current_sq = bump_delta->x * bump_delta->x + bump_delta->y * bump_delta->y;
-        if (candidate_sq > current_sq) {
-            bump_delta = candidate_delta;
-        }
-    };
-
-    for (const auto& attack : pending_attacks) {
-        self.runtime_health -= attack.damage_amount;
-        if (attack.attacker_asset_name == "spider") {
-            consider_knockback(attack);
-        }
-    }
-
-    if (self.runtime_health < 0) {
-        if (!animation_update::custom_controllers::AttackProcessingHelper::try_play_death_animation(self)) {
-            self.Delete();
-        }
+        gun_child_->bind(std::string{kHandAnchorName});
+        gun_child_->unhide();
         return;
     }
 
-    if (bump_delta.has_value()) {
-        animation_update::custom_controllers::AttackProcessingHelper::apply_knockback(self, *bump_delta);
+    if (gun_child_.has_value()) {
+        gun_child_->hide();
     }
+}
+
+void vibble_controller::update_world_carried_asset_pose() {
+    Asset* player = self_ptr();
+    if (!player || !carried_world_asset_ || carried_world_asset_->dead) {
+        carried_world_asset_ = nullptr;
+        return;
+    }
+
+    const auto hand_anchor = player->anchor_state(std::string{kHandAnchorName},
+                                                  anchor_points::GridMaterialization::None,
+                                                  Asset::AnchorResolveMode::ForceRecompute);
+    if (!hand_anchor.has_value()) {
+        return;
+    }
+
+    carried_world_asset_->set_anchor_hidden(false);
+    carried_world_asset_->set_hidden(false);
+    carried_world_asset_->active = true;
+
+    int target_layer = hand_anchor->resolution_layer;
+    if (target_layer < 0) {
+        target_layer = carried_world_asset_->grid_resolution;
+    }
+    // Anchor contract: world_quantized_px = {world_x, world_y}, and world_z is the depth axis.
+    carried_world_asset_->move_to_world_position(hand_anchor->world_quantized_px.x,
+                                                 hand_anchor->world_quantized_px.y,
+                                                 hand_anchor->world_z,
+                                                 target_layer);
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
+        carried_world_asset_,
+        std::string{});
+}
+
+OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
+                                                     const Input& input,
+                                                     int held_frames) const {
+    float dir_x = 0.0f;
+    float dir_z = 0.0f;
+    if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
+        dir_x = static_cast<float>(mouse_world->x - player.world_x());
+        dir_z = static_cast<float>(mouse_world->y - player.world_z());
+    }
+    if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
+        const CardinalVector facing = cardinal_vector_for_animation(last_facing_animation_);
+        dir_x = static_cast<float>(facing.x);
+        dir_z = static_cast<float>(facing.y);
+    }
+    if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
+        dir_x = 1.0f;
+        dir_z = 0.0f;
+    }
+    const float length = std::sqrt(dir_x * dir_x + dir_z * dir_z);
+    if (length > 1e-4f) {
+        dir_x /= length;
+        dir_z /= length;
+    }
+
+    const int clamped_hold = std::clamp(held_frames, 1, 120);
+    const float force = 250.0f + static_cast<float>(clamped_hold) * 12.0f;
+    const float upward_force = 220.0f + static_cast<float>(clamped_hold) * 5.0f;
+    return OrphanImpulse{dir_x, dir_z, force, upward_force};
+}
+
+void vibble_controller::drop_carried_asset(const Input& input, int held_frames) {
+    Asset* player = self_ptr();
+    if (!player) {
+        return;
+    }
+    if (!is_carrying_non_gun()) {
+        return;
+    }
+
+    const OrphanImpulse impulse = build_throw_impulse(*player, input, held_frames);
+    if (carried_world_asset_ && !carried_world_asset_->dead) {
+        carried_world_asset_->set_anchor_hidden(false);
+        carried_world_asset_->set_hidden(false);
+        carried_world_asset_->active = true;
+        carried_world_asset_->notify_orphaned(player, impulse);
+        carried_world_asset_ = nullptr;
+        carried_asset_name_.clear();
+        ensure_hand_defaults();
+        return;
+    }
+
+    if (!carried_child_.has_value()) {
+        return;
+    }
+
+    (void)carried_child_->orphan(impulse);
+    carried_child_.reset();
+    carried_asset_name_.clear();
+    ensure_hand_defaults();
+}
+
+void vibble_controller::pickup_asset(Asset& player, Asset& target) {
+    if (!target.info) {
+        return;
+    }
+    if (&target == &player) {
+        return;
+    }
+
+    if (Assets* owner_assets = assets()) {
+        for (Asset* candidate_owner : owner_assets->getActive()) {
+            if (!candidate_owner || candidate_owner == &target) {
+                continue;
+            }
+            if (candidate_owner->has_child(&target)) {
+                candidate_owner->remove_child(&target);
+            }
+        }
+    }
+    anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().unregister_child(&target);
+    target.clear_anchor_perspective_override();
+    target.clear_anchor_sprite_transform_override();
+    target.clear_render_anchor_offset();
+    target.set_anchor_hidden(false);
+    target.set_hidden(false);
+    target.active = true;
+    if (Assets* owner_assets = assets()) {
+        owner_assets->mark_active_assets_dirty();
+    }
+
+    carried_asset_name_ = target.info->name;
+    carried_child_.reset();
+    carried_world_asset_ = &target;
+    update_world_carried_asset_pose();
+    if (gun_child_.has_value()) {
+        gun_child_->hide();
+    }
+}
+
+void vibble_controller::process_interact(const Input& input, int held_frames) {
+    Asset* player = self_ptr();
+    if (!player) {
+        return;
+    }
+
+    if (Asset* interact_target = find_closest_tagged_asset(kInteractableTag, kInteractRadiusPx)) {
+        custom_controller_api::dispatch_interact(player, interact_target);
+        return;
+    }
+
+    if (Asset* carry_target = find_closest_tagged_asset(kCanCarryTag, kInteractRadiusPx)) {
+        if (is_carrying_non_gun()) {
+            drop_carried_asset(input, held_frames);
+        }
+        pickup_asset(*player, *carry_target);
+        return;
+    }
+
+    drop_carried_asset(input, held_frames);
+    ensure_hand_defaults();
+}
+
+custom_controller_api::AttackProcessingConfig vibble_controller::attack_processing_config() const {
+    custom_controller_api::AttackProcessingConfig config;
+    config.hit_animation_id = "hit";
+    config.death_animation_id = "die";
+    config.hit_fallback_animation_id = animation_update::detail::kDefaultAnimation;
+    config.death_fallback_tag = "break";
+    return config;
 }

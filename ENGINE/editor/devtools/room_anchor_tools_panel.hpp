@@ -8,6 +8,7 @@
 #include <SDL3/SDL.h>
 
 #include "assets/asset/anchor_point.hpp"
+#include "devtools/room_candidate_source_context.hpp"
 
 class DMButton;
 class DMTextBox;
@@ -29,13 +30,14 @@ public:
         bool flip_vertical = true;
         float rotation_degrees = 0.0f;
         bool hidden = false;
+        bool orphan_on_end = true;
         bool resolve_x = true;
         AnchorScalingMethod scaling_method = AnchorScalingMethod::Parent;
     };
 
     struct LightValues {
         bool has_light_data = false;
-        bool enabled = false;
+        bool enabled = true; // Deprecated UI field; lights now render based on anchor hidden state.
         int color_r = 255;
         int color_g = 236;
         int color_b = 196;
@@ -54,8 +56,8 @@ public:
     using ApplyDetailsCallback = std::function<void(const DetailValues&)>;
     using ApplyLightDetailsCallback = std::function<void(const LightValues&)>;
     using PropagateCallback = std::function<void(PropagationScope)>;
-    using OnionSkinToggleCallback = std::function<void(bool)>;
-    using OpenCandidatesCallback = std::function<void(const std::string&, SDL_Point, SDL_Rect)>;
+    using OpenCandidatesCallback =
+        std::function<void(const std::string&, SDL_Point, SDL_Rect, devmode::CandidateSourceContext)>;
 
     RoomAnchorToolsPanel();
     ~RoomAnchorToolsPanel();
@@ -75,9 +77,6 @@ public:
     void set_light_editor_mode(bool enabled);
     bool light_editor_mode() const { return light_editor_mode_; }
     void set_light_values(const LightValues& values);
-    void set_onion_skin_enabled(bool enabled);
-    bool onion_skin_enabled() const;
-
     void set_on_select(SelectCallback callback);
     void set_on_add(AddCallback callback);
     void set_on_rename(RenameCallback callback);
@@ -85,7 +84,6 @@ public:
     void set_on_apply_details(ApplyDetailsCallback callback);
     void set_on_apply_light_details(ApplyLightDetailsCallback callback);
     void set_on_propagate(PropagateCallback callback);
-    void set_on_onion_skin_toggle(OnionSkinToggleCallback callback);
     void set_on_open_candidates(OpenCandidatesCallback callback);
 
     bool handle_event(const SDL_Event& event);
@@ -115,6 +113,8 @@ private:
     mutable SDL_Rect detail_title_rect_{0, 0, 0, 0};
     mutable SDL_Rect advanced_card_rect_{0, 0, 0, 0};
     mutable SDL_Rect light_title_rect_{0, 0, 0, 0};
+    mutable SDL_Rect light_helper_rect_{0, 0, 0, 0};
+    mutable SDL_Rect light_swatch_rect_{0, 0, 0, 0};
     mutable SDL_Rect light_card_rect_{0, 0, 0, 0};
     mutable SDL_Rect list_clip_rect_{0, 0, 0, 0};
     mutable int content_height_ = 0;
@@ -130,12 +130,12 @@ private:
     std::unique_ptr<DMTextBox> depth_textbox_;
     std::unique_ptr<DMSlider> rotation_slider_;
     std::unique_ptr<DMCheckbox> hidden_checkbox_;
+    std::unique_ptr<DMCheckbox> orphan_on_end_checkbox_;
     std::unique_ptr<DMButton> advanced_options_button_;
     std::unique_ptr<DMCheckbox> flip_horizontal_checkbox_;
     std::unique_ptr<DMCheckbox> flip_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> resolve_x_checkbox_;
     std::unique_ptr<DMDropdown> scaling_method_dropdown_;
-    std::unique_ptr<DMCheckbox> light_enabled_checkbox_;
     std::unique_ptr<DMTextBox> light_color_r_textbox_;
     std::unique_ptr<DMTextBox> light_color_g_textbox_;
     std::unique_ptr<DMTextBox> light_color_b_textbox_;
@@ -145,7 +145,6 @@ private:
     std::unique_ptr<DMSlider> light_falloff_slider_;
     std::unique_ptr<DMSlider> light_shadow_strength_slider_;
     std::unique_ptr<DMCheckbox> light_cast_shadows_checkbox_;
-    std::unique_ptr<DMCheckbox> onion_skin_checkbox_;
     std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> apply_next_frame_button_;
     std::unique_ptr<DMButton> apply_animation_button_;
@@ -160,6 +159,16 @@ private:
     ApplyDetailsCallback on_apply_details_;
     ApplyLightDetailsCallback on_apply_light_details_;
     PropagateCallback on_propagate_;
-    OnionSkinToggleCallback on_onion_skin_toggle_;
     OpenCandidatesCallback on_open_candidates_;
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+    friend struct RoomAnchorToolsPanelTestAccess;
+#endif
 };
+
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+struct RoomAnchorToolsPanelTestAccess {
+    static bool delete_button_visible(RoomAnchorToolsPanel& panel);
+    static SDL_Rect delete_button_rect(RoomAnchorToolsPanel& panel);
+};
+#endif

@@ -5,7 +5,7 @@ Each asset manifest entry is authoritative via four booleans:
 - `movement_enabled`
 - `attack_box_enabled`
 - `hitbox_enabled`
-- `impassable_box_enabled`
+- `impassable_enabled`
 - `floor_boxes_enabled`
 
 All four flags are required on every asset entry.
@@ -20,26 +20,28 @@ All four flags are required on every asset entry.
   - Omit animation `hit_boxes`.
 - `attack_box_enabled=false`:
   - Omit animation `attack_boxes`.
-- `impassable_box_enabled=false`:
-  - Omit asset-level `impassable_boxes`.
+- `impassable_enabled=false`:
+  - Omit asset-level `impassable_shapes`.
 - `floor_boxes_enabled=false`:
   - Omit asset-level `floor_boxes`.
 
-## Impassable Boxes
+## Impassable Shapes
 
-`impassable_boxes` is asset-scoped only (never animation/frame scoped).
+`impassable_shapes` is asset-scoped only (never animation/frame scoped).
 
-Canonical impassable box fields:
+Canonical impassable shape fields:
 
 - `id` (string)
-- `type` (`"impassable_box"`)
 - `name` (string)
 - `enabled` (bool)
-- `extrusion_amount` (integer)
-- `anchor_link` (string)
-- `rotation_degrees` (number)
-- `position` (object with `x`, `y`)
-- `size` (object with `w`, `h`)
+- `points` (ordered array of `{x, y}` relative anchor points)
+
+Rules:
+
+- Minimum `points` length is `3`.
+- Point order defines polygon edges.
+- Persisted point order is canonicalized to a consistent winding.
+- Self-intersecting polygons are rejected during normalization/parse.
 
 ## Floor Boxes
 
@@ -55,11 +57,16 @@ Canonical floor box fields:
 - `depth` (number)
 - `enabled` (bool)
 - `tags` (array of strings)
+- `candidate` (optional object):
+  - `candidates` (candidate array using the shared spawn candidate schema)
+  - `grid_resolution` (integer in `[2, 8]`, defaults to `4`)
 
 Behavior:
 
 - `floor_boxes` are axis-aligned floor rectangles (no per-box rotation).
 - `boundary` is stripped from floor-box tags during normalization and has no runtime behavior.
+- `candidate` is optional. If absent, no floor-box candidate spawning runs for that box.
+- Candidate arrays are sanitized to always include a `null` entry; `null` cannot be removed and may be set to chance `0`.
 
 ## Runtime/Loader Behavior
 
@@ -67,5 +74,5 @@ Behavior:
 - `movement_enabled=true`: load authored movement only (no synthesized fallback movement payload).
 - `hitbox_enabled=false`: skip hitbox parsing and keep runtime hitbox caches empty.
 - `attack_box_enabled=false`: skip attack-box parsing and keep runtime attack-box caches empty.
-- `impassable_box_enabled=false`: skip impassable-box load into runtime state.
+- `impassable_enabled=false`: skip impassable-shape load into runtime state.
 - `floor_boxes_enabled=false`: skip floor-box load into runtime state.

@@ -254,6 +254,13 @@ void DevFooterBar::set_editor_navigation_enabled(bool enabled) {
         return;
     }
     editor_navigation_enabled_ = enabled;
+    if (editor_navigation_enabled_) {
+        manual_hidden_lock_ = false;
+        debounce_pending_ = false;
+        slide_active_ = false;
+        auto_hidden_ = false;
+        apply_rect_y(shown_y());
+    }
     if (!editor_navigation_enabled_) {
         editor_hovered_frame_index_ = -1;
         editor_pressed_frame_index_ = -1;
@@ -336,6 +343,17 @@ void DevFooterBar::update(const Input& input) {
     }
 
     const Uint64 now_ms = SDL_GetTicks();
+    if (editor_navigation_enabled_) {
+        manual_hidden_lock_ = false;
+        debounce_pending_ = false;
+        slide_active_ = false;
+        auto_hidden_ = false;
+        if (rect_.y != shown_y()) {
+            apply_rect_y(shown_y());
+        }
+        return;
+    }
+
     const float cursor_ratio = static_cast<float>(input.getY()) / static_cast<float>(std::max(1, screen_h_));
     const bool in_show_zone = cursor_ratio >= kFooterShowZoneRatio;
     const bool above_unlock_zone = cursor_ratio < kFooterUnlockZoneRatio;
@@ -377,7 +395,9 @@ bool DevFooterBar::handle_event(const SDL_Event& e) {
 
     if (hide_button_ && hide_button_->handle_event(e)) {
         used = true;
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        if (!editor_navigation_enabled_ &&
+            e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            e.button.button == SDL_BUTTON_LEFT) {
             manual_hidden_lock_ = true;
             request_hidden_state(true, SDL_GetTicks(), true);
         }

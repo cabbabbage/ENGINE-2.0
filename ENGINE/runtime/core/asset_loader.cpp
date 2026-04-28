@@ -25,6 +25,7 @@
 #include "utils/area.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "gameplay/map_generation/generate_rooms.hpp"
+#include "gameplay/map_generation/map_graph.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
@@ -255,6 +256,9 @@ void AssetLoader::finalizeAssets() {
         std::size_t total_assets       = 0;
         std::size_t finalized_assets   = 0;
         std::size_t skipped_assets     = 0;
+        std::size_t skipped_missing_default_count = 0;
+        std::vector<std::string> skipped_missing_default_names;
+        skipped_missing_default_names.reserve(16);
 
         for (Room* room : getRooms()) {
                 if (!room) {
@@ -282,6 +286,10 @@ void AssetLoader::finalizeAssets() {
                         auto default_anim = a->info->animations.find("default");
                         if (default_anim == a->info->animations.end() || !default_anim->second.has_frames()) {
                                 vibble::log::error(std::string("[AssetLoader] finalizeAssets: asset '") + name + "' is missing default animation frames; skipping.");
+                                ++skipped_missing_default_count;
+                                if (skipped_missing_default_names.size() < 16) {
+                                        skipped_missing_default_names.push_back(name);
+                                }
                                 asset_up.reset();
                                 ++skipped_assets;
                                 ++room_skipped;
@@ -319,12 +327,22 @@ void AssetLoader::finalizeAssets() {
         }
 
         {
-                std::string msg = std::string("[AssetLoader] finalizeAssets complete: ") + std::to_string(finalized_assets) + "/" + std::to_string(total_assets) + " assets ready";
-                if (skipped_assets > 0) {
-                        msg += std::string(" (") + std::to_string(skipped_assets) + " skipped)";
-                }
-                vibble::log::info(msg);
+        std::string msg = std::string("[AssetLoader] finalizeAssets complete: ") + std::to_string(finalized_assets) + "/" + std::to_string(total_assets) + " assets ready";
+        if (skipped_assets > 0) {
+                msg += std::string(" (") + std::to_string(skipped_assets) + " skipped)";
         }
+        vibble::log::info(msg);
+        vibble::log::warn(std::string("[AssetLoader] finalizeAssets missing-default skip count: ") +
+                          std::to_string(skipped_missing_default_count));
+        if (!skipped_missing_default_names.empty()) {
+                std::string sampled = skipped_missing_default_names.front();
+                for (std::size_t i = 1; i < skipped_missing_default_names.size(); ++i) {
+                        sampled += ", " + skipped_missing_default_names[i];
+                }
+                vibble::log::error(std::string("[AssetLoader] finalizeAssets high-severity: missing default frames after full preload. Sample assets: ") +
+                                   sampled);
+        }
+}
 }
 
 std::vector<std::unique_ptr<Asset>> AssetLoader::extract_all_assets() {
@@ -430,22 +448,47 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
         rooms_data_        = bind_object_section("rooms_data");
         trails_data_       = bind_object_section("trails_data");
 
-        auto layers_it = map_manifest_json_.find("map_layers");
-        if (layers_it != map_manifest_json_.end() && !layers_it->is_array()) {
-                vibble::log::warn(std::string("[AssetLoader] Invalid 'map_layers' section for map '") + map_id_ +
-                                  "'. Expected array.");
-                layers_it = map_manifest_json_.end();
+        map_graph::MapGraphPlan graph_plan = map_graph::build_map_graph_plan(&map_manifest_json_);
+        for (const std::string& diagnostic : graph_plan.diagnostics) {
+                if (diagnostic.rfind("error:", 0) == 0) {
+                        vibble::log::error(std::string("[AssetLoader] map_graph: ") + diagnostic);
+                } else {
+                        vibble::log::warn(std::string("[AssetLoader] map_graph: ") + diagnostic);
+                }
         }
+        if (!graph_plan.valid) {
+                throw std::runtime_error(
+                    std::string("[AssetLoader] map_graph planning failed for map '") + map_id_ + "'.");
+        }
+        map_boundary_data_ = bind_object_section("map_boundary_data");
+        rooms_data_        = bind_object_section("rooms_data");
+        trails_data_       = bind_object_section("trails_data");
+
+        map_layers_ = graph_plan.resolved_layers;
+        nlohmann::json resolved_layers_json = nlohmann::json::array();
+        for (const LayerSpec& layer_spec : map_layers_) {
+                nlohmann::json layer_entry = nlohmann::json::object();
+                layer_entry["level"] = layer_spec.level;
+                layer_entry["max_rooms"] = layer_spec.max_rooms;
+                layer_entry["rooms"] = nlohmann::json::array();
+                for (const RoomSpec& room_spec : layer_spec.rooms) {
+                        layer_entry["rooms"].push_back(nlohmann::json::object({
+                            {"name", room_spec.name},
+                            {"max_instances", room_spec.max_instances}
+                        }));
+                }
+                resolved_layers_json.push_back(std::move(layer_entry));
+        }
+
         map_layers::LayerRadiiResult radii_result;
         const nlohmann::json* rooms_data_ptr = rooms_data_;
-        if (layers_it != map_manifest_json_.end()) {
-                const double min_edge = map_layers::min_edge_distance_from_map_manifest(map_manifest_json_);
-                radii_result = map_layers::compute_layer_radii(*layers_it, rooms_data_ptr, min_edge);
-        }
+        const double min_edge = map_layers::min_edge_distance_from_map_manifest(map_manifest_json_);
+        radii_result = map_layers::compute_layer_radii(resolved_layers_json, rooms_data_ptr, min_edge);
 
         map_radius_   = radii_result.map_radius;
         map_center_x_ = map_center_y_ = map_radius_;
         layer_radii_  = radii_result.layer_radii;
+        auto layers_it = map_manifest_json_.find("map_layers");
         if (layers_it != map_manifest_json_.end() && layers_it->is_array()) {
                 for (std::size_t idx = 0; idx < layers_it->size(); ++idx) {
                         auto& layer_entry = (*layers_it)[idx];
@@ -464,40 +507,6 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
         } else {
                 vibble::log::warn(std::string("[AssetLoader] Missing or invalid 'map_layers_settings' section for map '") +
                                   map_id_ + "'.");
-        }
-        map_layers_.clear();
-
-        if (layers_it != map_manifest_json_.end() && layers_it->is_array()) {
-                map_layers_.reserve(layers_it->size());
-                size_t index = 0;
-                for (const auto& layer_entry : *layers_it) {
-                        LayerSpec spec;
-                        spec.level = static_cast<int>(index);
-                        spec.max_rooms = 0;
-
-                        if (layer_entry.is_object()) {
-                                spec.level     = layer_entry.value("level", spec.level);
-                                spec.max_rooms = layer_entry.value("max_rooms", 0);
-
-                                auto rooms_array_it = layer_entry.find("rooms");
-                                if (rooms_array_it != layer_entry.end() && rooms_array_it->is_array()) {
-                                        for (const auto& room_entry : *rooms_array_it) {
-                                                if (!room_entry.is_object()) {
-                                                        continue;
-                                                }
-                                                RoomSpec rs;
-                                                rs.name          = room_entry.value("name", "unnamed");
-                                                rs.max_instances = room_entry.value("max_instances", 1);
-
-
-                                                spec.rooms.push_back(std::move(rs));
-                                        }
-                                }
-                        }
-
-                        map_layers_.push_back(std::move(spec));
-                        ++index;
-                }
         }
 
         vibble::log::debug(std::string("[AssetLoader] load_from_manifest: map_radius_=") + std::to_string(map_radius_) + " layers=" + std::to_string(map_layers_.size()));

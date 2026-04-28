@@ -1187,6 +1187,21 @@ void AssetLibraryUI::delete_hashtag(const std::string& tag) {
 }
 
 void AssetLibraryUI::refresh_tiles(Assets& assets) {
+    if (refresh_tiles_in_progress_) {
+        refresh_tiles_queued_ = true;
+        filter_dirty_ = true;
+        return;
+    }
+    refresh_tiles_in_progress_ = true;
+    struct RefreshTilesGuard {
+        AssetLibraryUI* owner = nullptr;
+        ~RefreshTilesGuard() {
+            if (owner) {
+                owner->refresh_tiles_in_progress_ = false;
+            }
+        }
+    } guard{this};
+
     search_query_ = asset_list_view_.query();
     asset_list_view_.set_assets(&assets);
 
@@ -1208,8 +1223,9 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
     asset_list_view_.set_selected_values(multi_select_selection_);
     asset_list_view_.set_callbacks(AssetListView::Callbacks{
         [this](const AssetListView::Entry& entry){
-            if (entry.info) {
+            if (entry.info && !selection_dispatched_this_update_) {
                 pending_selection_ = entry.info;
+                selection_dispatched_this_update_ = true;
                 if (picker_mode_.enabled && picker_mode_.on_selected) {
                     picker_mode_.on_selected(entry.info);
                 }
@@ -1248,10 +1264,11 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
                 count,
                 [this](const std::string& tag_value){
                     auto resolved = resolve_tag_to_asset(tag_value);
-                    if (resolved) {
+                    if (resolved && !selection_dispatched_this_update_) {
                         pending_selection_ = resolved;
+                        selection_dispatched_this_update_ = true;
                         close();
-                    } else {
+                    } else if (!resolved) {
                         std::cerr << "[AssetLibraryUI] No assets found for tag '" << tag_value << "'\n";
                     }
                 },
@@ -1284,13 +1301,18 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
                 this,
                 ref.first,
                 ref.second,
-                [this](const AreaRef& ref){ pending_area_selection_ = ref; close(); }
+                [this](const AreaRef& ref){
+                    if (!area_selection_dispatched_this_update_) {
+                        pending_area_selection_ = ref;
+                        area_selection_dispatched_this_update_ = true;
+                    }
+                    close();
+                }
             ));
         }
     }
 
     mark_rows_dirty();
-    ensure_rows_layout();
 }
 
 void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer_multi_select_refresh) {
@@ -1625,6 +1647,10 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         manifest_entry["min_same_type_distance"] = 0;
         manifest_entry["min_distance_all"] = 0;
         manifest_entry["can_invert"] = false;
+    manifest_entry["tilt_range_min_deg"] = 0;
+    manifest_entry["tilt_range_max_deg"] = 0;
+    manifest_entry["y_pos_min"] = 0;
+    manifest_entry["y_pos_max"] = 0;
         manifest_entry["size_settings"] = {
             {"scale_percentage", 100.0},
             {"size_variation", 0.0}
@@ -1830,6 +1856,8 @@ void AssetLibraryUI::update(const Input& input,
                             devmode::core::ManifestStore& store)
 {
     if (!floating_) return;
+    selection_dispatched_this_update_ = false;
+    area_selection_dispatched_this_update_ = false;
     assets_owner_ = &assets;
     library_owner_ = &lib;
     manifest_store_owner_ = &store;
@@ -1851,6 +1879,11 @@ void AssetLibraryUI::update(const Input& input,
             floating_->reset_scroll();
         }
         refresh_tiles(assets);
+        if (refresh_tiles_queued_) {
+            refresh_tiles_queued_ = false;
+            filter_dirty_ = true;
+        }
+        ensure_rows_layout();
     }
 
     floating_->set_work_area(SDL_Rect{0,0,screen_w,screen_h});

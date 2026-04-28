@@ -9,31 +9,20 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_update.hpp"
+#include "animation_tag_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/area.hpp"
 #include "gameplay/world/grid_point.hpp"
 
 namespace {
-using CollisionEntryRef = const Assets::FrameCollisionEntry*;
-
-std::vector<CollisionEntryRef> gather_collision_entries(const Asset& self) {
-    std::vector<CollisionEntryRef> entries;
-    const Assets* assets = self.get_assets();
-    if (!assets) {
-        return entries;
-    }
-    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
-        ? self.info->NeighborSearchRadius
-        : 0;
-    assets->query_impassable_entries(self, search_radius, entries);
-    return entries;
-}
+using CollisionEntryRef = CollisionQueryContext::CollisionEntryRef;
 
 bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
                   const std::vector<CollisionEntryRef>& collisions,
                   const Asset& self,
-                  const Assets* assets_owner) {
+                  const Assets* assets_owner,
+                  const animation_update::detail::PathBlockingContext& context) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
     const world::GridPoint dest_bottom  = animation_update::detail::bottom_middle_for(self, to);
 
@@ -50,17 +39,22 @@ bool blocked_step(const world::GridPoint& from,
             continue;
         }
 
-        if (animation_update::detail::segment_hits_area(from, to, entry->area)) {
+        const std::string other_id = animation_update::detail::stable_asset_id(*other);
+        const bool is_engagement_target =
+            context.allow_engagement_target_overlap &&
+            context.engagement_target_asset_id.has_value() &&
+            !other_id.empty() &&
+            other_id == *context.engagement_target_asset_id;
+
+        if (!is_engagement_target && animation_update::detail::segment_hits_area(from, to, entry->area)) {
             return true;
         }
 
-        bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
-
-        if (overlap_check) {
-            if (animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) <
-                animation_update::detail::kOverlapDistanceSq) {
-                return true;
-            }
+        const int overlap_distance_sq =
+            animation_update::detail::overlap_distance_sq_for_pair(self, *other, context);
+        if (overlap_distance_sq > 0 &&
+            animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) < overlap_distance_sq) {
+            return true;
         }
     }
 
@@ -76,10 +70,15 @@ struct AnimationDescriptor {
     int frame_count = 0;
 };
 
-std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
-    std::vector<AnimationDescriptor> result;
+struct MovementAnimationBuckets {
+    std::vector<AnimationDescriptor> locomotion;
+    std::vector<AnimationDescriptor> attack;
+};
+
+MovementAnimationBuckets gather_movement_animations(const Asset& self) {
+    MovementAnimationBuckets buckets;
     if (!self.info || !self.isMovementEnabled()) {
-        return result;
+        return buckets;
     }
 
     for (const auto& [id, anim] : self.info->animations) {
@@ -105,11 +104,16 @@ std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
                 continue;
             }
 
-            result.push_back(AnimationDescriptor{ id, &anim, path_index, frames, anim.locked, frame_count });
+            AnimationDescriptor descriptor{ id, &anim, path_index, frames, anim.locked, frame_count };
+            if (animation_update::tag_utils::has_normalized_tag(anim.tags, "attack")) {
+                buckets.attack.push_back(std::move(descriptor));
+            } else {
+                buckets.locomotion.push_back(std::move(descriptor));
+            }
         }
     }
 
-    return result;
+    return buckets;
 }
 
 struct CandidateStride {
@@ -131,7 +135,8 @@ void copy_position(world::GridPoint& dst, const world::GridPoint& src) {
 Plan GetBestPath::operator()(const Asset& self,
                              const std::vector<SDL_Point>& sanitized_checkpoints,
                              int visited_thresh_px,
-                             const vibble::grid::Grid& grid) const {
+                             const vibble::grid::Grid& grid,
+                             CollisionQueryContext* collision_context) const {
     Plan plan;
     plan.sanitized_checkpoints = sanitized_checkpoints;
 
@@ -154,10 +159,17 @@ Plan GetBestPath::operator()(const Asset& self,
         return plan;
     }
 
-    const auto collisions  = gather_collision_entries(self);
+    CollisionQueryContext local_collision_context;
+    CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
+    const auto& collisions = context.collisions_for(self);
     const Assets* assets   = self.get_assets();
+    const animation_update::detail::PathBlockingContext blocking_context{
+        context.engagement_target_asset_id,
+        false
+    };
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
-    auto movement_anims    = gather_movement_animations(self);
+    const MovementAnimationBuckets animation_buckets = gather_movement_animations(self);
+    const auto& movement_anims = animation_buckets.locomotion;
 
     bool aborted = false;
     for (const world::GridPoint& checkpoint : checkpoints) {
@@ -194,7 +206,7 @@ Plan GetBestPath::operator()(const Asset& self,
                         const AnimationFrame& frame = (*frames_path)[i];
                         SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
                         world::GridPoint next = world::grid_math::offset(simulated, delta);
-                        if (blocked_step(simulated, next, collisions, self, assets)) {
+                        if (blocked_step(simulated, next, collisions, self, assets, blocking_context)) {
                             blocked = true;
                             break;
                         }
@@ -257,11 +269,20 @@ Plan GetBestPath::operator()(const Asset& self,
                     const int min_frames = descriptor.locked ? max_frames : 1;
                     for (int frames = min_frames; frames <= max_frames; ++frames) {
                         world::GridPoint simulated = cursor;
+                        bool blocked = false;
                         for (int i = 0; i < frames; ++i) {
                             const AnimationFrame& frame = (*frames_path)[i];
                             SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
                             world::GridPoint next = world::grid_math::offset(simulated, delta);
+                            if (blocked_step(simulated, next, collisions, self, assets, blocking_context)) {
+                                blocked = true;
+                                break;
+                            }
                             copy_position(simulated, next);
+                        }
+
+                        if (blocked) {
+                            continue;
                         }
 
                         const int dist_sq = animation_update::detail::distance_sq(simulated, checkpoint);
@@ -322,3 +343,23 @@ Plan GetBestPath::operator()(const Asset& self,
 
     return plan;
 }
+
+namespace get_best_path::test_hooks {
+
+AnimationTagBuckets classify_animation_tag_buckets(const Asset& self) {
+    AnimationTagBuckets result;
+    const MovementAnimationBuckets buckets = gather_movement_animations(self);
+    result.locomotion_animation_ids.reserve(buckets.locomotion.size());
+    result.attack_animation_ids.reserve(buckets.attack.size());
+
+    for (const auto& descriptor : buckets.locomotion) {
+        result.locomotion_animation_ids.push_back(descriptor.id);
+    }
+    for (const auto& descriptor : buckets.attack) {
+        result.attack_animation_ids.push_back(descriptor.id);
+    }
+
+    return result;
+}
+
+} // namespace get_best_path::test_hooks

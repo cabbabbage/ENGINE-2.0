@@ -40,6 +40,19 @@ void FloatSliderWidget::set_value(float v) {
     current_value_ = slider_to_value(slider_->value());
 }
 
+void FloatSliderWidget::set_range(float min_val, float max_val) {
+    min_ = std::min(min_val, max_val);
+    max_ = std::max(min_val, max_val);
+    slider_min_units_ = 0;
+    slider_max_units_ = std::max(slider_min_units_, compute_units_for_value(max_));
+    if (slider_) {
+        slider_->set_min_value(slider_min_units_);
+        slider_->set_max_value(slider_max_units_);
+        slider_->set_value(value_to_slider(current_value_));
+        current_value_ = slider_to_value(slider_->value());
+    }
+}
+
 void FloatSliderWidget::set_rect(const SDL_Rect& r) {
     if (slider_widget_) slider_widget_->set_rect(r);
 }
@@ -129,4 +142,3 @@ std::optional<int> FloatSliderWidget::parse_units(const std::string& text) const
         return std::nullopt;
     }
 }
-

@@ -79,11 +79,13 @@ bool traversal_contains_asset(const WarpedScreenGrid& camera_grid, const Asset* 
 
 std::unique_ptr<AnimationFrame> make_light_anchor_frame(float radius_world,
                                                         bool enabled = true,
-                                                        float intensity = 1.0f) {
+                                                        float intensity = 1.0f,
+                                                        bool hidden = false) {
     auto frame = std::make_unique<AnimationFrame>();
     DisplacedAssetAnchorPoint anchor{"light_anchor", 0, 0, 0.0f};
     anchor.has_light_data = true;
     anchor.light.enabled = enabled;
+    anchor.hidden = hidden;
     anchor.light.radius = radius_world;
     anchor.light.intensity = intensity;
     anchor.light.sanitize();
@@ -535,6 +537,97 @@ TEST_CASE("WarpedScreenGrid min on-screen culling uses light radius when enabled
     CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
 }
 
+TEST_CASE("WarpedScreenGrid includes large sprite when center is off-screen but projected extent overlaps") {
+    world::WorldGrid grid;
+    Asset* large_asset = grid.create_asset_at_point(make_world_grid_test_asset(-700, 80));
+    REQUIRE(large_asset != nullptr);
+    large_asset->info->original_canvas_width = 1600;
+    large_asset->info->original_canvas_height = 600;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, large_asset));
+}
+
+TEST_CASE("WarpedScreenGrid includes tiled asset when owner center is off-screen but tile coverage overlaps") {
+    world::WorldGrid grid;
+    Asset* tiled_asset = grid.create_asset_at_point(make_world_grid_test_asset(-2200, 80));
+    REQUIRE(tiled_asset != nullptr);
+
+    Asset::TilingInfo tiling{};
+    tiling.enabled = true;
+    tiling.grid_origin = SDL_Point{-256, 0};
+    tiling.tile_size = SDL_Point{64, 64};
+    tiling.coverage = SDL_Rect{-128, 40, 384, 192};
+    tiled_asset->set_tiling_info(tiling);
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, tiled_asset));
+}
+
+TEST_CASE("WarpedScreenGrid includes light-only overlap when geometry is off-screen") {
+    world::WorldGrid grid;
+    Asset* light_asset = grid.create_asset_at_point(make_world_grid_test_asset(-1400, 80));
+    REQUIRE(light_asset != nullptr);
+    light_asset->info->original_canvas_width = 1;
+    light_asset->info->original_canvas_height = 1;
+    std::unique_ptr<AnimationFrame> light_frame = make_light_anchor_frame(1800.0f, true, 1.0f);
+    light_asset->current_frame = light_frame.get();
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, light_asset));
+}
+
+TEST_CASE("WarpedScreenGrid culls fully off-screen asset with no geometry or light overlap") {
+    world::WorldGrid grid;
+    Asset* culled_asset = grid.create_asset_at_point(make_world_grid_test_asset(-2400, 80));
+    REQUIRE(culled_asset != nullptr);
+    culled_asset->info->original_canvas_width = 32;
+    culled_asset->info->original_canvas_height = 32;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK_FALSE(traversal_contains_asset(camera_grid, culled_asset));
+}
+
+TEST_CASE("WarpedScreenGrid conservatively includes asset when projection is indeterminate") {
+    world::WorldGrid grid;
+    Asset* uncertain_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, -40));
+    REQUIRE(uncertain_asset != nullptr);
+    uncertain_asset->info->original_canvas_width = 64;
+    uncertain_asset->info->original_canvas_height = 64;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, uncertain_asset));
+}
+
+TEST_CASE("WarpedScreenGrid min on-screen culling ignores light enabled and uses hidden only") {
+    world::WorldGrid grid;
+    Asset* tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(tiny_asset != nullptr);
+    tiny_asset->info->original_canvas_width = 1;
+    tiny_asset->info->original_canvas_height = 1;
+
+    std::unique_ptr<AnimationFrame> disabled_light_frame = make_light_anchor_frame(900.0f, false, 1.0f, false);
+    tiny_asset->current_frame = disabled_light_frame.get();
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.05f;
+    settings.min_visible_uses_light_radius = true;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, tiny_asset));
+
+    std::unique_ptr<AnimationFrame> hidden_light_frame = make_light_anchor_frame(900.0f, true, 1.0f, true);
+    tiny_asset->current_frame = hidden_light_frame.get();
+    camera_grid.rebuild_grid(grid, 0.016f, 2);
+    CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
+}
+
 TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
@@ -596,6 +689,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{
         {"max_cull_depth", 2500.0},
+        {"dynamic_renderer_depth_efficiency_depth", 875.0},
+        {"dynamic_renderer_depth_efficiency_min_density_ratio", 0.2},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
         {"front_layer_light_strength_multiplier", 1.4},
@@ -623,6 +718,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
+    CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(875.0f));
+    CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(0.2f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
     CHECK(settings.front_layer_light_strength_multiplier == doctest::Approx(1.4f));
@@ -650,6 +747,9 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
+    CHECK(serialized["dynamic_renderer_depth_efficiency_depth"] == doctest::Approx(875.0));
+    CHECK_FALSE(serialized.contains("dynamic_renderer_depth_efficiency_threshold"));
+    CHECK(serialized["dynamic_renderer_depth_efficiency_min_density_ratio"] == doctest::Approx(0.2));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
     CHECK(serialized["front_layer_light_strength_multiplier"] == doctest::Approx(1.4));
@@ -677,6 +777,33 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK_FALSE(serialized.contains("max_blur_px"));
     CHECK_FALSE(serialized.contains("radial_max_blur_px"));
     CHECK_FALSE(serialized.contains("focus_depth"));
+}
+
+TEST_CASE("WarpedScreenGrid depth efficiency camera settings are clamped to cull-depth range") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"max_cull_depth", 300.0},
+        {"dynamic_renderer_depth_efficiency_depth", -4.0},
+        {"dynamic_renderer_depth_efficiency_min_density_ratio", 9.0}
+    });
+
+    const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(0.0f));
+    CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(1.0f));
+
+    const nlohmann::json serialized = camera_grid.camera_settings_to_json();
+    CHECK(serialized["dynamic_renderer_depth_efficiency_depth"] == doctest::Approx(0.0));
+    CHECK(serialized["dynamic_renderer_depth_efficiency_min_density_ratio"] == doctest::Approx(1.0));
+}
+
+TEST_CASE("WarpedScreenGrid migrates legacy depth efficiency threshold ratio to depth") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.apply_camera_settings(nlohmann::json{
+        {"max_cull_depth", 2500.0},
+        {"dynamic_renderer_depth_efficiency_threshold", 0.35}
+    });
+    const auto settings = camera_grid.get_settings();
+    CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(875.0f));
 }
 
 TEST_CASE("WarpedScreenGrid camera settings accepts legacy blur keys") {

@@ -8,6 +8,7 @@
 #include <string>
 #include "devtools/widgets.hpp"
 #include "devtools/dm_styles.hpp"
+#include "devtools/draw_utils.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/grid.hpp"
@@ -24,6 +25,101 @@ float parse_float(const std::string& text, float fallback) {
     } catch (...) {
         return fallback;
     }
+}
+
+struct AxisTextboxLayout {
+    SDL_Rect panel_rect{0, 0, 0, 0};
+    SDL_Rect dx_rect{0, 0, 0, 0};
+    SDL_Rect dy_rect{0, 0, 0, 0};
+    SDL_Rect dz_rect{0, 0, 0, 0};
+    int total_height = 0;
+};
+
+AxisTextboxLayout compute_axis_textbox_layout(const SDL_Rect& container,
+                                              const DMTextBox* tb_dx,
+                                              const DMTextBox* tb_dy,
+                                              const DMTextBox* tb_dz) {
+    constexpr int kOuterBottomGap = 10;
+    constexpr int kPanelInnerPadding = 10;
+    constexpr int kTextboxGap = 10;
+    constexpr int kTextboxMinWidth = 120;
+    constexpr int kTextboxMaxWidth = 240;
+
+    AxisTextboxLayout layout{};
+    if (container.w <= 0 || container.h <= 0) {
+        return layout;
+    }
+
+    const int side_margin = std::max(DMSpacing::item_gap(), 12);
+    const int max_panel_w = std::max(0, container.w - side_margin * 2);
+    int panel_w = max_panel_w;
+    if (panel_w <= 0) {
+        return layout;
+    }
+
+    const int preferred_three_col_w = kTextboxMaxWidth * 3 + kTextboxGap * 2 + kPanelInnerPadding * 2;
+    panel_w = std::min(panel_w, preferred_three_col_w);
+    if (panel_w <= 0) {
+        return layout;
+    }
+
+    const int panel_x = container.x + (container.w - panel_w) / 2;
+    const int content_w = std::max(1, panel_w - kPanelInnerPadding * 2);
+    const bool can_fit_three = content_w >= (kTextboxMinWidth * 3 + kTextboxGap * 2);
+    const bool can_fit_two = content_w >= (kTextboxMinWidth * 2 + kTextboxGap);
+
+    int dx_w = content_w;
+    int dy_w = content_w;
+    int dz_w = content_w;
+    if (can_fit_three) {
+        const int col_w = std::max(kTextboxMinWidth, (content_w - kTextboxGap * 2) / 3);
+        dx_w = col_w;
+        dy_w = col_w;
+        dz_w = col_w;
+    } else if (can_fit_two) {
+        const int col_w = std::max(kTextboxMinWidth, (content_w - kTextboxGap) / 2);
+        dx_w = col_w;
+        dy_w = col_w;
+        dz_w = content_w;
+    }
+
+    const int dx_h = tb_dx ? tb_dx->height_for_width(dx_w) : DMTextBox::height();
+    const int dy_h = tb_dy ? tb_dy->height_for_width(dy_w) : DMTextBox::height();
+    const int dz_h = tb_dz ? tb_dz->height_for_width(dz_w) : DMTextBox::height();
+
+    int panel_h = 0;
+    if (can_fit_three) {
+        panel_h = kPanelInnerPadding * 2 + std::max({dx_h, dy_h, dz_h});
+    } else if (can_fit_two) {
+        panel_h = kPanelInnerPadding * 2 + std::max(dx_h, dy_h) + kTextboxGap + dz_h;
+    } else {
+        panel_h = kPanelInnerPadding * 2 + dx_h + kTextboxGap + dy_h + kTextboxGap + dz_h;
+    }
+
+    const int panel_y = container.y + container.h - panel_h - kOuterBottomGap;
+    layout.panel_rect = SDL_Rect{panel_x, panel_y, panel_w, panel_h};
+    layout.total_height = panel_h + kOuterBottomGap * 2;
+
+    const int content_x = panel_x + kPanelInnerPadding;
+    const int content_y = panel_y + kPanelInnerPadding;
+
+    if (can_fit_three) {
+        const int row_h = std::max({dx_h, dy_h, dz_h});
+        layout.dx_rect = SDL_Rect{content_x, content_y, dx_w, row_h};
+        layout.dy_rect = SDL_Rect{content_x + dx_w + kTextboxGap, content_y, dy_w, row_h};
+        layout.dz_rect = SDL_Rect{content_x + dx_w + kTextboxGap + dy_w + kTextboxGap, content_y, dz_w, row_h};
+    } else if (can_fit_two) {
+        const int top_h = std::max(dx_h, dy_h);
+        layout.dx_rect = SDL_Rect{content_x, content_y, dx_w, top_h};
+        layout.dy_rect = SDL_Rect{content_x + dx_w + kTextboxGap, content_y, dy_w, top_h};
+        layout.dz_rect = SDL_Rect{content_x, content_y + top_h + kTextboxGap, dz_w, dz_h};
+    } else {
+        layout.dx_rect = SDL_Rect{content_x, content_y, dx_w, dx_h};
+        layout.dy_rect = SDL_Rect{content_x, content_y + dx_h + kTextboxGap, dy_w, dy_h};
+        layout.dz_rect = SDL_Rect{content_x, content_y + dx_h + kTextboxGap + dy_h + kTextboxGap, dz_w, dz_h};
+    }
+
+    return layout;
 }
 
 }  // namespace
@@ -137,22 +233,10 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
     const bool dy_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)].has_value();
     const bool dz_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)].has_value();
 
-    auto rects_for_textboxes = [&](SDL_Rect& dx_rect, SDL_Rect& dy_rect, SDL_Rect& dz_rect) {
-        const int padding = DMSpacing::small_gap();
-        const int inner_w = std::max(0, effective_container.w - padding * 2);
-        const int third_w = std::max(0, (inner_w - DMSpacing::small_gap() * 2) / 3);
-        const int height_dx = tb_dx_ ? tb_dx_->height_for_width(third_w) : DMTextBox::height();
-        const int height_dy = tb_dy_ ? tb_dy_->height_for_width(third_w) : DMTextBox::height();
-        const int height_dz = tb_dz_ ? tb_dz_->height_for_width(third_w) : DMTextBox::height();
-        const int row_height = std::max({height_dx, height_dy, height_dz});
-        const int y = effective_container.y + effective_container.h - row_height - padding;
-        dx_rect = SDL_Rect{effective_container.x + padding, y, third_w, row_height};
-        dy_rect = SDL_Rect{effective_container.x + padding + third_w + DMSpacing::small_gap(), y, third_w, row_height};
-        dz_rect = SDL_Rect{effective_container.x + padding + (third_w + DMSpacing::small_gap()) * 2, y, third_w, row_height};
-    };
-
-    SDL_Rect dx_rect{}, dy_rect{}, dz_rect{};
-    rects_for_textboxes(dx_rect, dy_rect, dz_rect);
+    const AxisTextboxLayout layout = compute_axis_textbox_layout(effective_container, tb_dx_.get(), tb_dy_.get(), tb_dz_.get());
+    const SDL_Rect dx_rect = layout.dx_rect;
+    const SDL_Rect dy_rect = layout.dy_rect;
+    const SDL_Rect dz_rect = layout.dz_rect;
 
     bool consumed = false;
     bool pointer_clicked_textbox = false;
@@ -211,24 +295,32 @@ void Point3DEditor::render_overlays(SDL_Renderer* renderer, const SDL_Rect& cont
 
     sync_textboxes_from_selection();
 
-    const int padding = DMSpacing::small_gap();
-    const int inner_w = container.w - padding * 2;
-    const int third_w = (inner_w - DMSpacing::small_gap() * 2) / 3;
-    const int row_height = std::max({
-        tb_dx_ ? tb_dx_->height_for_width(third_w) : DMTextBox::height(),
-        tb_dy_ ? tb_dy_->height_for_width(third_w) : DMTextBox::height(),
-        tb_dz_ ? tb_dz_->height_for_width(third_w) : DMTextBox::height()});
+    const AxisTextboxLayout layout = compute_axis_textbox_layout(container, tb_dx_.get(), tb_dy_.get(), tb_dz_.get());
+    if (layout.panel_rect.w <= 0 || layout.panel_rect.h <= 0) {
+        return;
+    }
 
-    const int y = container.y + container.h - row_height - padding;
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             layout.panel_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity() * 0.45f,
+                             DMStyles::ShadowIntensity() * 0.6f);
+    dm_draw::DrawRoundedOutline(renderer,
+                                layout.panel_rect,
+                                DMStyles::CornerRadius(),
+                                1,
+                                DMStyles::Border());
 
     if (tb_dx_ && tb_dy_ && tb_dz_) {
-        SDL_Rect dx_rect{container.x + padding, y, third_w, row_height};
-        SDL_Rect dy_rect{container.x + padding + third_w + DMSpacing::small_gap(), y, third_w, row_height};
-        SDL_Rect dz_rect{container.x + padding + (third_w + DMSpacing::small_gap()) * 2, y, third_w, row_height};
-
-        tb_dx_->set_rect(dx_rect);
-        tb_dy_->set_rect(dy_rect);
-        tb_dz_->set_rect(dz_rect);
+        tb_dx_->set_rect(layout.dx_rect);
+        tb_dy_->set_rect(layout.dy_rect);
+        tb_dz_->set_rect(layout.dz_rect);
 
         tb_dx_->render(renderer);
         tb_dy_->render(renderer);
@@ -404,23 +496,9 @@ void Point3DEditor::apply_textbox_changes() {
 }
 
 int Point3DEditor::get_overlay_height(int container_width) const {
-    const int padding = DMSpacing::small_gap();
-    const int inner_w = std::max(0, container_width - padding * 2);
-    const int third_w = std::max(0, (inner_w - DMSpacing::small_gap() * 2) / 3);
-
-    int textbox_height = DMTextBox::height();
-    if (tb_dx_) {
-        textbox_height = std::max(textbox_height, tb_dx_->height_for_width(third_w));
-    }
-    if (tb_dy_) {
-        textbox_height = std::max(textbox_height, tb_dy_->height_for_width(third_w));
-    }
-    if (tb_dz_) {
-        textbox_height = std::max(textbox_height, tb_dz_->height_for_width(third_w));
-    }
-
-    // Keep the previous extra padding below the textboxes for consistency
-    return textbox_height + DMSpacing::small_gap() * 4;
+    const SDL_Rect probe_rect{0, 0, std::max(0, container_width), 2000};
+    const AxisTextboxLayout layout = compute_axis_textbox_layout(probe_rect, tb_dx_.get(), tb_dy_.get(), tb_dz_.get());
+    return std::max(DMTextBox::height(), layout.total_height);
 }
 
 void Point3DEditor::render_axis_point(SDL_Renderer* renderer,

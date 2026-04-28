@@ -42,8 +42,8 @@ struct CameraState {
     double screen_zoom = 1.0;
     double inv_screen_zoom = 1.0;
     double screen_pan_y_px = 0.0;
-    // Canonical anchors: height is separate from ground-plane depth.
-    double anchor_world_z = 0.0; // depth (Z) anchor on ground plane
+    // עוגנים קנוניים: הגובה נפרד מעומק מישור הקרקע.
+    double anchor_world_z = 0.0; // עוגן עומק (Z) על מישור הקרקע
 };
 
 class Asset;
@@ -71,19 +71,22 @@ public:
 
     struct RealismSettings {
 
-        float min_visible_screen_ratio     = 0.015f;
+        float min_visible_screen_ratio     = 0.003f;
         bool min_visible_uses_light_radius = true;
         float base_height_px               = 1000.0f;
-        float max_cull_depth               = 5000.0f;
+        float max_cull_depth               = 8000.0f;
+        float light_max_cull_depth         = 32000.0f;
+        float dynamic_renderer_depth_efficiency_depth = 2000.0f;
+        float dynamic_renderer_depth_efficiency_min_density_ratio = 0.10f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
         float front_layer_light_strength_multiplier = 1.0f;
         float behind_layer_light_strength_multiplier = 1.0f;
         bool light_radius_overlap_culling_enabled = true;
         bool light_fade_smoothing_enabled = true;
-        float light_fade_in_seconds = 0.08f;
-        float light_fade_out_seconds = 0.14f;
-        float light_min_fade_seconds = 0.03f;
+        float light_fade_in_seconds = 0.16f;
+        float light_fade_out_seconds = 0.28f;
+        float light_min_fade_seconds = 0.06f;
         bool light_culling_debug_overlay = false;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;
@@ -116,25 +119,25 @@ public:
     };
 
     struct CameraTransitionSettings {
-        // First-order dt-stable damping (1/seconds). Larger values settle faster.
+    // דעיכה יציבה מסדר ראשון ביחס ל-dt (1/שניות). ערכים גדולים מתייצבים מהר יותר.
         float transition_damping = 9.0f;
-        // World-pixel velocity cap for camera center movement.
+    // תקרת מהירות בפיקסלי עולם לתנועת מרכז המצלמה.
         float max_camera_velocity = 2200.0f;
-        // Scale applied to damping while blending between rooms (<1 slows transitions).
+    // סקייל שמוחל על דעיכה בזמן מיזוג בין חדרים (<1 מאט מעברים).
         float room_blend_damping_scale = 0.14f;
-        // Scale applied to camera max velocity while blending between rooms.
+    // סקייל שמוחל על מהירות המצלמה המקסימלית בזמן מיזוג בין חדרים.
         float room_blend_velocity_scale = 0.18f;
-        // Scale applied to player-follow influence while blending between rooms.
+    // סקייל שמוחל על השפעת מעקב השחקן בזמן מיזוג בין חדרים.
         float room_blend_follow_weight_scale = 0.28f;
-        // Keep settling toward room target briefly after movement stops.
+    // המשך התייצבות קצרה לעבר יעד החדר אחרי שהתנועה נעצרת.
         float settle_duration_after_stop = 0.20f;
-        // Optional movement look-ahead scale. 0 disables look-ahead.
+    // סקייל אופציונלי לחיזוי תנועה קדימה. ערך 0 מבטל חיזוי.
         float movement_look_ahead_weight = 0.12f;
-        // Blend room target toward player focus (0 keeps room framing, 1 locks to player).
+    // ערבב את יעד החדר לעבר פוקוס השחקן (0 שומר על מסגור החדר, 1 ננעל לשחקן).
         float player_follow_weight = 0.75f;
-        // Soft leash radius from camera center to player focus in world pixels.
+    // רדיוס רצועה רכה ממרכז המצלמה לפוקוס השחקן, בפיקסלי עולם.
         float player_soft_leash_px = 220.0f;
-        // Hard leash radius that player focus should never exceed.
+    // רדיוס רצועה קשיחה שפוקוס השחקן לא אמור לעבור.
         float player_hard_leash_px = 360.0f;
     };
 
@@ -187,11 +190,11 @@ public:
     void apply_camera_settings(const nlohmann::json& data);
     nlohmann::json camera_settings_to_json() const;
 
-    // Projects a point that lies on the ground plane (x/z) to screen space.
+    // מקרין למרחב המסך נקודה ששוכנת על מישור הקרקע (x/z).
     SDL_FPoint map_to_screen(SDL_Point world) const;
     SDL_FPoint map_to_screen_f(SDL_FPoint world) const;
-    // world.y is height (Y).
-    // world_z carries depth (Z) relative to the camera anchor.
+    // world.y הוא גובה (Y).
+    // world_z נושא עומק (Z) ביחס לעוגן המצלמה.
     bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
     bool build_camera_ray_from_screen(const SDL_FPoint& screen_point,
                                       render_projection::CameraRay& out_ray) const;
@@ -200,8 +203,8 @@ public:
                                         render_projection::WorldPoint3& out_world_point) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
-    // world.x maps to X and world.y to height (Y).
-    // world_z encodes depth (Z).
+    // world.x ממופה ל-X ו-world.y לגובה (Y).
+    // world_z מקודד עומק (Z).
     RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;
 
     FloorDepthParams compute_floor_depth_params() const;
@@ -339,7 +342,7 @@ private:
     double aspect_ = 1.0;
 
     bool render_areas_enabled_ = false;
-    bool lock_anchor_to_screen_center_ = false; // kept unlocked to avoid skewing perspective scale
+    bool lock_anchor_to_screen_center_ = false; // נשאר לא נעול כדי להימנע מעיוות סקייל הפרספקטיבה
     RealismSettings settings_{};
 
     CameraController camera_;
@@ -365,6 +368,7 @@ private:
     std::vector<world::GridPoint*> warped_points_;
     std::vector<VisibleTraversalEntry> visible_traversal_entries_;
     std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
+    std::unordered_map<const Asset*, std::uint8_t> visibility_reason_flags_;
     std::uint64_t frame_counter_ = 0;
     mutable std::uint64_t camera_state_version_ = 0;
     std::uint64_t last_projection_cache_invalidation_version_ = 0;

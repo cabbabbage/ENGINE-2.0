@@ -43,6 +43,8 @@ private:
 };
 
         int candidate_index = -1;
+        std::string source_type;
+        std::string candidate_value;
         std::string room_key;
         std::string display_label;
         int min_instances = 0;
@@ -104,6 +106,7 @@ private:
     mutable SDL_Rect empty_state_rect_{0, 0, 0, 0};
 
     mutable std::vector<std::string> available_rooms_;
+    mutable std::vector<std::string> available_tags_;
     mutable std::vector<std::string> filtered_rooms_;
 
     std::unique_ptr<RoomSelectorPopup> room_selector_;

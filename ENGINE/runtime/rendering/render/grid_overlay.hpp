@@ -7,11 +7,11 @@
 
 #include "rendering/render/render_depth_policy.hpp"
 
-// The grid overlay lives on the canonical X/Z plane (world.Z governs depth sorting while world.Y is used for height).
+// שכבת הגריד פועלת במישור X/Z הקנוני (world.Z קובע מיון עומק בעוד world.Y משמש לגובה).
 
 namespace render_overlay {
 
-// Shared bounds for grid overlay tuning knobs.
+// גבולות משותפים לפרמטרי הכוונון של שכבת הגריד.
 constexpr float kMinGridMultiplier = 0.25f;
 constexpr float kMaxGridMultiplier = 8.0f;
 constexpr float kMinBaseScale      = 0.25f;
@@ -46,3 +46,4 @@ int           choose_weighted_index(std::uint64_t hash,
                                     int total_weight = -1);
 
 }  // namespace render_overlay
+

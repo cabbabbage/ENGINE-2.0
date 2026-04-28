@@ -3,13 +3,15 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <cstdint>
 
 #include <SDL3/SDL.h>
 
+#include "rendering/render/gpu_format_policy.hpp"
+
 /**
- * Engine-owned renderer wrapper that selects the best SDL3 backend once at startup.
- * It always exposes the same API surface regardless of whether the underlying
- * implementation is GPU, accelerated 2D, or software.
+ * Engine-owned renderer wrapper that selects a GPU SDL3 backend once at startup.
+ * Startup fails when a compatible GPU backend cannot be created.
  */
 enum class RenderBackendType {
     GPU,
@@ -47,18 +49,23 @@ public:
     SDL_Window* window() const { return window_; }
     const RenderCaps& caps() const { return caps_; }
     RenderQualityTier quality_tier() const { return quality_tier_; }
+    const std::string& present_mode_name() const { return present_mode_name_; }
+    const RuntimeGpuFormatPolicy* gpu_format_policy() const {
+        return has_gpu_format_policy_ ? &gpu_format_policy_ : nullptr;
+    }
+    bool runtime_gpu_supported() const { return caps_.backend_type == RenderBackendType::GPU; }
 
-    // Frame control
+    // בקרת פריים
     void begin_frame(const SDL_Color& clear_color);
     void end_frame();
     void present();
 
-    // Basic transforms
+    // טרנספורמציות בסיסיות
     void set_scale(float scale_x, float scale_y);
     void set_viewport(const SDL_Rect& rect);
     void clear_viewport();
 
-    // Texture helpers
+    // כלי עזר לטקסטורות
     SDL_Texture* create_texture(SDL_PixelFormat format, SDL_TextureAccess access, int w, int h) const;
     SDL_Texture* create_texture_from_surface(SDL_Surface* surface) const;
 
@@ -72,8 +79,6 @@ private:
     };
 
     static AttemptResult try_create_gpu(SDL_Window* window, bool prefer_vsync, const char* gpu_driver_hint);
-    static AttemptResult try_create_accelerated(SDL_Window* window, bool prefer_vsync, const char* renderer_name_hint);
-    static AttemptResult try_create_software(SDL_Window* window);
 
     static RenderCaps build_caps(SDL_Renderer* renderer, RenderBackendType backend_type);
     static RenderQualityTier choose_quality_tier(const RenderCaps& caps);
@@ -83,4 +88,8 @@ private:
     SDL_Window* window_ = nullptr;
     RenderCaps caps_{};
     RenderQualityTier quality_tier_ = RenderQualityTier::Accelerated;
+    std::string present_mode_name_ = "vsync";
+    RuntimeGpuFormatPolicy gpu_format_policy_{};
+    bool has_gpu_format_policy_ = false;
+    std::uint64_t last_present_counter_ = 0;
 };

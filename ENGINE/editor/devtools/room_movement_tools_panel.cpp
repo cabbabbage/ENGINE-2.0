@@ -16,10 +16,15 @@ namespace {
 
 constexpr int kPanelMargin = 12;
 constexpr int kTopOffset = 56;
-constexpr int kPanelWidth = 320;
-constexpr int kPanelHeight = 340;
-constexpr int kPanelPadding = 12;
-constexpr int kSectionGap = 10;
+constexpr int kPanelWidth = 336;
+constexpr int kPanelHeight = 420;
+constexpr int kPanelPadding = 16;
+constexpr int kHeaderHeight = 22;
+constexpr int kHeaderToEnabledGap = 10;
+constexpr int kSectionGap = 14;
+constexpr int kFieldGap = 12;
+constexpr int kHintHeight = 44;
+constexpr int kHintLineGap = 20;
 
 }  // namespace
 
@@ -258,7 +263,7 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
     }
 
     DMFontCache::instance().draw_text(renderer, label_style, "Drag selected point on ground", hint_rect_.x, hint_rect_.y);
-    DMFontCache::instance().draw_text(renderer, label_style, "Mouse wheel adjusts height", hint_rect_.x, hint_rect_.y + 18);
+    DMFontCache::instance().draw_text(renderer, label_style, "Mouse wheel adjusts height", hint_rect_.x, hint_rect_.y + kHintLineGap);
 
     if (smooth_checkbox_) {
         smooth_checkbox_->render(renderer);
@@ -302,15 +307,47 @@ void RoomMovementToolsPanel::update_layout() const {
     panel_rect_.w = std::max(panel_rect_.w, 0);
     panel_rect_.h = std::max(panel_rect_.h, 0);
 
-    header_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, panel_rect_.y + kPanelPadding, panel_rect_.w - kPanelPadding * 2, 20};
-    enabled_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, header_rect_.y + 26, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
-    hint_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, enabled_rect_.y + enabled_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, 40};
-    smooth_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, hint_rect_.y + 48, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
-    curve_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, smooth_rect_.y + smooth_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMCheckbox::height()};
-    dx_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, curve_rect_.y + curve_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
-    dy_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, dx_rect_.y + dx_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
-    dz_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, dy_rect_.y + dy_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
-    rot_rect_ = SDL_Rect{panel_rect_.x + kPanelPadding, dz_rect_.y + dz_rect_.h + kSectionGap, panel_rect_.w - kPanelPadding * 2, DMTextBox::height()};
+    const int content_x = panel_rect_.x + kPanelPadding;
+    const int content_w = std::max(0, panel_rect_.w - kPanelPadding * 2);
+    int cursor_y = panel_rect_.y + kPanelPadding;
+
+    header_rect_ = SDL_Rect{content_x, cursor_y, content_w, kHeaderHeight};
+    cursor_y += header_rect_.h + kHeaderToEnabledGap;
+
+    enabled_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMCheckbox::height()};
+    cursor_y += enabled_rect_.h + kSectionGap;
+
+    hint_rect_ = SDL_Rect{content_x, cursor_y, content_w, kHintHeight};
+    cursor_y += hint_rect_.h + kSectionGap;
+
+    smooth_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMCheckbox::height()};
+    cursor_y += smooth_rect_.h + kFieldGap;
+
+    curve_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMCheckbox::height()};
+    cursor_y += curve_rect_.h + kSectionGap;
+
+    const auto textbox_height_for = [content_w](const std::unique_ptr<DMTextBox>& box) {
+        if (!box) {
+            return DMTextBox::height();
+        }
+        return std::max(DMTextBox::height(), box->height_for_width(content_w));
+    };
+
+    dx_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(dx_box_)};
+    cursor_y += dx_rect_.h + kFieldGap;
+
+    dy_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(dy_box_)};
+    cursor_y += dy_rect_.h + kFieldGap;
+
+    dz_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(dz_box_)};
+    cursor_y += dz_rect_.h + kFieldGap;
+
+    rot_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(rot_box_)};
+    cursor_y += rot_rect_.h + kPanelPadding;
+
+    if (!panel_bounds_override_active_) {
+        panel_rect_.h = std::max(panel_rect_.h, cursor_y - panel_rect_.y);
+    }
 
     if (enabled_checkbox_) {
         enabled_checkbox_->set_rect(enabled_rect_);

@@ -15,6 +15,7 @@
 
 #include "utils/area.hpp"
 #include "asset_info.hpp"
+#include "gameplay/spawn/runtime_candidates.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "anchor_point.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -22,7 +23,6 @@
 #include "utils/transform_smoothing.hpp"
 
 #include "asset_controller.hpp"
-#include "animation/animation_update.hpp"
 #include "animation/attack.hpp"
 #include "rendering/render/scaling_logic.hpp"
 
@@ -31,6 +31,7 @@ class Assets;
 class Input;
 class AnimationFrame;
 class Animation;
+class AnimationUpdate;
 class AssetInfoUI;
 class RenderAsset;
 
@@ -87,6 +88,9 @@ class Asset {
     void finalize_setup();
     void rebuild_animation_runtime();
     void Delete();
+    void notify_pre_delete();
+    void notify_orphaned(Asset* former_parent, std::optional<OrphanImpulse> impulse = std::nullopt);
+    void notify_interact(Asset* instigator);
 
     bool is_finalized() const { return finalized_; }
     void on_scale_factor_changed();
@@ -135,6 +139,7 @@ class Asset {
     float runtime_height_px() const;
     float runtime_effective_base_scale() const;
     float size_variation_sample() const { return size_variation_sample_; }
+    double base_spawn_tilt_degrees() const { return base_spawn_tilt_degrees_; }
     enum class PerspectiveSource {
         AnchorBindingOverride,
         CameraTraversal,
@@ -319,6 +324,7 @@ class Asset {
     void set_current_animation(const std::string& name);
     // Queue an attack event for deferred controller handling.
     void send_attack(const animation_update::Attack& attack);
+    bool has_pending_attacks();
     // Drain and return queued attacks for this tick.
     std::vector<animation_update::Attack> process_pending_attacks();
 
@@ -337,7 +343,8 @@ class Asset {
         int frame_end = 0;
         std::string anchor_link;
         int frame_index = -1;
-        int extrusion_amount = 0;
+        int extrusion_forward = 1;
+        int extrusion_backward = 1;
         int damage_amount = 0;
         std::string payload_id;
         std::string meta_json;
@@ -347,7 +354,42 @@ class Asset {
         bool valid = false;
     };
 
+    struct RuntimeImpassableShape {
+        std::string id;
+        std::string name;
+        bool enabled = true;
+        std::vector<SDL_FPoint> floor_points{};
+        std::vector<RuntimeBoxPoint3> bottom_ring{};
+        std::vector<RuntimeBoxPoint3> top_ring{};
+        RuntimeBoxPoint3 centroid{};
+        bool valid = false;
+    };
+
+    struct RuntimeImpassableGeometrySignature {
+        std::size_t point_count = 0;
+        int rounded_centroid_x = 0;
+        int rounded_centroid_z = 0;
+        std::uint64_t floor_points_hash = 0;
+
+        bool operator==(const RuntimeImpassableGeometrySignature& other) const {
+            return point_count == other.point_count &&
+                   rounded_centroid_x == other.rounded_centroid_x &&
+                   rounded_centroid_z == other.rounded_centroid_z &&
+                   floor_points_hash == other.floor_points_hash;
+        }
+
+        bool operator!=(const RuntimeImpassableGeometrySignature& other) const {
+            return !(*this == other);
+        }
+    };
+
     struct RuntimeFloorBox {
+        struct CandidatePayload {
+            vibble::spawn::RuntimeCandidates candidates;
+            int grid_resolution = 4;
+            bool has_positive_non_null_candidate = false;
+        };
+
         std::string id;
         std::string name;
         float position_x = 0.0f;
@@ -356,6 +398,7 @@ class Asset {
         float depth = 0.0f;
         bool enabled = true;
         std::vector<std::string> tags;
+        std::optional<CandidatePayload> candidate;
 
         bool has_tag(const std::string& tag) const;
     };
@@ -370,9 +413,11 @@ class Asset {
 
     const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
     const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
-    const std::vector<RuntimeBoxVolume>& current_impassable_box_volumes() const { return current_impassable_box_volumes_; }
+    const std::vector<RuntimeImpassableShape>& current_impassable_shapes() const { return current_impassable_shapes_; }
+    RuntimeImpassableGeometrySignature runtime_impassable_geometry_signature() const;
     void test_set_current_hit_box_volumes(std::vector<RuntimeBoxVolume> volumes);
     void test_set_current_attack_box_volumes(std::vector<RuntimeBoxVolume> volumes);
+    void test_set_current_impassable_shapes(std::vector<RuntimeImpassableShape> shapes);
     const RuntimeBoxVolume* find_hit_box_volume(const std::string& name) const;
     const RuntimeBoxVolume* find_attack_box_volume(const std::string& name) const;
 
@@ -513,6 +558,7 @@ private:
 
     std::optional<TilingInfo> tiling_info_{};
     float size_variation_sample_ = 0.0f;
+    double base_spawn_tilt_degrees_ = 0.0;
     void ensure_animation_runtime(bool force_recreate);
 
     void clear_downscale_cache();
@@ -574,7 +620,7 @@ private:
     std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
     std::vector<RuntimeBoxVolume> current_hit_box_volumes_;
     std::vector<RuntimeBoxVolume> current_attack_box_volumes_;
-    std::vector<RuntimeBoxVolume> current_impassable_box_volumes_;
+    std::vector<RuntimeImpassableShape> current_impassable_shapes_;
     std::vector<RuntimeFloorBox> floor_boxes_;
     std::unordered_map<std::string, std::size_t> runtime_hit_box_lookup_;
     std::unordered_map<std::string, std::size_t> runtime_attack_box_lookup_;

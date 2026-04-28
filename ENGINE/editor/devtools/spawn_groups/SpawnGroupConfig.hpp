@@ -211,6 +211,8 @@ private:
     void restore_order_from_snapshot(const std::vector<std::string>& order);
     void nudge_priority(Entry& entry, int delta);
     std::string stable_id_for_index(size_t index) const;
+    void queue_add_spawn_group();
+    void add_spawn_group_now();
 
     friend class SpawnGroupConfigTestAccessor;
 

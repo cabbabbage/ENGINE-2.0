@@ -25101,10 +25101,6 @@
                 "name": "#candle",
                 "tag": true,
                 "tag_name": "candle"
-              },
-              {
-                "chance": 6.950656250000001,
-                "name": "fly"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -25123,6 +25119,32 @@
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-forrest-map_boundary"
+          },
+          {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "fly"
+              }
+            ],
+            "display_name": "batch_map_boundary",
+            "enforce_spacing": false,
+            "explicit_flip": false,
+            "force_flipped": false,
+            "grid_resolution": 4,
+            "jitter": 0,
+            "locked": false,
+            "max_number": 1,
+            "min_number": 1,
+            "position": "Random",
+            "resolution": 8,
+            "resolve_geometry_to_room_size": false,
+            "resolve_quantity_to_room_size": false,
+            "spawn_id": "spn-456f5f025984"
           }
         ],
         "inherits_map_assets": false,

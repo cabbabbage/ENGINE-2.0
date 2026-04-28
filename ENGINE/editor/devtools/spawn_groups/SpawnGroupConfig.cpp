@@ -2745,45 +2745,7 @@ DockableCollapsible::Rows SpawnGroupConfig::build_layout_rows() {
         if (!add_button_) {
             add_button_ = std::make_unique<DMButton>("Add Spawn Group", &DMStyles::CreateButton(), 0, DMButton::height());
             add_button_widget_ = std::make_unique<ButtonWidget>(add_button_.get(), [this]() {
-                if (!editable_mode_) {
-                    return;
-                }
-                if (!draft_groups_.is_array()) {
-                    draft_groups_ = nlohmann::json::array();
-                }
-                nlohmann::json entry = nlohmann::json::object();
-                const std::string spawn_id = devmode::spawn::generate_spawn_id();
-                entry["spawn_id"] = spawn_id;
-                devmode::spawn::ensure_spawn_group_entry_defaults(entry, "New Spawn", default_resolution_);
-                draft_groups_.push_back(entry);
-                draft_stable_ids_.push_back(spawn_id);
-                for (size_t i = 0; i < draft_groups_.size(); ++i) {
-                    if (draft_groups_[i].is_object()) {
-                        draft_groups_[i]["priority"] = static_cast<int>(i);
-                    }
-                }
-                devmode::spawn::sanitize_perimeter_spawn_groups(draft_groups_);
-                rebuild_rows();
-                request_open_spawn_group(spawn_id, 0, 0);
-
-                PatchOperation patch{};
-                patch.type = PatchType::Add;
-                patch.spawn_id = spawn_id;
-                patch.entry = entry;
-                patch.from_index = draft_groups_.size() > 0 ? draft_groups_.size() - 1 : 0;
-                patch.to_index = patch.from_index;
-
-                ChangeEvent event{};
-                event.reason = ChangeReason::EntryAdded;
-                event.spawn_id = spawn_id;
-                event.entry = std::move(entry);
-                event.patches.push_back(std::move(patch));
-                std::string error;
-                if (!commit_patches(event.patches, event, &error)) {
-                    event.reason = ChangeReason::CommitFailed;
-                    event.error_message = std::move(error);
-                }
-                emit_change_event(std::move(event));
+                queue_add_spawn_group();
             });
         }
         result.push_back({add_button_widget_.get()});
@@ -2804,6 +2766,54 @@ std::string SpawnGroupConfig::stable_id_for_index(size_t index) const {
         return draft_groups_[index].value("spawn_id", std::string{});
     }
     return {};
+}
+
+void SpawnGroupConfig::queue_add_spawn_group() {
+    enqueue_notification([this]() {
+        add_spawn_group_now();
+    });
+}
+
+void SpawnGroupConfig::add_spawn_group_now() {
+    if (!editable_mode_) {
+        return;
+    }
+    if (!draft_groups_.is_array()) {
+        draft_groups_ = nlohmann::json::array();
+    }
+    nlohmann::json entry = nlohmann::json::object();
+    const std::string spawn_id = devmode::spawn::generate_spawn_id();
+    entry["spawn_id"] = spawn_id;
+    devmode::spawn::ensure_spawn_group_entry_defaults(entry, "New Spawn", default_resolution_);
+    draft_groups_.push_back(entry);
+    draft_stable_ids_.push_back(spawn_id);
+    for (size_t i = 0; i < draft_groups_.size(); ++i) {
+        if (draft_groups_[i].is_object()) {
+            draft_groups_[i]["priority"] = static_cast<int>(i);
+        }
+    }
+    devmode::spawn::sanitize_perimeter_spawn_groups(draft_groups_);
+    rebuild_rows();
+    request_open_spawn_group(spawn_id, 0, 0);
+
+    PatchOperation patch{};
+    patch.type = PatchType::Add;
+    patch.spawn_id = spawn_id;
+    patch.entry = entry;
+    patch.from_index = draft_groups_.size() > 0 ? draft_groups_.size() - 1 : 0;
+    patch.to_index = patch.from_index;
+
+    ChangeEvent event{};
+    event.reason = ChangeReason::EntryAdded;
+    event.spawn_id = spawn_id;
+    event.entry = std::move(entry);
+    event.patches.push_back(std::move(patch));
+    std::string error;
+    if (!commit_patches(event.patches, event, &error)) {
+        event.reason = ChangeReason::CommitFailed;
+        event.error_message = std::move(error);
+    }
+    emit_change_event(std::move(event));
 }
 
 void SpawnGroupConfig::enqueue_notification(std::function<void()> cb) {

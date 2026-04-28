@@ -120,6 +120,7 @@ class Section_BasicInfo : public DockableCollapsible {
     std::unique_ptr<DMDropdown>  dd_type_;
     std::unique_ptr<DMSlider>    s_scale_pct_;
     std::unique_ptr<DMSlider>    s_size_variation_pct_;
+    std::unique_ptr<DMRangeSlider> rs_tilt_range_deg_;
     std::unique_ptr<DMSlider>    s_weight_kg_;
     std::unique_ptr<DMSlider>    s_bounce_amount_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
@@ -205,6 +206,16 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_size_variation.get() });
     widgets_.push_back(std::move(w_size_variation));
 
+    int tilt_min = std::clamp(info_->tilt_range_min_deg, -180, 180);
+    int tilt_max = std::clamp(info_->tilt_range_max_deg, -180, 180);
+    if (tilt_max < tilt_min) {
+        std::swap(tilt_min, tilt_max);
+    }
+    rs_tilt_range_deg_ = std::make_unique<DMRangeSlider>(-180, 180, tilt_min, tilt_max);
+    auto w_tilt = std::make_unique<RangeSliderWidget>(rs_tilt_range_deg_.get());
+    rows.push_back({ w_tilt.get() });
+    widgets_.push_back(std::move(w_tilt));
+
     auto w_weight = std::make_unique<SliderWidget>(s_weight_kg_.get());
     rows.push_back({ w_weight.get() });
     widgets_.push_back(std::move(w_weight));
@@ -248,6 +259,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
         if (s_size_variation_pct_ && s_size_variation_pct_->handle_event(e)) used = true;
+        if (rs_tilt_range_deg_ && rs_tilt_range_deg_->handle_event(e)) used = true;
         if (s_weight_kg_ && s_weight_kg_->handle_event(e)) used = true;
         if (s_bounce_amount_ && s_bounce_amount_->handle_event(e)) used = true;
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
@@ -295,6 +307,15 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (s_bounce_amount_ && info_->bounce_amount != s_bounce_amount_->value()) {
         info_->set_bounce_amount(s_bounce_amount_->value());
         changed = true;
+    }
+    if (rs_tilt_range_deg_) {
+        const int slider_min = rs_tilt_range_deg_->min_value();
+        const int slider_max = rs_tilt_range_deg_->max_value();
+        if (info_->tilt_range_min_deg != slider_min || info_->tilt_range_max_deg != slider_max) {
+            info_->set_tilt_range_degrees(slider_min, slider_max);
+            changed = true;
+            render_settings_changed = true;
+        }
     }
     if (c_flipable_ && info_->flipable != c_flipable_->value()) {
         info_->set_flipable(c_flipable_->value());

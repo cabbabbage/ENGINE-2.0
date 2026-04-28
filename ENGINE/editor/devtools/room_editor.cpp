@@ -2587,24 +2587,9 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
 }
 
 void RoomEditor::set_room_config_visible(bool visible) {
-    ensure_room_configurator();
-    if (!room_cfg_ui_) return;
-    if (visible && active_modal_ == ActiveModal::AssetInfo) {
-        pulse_active_modal_header();
-        return;
-    }
-    if (visible) {
-        if (assets_) {
-            Room* selected_room = assets_->current_room();
-            if (selected_room && selected_room != current_room_) {
-                set_current_room(selected_room);
-            }
-        }
-        room_cfg_ui_->open(current_room_);
-    }
-    room_config_dock_open_ = visible;
-    set_camera_settings_lock(false);
-    refresh_room_config_visibility();
+    (void)visible;
+    room_config_dock_open_ = false;
+    room_config_panel_visible_ = false;
 }
 
 class ScopedBoolOverride {
@@ -5706,35 +5691,16 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
 }
 
 void RoomEditor::toggle_room_config() {
-    ensure_room_configurator();
-    if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; toggle ignored.");
-        return;
-    }
-    set_room_config_visible(!is_room_config_open());
+    set_room_config_visible(false);
 }
 
 void RoomEditor::open_room_config() {
-    ensure_room_configurator();
-    if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; open request ignored.");
-        return;
-    }
-    if (assets_) {
-        Room* selected_room = assets_->current_room();
-        if (selected_room && selected_room != current_room_) {
-            set_current_room(selected_room);
-        }
-    }
-    set_room_config_visible(true);
+    set_room_config_visible(false);
 }
 
 void RoomEditor::open_room_config_for(Asset* asset) {
-    if (!asset || asset->spawn_id.empty()) {
-        open_room_config();
-        return;
-    }
-    open_spawn_group_editor_by_id(asset->spawn_id);
+    (void)asset;
+    set_room_config_visible(false);
 }
 
 void RoomEditor::close_room_config() {
@@ -5742,7 +5708,7 @@ void RoomEditor::close_room_config() {
 }
 
 bool RoomEditor::is_room_config_open() const {
-    return room_config_dock_open_;
+    return false;
 }
 
 bool RoomEditor::is_camera_settings_open() const {
@@ -6295,7 +6261,10 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) ||
         input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     bool consumed = false;
-    RoomConfigurator::CameraAdjustment adjustment{};
+    int height_delta_px = 0;
+    int zoom_delta_percent = 0;
+    float tilt_delta_deg = 0.0f;
+    float pan_delta_percent = 0.0f;
 
     const int scroll_y = input.getScrollY();
     const bool center_depth_scroll_override = oval_mode_active() && oval_edit_.center_selected;
@@ -6303,9 +6272,9 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         const int ticks = std::abs(scroll_y);
         const int direction = (scroll_y > 0) ? 1 : -1;
         if (shift_down) {
-            adjustment.zoom_delta_percent = direction * kCameraZoomScrollStep * ticks;
+            zoom_delta_percent = direction * kCameraZoomScrollStep * ticks;
         } else {
-            adjustment.height_delta_px = direction * kCameraHeightScrollStep * ticks;
+            height_delta_px = direction * kCameraHeightScrollStep * ticks;
         }
         consumed = true;
     }
@@ -6340,11 +6309,11 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
             const float delta = -static_cast<float>(dy);
             switch (camera_settings_drag_.mode) {
                 case CameraSettingsDragState::Mode::Tilt:
-                    adjustment.tilt_delta_deg = delta * kCameraTiltDegreesPerPixel;
+                    tilt_delta_deg = delta * kCameraTiltDegreesPerPixel;
                     consumed = true;
                     break;
                 case CameraSettingsDragState::Mode::Pan:
-                    adjustment.pan_delta_percent = delta * kCameraPanPercentPerPixel;
+                    pan_delta_percent = delta * kCameraPanPercentPerPixel;
                     consumed = true;
                     break;
                 case CameraSettingsDragState::Mode::None:
@@ -6353,9 +6322,10 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         }
     }
 
-    if (consumed) {
-        room_cfg_ui_->apply_camera_adjustment(adjustment);
-    }
+    (void)height_delta_px;
+    (void)zoom_delta_percent;
+    (void)tilt_delta_deg;
+    (void)pan_delta_percent;
 
     if (assets_) {
         if (camera_settings_drag_.active && !camera_settings_drag_active_notified_) {
@@ -21159,109 +21129,9 @@ bool RoomEditor::focus_selection_matches_snapshot() const {
 }
 
 void RoomEditor::ensure_room_configurator() {
-    if (!room_cfg_ui_) {
-        room_cfg_ui_ = std::make_unique<RoomConfigurator>();
-    }
-    if (room_cfg_ui_) {
-        room_cfg_ui_->set_room_metadata_only_mode(false);
-        room_cfg_ui_->set_manifest_store(manifest_store_);
-        room_cfg_ui_->set_assets(assets_);
-        room_cfg_ui_->set_room_save_callback([this](bool immediate) {
-            return enqueue_current_room_save(immediate
-                ? devmode::core::DevSaveCoordinator::Priority::Immediate
-                : devmode::core::DevSaveCoordinator::Priority::Debounced);
-        });
-        room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
-            room_config_panel_visible_ = visible;
-            if (header_visibility_callback_) {
-                header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
-            }
-        });
-        room_cfg_ui_->set_bounds(room_config_bounds_);
-
-        room_cfg_ui_->set_work_area(DockManager::instance().usableRect());
-        room_cfg_ui_->set_blocks_editor_interactions(false);
-        room_cfg_ui_->set_spawn_groups_provider([this]() {
-            std::vector<RoomConfigurator::SpawnGroupListItem> rows;
-            if (!current_room_) {
-                return rows;
-            }
-            auto& root = current_room_->assets_data();
-            auto& arr = ensure_spawn_groups_array(root);
-            rows.reserve(arr.size());
-            for (const auto& entry : arr) {
-                if (!entry.is_object()) {
-                    continue;
-                }
-                RoomConfigurator::SpawnGroupListItem item{};
-                item.spawn_id = entry.value("spawn_id", std::string{});
-                item.display_name = entry.value("display_name", std::string{});
-                if (item.display_name.empty()) {
-                    item.display_name = item.spawn_id.empty() ? std::string{"Spawn Group"} : item.spawn_id;
-                }
-                std::unordered_map<std::string, double> weight_by_name;
-                if (entry.contains("candidates") && entry["candidates"].is_array()) {
-                    for (const auto& candidate : entry["candidates"]) {
-                        if (!candidate.is_object()) continue;
-                        const std::string name = candidate.value("name", std::string{});
-                        if (name.empty()) continue;
-                        double weight = 1.0;
-                        if (candidate.contains("chance")) {
-                            if (candidate["chance"].is_number()) {
-                                weight = candidate["chance"].get<double>();
-                            } else if (candidate["chance"].is_string()) {
-                                try {
-                                    weight = std::stod(candidate["chance"].get<std::string>());
-                                } catch (...) {
-                                    weight = 1.0;
-                                }
-                            }
-                        }
-                        weight_by_name[name] += std::max(0.0, weight);
-                    }
-                }
-                std::string best_name;
-                double best_weight = -1.0;
-                for (const auto& pair : weight_by_name) {
-                    if (pair.second > best_weight) {
-                        best_weight = pair.second;
-                        best_name = pair.first;
-                    }
-                }
-                if (!best_name.empty()) {
-                    item.icon_label = best_name.substr(0, std::min<std::size_t>(2, best_name.size()));
-                    for (char& ch : item.icon_label) {
-                        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-                    }
-                } else {
-                    item.icon_label = "??";
-                }
-                rows.push_back(std::move(item));
-            }
-            return rows;
-        });
-        room_cfg_ui_->set_on_spawn_group_click([this](const std::string& spawn_id) {
-            focus_camera_on_spawn_group(spawn_id);
-        });
-        room_cfg_ui_->set_on_spawn_group_double_click([this](const std::string& spawn_id) {
-            open_spawn_group_editor_by_id(spawn_id);
-        });
-        room_cfg_ui_->set_on_spawn_group_delete([this](const std::string& spawn_id) {
-            const bool deleted = delete_spawn_group_internal(spawn_id);
-            if (deleted) {
-                refresh_spawn_group_config_ui();
-            }
-            return deleted;
-        });
-        room_cfg_ui_->set_on_close([this]() {
-            room_config_dock_open_ = false;
-            set_camera_settings_lock(false);
-            update_spawn_group_config_anchor();
-        });
-        room_cfg_ui_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired) {
-            return this->rename_active_room(old_name, desired);
-        });
-    }
+    room_cfg_ui_.reset();
+    room_config_dock_open_ = false;
+    room_config_panel_visible_ = false;
 }
 
 std::string RoomEditor::rename_active_room(const std::string& old_name, const std::string& desired_name) {
@@ -21343,23 +21213,9 @@ void RoomEditor::ensure_spawn_group_config_ui() {
 }
 
 void RoomEditor::update_room_config_bounds() {
-    const int side_margin = 0;
-    const int available_width = std::max(0, screen_w_ - 2 * side_margin);
-    const int max_width = std::max(320, available_width);
-    const int desired_width = std::max(360, screen_w_ / 3);
-    const int width = std::min(max_width, desired_width);
-
-    SDL_Rect usable = DockManager::instance().usableRect();
-    const int height = std::max(1, usable.h > 0 ? usable.h : screen_h_);
-    const int max_x = std::max(0, screen_w_ - width);
-    const int desired_x = screen_w_ - width;
-    const int x = std::clamp(desired_x, 0, max_x);
-    const int y = usable.h > 0 ? usable.y : 0;
-    room_config_bounds_ = SDL_Rect{x, y, width, height};
-    if (room_cfg_ui_ && room_config_dock_open_) {
-        room_cfg_ui_->set_bounds(room_config_bounds_);
-    }
-    refresh_room_config_visibility();
+    room_config_bounds_ = SDL_Rect{0, 0, 0, 0};
+    room_config_dock_open_ = false;
+    room_config_panel_visible_ = false;
 }
 
 void RoomEditor::configure_shared_panel() {
@@ -21371,21 +21227,8 @@ void RoomEditor::configure_shared_panel() {
 }
 
 void RoomEditor::refresh_room_config_visibility() {
-    ensure_room_configurator();
-    if (!room_cfg_ui_) {
-        return;
-    }
-    if (active_modal_ == ActiveModal::AssetInfo) {
-        room_cfg_ui_->close();
-        update_spawn_group_config_anchor();
-        return;
-    }
-    if (room_config_dock_open_) {
-        room_cfg_ui_->set_bounds(room_config_bounds_);
-        room_cfg_ui_->open(current_room_);
-    } else {
-        room_cfg_ui_->close();
-    }
+    room_config_dock_open_ = false;
+    room_config_panel_visible_ = false;
     update_spawn_group_config_anchor();
 }
 
@@ -23209,15 +23052,7 @@ void RoomEditor::focus_camera_on_spawn_group(const std::string& spawn_id) {
 }
 
 void RoomEditor::reopen_room_configurator() {
-    if (spawn_group_callback_in_progress_ && !processing_pending_spawn_group_work_) {
-        enqueue_spawn_group_ui_refresh(true, false);
-        return;
-    }
-    if (!room_cfg_ui_) return;
-    if (!room_config_dock_open_) {
-        return;
-    }
-    room_cfg_ui_->open(current_room_);
+    room_config_dock_open_ = false;
 }
 
 void RoomEditor::rebuild_room_spawn_id_cache() {

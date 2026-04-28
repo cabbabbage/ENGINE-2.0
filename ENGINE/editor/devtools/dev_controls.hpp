@@ -17,7 +17,6 @@
 
 #include "core/AssetsManager.hpp"
 #include "other_settings_and_controls.hpp"
-#include "trail_editor_suite.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/core/save_manager.hpp"
@@ -389,8 +388,8 @@ private:
     };
     mutable std::unordered_map<Asset*, FilterHiddenAssetState> filter_hidden_assets_;
     mutable std::unordered_set<Asset*> previous_filtered_membership_;
-    std::unique_ptr<TrailEditorSuite> trail_suite_;
-    std::unique_ptr<Room> pending_trail_template_;
+    
+    
     devmode::core::ManifestStore manifest_store_;
     devmode::core::DevSaveCoordinator save_coordinator_;
     devmode::core::SaveManager save_manager_;

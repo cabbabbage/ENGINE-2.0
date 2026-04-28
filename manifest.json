@@ -15411,10 +15411,11 @@
     "fly": {
       "anchor_point_child_candidates": [
         {
-          "anchor_point_name": "anchor_1",
+          "anchor_point_name": "l_anchor_1",
           "candidates": {
             "candidates": []
-          }
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -15435,12 +15436,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15498,12 +15499,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15557,12 +15558,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15620,12 +15621,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15658,12 +15659,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15721,12 +15722,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15784,12 +15785,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15847,12 +15848,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15910,12 +15911,12 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 0.38999998569488525,
+                  "intensity": 1.7599999904632568,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
                 },
-                "name": "anchor_1",
+                "name": "l_anchor_1",
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
@@ -15937,6 +15938,7 @@
       "asset_name": "fly",
       "asset_type": "Object",
       "attack_box_enabled": true,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
@@ -15948,14 +15950,18 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 21.0,
+        "scale_percentage": 101.0,
         "size_variation": 0.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
       "update_radius": 0,
-      "weight_kg": 0.0
+      "weight_kg": 0.0,
+      "y_pos_max": 194,
+      "y_pos_min": 32
     },
     "fog_1": {
       "anchor_point_child_candidates": [],
@@ -19783,10 +19789,12 @@
           "movement": [
             [
               0,
+              0,
               0
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -19799,7 +19807,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -19807,6 +19816,7 @@
       "asset_name": "tree_dark",
       "asset_type": "boundary",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -19823,7 +19833,11 @@
         "tree"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 3,
+      "tilt_range_min_deg": -3,
+      "weight_kg": 584.0,
+      "y_pos_max": 0,
+      "y_pos_min": -5
     },
     "tree_darker": {
       "anchor_point_child_candidates": [],
@@ -20053,7 +20067,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -20064,6 +20078,42 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
               }
             ]
           ],
@@ -21141,7 +21191,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21152,6 +21202,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -21169,7 +21267,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21180,6 +21278,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -21197,7 +21343,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21208,6 +21354,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -21225,7 +21419,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21236,6 +21430,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -21253,7 +21495,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21264,6 +21506,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -21281,7 +21571,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21292,6 +21582,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -21309,7 +21647,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21320,6 +21658,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -21337,7 +21723,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -21348,6 +21734,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ]
           ],
@@ -22530,7 +22964,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22541,6 +22975,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -22558,7 +23040,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22569,6 +23051,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -22586,7 +23116,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22597,6 +23127,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -22614,7 +23192,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22625,6 +23203,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -22642,7 +23268,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22653,6 +23279,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -22670,7 +23344,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22681,6 +23355,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -22698,7 +23420,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22709,6 +23431,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ],
             [
@@ -22726,7 +23496,7 @@
                   ],
                   "enabled": true,
                   "falloff": 0.6899999976158142,
-                  "intensity": 0.2800000011920929,
+                  "intensity": 0.029999999329447746,
                   "opacity": 50.0,
                   "radius": 3910.0,
                   "shadow_strength": 0.8199999928474426
@@ -22737,6 +23507,54 @@
                 "scaling_method": "parent",
                 "texture_x": 258,
                 "texture_y": 198
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "eyes_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 153
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "neck_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 0,
+                "texture_y": 0
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "melee_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 183,
+                "texture_y": 363
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "hand_oval_center",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 163,
+                "texture_y": 393
               }
             ]
           ],
@@ -23167,8 +23985,8 @@
               "rotation_degrees": -18.0,
               "scaling_method": "parent",
               "tags": [],
-              "texture_x": 30,
-              "texture_y": 0
+              "texture_x": 21,
+              "texture_y": 1
             },
             {
               "angle_degrees": 90.0,
@@ -23179,8 +23997,8 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "tags": [],
-              "texture_x": 0,
-              "texture_y": 2
+              "texture_x": -21,
+              "texture_y": 1
             },
             {
               "angle_degrees": 180.0,
@@ -23191,8 +24009,8 @@
               "rotation_degrees": 18.0,
               "scaling_method": "parent",
               "tags": [],
-              "texture_x": -30,
-              "texture_y": 0
+              "texture_x": -21,
+              "texture_y": -1
             },
             {
               "angle_degrees": 270.0,
@@ -23203,11 +24021,11 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "tags": [],
-              "texture_x": 0,
-              "texture_y": -2
+              "texture_x": 21,
+              "texture_y": -1
             }
           ],
-          "radius_offset_degrees": 0.0,
+          "radius_offset_degrees": 315.0,
           "width_radius_x": 30.0
         },
         {
@@ -23225,23 +24043,11 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "tags": [],
-              "texture_x": 20,
-              "texture_y": 0
-            },
-            {
-              "angle_degrees": 45.0,
-              "anti_tags": [],
-              "depth_offset": 0.0,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "tags": [],
               "texture_x": 14,
               "texture_y": 17
             },
             {
-              "angle_degrees": 90.0,
+              "angle_degrees": 45.0,
               "anti_tags": [],
               "depth_offset": 0.0,
               "hidden": false,
@@ -23253,7 +24059,7 @@
               "texture_y": 24
             },
             {
-              "angle_degrees": 135.0,
+              "angle_degrees": 90.0,
               "anti_tags": [],
               "depth_offset": 0.0,
               "hidden": false,
@@ -23265,7 +24071,7 @@
               "texture_y": 17
             },
             {
-              "angle_degrees": 180.0,
+              "angle_degrees": 135.0,
               "anti_tags": [],
               "depth_offset": 0.0,
               "hidden": false,
@@ -23277,7 +24083,7 @@
               "texture_y": 0
             },
             {
-              "angle_degrees": 225.0,
+              "angle_degrees": 180.0,
               "anti_tags": [],
               "depth_offset": 0.0,
               "hidden": false,
@@ -23289,7 +24095,7 @@
               "texture_y": -17
             },
             {
-              "angle_degrees": 270.0,
+              "angle_degrees": 225.0,
               "anti_tags": [],
               "depth_offset": 0.0,
               "hidden": false,
@@ -23301,7 +24107,7 @@
               "texture_y": -24
             },
             {
-              "angle_degrees": 315.0,
+              "angle_degrees": 270.0,
               "anti_tags": [],
               "depth_offset": 0.0,
               "hidden": false,
@@ -23311,6 +24117,18 @@
               "tags": [],
               "texture_x": 14,
               "texture_y": -17
+            },
+            {
+              "angle_degrees": 315.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": 20,
+              "texture_y": 0
             }
           ],
           "radius_offset_degrees": 0.0,
@@ -23335,27 +24153,11 @@
               "tags": [
                 "right"
               ],
-              "texture_x": 50,
-              "texture_y": 0
-            },
-            {
-              "angle_degrees": 45.0,
-              "anti_tags": [
-                "attack"
-              ],
-              "depth_offset": 0.0,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "tags": [
-                "right"
-              ],
               "texture_x": 35,
               "texture_y": 14
             },
             {
-              "angle_degrees": 90.0,
+              "angle_degrees": 45.0,
               "anti_tags": [
                 "attack"
               ],
@@ -23371,7 +24173,7 @@
               "texture_y": 20
             },
             {
-              "angle_degrees": 135.0,
+              "angle_degrees": 90.0,
               "anti_tags": [
                 "attack"
               ],
@@ -23387,6 +24189,22 @@
               "texture_y": 14
             },
             {
+              "angle_degrees": 135.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "right"
+              ],
+              "texture_x": -50,
+              "texture_y": 0
+            },
+            {
               "angle_degrees": 180.0,
               "anti_tags": [
                 "attack",
@@ -23400,27 +24218,11 @@
               "tags": [
                 "left"
               ],
-              "texture_x": -50,
-              "texture_y": 0
-            },
-            {
-              "angle_degrees": 225.0,
-              "anti_tags": [
-                "attack"
-              ],
-              "depth_offset": 0.0,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "tags": [
-                "left"
-              ],
               "texture_x": -35,
               "texture_y": -14
             },
             {
-              "angle_degrees": 270.0,
+              "angle_degrees": 225.0,
               "anti_tags": [
                 "attack"
               ],
@@ -23436,7 +24238,7 @@
               "texture_y": -20
             },
             {
-              "angle_degrees": 315.0,
+              "angle_degrees": 270.0,
               "anti_tags": [
                 "attack"
               ],
@@ -23450,9 +24252,25 @@
               ],
               "texture_x": 35,
               "texture_y": -14
+            },
+            {
+              "angle_degrees": 315.0,
+              "anti_tags": [
+                "attack"
+              ],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [
+                "left"
+              ],
+              "texture_x": 50,
+              "texture_y": 0
             }
           ],
-          "radius_offset_degrees": 288.0,
+          "radius_offset_degrees": 235.0,
           "width_radius_x": 50.0
         },
         {
@@ -23472,8 +24290,8 @@
               "tags": [
                 "right"
               ],
-              "texture_x": 50,
-              "texture_y": 0
+              "texture_x": 35,
+              "texture_y": 14
             },
             {
               "angle_degrees": 90.0,
@@ -23484,8 +24302,8 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "tags": [],
-              "texture_x": 0,
-              "texture_y": 20
+              "texture_x": -35,
+              "texture_y": 14
             },
             {
               "angle_degrees": 180.0,
@@ -23498,8 +24316,8 @@
               "tags": [
                 "left"
               ],
-              "texture_x": -50,
-              "texture_y": 0
+              "texture_x": -35,
+              "texture_y": -14
             },
             {
               "angle_degrees": 270.0,
@@ -23510,11 +24328,11 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "tags": [],
-              "texture_x": 0,
-              "texture_y": -20
+              "texture_x": 35,
+              "texture_y": -14
             }
           ],
-          "radius_offset_degrees": 69.0,
+          "radius_offset_degrees": 15.0,
           "width_radius_x": 50.0
         }
       ],
@@ -24283,6 +25101,10 @@
                 "name": "#candle",
                 "tag": true,
                 "tag_name": "candle"
+              },
+              {
+                "chance": 6.950656250000001,
+                "name": "fly"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -24370,9 +25192,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -24730,9 +25552,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
-            85,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -24843,9 +25665,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -24931,8 +25753,8 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": -76,
-              "dz": 3515,
+              "dx": -439,
+              "dz": 3976,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -25038,6 +25860,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-b49f73bbb9ae"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "fly"
+                }
+              ],
+              "display_name": "fly",
+              "dx": -2884,
+              "dz": -967,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10000,
+              "position": "Exact",
+              "priority": 6,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-740eafc48263"
             }
           ],
           "trail_connection_sector": {

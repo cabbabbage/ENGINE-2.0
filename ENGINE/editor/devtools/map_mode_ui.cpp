@@ -10,7 +10,6 @@
 #include "map_layers_common.hpp"
 #include "map_layers_panel.hpp"
 #include "map_rooms_display.hpp"
-#include "config/room_config/room_configurator.hpp"
 #include "room_editor.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "SlidingWindowContainer.hpp"
@@ -1521,10 +1520,6 @@ void MapModeUI::update_room_config_header_controls() {
 
 void MapModeUI::close_legacy_room_config_if_visible(const char* reason) {
     bool closed_any = false;
-    if (room_configurator_ && room_configurator_->visible()) {
-        room_configurator_->close();
-        closed_any = true;
-    }
     if (room_config_container_ && room_config_container_->is_visible()) {
         room_config_container_->close();
         closed_any = true;

@@ -3641,19 +3641,15 @@ bool Assets::is_asset_library_open() const {
 }
 
 void Assets::toggle_room_config() {
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        dev_controls_->toggle_room_config();
-    }
+    
 }
 
 void Assets::close_room_config() {
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        dev_controls_->close_room_config();
-    }
+    
 }
 
 bool Assets::is_room_config_open() const {
-    return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_room_config_open();
+    return false;
 }
 
 std::shared_ptr<AssetInfo> Assets::consume_selected_asset_from_library() {

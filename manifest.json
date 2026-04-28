@@ -12905,50 +12905,106 @@
       "start": "default"
     },
     "bush_1_fps_2": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/bush_1_fps_2",
       "asset_name": "bush_1_fps_2",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 100.0,
+        "size_variation": 14.0
+      },
+      "start": "default",
+      "tags": [
+        "bush",
+        "green",
+        "medium",
+        "plant"
+      ],
+      "tillable": false,
+      "tilt_range_max_deg": 8,
+      "tilt_range_min_deg": -6,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": -8
     },
     "bush_fps_2": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/bush_fps_2",
       "asset_name": "bush_fps_2",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 100.0,
+        "size_variation": 17.0
+      },
+      "start": "default",
+      "tags": [
+        "bush",
+        "green",
+        "medium",
+        "plant"
+      ],
+      "tillable": false,
+      "tilt_range_max_deg": 7,
+      "tilt_range_min_deg": 7,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": -6
     },
     "candle_fps_12": {
       "anchor_point_child_candidates": [
@@ -14144,7 +14200,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -1.0,
+                "depth_offset": 6.300002098083496,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14166,8 +14222,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 933,
-                "texture_y": 483
+                "texture_x": 485,
+                "texture_y": 532
               }
             ],
             [
@@ -14316,7 +14372,7 @@
           "invert_z": false,
           "locked": true,
           "number_of_frames": 6,
-          "on_end": "lock",
+          "on_end": "open",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -14327,6 +14383,22 @@
           "tags": [
             "interact"
           ]
+        },
+        "open": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": true,
+          "number_of_frames": 1,
+          "on_end": "loop",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "open"
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -14341,7 +14413,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 17.0
+        "scale_percentage": 10.0
       },
       "start": "interact",
       "tags": [
@@ -14540,6 +14612,391 @@
       "tillable": false,
       "weight_kg": 0.0
     },
+    "city_hall_background": {
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "norm_anhor_point_1",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "clock"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_2",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "doorway_1"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_3",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_large"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_3_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_large"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_4",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#bush"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_4_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#bush"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_4_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#bush"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_4_copy_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#bush"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_5",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_5_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        }
+      ],
+      "animations": {
+        "default": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": -0.30000001192092896,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 922,
+                "texture_y": 744
+              },
+              {
+                "depth_offset": -0.4000000059604645,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 917,
+                "texture_y": 1584
+              },
+              {
+                "depth_offset": -0.20000001788139343,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_3",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 354,
+                "texture_y": 1352
+              },
+              {
+                "depth_offset": -0.20000001788139343,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_3_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 1479,
+                "texture_y": 1339
+              },
+              {
+                "depth_offset": -0.4000000059604645,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_4",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 442,
+                "texture_y": 1559
+              },
+              {
+                "depth_offset": -0.4000000059604645,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_4_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 172,
+                "texture_y": 1569
+              },
+              {
+                "depth_offset": -0.4000000059604645,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_4_copy_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 1372,
+                "texture_y": 1577
+              },
+              {
+                "depth_offset": -0.4000000059604645,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_4_copy_copy_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 1657,
+                "texture_y": 1569
+              },
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_5",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 424,
+                "texture_y": 872
+              },
+              {
+                "depth_offset": -0.09999995678663254,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_5_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 1424,
+                "texture_y": 864
+              }
+            ]
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/city_hall_background",
+      "asset_name": "city_hall_background",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 73.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
+    },
+    "clock": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/clock",
+      "asset_name": "clock",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 35.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
+    },
     "curse_circle": {
       "anchor_point_child_candidates": [],
       "animations": {
@@ -14572,6 +15029,56 @@
       "tags": [],
       "tillable": false,
       "weight_kg": 0.0
+    },
+    "doorway_1": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/doorway_1",
+      "asset_name": "doorway_1",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 32.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "dot": {
       "anchor_point_child_candidates": [],
@@ -15419,111 +15926,6 @@
         }
       ],
       "animations": {
-        "backward": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "attack_boxes": [
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              1
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": 1
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "backward"
-          }
-        },
         "default": {
           "anchor_points": [
             [
@@ -15566,21 +15968,21 @@
                     "texture_y": 0
                   },
                   {
-                    "texture_x": 13,
+                    "texture_x": 14,
                     "texture_y": 0
                   },
                   {
-                    "texture_x": 13,
-                    "texture_y": 10
+                    "texture_x": 14,
+                    "texture_y": 7
                   },
                   {
                     "texture_x": 0,
-                    "texture_y": 10
+                    "texture_y": 7
                   }
                 ],
                 "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
+                "extrusion_backward": 71,
+                "extrusion_forward": 68,
                 "frame_range": {
                   "end": 0,
                   "start": 0
@@ -15593,8 +15995,8 @@
                 },
                 "rotation_degrees": 0.0,
                 "size": {
-                  "h": 10,
-                  "w": 13
+                  "h": 7,
+                  "w": 14
                 },
                 "type": "hitbox"
               }
@@ -15627,697 +16029,6 @@
             "path": "default"
           },
           "tags": []
-        },
-        "down": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "attack_boxes": [
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              -1,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": -1,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "down"
-          }
-        },
-        "down_forward_left": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "down_forward_left"
-          }
-        },
-        "forward": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "attack_boxes": [
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              -1
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": -1
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "forward"
-          }
-        },
-        "left": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "attack_boxes": [
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              -1,
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": -1,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "left"
-          }
-        },
-        "right": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "attack_boxes": [
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              1,
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 1,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "right"
-          }
-        },
-        "up": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "attack_boxes": [
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              3,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 3,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "up"
-          }
-        },
-        "up_forward_left": {
-          "anchor_points": [
-            [
-              {
-                "depth_offset": -0.20000000298023224,
-                "flip_horizontal": false,
-                "flip_vertical": false,
-                "hidden": false,
-                "light": {
-                  "cast_shadows": false,
-                  "color": [
-                    150,
-                    200,
-                    17
-                  ],
-                  "enabled": true,
-                  "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
-                  "opacity": 100.0,
-                  "radius": 15.0,
-                  "shadow_strength": 0.4099999964237213
-                },
-                "name": "l_anchor_1",
-                "resolve_x": false,
-                "rotation_degrees": 0.0,
-                "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
-              }
-            ]
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 13,
-                    "texture_y": 10
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 10
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 10,
-                  "w": 13
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "locked": false,
-          "on_end": "default",
-          "source": {
-            "kind": "folder",
-            "path": "up_forward_left"
-          }
         }
       },
       "anti_tags": [],
@@ -16337,7 +16048,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 101.0,
+        "scale_percentage": 44.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -25397,6 +25108,106 @@
       "impassable_enabled": false,
       "movement_enabled": false,
       "start": "default"
+    },
+    "window_round_large": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/window_round_large",
+      "asset_name": "window_round_large",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 53.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
+    },
+    "window_round_small": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/window_round_small",
+      "asset_name": "window_round_small",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 41.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     }
   },
   "maps": {
@@ -25409,17 +25220,17 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 0.7199999690055847,
+        "behind_layer_light_strength_multiplier": 0.9699999690055847,
         "blur_px": 3.1599998474121094,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
         "depth_of_field_enabled": true,
-        "dynamic_renderer_depth_efficiency_depth": 2037.0,
+        "dynamic_renderer_depth_efficiency_depth": 1479.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
-        "front_layer_light_strength_multiplier": 1.0199999809265137,
-        "layer_depth_curve": 21.75,
-        "layer_depth_interval": 68.0,
+        "front_layer_light_strength_multiplier": 1.350000023841858,
+        "layer_depth_curve": 66.3699951171875,
+        "layer_depth_interval": 102.0,
         "light_culling_debug_overlay": false,
         "light_distance_fade_start_ratio": 0.800000011920929,
         "light_fade_in_seconds": 0.07999999821186066,
@@ -25510,12 +25321,8 @@
           {
             "candidates": [
               {
-                "chance": 34,
+                "chance": 79,
                 "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "fly"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -25562,12 +25369,12 @@
           ]
         },
         {
-          "bounding_extent": 2828.42712474619,
+          "bounding_extent": 1500.0,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 2,
           "name": "layer_1",
-          "ring_radius": 18203.0,
+          "ring_radius": 16875.0,
           "rooms": [
             {
               "max_instances": 1,
@@ -25954,10 +25761,10 @@
           }
         },
         "Random_Enemy_Easy": {
-          "camera_center_dx": -7,
-          "camera_center_dz": 75,
-          "camera_height_px": 456,
-          "camera_tilt_deg": 37.47359085083008,
+          "camera_center_dx": 144,
+          "camera_center_dz": -103,
+          "camera_height_px": 109,
+          "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
@@ -25966,14 +25773,14 @@
             31,
             255
           ],
-          "edge_smoothness": 101,
-          "geometry": "Square",
+          "edge_smoothness": 70,
+          "geometry": "Circle",
           "inherits_map_assets": false,
           "is_boss": false,
-          "max_height": 4000,
-          "max_width": 4000,
-          "min_height": 4000,
-          "min_width": 4000,
+          "max_height": 1634,
+          "max_width": 1362,
+          "min_height": 1634,
+          "min_width": 1362,
           "name": "Random_Enemy_Easy",
           "room_tags": [
             "early_layer",
@@ -25995,16 +25802,16 @@
                 }
               ],
               "display_name": "chest_opening",
-              "dx": -763,
-              "dz": 97,
+              "dx": -17,
+              "dz": 331,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 5176,
-              "origional_width": 2816,
+              "origional_height": 1712,
+              "origional_width": 1408,
               "position": "Exact",
               "priority": 0,
               "quantity": 1,
@@ -26067,11 +25874,11 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -2442,
-          "camera_center_dz": -3745,
-          "camera_height_px": 489,
-          "camera_tilt_deg": 29.5625057220459,
-          "camera_zoom_percent": 0,
+          "camera_center_dx": -1841,
+          "camera_center_dz": -1773,
+          "camera_height_px": 749,
+          "camera_tilt_deg": 51.17104721069336,
+          "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
             85,
@@ -26222,8 +26029,8 @@
                 }
               ],
               "display_name": "casino",
-              "dx": -2746,
-              "dz": -3240,
+              "dx": -3151,
+              "dz": -2806,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -26231,7 +26038,7 @@
               "max_number": 1,
               "min_number": 1,
               "origional_height": 8000,
-              "origional_width": 10000,
+              "origional_width": 10752,
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
@@ -26299,6 +26106,126 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-740eafc48263"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -2409,
+              "dz": -1680,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10752,
+              "position": "Exact",
+              "priority": 7,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-15df12418e39"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "city_hall_background"
+                }
+              ],
+              "display_name": "city_hall_background",
+              "dx": -961,
+              "dz": -2779,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10752,
+              "position": "Exact",
+              "priority": 8,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-cd7d0cd55e23"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "clock"
+                }
+              ],
+              "display_name": "clock",
+              "dx": 507,
+              "dz": -3138,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10752,
+              "position": "Exact",
+              "priority": 9,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a66d7f4338ba"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "doorway_1"
+                }
+              ],
+              "display_name": "doorway_1",
+              "dx": -222,
+              "dz": -2409,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10752,
+              "position": "Exact",
+              "priority": 10,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-97c8529d7242"
             }
           ],
           "trail_connection_sector": {
@@ -26307,13 +26234,23 @@
           }
         }
       },
+      "runtime_game_config": {
+        "fly_orbit_behavior": {
+          "orbit_height_max_offset": 4000,
+          "orbit_height_min_offset": 3,
+          "orbit_refresh_max_frames": 100,
+          "orbit_refresh_max_frames_aggressive": 300,
+          "orbit_refresh_min_frames": 50,
+          "orbit_refresh_min_frames_aggressive": 300
+        }
+      },
       "schema_version": 1,
       "trails_data": {
         "basic": {
-          "camera_center_dx": 1372,
-          "camera_center_dz": -2411,
-          "camera_height_px": 369,
-          "camera_tilt_deg": 45.06768798828125,
+          "camera_center_dx": -3379,
+          "camera_center_dz": 463,
+          "camera_height_px": 1158,
+          "camera_tilt_deg": 63.06760787963867,
           "camera_zoom_percent": 0,
           "curvyness": 10,
           "display_color": [

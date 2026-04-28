@@ -296,6 +296,8 @@ private:
     void hydrate_map_info_sections();
     void load_camera_settings_from_json();
     void write_camera_settings_to_json();
+    void load_runtime_game_config_from_json();
+    void write_runtime_game_config_to_json();
     void schedule_removal(Asset* a);
     std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
     std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);

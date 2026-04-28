@@ -14,13 +14,6 @@ namespace animation_update::custom_controllers {
 
 namespace {
 
-constexpr std::uint32_t kOrbitRefreshMinFrames = 100;
-constexpr std::uint32_t kOrbitRefreshMaxFrames = 400;
-constexpr std::uint32_t kOrbitRefreshMinFramesMad = 100;
-constexpr std::uint32_t kOrbitRefreshMaxFramesMad = 500;
-
-constexpr int kOrbitHeightMinOffset = 300;
-constexpr int kOrbitHeightMaxOffset = 5000;
 constexpr float kOrbitPointChangeEpsilon = 4.0f;
 constexpr int kOrbitRadiusMin = 12;
 constexpr int kOrbitRadiusMax = 220;
@@ -82,7 +75,8 @@ std::uint64_t asset_runtime_seed(const Asset* self) {
 std::uint32_t orbit_refresh_interval_frames(const Asset* self,
                                             std::uint64_t target_id,
                                             std::uint32_t target_version,
-                                            bool mad) {
+                                            bool mad,
+                                            const runtime::config::RandomOrbit3DControllerBehaviorConfig& cfg) {
     std::uint64_t seed = asset_runtime_seed(self);
     seed = mix_hash(seed, target_id);
     seed = mix_hash(seed, static_cast<std::uint64_t>(target_version));
@@ -90,11 +84,17 @@ std::uint32_t orbit_refresh_interval_frames(const Asset* self,
 
     const std::uint64_t random_value = splitmix64(seed);
 
-    const std::uint32_t min_frames = mad ? kOrbitRefreshMinFramesMad : kOrbitRefreshMinFrames;
-    const std::uint32_t max_frames = mad ? kOrbitRefreshMaxFramesMad : kOrbitRefreshMaxFrames;
-    const std::uint32_t span = (max_frames - min_frames) + 1u;
+    const std::uint32_t min_frames = mad
+        ? cfg.orbit_refresh_min_frames_aggressive
+        : cfg.orbit_refresh_min_frames;
+    const std::uint32_t max_frames = mad
+        ? cfg.orbit_refresh_max_frames_aggressive
+        : cfg.orbit_refresh_max_frames;
+    const std::uint32_t ordered_min = std::min(min_frames, max_frames);
+    const std::uint32_t ordered_max = std::max(min_frames, max_frames);
+    const std::uint32_t span = (ordered_max - ordered_min) + 1u;
 
-    return min_frames + static_cast<std::uint32_t>(random_value % span);
+    return ordered_min + static_cast<std::uint32_t>(random_value % span);
 }
 
 std::uint32_t schedule_next_refresh_frame(std::uint32_t frame, std::uint32_t interval) {
@@ -177,6 +177,7 @@ const Room* resolve_orbit_room(const ControllerGameContext& context) {
 FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& context,
                                                 const FlyOrbitTargetSnapshot& previous) {
     FlyOrbitTargetSnapshot snapshot = previous;
+    const auto& orbit_cfg = context.fly_orbit_behavior_config();
     const Room* orbit_room = resolve_orbit_room(context);
 
     if (!context.self || !context.assets || !orbit_room || !orbit_room->room_area) {
@@ -184,7 +185,7 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
         snapshot.next_refresh_frame = schedule_next_refresh_frame(
             context.frame_id,
             orbit_refresh_interval_frames(
-                context.self, 0, previous.target_version, context.flies_aggressive));
+                context.self, 0, previous.target_version, context.flies_aggressive, orbit_cfg));
         return snapshot;
     }
 
@@ -253,14 +254,16 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
         snapshot.next_refresh_frame = schedule_next_refresh_frame(
             context.frame_id,
             orbit_refresh_interval_frames(
-                context.self, 0, previous.target_version, context.flies_aggressive));
+                context.self, 0, previous.target_version, context.flies_aggressive, orbit_cfg));
         return snapshot;
     }
 
     const world::GridPoint floor_point =
         context.assets->resolve_floor_world_point(candidate, context.self_grid_resolution);
-    const int min_world_y = floor_point.world_y() + kOrbitHeightMinOffset;
-    const int max_world_y = floor_point.world_y() + kOrbitHeightMaxOffset;
+    const int min_height_offset = std::min(orbit_cfg.orbit_height_min_offset, orbit_cfg.orbit_height_max_offset);
+    const int max_height_offset = std::max(orbit_cfg.orbit_height_min_offset, orbit_cfg.orbit_height_max_offset);
+    const int min_world_y = floor_point.world_y() + min_height_offset;
+    const int max_world_y = floor_point.world_y() + max_height_offset;
     const int desired_world_y = context.self ? context.self->world_y() : min_world_y;
 
     snapshot.valid = true;
@@ -278,7 +281,8 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
             context.self,
             snapshot.target_id,
             snapshot.target_version,
-            context.flies_aggressive));
+            context.flies_aggressive,
+            orbit_cfg));
 
     return snapshot;
 }

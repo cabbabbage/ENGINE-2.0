@@ -41,12 +41,16 @@ private:
     void reset_for_missing_target(Asset& self);
     void apply_default_idle(Asset& self) const;
 
-    int visit_threshold_px(const Asset& self) const;
     std::optional<int> checkpoint_resolution_override() const;
 
     bool should_enter_orbit(const axis::WorldPos& self_pos) const;
     bool should_exit_orbit(const axis::WorldPos& self_pos) const;
     double speed_multiplier() const;
+    int movement_step_px() const;
+    bool move_direct_towards(Asset& self,
+                             const axis::WorldPos& from,
+                             const axis::WorldPos& target,
+                             std::optional<int> resolution_override) const;
     void randomize_orbit_plane();
 
     axis::WorldPos blended_retarget_target() const;

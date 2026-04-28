@@ -1,11 +1,12 @@
 #pragma once
+#include <cstdint>
 
 namespace runtime::config {
 
 struct RandomOrbit3DControllerBehaviorConfig {
     int visit_threshold_px = 8;
     int orbit_radius_px = 20;
-    int orbit_vertical_amplitude_px = 306;
+    int orbit_vertical_amplitude_px = 36;
     int orbit_segment_checkpoints = 4;
     int orbit_enter_distance_px = 80;
     int orbit_exit_distance_px = 90;
@@ -17,6 +18,12 @@ struct RandomOrbit3DControllerBehaviorConfig {
     double retarget_blend_step = 0.35;
     double non_aggressive_speed_multiplier = 30.0;
     double aggressive_speed_multiplier = 50.0;
+    std::uint32_t orbit_refresh_min_frames = 50;
+    std::uint32_t orbit_refresh_max_frames = 100;
+    std::uint32_t orbit_refresh_min_frames_aggressive = 300;
+    std::uint32_t orbit_refresh_max_frames_aggressive = 500;
+    int orbit_height_min_offset = 30;
+    int orbit_height_max_offset = 4000;
     bool debug_enabled = false;
     bool override_non_locked = true;
 };
@@ -25,7 +32,7 @@ inline RandomOrbit3DControllerBehaviorConfig make_default_fly_orbit_behavior_con
     RandomOrbit3DControllerBehaviorConfig cfg{};
     cfg.visit_threshold_px = 18;
     cfg.orbit_radius_px = 10;
-    cfg.orbit_vertical_amplitude_px = 306;
+    cfg.orbit_vertical_amplitude_px = 36;
     cfg.orbit_segment_checkpoints = 4;
     cfg.orbit_enter_distance_px = 80;
     cfg.orbit_exit_distance_px = 120;
@@ -37,6 +44,12 @@ inline RandomOrbit3DControllerBehaviorConfig make_default_fly_orbit_behavior_con
     cfg.retarget_blend_step = 0.35;
     cfg.non_aggressive_speed_multiplier = 3.0;
     cfg.aggressive_speed_multiplier = 5.0;
+    cfg.orbit_refresh_min_frames = 50;
+    cfg.orbit_refresh_max_frames = 100;
+    cfg.orbit_refresh_min_frames_aggressive = 300;
+    cfg.orbit_refresh_max_frames_aggressive = 300;
+    cfg.orbit_height_min_offset = 3;
+    cfg.orbit_height_max_offset = 4000;
     cfg.debug_enabled = false;
     cfg.override_non_locked = true;
     return cfg;

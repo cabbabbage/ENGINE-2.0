@@ -6,7 +6,6 @@
 
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/controller_game_context.hpp"
-#include "animation/controllers/shared/controller_path_utils.hpp"
 #include "animation/controllers/shared/custom_asset_controller.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
@@ -196,25 +195,17 @@ void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in) {
         phase_ = Phase::Approach;
     }
 
-    if (!self->needs_target) {
-        return;
-    }
-
-    const int visited_thresh = visit_threshold_px(*self);
     const std::optional<int> resolution_override = checkpoint_resolution_override();
+    bool moved = false;
 
     if (phase_ == Phase::Orbit) {
         const auto checkpoints = build_orbit_checkpoints(self_pos);
         if (!checkpoints.empty()) {
-            self->anim_->auto_move_3d(
-                checkpoints, false, visited_thresh, resolution_override, config_.override_non_locked);
-            if (!self->needs_target) {
-                const double speed = speed_multiplier();
-                orbit_angle_ = wrap_angle(
-                    orbit_angle_ + (angular_velocity_ * speed) * static_cast<double>(checkpoints.size()));
-                orbit_radius_current_ += (orbit_radius_goal_ - orbit_radius_current_) * 0.25;
-                approach_wave_phase_ = wrap_angle(approach_wave_phase_ + 0.25 * speed);
-            }
+            moved = move_direct_towards(*self, self_pos, checkpoints.front(), resolution_override);
+            const double speed = speed_multiplier();
+            orbit_angle_ = wrap_angle(orbit_angle_ + (angular_velocity_ * speed));
+            orbit_radius_current_ += (orbit_radius_goal_ - orbit_radius_current_) * 0.25;
+            approach_wave_phase_ = wrap_angle(approach_wave_phase_ + 0.25 * speed);
         }
     } else {
         const bool soft_transition = phase_ == Phase::RetargetTransition;
@@ -224,18 +215,17 @@ void RandomOrbit3DControllerBehavior::tick([[maybe_unused]] const Input& in) {
         const axis::WorldPos goal = soft_transition ? blended_retarget_target() : target_;
         const auto checkpoints = build_approach_checkpoints(self_pos, goal, soft_transition);
         if (!checkpoints.empty()) {
-            self->anim_->auto_move_3d(
-                checkpoints, false, visited_thresh, resolution_override, config_.override_non_locked);
-            if (!self->needs_target) {
+            moved = move_direct_towards(*self, self_pos, checkpoints.front(), resolution_override);
+            if (moved) {
                 approach_wave_phase_ = wrap_angle(approach_wave_phase_ + 0.55 * speed_multiplier());
-                if (phase_ == Phase::RetargetTransition && retarget_alpha_ >= 1.0) {
-                    phase_ = Phase::Approach;
-                }
+            }
+            if (phase_ == Phase::RetargetTransition && retarget_alpha_ >= 1.0) {
+                phase_ = Phase::Approach;
             }
         }
     }
 
-    if (self->needs_target) {
+    if (!moved) {
         apply_default_idle(*self);
     }
 }
@@ -321,13 +311,6 @@ void RandomOrbit3DControllerBehavior::apply_default_idle(Asset& self) const {
     }
 }
 
-int RandomOrbit3DControllerBehavior::visit_threshold_px(const Asset& self) const {
-    if (config_.visit_threshold_px > 0) {
-        return config_.visit_threshold_px;
-    }
-    return std::max(1, controller_paths::default_visit_threshold(&self));
-}
-
 std::optional<int> RandomOrbit3DControllerBehavior::checkpoint_resolution_override() const {
     if (checkpoint_resolution_layer_ < 0) {
         return std::nullopt;
@@ -365,6 +348,40 @@ double RandomOrbit3DControllerBehavior::speed_multiplier() const {
         ? config_.aggressive_speed_multiplier
         : config_.non_aggressive_speed_multiplier;
     return std::max(0.1, configured);
+}
+
+int RandomOrbit3DControllerBehavior::movement_step_px() const {
+    if (!controller_) {
+        return 3;
+    }
+    return controller_->game_context().room_flies_aggressive() ? 20 : 10;
+}
+
+bool RandomOrbit3DControllerBehavior::move_direct_towards(
+    Asset& self,
+    const axis::WorldPos& from,
+    const axis::WorldPos& target,
+    std::optional<int> resolution_override) const {
+    const double dx = static_cast<double>(target.x - from.x);
+    const double dy = static_cast<double>(target.y - from.y);
+    const double dz = static_cast<double>(target.z - from.z);
+    const double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist <= 0.5) {
+        return false;
+    }
+
+    const double step = static_cast<double>(movement_step_px());
+    const double t = std::min(1.0, step / dist);
+    const int next_x = static_cast<int>(std::lround(static_cast<double>(from.x) + dx * t));
+    const int next_y = static_cast<int>(std::lround(static_cast<double>(from.y) + dy * t));
+    const int next_z = static_cast<int>(std::lround(static_cast<double>(from.z) + dz * t));
+
+    if (next_x == from.x && next_y == from.y && next_z == from.z) {
+        return false;
+    }
+
+    self.move_to_world_position(next_x, next_y, next_z, resolution_override);
+    return true;
 }
 
 void RandomOrbit3DControllerBehavior::randomize_orbit_plane() {

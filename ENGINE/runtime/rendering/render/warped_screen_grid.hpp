@@ -75,6 +75,7 @@ public:
         bool min_visible_uses_light_radius = true;
         float base_height_px               = 1000.0f;
         float max_cull_depth               = 5000.0f;
+        float light_max_cull_depth         = 15000.0f;
         float dynamic_renderer_depth_efficiency_depth = 2000.0f;
         float dynamic_renderer_depth_efficiency_min_density_ratio = 0.10f;
         float layer_depth_interval         = 250.0f;

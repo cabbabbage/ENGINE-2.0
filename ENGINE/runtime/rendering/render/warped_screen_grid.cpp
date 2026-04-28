@@ -734,6 +734,9 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     if (!std::isfinite(settings_.max_cull_depth) || settings_.max_cull_depth < 1.0f) {
         settings_.max_cull_depth = 1.0f;
     }
+    if (!std::isfinite(settings_.light_max_cull_depth) || settings_.light_max_cull_depth < settings_.max_cull_depth) {
+        settings_.light_max_cull_depth = settings_.max_cull_depth;
+    }
     if (!std::isfinite(settings_.dynamic_renderer_depth_efficiency_depth)) {
         settings_.dynamic_renderer_depth_efficiency_depth = 2000.0f;
     }
@@ -1496,6 +1499,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_bool("min_visible_uses_light_radius", updated.min_visible_uses_light_radius);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
+    read_float("light_max_cull_depth", updated.light_max_cull_depth, 1.0f, 1000000.0f);
     const float parsed_max_cull_depth = updated.max_cull_depth;
     const bool has_efficiency_depth = read_float_present("dynamic_renderer_depth_efficiency_depth",
                                                          updated.dynamic_renderer_depth_efficiency_depth,
@@ -1603,6 +1607,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["min_visible_uses_light_radius"] = settings_.min_visible_uses_light_radius;
     result["base_height_px"] = settings_.base_height_px;
     result["max_cull_depth"] = settings_.max_cull_depth;
+    result["light_max_cull_depth"] = settings_.light_max_cull_depth;
     result["dynamic_renderer_depth_efficiency_depth"] =
         settings_.dynamic_renderer_depth_efficiency_depth;
     result["dynamic_renderer_depth_efficiency_min_density_ratio"] =
@@ -1764,7 +1769,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
 
     world::WorldGrid::RegionMetrics region_metrics{};
     const int min_world_z = std::numeric_limits<int>::min();
-    const int max_world_z = static_cast<int>(std::ceil(cam_state.anchor_world_z + static_cast<double>(settings_.max_cull_depth)));
+    const int max_world_z = static_cast<int>(std::ceil(
+        cam_state.anchor_world_z + static_cast<double>(settings_.light_max_cull_depth)));
     std::vector<world::GridPoint*> grid_points = world_grid.query_region(
         world_bounds,
         0,
@@ -1844,6 +1850,18 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     constexpr std::uint8_t kVisibilityReasonTile = 0x2;
     constexpr std::uint8_t kVisibilityReasonLight = 0x4;
     constexpr std::uint8_t kVisibilityReasonConservative = 0x8;
+
+    auto asset_has_runtime_light = [](const Asset* asset) -> bool {
+        if (!asset || !asset->current_frame) {
+            return false;
+        }
+        for (const DisplacedAssetAnchorPoint& frame_anchor : asset->current_frame->anchor_points) {
+            if (frame_anchor.is_valid() && frame_anchor.has_light_data && !frame_anchor.hidden) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     auto evaluate_asset_visibility = [&](Asset* asset,
                                          const world::GridPoint* gp,
@@ -2042,8 +2060,18 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         const double base_world_z = static_cast<double>(gp->world_z());
         const double point_depth_from_anchor = render_depth::depth_from_anchor(anchor_depth, base_world_z);
         const double point_depth_distance = std::fabs(point_depth_from_anchor);
+        bool allow_far_light_pass = false;
+        if (std::isfinite(point_depth_distance) &&
+            point_depth_distance <= static_cast<double>(settings_.light_max_cull_depth)) {
+            for (const auto& owned : gp->occupants) {
+                if (asset_has_runtime_light(owned.get())) {
+                    allow_far_light_pass = true;
+                    break;
+                }
+            }
+        }
         if (!std::isfinite(point_depth_distance) ||
-            point_depth_distance > static_cast<double>(settings_.max_cull_depth)) {
+            (point_depth_distance > static_cast<double>(settings_.max_cull_depth) && !allow_far_light_pass)) {
             ++last_depth_culled_;
             continue;
         }
@@ -2108,8 +2136,12 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                     visible_asset,
                     gp,
                     depth_from_anchor});
+                const float effective_depth_limit =
+                    asset_has_runtime_light(visible_asset)
+                        ? settings_.light_max_cull_depth
+                        : settings_.max_cull_depth;
                 if (!std::isfinite(visible_traversal_entries_.back().depth_from_anchor) ||
-                    depth_distance > static_cast<double>(settings_.max_cull_depth)) {
+                    depth_distance > static_cast<double>(effective_depth_limit)) {
                     visible_traversal_entries_.pop_back();
                     ++last_depth_culled_;
                 }

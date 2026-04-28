@@ -397,6 +397,7 @@ Assets::Assets(AssetLibrary& library,
 
     auto& room_refs = rooms();
     finder_ = new CurrentRoomFinder(room_refs, player);
+    game_context_.rebuild_runtime_map_graph(room_refs);
     if (finder_) {
         finder_->setCamera(&camera_);
         camera_.set_up_rooms(finder_);
@@ -953,6 +954,7 @@ void Assets::notify_rooms_changed() {
     if (finder_) {
         auto& room_refs = rooms();
         finder_->setRooms(room_refs);
+        game_context_.rebuild_runtime_map_graph(room_refs);
     }
     if (dev_controls_) {
         auto& room_refs = rooms();
@@ -3777,6 +3779,7 @@ void Assets::notify_camera_activity(bool active) {
 
 void Assets::set_editor_current_room(Room* room) {
     current_room_ = room;
+    game_context_.mutable_map_graph().set_current_room(room);
     if (dev_controls_) {
         sync_dev_controls_current_room(room, true);
     }

@@ -276,9 +276,11 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
             changed = true;
         }
     };
-    normalize_bool("is_spawn", false);
     normalize_bool("is_boss", false);
     normalize_bool("inherits_map_assets", false);
+    if (entry.erase("is_spawn") > 0) {
+        changed = true;
+    }
 
     int edge_smoothness = 2;
     if (entry.contains("edge_smoothness")) {
@@ -372,7 +374,6 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["min_height"] = diameter;
     entry["max_height"] = diameter;
     entry["edge_smoothness"] = 2;
-    entry["is_spawn"] = true;
     entry["is_boss"] = false;
     entry["inherits_map_assets"] = false;
     entry["spawn_groups"] = nlohmann::json::array();
@@ -449,67 +450,154 @@ nlohmann::json make_batch_spawn_group(const std::string& map_name,
     return group;
 }
 
-std::string infer_spawn_room_name(nlohmann::json& rooms_data, bool& changed) {
+void normalize_layer_candidate_entry(nlohmann::json& candidate, bool& changed) {
+    if (!candidate.is_object()) {
+        candidate = nlohmann::json::object();
+        changed = true;
+    }
+
+    std::string source_type = candidate.value("source_type", std::string());
+    if (source_type != "room_name" && source_type != "room_tag") {
+        source_type = "room_name";
+        changed = true;
+    }
+
+    std::string value = candidate.value("value", std::string());
+    if (value.empty()) {
+        if (candidate.contains("name") && candidate["name"].is_string()) {
+            value = candidate["name"].get<std::string>();
+            changed = true;
+        }
+    }
+
+    int min_instances = 0;
+    if (candidate.contains("min_instances") && candidate["min_instances"].is_number_integer()) {
+        min_instances = std::max(0, candidate["min_instances"].get<int>());
+    }
+    int max_instances = 1;
+    if (candidate.contains("max_instances") && candidate["max_instances"].is_number_integer()) {
+        max_instances = std::max(0, candidate["max_instances"].get<int>());
+    }
+    if (max_instances < min_instances) {
+        max_instances = min_instances;
+        changed = true;
+    }
+
+    if (!candidate.contains("required_children") || !candidate["required_children"].is_array()) {
+        candidate["required_children"] = nlohmann::json::array();
+        changed = true;
+    }
+
+    candidate["source_type"] = source_type;
+    candidate["value"] = value;
+    candidate["name"] = value; // compatibility mirror
+    candidate["min_instances"] = min_instances;
+    candidate["max_instances"] = max_instances;
+}
+
+bool ensure_spawn_room_via_layer_zero(nlohmann::json& map_manifest, const std::string& map_id) {
+    bool changed = false;
+    nlohmann::json& rooms_data = map_manifest["rooms_data"];
     if (!rooms_data.is_object()) {
         rooms_data = nlohmann::json::object();
         changed = true;
     }
 
-    for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
-        if (it.value().is_object()) {
-            bool is_spawn = false;
-            if (it.value().contains("is_spawn")) {
-                if (it.value()["is_spawn"].is_boolean()) {
-                    is_spawn = it.value()["is_spawn"].get<bool>();
-                } else if (it.value()["is_spawn"].is_number_integer()) {
-                    is_spawn = it.value()["is_spawn"].get<int>() != 0;
-                }
-            }
-            if (is_spawn) {
-                return it.key();
-            }
-        }
+    if (!map_manifest.contains("map_layers") || !map_manifest["map_layers"].is_array()) {
+        map_manifest["map_layers"] = nlohmann::json::array();
+        changed = true;
+    }
+    nlohmann::json& layers = map_manifest["map_layers"];
+    if (layers.empty()) {
+        layers.push_back(nlohmann::json::object());
+        changed = true;
     }
 
-    if (rooms_data.contains("spawn")) {
-        if (!rooms_data["spawn"].is_object()) {
-            rooms_data["spawn"] = make_default_spawn_room("spawn");
+    for (std::size_t i = 0; i < layers.size(); ++i) {
+        if (!layers[i].is_object()) {
+            layers[i] = nlohmann::json::object();
             changed = true;
         }
-        return "spawn";
+        layers[i]["level"] = static_cast<int>(i);
+        if (!layers[i].contains("name") || !layers[i]["name"].is_string()) {
+            layers[i]["name"] = std::string("layer_") + std::to_string(i);
+            changed = true;
+        }
+        if (!layers[i].contains("rooms") || !layers[i]["rooms"].is_array()) {
+            layers[i]["rooms"] = nlohmann::json::array();
+            changed = true;
+        }
     }
 
-    rooms_data["spawn"] = make_default_spawn_room("spawn");
-    changed = true;
-    return "spawn";
-}
-
-bool ensure_map_layers(nlohmann::json& map_manifest, const std::string& map_id) {
-    nlohmann::json& rooms_data = map_manifest["rooms_data"];
-    bool changed = false;
-    const std::string spawn_name = infer_spawn_room_name(rooms_data, changed);
-
-    auto layers_it = map_manifest.find("map_layers");
-    const bool missing_or_empty =
-        (layers_it == map_manifest.end()) ||
-        !layers_it->is_array() ||
-        layers_it->empty();
-
-    if (!missing_or_empty) {
-        return changed;
+    nlohmann::json& layer0 = layers[0];
+    nlohmann::json& layer0_rooms = layer0["rooms"];
+    for (auto& candidate : layer0_rooms) {
+        normalize_layer_candidate_entry(candidate, changed);
     }
 
-    nlohmann::json inferred_layer = nlohmann::json::object();
-    inferred_layer["level"] = 0;
-    inferred_layer["max_rooms"] = 1;
-    inferred_layer["rooms"] = nlohmann::json::array({
-        nlohmann::json::object({
-            {"name", spawn_name.empty() ? std::string("spawn") : spawn_name},
-            {"max_instances", 1}
-        })
-    });
-    map_manifest["map_layers"] = nlohmann::json::array({std::move(inferred_layer)});
-    changed = true;
+    bool valid_layer0 = !layer0_rooms.empty() &&
+                        layer0_rooms[0].is_object() &&
+                        layer0_rooms[0].value("source_type", std::string()) == "room_name" &&
+                        layer0_rooms[0].value("value", std::string()).size() > 0;
+    if (!valid_layer0) {
+        nlohmann::json spawn_candidate = nlohmann::json::object({
+            {"source_type", "room_name"},
+            {"value", std::string("Spawn")},
+            {"name", std::string("Spawn")},
+            {"min_instances", 1},
+            {"max_instances", 1},
+            {"required_children", nlohmann::json::array()}
+        });
+        layer0_rooms = nlohmann::json::array({std::move(spawn_candidate)});
+        changed = true;
+    }
+    if (layer0_rooms.size() > 1) {
+        layer0_rooms.erase(layer0_rooms.begin() + 1, layer0_rooms.end());
+        changed = true;
+    }
+
+    nlohmann::json& spawn_candidate = layer0_rooms[0];
+    normalize_layer_candidate_entry(spawn_candidate, changed);
+    spawn_candidate["source_type"] = "room_name";
+    spawn_candidate["min_instances"] = 1;
+    spawn_candidate["max_instances"] = 1;
+    layer0["min_rooms"] = 1;
+    layer0["max_rooms"] = 1;
+
+    std::string spawn_room_name = spawn_candidate.value("value", std::string("Spawn"));
+    if (spawn_room_name.empty()) {
+        spawn_room_name = "Spawn";
+        spawn_candidate["value"] = spawn_room_name;
+        spawn_candidate["name"] = spawn_room_name;
+        changed = true;
+    }
+
+    if (!rooms_data.contains(spawn_room_name) || !rooms_data[spawn_room_name].is_object()) {
+        rooms_data[spawn_room_name] = make_default_spawn_room(spawn_room_name);
+        changed = true;
+    }
+    rooms_data[spawn_room_name]["name"] = spawn_room_name;
+    if (!rooms_data[spawn_room_name].contains("room_tags") || !rooms_data[spawn_room_name]["room_tags"].is_array()) {
+        rooms_data[spawn_room_name]["room_tags"] = nlohmann::json::array();
+        changed = true;
+    }
+    rooms_data[spawn_room_name].erase("is_spawn");
+
+    for (auto& room_entry : rooms_data.items()) {
+        if (room_entry.value().is_object()) {
+            if (room_entry.value().erase("is_spawn") > 0) {
+                changed = true;
+            }
+            if (!room_entry.value().contains("room_tags") || !room_entry.value()["room_tags"].is_array()) {
+                room_entry.value()["room_tags"] = nlohmann::json::array();
+                changed = true;
+            }
+        }
+    }
+
+    if (!map_id.empty()) {
+        layer0["name"] = layer0.value("name", std::string("layer_0"));
+    }
 
     return changed;
 }
@@ -719,9 +807,12 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     layer["min_rooms"] = 1;
     layer["max_rooms"] = 1;
     nlohmann::json spawn_spec = nlohmann::json::object();
-    spawn_spec["name"] = "spawn";
+    spawn_spec["source_type"] = "room_name";
+    spawn_spec["value"] = "Spawn";
+    spawn_spec["name"] = "Spawn";
     spawn_spec["min_instances"] = 1;
     spawn_spec["max_instances"] = 1;
+    spawn_spec["required_children"] = nlohmann::json::array();
     layer["rooms"] = nlohmann::json::array({spawn_spec});
     map_info["map_layers"] = nlohmann::json::array({layer});
 
@@ -737,7 +828,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"edge_smoothness", 2},
             {"geometry", "Line"},
             {"inherits_map_assets", false},
-            {"is_spawn", false},
             {"is_boss", false},
             {"min_width", 400},
             {"max_width", 800},
@@ -750,7 +840,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     map_info["map_layers_settings"] = nlohmann::json::object({{"min_edge_distance", 200}});
 
     nlohmann::json spawn_room = nlohmann::json::object();
-    spawn_room["name"] = "spawn";
+    spawn_room["name"] = "Spawn";
     spawn_room["geometry"] = "Circle";
     spawn_room["min_width"] = diameter;
     spawn_room["max_width"] = diameter;
@@ -758,7 +848,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_room["max_height"] = diameter;
     spawn_room["edge_smoothness"] = 2;
     spawn_room["curvyness"] = 2;
-    spawn_room["is_spawn"] = true;
     spawn_room["is_boss"] = false;
     spawn_room["inherits_map_assets"] = true;
     spawn_room["trail_connection_sector"] = nlohmann::json::object({
@@ -783,9 +872,10 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_room["spawn_groups"] = nlohmann::json::array({
         make_room_spawn_group(map_name, "Vibble", "Vibble")
     });
+    spawn_room["room_tags"] = nlohmann::json::array();
 
     map_info["rooms_data"] = nlohmann::json::object();
-    map_info["rooms_data"]["spawn"] = std::move(spawn_room);
+    map_info["rooms_data"]["Spawn"] = std::move(spawn_room);
     // Camera runtime defaults:
     // - transition_damping: dt-stable response speed (1/seconds)
     // - max_camera_velocity: world-pixel velocity cap to prevent jitter/overshoot
@@ -864,7 +954,7 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         changed = true;
     }
 
-    if (ensure_map_layers(map_manifest, map_id)) {
+    if (ensure_spawn_room_via_layer_zero(map_manifest, map_id)) {
         changed = true;
     }
     if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {

@@ -22,6 +22,7 @@
 #include "utils/utils/string_utils.hpp"
 
 #include "animation/controllers/custom_controllers/fly_controller.hpp"
+#include "animation/controllers/custom_controllers/chest_opening_controller.hpp"
 // <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>
 
 namespace {
@@ -130,6 +131,9 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
 
         try {
                 return it->second(self);
+
+                if (key == "chest_opening_controller")
+                        return std::make_unique<chest_opening_controller>(self);
         } catch (const std::exception& ex) {
                 const std::string asset_name = (self->info && !self->info->name.empty()) ? self->info->name
                                                                                           : "<unknown asset>";

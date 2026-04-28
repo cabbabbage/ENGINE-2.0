@@ -12950,7 +12950,8 @@
                 "name": "flame_fps_12"
               }
             ]
-          }
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -13158,6 +13159,7 @@
       "asset_directory": "resources/assets/candle_fps_12",
       "asset_name": "candle_fps_12",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -13169,12 +13171,17 @@
       },
       "start": "default",
       "tags": [
+        "can_carry",
         "candle",
         "light",
         "small_surface_top"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "car": {
       "anchor_point_child_candidates": [
@@ -14326,7 +14333,11 @@
         "scale_percentage": 17.0
       },
       "start": "interact",
-      "tags": [],
+      "tags": [
+        "chest",
+        "interactable",
+        "loot"
+      ],
       "tillable": false,
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
@@ -25589,6 +25600,35 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-78ea4ff838db"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "candle_fps_12"
+                }
+              ],
+              "display_name": "candle_fps_12",
+              "dx": -25,
+              "dz": 227,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 2984,
+              "origional_width": 3320,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-27f61b03ca34"
             }
           ],
           "trail_connection_sector": {

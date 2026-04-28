@@ -38,7 +38,8 @@ TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
         }},
         {"dev_map_settings", {
             {"show_grid", true},
-            {"custom_dev_key", "value"}
+            {"custom_dev_key", "value"},
+            {"map_color", nlohmann::json::array({17, 34, 51, 255})}
         }},
         {"future_new_section", {
             {"x", 99}
@@ -56,6 +57,22 @@ TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
     CHECK(data.extras.contains("future_new_section"));
     CHECK(data.extras.contains("another_unknown"));
     CHECK_FALSE(data.extras.contains("map_assets_data"));
+}
+
+TEST_CASE("MapData round-trip preserves dev_map_settings.map_color") {
+    nlohmann::json entry = {
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"dev_map_settings", {
+            {"map_color", nlohmann::json::array({12, 200, 44, 128})}
+        }}
+    };
+
+    manifest::MapData data = manifest::MapData::from_manifest_entry("map_color_case", entry);
+    nlohmann::json out = data.to_manifest_entry();
+
+    REQUIRE(out.contains("dev_map_settings"));
+    REQUIRE(out["dev_map_settings"].contains("map_color"));
+    CHECK(out["dev_map_settings"]["map_color"] == nlohmann::json::array({12, 200, 44, 128}));
 }
 
 TEST_CASE("MapData writes known section schema keys when entry is missing") {

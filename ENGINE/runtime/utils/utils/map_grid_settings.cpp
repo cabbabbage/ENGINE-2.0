@@ -29,7 +29,7 @@ int power_of_three(int exponent) {
 }
 
 MapGridSettings MapGridSettings::defaults() {
-    return MapGridSettings{0, 0};
+    return MapGridSettings{8, 0};
 }
 
 MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {

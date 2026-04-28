@@ -4,6 +4,7 @@
 
 #include "core/manifest/map_data.hpp"
 #include "core/manifest/map_manifest_normalizer.hpp"
+#include "utils/map_grid_settings.hpp"
 
 TEST_CASE("normalize_map_manifest keeps default map manifest stable") {
     nlohmann::json map_manifest = manifest::build_default_map_manifest("base_case");
@@ -17,6 +18,7 @@ TEST_CASE("normalize_map_manifest keeps default map manifest stable") {
     CHECK(first.map_manifest.is_object());
     CHECK(first.map_manifest.contains("map_layers"));
     CHECK(first.map_manifest.contains("map_grid_settings"));
+    CHECK(first.map_manifest["map_grid_settings"].value("grid_resolution", -1) == 8);
 
     const manifest::MapManifestNormalizationResult second =
         manifest::normalize_map_manifest(first.map_manifest, "base_case", root);
@@ -90,6 +92,38 @@ TEST_CASE("normalize_map_manifest self-heals malformed room config entries and m
     CHECK(broken.value("max_width", 0) >= broken.value("min_width", 0));
     CHECK(broken.contains("spawn_groups"));
     CHECK(broken["spawn_groups"].is_array());
+}
+
+TEST_CASE("MapGridSettings defaults missing grid_resolution to 8") {
+    nlohmann::json section = nlohmann::json::object();
+    MapGridSettings settings = MapGridSettings::from_json(&section);
+    CHECK(settings.grid_resolution == 8);
+}
+
+TEST_CASE("normalize_map_manifest inserts default grid_resolution when missing") {
+    nlohmann::json map_manifest = manifest::build_default_map_manifest("missing_grid_case");
+    map_manifest["schema_version"] = manifest::kMapSchemaVersion;
+    map_manifest["map_grid_settings"] = nlohmann::json::object();
+
+    const std::filesystem::path root = std::filesystem::path("C:/tmp/manifest_normalizer_test");
+    const manifest::MapManifestNormalizationResult normalized =
+        manifest::normalize_map_manifest(map_manifest, "missing_grid_case", root);
+
+    REQUIRE(normalized.map_manifest.contains("map_grid_settings"));
+    CHECK(normalized.map_manifest["map_grid_settings"].value("grid_resolution", -1) == 8);
+}
+
+TEST_CASE("normalize_map_manifest preserves explicit grid_resolution") {
+    nlohmann::json map_manifest = manifest::build_default_map_manifest("explicit_grid_case");
+    map_manifest["schema_version"] = manifest::kMapSchemaVersion;
+    map_manifest["map_grid_settings"]["grid_resolution"] = 3;
+
+    const std::filesystem::path root = std::filesystem::path("C:/tmp/manifest_normalizer_test");
+    const manifest::MapManifestNormalizationResult normalized =
+        manifest::normalize_map_manifest(map_manifest, "explicit_grid_case", root);
+
+    REQUIRE(normalized.map_manifest.contains("map_grid_settings"));
+    CHECK(normalized.map_manifest["map_grid_settings"].value("grid_resolution", -1) == 3);
 }
 
 TEST_CASE("normalize_map_manifest normalizes trail connection sector defaults and clamps") {

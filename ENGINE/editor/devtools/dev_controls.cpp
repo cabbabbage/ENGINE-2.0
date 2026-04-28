@@ -199,6 +199,8 @@ constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
 constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
+constexpr const char* kDevMapSettingsKey = "dev_map_settings";
+constexpr const char* kMapColorKey = "map_color";
 
 void persist_dev_bool(const char* key, bool value) {
     devmode::ui_settings::save_bool(key, value);
@@ -531,6 +533,19 @@ std::string suggest_name_from_drop(const DropValidationResult& validation) {
 
 void draw_simple_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
     simple_label_cache().draw(renderer, DMStyles::Label(), text, x, y);
+}
+
+Uint8 clamp_u8_channel(int value) {
+    return static_cast<Uint8>(std::clamp(value, 0, 255));
+}
+
+SDL_Color clamp_rgba(SDL_Color color) {
+    return SDL_Color{
+        clamp_u8_channel(static_cast<int>(color.r)),
+        clamp_u8_channel(static_cast<int>(color.g)),
+        clamp_u8_channel(static_cast<int>(color.b)),
+        clamp_u8_channel(static_cast<int>(color.a)),
+    };
 }
 
 bool is_trail_room(const Room* room) {
@@ -978,6 +993,10 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             assets_->invalidate_dynamic_boundary_system();
         }
     };
+    map_grid_save_cb_ = [this]() {
+        this->mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        return true;
+    };
     apply_header_suppression();
     camera_panel_ = std::make_unique<CameraUIPanel>(assets_, 72, 72);
     if (camera_panel_) {
@@ -1017,7 +1036,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                     if (clamped == grid_overlay_resolution_r_) {
                         return;
                     }
-                    apply_int_setting(OtherSettingsAndControls::kOverlayResolutionSettingId, clamped, true);
+                    apply_overlay_grid_resolution(clamped, true, false, true);
                 }
             );
             footer->set_movement_debug_enabled(movement_debug_enabled_);
@@ -1053,12 +1072,9 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     other_settings_.set_extra_panel_renderer({});
     other_settings_.set_extra_panel_event_handler({});
     other_settings_.set_header_title(format_room_header_label(current_room_));
-    other_settings_.set_grid_resolution_range(0, vibble::grid::kMaxResolution);
-    other_settings_.set_grid_resolution_change_callback([this](int new_r) {
-        apply_grid_resolution_change(new_r);
-    });
 
     rebuild_settings_schema();
+    ensure_misc_options_widgets();
     const char* ctor_end = "[DevControls] ctor complete";
     std::cout << ctor_end << "\n";
     AssetInfo::set_manifest_store_provider([this]() -> devmode::core::ManifestStore* {
@@ -1283,20 +1299,9 @@ void DevControls::set_map_info(nlohmann::json* map_info) {
     }
     other_settings_.set_map_info(map_info_json_);
 
-    if (map_info_json_) {
-        ensure_map_grid_settings(*map_info_json_);
-        const nlohmann::json& section = (*map_info_json_)["map_grid_settings"];
-        MapGridSettings settings = MapGridSettings::from_json(&section);
-        settings.clamp();
-        grid_resolution_r_ = settings.grid_resolution;
-        other_settings_.set_grid_resolution_value(grid_resolution_r_);
-        if (!grid_overlay_resolution_user_override_) {
-            apply_overlay_grid_resolution(settings.grid_resolution, false, true, true);
-        } else {
-            apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, true, true);
-        }
-    } else {
-        apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, true, true);
+    sync_misc_options_from_map_info();
+    if (!map_info_json_) {
+        apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, false, true);
     }
     configure_header_button_sets();
 
@@ -1307,9 +1312,6 @@ void DevControls::rebuild_settings_schema() {
     using SettingSchema = OtherSettingsAndControls::SettingSchema;
     using SettingGroup = OtherSettingsAndControls::SettingGroup;
     using SettingControl = OtherSettingsAndControls::SettingControl;
-
-    const int overlay_min = 0;
-    const int overlay_max = vibble::grid::kMaxResolution;
 
     global_settings_schema_.clear();
 
@@ -1398,19 +1400,6 @@ void DevControls::rebuild_settings_schema() {
         {},
     });
 
-    global_settings_schema_.push_back(SettingSchema{
-        OtherSettingsAndControls::kOverlayResolutionSettingId,
-        "Grid Overlay (r)",
-        SettingGroup::Overlay,
-        SettingControl::Stepper,
-        overlay_min,
-        overlay_max,
-        {},
-        {},
-        [this]() { return grid_overlay_resolution_r_; },
-        [this](int new_r) { apply_overlay_grid_resolution(new_r, true, false, true); },
-    });
-
     other_settings_.set_settings_schema(global_settings_schema_);
     other_settings_.refresh_setting_values();
 }
@@ -1444,6 +1433,7 @@ void DevControls::apply_int_setting(const char* id, int value, bool sync_other_s
 }
 
 void DevControls::apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer) {
+    (void)update_stepper;
     const int clamped = vibble::grid::clamp_resolution(resolution);
     grid_overlay_resolution_r_ = clamped;
     grid_cell_size_px_ = layer_spacing(clamped);
@@ -1451,9 +1441,6 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
         grid_overlay_resolution_user_override_ = true;
         persist_dev_number(kGridOverlayResolutionKey, clamped);
         persist_dev_number(kGridCellSizePxKey, grid_cell_size_px_);
-    }
-    if (update_stepper) {
-        other_settings_.set_setting_value(OtherSettingsAndControls::kOverlayResolutionSettingId, clamped);
     }
     if (update_footer && map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
@@ -1490,27 +1477,363 @@ void DevControls::push_grid_resolution_toast(int resolution) {
 
 void DevControls::apply_grid_resolution_change(int resolution) {
     const int clamped = vibble::grid::clamp_resolution(resolution);
-    if (clamped == grid_resolution_r_) {
+    const bool changed = (clamped != grid_resolution_r_);
+    grid_resolution_r_ = clamped;
+    if (!map_info_json_) {
         return;
     }
-    grid_resolution_r_ = clamped;
+    write_map_tile_size(clamped);
+    nlohmann::json& section = (*map_info_json_)["map_grid_settings"];
+    MapGridSettings settings = MapGridSettings::from_json(&section);
+    if (assets_) {
+        assets_->apply_map_grid_settings(settings, false);
+    }
+    if (!grid_overlay_resolution_user_override_) {
+        apply_overlay_grid_resolution(clamped, false, false, true);
+    }
+    if (map_grid_save_cb_) {
+        map_grid_save_cb_();
+    } else {
+        mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    }
+    if (changed && assets_) {
+        assets_->invalidate_dynamic_boundary_system();
+    }
+}
+
+void DevControls::ensure_misc_options_widgets() {
+    if (!misc_tile_size_stepper_) {
+        misc_tile_size_stepper_ = std::make_unique<DMNumericStepper>(
+            "Tile Size", 0, vibble::grid::kMaxResolution, 8);
+        misc_tile_size_stepper_->set_on_change([this](int value) {
+            if (misc_options_panel_suppress_callbacks_) {
+                return;
+            }
+            apply_grid_resolution_change(value);
+        });
+    }
+
+    static constexpr std::array<const char*, 4> kMapColorLabels{
+        "Map Color R",
+        "Map Color G",
+        "Map Color B",
+        "Map Color A",
+    };
+
+    for (std::size_t i = 0; i < misc_map_color_steppers_.size(); ++i) {
+        if (!misc_map_color_steppers_[i]) {
+            misc_map_color_steppers_[i] =
+                std::make_unique<DMNumericStepper>(kMapColorLabels[i], 0, 255, 0);
+            misc_map_color_steppers_[i]->set_on_change([this](int) {
+                if (misc_options_panel_suppress_callbacks_) {
+                    return;
+                }
+                apply_misc_map_color_change_from_ui();
+            });
+        }
+    }
+}
+
+int DevControls::read_map_tile_size_or_default8() const {
+    if (!map_info_json_ || !map_info_json_->is_object()) {
+        return 8;
+    }
+    auto grid_it = map_info_json_->find("map_grid_settings");
+    if (grid_it == map_info_json_->end() || !grid_it->is_object()) {
+        return 8;
+    }
+    const nlohmann::json& grid = *grid_it;
+    auto resolution_it = grid.find("grid_resolution");
+    if (resolution_it == grid.end() || !resolution_it->is_number_integer()) {
+        return 8;
+    }
+    return vibble::grid::clamp_resolution(resolution_it->get<int>());
+}
+
+void DevControls::write_map_tile_size(int resolution) {
     if (!map_info_json_) {
         return;
     }
     ensure_map_grid_settings(*map_info_json_);
     nlohmann::json& section = (*map_info_json_)["map_grid_settings"];
     MapGridSettings settings = MapGridSettings::from_json(&section);
-    settings.grid_resolution = clamped;
+    settings.grid_resolution = vibble::grid::clamp_resolution(resolution);
     settings.apply_to_json(section);
+}
+
+SDL_Color DevControls::read_map_color_or_default() const {
+    SDL_Color color{0, 0, 0, 255};
+    if (!map_info_json_ || !map_info_json_->is_object()) {
+        return color;
+    }
+    auto dev_it = map_info_json_->find(kDevMapSettingsKey);
+    if (dev_it == map_info_json_->end() || !dev_it->is_object()) {
+        return color;
+    }
+    auto color_it = dev_it->find(kMapColorKey);
+    if (color_it == dev_it->end() || !color_it->is_array() || color_it->size() != 4) {
+        return color;
+    }
+
+    std::array<int, 4> channels{0, 0, 0, 255};
+    for (std::size_t i = 0; i < channels.size(); ++i) {
+        const nlohmann::json& value = (*color_it)[i];
+        if (!value.is_number()) {
+            return color;
+        }
+        channels[i] = static_cast<int>(std::lround(value.get<double>()));
+    }
+    color.r = clamp_u8_channel(channels[0]);
+    color.g = clamp_u8_channel(channels[1]);
+    color.b = clamp_u8_channel(channels[2]);
+    color.a = clamp_u8_channel(channels[3]);
+    return color;
+}
+
+void DevControls::write_map_color(SDL_Color color) {
+    if (!map_info_json_) {
+        return;
+    }
+    if (!map_info_json_->is_object()) {
+        *map_info_json_ = nlohmann::json::object();
+    }
+    nlohmann::json& dev_settings = (*map_info_json_)[kDevMapSettingsKey];
+    if (!dev_settings.is_object()) {
+        dev_settings = nlohmann::json::object();
+    }
+    const SDL_Color clamped = clamp_rgba(color);
+    dev_settings[kMapColorKey] = nlohmann::json::array({
+        static_cast<int>(clamped.r),
+        static_cast<int>(clamped.g),
+        static_cast<int>(clamped.b),
+        static_cast<int>(clamped.a),
+    });
+}
+
+void DevControls::apply_misc_map_color_change_from_ui() {
+    ensure_misc_options_widgets();
+    std::array<int, 4> channels{
+        misc_map_color_steppers_[0] ? misc_map_color_steppers_[0]->value() : 0,
+        misc_map_color_steppers_[1] ? misc_map_color_steppers_[1]->value() : 0,
+        misc_map_color_steppers_[2] ? misc_map_color_steppers_[2]->value() : 0,
+        misc_map_color_steppers_[3] ? misc_map_color_steppers_[3]->value() : 255,
+    };
+    misc_map_color_ = SDL_Color{
+        clamp_u8_channel(channels[0]),
+        clamp_u8_channel(channels[1]),
+        clamp_u8_channel(channels[2]),
+        clamp_u8_channel(channels[3]),
+    };
+    write_map_color(misc_map_color_);
+    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+}
+
+void DevControls::sync_misc_options_from_map_info() {
+    ensure_misc_options_widgets();
+    if (!map_info_json_) {
+        grid_resolution_r_ = 8;
+        misc_map_color_ = SDL_Color{0, 0, 0, 255};
+        misc_options_panel_suppress_callbacks_ = true;
+        if (misc_tile_size_stepper_) {
+            misc_tile_size_stepper_->set_value(grid_resolution_r_);
+        }
+        for (std::size_t i = 0; i < misc_map_color_steppers_.size(); ++i) {
+            if (!misc_map_color_steppers_[i]) {
+                continue;
+            }
+            const int value = (i == 0) ? misc_map_color_.r
+                : (i == 1) ? misc_map_color_.g
+                : (i == 2) ? misc_map_color_.b
+                           : misc_map_color_.a;
+            misc_map_color_steppers_[i]->set_value(value);
+        }
+        misc_options_panel_suppress_callbacks_ = false;
+        return;
+    }
+
+    const int tile_size = read_map_tile_size_or_default8();
+    write_map_tile_size(tile_size);
+    grid_resolution_r_ = tile_size;
+    if (!grid_overlay_resolution_user_override_) {
+        apply_overlay_grid_resolution(tile_size, false, false, true);
+    } else {
+        apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, false, true);
+    }
     if (assets_) {
+        MapGridSettings settings = MapGridSettings::from_json(&(*map_info_json_)["map_grid_settings"]);
         assets_->apply_map_grid_settings(settings, false);
     }
-    if (map_grid_save_cb_) {
-        map_grid_save_cb_();
+
+    misc_map_color_ = read_map_color_or_default();
+    write_map_color(misc_map_color_);
+
+    misc_options_panel_suppress_callbacks_ = true;
+    if (misc_tile_size_stepper_) {
+        misc_tile_size_stepper_->set_value(tile_size);
     }
-    if (assets_) {
-        assets_->invalidate_dynamic_boundary_system();
+    for (std::size_t i = 0; i < misc_map_color_steppers_.size(); ++i) {
+        if (!misc_map_color_steppers_[i]) {
+            continue;
+        }
+        const int value = (i == 0) ? misc_map_color_.r
+            : (i == 1) ? misc_map_color_.g
+            : (i == 2) ? misc_map_color_.b
+                       : misc_map_color_.a;
+        misc_map_color_steppers_[i]->set_value(value);
     }
+    misc_options_panel_suppress_callbacks_ = false;
+}
+
+void DevControls::layout_misc_options_panel() {
+    if (!misc_options_panel_open_) {
+        misc_options_panel_rect_ = SDL_Rect{0, 0, 0, 0};
+        return;
+    }
+    ensure_misc_options_widgets();
+
+    const int panel_w = 320;
+    const int padding = DMSpacing::panel_padding();
+    const int gap = DMSpacing::item_gap();
+    const int content_w = std::max(0, panel_w - padding * 2);
+    const int label_h = DMStyles::Label().font_size;
+    const int tile_h = misc_tile_size_stepper_ ? misc_tile_size_stepper_->preferred_height(content_w) : DMNumericStepper::height();
+    const int color_h = misc_map_color_steppers_[0] ? misc_map_color_steppers_[0]->preferred_height(content_w) : DMNumericStepper::height();
+    const int preview_h = 26;
+    const int panel_h = padding + label_h + gap + tile_h + gap + (color_h * 4) + (gap * 3) + gap + preview_h + padding;
+
+    int footer_top = screen_h_;
+    if (map_mode_ui_) {
+        if (auto* footer = map_mode_ui_->get_footer_bar()) {
+            if (footer->visible()) {
+                SDL_Rect footer_rect = footer->rect();
+                footer_top = footer_rect.y;
+            }
+        }
+    }
+
+    const int x = std::max(0, screen_w_ - panel_w - 16);
+    const int y = std::max(0, footer_top - panel_h - 10);
+    misc_options_panel_rect_ = SDL_Rect{x, y, panel_w, panel_h};
+
+    int cursor_y = y + padding + label_h + gap;
+    if (misc_tile_size_stepper_) {
+        misc_tile_size_stepper_->set_rect(SDL_Rect{x + padding, cursor_y, content_w, tile_h});
+        cursor_y += tile_h + gap;
+    }
+    for (auto& stepper : misc_map_color_steppers_) {
+        if (!stepper) {
+            continue;
+        }
+        stepper->set_rect(SDL_Rect{x + padding, cursor_y, content_w, color_h});
+        cursor_y += color_h + gap;
+    }
+}
+
+bool DevControls::handle_misc_options_panel_event(const SDL_Event& event) {
+    if (!misc_options_panel_open_) {
+        return false;
+    }
+    layout_misc_options_panel();
+
+    bool used = false;
+    if (misc_tile_size_stepper_ && misc_tile_size_stepper_->handle_event(event)) {
+        used = true;
+    }
+    for (auto& stepper : misc_map_color_steppers_) {
+        if (stepper && stepper->handle_event(event)) {
+            used = true;
+        }
+    }
+
+    if (!used && is_pointer_event(event)) {
+        const SDL_Point p = event_point(event);
+        if (SDL_PointInRect(&p, &misc_options_panel_rect_)) {
+            used = true;
+        }
+    }
+    return used;
+}
+
+void DevControls::render_misc_options_panel(SDL_Renderer* renderer) {
+    if (!renderer || !misc_options_panel_open_) {
+        return;
+    }
+    layout_misc_options_panel();
+    if (misc_options_panel_rect_.w <= 0 || misc_options_panel_rect_.h <= 0) {
+        return;
+    }
+
+    const SDL_Color panel_bg = DMStyles::PanelBG();
+    const SDL_Color panel_border = DMStyles::Border();
+    const SDL_Color panel_header = DMStyles::PanelHeader();
+    SDL_SetRenderDrawColor(renderer, panel_bg.r, panel_bg.g, panel_bg.b, panel_bg.a);
+    sdl_render::FillRect(renderer, &misc_options_panel_rect_);
+    SDL_SetRenderDrawColor(renderer, panel_border.r, panel_border.g, panel_border.b, panel_border.a);
+    sdl_render::DrawRect(renderer, &misc_options_panel_rect_);
+
+    SDL_Rect header_rect = misc_options_panel_rect_;
+    header_rect.h = DMStyles::Label().font_size + DMSpacing::panel_padding();
+    SDL_SetRenderDrawColor(renderer, panel_header.r, panel_header.g, panel_header.b, panel_header.a);
+    sdl_render::FillRect(renderer, &header_rect);
+    draw_simple_label(renderer,
+                      "Misc Options",
+                      misc_options_panel_rect_.x + DMSpacing::panel_padding(),
+                      misc_options_panel_rect_.y + (DMSpacing::panel_padding() / 2));
+
+    if (misc_tile_size_stepper_) {
+        misc_tile_size_stepper_->render(renderer);
+    }
+    for (const auto& stepper : misc_map_color_steppers_) {
+        if (stepper) {
+            stepper->render(renderer);
+        }
+    }
+
+    const int preview_w = std::max(0, misc_options_panel_rect_.w - DMSpacing::panel_padding() * 2);
+    const int preview_h = 22;
+    SDL_Rect preview_rect{
+        misc_options_panel_rect_.x + DMSpacing::panel_padding(),
+        misc_options_panel_rect_.y + misc_options_panel_rect_.h - preview_h - DMSpacing::panel_padding(),
+        preview_w,
+        preview_h,
+    };
+    SDL_SetRenderDrawColor(renderer, misc_map_color_.r, misc_map_color_.g, misc_map_color_.b, misc_map_color_.a);
+    sdl_render::FillRect(renderer, &preview_rect);
+    SDL_SetRenderDrawColor(renderer, panel_border.r, panel_border.g, panel_border.b, panel_border.a);
+    sdl_render::DrawRect(renderer, &preview_rect);
+}
+
+void DevControls::open_misc_options_panel() {
+    if (misc_options_panel_open_) {
+        return;
+    }
+    ensure_misc_options_widgets();
+    sync_misc_options_from_map_info();
+    misc_options_panel_open_ = true;
+    mark_layout_dirty();
+    sync_header_button_states();
+}
+
+void DevControls::close_misc_options_panel() {
+    if (!misc_options_panel_open_) {
+        return;
+    }
+    misc_options_panel_open_ = false;
+    misc_options_panel_rect_ = SDL_Rect{0, 0, 0, 0};
+    mark_layout_dirty();
+    sync_header_button_states();
+}
+
+void DevControls::toggle_misc_options_panel() {
+    if (misc_options_panel_open_) {
+        close_misc_options_panel();
+    } else {
+        open_misc_options_panel();
+    }
+}
+
+bool DevControls::is_misc_options_panel_open() const {
+    return misc_options_panel_open_;
 }
 
 void DevControls::set_player(Asset* player) {
@@ -1674,6 +1997,7 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
         }
     }
     other_settings_.set_map_info(map_info_json_);
+    sync_misc_options_from_map_info();
     configure_header_button_sets();
 
     mark_layout_dirty();
@@ -1694,6 +2018,12 @@ bool DevControls::is_pointer_over_dev_ui(int x, int y) const {
     }
     if (regenerate_popup_ && regenerate_popup_->visible() && regenerate_popup_->is_point_inside(x, y)) {
         return true;
+    }
+    if (misc_options_panel_open_) {
+        SDL_Point p{x, y};
+        if (SDL_PointInRect(&p, &misc_options_panel_rect_)) {
+            return true;
+        }
     }
     if (!is_modal_blocking_panels() && enabled_ && other_settings_.contains_point(x, y)) {
         return true;
@@ -1954,6 +2284,7 @@ void DevControls::update(const Input& input) {
         depth_guide_blue_wheel_last_change_ms_ = 0;
     }
     if (map_mode_ui_ && input.wasScancodePressed(SDL_SCANCODE_F8)) {
+        close_misc_options_panel();
         const bool was_visible = map_mode_ui_->is_layers_panel_visible();
         map_mode_ui_->toggle_layers_panel();
         const bool now_visible = map_mode_ui_->is_layers_panel_visible();
@@ -2017,10 +2348,13 @@ void DevControls::update(const Input& input) {
     }
 
     ensure_layout_cache();
+    layout_misc_options_panel();
 
     if (room_editor_ && room_editor_->is_enabled()) {
         SDL_Point pointer{input.getX(), input.getY()};
         if (other_settings_.contains_point(pointer.x, pointer.y)) {
+            room_editor_->clear_highlighted_assets();
+        } else if (misc_options_panel_open_ && SDL_PointInRect(&pointer, &misc_options_panel_rect_)) {
             room_editor_->clear_highlighted_assets();
         } else if (last_header_rect_.w > 0 && last_header_rect_.h > 0 && SDL_PointInRect(&pointer, &last_header_rect_)) {
             room_editor_->clear_highlighted_assets();
@@ -3113,6 +3447,13 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
+    if (handle_misc_options_panel_event(event)) {
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
     other_settings_.ensure_layout();
     SDL_Rect header_rect{0, 0, 0, 0};
     SDL_Rect layout_rect = other_settings_.layout_bounds();
@@ -3794,6 +4135,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     }
 
     if (renderer && map_mode_ui_) map_mode_ui_->render(renderer);
+    render_misc_options_panel(renderer);
     if (renderer && boundary_assets_modal_ && boundary_assets_modal_->visible()) {
         boundary_assets_modal_->render(renderer);
     }
@@ -4100,6 +4442,9 @@ void DevControls::configure_header_button_sets() {
             if (room_editor_) {
                 room_editor_->close_room_config();
             }
+            if (active) {
+                close_misc_options_panel();
+            }
             if (!camera_panel_) {
                 sync_header_button_states();
                 return;
@@ -4126,6 +4471,9 @@ void DevControls::configure_header_button_sets() {
         layers_btn.on_toggle = [this](bool active) {
             if (room_editor_) {
                 room_editor_->close_room_config();
+            }
+            if (active) {
+                close_misc_options_panel();
             }
             if (!map_mode_ui_) {
                 sync_header_button_states();
@@ -4166,6 +4514,7 @@ void DevControls::configure_header_button_sets() {
         boundary_btn.active_style_override = &DMStyles::AccentButton();
         boundary_btn.on_toggle = [this](bool active) {
             if (active) {
+                close_misc_options_panel();
                 toggle_boundary_assets_modal();
             } else {
                 if (room_editor_) room_editor_->clear_selection();
@@ -4199,10 +4548,30 @@ void DevControls::configure_header_button_sets() {
     room_config_btn.active_style_override = &DMStyles::AccentButton();
     room_config_btn.on_toggle = [this](bool active) {
         if (!room_editor_) return;
+        if (active) {
+            close_misc_options_panel();
+        }
         room_editor_->set_room_config_visible(active);
         sync_header_button_states();
 };
     room_buttons.push_back(std::move(room_config_btn));
+
+    MapModeUI::HeaderButtonConfig misc_options_btn;
+    misc_options_btn.id = "misc_options";
+    misc_options_btn.label = "Misc Options";
+    misc_options_btn.active = is_misc_options_panel_open();
+    misc_options_btn.group = FooterButtonGroup::Panels;
+    misc_options_btn.style_override = &DMStyles::ListButton();
+    misc_options_btn.active_style_override = &DMStyles::AccentButton();
+    misc_options_btn.on_toggle = [this](bool active) {
+        if (active) {
+            open_misc_options_panel();
+        } else {
+            close_misc_options_panel();
+        }
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(misc_options_btn));
 
     MapModeUI::HeaderButtonConfig library_btn;
     library_btn.id = "asset_library";
@@ -4215,6 +4584,7 @@ void DevControls::configure_header_button_sets() {
         if (!room_editor_) return;
         room_editor_->close_room_config();
         if (active) {
+            close_misc_options_panel();
             room_editor_->open_asset_library();
         } else {
             room_editor_->close_asset_library();
@@ -4241,6 +4611,7 @@ void DevControls::configure_header_button_sets() {
             sync_header_button_states();
             return;
         }
+        close_misc_options_panel();
         open_regenerate_room_popup();
         sync_header_button_states();
 };
@@ -4273,6 +4644,7 @@ void DevControls::sync_header_button_states() {
     }
     const bool room_config_open = room_editor_ && room_editor_->is_room_config_open();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "room_config", room_config_open);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "misc_options", is_misc_options_panel_open());
     const bool library_open = room_editor_ && room_editor_->is_asset_library_open();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "asset_library", library_open);
     const bool camera_open = camera_panel_ && camera_panel_->is_visible();
@@ -4298,6 +4670,7 @@ void DevControls::sync_header_button_states() {
             (trail_suite_ && trail_suite_->is_open()) ||
             boundary_open ||
             camera_open ||
+            misc_options_panel_open_ ||
             map_ui_panels_open;
         const bool nav_buttons_enabled =
             enabled_ &&
@@ -4331,6 +4704,7 @@ void DevControls::close_all_floating_panels() {
     if (trail_suite_) {
         trail_suite_->close();
     }
+    close_misc_options_panel();
     pending_trail_template_.reset();
     if (regenerate_popup_) {
         regenerate_popup_->close();

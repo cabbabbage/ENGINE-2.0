@@ -810,7 +810,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"player_soft_leash_px", 220.0},
         {"player_hard_leash_px", 360.0}
     });
-    map_info["map_grid_settings"] = nlohmann::json::object({{"grid_resolution", 6}});
+    map_info["map_grid_settings"] = nlohmann::json::object({{"grid_resolution", 8}});
     map_info["audio"] = nlohmann::json::object({
         {"music", nlohmann::json::object({
             {"content_root", (std::filesystem::path("content") / map_name / "music").generic_string()},

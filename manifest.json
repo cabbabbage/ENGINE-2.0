@@ -23675,9 +23675,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            132,
             242,
             36,
+            115,
             255
           ],
           "edge_smoothness": 2,
@@ -24021,7 +24021,11 @@
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-14355a24bb8c"
             }
-          ]
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 0.0,
+            "width_percent": 100
+          }
         },
         "spawn": {
           "areas": [
@@ -24078,9 +24082,9 @@
           "camera_zoom_percent": 53,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -24424,7 +24428,11 @@
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-d0f7ae175255"
             }
-          ]
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 0.0,
+            "width_percent": 100
+          }
         }
       },
       "schema_version": 1,

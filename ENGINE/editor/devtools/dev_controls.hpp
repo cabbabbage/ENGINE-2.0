@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <cstdint>
+#include <array>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -41,6 +42,7 @@ class PreviewProvider;
 
 class DMButton;
 class DMTextBox;
+class DMNumericStepper;
 
 class DevControls {
 public:
@@ -233,6 +235,10 @@ public:
     void open_boundary_assets_modal();
     void configure_header_button_sets();
     void sync_header_button_states();
+    void open_misc_options_panel();
+    void close_misc_options_panel();
+    void toggle_misc_options_panel();
+    bool is_misc_options_panel_open() const;
     Room* find_spawn_room() const;
     Room* choose_room(Room* preferred) const;
     bool is_pointer_over_dev_ui(int x, int y) const;
@@ -261,6 +267,16 @@ public:
     void push_grid_resolution_toast(int resolution);
     void render_grid_resolution_toast(SDL_Renderer* renderer);
     void render_room_geometry_overlay(SDL_Renderer* renderer);
+    void ensure_misc_options_widgets();
+    void sync_misc_options_from_map_info();
+    void layout_misc_options_panel();
+    bool handle_misc_options_panel_event(const SDL_Event& event);
+    void render_misc_options_panel(SDL_Renderer* renderer);
+    int read_map_tile_size_or_default8() const;
+    void write_map_tile_size(int resolution);
+    SDL_Color read_map_color_or_default() const;
+    void write_map_color(SDL_Color color);
+    void apply_misc_map_color_change_from_ui();
     void restore_filter_hidden_assets() const;
     void mark_layout_dirty();
     void rebuild_layout_state();
@@ -401,6 +417,12 @@ private:
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
     bool anchor_point_debug_enabled_ = false;
+    bool misc_options_panel_open_ = false;
+    bool misc_options_panel_suppress_callbacks_ = false;
+    SDL_Rect misc_options_panel_rect_{0, 0, 0, 0};
+    std::unique_ptr<DMNumericStepper> misc_tile_size_stepper_;
+    std::array<std::unique_ptr<DMNumericStepper>, 4> misc_map_color_steppers_{};
+    SDL_Color misc_map_color_{0, 0, 0, 255};
 
     std::unique_ptr<class FrameEditorSession> frame_editor_session_;
     bool frame_editor_prev_grid_overlay_ = false;

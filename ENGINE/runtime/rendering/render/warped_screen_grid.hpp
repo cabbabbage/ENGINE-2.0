@@ -367,6 +367,7 @@ private:
     std::vector<world::GridPoint*> warped_points_;
     std::vector<VisibleTraversalEntry> visible_traversal_entries_;
     std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
+    std::unordered_map<const Asset*, std::uint8_t> visibility_reason_flags_;
     std::uint64_t frame_counter_ = 0;
     mutable std::uint64_t camera_state_version_ = 0;
     std::uint64_t last_projection_cache_invalidation_version_ = 0;

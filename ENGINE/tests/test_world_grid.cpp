@@ -537,6 +537,73 @@ TEST_CASE("WarpedScreenGrid min on-screen culling uses light radius when enabled
     CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
 }
 
+TEST_CASE("WarpedScreenGrid includes large sprite when center is off-screen but projected extent overlaps") {
+    world::WorldGrid grid;
+    Asset* large_asset = grid.create_asset_at_point(make_world_grid_test_asset(-700, 80));
+    REQUIRE(large_asset != nullptr);
+    large_asset->info->original_canvas_width = 1600;
+    large_asset->info->original_canvas_height = 600;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, large_asset));
+}
+
+TEST_CASE("WarpedScreenGrid includes tiled asset when owner center is off-screen but tile coverage overlaps") {
+    world::WorldGrid grid;
+    Asset* tiled_asset = grid.create_asset_at_point(make_world_grid_test_asset(-2200, 80));
+    REQUIRE(tiled_asset != nullptr);
+
+    Asset::TilingInfo tiling{};
+    tiling.enabled = true;
+    tiling.grid_origin = SDL_Point{-256, 0};
+    tiling.tile_size = SDL_Point{64, 64};
+    tiling.coverage = SDL_Rect{-128, 40, 384, 192};
+    tiled_asset->set_tiling_info(tiling);
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, tiled_asset));
+}
+
+TEST_CASE("WarpedScreenGrid includes light-only overlap when geometry is off-screen") {
+    world::WorldGrid grid;
+    Asset* light_asset = grid.create_asset_at_point(make_world_grid_test_asset(-1400, 80));
+    REQUIRE(light_asset != nullptr);
+    light_asset->info->original_canvas_width = 1;
+    light_asset->info->original_canvas_height = 1;
+    std::unique_ptr<AnimationFrame> light_frame = make_light_anchor_frame(1800.0f, true, 1.0f);
+    light_asset->current_frame = light_frame.get();
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, light_asset));
+}
+
+TEST_CASE("WarpedScreenGrid culls fully off-screen asset with no geometry or light overlap") {
+    world::WorldGrid grid;
+    Asset* culled_asset = grid.create_asset_at_point(make_world_grid_test_asset(-2400, 80));
+    REQUIRE(culled_asset != nullptr);
+    culled_asset->info->original_canvas_width = 32;
+    culled_asset->info->original_canvas_height = 32;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK_FALSE(traversal_contains_asset(camera_grid, culled_asset));
+}
+
+TEST_CASE("WarpedScreenGrid conservatively includes asset when projection is indeterminate") {
+    world::WorldGrid grid;
+    Asset* uncertain_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, -40));
+    REQUIRE(uncertain_asset != nullptr);
+    uncertain_asset->info->original_canvas_width = 64;
+    uncertain_asset->info->original_canvas_height = 64;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+    CHECK(traversal_contains_asset(camera_grid, uncertain_asset));
+}
+
 TEST_CASE("WarpedScreenGrid min on-screen culling ignores light enabled and uses hidden only") {
     world::WorldGrid grid;
     Asset* tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));

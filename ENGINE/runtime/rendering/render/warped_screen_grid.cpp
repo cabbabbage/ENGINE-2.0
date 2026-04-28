@@ -1674,6 +1674,7 @@ void WarpedScreenGrid::clear_grid_state() {
     warped_points_.clear();
     visible_traversal_entries_.clear();
     asset_to_point_.clear();
+    visibility_reason_flags_.clear();
     cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
     bounds_ = GridBounds{};
 }
@@ -1822,57 +1823,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         return true;
     };
 
-    struct Bounds2D {
-        double left = 0.0;
-        double right = 0.0;
-        double top = 0.0;
-        double bottom = 0.0;
-    };
-
-    auto compute_bounds = [&](Asset* asset, const world::GridPoint* gp) -> std::optional<Bounds2D> {
-        if (!asset || !asset->info) {
-            return std::nullopt;
-        }
-        (void)gp;
-        if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
-            return Bounds2D{
-                static_cast<double>(tiling->coverage.x),
-                static_cast<double>(tiling->coverage.x + tiling->coverage.w),
-                static_cast<double>(tiling->coverage.y),
-                static_cast<double>(tiling->coverage.y + tiling->coverage.h)
-            };
-        }
-
-        float authored_scale = 1.0f;
-        if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
-            authored_scale = asset->info->scale_factor;
-        }
-        constexpr float kCullBoundsSafetyInflation = 1.15f;
-        authored_scale *= kCullBoundsSafetyInflation;
-
-        const float fw = static_cast<float>(std::max(1, asset->info->original_canvas_width));
-        const float fh = static_cast<float>(std::max(1, asset->info->original_canvas_height));
-        const float width = fw * authored_scale;
-        const float height = fh * authored_scale;
-        const float half_w = width * 0.5f;
-
-        float center_x = asset->smoothed_translation_x();
-        float bottom = asset->smoothed_translation_y();
-        if (!std::isfinite(center_x)) {
-            center_x = static_cast<float>(asset->world_x());
-        }
-        if (!std::isfinite(bottom)) {
-            bottom = static_cast<float>(asset->world_y());
-        }
-
-        return Bounds2D{
-            static_cast<double>(center_x - half_w),
-            static_cast<double>(center_x + half_w),
-            static_cast<double>(bottom - height),
-            static_cast<double>(bottom)
-        };
-    };
-
     struct ProjectedAssetBounds {
         float min_x = 0.0f;
         float max_x = 0.0f;
@@ -1880,26 +1830,45 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         float max_y = 0.0f;
         float largest_dim_px = 0.0f;
     };
+    struct AssetVisibilityResult {
+        bool visible = false;
+        bool geometry_overlap = false;
+        bool tile_overlap = false;
+        bool light_overlap = false;
+        bool conservative_include = false;
+        std::optional<ProjectedAssetBounds> projected_bounds{};
+        float max_light_diameter_px = 0.0f;
+        std::uint8_t reason_flags = 0;
+    };
+    constexpr std::uint8_t kVisibilityReasonSprite = 0x1;
+    constexpr std::uint8_t kVisibilityReasonTile = 0x2;
+    constexpr std::uint8_t kVisibilityReasonLight = 0x4;
+    constexpr std::uint8_t kVisibilityReasonConservative = 0x8;
 
-    auto project_asset_screen_bounds = [&](Asset* asset,
-                                           const world::GridPoint* gp,
-                                           double base_world_z) -> std::optional<ProjectedAssetBounds> {
-        if (!asset) {
-            return std::nullopt;
+    auto evaluate_asset_visibility = [&](Asset* asset,
+                                         const world::GridPoint* gp,
+                                         double base_world_z) -> AssetVisibilityResult {
+        AssetVisibilityResult result{};
+        if (!asset || !asset->info) {
+            return result;
         }
-        std::optional<Bounds2D> world_bounds_2d = compute_bounds(asset, gp);
-        if (!world_bounds_2d.has_value()) {
-            return std::nullopt;
-        }
-        const Bounds2D& b = *world_bounds_2d;
-        const double world_height = std::max(1.0, b.bottom - b.top);
+
+        bool had_any_projection_sample = false;
+        bool had_any_projection_success = false;
+        auto try_project = [&](double world_x, double world_y, double world_z, SDL_FPoint& out) -> bool {
+            had_any_projection_sample = true;
+            if (!project_screen_point(world_x, world_y, world_z, out)) {
+                return false;
+            }
+            had_any_projection_success = true;
+            return true;
+        };
 
         bool have_projected_bounds = false;
         float min_x = 0.0f;
         float max_x = 0.0f;
         float min_y = 0.0f;
         float max_y = 0.0f;
-
         auto expand_bounds = [&](const SDL_FPoint& pt) {
             if (!have_projected_bounds) {
                 min_x = max_x = pt.x;
@@ -1913,148 +1882,149 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             max_y = std::max(max_y, pt.y);
         };
 
-        auto project_with_base = [&](double world_x, double world_y, double world_z_offset, SDL_FPoint& out) -> bool {
-            return project_screen_point(world_x, world_y, base_world_z + world_z_offset, out);
-        };
-
-        SDL_FPoint corner{};
-        if (project_with_base(b.left, b.bottom, 0.0, corner)) {
-            expand_bounds(corner);
-        }
-        if (project_with_base(b.right, b.bottom, 0.0, corner)) {
-            expand_bounds(corner);
-        }
-        if (project_with_base(b.left, b.bottom, world_height, corner)) {
-            expand_bounds(corner);
-        }
-        if (project_with_base(b.right, b.bottom, world_height, corner)) {
-            expand_bounds(corner);
-        }
-        if (!have_projected_bounds) {
-            return std::nullopt;
-        }
-
-        const float width_px = max_x - min_x;
-        const float height_px = max_y - min_y;
-        if (!std::isfinite(width_px) || !std::isfinite(height_px) ||
-            width_px <= 0.0f || height_px <= 0.0f) {
-            return std::nullopt;
-        }
-
-        const float largest_dim = std::max(width_px, height_px);
-        if (!std::isfinite(largest_dim)) {
-            return std::nullopt;
-        }
-
-        return ProjectedAssetBounds{
-            min_x,
-            max_x,
-            min_y,
-            max_y,
-            largest_dim
-        };
-    };
-
-    auto asset_visible_on_screen = [&](Asset* asset,
-                                       const world::GridPoint* gp,
-                                       double base_world_z,
-                                       std::optional<ProjectedAssetBounds>& projected_bounds_out) -> bool {
-        projected_bounds_out = project_asset_screen_bounds(asset, gp, base_world_z);
-        if (projected_bounds_out.has_value()) {
-            const ProjectedAssetBounds& projected = *projected_bounds_out;
-            return rect_intersects_screen_bounds(cull_bounds,
-                                                 projected.min_x,
-                                                 projected.min_y,
-                                                 projected.max_x,
-                                                 projected.max_y);
-        }
-        if (!asset || !asset->info) {
-            return false;
-        }
-        float center_x = asset->smoothed_translation_x();
-        float center_y = asset->smoothed_translation_y();
-        if (!std::isfinite(center_x)) {
-            center_x = static_cast<float>(asset->world_x());
-        }
-        if (!std::isfinite(center_y)) {
-            center_y = static_cast<float>(asset->world_y());
-        }
-        SDL_FPoint center_screen{};
-        if (!project_screen_point(center_x, center_y, base_world_z, center_screen)) {
-            return false;
-        }
-        return point_inside_screen_bounds(cull_bounds, center_screen);
-    };
-
-    auto max_light_projected_diameter_px = [&](Asset* asset) -> float {
-        if (!settings_.min_visible_uses_light_radius || !asset || !asset->current_frame) {
-            return 0.0f;
-        }
-
-        float max_diameter = 0.0f;
-        for (const DisplacedAssetAnchorPoint& frame_anchor : asset->current_frame->anchor_points) {
-            if (!frame_anchor.is_valid() || !frame_anchor.has_light_data || frame_anchor.hidden) {
-                continue;
+        if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
+            const double left = static_cast<double>(tiling->coverage.x);
+            const double right = static_cast<double>(tiling->coverage.x + tiling->coverage.w);
+            const double top_z = static_cast<double>(tiling->coverage.y);
+            const double bottom_z = static_cast<double>(tiling->coverage.y + tiling->coverage.h);
+            SDL_FPoint p{};
+            if (try_project(left, 0.0, top_z, p)) expand_bounds(p);
+            if (try_project(right, 0.0, top_z, p)) expand_bounds(p);
+            if (try_project(left, 0.0, bottom_z, p)) expand_bounds(p);
+            if (try_project(right, 0.0, bottom_z, p)) expand_bounds(p);
+            if (have_projected_bounds &&
+                rect_intersects_screen_bounds(cull_bounds, min_x, min_y, max_x, max_y)) {
+                result.tile_overlap = true;
+                result.visible = true;
             }
-
-            std::optional<AnchorPoint> resolved = asset->anchor_state(
-                frame_anchor.name,
-                anchor_points::GridMaterialization::None,
-                Asset::AnchorResolveMode::Cached);
-            if (!resolved.has_value() || !resolved->exists) {
-                resolved = asset->anchor_state(
-                    frame_anchor.name,
-                    anchor_points::GridMaterialization::None,
-                    Asset::AnchorResolveMode::ForceRecompute);
+        } else {
+            float authored_scale = 1.0f;
+            if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
+                authored_scale = asset->info->scale_factor;
             }
-            if (!resolved.has_value() || !resolved->exists) {
-                continue;
+            constexpr float kCullBoundsSafetyInflation = 1.15f;
+            authored_scale *= kCullBoundsSafetyInflation;
+
+            const float fw = static_cast<float>(std::max(1, asset->info->original_canvas_width));
+            const float fh = static_cast<float>(std::max(1, asset->info->original_canvas_height));
+            const float width = fw * authored_scale;
+            const float height = fh * authored_scale;
+            const float half_w = width * 0.5f;
+
+            float center_x = asset->smoothed_translation_x();
+            float bottom = asset->smoothed_translation_y();
+            if (!std::isfinite(center_x)) {
+                center_x = static_cast<float>(asset->world_x());
             }
+            if (!std::isfinite(bottom)) {
+                bottom = static_cast<float>(asset->world_y());
+            }
+            const double left = static_cast<double>(center_x - half_w);
+            const double right = static_cast<double>(center_x + half_w);
+            const double world_height = static_cast<double>(std::max(1.0f, height));
+            SDL_FPoint p{};
+            if (try_project(left, static_cast<double>(bottom), base_world_z, p)) expand_bounds(p);
+            if (try_project(right, static_cast<double>(bottom), base_world_z, p)) expand_bounds(p);
+            if (try_project(left, static_cast<double>(bottom), base_world_z + world_height, p)) expand_bounds(p);
+            if (try_project(right, static_cast<double>(bottom), base_world_z + world_height, p)) expand_bounds(p);
+            if (have_projected_bounds &&
+                rect_intersects_screen_bounds(cull_bounds, min_x, min_y, max_x, max_y)) {
+                result.geometry_overlap = true;
+                result.visible = true;
+            }
+        }
 
-            AnchorLightData light = frame_anchor.light;
-            light.sanitize();
-            const float radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
+        if (have_projected_bounds) {
+            const float width_px = max_x - min_x;
+            const float height_px = max_y - min_y;
+            if (std::isfinite(width_px) && std::isfinite(height_px) &&
+                width_px > 0.0f && height_px > 0.0f) {
+                result.projected_bounds = ProjectedAssetBounds{
+                    min_x,
+                    max_x,
+                    min_y,
+                    max_y,
+                    std::max(width_px, height_px)};
+            }
+        }
 
-            SDL_FPoint center_screen = resolved->screen_pos_2d;
-            if (!std::isfinite(center_screen.x) || !std::isfinite(center_screen.y)) {
-                if (!project_screen_point(resolved->world_exact_pos_2d.x,
-                                          resolved->world_exact_pos_2d.y,
-                                          resolved->world_exact_z,
-                                          center_screen)) {
+        if (asset->current_frame) {
+            for (const DisplacedAssetAnchorPoint& frame_anchor : asset->current_frame->anchor_points) {
+                if (!frame_anchor.is_valid() || !frame_anchor.has_light_data || frame_anchor.hidden) {
                     continue;
                 }
-            }
+                std::optional<AnchorPoint> resolved = asset->anchor_state(
+                    frame_anchor.name,
+                    anchor_points::GridMaterialization::None,
+                    Asset::AnchorResolveMode::Cached);
+                if (!resolved.has_value() || !resolved->exists) {
+                    resolved = asset->anchor_state(
+                        frame_anchor.name,
+                        anchor_points::GridMaterialization::None,
+                        Asset::AnchorResolveMode::ForceRecompute);
+                }
+                if (!resolved.has_value() || !resolved->exists) {
+                    continue;
+                }
 
-            SDL_FPoint edge_screen{};
-            float radius_px = 0.0f;
-            if (project_screen_point(resolved->world_exact_pos_2d.x + radius_world,
+                AnchorLightData light = frame_anchor.light;
+                light.sanitize();
+                const float radius_world = std::max(AnchorLightData::kMinRadius, light.radius);
+
+                SDL_FPoint center_screen = resolved->screen_pos_2d;
+                if (!std::isfinite(center_screen.x) || !std::isfinite(center_screen.y)) {
+                    if (!try_project(resolved->world_exact_pos_2d.x,
                                      resolved->world_exact_pos_2d.y,
                                      resolved->world_exact_z,
-                                     edge_screen)) {
-                const float dx = edge_screen.x - center_screen.x;
-                const float dy = edge_screen.y - center_screen.y;
-                radius_px = std::sqrt(dx * dx + dy * dy);
-            } else if (resolved->has_flat_perspective_scale &&
-                       std::isfinite(resolved->flat_perspective_scale) &&
-                       resolved->flat_perspective_scale > 0.0f) {
-                radius_px = radius_world * resolved->flat_perspective_scale;
-            }
+                                     center_screen)) {
+                        continue;
+                    }
+                } else {
+                    had_any_projection_success = true;
+                }
 
-            if (!std::isfinite(radius_px) || radius_px <= 0.0f) {
-                continue;
-            }
+                SDL_FPoint edge_screen{};
+                float radius_px = 0.0f;
+                if (try_project(resolved->world_exact_pos_2d.x + radius_world,
+                                resolved->world_exact_pos_2d.y,
+                                resolved->world_exact_z,
+                                edge_screen)) {
+                    const float dx = edge_screen.x - center_screen.x;
+                    const float dy = edge_screen.y - center_screen.y;
+                    radius_px = std::sqrt(dx * dx + dy * dy);
+                } else if (resolved->has_flat_perspective_scale &&
+                           std::isfinite(resolved->flat_perspective_scale) &&
+                           resolved->flat_perspective_scale > 0.0f) {
+                    radius_px = radius_world * resolved->flat_perspective_scale;
+                }
 
-            if (!rect_intersects_screen_bounds(cull_bounds,
-                                               center_screen.x - radius_px,
-                                               center_screen.y - radius_px,
-                                               center_screen.x + radius_px,
-                                               center_screen.y + radius_px)) {
-                continue;
+                if (!std::isfinite(radius_px) || radius_px <= 0.0f) {
+                    continue;
+                }
+                result.max_light_diameter_px = std::max(result.max_light_diameter_px, radius_px * 2.0f);
+                if (rect_intersects_screen_bounds(cull_bounds,
+                                                  center_screen.x - radius_px,
+                                                  center_screen.y - radius_px,
+                                                  center_screen.x + radius_px,
+                                                  center_screen.y + radius_px)) {
+                    result.light_overlap = true;
+                }
             }
-
-            max_diameter = std::max(max_diameter, radius_px * 2.0f);
         }
-        return max_diameter;
+
+        if (!result.visible && settings_.light_radius_overlap_culling_enabled && result.light_overlap) {
+            result.visible = true;
+        }
+        if (!result.visible && had_any_projection_sample && !had_any_projection_success) {
+            result.conservative_include = true;
+            result.visible = true;
+        }
+        if (result.geometry_overlap) result.reason_flags |= kVisibilityReasonSprite;
+        if (result.tile_overlap) result.reason_flags |= kVisibilityReasonTile;
+        if (result.light_overlap) result.reason_flags |= kVisibilityReasonLight;
+        if (result.conservative_include) result.reason_flags |= kVisibilityReasonConservative;
+        (void)gp;
+        return result;
     };
 
     std::vector<Asset*> frustum_hits;
@@ -2101,14 +2071,17 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
 
             asset_to_point_[owned.get()] = gp;
-            std::optional<ProjectedAssetBounds> projected_bounds;
-            if (asset_visible_on_screen(owned.get(), gp, base_world_z, projected_bounds)) {
+            const AssetVisibilityResult visibility = evaluate_asset_visibility(owned.get(), gp, base_world_z);
+            if (visibility.reason_flags != 0) {
+                visibility_reason_flags_[owned.get()] = visibility.reason_flags;
+            }
+            if (visibility.visible) {
                 if (owned.get() != tracked_player_asset_ && min_visible_px > 0.0f) {
                     float effective_largest_dim = 0.0f;
-                    if (projected_bounds.has_value()) {
-                        effective_largest_dim = projected_bounds->largest_dim_px;
+                    if (visibility.projected_bounds.has_value()) {
+                        effective_largest_dim = visibility.projected_bounds->largest_dim_px;
                     }
-                    effective_largest_dim = std::max(effective_largest_dim, max_light_projected_diameter_px(owned.get()));
+                    effective_largest_dim = std::max(effective_largest_dim, visibility.max_light_diameter_px);
                     if (effective_largest_dim > 0.0f &&
                         effective_largest_dim < min_visible_px) {
                         continue;

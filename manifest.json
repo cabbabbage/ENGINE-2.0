@@ -19214,13 +19214,17 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 103.0
+        "scale_percentage": 216.0
       },
       "start": "default",
       "tags": [],
       "tileable": true,
       "tillable": true,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "tree_dark": {
       "anchor_point_child_candidates": [],
@@ -23532,14 +23536,14 @@
         "behind_layer_light_strength_multiplier": 1.0,
         "blur_px": 1.4299999475479126,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
-        "camera_height_max_px": 2692,
-        "camera_height_min_px": 25,
-        "depth_of_field_enabled": true,
+        "camera_height_max_px": 3500,
+        "camera_height_min_px": 40,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 1156.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "front_layer_light_strength_multiplier": 1.090000033378601,
         "layer_depth_curve": 62.189998626708984,
-        "layer_depth_interval": 192.0,
+        "layer_depth_interval": 763.0,
         "light_culling_debug_overlay": false,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
@@ -23547,7 +23551,7 @@
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 8185.0,
+        "max_cull_depth": 4709.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
@@ -23630,12 +23634,12 @@
         "regen_seed": 1
       },
       "map_grid_settings": {
-        "grid_resolution": 9,
+        "grid_resolution": 6,
         "position_jitter_px": 0
       },
       "map_layers": [
         {
-          "bounding_extent": 2828.42712474619,
+          "bounding_extent": 6403.1242374328485,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -23655,42 +23659,32 @@
         {
           "bounding_extent": 2828.42712474619,
           "level": 1,
-          "max_rooms": 3,
-          "min_rooms": 3,
+          "max_rooms": 2,
+          "min_rooms": 2,
           "name": "layer_1",
-          "ring_radius": 10657.0,
+          "ring_radius": 19232.0,
           "rooms": [
             {
-              "max_instances": 3,
-              "min_instances": 3,
+              "max_instances": 1,
+              "min_instances": 1,
               "name": "Random_Enemy_Easy",
               "required_children": [],
               "source_type": "room_name",
               "value": "Random_Enemy_Easy"
-            }
-          ]
-        },
-        {
-          "bounding_extent": 2828.42712474619,
-          "level": 2,
-          "max_rooms": 6,
-          "min_rooms": 3,
-          "name": "layer_2",
-          "ring_radius": 21314.0,
-          "rooms": [
+            },
             {
-              "max_instances": 6,
-              "min_instances": 3,
-              "name": "Random_Enemy_Easy",
+              "max_instances": 1,
+              "min_instances": 1,
+              "name": "Loot_Room",
               "required_children": [],
               "source_type": "room_name",
-              "value": "Random_Enemy_Easy"
+              "value": "Loot_Room"
             }
           ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 5000
+        "min_edge_distance": 10000
       },
       "map_name": "forrest",
       "rooms_data": {
@@ -23702,9 +23696,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            84,
-            36,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -24062,9 +24056,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            208,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -24168,26 +24162,26 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -393,
-          "camera_center_dz": -256,
-          "camera_height_px": 665,
-          "camera_tilt_deg": 50.791439056396484,
-          "camera_zoom_percent": 53,
+          "camera_center_dx": 59,
+          "camera_center_dz": 731,
+          "camera_height_px": 1249,
+          "camera_tilt_deg": 49.40607833862305,
+          "camera_zoom_percent": 49,
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
             85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,
           "geometry": "Square",
           "inherits_map_assets": true,
           "is_boss": false,
-          "max_height": 4000,
-          "max_width": 4000,
-          "min_height": 4000,
-          "min_width": 4000,
+          "max_height": 8000,
+          "max_width": 10000,
+          "min_height": 8000,
+          "min_width": 10000,
           "name": "spawn",
           "room_tags": [],
           "spawn_groups": [
@@ -24250,6 +24244,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-e94475b671ce"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "trail"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -76,
+              "dz": 3515,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8000,
+              "origional_width": 10000,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 9,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-17cbee79c4bf"
             }
           ],
           "trail_connection_sector": {
@@ -24423,7 +24447,7 @@
         "inherits_map_assets": false
       },
       "map_grid_settings": {
-        "grid_resolution": 6,
+        "grid_resolution": 7,
         "position_jitter_px": 0
       },
       "map_layers": [

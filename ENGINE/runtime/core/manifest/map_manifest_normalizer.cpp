@@ -15,9 +15,9 @@ namespace {
 
 constexpr int kDefaultSpawnRadius = 1500;
 constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 4000;
+constexpr int kMaxRoomDimension = 40000;
 constexpr int kDefaultRoomMinDimension = 500;
-constexpr int kDefaultRoomMaxDimension = 4000;
+constexpr int kDefaultRoomMaxDimension = 40000;
 constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
 constexpr int kDefaultTrailSectorWidthPercent = 100;
 constexpr int kMinTrailSectorWidthPercent = 25;

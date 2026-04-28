@@ -405,6 +405,8 @@
       "starting_health": 200,
       "tags": [],
       "tillable": false,
+      "tilt_range_max_deg": 46,
+      "tilt_range_min_deg": -48,
       "weight_kg": 400.0
     },
     "bench": {

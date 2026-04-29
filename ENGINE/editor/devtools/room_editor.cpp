@@ -2241,8 +2241,11 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
     auto& root = current_room_->assets_data();
     auto& groups = ensure_spawn_groups_array(root);
 
+    std::vector<nlohmann::json> prepared_entries{};
+    prepared_entries.reserve(spawn_group_clipboard_->entries.size());
     std::vector<std::string> new_ids{};
     new_ids.reserve(spawn_group_clipboard_->entries.size());
+    const bool multi_paste = spawn_group_clipboard_->entries.size() > 1;
 
     const int default_resolution =
         current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
@@ -2257,9 +2260,78 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
 
         const std::string display_name = entry.value("display_name", std::string{"Spawn Group"});
         devmode::spawn::ensure_spawn_group_entry_defaults(entry, display_name, default_resolution);
-        remap_clipboard_entry_to_room(entry, current_room_);
-        groups.push_back(entry);
+        remap_clipboard_entry_to_room(entry, current_room_, !multi_paste);
+        prepared_entries.push_back(entry);
         new_ids.push_back(new_id);
+    }
+
+    if (multi_paste && current_room_ && current_room_->room_area) {
+        auto method_for_entry = [](const nlohmann::json& entry) -> std::string {
+            std::string method = entry.value("position", std::string{});
+            if (method == "Exact Position") {
+                method = "Exact";
+            }
+            return method;
+        };
+
+        std::vector<std::size_t> movable_indices{};
+        movable_indices.reserve(prepared_entries.size());
+        for (std::size_t i = 0; i < prepared_entries.size(); ++i) {
+            const std::string method = method_for_entry(prepared_entries[i]);
+            if (method == "Exact" || method == "Perimeter") {
+                movable_indices.push_back(i);
+            }
+        }
+
+        if (!movable_indices.empty()) {
+            const SDL_Point room_center = current_room_->room_area->get_center();
+
+            const std::array<SDL_Point, 9> translation_candidates{{
+                SDL_Point{kClipboardNudge, kClipboardNudge},
+                SDL_Point{kClipboardNudge, 0},
+                SDL_Point{0, kClipboardNudge},
+                SDL_Point{-kClipboardNudge, kClipboardNudge},
+                SDL_Point{kClipboardNudge, -kClipboardNudge},
+                SDL_Point{-kClipboardNudge, 0},
+                SDL_Point{0, -kClipboardNudge},
+                SDL_Point{-kClipboardNudge, -kClipboardNudge},
+                SDL_Point{0, 0},
+            }};
+
+            auto translation_fits = [&](const SDL_Point& delta) {
+                for (std::size_t idx : movable_indices) {
+                    const int dx = prepared_entries[idx].value("dx", 0) + delta.x;
+                    const int dz = prepared_entries[idx].value("dz", 0) + delta.y;
+                    SDL_Point world{room_center.x + dx, room_center.y + dz};
+                    if (!current_room_->room_area->contains_point(world)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            SDL_Point chosen_delta{0, 0};
+            bool found_delta = false;
+            for (const SDL_Point& candidate : translation_candidates) {
+                const SDL_Point delta{candidate.x, candidate.y};
+                if (translation_fits(delta)) {
+                    chosen_delta = delta;
+                    found_delta = true;
+                    break;
+                }
+            }
+
+            if (found_delta && (chosen_delta.x != 0 || chosen_delta.y != 0)) {
+                for (std::size_t idx : movable_indices) {
+                    prepared_entries[idx]["dx"] = prepared_entries[idx].value("dx", 0) + chosen_delta.x;
+                    prepared_entries[idx]["dz"] = prepared_entries[idx].value("dz", 0) + chosen_delta.y;
+                }
+            }
+        }
+    }
+
+    for (const auto& entry : prepared_entries) {
+        groups.push_back(entry);
     }
 
     for (size_t i = 0; i < groups.size(); ++i) {
@@ -2281,18 +2353,10 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
         }
     }
 
-    std::vector<Asset*> pasted_assets{};
-    if (assets_) {
-        for (Asset* asset : assets_->all) {
-            if (!asset || asset->dead || !asset_belongs_to_room(asset)) {
-                continue;
-            }
-            if (std::find(new_ids.begin(), new_ids.end(), asset->spawn_id) != new_ids.end()) {
-                pasted_assets.push_back(asset);
-            }
-        }
+    pending_paste_selection_spawn_ids_ = new_ids;
+    if (try_select_spawn_groups_by_ids(new_ids)) {
+        pending_paste_selection_spawn_ids_.clear();
     }
-    select_assets_direct(pasted_assets);
 
     if (new_ids.size() == 1) {
         active_spawn_group_id_ = new_ids.front();
@@ -2413,6 +2477,44 @@ void RoomEditor::select_assets_direct(const std::vector<Asset*>& assets) {
     update_highlighted_assets();
 }
 
+bool RoomEditor::try_select_spawn_groups_by_ids(const std::vector<std::string>& spawn_ids) {
+    if (spawn_ids.empty() || !assets_) {
+        return false;
+    }
+
+    std::unordered_set<std::string> wanted_ids{};
+    wanted_ids.reserve(spawn_ids.size());
+    for (const std::string& id : spawn_ids) {
+        if (!id.empty()) {
+            wanted_ids.insert(id);
+        }
+    }
+    if (wanted_ids.empty()) {
+        return false;
+    }
+
+    std::unordered_set<std::string> found_ids{};
+    std::vector<Asset*> matched_assets{};
+    matched_assets.reserve(64);
+    for (Asset* asset : assets_->all) {
+        if (!asset || asset->dead || !asset_belongs_to_room(asset) || asset->spawn_id.empty()) {
+            continue;
+        }
+        if (wanted_ids.find(asset->spawn_id) == wanted_ids.end()) {
+            continue;
+        }
+        matched_assets.push_back(asset);
+        found_ids.insert(asset->spawn_id);
+    }
+
+    if (matched_assets.empty() || found_ids.size() != wanted_ids.size()) {
+        return false;
+    }
+
+    select_assets_direct(matched_assets);
+    return true;
+}
+
 void RoomEditor::select_spawn_group_assets(const std::string& spawn_id) {
     clear_focus();
     const std::vector<Asset*> previous_selection = selected_assets_;
@@ -2468,7 +2570,7 @@ void RoomEditor::select_spawn_group_assets(const std::string& spawn_id) {
     update_highlighted_assets();
 }
 
-void RoomEditor::remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room) {
+void RoomEditor::remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room, bool ensure_valid_position) {
     if (!room || !room->room_area) {
         return;
     }
@@ -2493,7 +2595,9 @@ void RoomEditor::remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room
         entry["dz"] = scaled.y;
         entry["origional_width"] = width;
         entry["origional_height"] = height;
-        ensure_clipboard_position_is_valid(entry, room);
+        if (ensure_valid_position) {
+            ensure_clipboard_position_is_valid(entry, room);
+        }
     } else if (method == "Percent") {
         entry["origional_width"] = width;
         entry["origional_height"] = height;
@@ -3094,6 +3198,11 @@ void RoomEditor::update_ui(const Input& input) {
     }
 
     process_pending_spawn_group_work();
+    if (!pending_paste_selection_spawn_ids_.empty()) {
+        if (try_select_spawn_groups_by_ids(pending_paste_selection_spawn_ids_)) {
+            pending_paste_selection_spawn_ids_.clear();
+        }
+    }
 
     room_config_was_visible_ = config_visible_now;
 }

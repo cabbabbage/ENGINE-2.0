@@ -427,8 +427,9 @@ private:
     Room* resolve_room_for_clipboard_action() const;
     void select_spawn_group_assets(const std::string& spawn_id);
     void select_assets_direct(const std::vector<Asset*>& assets);
-    void remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room);
+    void remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room, bool ensure_valid_position = true);
     void ensure_clipboard_position_is_valid(nlohmann::json& entry, Room* room);
+    bool try_select_spawn_groups_by_ids(const std::vector<std::string>& spawn_ids);
     static std::string strip_copy_suffix(const std::string& name);
     struct SpawnGroupClipboardEntry;
     static std::string next_clipboard_display_name(SpawnGroupClipboardEntry& entry);
@@ -1269,6 +1270,7 @@ private:
 };
     std::optional<SpawnGroupClipboard> spawn_group_clipboard_{};
     MarqueeSelectionState marquee_selection_{};
+    std::vector<std::string> pending_paste_selection_spawn_ids_{};
 
     TTF_Font* label_font_ = nullptr;
     std::vector<SDL_Rect> label_rects_;

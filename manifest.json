@@ -26428,6 +26428,24 @@
               "value": "baseball"
             }
           ]
+        },
+        {
+          "bounding_extent": 1500.0,
+          "level": 1,
+          "max_rooms": 2,
+          "min_rooms": 1,
+          "name": "layer_1",
+          "ring_radius": 13558.0,
+          "rooms": [
+            {
+              "max_instances": 2,
+              "min_instances": 1,
+              "name": "Loot_Room",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "Loot_Room"
+            }
+          ]
         }
       ],
       "map_layers_settings": {
@@ -26443,9 +26461,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            62,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26798,9 +26816,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            211,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26823,9 +26841,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            142,
-            242,
-            85,
+            204,
+            140,
+            51,
             255
           ],
           "edge_smoothness": 4,
@@ -26848,9 +26866,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            160,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26908,9 +26926,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            134,
-            31,
-            204,
+            36,
+            84,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -26967,16 +26985,16 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -408,
-          "camera_center_dz": -3157,
-          "camera_height_px": 144,
-          "camera_tilt_deg": 14.873037338256836,
+          "camera_center_dx": -1451,
+          "camera_center_dz": -301,
+          "camera_height_px": 662,
+          "camera_tilt_deg": 40.656612396240234,
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            242,
-            85,
+            72,
             255
           ],
           "edge_smoothness": 101,
@@ -26990,36 +27008,6 @@
           "name": "baseball",
           "room_tags": [],
           "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "baseball_field"
-                }
-              ],
-              "display_name": "baseball_field",
-              "dx": -1289,
-              "dz": -224,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12456,
-              "origional_width": 19304,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-f81293dd909b"
-            },
             {
               "candidates": [
                 {
@@ -27043,222 +27031,12 @@
               "origional_height": 12792,
               "origional_width": 19320,
               "position": "Exact",
-              "priority": 1,
+              "priority": 0,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-086eeda44d76"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "pngtree_3d_rendering_of_a_fast_food_shop_building_illustration_png_image_11533843"
-                }
-              ],
-              "display_name": "pngtree_3d_rendering_of_a_fast_food_shop_building_illustration_png_image_11533843",
-              "dx": -8166,
-              "dz": -3403,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-cc4def7da2e8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "pole_800a21_o0109_2"
-                }
-              ],
-              "display_name": "pole_800a21_o0109_2",
-              "dx": -8370,
-              "dz": -3177,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 3,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-03847c4c7803"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "parking_lot"
-                }
-              ],
-              "display_name": "parking_lot",
-              "dx": -7276,
-              "dz": -2085,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12624,
-              "origional_width": 18688,
-              "position": "Exact",
-              "priority": 4,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-0122669767e5"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -1541,
-              "dz": 754,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 5,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-43ea7d7a92c7"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "car"
-                }
-              ],
-              "display_name": "car",
-              "dx": -6686,
-              "dz": -873,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 6,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-c08c757c55b8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly",
-              "dx": -937,
-              "dz": 1054,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12344,
-              "origional_width": 19440,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-4db6a682b907"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "baseball_field"
-                }
-              ],
-              "display_name": "baseball_field (Copy)",
-              "dx": -1236,
-              "dz": -218,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 8,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-2ff4aa54fba6"
             },
             {
               "candidates": [
@@ -27283,342 +27061,12 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 9,
+              "priority": 1,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-1b89210a629b"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -1541,
-              "dz": 754,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 10,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-0e19c9135264"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly (Copy)",
-              "dx": -892,
-              "dz": 1034,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 11,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-bf1845a93955"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -1541,
-              "dz": 754,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 12,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-f0b416ea350a"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly (Copy)",
-              "dx": -892,
-              "dz": 1034,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 13,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-644e5367f59f"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -908,
-              "dz": 1215,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 14,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-13daedde1716"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly (Copy)",
-              "dx": -892,
-              "dz": 1034,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 15,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-a1e511238c21"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -1541,
-              "dz": 754,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 16,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-61f502673fdc"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -1541,
-              "dz": 754,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 17,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-55283942f4c9"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly (Copy)",
-              "dx": -892,
-              "dz": 1034,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 18,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6fe6d77181a8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -1541,
-              "dz": 754,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 19,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-16302f118c04"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -908,
-              "dz": 1215,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 20,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-aea10039c9f2"
             }
           ],
           "trail_connection_sector": {
@@ -27681,9 +27129,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            99,
-            204,
-            31,
+            146,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 96,

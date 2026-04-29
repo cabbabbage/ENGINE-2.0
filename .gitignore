@@ -36,3 +36,5 @@ __pycache__/
 *.lib
 *.out
 log.txt
+assets_coppy/
+screenshots/

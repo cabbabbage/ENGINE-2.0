@@ -1166,7 +1166,11 @@ private:
     bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
-    std::vector<Asset*> asset_info_parent_history_;
+    struct AssetInfoParentHistoryEntry {
+        Asset* parent = nullptr;
+        AssetEditorSubview return_subview = AssetEditorSubview::AssetInfo;
+    };
+    std::vector<AssetInfoParentHistoryEntry> asset_info_parent_history_;
     bool preserve_asset_info_parent_history_on_next_open_ = false;
     std::vector<Asset*> focus_selection_snapshot_;
     std::optional<std::string> focus_spawn_group_snapshot_{};

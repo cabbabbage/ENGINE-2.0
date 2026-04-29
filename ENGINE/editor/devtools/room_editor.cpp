@@ -7817,7 +7817,7 @@ Asset* RoomEditor::resolve_bound_child_for_owner(
     Asset* owner,
     SDL_Point screen_point,
     const std::unordered_set<std::string>* allowed_anchor_names) const {
-    if (!owner || !assets_ || owner->dead || !asset_belongs_to_room(owner)) {
+    if (!owner || !assets_ || owner->dead) {
         return nullptr;
     }
 
@@ -7828,6 +7828,7 @@ Asset* RoomEditor::resolve_bound_child_for_owner(
     Asset* best = nullptr;
     bool best_contains = false;
     int best_score = std::numeric_limits<int>::max();
+    int best_screen_y = std::numeric_limits<int>::max();
 
     for (const auto& binding : bindings) {
         if (binding.owner != owner) {
@@ -7838,27 +7839,47 @@ Asset* RoomEditor::resolve_bound_child_for_owner(
             continue;
         }
         Asset* child = binding.child_asset;
-        if (!child || child->dead || !asset_belongs_to_room(child) || !child->info) {
+        if (!child || child->dead || !child->info || !is_asset_pointer_live(child)) {
             continue;
         }
+
+        bool contains = false;
+        int dist2 = std::numeric_limits<int>::max() / 4;
+        int screen_y = std::numeric_limits<int>::max();
 
         auto bounds_it = asset_bounds_cache_.find(child);
-        if (bounds_it == asset_bounds_cache_.end()) {
-            continue;
+        if (bounds_it != asset_bounds_cache_.end()) {
+            const SDL_Rect rect = bounds_it->second.bounds;
+            contains = SDL_PointInRect(&screen_point, &rect) != 0;
+            const int cx = rect.x + (rect.w / 2);
+            const int cy = rect.y + (rect.h / 2);
+            const int dx = cx - screen_point.x;
+            const int dy = cy - screen_point.y;
+            dist2 = dx * dx + dy * dy;
+            screen_y = bounds_it->second.screen_y;
+        } else {
+            SDL_Point child_anchor_px{0, 0};
+            if (!asset_anchor_screen_position(cam, child, child_anchor_px)) {
+                continue;
+            }
+            const int dx = child_anchor_px.x - screen_point.x;
+            const int dy = child_anchor_px.y - screen_point.y;
+            dist2 = dx * dx + dy * dy;
+            screen_y = child_anchor_px.y;
         }
-        const SDL_Rect rect = bounds_it->second.bounds;
-        const bool contains = SDL_PointInRect(&screen_point, &rect) != 0;
-        const int cx = rect.x + (rect.w / 2);
-        const int cy = rect.y + (rect.h / 2);
-        const int dx = cx - screen_point.x;
-        const int dy = cy - screen_point.y;
-        const int dist2 = dx * dx + dy * dy;
+
         const int score = contains ? dist2 : (dist2 + 50000);
 
-        if (!best || (contains && !best_contains) || (contains == best_contains && score < best_score)) {
+        const bool is_better =
+            !best ||
+            (contains && !best_contains) ||
+            (contains == best_contains && score < best_score) ||
+            (contains == best_contains && score == best_score && screen_y < best_screen_y);
+        if (is_better) {
             best = child;
             best_contains = contains;
             best_score = score;
+            best_screen_y = screen_y;
         }
     }
 
@@ -7879,8 +7900,15 @@ bool RoomEditor::navigate_to_bound_child_asset_info(Asset* child) {
         parent = info_ui_->get_target_asset();
     }
 
+    AssetEditorSubview return_subview = AssetEditorSubview::AssetInfo;
+    if (oval_mode_active()) {
+        return_subview = AssetEditorSubview::OvalAnchor;
+    } else if (anchor_mode_active()) {
+        return_subview = light_mode_active() ? AssetEditorSubview::Light : AssetEditorSubview::Anchor;
+    }
+
     if (parent && parent != child) {
-        asset_info_parent_history_.push_back(parent);
+        asset_info_parent_history_.push_back(AssetInfoParentHistoryEntry{parent, return_subview});
     }
 
     preserve_asset_info_parent_history_on_next_open_ = true;
@@ -7890,13 +7918,24 @@ bool RoomEditor::navigate_to_bound_child_asset_info(Asset* child) {
 
 bool RoomEditor::try_return_to_parent_asset_info() {
     while (!asset_info_parent_history_.empty()) {
-        Asset* parent = asset_info_parent_history_.back();
+        const AssetInfoParentHistoryEntry entry = asset_info_parent_history_.back();
         asset_info_parent_history_.pop_back();
+        Asset* parent = entry.parent;
         if (!parent || parent->dead || !parent->info || !is_asset_pointer_live(parent) || !asset_belongs_to_room(parent)) {
             continue;
         }
         preserve_asset_info_parent_history_on_next_open_ = true;
         open_asset_info_editor_for_asset(parent, false);
+        if (entry.return_subview == AssetEditorSubview::Anchor ||
+            entry.return_subview == AssetEditorSubview::Light ||
+            entry.return_subview == AssetEditorSubview::OvalAnchor) {
+            if (can_enter_asset_editor_subview(entry.return_subview)) {
+                set_asset_editor_subview(entry.return_subview, false);
+            } else if (entry.return_subview == AssetEditorSubview::Light &&
+                       can_enter_asset_editor_subview(AssetEditorSubview::Anchor)) {
+                set_asset_editor_subview(AssetEditorSubview::Anchor, false);
+            }
+        }
         return true;
     }
     return false;
@@ -16914,16 +16953,19 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
                     allowed_anchor_names.insert(legacy_anchor);
                 }
             }
+            Asset* child = nullptr;
             if (!allowed_anchor_names.empty()) {
-                Asset* child =
-                    resolve_bound_child_for_owner(oval_edit_.target_asset, screen_pt, &allowed_anchor_names);
-                if (child && navigate_to_bound_child_asset_info(child)) {
-                    rclick_buffer_frames_ = 2;
-                    if (input_) {
-                        input_->consumeMouseButton(Input::RIGHT);
-                    }
-                    return true;
+                child = resolve_bound_child_for_owner(oval_edit_.target_asset, screen_pt, &allowed_anchor_names);
+            }
+            if (!child) {
+                child = resolve_bound_child_for_owner(oval_edit_.target_asset, screen_pt, nullptr);
+            }
+            if (child && navigate_to_bound_child_asset_info(child)) {
+                rclick_buffer_frames_ = 2;
+                if (input_) {
+                    input_->consumeMouseButton(Input::RIGHT);
                 }
+                return true;
             }
         }
     }
@@ -17123,6 +17165,9 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
             allowed_anchor_names.insert(anchor_edit_.handles[static_cast<std::size_t>(hit)].name);
             Asset* child =
                 resolve_bound_child_for_owner(anchor_edit_.target_asset, screen_pt, &allowed_anchor_names);
+            if (!child) {
+                child = resolve_bound_child_for_owner(anchor_edit_.target_asset, screen_pt, nullptr);
+            }
             if (child && navigate_to_bound_child_asset_info(child)) {
                 rclick_buffer_frames_ = 2;
                 if (input_) {

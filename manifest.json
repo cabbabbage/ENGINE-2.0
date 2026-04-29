@@ -15042,8 +15042,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 519,
-                "texture_y": 1585
+                "texture_x": 533,
+                "texture_y": 1588
               },
               {
                 "depth_offset": -0.4000000059604645,
@@ -15054,8 +15054,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 182,
-                "texture_y": 1569
+                "texture_x": 218,
+                "texture_y": 1633
               },
               {
                 "depth_offset": -0.4000000059604645,
@@ -25930,27 +25930,44 @@
       "weight_kg": 0.0
     },
     "vibble_eyes": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/vibble_eyes",
       "asset_name": "vibble_eyes",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "vibble_hat": {
       "anchor_point_child_candidates": [],
@@ -26461,9 +26478,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
-            149,
             242,
+            200,
+            85,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26817,8 +26834,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            135,
             85,
+            131,
             255
           ],
           "edge_smoothness": 4,
@@ -26841,8 +26858,8 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            149,
-            85,
+            37,
+            36,
             242,
             255
           ],
@@ -26866,9 +26883,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
+            160,
             204,
-            51,
-            132,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26927,7 +26944,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            238,
+            215,
             242,
             255
           ],
@@ -26992,9 +27009,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            117,
             242,
-            85,
+            118,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -27279,9 +27296,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
+            117,
             31,
             204,
-            114,
             255
           ],
           "edge_smoothness": 96,

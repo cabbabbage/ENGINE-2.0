@@ -409,6 +409,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                     if (!boundary_region && !room_or_trail_region) {
                         continue;
                     }
+                    if (room_or_trail_region && region_entry.owner &&
+                        !region_entry.owner->inherits_map_assets()) {
+                        continue;
+                    }
 
                     const int region_domain = boundary_region ? 0 : 1;
                     const BoundaryKey key =
@@ -1442,6 +1446,7 @@ std::size_t DynamicBoundarySystem::compute_rooms_topology_hash(const Assets* ass
         hash = mix_uint64(hash, static_cast<std::uint64_t>(room->layer));
         hash = mix_uint64(hash, string_hasher(room->room_name));
         hash = mix_uint64(hash, string_hasher(room->type));
+        hash = mix_uint64(hash, room->inherits_map_assets() ? 1ULL : 0ULL);
         if (room->room_area) {
             try {
                 auto [minx, miny, maxx, maxy] = room->room_area->get_bounds();

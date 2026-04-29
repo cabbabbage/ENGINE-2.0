@@ -36,6 +36,7 @@ public:
     using AssetFilter = std::function<bool(const nlohmann::json&)>;
 
     using Callback = std::function<void(const std::string&)>;
+    using MultiSelectCallback = std::function<void(const std::vector<std::string>&)>;
     explicit SearchAssets(devmode::core::ManifestStore* manifest_store = nullptr);
     ~SearchAssets();
     void set_position(int x, int y);
@@ -44,6 +45,7 @@ public:
     void set_anchor_position(int x, int y);
     void layout_with_parent(const DockManager::SlidingParentInfo& parent);
     void open(Callback cb);
+    void open_multi_select(MultiSelectCallback cb);
     void close();
     bool visible() const;
     void set_embedded_mode(bool embedded);
@@ -78,8 +80,15 @@ private:
     std::unique_ptr<DockableCollapsible> panel_;
     AssetListView list_view_;
     Callback cb_;
+    MultiSelectCallback multi_select_cb_;
     std::vector<Asset> all_;
     std::vector<Result> results_;
+    std::unordered_set<std::string> selected_values_;
+    std::unique_ptr<class DMButton> multi_apply_btn_;
+    std::unique_ptr<class ButtonWidget> multi_apply_btn_widget_;
+    std::unique_ptr<class DMButton> multi_cancel_btn_;
+    std::unique_ptr<class ButtonWidget> multi_cancel_btn_widget_;
+    bool multi_select_mode_ = false;
     std::uint64_t tag_data_version_ = 0;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     std::unique_ptr<devmode::core::ManifestStore> owned_manifest_store_;

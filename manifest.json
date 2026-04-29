@@ -17572,9 +17572,7 @@
             "name": "",
             "path": "default"
           },
-          "tags": [
-            "right"
-          ]
+          "tags": []
         },
         "default_left": {
           "derived_modifiers": {
@@ -26445,9 +26443,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            124,
             242,
-            242,
-            85,
+            36,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26800,8 +26798,8 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            131,
             85,
+            126,
             242,
             255
           ],
@@ -26825,9 +26823,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26850,9 +26848,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            157,
-            242,
-            36,
+            153,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26910,9 +26908,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            31,
-            125,
-            204,
+            242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 70,
@@ -26976,9 +26974,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            36,
+            39,
             242,
-            184,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -27034,8 +27032,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -518,
-              "dz": 57,
+              "dx": -1633,
+              "dz": -281,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27655,8 +27653,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            61,
             36,
+            178,
             255
           ],
           "edge_smoothness": 96,

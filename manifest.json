@@ -761,6 +761,7 @@
       "asset_name": "blue_flower",
       "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -769,7 +770,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 22.0
+        "scale_percentage": 22.0,
+        "size_variation": 3.0
       },
       "start": "default",
       "tags": [
@@ -780,7 +782,11 @@
         "pretty"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 2,
+      "tilt_range_min_deg": -2,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": -3
     },
     "bomb": {
       "anchor_point_child_candidates": [],
@@ -20763,11 +20769,11 @@
         "tree"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 3,
-      "tilt_range_min_deg": -3,
+      "tilt_range_max_deg": 2,
+      "tilt_range_min_deg": -2,
       "weight_kg": 584.0,
       "y_pos_max": 0,
-      "y_pos_min": -5
+      "y_pos_min": -6
     },
     "tree_darker": {
       "anchor_point_child_candidates": [],
@@ -26314,9 +26320,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
             242,
-            125,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26669,9 +26675,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            59,
-            31,
-            204,
+            127,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26695,7 +26701,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            39,
+            71,
             36,
             255
           ],
@@ -26720,8 +26726,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            36,
-            220,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26749,9 +26755,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
-            85,
+            51,
+            204,
+            122,
             255
           ],
           "edge_smoothness": 70,
@@ -26815,9 +26821,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            37,
+            85,
+            177,
             242,
-            36,
             255
           ],
           "edge_smoothness": 101,
@@ -26873,8 +26879,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -938,
-              "dz": -1217,
+              "dx": -1920,
+              "dz": -5023,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27093,7 +27099,7 @@
               "min_number": 15,
               "origional_height": 12768,
               "origional_width": 18984,
-              "perimeter_radius": 137,
+              "perimeter_radius": 134,
               "position": "Perimeter",
               "priority": 8,
               "radius": 134,
@@ -27431,6 +27437,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-4db6a682b907"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_dark"
+                }
+              ],
+              "display_name": "tree_dark",
+              "dx": -1654,
+              "dz": -5295,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 20,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-e8eb6ab22927"
             }
           ],
           "trail_connection_sector": {
@@ -27493,9 +27529,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            160,
             242,
             85,
+            178,
             255
           ],
           "edge_smoothness": 96,

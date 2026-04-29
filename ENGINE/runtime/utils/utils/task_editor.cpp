@@ -104,7 +104,7 @@ constexpr int kDescriptionVerticalSpacing = 8;
 
 TaskEditor::TaskEditor(std::filesystem::path repo_root)
     : repo_root_(std::move(repo_root)),
-      csv_path_(repo_root_ / "tasks.csv") {
+      csv_path_(repo_root_ / "docs/tasks.csv") {
     add_button_ = std::make_unique<DMButton>("Add Task", &DMStyles::CreateButton(), 0, DMButton::height());
     close_button_ = std::make_unique<DMButton>("Close", &DMStyles::DeleteButton(), 0, DMButton::height());
     attachment_pick_files_ = std::make_unique<DMButton>("Select Files", &DMStyles::CreateButton(), 0, DMButton::height());

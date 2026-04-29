@@ -37,4 +37,4 @@ __pycache__/
 *.out
 log.txt
 assets_coppy/
-screenshots/
+docs/screen_shots/

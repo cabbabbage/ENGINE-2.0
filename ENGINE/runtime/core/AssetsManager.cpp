@@ -3473,7 +3473,7 @@ bool Assets::capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out
     }
 
     const std::filesystem::path root = std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()).parent_path());
-    const std::filesystem::path screenshot_dir = root / "screen_shots";
+    const std::filesystem::path screenshot_dir = root / "docs/screen_shots";
     std::error_code ec;
     std::filesystem::create_directories(screenshot_dir, ec);
     if (ec) {
@@ -3507,14 +3507,14 @@ bool Assets::capture_screenshot_to_root(SDL_Renderer* renderer, std::string& out
     const int png_save_ok = IMG_SavePNG(captured, png_path.string().c_str());
     if (png_save_ok == 0) {
         SDL_DestroySurface(captured);
-        out_relative_path = (std::filesystem::path("screen_shots") / png_path.filename()).generic_string();
+        out_relative_path = (std::filesystem::path("docs/screen_shots") / png_path.filename()).generic_string();
         return true;
     }
 
     const bool bmp_save_ok = SDL_SaveBMP(captured, bmp_path.string().c_str());
     SDL_DestroySurface(captured);
     if (bmp_save_ok) {
-        out_relative_path = (std::filesystem::path("screen_shots") / bmp_path.filename()).generic_string();
+        out_relative_path = (std::filesystem::path("docs/screen_shots") / bmp_path.filename()).generic_string();
         return true;
     }
 

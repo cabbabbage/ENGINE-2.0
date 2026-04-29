@@ -418,13 +418,16 @@ private:
     void copy_selected_spawn_group();
     void paste_spawn_group_from_clipboard();
     std::optional<std::string> selected_spawn_group_id() const;
+    std::vector<std::string> selected_spawn_group_ids() const;
     bool spawn_group_is_boundary(const std::string& spawn_id) const;
     Room* resolve_room_for_clipboard_action() const;
     void select_spawn_group_assets(const std::string& spawn_id);
+    void select_assets_direct(const std::vector<Asset*>& assets);
     void remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room);
     void ensure_clipboard_position_is_valid(nlohmann::json& entry, Room* room);
     static std::string strip_copy_suffix(const std::string& name);
-    std::string next_clipboard_display_name();
+    struct SpawnGroupClipboardEntry;
+    static std::string next_clipboard_display_name(SpawnGroupClipboardEntry& entry);
     void show_notice(const std::string& message) const;
     static bool asset_info_contains_spawn_group(const class AssetInfo* info, const std::string& spawn_id);
     void mark_highlight_dirty();
@@ -1238,11 +1241,29 @@ private:
     Uint32 geometry_last_click_ms_ = 0;
 
     struct SpawnGroupClipboard {
+        std::vector<SpawnGroupClipboardEntry> entries;
+    };
+    struct SpawnGroupClipboardEntry {
         nlohmann::json entry;
         std::string base_display_name;
         int paste_count = 0;
+    };
+    struct MarqueeSelectionState {
+        bool active = false;
+        bool threshold_passed = false;
+        SDL_Point start_screen{0, 0};
+        SDL_Point current_screen{0, 0};
+        std::vector<Asset*> last_selection{};
+        void reset() {
+            active = false;
+            threshold_passed = false;
+            start_screen = SDL_Point{0, 0};
+            current_screen = SDL_Point{0, 0};
+            last_selection.clear();
+        }
 };
     std::optional<SpawnGroupClipboard> spawn_group_clipboard_{};
+    MarqueeSelectionState marquee_selection_{};
 
     TTF_Font* label_font_ = nullptr;
     std::vector<SDL_Rect> label_rects_;

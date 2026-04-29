@@ -2156,47 +2156,65 @@ void RoomEditor::mark_map_dirty_for_spawn_groups(
 }
 
 void RoomEditor::copy_selected_spawn_group() {
-    auto spawn_id_opt = selected_spawn_group_id();
-    if (!spawn_id_opt) {
-        show_notice("Select a room spawn group to copy.");
-        return;
-    }
-
-    const std::string& spawn_id = *spawn_id_opt;
-    SpawnEntryResolution resolved = locate_spawn_entry(spawn_id);
-    if (!resolved.valid() || resolved.source != SpawnEntryResolution::Source::Room || !resolved.entry) {
-        show_notice("Only room spawn groups can be copied.");
-        return;
-    }
-
-    if (spawn_group_is_boundary(spawn_id)) {
-        show_notice("Boundary spawn groups cannot be copied.");
+    const std::vector<std::string> spawn_ids = selected_spawn_group_ids();
+    if (spawn_ids.empty()) {
+        show_notice("Select one or more room spawn groups to copy.");
         return;
     }
 
     spawn_group_clipboard_.emplace();
-    spawn_group_clipboard_->entry = *resolved.entry;
-    spawn_group_clipboard_->entry.erase("priority");
-    const std::string display_name = spawn_group_clipboard_->entry.value("display_name", std::string{"Spawn Group"});
-    std::string base = strip_copy_suffix(display_name);
-    if (base.empty()) {
-        base = display_name;
-    }
-    if (base.empty()) {
-        base = "Spawn Group";
-    }
-    spawn_group_clipboard_->base_display_name = std::move(base);
-    spawn_group_clipboard_->paste_count = 0;
+    spawn_group_clipboard_->entries.clear();
+    spawn_group_clipboard_->entries.reserve(spawn_ids.size());
 
-    if (!display_name.empty()) {
+    int skipped_count = 0;
+    for (const std::string& spawn_id : spawn_ids) {
+        SpawnEntryResolution resolved = locate_spawn_entry(spawn_id);
+        if (!resolved.valid() || resolved.source != SpawnEntryResolution::Source::Room || !resolved.entry) {
+            ++skipped_count;
+            continue;
+        }
+        if (spawn_group_is_boundary(spawn_id) || spawn_group_locked(spawn_id)) {
+            ++skipped_count;
+            continue;
+        }
+
+        SpawnGroupClipboardEntry clip_entry{};
+        clip_entry.entry = *resolved.entry;
+        clip_entry.entry.erase("priority");
+        const std::string display_name = clip_entry.entry.value("display_name", std::string{"Spawn Group"});
+        std::string base = strip_copy_suffix(display_name);
+        if (base.empty()) {
+            base = display_name;
+        }
+        if (base.empty()) {
+            base = "Spawn Group";
+        }
+        clip_entry.base_display_name = std::move(base);
+        clip_entry.paste_count = 0;
+        spawn_group_clipboard_->entries.push_back(std::move(clip_entry));
+    }
+
+    if (spawn_group_clipboard_->entries.empty()) {
+        spawn_group_clipboard_.reset();
+        show_notice("No copyable room spawn groups in current selection.");
+        return;
+    }
+
+    if (spawn_group_clipboard_->entries.size() == 1) {
+        const std::string display_name =
+            spawn_group_clipboard_->entries.front().entry.value("display_name", std::string{"Spawn Group"});
         show_notice(std::string("Copied spawn group \"") + display_name + "\"");
     } else {
-        show_notice("Copied spawn group to clipboard");
+        std::string message = "Copied " + std::to_string(spawn_group_clipboard_->entries.size()) + " spawn groups";
+        if (skipped_count > 0) {
+            message += " (" + std::to_string(skipped_count) + " skipped)";
+        }
+        show_notice(message);
     }
 }
 
 void RoomEditor::paste_spawn_group_from_clipboard() {
-    if (!spawn_group_clipboard_) {
+    if (!spawn_group_clipboard_ || spawn_group_clipboard_->entries.empty()) {
         show_notice("Clipboard is empty. Copy a spawn group first.");
         return;
     }
@@ -2223,20 +2241,27 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
     auto& root = current_room_->assets_data();
     auto& groups = ensure_spawn_groups_array(root);
 
-    nlohmann::json entry = spawn_group_clipboard_->entry;
-    const std::string new_id = generate_spawn_id();
-    entry["spawn_id"] = new_id;
-    const std::string next_name = next_clipboard_display_name();
-    if (!next_name.empty()) {
-        entry["display_name"] = next_name;
+    std::vector<std::string> new_ids{};
+    new_ids.reserve(spawn_group_clipboard_->entries.size());
+
+    const int default_resolution =
+        current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
+    for (SpawnGroupClipboardEntry& clip_entry : spawn_group_clipboard_->entries) {
+        nlohmann::json entry = clip_entry.entry;
+        const std::string new_id = generate_spawn_id();
+        entry["spawn_id"] = new_id;
+        const std::string next_name = next_clipboard_display_name(clip_entry);
+        if (!next_name.empty()) {
+            entry["display_name"] = next_name;
+        }
+
+        const std::string display_name = entry.value("display_name", std::string{"Spawn Group"});
+        devmode::spawn::ensure_spawn_group_entry_defaults(entry, display_name, default_resolution);
+        remap_clipboard_entry_to_room(entry, current_room_);
+        groups.push_back(entry);
+        new_ids.push_back(new_id);
     }
 
-    const std::string display_name = entry.value("display_name", std::string{"Spawn Group"});
-    const int default_resolution = current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
-    devmode::spawn::ensure_spawn_group_entry_defaults(entry, display_name, default_resolution);
-    remap_clipboard_entry_to_room(entry, current_room_);
-
-    groups.push_back(entry);
     for (size_t i = 0; i < groups.size(); ++i) {
         if (groups[i].is_object()) {
             groups[i]["priority"] = static_cast<int>(i);
@@ -2249,16 +2274,31 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
     refresh_spawn_group_config_ui();
     reopen_room_configurator();
 
-    nlohmann::json& inserted = groups.back();
-    respawn_spawn_group(inserted);
+    for (const std::string& new_id : new_ids) {
+        SpawnEntryResolution inserted = locate_spawn_entry(new_id);
+        if (inserted.entry) {
+            respawn_spawn_group(*inserted.entry);
+        }
+    }
 
-    active_spawn_group_id_ = new_id;
-    select_spawn_group_assets(new_id);
+    std::vector<Asset*> pasted_assets{};
+    if (assets_) {
+        for (Asset* asset : assets_->all) {
+            if (!asset || asset->dead || !asset_belongs_to_room(asset)) {
+                continue;
+            }
+            if (std::find(new_ids.begin(), new_ids.end(), asset->spawn_id) != new_ids.end()) {
+                pasted_assets.push_back(asset);
+            }
+        }
+    }
+    select_assets_direct(pasted_assets);
 
-    if (!display_name.empty()) {
-        show_notice(std::string("Pasted spawn group \"") + display_name + "\"");
-    } else {
+    if (new_ids.size() == 1) {
+        active_spawn_group_id_ = new_ids.front();
         show_notice("Pasted spawn group");
+    } else {
+        show_notice("Pasted " + std::to_string(new_ids.size()) + " spawn groups");
     }
 }
 
@@ -2287,6 +2327,21 @@ std::optional<std::string> RoomEditor::selected_spawn_group_id() const {
         return std::nullopt;
     }
     return result;
+}
+
+std::vector<std::string> RoomEditor::selected_spawn_group_ids() const {
+    std::vector<std::string> ordered_ids{};
+    std::unordered_set<std::string> seen{};
+    ordered_ids.reserve(selected_assets_.size());
+    for (Asset* asset : selected_assets_) {
+        if (!asset || !asset_belongs_to_room(asset) || asset->spawn_id.empty()) {
+            continue;
+        }
+        if (seen.insert(asset->spawn_id).second) {
+            ordered_ids.push_back(asset->spawn_id);
+        }
+    }
+    return ordered_ids;
 }
 
 bool RoomEditor::spawn_group_is_boundary(const std::string& spawn_id) const {
@@ -2340,6 +2395,22 @@ Room* RoomEditor::resolve_room_for_clipboard_action() const {
         }
     }
     return current_room_;
+}
+
+void RoomEditor::select_assets_direct(const std::vector<Asset*>& assets) {
+    clear_focus();
+    selected_assets_.clear();
+    selected_assets_.reserve(assets.size());
+    for (Asset* asset : assets) {
+        if (!asset || !asset_belongs_to_room(asset)) {
+            continue;
+        }
+        selected_assets_.push_back(asset);
+    }
+    hovered_asset_ = selected_assets_.empty() ? nullptr : selected_assets_.front();
+    sync_spawn_group_panel_with_selection();
+    mark_highlight_dirty();
+    update_highlighted_assets();
 }
 
 void RoomEditor::select_spawn_group_assets(const std::string& spawn_id) {
@@ -2502,19 +2573,16 @@ std::string RoomEditor::strip_copy_suffix(const std::string& name) {
     return name;
 }
 
-std::string RoomEditor::next_clipboard_display_name() {
-    if (!spawn_group_clipboard_) {
-        return {};
-    }
-    ++spawn_group_clipboard_->paste_count;
-    std::string base = spawn_group_clipboard_->base_display_name;
+std::string RoomEditor::next_clipboard_display_name(SpawnGroupClipboardEntry& entry) {
+    ++entry.paste_count;
+    std::string base = entry.base_display_name;
     if (base.empty()) {
         base = "Spawn Group";
     }
-    if (spawn_group_clipboard_->paste_count == 1) {
+    if (entry.paste_count == 1) {
         return base + " (Copy)";
     }
-    return base + " (Copy " + std::to_string(spawn_group_clipboard_->paste_count) + ")";
+    return base + " (Copy " + std::to_string(entry.paste_count) + ")";
 }
 
 void RoomEditor::show_notice(const std::string& message) const {
@@ -4410,6 +4478,19 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     render_asset_outline(renderer, asset, cam, color, outline_offset);
                 }
             }
+        }
+
+        if (marquee_selection_.active && marquee_selection_.threshold_passed) {
+            const int left = std::min(marquee_selection_.start_screen.x, marquee_selection_.current_screen.x);
+            const int top = std::min(marquee_selection_.start_screen.y, marquee_selection_.current_screen.y);
+            const int right = std::max(marquee_selection_.start_screen.x, marquee_selection_.current_screen.x);
+            const int bottom = std::max(marquee_selection_.start_screen.y, marquee_selection_.current_screen.y);
+            SDL_Rect marquee_rect{left, top, std::max(1, right - left), std::max(1, bottom - top)};
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 70, 160, 255, 44);
+            sdl_render::FillRect(renderer, &marquee_rect);
+            SDL_SetRenderDrawColor(renderer, 70, 160, 255, 210);
+            sdl_render::Rect(renderer, &marquee_rect);
         }
 
         if (!suppress_asset_info_overlays && anchor_mode_active()) {
@@ -6458,8 +6539,21 @@ bool RoomEditor::apply_scroll_size_adjustment(const Input& input) {
         return false;
     }
 
+    const std::vector<std::string> selected_ids = selected_spawn_group_ids();
+    if (selected_ids.size() > 1) {
+        return false;
+    }
+    if (selected_assets_.size() != 1) {
+        return false;
+    }
+
     Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
     if (!primary || !primary->info) {
+        return false;
+    }
+    const std::string& method = primary->spawn_method;
+    const bool exact_method = (method == "Exact" || method == "Exact Position");
+    if (!exact_method) {
         return false;
     }
 
@@ -6601,22 +6695,29 @@ Asset* RoomEditor::selected_asset_within_interaction_radius(SDL_Point screen_poi
 }
 
 bool RoomEditor::delete_selected_asset_or_group() {
-    Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
-    if (!primary) {
+    const std::vector<std::string> spawn_ids = selected_spawn_group_ids();
+    if (spawn_ids.empty()) {
         return false;
     }
 
-    const std::string spawn_id = primary->spawn_id;
-    if (spawn_id.empty()) {
+    int deleted_count = 0;
+    for (const std::string& spawn_id : spawn_ids) {
+        if (spawn_id.empty()) {
+            continue;
+        }
+        if (delete_spawn_group_internal(spawn_id)) {
+            ++deleted_count;
+        }
+    }
+    if (deleted_count <= 0) {
         return false;
     }
-
-    if (!delete_spawn_group_internal(spawn_id)) {
-        return false;
-    }
-
     clear_selection();
-    show_notice("Deleted spawn group");
+    if (deleted_count == 1) {
+        show_notice("Deleted spawn group");
+    } else {
+        show_notice("Deleted " + std::to_string(deleted_count) + " spawn groups");
+    }
     return true;
 }
 
@@ -21791,6 +21892,9 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
     if (forced_mode != DragMode::None) {
         drag_mode_ = forced_mode;
     }
+    if (selected_spawn_group_ids().size() > 1) {
+        drag_mode_ = DragMode::Free;
+    }
 
     bool resolve_geometry = (method == "Exact" || method == "Exact Position" || method == "Perimeter");
 
@@ -22947,6 +23051,19 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
     };
     SyncGuard sync_guard(spawn_group_panel_sync_in_progress_);
     (void)sync_guard;
+
+    const std::vector<std::string> selected_ids = selected_spawn_group_ids();
+    if (selected_ids.size() > 1) {
+        if (spawn_group_panel_) {
+            spawn_group_panel_->close();
+            spawn_group_panel_->set_visible(false);
+        }
+        spawn_group_panel_single_entry_mode_ = false;
+        spawn_group_panel_single_entry_id_.reset();
+        clear_active_spawn_group_target();
+        update_grid_resolution_for_selection(nullptr);
+        return;
+    }
 
     Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
     std::string spawn_id;

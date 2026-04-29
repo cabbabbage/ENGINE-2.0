@@ -20,6 +20,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
+#include "core/tile_builder.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/render_depth_policy.hpp"
@@ -3310,12 +3311,14 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
 
     auto batch = begin_world_mutation_batch();
     std::size_t count = 0;
+    bool removed_tileable_asset = false;
     for (Asset* asset : all) {
         if (!asset || asset->dead || asset == player) {
             continue;
         }
         if (asset->spawn_id == spawn_id) {
             batch.mark_for_deletion(asset);
+            removed_tileable_asset = removed_tileable_asset || (asset->info && asset->info->tillable);
             ++count;
         }
     }
@@ -3326,6 +3329,10 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
 
     if (!batch.commit()) {
         return 0;
+    }
+
+    if (removed_tileable_asset) {
+        loader_tiles::build_grid_tiles(renderer(), world_grid_, map_grid_settings_, all);
     }
     return count;
 }

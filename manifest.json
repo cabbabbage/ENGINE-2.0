@@ -26461,9 +26461,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            239,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26816,9 +26816,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            211,
-            36,
             242,
+            142,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26841,9 +26841,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            204,
-            140,
-            51,
+            132,
+            242,
+            61,
             255
           ],
           "edge_smoothness": 4,
@@ -26866,8 +26866,8 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
+            166,
+            85,
             242,
             255
           ],
@@ -26927,8 +26927,8 @@
           "curvyness": 2,
           "display_color": [
             36,
-            84,
             242,
+            226,
             255
           ],
           "edge_smoothness": 70,
@@ -26992,9 +26992,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            72,
+            31,
+            98,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -27067,6 +27067,126 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-1b89210a629b"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_left"
+                }
+              ],
+              "display_name": "lamp_left",
+              "dx": -2738,
+              "dz": 263,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-ea0f6515d733"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_left"
+                }
+              ],
+              "display_name": "lamp_left (Copy)",
+              "dx": -2900,
+              "dz": 512,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 3,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-df600054c9c2"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_left"
+                }
+              ],
+              "display_name": "lamp_left (Copy)",
+              "dx": -2722,
+              "dz": 279,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 4,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-8730a51c607c"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_left"
+                }
+              ],
+              "display_name": "lamp_left (Copy)",
+              "dx": -2884,
+              "dz": 528,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 5,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a1fa5d042078"
             }
           ],
           "trail_connection_sector": {
@@ -27129,8 +27249,8 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            146,
-            85,
+            228,
+            36,
             242,
             255
           ],

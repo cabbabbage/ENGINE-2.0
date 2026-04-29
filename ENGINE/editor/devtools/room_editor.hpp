@@ -288,10 +288,12 @@ private:
     bool should_open_spawn_group_panel_for_click(const std::string& spawn_id,
                                                  bool has_spawn_group,
                                                  Uint32 click_time_ms);
-    Asset* resolve_owned_parent_asset(const Asset* focus_asset) const;
-    std::vector<Asset*> collect_owned_navigation_candidates() const;
-    Asset* hit_test_owned_navigation_asset(SDL_Point screen_point) const;
-    void update_shift_owned_navigation_hover(SDL_Point screen_point, bool shift_down);
+    Asset* resolve_bound_child_for_owner(
+        Asset* owner,
+        SDL_Point screen_point,
+        const std::unordered_set<std::string>* allowed_anchor_names = nullptr) const;
+    bool navigate_to_bound_child_asset_info(Asset* child);
+    bool try_return_to_parent_asset_info();
     bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     bool asset_anchor_screen_position(const WarpedScreenGrid& cam, const Asset* asset, SDL_Point& out_screen) const;
@@ -1160,10 +1162,10 @@ private:
 
     Asset* hovered_asset_ = nullptr;
     Asset* hovered_anchor_asset_ = nullptr;
-    Asset* shift_nav_hover_asset_ = nullptr;
     bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
+    std::vector<Asset*> asset_info_parent_history_;
     std::vector<Asset*> focus_selection_snapshot_;
     std::optional<std::string> focus_spawn_group_snapshot_{};
     Asset* focused_asset_ = nullptr;

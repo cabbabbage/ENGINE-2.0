@@ -2946,7 +2946,6 @@ void RoomEditor::update(const Input& input) {
 };
 
     if (!enabled_) {
-        shift_nav_hover_asset_ = nullptr;
         if (mouse_controls_enabled_last_frame_) {
             enforce_mouse_controls_disabled();
         }
@@ -2973,9 +2972,6 @@ void RoomEditor::update(const Input& input) {
     const int mx = input.getX();
     const int my = input.getY();
     const bool ui_blocked = is_ui_blocking_input(mx, my);
-    const bool shift_down =
-        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
-    update_shift_owned_navigation_hover(SDL_Point{mx, my}, shift_down);
 
     if (!should_enable_mouse_controls()) {
         enforce_mouse_controls_disabled();
@@ -6478,7 +6474,6 @@ void RoomEditor::clear_selection() {
     highlighted_assets_.clear();
     hovered_asset_ = nullptr;
     hovered_anchor_asset_ = nullptr;
-    shift_nav_hover_asset_ = nullptr;
     clear_dynamic_boundary_proxy_selection();
     reset_drag_state();
     clear_mouse_press_state(true);
@@ -7809,83 +7804,91 @@ Asset* RoomEditor::hit_test_asset_anchor(SDL_Point screen_point, int pick_radius
     return best;
 }
 
-Asset* RoomEditor::resolve_owned_parent_asset(const Asset* focus_asset) const {
-    if (!focus_asset || !assets_) {
+Asset* RoomEditor::resolve_bound_child_for_owner(
+    Asset* owner,
+    SDL_Point screen_point,
+    const std::unordered_set<std::string>* allowed_anchor_names) const {
+    if (!owner || !assets_ || owner->dead || !asset_belongs_to_room(owner)) {
         return nullptr;
     }
-    const std::vector<Asset*>* source_assets = selection_asset_source();
-    if (!source_assets) {
-        source_assets = &assets_->all;
-    }
-    Asset* best = nullptr;
-    for (Asset* candidate : *source_assets) {
-        if (!candidate || candidate == focus_asset || candidate->dead) continue;
-        if (!asset_belongs_to_room(candidate)) continue;
-        if (candidate->has_child(focus_asset)) {
-            if (!best || candidate->world_z() < best->world_z()) {
-                best = candidate;
-            }
-        }
-    }
-    return best;
-}
-
-std::vector<Asset*> RoomEditor::collect_owned_navigation_candidates() const {
-    std::vector<Asset*> out;
-    Asset* focus = selected_assets_.empty() ? nullptr : selected_assets_.front();
-    if (!focus || !asset_belongs_to_room(focus) || focus->dead) {
-        return out;
-    }
-    if (Asset* parent = resolve_owned_parent_asset(focus)) {
-        out.push_back(parent);
-    }
-    for (Asset* child : focus->children()) {
-        if (!child || child->dead || !asset_belongs_to_room(child)) continue;
-        if (std::find(out.begin(), out.end(), child) == out.end()) {
-            out.push_back(child);
-        }
-    }
-    return out;
-}
-
-Asset* RoomEditor::hit_test_owned_navigation_asset(SDL_Point screen_point) const {
-    if (!assets_) return nullptr;
-    const std::vector<Asset*> candidates = collect_owned_navigation_candidates();
-    if (candidates.empty()) return nullptr;
 
     const WarpedScreenGrid& cam = assets_->getView();
     ensure_spatial_index(cam);
+
+    const auto bindings = anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().debug_bindings_snapshot();
     Asset* best = nullptr;
-    int best_dist2 = std::numeric_limits<int>::max();
-    int best_top = std::numeric_limits<int>::max();
-    for (Asset* candidate : candidates) {
-        auto it = asset_bounds_cache_.find(candidate);
-        if (it == asset_bounds_cache_.end()) continue;
-        const SDL_Rect rect = it->second.bounds;
-        if (!SDL_PointInRect(&screen_point, &rect)) continue;
-        const SDL_Point gp = grid_point_for_asset(candidate);
-        const SDL_Point cursor_grid = grid_point_for_screen(cam, screen_point);
-        const int dx = gp.x - cursor_grid.x;
-        const int dy = gp.y - cursor_grid.y;
+    bool best_contains = false;
+    int best_score = std::numeric_limits<int>::max();
+
+    for (const auto& binding : bindings) {
+        if (binding.owner != owner) {
+            continue;
+        }
+        if (allowed_anchor_names && !allowed_anchor_names->empty() &&
+            allowed_anchor_names->find(binding.anchor_name) == allowed_anchor_names->end()) {
+            continue;
+        }
+        Asset* child = binding.child_asset;
+        if (!child || child->dead || !asset_belongs_to_room(child) || !child->info) {
+            continue;
+        }
+
+        auto bounds_it = asset_bounds_cache_.find(child);
+        if (bounds_it == asset_bounds_cache_.end()) {
+            continue;
+        }
+        const SDL_Rect rect = bounds_it->second.bounds;
+        const bool contains = SDL_PointInRect(&screen_point, &rect) != 0;
+        const int cx = rect.x + (rect.w / 2);
+        const int cy = rect.y + (rect.h / 2);
+        const int dx = cx - screen_point.x;
+        const int dy = cy - screen_point.y;
         const int dist2 = dx * dx + dy * dy;
-        if (!best || dist2 < best_dist2 || (dist2 == best_dist2 && rect.y < best_top)) {
-            best = candidate;
-            best_dist2 = dist2;
-            best_top = rect.y;
+        const int score = contains ? dist2 : (dist2 + 50000);
+
+        if (!best || (contains && !best_contains) || (contains == best_contains && score < best_score)) {
+            best = child;
+            best_contains = contains;
+            best_score = score;
         }
     }
+
     return best;
 }
 
-void RoomEditor::update_shift_owned_navigation_hover(SDL_Point screen_point, bool shift_down) {
-    Asset* next = nullptr;
-    if (shift_down && asset_editor_tab_scope_active()) {
-        next = hit_test_owned_navigation_asset(screen_point);
+bool RoomEditor::navigate_to_bound_child_asset_info(Asset* child) {
+    if (!child || !child->info) {
+        return false;
     }
-    if (next != shift_nav_hover_asset_) {
-        shift_nav_hover_asset_ = next;
-        mark_highlight_dirty();
+
+    Asset* parent = nullptr;
+    if (anchor_mode_active() && anchor_edit_.target_asset) {
+        parent = anchor_edit_.target_asset;
+    } else if (oval_mode_active() && oval_edit_.target_asset) {
+        parent = oval_edit_.target_asset;
+    } else if (info_ui_) {
+        parent = info_ui_->get_target_asset();
     }
+
+    if (parent && parent != child) {
+        asset_info_parent_history_.push_back(parent);
+    }
+
+    open_asset_info_editor_for_asset(child, false);
+    return true;
+}
+
+bool RoomEditor::try_return_to_parent_asset_info() {
+    while (!asset_info_parent_history_.empty()) {
+        Asset* parent = asset_info_parent_history_.back();
+        asset_info_parent_history_.pop_back();
+        if (!parent || parent->dead || !parent->info || !is_asset_pointer_live(parent) || !asset_belongs_to_room(parent)) {
+            continue;
+        }
+        open_asset_info_editor_for_asset(parent, false);
+        return true;
+    }
+    return false;
 }
 
 Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const {

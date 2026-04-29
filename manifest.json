@@ -26772,9 +26772,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26797,9 +26797,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26824,7 +26824,7 @@
           "display_color": [
             204,
             31,
-            139,
+            133,
             255
           ],
           "edge_smoothness": 4,
@@ -26883,7 +26883,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            219,
+            203,
             36,
             255
           ],
@@ -26948,8 +26948,8 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            36,
-            68,
+            171,
+            85,
             242,
             255
           ],
@@ -27626,7 +27626,7 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            113,
+            118,
             204,
             31,
             255

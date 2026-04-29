@@ -3210,13 +3210,6 @@ bool Assets::apply_world_mutation_batch(WorldMutationBatch& batch) {
 }
 
 std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_delete) {
-    for (Asset* asset : assets_to_delete) {
-        if (!asset) {
-            continue;
-        }
-        asset->notify_pre_delete();
-    }
-
     const std::vector<Asset*> ordered_removals = collect_removal_closure(assets_to_delete);
     if (ordered_removals.empty()) {
         return 0;
@@ -3231,6 +3224,13 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     }
     if (unique_removals.empty()) {
         return 0;
+    }
+
+    for (Asset* asset : ordered_removals) {
+        if (!asset || unique_removals.find(asset) == unique_removals.end()) {
+            continue;
+        }
+        asset->notify_pre_delete();
     }
 
     for (Asset* asset : all) {

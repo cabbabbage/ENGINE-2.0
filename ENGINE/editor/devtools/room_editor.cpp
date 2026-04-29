@@ -4487,6 +4487,16 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 }
             }
 
+            if (marquee_selection_.active && marquee_selection_.threshold_passed) {
+                SDL_Color preview_color{50, 150, 255, 255}; // blue marquee preview
+                for (Asset* asset : marquee_selection_.last_selection) {
+                    if (!asset_belongs_to_room(asset)) {
+                        continue;
+                    }
+                    render_asset_outline(renderer, asset, cam, preview_color, outline_offset);
+                }
+            }
+
         }
 
         if (has_shift_nav_hover) {
@@ -7140,6 +7150,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             mouse_press_state_.valid = selection_hit != nullptr;
 
             if (!selection_hit) {
+                if (had_selection_before_press) {
+                    clear_selection();
+                }
                 marquee_selection_.reset();
                 marquee_selection_.active = true;
                 marquee_selection_.start_screen = screen_pt;
@@ -7183,7 +7196,6 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                     }
                 }
                 marquee_selection_.last_selection = inside;
-                select_assets_direct(inside);
             }
         }
 

@@ -287,6 +287,7 @@ public:
     void touch_last_frame_counter();
     bool process_pending_removals();
     std::size_t delete_assets_for_spawn_group(const std::string& spawn_id);
+    std::size_t delete_assets_for_spawn_groups(const std::vector<std::string>& spawn_ids);
     WorldMutationBatch begin_world_mutation_batch();
     void set_output_dimensions(int width, int height);
     std::optional<SDL_Point> scene_postprocess_target_size() const;

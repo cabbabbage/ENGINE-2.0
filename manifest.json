@@ -14823,7 +14823,7 @@
               },
               {
                 "chance": 5,
-                "name": "window_round_large"
+                "name": "window_round_small"
               }
             ]
           },
@@ -14924,6 +14924,54 @@
             ]
           },
           "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_5_copy_2",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_5_copy_2_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_5_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -14963,8 +15011,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 354,
-                "texture_y": 1352
+                "texture_x": 919,
+                "texture_y": 1126
               },
               {
                 "depth_offset": -0.20000001788139343,
@@ -14975,8 +15023,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1479,
-                "texture_y": 1339
+                "texture_x": 1601,
+                "texture_y": 1263
               },
               {
                 "depth_offset": -0.4000000059604645,
@@ -15035,8 +15083,32 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 424,
-                "texture_y": 872
+                "texture_x": 170,
+                "texture_y": 1249
+              },
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_5_copy_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 436,
+                "texture_y": 1254
+              },
+              {
+                "depth_offset": -0.10000000149011612,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_5_copy_2_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 429,
+                "texture_y": 874
               },
               {
                 "depth_offset": -0.09999995678663254,
@@ -15047,8 +15119,20 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1424,
-                "texture_y": 864
+                "texture_x": 1327,
+                "texture_y": 1263
+              },
+              {
+                "depth_offset": -0.09999995678663254,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_5_copy_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 1416,
+                "texture_y": 875
               }
             ]
           ],
@@ -16094,7 +16178,7 @@
                   ],
                   "enabled": true,
                   "falloff": 8.0,
-                  "intensity": 1.7599999904632568,
+                  "intensity": 3.8299999237060547,
                   "opacity": 100.0,
                   "radius": 15.0,
                   "shadow_strength": 0.4099999964237213
@@ -16103,15 +16187,12 @@
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "real_3d_point",
-                "texture_x": 6,
-                "texture_y": 5
+                "texture_x": 775,
+                "texture_y": 555
               }
             ]
           ],
           "box_schema_version": 1,
-          "derived_modifiers": {
-            "reverse": false
-          },
           "hit_boxes": [
             [
               {
@@ -16156,37 +16237,6 @@
               }
             ]
           ],
-          "inherit_data": false,
-          "invert_frames_horizontal": false,
-          "invert_frames_vertical": false,
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "movement": [
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "yes",
-            "path": ""
-          },
-          "tags": []
-        },
-        "yes": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -16211,7 +16261,7 @@
           "source": {
             "kind": "folder",
             "name": "",
-            "path": "yes"
+            "path": "default"
           },
           "tags": []
         }
@@ -16233,7 +16283,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 75.0,
+        "scale_percentage": 2.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -26264,9 +26314,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            85,
-            193,
+            125,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26619,8 +26669,8 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
+            59,
             31,
-            96,
             204,
             255
           ],
@@ -26644,8 +26694,8 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            37,
             242,
+            39,
             36,
             255
           ],
@@ -26670,8 +26720,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            241,
             36,
+            220,
             255
           ],
           "edge_smoothness": 4,
@@ -26699,9 +26749,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            204,
-            102,
-            31,
+            242,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 70,
@@ -26765,12 +26815,12 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            211,
-            36,
+            37,
             242,
+            36,
             255
           ],
-          "edge_smoothness": 87,
+          "edge_smoothness": 101,
           "geometry": "Square",
           "inherits_map_assets": false,
           "is_boss": false,
@@ -26823,16 +26873,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1216,
-              "dz": 691,
+              "dx": -938,
+              "dz": -1217,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12456,
-              "origional_width": 19304,
+              "origional_height": 12112,
+              "origional_width": 18504,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -27033,8 +27083,8 @@
                 }
               ],
               "display_name": "3_candles",
-              "dx": -130,
-              "dz": -1349,
+              "dx": -121,
+              "dz": -1370,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27046,7 +27096,7 @@
               "perimeter_radius": 137,
               "position": "Perimeter",
               "priority": 8,
-              "radius": 137,
+              "radius": 134,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
@@ -27364,22 +27414,23 @@
                 }
               ],
               "display_name": "fly",
-              "dx": -1290,
-              "dz": 2023,
+              "dx": -937,
+              "dz": 1054,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
-              "max_number": 2000,
-              "min_number": 2000,
-              "origional_height": 12712,
-              "origional_width": 18528,
-              "position": "Random",
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12344,
+              "origional_width": 19440,
+              "position": "Exact",
               "priority": 19,
-              "resolution": 4,
+              "quantity": 1,
+              "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-a2a466fa449b"
+              "spawn_id": "spn-4db6a682b907"
             }
           ],
           "trail_connection_sector": {
@@ -27442,9 +27493,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            58,
-            36,
+            160,
             242,
+            85,
             255
           ],
           "edge_smoothness": 96,
@@ -27560,16 +27611,16 @@
                 }
               ],
               "display_name": "candle_fps_12",
-              "dx": -1318,
-              "dz": -1048,
+              "dx": -925,
+              "dz": -945,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 8000,
-              "origional_width": 10000,
+              "origional_height": 6760,
+              "origional_width": 5768,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -27646,36 +27697,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly",
-              "dx": -2884,
-              "dz": -967,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 8000,
-              "origional_width": 10000,
-              "position": "Exact",
-              "priority": 6,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-740eafc48263"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "spider"
                 }
               ],
@@ -27691,7 +27712,7 @@
               "origional_height": 8000,
               "origional_width": 10752,
               "position": "Exact",
-              "priority": 7,
+              "priority": 6,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27710,18 +27731,18 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -961,
-              "dz": -2779,
+              "dx": -804,
+              "dz": -2018,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 8000,
-              "origional_width": 10752,
+              "origional_height": 6704,
+              "origional_width": 5768,
               "position": "Exact",
-              "priority": 8,
+              "priority": 7,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27751,42 +27772,12 @@
               "origional_height": 8000,
               "origional_width": 10752,
               "position": "Exact",
-              "priority": 9,
+              "priority": 8,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-a66d7f4338ba"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "doorway_1"
-                }
-              ],
-              "display_name": "doorway_1",
-              "dx": -222,
-              "dz": -2409,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 8000,
-              "origional_width": 10752,
-              "position": "Exact",
-              "priority": 10,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-97c8529d7242"
             }
           ],
           "trail_connection_sector": {

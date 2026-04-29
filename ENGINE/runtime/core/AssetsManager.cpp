@@ -3337,6 +3337,54 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
     return count;
 }
 
+std::size_t Assets::delete_assets_for_spawn_groups(const std::vector<std::string>& spawn_ids) {
+    if (spawn_ids.empty()) {
+        return 0;
+    }
+
+    std::vector<std::string> filtered_spawn_ids;
+    filtered_spawn_ids.reserve(spawn_ids.size());
+    for (const std::string& spawn_id : spawn_ids) {
+        if (!spawn_id.empty()) {
+            filtered_spawn_ids.push_back(spawn_id);
+        }
+    }
+    if (filtered_spawn_ids.empty()) {
+        return 0;
+    }
+    std::sort(filtered_spawn_ids.begin(), filtered_spawn_ids.end());
+    filtered_spawn_ids.erase(std::unique(filtered_spawn_ids.begin(), filtered_spawn_ids.end()),
+                             filtered_spawn_ids.end());
+
+    auto batch = begin_world_mutation_batch();
+    std::size_t count = 0;
+    bool removed_tileable_asset = false;
+    for (Asset* asset : all) {
+        if (!asset || asset->dead || asset == player) {
+            continue;
+        }
+        if (!std::binary_search(filtered_spawn_ids.begin(), filtered_spawn_ids.end(), asset->spawn_id)) {
+            continue;
+        }
+        batch.mark_for_deletion(asset);
+        removed_tileable_asset = removed_tileable_asset || (asset->info && asset->info->tillable);
+        ++count;
+    }
+
+    if (count == 0) {
+        return 0;
+    }
+
+    if (!batch.commit()) {
+        return 0;
+    }
+
+    if (removed_tileable_asset) {
+        loader_tiles::build_grid_tiles(renderer(), world_grid_, map_grid_settings_, all);
+    }
+    return count;
+}
+
 void Assets::render_overlays(SDL_Renderer* renderer) {
     const Uint32 now = SDL_GetTicks();
 

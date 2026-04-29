@@ -5937,12 +5937,11 @@ void RoomEditor::regenerate_room_from_template(const std::string& template_key) 
 
     clear_selection();
     clear_room_trail_nav_entries();
+    assets_->delete_assets_for_spawn_groups(spawn_ids_to_delete);
     for (const std::string& spawn_id : spawn_ids_to_delete) {
-        if (spawn_id.empty()) {
-            continue;
+        if (!spawn_id.empty()) {
+            prune_spawn_group_transient_references(spawn_id);
         }
-        assets_->delete_assets_for_spawn_group(spawn_id);
-        prune_spawn_group_transient_references(spawn_id);
     }
 
     for (Room* trail_room : snapshot.connected_trails) {

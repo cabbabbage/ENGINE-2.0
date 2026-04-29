@@ -76,8 +76,6 @@ class AssetInfoUI {
     void sync_target_tiling_state();
     void request_apply_section(AssetInfoSectionId section_id);
     void set_header_visibility_callback(std::function<void(bool)> cb);
-    void set_ownership_navigation_callback(std::function<void(class Asset*)> cb);
-    void set_ownership_navigation_targets(class Asset* parent, const std::vector<class Asset*>& children);
     void mark_target_asset_composite_dirty();
     void sync_target_spacing_settings();
     void sync_target_tags();
@@ -117,9 +115,6 @@ class AssetInfoUI {
     bool handle_section_focus_event(const SDL_Event& e);
     std::shared_ptr<animation_editor::AnimationDocument> animation_document() const;
     void collapse_all_except(DockableCollapsible* keep);
-    void rebuild_ownership_navigation_controls();
-    bool handle_ownership_navigation_event(const SDL_Event& e);
-    void render_ownership_navigation_controls(SDL_Renderer* r) const;
 
   private:
     bool visible_ = false;
@@ -189,13 +184,5 @@ class AssetInfoUI {
     SDL_Cursor* color_sampling_prev_cursor_ = nullptr;
     SDL_Cursor* color_sampling_cursor_handle_ = nullptr;
     bool animation_document_save_in_progress_ = false;
-    std::function<void(class Asset*)> ownership_navigation_callback_{};
-    class Asset* ownership_parent_asset_ = nullptr;
-    std::vector<class Asset*> ownership_child_assets_;
-    std::unique_ptr<class DMButton> ownership_parent_btn_;
-    std::unique_ptr<class ButtonWidget> ownership_parent_btn_widget_;
-    std::vector<std::unique_ptr<class DMButton>> ownership_child_btns_;
-    std::vector<std::unique_ptr<class ButtonWidget>> ownership_child_btn_widgets_;
-    mutable std::vector<std::pair<class Asset*, SDL_Rect>> ownership_nav_hit_regions_;
 };
 

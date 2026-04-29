@@ -292,7 +292,6 @@ private:
     std::vector<Asset*> collect_owned_navigation_candidates() const;
     Asset* hit_test_owned_navigation_asset(SDL_Point screen_point) const;
     void update_shift_owned_navigation_hover(SDL_Point screen_point, bool shift_down);
-    void refresh_asset_info_ownership_navigation_controls();
     bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     bool asset_anchor_screen_position(const WarpedScreenGrid& cam, const Asset* asset, SDL_Point& out_screen) const;

@@ -1239,6 +1239,29 @@ const SlidingWindowContainer* RoomConfigurator::container() const { return conta
 
 void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
     container.set_header_text_provider([this]() { return this->current_header_text(); });
+    const bool can_generate_live_room = (room_ != nullptr) && !is_trail_context_ && !room_metadata_only_mode_;
+    if (can_generate_live_room && on_generate_room_) {
+        container.set_header_navigation_button(
+            "Generate",
+            [this]() {
+                if (!on_generate_room_) {
+                    return;
+                }
+                std::string template_key;
+                if (room_ && !room_->room_name.empty()) {
+                    template_key = room_->room_name;
+                } else if (state_ && !state_->name.empty()) {
+                    template_key = state_->name;
+                }
+                if (!template_key.empty()) {
+                    on_generate_room_(template_key);
+                }
+            },
+            &DMStyles::CreateButton());
+        container.set_header_navigation_alignment_right(true);
+    } else {
+        container.clear_header_navigation_button();
+    }
     container.set_on_close([this]() { handle_container_closed(); });
     container.set_layout_function([this](const SlidingWindowContainer::LayoutContext& ctx) {
         return this->layout_content(ctx);
@@ -1997,6 +2020,7 @@ void RoomConfigurator::rebuild_rows() {
     }
 
     if (container_) {
+        configure_container(*container_);
         container_->set_scroll_value(previous_scroll);
     }
 }

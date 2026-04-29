@@ -21558,6 +21558,9 @@ void RoomEditor::ensure_room_configurator() {
     room_cfg_ui_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired_name) {
         return rename_active_room(old_name, desired_name);
     });
+    room_cfg_ui_->set_on_generate_room([this](const std::string& template_key) {
+        regenerate_room_from_template(template_key);
+    });
     room_cfg_ui_->set_on_close([this]() {
         room_config_dock_open_ = false;
         room_config_panel_visible_ = false;

@@ -4451,7 +4451,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         render_dynamic_boundary_proxy_overlay(renderer);
 
         const bool has_selected = !selected_assets_.empty();
-        const bool has_hover_highlight = shift_now && !highlighted_assets_.empty();
+        const bool has_hover_highlight = !highlighted_assets_.empty();
         const bool has_shift_nav_hover = shift_now && shift_nav_hover_asset_ && asset_belongs_to_room(shift_nav_hover_asset_);
         const bool asset_editor_mode_active = (editor_mode_ != EditorMode::Normal);
         const bool suppress_selection_outlines =
@@ -4473,7 +4473,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 }
             }
 
-            // Render hover outlines only when Shift is held.
+            // Render hover outlines for hovered assets not already selected.
             if (has_hover_highlight) {
                 for (Asset* asset : highlighted_assets_) {
                     if (!asset_belongs_to_room(asset)) continue;
@@ -7357,16 +7357,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             }
         }
 
-        Asset* direct_hit = hit_test_asset(screen_pt, nullptr);
-        if (!selection_hit && !selection_boundary_hit && !selected_assets_.empty() && direct_hit) {
-            const bool hit_is_already_selected =
-                std::find(selected_assets_.begin(), selected_assets_.end(), direct_hit) != selected_assets_.end();
-            if (!hit_is_already_selected) {
-                select_asset_or_group(direct_hit);
-                selection_hit = direct_hit;
-            }
-        }
-        if (!selection_hit && !selection_boundary_hit && !selected_assets_.empty() && !direct_hit) {
+        if (!selection_hit && !selection_boundary_hit && !selected_assets_.empty()) {
             clear_selection();
         }
         if (!selection_hit && !selection_boundary_hit && selected_dynamic_boundary_proxy_) {
@@ -8723,24 +8714,9 @@ void RoomEditor::handle_click(const Input& input) {
     }
 
     if (!selected_assets_.empty()) {
-        if (selected_asset_within_interaction_radius(screen_mouse)) {
-            return;
+        if (!selected_asset_within_interaction_radius(screen_mouse)) {
+            clear_selection();
         }
-
-        Asset* clicked_asset = hit_test_asset(screen_mouse, nullptr);
-        if (!clicked_asset && shift_modifier) {
-            clicked_asset = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
-        }
-        if (clicked_asset) {
-            const bool clicked_selected =
-                std::find(selected_assets_.begin(), selected_assets_.end(), clicked_asset) != selected_assets_.end();
-            if (!clicked_selected) {
-                select_asset_or_group(clicked_asset);
-            }
-            return;
-        }
-
-        clear_selection();
         return;
     }
 

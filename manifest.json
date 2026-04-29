@@ -248,9 +248,9 @@
         "small_surface_top"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 11,
-      "tilt_range_min_deg": -18,
-      "weight_kg": 100.0,
+      "tilt_range_max_deg": 20,
+      "tilt_range_min_deg": -20,
+      "weight_kg": 125.0,
       "y_pos_max": 0,
       "y_pos_min": -8
     },
@@ -12896,6 +12896,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/booze_2",
       "asset_name": "booze_2",
+      "asset_type": "object",
       "attack_box_enabled": false,
       "can_invert": true,
       "floor_boxes_enabled": false,
@@ -12905,7 +12906,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 20.0
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
       },
       "start": "default",
       "tags": [
@@ -17684,12 +17686,19 @@
       },
       "asset_directory": "resources/assets/health",
       "asset_name": "health",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "size_settings": {
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
+      },
+      "start": "default",
+      "tillable": false
     },
     "health_beer": {
       "animations": {
@@ -18113,6 +18122,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/mana",
       "asset_name": "mana",
+      "asset_type": "object",
       "attack_box_enabled": false,
       "can_invert": true,
       "floor_boxes_enabled": false,
@@ -18122,7 +18132,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 24.0
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
       },
       "start": "default",
       "tags": [
@@ -18173,12 +18184,19 @@
       },
       "asset_directory": "resources/assets/movement_speed",
       "asset_name": "movement_speed",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "size_settings": {
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
+      },
+      "start": "default",
+      "tillable": false
     },
     "mushroom": {
       "anchor_point_child_candidates": [],
@@ -26427,9 +26445,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            242,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26782,9 +26800,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
+            131,
             85,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26807,9 +26825,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            140,
-            242,
-            36,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26832,8 +26850,8 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
+            157,
             242,
-            36,
             36,
             255
           ],
@@ -26892,9 +26910,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            210,
+            31,
+            125,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -26958,14 +26976,14 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            192,
+            242,
+            184,
             255
           ],
           "edge_smoothness": 101,
           "geometry": "Square",
-          "inherits_map_assets": false,
+          "inherits_map_assets": true,
           "is_boss": false,
           "max_height": 12110,
           "max_width": 18504,
@@ -27016,8 +27034,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 1,
-              "dz": 24,
+              "dx": -518,
+              "dz": 57,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27046,16 +27064,16 @@
                 }
               ],
               "display_name": "lamp_left",
-              "dx": -3047,
-              "dz": -914,
+              "dx": -2889,
+              "dz": -458,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
+              "origional_height": 12112,
+              "origional_width": 18504,
               "position": "Exact",
               "priority": 2,
               "quantity": 1,
@@ -27106,16 +27124,16 @@
                 }
               ],
               "display_name": "lamp_left (Copy 2)",
-              "dx": -3207,
-              "dz": -2197,
+              "dx": -3175,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
+              "origional_height": 12112,
+              "origional_width": 18504,
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
@@ -27636,9 +27654,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            129,
-            31,
-            204,
+            242,
+            61,
+            36,
             255
           ],
           "edge_smoothness": 96,

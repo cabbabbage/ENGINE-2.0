@@ -1633,13 +1633,6 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
 
     if (info_ && asset_selector_ && asset_selector_->visible()) {
         asset_selector_->update(input);
-        const SDL_Rect& panel = container_.panel_rect();
-        DockManager::SlidingParentInfo parent;
-        parent.bounds = panel;
-        parent.padding = DMSpacing::panel_padding();
-        parent.anchor_left = true;
-        parent.align_top = true;
-        asset_selector_->layout_with_parent(parent);
     }
 
     container_.update(input, screen_w, screen_h);

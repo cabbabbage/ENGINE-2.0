@@ -26443,7 +26443,7 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            160,
+            157,
             242,
             36,
             255
@@ -26798,9 +26798,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            36,
+            85,
             242,
-            155,
+            128,
             255
           ],
           "edge_smoothness": 4,
@@ -26823,8 +26823,8 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            123,
-            31,
+            125,
+            71,
             204,
             255
           ],
@@ -26848,9 +26848,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            240,
             242,
             85,
+            168,
             255
           ],
           "edge_smoothness": 4,
@@ -26908,9 +26908,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            204,
-            91,
-            31,
+            235,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 70,
@@ -26974,9 +26974,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            36,
-            232,
-            242,
+            204,
+            91,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27192,7 +27192,7 @@
               "min_number": 15,
               "origional_height": 12768,
               "origional_width": 18984,
-              "perimeter_radius": 134,
+              "perimeter_radius": 320,
               "position": "Perimeter",
               "priority": 6,
               "radius": 320,
@@ -27500,6 +27500,277 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-e8eb6ab22927"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_left"
+                }
+              ],
+              "display_name": "lamp_left (Copy)",
+              "dx": 303,
+              "dz": -4495,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 17,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-7c597dcf5435"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "baseball_field"
+                }
+              ],
+              "display_name": "baseball_field (Copy)",
+              "dx": -1236,
+              "dz": -218,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 18,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-2ff4aa54fba6"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble"
+                }
+              ],
+              "display_name": "vibble (Copy)",
+              "dx": -1690,
+              "dz": -268,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 19,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-1b89210a629b"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 5.0,
+                  "name": "#candle"
+                }
+              ],
+              "display_name": "3_candles (Copy)",
+              "dx": -112,
+              "dz": -1312,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 15,
+              "min_number": 15,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "perimeter_radius": 320,
+              "position": "Perimeter",
+              "priority": 20,
+              "radius": 320,
+              "resolution": 2,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-fdf0f71c9d9f"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_left"
+                }
+              ],
+              "display_name": "lamp_left (Copy)",
+              "dx": -2819,
+              "dz": -3149,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 21,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-97bc0bc086b2"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_left"
+                }
+              ],
+              "display_name": "lamp_left (Copy)",
+              "dx": -771,
+              "dz": -4434,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 22,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-6ffe9948aff3"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "skull_pile"
+                }
+              ],
+              "display_name": "skull_pile (Copy)",
+              "dx": -329,
+              "dz": -2989,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 23,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-d4992a6766e9"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "pngtree_electric_pole_png_image_5949632"
+                }
+              ],
+              "display_name": "pngtree_electric_pole_png_image_5949632 (Copy)",
+              "dx": -2209,
+              "dz": -5057,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 24,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-3d43d7d26921"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_right"
+                }
+              ],
+              "display_name": "lamp_right (Copy)",
+              "dx": -2001,
+              "dz": -4741,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 25,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-33ba58f7e8b0"
             }
           ],
           "trail_connection_sector": {
@@ -27562,9 +27833,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            87,
-            242,
-            85,
+            31,
+            204,
+            180,
             255
           ],
           "edge_smoothness": 96,

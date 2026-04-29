@@ -7161,8 +7161,29 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                 dist2 > (kMouseDragThresholdPx * kMouseDragThresholdPx)) {
                 marquee_selection_.threshold_passed = true;
             }
-            if (marquee_selection_.threshold_passed) {
-                (void)commit_marquee_selection(screen_pt);
+            if (marquee_selection_.threshold_passed && assets_) {
+                const int left = std::min(marquee_selection_.start_screen.x, marquee_selection_.current_screen.x);
+                const int top = std::min(marquee_selection_.start_screen.y, marquee_selection_.current_screen.y);
+                const int right = std::max(marquee_selection_.start_screen.x, marquee_selection_.current_screen.x);
+                const int bottom = std::max(marquee_selection_.start_screen.y, marquee_selection_.current_screen.y);
+                const WarpedScreenGrid& cam = assets_->getView();
+                std::vector<Asset*> inside{};
+                inside.reserve(64);
+                for (Asset* asset : assets_->all) {
+                    if (!asset || asset->dead || !asset_belongs_to_room(asset)) {
+                        continue;
+                    }
+                    SDL_Point anchor_screen{0, 0};
+                    if (!asset_anchor_screen_position(cam, asset, anchor_screen)) {
+                        continue;
+                    }
+                    if (anchor_screen.x >= left && anchor_screen.x <= right &&
+                        anchor_screen.y >= top && anchor_screen.y <= bottom) {
+                        inside.push_back(asset);
+                    }
+                }
+                marquee_selection_.last_selection = inside;
+                select_assets_direct(inside);
             }
         }
 
@@ -8657,7 +8678,17 @@ void RoomEditor::handle_click(const Input& input) {
         };
 
         Asset* target = nullptr;
-        if (!selected_assets_.empty()) {
+        if (shift_modifier) {
+            if (hovered_asset_ && asset_belongs_to_room(hovered_asset_)) {
+                target = hovered_asset_;
+            }
+            if (!target) {
+                target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
+            }
+            if (!target) {
+                target = hit_test_asset(screen_mouse, nullptr);
+            }
+        } else if (!selected_assets_.empty()) {
             target = selected_asset_within_interaction_radius(screen_mouse);
         } else {
             target = hit_test_asset(screen_mouse, nullptr);
@@ -8666,6 +8697,9 @@ void RoomEditor::handle_click(const Input& input) {
             }
         }
         if (target) {
+            if (shift_modifier) {
+                select_asset_or_group(target);
+            }
             if (spawn_group_panel_) {
                 spawn_group_panel_->close();
                 spawn_group_panel_->set_visible(false);

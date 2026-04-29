@@ -1,5 +1,6 @@
 #include "fly_controller.hpp"
 #include "animation/controllers/shared/custom_controller_api.hpp"
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/attack.hpp"
 #include "assets/asset/Asset.hpp"
@@ -34,14 +35,21 @@ fly_controller::fly_controller(Asset* self)
 }
 
 void fly_controller::on_update(const Input& in) {
+    Asset* self = self_ptr();
+    if (!self) {
+        return;
+    }
+
     orbit_behavior_.set_config(game_context().fly_orbit_behavior_config());
     if(orbiting) {
         orbit_behavior_.tick(in);
+        if (game_context().room_flies_aggressive()) {
+            animation_update::custom_controllers::AttackDetectionHelper::send_attacks_to_active_targets(self, assets());
+        }
     }
     else{
-        if (self_ptr()->needs_target) {
-            self_ptr()->anim_->set_animation("die");
-
+        if (self->anim_) {
+            self->anim_->set_animation(animation_update::detail::kDefaultAnimation);
         }
     }
 }
@@ -68,8 +76,9 @@ void fly_controller::on_attack(const animation_update::Attack& attack) {
 
         if (self->anim_) {
             self->anim_->cancel_all_movement();
-            self->anim_->auto_move_3d({self->world_x(), -10, self->world_z()}, 0, std::nullopt, true);
+            self->anim_->set_animation(animation_update::detail::kDefaultAnimation);
         }
+        self->move_to_world_position(self->world_x(), -10, self->world_z(), self->grid_resolution);
         orbiting = false;
     }
 }

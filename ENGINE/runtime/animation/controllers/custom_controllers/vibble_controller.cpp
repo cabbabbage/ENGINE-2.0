@@ -604,8 +604,8 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
     }
 
     const int clamped_hold = std::clamp(held_frames, 1, 120);
-    const float force = 250.0f + static_cast<float>(clamped_hold) * 12.0f;
-    const float upward_force = 220.0f + static_cast<float>(clamped_hold) * 5.0f;
+    const float force = 350.0f + static_cast<float>(clamped_hold) * 14.0f;
+    const float upward_force = 220.0f + static_cast<float>(clamped_hold) * 10.0f;
     return OrphanImpulse{dir_x, dir_z, force, upward_force};
 }
 

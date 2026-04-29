@@ -87,6 +87,7 @@ public:
         float light_fade_in_seconds = 0.16f;
         float light_fade_out_seconds = 0.28f;
         float light_min_fade_seconds = 0.06f;
+        float light_distance_fade_start_ratio = 0.8f;
         bool light_culling_debug_overlay = false;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;

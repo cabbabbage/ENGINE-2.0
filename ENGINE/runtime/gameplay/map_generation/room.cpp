@@ -1177,10 +1177,6 @@ const nlohmann::json& Room::assets_data() const {
         return assets_json;
 }
 
-bool Room::is_spawn_room() const {
-        return false;
-}
-
 SDL_Color Room::display_color() const {
         static constexpr SDL_Color kFallback{120, 170, 235, 255};
         if (!assets_json.is_object()) {

@@ -666,16 +666,27 @@ std::string make_unique_asset_area_name(const AssetInfo& info, const std::string
 
 class RegenerateRoomPopup {
 public:
-    using Callback = std::function<void(Room*)>;
+    struct TemplateEntry {
+        std::string key;
+        std::string label;
+    };
 
-    void open(std::vector<std::pair<std::string, Room*>> rooms,
+    using Callback = std::function<void(const std::string&)>;
+
+    void open(std::vector<TemplateEntry> templates,
               Callback cb,
               int screen_w,
               int screen_h) {
-        rooms_ = std::move(rooms);
+        all_templates_ = std::move(templates);
         callback_ = std::move(cb);
         buttons_.clear();
-        if (rooms_.empty()) {
+
+        if (all_templates_.empty()) {
+            visible_ = false;
+            return;
+        }
+        rebuild_button_labels();
+        if (button_labels_.empty()) {
             visible_ = false;
             return;
         }
@@ -684,7 +695,7 @@ public:
         const int button_height = DMButton::height();
         const int button_width = std::max(220, screen_w / 6);
         rect_.w = button_width + margin * 2;
-        const int total_buttons = static_cast<int>(rooms_.size());
+        const int total_buttons = static_cast<int>(button_labels_.size());
         const int content_height = total_buttons * button_height + std::max(0, total_buttons - 1) * spacing;
         rect_.h = margin * 2 + content_height;
         const int padding = DMSpacing::panel_padding();
@@ -710,9 +721,9 @@ public:
             rect_.y = std::clamp(centered_y, min_y, max_y);
         }
 
-        buttons_.reserve(rooms_.size());
-        for (const auto& entry : rooms_) {
-            auto btn = std::make_unique<DMButton>(entry.first, &DMStyles::ListButton(), button_width, button_height);
+        buttons_.reserve(button_labels_.size());
+        for (const std::string& label : button_labels_) {
+            auto btn = std::make_unique<DMButton>(label, &DMStyles::ListButton(), button_width, button_height);
             buttons_.push_back(std::move(btn));
         }
         visible_ = true;
@@ -758,8 +769,7 @@ public:
             if (btn->handle_event(e)) {
                 used = true;
                 if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-                    if (callback_) callback_(rooms_[i].second);
-                    close();
+                    on_button_pressed(i);
                 }
             }
             btn_rect.y += button_height + spacing;
@@ -802,9 +812,48 @@ public:
     }
 
 private:
+    void rebuild_button_labels() {
+        button_labels_.clear();
+        visible_template_keys_.clear();
+
+        std::vector<const TemplateEntry*> filtered;
+        for (const TemplateEntry& entry : all_templates_) {
+            if (entry.key.empty()) {
+                continue;
+            }
+            filtered.push_back(&entry);
+        }
+
+        std::sort(filtered.begin(), filtered.end(), [](const TemplateEntry* a, const TemplateEntry* b) {
+            const std::string a_label = a ? to_lower_copy(a->label) : std::string();
+            const std::string b_label = b ? to_lower_copy(b->label) : std::string();
+            return a_label < b_label;
+        });
+
+        for (const TemplateEntry* entry : filtered) {
+            if (!entry) {
+                continue;
+            }
+            button_labels_.push_back(entry->label.empty() ? entry->key : entry->label);
+            visible_template_keys_.push_back(entry->key);
+        }
+    }
+
+    void on_button_pressed(std::size_t index) {
+        if (index >= visible_template_keys_.size()) {
+            return;
+        }
+        if (callback_) {
+            callback_(visible_template_keys_[index]);
+        }
+        close();
+    }
+
     bool visible_ = false;
     SDL_Rect rect_{0, 0, 280, 320};
-    std::vector<std::pair<std::string, Room*>> rooms_;
+    std::vector<TemplateEntry> all_templates_;
+    std::vector<std::string> button_labels_;
+    std::vector<std::string> visible_template_keys_;
     std::vector<std::unique_ptr<DMButton>> buttons_;
     Callback callback_;
 };
@@ -1051,14 +1100,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     }
     update_movement_debug_visibility();
     configure_header_button_sets();
-    trail_suite_ = std::make_unique<TrailEditorSuite>();
-    if (trail_suite_) {
-        trail_suite_->set_screen_dimensions(screen_w_, screen_h_);
-        trail_suite_->set_save_coordinator(&save_coordinator_);
-        trail_suite_->set_dirty_callback([this](devmode::core::DevSaveCoordinator::Priority priority) {
-            this->mark_map_dirty(priority);
-        });
-    }
+    
     other_settings_.initialize();
     other_settings_.set_assets_context(assets_);
     other_settings_.set_state_changed_callback([this]() { refresh_active_asset_filters(); });
@@ -1856,7 +1898,7 @@ void DevControls::set_screen_dimensions(int width, int height) {
 
     SDL_Rect bounds{0, 0, screen_w_, screen_h_};
     if (camera_panel_) camera_panel_->set_work_area(bounds);
-    if (trail_suite_) trail_suite_->set_screen_dimensions(width, height);
+    
 
     other_settings_.set_screen_dimensions(width, height);
     if (boundary_assets_modal_) boundary_assets_modal_->set_screen_dimensions(width, height);
@@ -2004,9 +2046,7 @@ bool DevControls::is_pointer_over_dev_ui(int x, int y) const {
     if (room_editor_ && room_editor_->is_room_ui_blocking_point(x, y)) {
         return true;
     }
-    if (trail_suite_ && trail_suite_->contains_point(x, y)) {
-        return true;
-    }
+    
     if (map_mode_ui_ && map_mode_ui_->is_point_inside(x, y)) {
         return true;
     }
@@ -2334,12 +2374,7 @@ void DevControls::update(const Input& input) {
         boundary_assets_modal_->update(input);
     }
 
-    if (trail_suite_) {
-        trail_suite_->update(input);
-        if (pending_trail_template_ && !trail_suite_->is_open()) {
-            pending_trail_template_.reset();
-        }
-    }
+    
 
     ensure_layout_cache();
     layout_misc_options_panel();
@@ -3580,15 +3615,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (trail_suite_ && trail_suite_->is_open()) {
-        bool pointer_inside_trail = pointer_relevant && trail_suite_->contains_point(pointer.x, pointer.y);
-        if (consume_if_handled(trail_suite_->handle_event(event), pointer_inside_trail)) {
-            return;
-        }
-        if (pointer_inside_trail) {
-            return;
-        }
-    }
+    
 
     if (consume_modal_event(boundary_assets_modal_.get(), event, pointer, pointer_relevant, input_)) {
         return;
@@ -4137,7 +4164,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     if (renderer && boundary_assets_modal_ && boundary_assets_modal_->visible()) {
         boundary_assets_modal_->render(renderer);
     }
-    if (renderer && trail_suite_) trail_suite_->render(renderer);
+    
     if (frame_editor_session_ && frame_editor_session_->is_active()) {
 
     }
@@ -4331,18 +4358,21 @@ void DevControls::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetI
 
 void DevControls::toggle_room_config() {
     if (!can_use_room_editor_ui()) return;
-    room_editor_->toggle_room_config();
+    if (room_editor_) {
+        room_editor_->toggle_room_config();
+    }
     sync_header_button_states();
 }
 
 void DevControls::close_room_config() {
-    if (room_editor_) room_editor_->close_room_config();
+    if (room_editor_) {
+        room_editor_->close_room_config();
+    }
     sync_header_button_states();
 }
 
 bool DevControls::is_room_config_open() const {
-    if (!room_editor_) return false;
-    return room_editor_->is_room_config_open();
+    return room_editor_ && room_editor_->is_room_config_open();
 }
 
 void DevControls::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {
@@ -4523,36 +4553,59 @@ void DevControls::configure_header_button_sets() {
         room_buttons.push_back(std::move(boundary_btn));
     }
 
-    {
-        MapModeUI::HeaderButtonConfig trail_btn;
-        trail_btn.id = "create_trail";
-        trail_btn.label = "New Trail";
-        trail_btn.momentary = true;
-        trail_btn.style_override = &DMStyles::CreateButton();
-        trail_btn.group = FooterButtonGroup::Actions;
-        trail_btn.active_style_override = &DMStyles::AccentButton();
-        trail_btn.on_toggle = [this](bool) {
-            this->create_trail_template();
-};
-        room_buttons.push_back(std::move(trail_btn));
-    }
-
     MapModeUI::HeaderButtonConfig room_config_btn;
     room_config_btn.id = "room_config";
     room_config_btn.label = "Room Config";
-    room_config_btn.active = room_editor_ && room_editor_->is_room_config_open();
+    room_config_btn.active = false;
     room_config_btn.group = FooterButtonGroup::Panels;
     room_config_btn.style_override = &DMStyles::ListButton();
     room_config_btn.active_style_override = &DMStyles::AccentButton();
     room_config_btn.on_toggle = [this](bool active) {
-        if (!room_editor_) return;
+        if (!room_editor_) {
+            sync_header_button_states();
+            return;
+        }
         if (active) {
             close_misc_options_panel();
+            room_editor_->open_room_config();
+        } else {
+            room_editor_->close_room_config();
         }
-        room_editor_->set_room_config_visible(active);
         sync_header_button_states();
 };
     room_buttons.push_back(std::move(room_config_btn));
+
+    MapModeUI::HeaderButtonConfig create_room_btn;
+    create_room_btn.id = "create_room";
+    create_room_btn.label = "Create Room";
+    create_room_btn.momentary = true;
+    create_room_btn.group = FooterButtonGroup::Actions;
+    create_room_btn.style_override = &DMStyles::CreateButton();
+    create_room_btn.active_style_override = &DMStyles::AccentButton();
+    create_room_btn.on_toggle = [this](bool) {
+        if (room_editor_) {
+            room_editor_->create_room_from_footer();
+            room_editor_->open_room_config();
+        }
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(create_room_btn));
+
+    MapModeUI::HeaderButtonConfig create_trail_btn;
+    create_trail_btn.id = "create_trail";
+    create_trail_btn.label = "Create Trail";
+    create_trail_btn.momentary = true;
+    create_trail_btn.group = FooterButtonGroup::Actions;
+    create_trail_btn.style_override = &DMStyles::CreateButton();
+    create_trail_btn.active_style_override = &DMStyles::AccentButton();
+    create_trail_btn.on_toggle = [this](bool) {
+        if (room_editor_) {
+            room_editor_->create_trail_from_footer();
+            room_editor_->open_room_config();
+        }
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(create_trail_btn));
 
     MapModeUI::HeaderButtonConfig misc_options_btn;
     misc_options_btn.id = "misc_options";
@@ -4650,10 +4703,12 @@ void DevControls::sync_header_button_states() {
     const bool layers_open = map_mode_ui_->is_layers_panel_visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "layers", layers_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "regenerate", false);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_room", false);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_trail", false);
 
     const bool boundary_open = boundary_assets_modal_ && boundary_assets_modal_->visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "map_boundary", boundary_open);
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_trail", false);
+    
 
     if (room_editor_) {
         room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::Camera, camera_open);
@@ -4665,7 +4720,7 @@ void DevControls::sync_header_button_states() {
             room_config_open ||
             room_editor_->is_asset_info_editor_open() ||
             (regenerate_popup_ && regenerate_popup_->visible()) ||
-            (trail_suite_ && trail_suite_->is_open()) ||
+            false ||
             boundary_open ||
             camera_open ||
             misc_options_panel_open_ ||
@@ -4685,7 +4740,6 @@ void DevControls::sync_header_button_states() {
 
 void DevControls::close_all_floating_panels() {
     if (room_editor_) {
-        room_editor_->close_room_config();
         room_editor_->close_asset_library();
         room_editor_->close_asset_info_editor();
     }
@@ -4699,11 +4753,9 @@ void DevControls::close_all_floating_panels() {
         if (room_editor_) room_editor_->clear_selection();
         boundary_assets_modal_->close();
     }
-    if (trail_suite_) {
-        trail_suite_->close();
-    }
+    
     close_misc_options_panel();
-    pending_trail_template_.reset();
+    
     if (regenerate_popup_) {
         regenerate_popup_->close();
     }
@@ -5172,95 +5224,7 @@ void DevControls::toggle_boundary_assets_modal() {
 }
 
 void DevControls::create_trail_template() {
-    if (!map_info_json_ || !assets_) {
-        if (assets_) {
-            assets_->show_dev_notice("Unable to create trail: missing map info");
-        }
-        sync_header_button_states();
-        return;
-    }
-
-    std::string key;
-    bool created = assets_->mutate_map_data([&](manifest::MapData& map_data) {
-        nlohmann::json trails = map_data.trails_data;
-        if (!trails.is_object()) {
-            trails = nlohmann::json::object();
-        }
-
-        const std::string base_name = "NewTrail";
-        key = base_name;
-        int suffix = 1;
-        while (trails.contains(key)) {
-            key = base_name + std::to_string(suffix++);
-        }
-
-        std::vector<SDL_Color> used_colors = utils::display_color::collect(trails);
-        SDL_Color display_color = utils::display_color::generate_distinct_color(used_colors);
-
-        nlohmann::json entry = nlohmann::json::object();
-        entry["name"] = key;
-        entry["geometry"] = "Square";
-        entry["min_width"] = 400;
-        entry["max_width"] = 400;
-        entry["min_height"] = 200;
-        entry["max_height"] = 200;
-        entry["inherits_map_assets"] = true;
-        entry["is_boss"] = false;
-        entry["edge_smoothness"] = 8;
-        entry["curvyness"] = 4;
-        entry["spawn_groups"] = nlohmann::json::array();
-        utils::display_color::write(entry, display_color);
-
-        trails[key] = std::move(entry);
-        map_data.trails_data = std::move(trails);
-        return true;
-    });
-
-    if (!created || key.empty()) {
-        if (assets_) {
-            assets_->show_dev_notice("Unable to create trail: invalid map manifest data");
-        }
-        sync_header_button_states();
-        return;
-    }
-
-    nlohmann::json& map_info = *map_info_json_;
-    nlohmann::json& trails = map_info["trails_data"];
-    nlohmann::json& inserted = trails[key];
-
-    const MapGridSettings grid_settings = assets_->map_grid_settings();
-    const std::string manifest_context = assets_->map_id();
-
-    pending_trail_template_ = std::make_unique<Room>(Room::Point{0, 0},          // origin
-                                                     "trail",                    // type
-                                                     key,                        // room_def_name
-                                                     nullptr,                    // parent
-                                                     manifest_context,           // manifest_context
-                                                     &assets_->library(),        // asset_lib
-                                                     nullptr,                    // precomputed_area
-                                                     &inserted,                  // room_data
-                                                     grid_settings,
-                                                     static_cast<double>(map_radius_or_default()),
-                                                     "trails_data",
-                                                     &map_info,
-                                                     &manifest_store_,
-                                                     manifest_context,
-                                                     Room::ManifestWriter{});
-
-    if (pending_trail_template_) {
-        pending_trail_template_->mark_dirty();
-        pending_trail_template_->set_manifest_store(&manifest_store_, manifest_context, &map_info);
-    }
-
-    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
-
-    if (trail_suite_) {
-        trail_suite_->open(pending_trail_template_.get(), true);
-    }
-
-    if (assets_) {
-        assets_->show_dev_notice(std::string("Created trail \"") + key + "\"");
-    }
+    if (assets_) assets_->show_dev_notice("Trail creation from this panel is disabled", 1400);
     sync_header_button_states();
 }
 
@@ -5271,32 +5235,54 @@ void DevControls::open_regenerate_room_popup() {
         return;
     }
 
-    std::vector<std::pair<std::string, Room*>> entries;
-    entries.reserve(1 + (rooms_ ? rooms_->size() : 0));
-    entries.emplace_back(std::string("current room"), current_room_);
-
-    if (rooms_) {
-        std::vector<std::pair<std::string, Room*>> other_entries;
-        other_entries.reserve(rooms_->size());
-        for (Room* room : *rooms_) {
-            if (!room || room == current_room_) continue;
-            if (!room->room_area) continue;
-            if (is_trail_room(room)) {
-                continue;
-            }
-            std::string name = room->room_name.empty() ? std::string("<unnamed>") : room->room_name;
-            other_entries.emplace_back(std::move(name), room);
+    if (is_trail_room(current_room_)) {
+        if (assets_) {
+            assets_->show_dev_notice("Regen is disabled for trail rooms", 1600);
         }
-
-        std::sort(other_entries.begin(), other_entries.end(), [](const auto& a, const auto& b) {
-            return to_lower_copy(a.first) < to_lower_copy(b.first);
-        });
-
-        entries.insert(entries.end(), other_entries.begin(), other_entries.end());
+        if (regenerate_popup_) regenerate_popup_->close();
+        return;
     }
 
-    if (entries.empty()) {
+    if (!assets_) {
         if (regenerate_popup_) regenerate_popup_->close();
+        return;
+    }
+
+    nlohmann::json& map_info = assets_->map_info_json();
+    nlohmann::json& rooms_data = map_info["rooms_data"];
+    if (!rooms_data.is_object()) {
+        if (assets_) {
+            assets_->show_dev_notice("No room templates found in rooms_data", 1800);
+        }
+        if (regenerate_popup_) regenerate_popup_->close();
+        return;
+    }
+
+    std::vector<RegenerateRoomPopup::TemplateEntry> templates;
+    templates.reserve(rooms_data.size());
+    for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+        const std::string template_key = it.key();
+        if (template_key.empty()) {
+            continue;
+        }
+        const std::string template_type = to_lower_copy(it.value().value("type", std::string("room")));
+        if (template_type == "trail") {
+            continue;
+        }
+        RegenerateRoomPopup::TemplateEntry entry;
+        entry.key = template_key;
+        entry.label = template_key;
+        templates.push_back(std::move(entry));
+    }
+
+    if (templates.empty()) {
+        if (regenerate_popup_) regenerate_popup_->close();
+        if (assets_) {
+            assets_->show_dev_notice("No room templates available for regen", 1800);
+        }
         return;
     }
 
@@ -5304,14 +5290,10 @@ void DevControls::open_regenerate_room_popup() {
         regenerate_popup_ = std::make_unique<RegenerateRoomPopup>();
     }
 
-    regenerate_popup_->open(entries,
-                            [this](Room* selected) {
+    regenerate_popup_->open(templates,
+                            [this](const std::string& selected_template_key) {
                                 if (!room_editor_) return;
-                                if (!selected || selected == current_room_) {
-                                    room_editor_->regenerate_room();
-                                } else {
-                                    room_editor_->regenerate_room_from_template(selected);
-                                }
+                                room_editor_->regenerate_room_from_template(selected_template_key);
                                 if (regenerate_popup_) regenerate_popup_->close();
                                 sync_header_button_states();
                             },
@@ -5516,5 +5498,3 @@ bool DevControls::persist_map_info_to_disk() {
     mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
     return true;
 }
-
-

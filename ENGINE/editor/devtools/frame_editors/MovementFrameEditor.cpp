@@ -283,6 +283,14 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         });
     }
 
+    if (selection_state_) {
+        selection_state_->target = SelectionTarget::MovementPoint;
+    }
+    if (point_3d_editor_) {
+        point_3d_editor_->set_selected_point_index(selected_index_);
+    }
+    refresh_selection_state();
+
     apply_selected_frame_to_target();
 }
 
@@ -487,14 +495,13 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 void MovementFrameEditor::select_frame(int index) {
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
 
-    // Don't automatically select/refresh point - that's done explicitly when user clicks or uses arrow keys
-    // Just deselect any current point when changing frames via frame navigator
-    if (point_3d_editor_) {
-        point_3d_editor_->set_selected_point_index(-1);
-    }
     if (selection_state_) {
-        selection_state_->reset();
+        selection_state_->target = SelectionTarget::MovementPoint;
     }
+    if (point_3d_editor_) {
+        point_3d_editor_->set_selected_point_index(selected_index_);
+    }
+    refresh_selection_state();
 
     // Update frame navigator to show correct frame
     if (frame_navigator_) {

@@ -1351,7 +1351,7 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         }
 
         const float half_width = sprite.world_width * 0.5f;
-        const float adjusted_y = base_screen.y + boundary_vertical_offset;
+        const float adjusted_y = base_screen.y + boundary_vertical_offset + sprite.spawn_y_offset_px;
         if (base_screen.x + half_width < -boundary_cull_margin ||
             base_screen.x - half_width > static_cast<float>(screen_width_) + boundary_cull_margin ||
             adjusted_y < -boundary_cull_margin ||
@@ -1370,6 +1370,18 @@ void SceneRenderer::collect_frame_geometry(const WarpedScreenGrid& cam,
         vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - sprite.world_height};
         vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
         vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
+        if (std::isfinite(sprite.spawn_tilt_degrees) && std::fabs(sprite.spawn_tilt_degrees) > 1e-4f) {
+            const float radians = sprite.spawn_tilt_degrees * (3.14159265358979323846f / 180.0f);
+            const float cos_v = std::cos(radians);
+            const float sin_v = std::sin(radians);
+            const SDL_FPoint pivot{base_screen.x, adjusted_y};
+            for (SDL_Vertex& vertex : vertices) {
+                const float local_x = vertex.position.x - pivot.x;
+                const float local_y = vertex.position.y - pivot.y;
+                vertex.position.x = pivot.x + local_x * cos_v - local_y * sin_v;
+                vertex.position.y = pivot.y + local_x * sin_v + local_y * cos_v;
+            }
+        }
         vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
         vertices[0].tex_coord = SDL_FPoint{pad_x, pad_y};
         vertices[1].tex_coord = SDL_FPoint{1.0f - pad_x, pad_y};
@@ -1534,6 +1546,10 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
     const float min_fade_seconds = std::max(0.0f, realism.light_min_fade_seconds);
     const float fade_in_seconds = std::max(min_fade_seconds, std::max(0.0f, realism.light_fade_in_seconds));
     const float fade_out_seconds = std::max(min_fade_seconds, std::max(0.0f, realism.light_fade_out_seconds));
+    const float light_max_cull_depth = std::max(1.0f, realism.light_max_cull_depth);
+    const float distance_fade_start_ratio = std::clamp(realism.light_distance_fade_start_ratio, 0.0f, 0.999f);
+    const float distance_fade_start_depth = light_max_cull_depth * distance_fade_start_ratio;
+    const float distance_fade_span = std::max(32.0f, light_max_cull_depth - distance_fade_start_depth);
     const float dt_seconds = std::clamp(assets_->frame_delta_seconds(), 0.0f, 0.25f);
     const std::uint64_t frame_token = static_cast<std::uint64_t>(assets_->frame_id());
 
@@ -1679,6 +1695,21 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
             ++runtime_light_culled_count_;
         }
 
+        const float light_depth_distance = static_cast<float>(std::fabs(
+            render_depth::depth_from_anchor(focus_plane_world_z, static_cast<double>(resolved->world_exact_z))));
+        float depth_fade_alpha = 0.0f;
+        if (std::isfinite(light_depth_distance) && light_depth_distance < light_max_cull_depth) {
+            if (light_depth_distance <= distance_fade_start_depth) {
+                depth_fade_alpha = 1.0f;
+            } else {
+                const float t = std::clamp((light_depth_distance - distance_fade_start_depth) / distance_fade_span,
+                                           0.0f,
+                                           1.0f);
+                const float smoothstep_t = t * t * (3.0f - 2.0f * t);
+                depth_fade_alpha = 1.0f - smoothstep_t;
+            }
+        }
+
         if (broadphase.light_id >= runtime_light_cache_.size()) {
             runtime_light_cache_.resize(static_cast<std::size_t>(broadphase.light_id) + 1);
         }
@@ -1687,7 +1718,9 @@ void SceneRenderer::gather_runtime_lights(const WarpedScreenGrid& cam,
         cache_entry.last_seen_frame = frame_token;
         cache_entry.fade.last_seen_frame = frame_token;
 
-        const float target_intensity = enabled_and_overlapping ? light.intensity : 0.0f;
+        const float target_intensity = enabled_and_overlapping
+            ? light.intensity * depth_fade_alpha
+            : 0.0f;
         if (!fade_smoothing_enabled) {
             cache_entry.fade.intensity_current = target_intensity;
         } else {

@@ -105,7 +105,6 @@ class Room {
     bool has_pending_assets_save() const { return assets_save_dirty_; }
     void mark_dirty() const { assets_save_dirty_ = true; }
     bool is_dirty() const { return assets_save_dirty_; }
-    bool is_spawn_room() const;
     SDL_Color display_color() const;
     void rename(const std::string& new_name, nlohmann::json& map_info_json);
     void set_manifest_store(devmode::core::ManifestStore* store,

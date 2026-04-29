@@ -283,7 +283,6 @@ void SourceConfigPanel::set_source_mode(SourceMode mode) {
     }
 
     use_animation_reference_ = wants_animation;
-
     if (use_animation_reference_) {
         refresh_animation_options();
         if (!animation_options_.empty()) {
@@ -309,7 +308,7 @@ void SourceConfigPanel::set_source_mode(SourceMode mode) {
             }
             if (animation_dropdown_ && !animation_options_.empty()) {
                 clean_output_frames();
-                apply_animation_selection();
+                (void)apply_animation_selection_for_id(animation_id_);
             }
         } else if (animation_picker_) {
             if (!pick_animation_button_) {
@@ -322,11 +321,22 @@ void SourceConfigPanel::set_source_mode(SourceMode mode) {
         animation_dropdown_owner_id_.clear();
         animation_dropdown_.reset();
         pick_animation_button_.reset();
+        if (to_lower_copy(current_source_.kind) == std::string{"animation"}) {
+            SourceConfig config;
+            config.kind = "folder";
+            config.path = animation_id_;
+            config.name.reset();
+            apply_source_config(config);
+            if (on_source_changed_) {
+                on_source_changed_(SourceChangeEvent{
+                    animation_id_,
+                    SourceChangeReason::SourceModeChanged,
+                });
+            }
+        }
     }
 
     layout_controls();
-
-    if (on_source_changed_) on_source_changed_(animation_id_);
 }
 
 std::vector<std::string> SourceConfigPanel::summary_badges() const {
@@ -908,7 +918,12 @@ bool SourceConfigPanel::apply_animation_selection_for_id(const std::string& expe
     if (animation_id_ != expected_animation_id) return false;
     animation_start_time_ = SDL_GetTicks();
     update_status("Linked frames from animation '" + target + "'");
-    if (on_source_changed_) on_source_changed_(expected_animation_id);
+    if (on_source_changed_) {
+        on_source_changed_(SourceChangeEvent{
+            expected_animation_id,
+            SourceChangeReason::SourceAnimationChanged,
+        });
+    }
     return true;
 }
 
@@ -958,6 +973,12 @@ void SourceConfigPanel::import_from_folder() {
     config.name.reset();
     apply_source_config(config);
     update_status("Imported frames from folder");
+    if (on_source_changed_) {
+        on_source_changed_(SourceChangeEvent{
+            animation_id_,
+            SourceChangeReason::SourceImagesReplaced,
+        });
+    }
 }
 
 void SourceConfigPanel::import_from_animation() {
@@ -996,7 +1017,12 @@ void SourceConfigPanel::import_from_animation() {
         animation_dropdown_->set_selected(animation_index_);
     }
     update_status("Linked frames from animation '" + target + "'");
-    if (on_source_changed_) on_source_changed_(animation_id_);
+    if (on_source_changed_) {
+        on_source_changed_(SourceChangeEvent{
+            animation_id_,
+            SourceChangeReason::SourceAnimationChanged,
+        });
+    }
 }
 
 void SourceConfigPanel::import_from_gif() {
@@ -1085,6 +1111,12 @@ void SourceConfigPanel::import_from_gif() {
     config.name.reset();
     apply_source_config(config);
     update_status("Imported GIF frames");
+    if (on_source_changed_) {
+        on_source_changed_(SourceChangeEvent{
+            animation_id_,
+            SourceChangeReason::SourceImagesReplaced,
+        });
+    }
 }
 
 void SourceConfigPanel::import_from_png_sequence() {
@@ -1121,6 +1153,12 @@ void SourceConfigPanel::import_from_png_sequence() {
     config.name.reset();
     apply_source_config(config);
     update_status("Imported PNG sequence");
+    if (on_source_changed_) {
+        on_source_changed_(SourceChangeEvent{
+            animation_id_,
+            SourceChangeReason::SourceImagesReplaced,
+        });
+    }
 }
 
 void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {

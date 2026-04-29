@@ -74,7 +74,6 @@ private:
     void mark_dirty(devmode::core::DevSaveCoordinator::Priority priority =
                     devmode::core::DevSaveCoordinator::Priority::Debounced);
     void clamp_layer_counts(nlohmann::json& layer) const;
-    void ensure_spawn_room_data(const std::string& previous_name) const;
     void ensure_map_settings();
 
 private:

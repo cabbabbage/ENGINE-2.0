@@ -26,7 +26,6 @@ class MapLayersPreviewPanel;
 class MapLayersPanel;
 class MapLayerControlsDisplay;
 class MapLayersController;
-class RoomConfigurator;
 class SlidingWindowContainer;
 class DockableCollapsible;
 struct DMButtonStyle;
@@ -179,7 +178,6 @@ private:
     bool dev_sliding_headers_hidden_ = false;
     std::vector<DockableCollapsible*> floating_panels_;
     std::function<void(HeaderMode)> on_mode_changed_;
-    std::unique_ptr<RoomConfigurator> room_configurator_;
     RoomEditor* room_editor_ = nullptr;
     std::string active_room_config_key_;
     SlidingPanel active_sliding_panel_ = SlidingPanel::None;

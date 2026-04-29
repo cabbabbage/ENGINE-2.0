@@ -153,7 +153,7 @@ std::string make_unique_anchor_name(const std::string& desired_name,
     return candidate;
 }
 
-std::string next_default_anchor_name(const std::vector<std::string>& existing_names) {
+std::string next_default_anchor_name(const std::vector<std::string>& existing_names, AnchorPointOwner owner) {
     std::unordered_set<std::string> used;
     used.reserve(existing_names.size());
     for (const std::string& name : existing_names) {
@@ -163,10 +163,12 @@ std::string next_default_anchor_name(const std::vector<std::string>& existing_na
     }
 
     int suffix = 1;
-    std::string candidate = "anchor_" + std::to_string(suffix);
+    const std::string base =
+        owner == AnchorPointOwner::Light ? std::string("lightanchor_point_") : std::string("norm_anhor_point_");
+    std::string candidate = base + std::to_string(suffix);
     while (used.find(candidate) != used.end()) {
         ++suffix;
-        candidate = "anchor_" + std::to_string(suffix);
+        candidate = base + std::to_string(suffix);
     }
     return candidate;
 }

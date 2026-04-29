@@ -313,12 +313,12 @@ void MapEditor::apply_camera_to_bounds() {
     if (!cam) return;
     cam->set_manual_height_override(true);
 
-    Room* spawn_room = find_spawn_room();
-    SDL_Point spawn_center{0, 0};
-    bool has_spawn_center = false;
-    if (spawn_room && spawn_room->room_area) {
-        spawn_center = spawn_room->room_area->get_center();
-        has_spawn_center = true;
+    Room* center_room = find_spawn_room();
+    SDL_Point center_room_point{0, 0};
+    bool has_center_room = false;
+    if (center_room && center_room->room_area) {
+        center_room_point = center_room->room_area->get_center();
+        has_center_room = true;
     }
 
     if (has_bounds_) {
@@ -330,7 +330,7 @@ void MapEditor::apply_camera_to_bounds() {
         auto distance = [](int a, int b) { return (a > b) ? (a - b) : (b - a); };
         SDL_Point bounds_center{ (min_x + max_x) / 2, (min_y + max_y) / 2 };
         SDL_Point center = has_entry_center_ ? entry_center_
-                                             : (has_spawn_center ? spawn_center : bounds_center);
+                                             : (has_center_room ? center_room_point : bounds_center);
         int half_w = std::max({ distance(center.x, min_x), distance(center.x, max_x), 1 });
         int half_h = std::max({ distance(center.y, min_y), distance(center.y, max_y), 1 });
         int left = center.x - half_w;
@@ -352,10 +352,10 @@ void MapEditor::apply_camera_to_bounds() {
     } else if (has_entry_center_) {
         cam->set_focus_override(entry_center_);
         cam->animate_height_to_scale(1.0, 0);
-    } else if (has_spawn_center) {
-        cam->set_focus_override(spawn_center);
-        if (spawn_room && spawn_room->room_area) {
-            Area adjusted = cam->convert_area_to_aspect(*spawn_room->room_area);
+    } else if (has_center_room) {
+        cam->set_focus_override(center_room_point);
+        if (center_room && center_room->room_area) {
+            Area adjusted = cam->convert_area_to_aspect(*center_room->room_area);
             auto [minx, miny, maxx, maxy] = adjusted.get_bounds();
             SDL_Rect rect{minx, miny, maxx - minx, maxy - miny};
             cam->frame_to_area(rect);

@@ -18,6 +18,7 @@ using devmode::room_anchor_mode::find_anchor_in_mode;
 using devmode::room_anchor_mode::make_default_anchor_for_frame;
 using devmode::room_anchor_mode::make_unique_anchor_name;
 using devmode::room_anchor_mode::next_default_anchor_name;
+using devmode::room_anchor_mode::AnchorPointOwner;
 using devmode::room_anchor_mode::normalize_anchor_points_payload;
 using devmode::room_anchor_mode::rename_anchor_in_mode;
 using devmode::room_anchor_mode::serialize_anchor_frame;
@@ -42,7 +43,8 @@ TEST_CASE("Anchor mode unique naming trims and appends numeric suffixes") {
     CHECK(make_unique_anchor_name("  ", existing) == "anchor_3");
     CHECK(make_unique_anchor_name("new_anchor", existing) == "new_anchor");
     CHECK(make_unique_anchor_name("hand", existing, "hand") == "hand");
-    CHECK(next_default_anchor_name(existing) == "anchor_1");
+    CHECK(next_default_anchor_name(existing, AnchorPointOwner::NonLight) == "norm_anhor_point_1");
+    CHECK(next_default_anchor_name(existing, AnchorPointOwner::Light) == "lightanchor_point_1");
 }
 
 TEST_CASE("Anchor mode default anchor position is center-bottom with depth zero") {

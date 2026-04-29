@@ -20,6 +20,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
+#include "core/tile_builder.hpp"
 #include "core/dev_mode_animation_policy.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/render_depth_policy.hpp"
@@ -390,6 +391,7 @@ Assets::Assets(AssetLibrary& library,
     }
 
     hydrate_map_info_sections();
+    load_runtime_game_config_from_json();
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
     InitializeAssets::initialize(*this, screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
@@ -564,6 +566,7 @@ std::vector<const Room::NamedArea*> Assets::current_room_trigger_areas() const {
 
 void Assets::save_map_info_json() {
     write_camera_settings_to_json();
+    write_runtime_game_config_to_json();
     if (map_id_.empty()) {
         std::cerr << "[Assets] Unable to persist map manifest entry: map ID is empty.\n";
         return;
@@ -647,6 +650,7 @@ void Assets::hydrate_map_info_sections() {
     ensure_object("map_boundary_data");
     ensure_object("rooms_data");
     ensure_object("trails_data");
+    ensure_object("runtime_game_config");
 
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
@@ -719,6 +723,99 @@ void Assets::write_camera_settings_to_json() {
     camera_settings["camera_height_min_px"] = camera_height_min_px_;
     camera_settings["camera_height_max_px"] = camera_height_max_px_;
     map_info_json_["camera_settings"] = std::move(camera_settings);
+}
+
+void Assets::load_runtime_game_config_from_json() {
+    if (!map_info_json_.is_object()) {
+        return;
+    }
+    if (!map_info_json_.contains("runtime_game_config") || !map_info_json_["runtime_game_config"].is_object()) {
+        map_info_json_["runtime_game_config"] = nlohmann::json::object();
+    }
+
+    nlohmann::json& runtime_cfg = map_info_json_["runtime_game_config"];
+    if (!runtime_cfg.contains("fly_orbit_behavior") || !runtime_cfg["fly_orbit_behavior"].is_object()) {
+        runtime_cfg["fly_orbit_behavior"] = nlohmann::json::object();
+    }
+
+    nlohmann::json& fly_cfg_json = runtime_cfg["fly_orbit_behavior"];
+    runtime::config::RandomOrbit3DControllerBehaviorConfig cfg =
+        runtime::config::make_default_fly_orbit_behavior_config();
+
+    const auto read_int = [&](const char* key, int fallback) {
+        auto it = fly_cfg_json.find(key);
+        if (it == fly_cfg_json.end() || !it->is_number_integer()) {
+            return fallback;
+        }
+        try {
+            return it->get<int>();
+        } catch (...) {
+            return fallback;
+        }
+    };
+    const auto read_u32 = [&](const char* key, std::uint32_t fallback) {
+        auto it = fly_cfg_json.find(key);
+        if (it == fly_cfg_json.end() || !it->is_number_integer()) {
+            return fallback;
+        }
+        try {
+            const int value = it->get<int>();
+            if (value < 0) {
+                return fallback;
+            }
+            return static_cast<std::uint32_t>(value);
+        } catch (...) {
+            return fallback;
+        }
+    };
+
+    cfg.orbit_refresh_min_frames =
+        read_u32("orbit_refresh_min_frames", cfg.orbit_refresh_min_frames);
+    cfg.orbit_refresh_max_frames =
+        read_u32("orbit_refresh_max_frames", cfg.orbit_refresh_max_frames);
+    cfg.orbit_refresh_min_frames_aggressive =
+        read_u32("orbit_refresh_min_frames_aggressive", cfg.orbit_refresh_min_frames_aggressive);
+    cfg.orbit_refresh_max_frames_aggressive =
+        read_u32("orbit_refresh_max_frames_aggressive", cfg.orbit_refresh_max_frames_aggressive);
+    cfg.orbit_height_min_offset =
+        read_int("orbit_height_min_offset", cfg.orbit_height_min_offset);
+    cfg.orbit_height_max_offset =
+        read_int("orbit_height_max_offset", cfg.orbit_height_max_offset);
+
+    runtime_game_config().fly_orbit_behavior.orbit_refresh_min_frames =
+        cfg.orbit_refresh_min_frames;
+    runtime_game_config().fly_orbit_behavior.orbit_refresh_max_frames =
+        cfg.orbit_refresh_max_frames;
+    runtime_game_config().fly_orbit_behavior.orbit_refresh_min_frames_aggressive =
+        cfg.orbit_refresh_min_frames_aggressive;
+    runtime_game_config().fly_orbit_behavior.orbit_refresh_max_frames_aggressive =
+        cfg.orbit_refresh_max_frames_aggressive;
+    runtime_game_config().fly_orbit_behavior.orbit_height_min_offset =
+        cfg.orbit_height_min_offset;
+    runtime_game_config().fly_orbit_behavior.orbit_height_max_offset =
+        cfg.orbit_height_max_offset;
+
+    write_runtime_game_config_to_json();
+}
+
+void Assets::write_runtime_game_config_to_json() {
+    if (!map_info_json_.is_object()) {
+        return;
+    }
+    nlohmann::json& runtime_cfg = map_info_json_["runtime_game_config"];
+    if (!runtime_cfg.is_object()) {
+        runtime_cfg = nlohmann::json::object();
+    }
+
+    const auto& cfg = runtime_game_config().fly_orbit_behavior;
+    runtime_cfg["fly_orbit_behavior"] = nlohmann::json{
+        {"orbit_refresh_min_frames", cfg.orbit_refresh_min_frames},
+        {"orbit_refresh_max_frames", cfg.orbit_refresh_max_frames},
+        {"orbit_refresh_min_frames_aggressive", cfg.orbit_refresh_min_frames_aggressive},
+        {"orbit_refresh_max_frames_aggressive", cfg.orbit_refresh_max_frames_aggressive},
+        {"orbit_height_min_offset", cfg.orbit_height_min_offset},
+        {"orbit_height_max_offset", cfg.orbit_height_max_offset}
+    };
 }
 
 void Assets::on_camera_settings_changed() {
@@ -3214,12 +3311,14 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
 
     auto batch = begin_world_mutation_batch();
     std::size_t count = 0;
+    bool removed_tileable_asset = false;
     for (Asset* asset : all) {
         if (!asset || asset->dead || asset == player) {
             continue;
         }
         if (asset->spawn_id == spawn_id) {
             batch.mark_for_deletion(asset);
+            removed_tileable_asset = removed_tileable_asset || (asset->info && asset->info->tillable);
             ++count;
         }
     }
@@ -3230,6 +3329,58 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
 
     if (!batch.commit()) {
         return 0;
+    }
+
+    if (removed_tileable_asset) {
+        loader_tiles::build_grid_tiles(renderer(), world_grid_, map_grid_settings_, all);
+    }
+    return count;
+}
+
+std::size_t Assets::delete_assets_for_spawn_groups(const std::vector<std::string>& spawn_ids) {
+    if (spawn_ids.empty()) {
+        return 0;
+    }
+
+    std::vector<std::string> filtered_spawn_ids;
+    filtered_spawn_ids.reserve(spawn_ids.size());
+    for (const std::string& spawn_id : spawn_ids) {
+        if (!spawn_id.empty()) {
+            filtered_spawn_ids.push_back(spawn_id);
+        }
+    }
+    if (filtered_spawn_ids.empty()) {
+        return 0;
+    }
+    std::sort(filtered_spawn_ids.begin(), filtered_spawn_ids.end());
+    filtered_spawn_ids.erase(std::unique(filtered_spawn_ids.begin(), filtered_spawn_ids.end()),
+                             filtered_spawn_ids.end());
+
+    auto batch = begin_world_mutation_batch();
+    std::size_t count = 0;
+    bool removed_tileable_asset = false;
+    for (Asset* asset : all) {
+        if (!asset || asset->dead || asset == player) {
+            continue;
+        }
+        if (!std::binary_search(filtered_spawn_ids.begin(), filtered_spawn_ids.end(), asset->spawn_id)) {
+            continue;
+        }
+        batch.mark_for_deletion(asset);
+        removed_tileable_asset = removed_tileable_asset || (asset->info && asset->info->tillable);
+        ++count;
+    }
+
+    if (count == 0) {
+        return 0;
+    }
+
+    if (!batch.commit()) {
+        return 0;
+    }
+
+    if (removed_tileable_asset) {
+        loader_tiles::build_grid_tiles(renderer(), world_grid_, map_grid_settings_, all);
     }
     return count;
 }
@@ -3641,19 +3792,15 @@ bool Assets::is_asset_library_open() const {
 }
 
 void Assets::toggle_room_config() {
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        dev_controls_->toggle_room_config();
-    }
+    
 }
 
 void Assets::close_room_config() {
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        dev_controls_->close_room_config();
-    }
+    
 }
 
 bool Assets::is_room_config_open() const {
-    return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_room_config_open();
+    return false;
 }
 
 std::shared_ptr<AssetInfo> Assets::consume_selected_asset_from_library() {

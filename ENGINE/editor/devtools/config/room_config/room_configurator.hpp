@@ -70,6 +70,7 @@ public:
     void set_on_spawn_group_click(std::function<void(const std::string&)> cb);
     void set_on_spawn_group_double_click(std::function<void(const std::string&)> cb);
     void set_on_spawn_group_delete(std::function<bool(const std::string&)> cb);
+    void set_on_generate_room(std::function<void(const std::string&)> cb) { on_generate_room_ = std::move(cb); }
     void set_room_metadata_only_mode(bool enabled);
     bool room_metadata_only_mode() const { return room_metadata_only_mode_; }
 
@@ -227,6 +228,7 @@ private:
     std::function<void(const std::string&)> on_spawn_group_click_;
     std::function<void(const std::string&)> on_spawn_group_double_click_;
     std::function<bool(const std::string&)> on_spawn_group_delete_;
+    std::function<void(const std::string&)> on_generate_room_;
     std::vector<SpawnGroupListItem> spawn_group_rows_{};
     std::size_t spawn_group_rows_hash_ = 0;
     std::unique_ptr<Widget> spawn_group_list_widget_;

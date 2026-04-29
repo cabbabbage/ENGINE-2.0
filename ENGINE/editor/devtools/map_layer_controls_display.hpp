@@ -32,7 +32,6 @@ public:
     void refresh();
     void set_on_change(std::function<void()> cb);
     void set_on_show_rooms_list(std::function<void()> cb);
-    void set_on_create_room(std::function<void()> cb);
 
 private:
     struct CandidateRow {
@@ -84,7 +83,6 @@ private:
     bool handle_slider_change(CandidateRow& row);
     void notify_change();
     void handle_back_to_rooms();
-    void handle_create_room();
     void begin_slider_dirty_suppression(const DMRangeSlider* slider) const;
     void end_slider_dirty_suppression(const DMRangeSlider* slider) const;
 
@@ -97,7 +95,6 @@ private:
     mutable bool has_layer_data_ = false;
 
     std::unique_ptr<DMButton> add_room_button_;
-    std::unique_ptr<DMButton> new_room_button_;
     mutable std::vector<CandidateRow> candidates_;
     mutable std::vector<std::string> info_lines_;
     mutable std::vector<SDL_Rect> info_rects_;
@@ -115,11 +112,9 @@ private:
     int pending_child_candidate_index_ = -1;
     std::function<void()> on_change_{};
     std::function<void()> on_show_rooms_list_{};
-    std::function<void()> on_create_room_{};
 
     mutable bool suppress_slider_dirty_notifications_ = false;
     mutable bool pending_slider_dirty_refresh_ = false;
     mutable const DMRangeSlider* active_slider_dirty_owner_ = nullptr;
 };
-
 

@@ -2520,7 +2520,6 @@ void AssetInfoUI::on_animation_document_saved() {
         return;
     }
 
-    current_info->classify_animation_snapshot_rebuilds(before_snapshot, after_snapshot);
     current_info->mark_dirty();
 
     if (!info_ || info_.get() != current_info.get()) {
@@ -2531,6 +2530,7 @@ void AssetInfoUI::on_animation_document_saved() {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] No renderer available for animation reload");
     }
     refresh_loaded_asset_instances(RuntimeRefreshScope::StructuralWithDependents, current_info);
+    (void)current_info->consume_pending_texture_rebuild_on_close();
 }
 
 bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {

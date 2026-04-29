@@ -209,7 +209,7 @@ TEST_CASE("normalize_map_manifest normalizes trail connection sector defaults an
     CHECK_FALSE(normalized.map_manifest["trails_data"]["trail_template"].contains("trail_connection_sector"));
 }
 
-TEST_CASE("normalize_map_manifest migrates legacy spawn fields to layer-0 authority") {
+TEST_CASE("normalize_map_manifest preserves layer-0 center selector and removes legacy spawn flags") {
     nlohmann::json map_manifest = manifest::build_default_map_manifest("spawn_migration_case");
     map_manifest["schema_version"] = manifest::kMapSchemaVersion;
     map_manifest["rooms_data"]["legacy_spawn"] = nlohmann::json::object({
@@ -248,7 +248,8 @@ TEST_CASE("normalize_map_manifest migrates legacy spawn fields to layer-0 author
     REQUIRE(layer0.contains("rooms"));
     REQUIRE(layer0["rooms"].is_array());
     REQUIRE(layer0["rooms"].size() == 1);
-    CHECK(layer0["rooms"][0].value("source_type", std::string()) == "room_name");
+    CHECK(layer0["rooms"][0].value("source_type", std::string()) == "room_tag");
+    CHECK(layer0["rooms"][0].value("value", std::string()) == "forest");
     CHECK(layer0["rooms"][0].value("min_instances", 0) == 1);
     CHECK(layer0["rooms"][0].value("max_instances", 0) == 1);
     CHECK(layer0.value("min_rooms", 0) == 1);

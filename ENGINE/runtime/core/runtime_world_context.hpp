@@ -18,6 +18,9 @@ public:
     void adopt_rooms(std::vector<std::unique_ptr<Room>> rooms);
     void rebuild_room_view();
     void notify_topology_changed();
+    bool remove_room(Room* target);
+    bool replace_room(Room* target, std::unique_ptr<Room> replacement);
+    void append_rooms(std::vector<std::unique_ptr<Room>> rooms);
 
     std::vector<Room*>& rooms() { return rooms_view_; }
     const std::vector<Room*>& rooms() const { return rooms_view_; }

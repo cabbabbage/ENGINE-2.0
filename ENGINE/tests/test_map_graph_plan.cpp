@@ -18,26 +18,23 @@ bool contains_name(const std::vector<RoomSpec>& specs, const std::string& name) 
 
 }
 
-TEST_CASE("map_graph plan creates default layer-0 Spawn candidate when missing") {
+TEST_CASE("map_graph plan leaves layer-0 unresolved when center-room candidate is missing") {
     nlohmann::json manifest = nlohmann::json::object({
         {"rooms_data", nlohmann::json::object()},
         {"map_layers", nlohmann::json::array()}
     });
 
     map_graph::MapGraphPlan plan = map_graph::build_map_graph_plan(&manifest);
-    CHECK(plan.valid);
-    CHECK(plan.spawn_room_name == "Spawn");
+    CHECK_FALSE(plan.valid);
     REQUIRE(manifest.contains("map_layers"));
     REQUIRE(manifest["map_layers"].is_array());
     REQUIRE(!manifest["map_layers"].empty());
     REQUIRE(manifest["map_layers"][0].contains("rooms"));
     REQUIRE(manifest["map_layers"][0]["rooms"].is_array());
-    REQUIRE(manifest["map_layers"][0]["rooms"].size() == 1);
-    CHECK(manifest["map_layers"][0]["rooms"][0].value("source_type", std::string()) == "room_name");
-    CHECK(manifest["map_layers"][0]["rooms"][0].value("value", std::string()) == "Spawn");
-    CHECK(manifest["map_layers"][0].value("min_rooms", 0) == 1);
-    CHECK(manifest["map_layers"][0].value("max_rooms", 0) == 1);
-    CHECK(manifest["rooms_data"].contains("Spawn"));
+    CHECK(manifest["map_layers"][0]["rooms"].empty());
+    CHECK(manifest["map_layers"][0].value("min_rooms", -1) == 0);
+    CHECK(manifest["map_layers"][0].value("max_rooms", -1) == 0);
+    CHECK(manifest["rooms_data"].empty());
 }
 
 TEST_CASE("map_graph plan resolves room-tag candidates into concrete rooms") {

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <random>
+#include <array>
 #include <vector>
 
 #include "core/axis_convention.hpp"
@@ -40,11 +41,17 @@ private:
     void reset_for_missing_target(Asset& self);
     void apply_default_idle(Asset& self) const;
 
-    int visit_threshold_px(const Asset& self) const;
     std::optional<int> checkpoint_resolution_override() const;
 
     bool should_enter_orbit(const axis::WorldPos& self_pos) const;
     bool should_exit_orbit(const axis::WorldPos& self_pos) const;
+    double speed_multiplier() const;
+    int movement_step_px() const;
+    bool move_direct_towards(Asset& self,
+                             const axis::WorldPos& from,
+                             const axis::WorldPos& target,
+                             std::optional<int> resolution_override) const;
+    void randomize_orbit_plane();
 
     axis::WorldPos blended_retarget_target() const;
     void calibrate_orbit_phase(const axis::WorldPos& self_pos, const axis::WorldPos& center);
@@ -73,6 +80,8 @@ private:
     double angular_velocity_ = 0.0;
     double approach_wave_phase_ = 0.0;
     double retarget_alpha_ = 1.0;
+    std::array<double, 3> orbit_plane_u_{1.0, 0.0, 0.0};
+    std::array<double, 3> orbit_plane_v_{0.0, 0.0, 1.0};
 };
 
 } // namespace animation_update::custom_controllers

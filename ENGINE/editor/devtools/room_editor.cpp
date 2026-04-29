@@ -55,6 +55,8 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "core/axis_convention.hpp"
 #include "gameplay/map_generation/room.hpp"
+#include "gameplay/map_generation/map_graph.hpp"
+#include "gameplay/map_generation/generate_trails.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "gameplay/spawn/check.hpp"
@@ -85,6 +87,7 @@
 #include <random>
 #include <sstream>
 #include <set>
+#include <map>
 #include <type_traits>
 #include <tuple>
 #include <vector>
@@ -2588,23 +2591,21 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
 
 void RoomEditor::set_room_config_visible(bool visible) {
     ensure_room_configurator();
-    if (!room_cfg_ui_) return;
-    if (visible && active_modal_ == ActiveModal::AssetInfo) {
-        pulse_active_modal_header();
+    if (!room_cfg_ui_) {
+        room_config_dock_open_ = false;
+        room_config_panel_visible_ = false;
         return;
     }
-    if (visible) {
-        if (assets_) {
-            Room* selected_room = assets_->current_room();
-            if (selected_room && selected_room != current_room_) {
-                set_current_room(selected_room);
-            }
-        }
-        room_cfg_ui_->open(current_room_);
-    }
     room_config_dock_open_ = visible;
-    set_camera_settings_lock(false);
-    refresh_room_config_visibility();
+    room_config_panel_visible_ = visible;
+    if (visible) {
+        room_cfg_ui_->set_room_metadata_only_mode(false);
+        room_cfg_ui_->set_bounds(room_config_bounds_);
+        room_cfg_ui_->open(current_room_);
+    } else {
+        room_cfg_ui_->close();
+    }
+    update_spawn_group_config_anchor();
 }
 
 class ScopedBoolOverride {
@@ -4421,15 +4422,17 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 if (!handle.has_final_screen_px) {
                     continue;
                 }
-                if (isolate_selected_anchor && handle.name != anchor_edit_.selected_anchor_name) {
-                    continue;
-                }
 
                 const bool selected = (handle.name == anchor_edit_.selected_anchor_name);
                 const bool hovered = !isolate_selected_anchor && (handle.name == anchor_edit_.hovered_anchor_name);
+                const bool subdued = isolate_selected_anchor && !selected;
 
                 if (handle.has_flat_screen_px) {
-                    SDL_SetRenderDrawColor(renderer, 80, 170, 255, 180);
+                    if (subdued) {
+                        SDL_SetRenderDrawColor(renderer, 130, 130, 130, 70);
+                    } else {
+                        SDL_SetRenderDrawColor(renderer, 80, 170, 255, 180);
+                    }
                     SDL_RenderLine(renderer,
                                    handle.flat_screen_px.x,
                                    handle.flat_screen_px.y,
@@ -4446,11 +4449,17 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 SDL_Color color{255, 165, 0, 235};
                 if (selected) {
                     color = SDL_Color{255, 255, 255, 255};
+                } else if (subdued) {
+                    color = SDL_Color{145, 145, 145, 105};
                 }
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
                 SDL_Rect box{cx - 4, cy - 4, 9, 9};
                 sdl_render::FillRect(renderer, &box);
-                SDL_SetRenderDrawColor(renderer, 24, 24, 24, 235);
+                if (subdued) {
+                    SDL_SetRenderDrawColor(renderer, 70, 70, 70, 110);
+                } else {
+                    SDL_SetRenderDrawColor(renderer, 24, 24, 24, 235);
+                }
                 sdl_render::Rect(renderer, &box);
 
                 if (hovered || selected) {
@@ -5203,6 +5212,22 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
         if (overlay && overlay->radius > 0.0) {
+            std::string overlay_spawn_id;
+            if (hovered_asset_ && hovered_asset_->spawn_method == "Perimeter" && !hovered_asset_->spawn_id.empty()) {
+                overlay_spawn_id = hovered_asset_->spawn_id;
+            } else {
+                for (Asset* asset : selected_assets_) {
+                    if (!asset || asset->spawn_method != "Perimeter" || asset->spawn_id.empty()) continue;
+                    overlay_spawn_id = asset->spawn_id;
+                    break;
+                }
+            }
+            PerimeterHandleHover hover_target = PerimeterHandleHover::None;
+            if (input_ && !overlay_spawn_id.empty()) {
+                hover_target = perimeter_handle_hover_target(
+                    overlay_spawn_id,
+                    SDL_Point{input_->getX(), input_->getY()});
+            }
             SDL_FPoint screen_center_f = cam.map_to_screen(overlay->center);
             SDL_Point screen_center{static_cast<int>(std::lround(screen_center_f.x)),
                                     static_cast<int>(std::lround(screen_center_f.y))};
@@ -5216,7 +5241,13 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             radius_px = std::max(1, radius_px);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const SDL_Color accent = DMStyles::AccentButton().hover_bg;
-            SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, 210);
+            const SDL_Color ring_color =
+                (hover_target == PerimeterHandleHover::Radius) ? SDL_Color{255, 255, 255, 230}
+                                                                : SDL_Color{accent.r, accent.g, accent.b, 210};
+            const SDL_Color cross_color =
+                (hover_target == PerimeterHandleHover::Center) ? SDL_Color{255, 255, 255, 230}
+                                                                : SDL_Color{accent.r, accent.g, accent.b, 210};
+            SDL_SetRenderDrawColor(renderer, ring_color.r, ring_color.g, ring_color.b, ring_color.a);
             const int segments = std::clamp(radius_px * 4, 64, 720);
             for (int i = 0; i < segments; ++i) {
                 double angle = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * kPi;
@@ -5225,6 +5256,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 SDL_RenderPoint(renderer, px, py);
             }
             const int cross = std::max(6, radius_px / 4);
+            SDL_SetRenderDrawColor(renderer, cross_color.r, cross_color.g, cross_color.b, cross_color.a);
             SDL_RenderLine(renderer, screen_center.x - cross, screen_center.y, screen_center.x + cross, screen_center.y);
             SDL_RenderLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
         }
@@ -5706,35 +5738,16 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
 }
 
 void RoomEditor::toggle_room_config() {
-    ensure_room_configurator();
-    if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; toggle ignored.");
-        return;
-    }
     set_room_config_visible(!is_room_config_open());
 }
 
 void RoomEditor::open_room_config() {
-    ensure_room_configurator();
-    if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; open request ignored.");
-        return;
-    }
-    if (assets_) {
-        Room* selected_room = assets_->current_room();
-        if (selected_room && selected_room != current_room_) {
-            set_current_room(selected_room);
-        }
-    }
     set_room_config_visible(true);
 }
 
 void RoomEditor::open_room_config_for(Asset* asset) {
-    if (!asset || asset->spawn_id.empty()) {
-        open_room_config();
-        return;
-    }
-    open_spawn_group_editor_by_id(asset->spawn_id);
+    (void)asset;
+    set_room_config_visible(true);
 }
 
 void RoomEditor::close_room_config() {
@@ -5742,11 +5755,96 @@ void RoomEditor::close_room_config() {
 }
 
 bool RoomEditor::is_room_config_open() const {
-    return room_config_dock_open_;
+    return room_cfg_ui_ && room_cfg_ui_->visible();
 }
 
 bool RoomEditor::is_camera_settings_open() const {
     return false;
+}
+
+void RoomEditor::open_room_config_for_json_entry(nlohmann::json& room_data, bool is_trail_context) {
+    ensure_room_configurator();
+    if (!room_cfg_ui_) {
+        return;
+    }
+    room_cfg_ui_->set_room_metadata_only_mode(true);
+    room_cfg_ui_->set_bounds(room_config_bounds_);
+    room_cfg_ui_->open(room_data, [this, is_trail_context]() {
+        if (!assets_) {
+            return;
+        }
+        assets_->mark_map_data_dirty();
+        if (mark_map_dirty_callback_) {
+            mark_map_dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        }
+        if (is_trail_context) {
+            show_notice("Trail template saved.");
+        } else {
+            show_notice("Room template saved.");
+        }
+    });
+    room_config_dock_open_ = true;
+    room_config_panel_visible_ = true;
+}
+
+void RoomEditor::create_room_from_footer() {
+    if (!assets_) return;
+    nlohmann::json& map_info = assets_->map_info_json();
+    std::string key = map_layers::create_room_entry(map_info);
+    if (key.empty()) {
+        show_notice("Unable to create room entry.");
+        return;
+    }
+    nlohmann::json& room_entry = map_info["rooms_data"][key];
+    room_entry["geometry"] = "Square";
+    room_entry["min_width"] = 1200;
+    room_entry["max_width"] = 1800;
+    room_entry["min_height"] = 1200;
+    room_entry["max_height"] = 1800;
+    room_entry["edge_smoothness"] = 4;
+    room_entry["curvyness"] = 2;
+    room_entry["is_boss"] = false;
+    room_entry["inherits_map_assets"] = false;
+    room_entry["tags"] = nlohmann::json::array();
+    if (!room_entry.contains("spawn_groups") || !room_entry["spawn_groups"].is_array()) {
+        room_entry["spawn_groups"] = nlohmann::json::array();
+    }
+
+    open_room_config_for_json_entry(room_entry, false);
+    show_notice("Created room template: " + key);
+}
+
+void RoomEditor::create_trail_from_footer() {
+    if (!assets_) return;
+    nlohmann::json& map_info = assets_->map_info_json();
+    nlohmann::json& trails = map_info["trails_data"];
+    if (!trails.is_object()) {
+        trails = nlohmann::json::object();
+    }
+    std::string base = "NewTrail";
+    std::string key = base;
+    int suffix = 1;
+    while (trails.contains(key)) {
+        key = base + std::to_string(suffix++);
+    }
+    nlohmann::json& trail_entry = trails[key];
+    trail_entry = nlohmann::json::object();
+    trail_entry["name"] = key;
+    trail_entry["geometry"] = "Square";
+    trail_entry["min_width"] = 600;
+    trail_entry["max_width"] = 900;
+    trail_entry["min_height"] = 600;
+    trail_entry["max_height"] = 900;
+    trail_entry["edge_smoothness"] = 4;
+    trail_entry["curvyness"] = 2;
+    trail_entry["tags"] = nlohmann::json::array();
+    trail_entry["anti_tags"] = nlohmann::json::array();
+    if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {
+        trail_entry["spawn_groups"] = nlohmann::json::array();
+    }
+
+    open_room_config_for_json_entry(trail_entry, true);
+    show_notice("Created trail template: " + key);
 }
 
 void RoomEditor::regenerate_room() {
@@ -5757,48 +5855,252 @@ void RoomEditor::regenerate_room() {
     regenerate_current_room();
 }
 
-void RoomEditor::regenerate_room_from_template(Room* source_room) {
+void RoomEditor::regenerate_room_from_template(const std::string& template_key) {
     if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; regeneration from template skipped.");
         return;
     }
-    if (!assets_ || !current_room_ || !source_room) return;
-
-    nlohmann::json template_root = source_room->assets_data();
-    auto& template_groups = ensure_spawn_groups_array(template_root);
-    const int template_resolution = current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
-    for (auto& entry : template_groups) {
-        if (!entry.is_object()) continue;
-        entry["spawn_id"] = generate_spawn_id();
-        devmode::spawn::ensure_spawn_group_entry_defaults(
-            entry,
-            entry.contains("display_name") && entry["display_name"].is_string()
-                ? entry["display_name"].get<std::string>()
-                : std::string{"New Spawn"},
-            template_resolution);
+    if (!assets_ || !current_room_ || !current_room_->room_area) {
+        return;
+    }
+    if (template_key.empty()) {
+        show_notice("Room regen failed: empty room template key");
+        return;
+    }
+    const std::string current_type = vibble::strings::to_lower_copy(current_room_->type);
+    if (current_type == "trail") {
+        show_notice("Room regen failed: trail rooms cannot be replaced by regen");
+        return;
     }
 
-    sanitize_perimeter_spawn_groups(template_groups);
+    nlohmann::json& map_info = assets_->map_info_json();
+    nlohmann::json& rooms_data = map_info["rooms_data"];
+    if (!rooms_data.is_object()) {
+        show_notice("Room regen failed: map rooms_data is missing");
+        return;
+    }
+    auto template_it = rooms_data.find(template_key);
+    if (template_it == rooms_data.end() || !template_it->is_object()) {
+        show_notice("Room regen failed: selected room template is missing");
+        return;
+    }
+    const std::string template_type = vibble::strings::to_lower_copy(template_it->value("type", std::string("room")));
+    if (template_type == "trail") {
+        show_notice("Room regen failed: selected template is a trail");
+        return;
+    }
 
-    auto& target_root = current_room_->assets_data();
-    nlohmann::json preserved_identity = nlohmann::json::object();
-    static const std::array<const char*, 3> preserved_keys{ "name", "key", "room_key" };
-    for (const char* key : preserved_keys) {
-        if (target_root.contains(key)) {
-            preserved_identity[key] = target_root[key];
+    map_graph::RoomRegenSnapshot snapshot = map_graph::capture_room_regen_snapshot(current_room_);
+    map_graph::RoomRegenPlan plan = map_graph::build_room_regen_plan(snapshot, template_key);
+    if (!snapshot.valid || !plan.valid || !snapshot.old_room) {
+        show_notice("Room regen failed: unable to build regen plan");
+        return;
+    }
+
+    RuntimeWorldContext* world_context = assets_->runtime_world_context();
+    if (!world_context) {
+        show_notice("Room regen failed: runtime world context unavailable");
+        return;
+    }
+
+    auto collect_spawn_ids = [](const Room* room) {
+        std::vector<std::string> spawn_ids;
+        if (!room) {
+            return spawn_ids;
+        }
+        const nlohmann::json& room_data = room->assets_data();
+        auto groups_it = room_data.find("spawn_groups");
+        if (groups_it == room_data.end() || !groups_it->is_array()) {
+            return spawn_ids;
+        }
+        spawn_ids.reserve(groups_it->size());
+        for (const auto& entry : *groups_it) {
+            if (!entry.is_object()) {
+                continue;
+            }
+            const std::string spawn_id = entry.value("spawn_id", std::string{});
+            if (!spawn_id.empty()) {
+                spawn_ids.push_back(spawn_id);
+            }
+        }
+        return spawn_ids;
+    };
+
+    std::vector<std::string> spawn_ids_to_delete = collect_spawn_ids(snapshot.old_room);
+    for (Room* trail_room : snapshot.connected_trails) {
+        std::vector<std::string> trail_spawn_ids = collect_spawn_ids(trail_room);
+        spawn_ids_to_delete.insert(spawn_ids_to_delete.end(), trail_spawn_ids.begin(), trail_spawn_ids.end());
+    }
+    std::sort(spawn_ids_to_delete.begin(), spawn_ids_to_delete.end());
+    spawn_ids_to_delete.erase(std::unique(spawn_ids_to_delete.begin(), spawn_ids_to_delete.end()),
+                              spawn_ids_to_delete.end());
+
+    clear_selection();
+    clear_room_trail_nav_entries();
+    assets_->delete_assets_for_spawn_groups(spawn_ids_to_delete);
+    for (const std::string& spawn_id : spawn_ids_to_delete) {
+        if (!spawn_id.empty()) {
+            prune_spawn_group_transient_references(spawn_id);
         }
     }
 
-    target_root = std::move(template_root);
-
-    for (auto& [key, value] : preserved_identity.items()) {
-        target_root[key] = value;
+    for (Room* trail_room : snapshot.connected_trails) {
+        if (!trail_room) {
+            continue;
+        }
+        std::vector<Room*> linked = trail_room->connected_rooms;
+        for (Room* linked_room : linked) {
+            if (linked_room) {
+                linked_room->remove_connecting_room(trail_room);
+            }
+        }
+        trail_room->connected_rooms.clear();
     }
 
-    regenerate_current_room();
+    Room* old_room = snapshot.old_room;
+    std::vector<Room*> old_links = old_room->connected_rooms;
+    for (Room* linked_room : old_links) {
+        if (linked_room) {
+            linked_room->remove_connecting_room(old_room);
+        }
+    }
+    old_room->connected_rooms.clear();
 
+    for (Room* trail_room : snapshot.connected_trails) {
+        world_context->remove_room(trail_room);
+    }
+
+    auto estimate_map_radius = [](const std::vector<Room*>& rooms) -> double {
+        double max_radius = 10000.0;
+        for (Room* room : rooms) {
+            if (!room || !room->room_area) {
+                continue;
+            }
+            int min_x = 0;
+            int min_y = 0;
+            int max_x = 0;
+            int max_y = 0;
+            std::tie(min_x, min_y, max_x, max_y) = room->room_area->get_bounds();
+            max_radius = std::max(max_radius, static_cast<double>(std::max({std::abs(min_x), std::abs(min_y), std::abs(max_x), std::abs(max_y)})));
+        }
+        return std::max(1.0, max_radius);
+    };
+
+    nlohmann::json& template_data_ref = *template_it;
+    const double map_radius = estimate_map_radius(assets_->rooms());
+    auto replacement_room = std::make_unique<Room>(
+        Room::Point{plan.replacement_center.x, plan.replacement_center.y},
+        "room",
+        template_key,
+        snapshot.parent,
+        assets_->map_id(),
+        &assets_->library(),
+        nullptr,
+        &template_data_ref,
+        old_room->map_grid_settings(),
+        map_radius,
+        "rooms_data",
+        &map_info,
+        assets_->manifest_store(),
+        assets_->map_id(),
+        Room::ManifestWriter{});
+
+    Room* replacement_room_ptr = replacement_room.get();
+    replacement_room_ptr->layer = old_room->layer;
+    replacement_room_ptr->camera_height_px = old_room->camera_height_px;
+    replacement_room_ptr->camera_tilt_deg = old_room->camera_tilt_deg;
+    replacement_room_ptr->camera_zoom_percent = old_room->camera_zoom_percent;
+    replacement_room_ptr->camera_center_dx = old_room->camera_center_dx;
+    replacement_room_ptr->camera_center_dz = old_room->camera_center_dz;
+    replacement_room_ptr->children = snapshot.children;
+    replacement_room_ptr->set_sibling_left(snapshot.left_sibling);
+    replacement_room_ptr->set_sibling_right(snapshot.right_sibling);
+
+    for (Room* child : snapshot.children) {
+        if (child && child->parent == old_room) {
+            child->parent = replacement_room_ptr;
+        }
+    }
+    if (snapshot.parent) {
+        for (Room*& child_ref : snapshot.parent->children) {
+            if (child_ref == old_room) {
+                child_ref = replacement_room_ptr;
+            }
+        }
+    }
+    if (snapshot.left_sibling && snapshot.left_sibling->right_sibling == old_room) {
+        snapshot.left_sibling->set_sibling_right(replacement_room_ptr);
+    }
+    if (snapshot.right_sibling && snapshot.right_sibling->left_sibling == old_room) {
+        snapshot.right_sibling->set_sibling_left(replacement_room_ptr);
+    }
+
+    if (!world_context->replace_room(old_room, std::move(replacement_room))) {
+        show_notice("Room regen failed: runtime room replacement did not commit");
+        return;
+    }
+
+    std::vector<std::unique_ptr<Asset>> initial_room_assets = std::move(replacement_room_ptr->get_room_assets());
+    integrate_spawned_assets(initial_room_assets);
+
+    int requested_trail_pairs = static_cast<int>(plan.planned_trail_pairs.size());
+    int generated_trail_pairs = 0;
+    std::vector<std::unique_ptr<Room>> successful_new_trails;
+    successful_new_trails.reserve(plan.planned_trail_pairs.size());
+    nlohmann::json& trails_data = map_info["trails_data"];
+    if (!trails_data.is_object()) {
+        trails_data = nlohmann::json::object();
+    }
+
+    for (const auto& trail_pair : plan.planned_trail_pairs) {
+        Room* neighbor = trail_pair.second;
+        if (!neighbor || !neighbor->room_area) {
+            continue;
+        }
+        GenerateTrails trail_generator(trails_data);
+        std::vector<Room*> room_refs{replacement_room_ptr, neighbor};
+        trail_generator.set_all_rooms_reference(room_refs);
+        const std::vector<std::pair<Room*, Room*>> single_pair{{replacement_room_ptr, neighbor}};
+        auto generated = trail_generator.generate_trails(
+            single_pair,
+            assets_->map_id(),
+            &assets_->library(),
+            map_radius,
+            &map_info,
+            assets_->manifest_store(),
+            {});
+        if (!generated.empty()) {
+            generated_trail_pairs += static_cast<int>(generated.size());
+            for (auto& trail_room : generated) {
+                if (trail_room) {
+                    successful_new_trails.push_back(std::move(trail_room));
+                }
+            }
+        }
+    }
+
+    if (!successful_new_trails.empty()) {
+        world_context->append_rooms(std::move(successful_new_trails));
+    }
+
+    assets_->set_editor_current_room(replacement_room_ptr);
+    assets_->notify_rooms_changed();
+    assets_->invalidate_dynamic_boundary_system();
+    assets_->rebuild_from_grid_state();
+    assets_->refresh_active_asset_lists();
+    set_current_room(replacement_room_ptr, room_locked_for_edit_);
+    clear_room_trail_nav_entries();
     rebuild_room_spawn_id_cache();
-    save_current_room_assets_json();
+    refresh_spawn_group_config_ui();
+    mark_spatial_index_dirty();
+
+    const int failed_pairs = std::max(0, requested_trail_pairs - generated_trail_pairs);
+    if (failed_pairs > 0) {
+        show_notice("Room regenerated with trail warnings (" + std::to_string(generated_trail_pairs) + "/" +
+                    std::to_string(requested_trail_pairs) + " trails rebuilt)");
+    } else {
+        show_notice("Room regenerated: " + template_key);
+    }
 }
 
 void RoomEditor::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {
@@ -5848,6 +6150,39 @@ RoomEditor::DragMode RoomEditor::drag_mode_for_spawn_method(const std::string& m
         return DragMode::Edge;
     }
     return DragMode::Free;
+}
+
+RoomEditor::PerimeterHandleHover RoomEditor::perimeter_handle_hover_target(const std::string& spawn_id,
+                                                                            SDL_Point screen_point) {
+    if (spawn_id.empty() || !assets_) {
+        return PerimeterHandleHover::None;
+    }
+    auto overlay = compute_perimeter_overlay_for_spawn(spawn_id);
+    if (!overlay || overlay->radius <= 0.0) {
+        return PerimeterHandleHover::None;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    const SDL_FPoint center_screen_f = cam.map_to_screen(overlay->center);
+    const SDL_FPoint edge_screen_f = cam.map_to_screen(SDL_Point{
+        overlay->center.x + static_cast<int>(std::lround(overlay->radius)),
+        overlay->center.y});
+    const float dx = edge_screen_f.x - center_screen_f.x;
+    const float dy = edge_screen_f.y - center_screen_f.y;
+    const float radius_px = std::max(1.0f, std::hypot(dx, dy));
+
+    const float center_dx = static_cast<float>(screen_point.x) - center_screen_f.x;
+    const float center_dy = static_cast<float>(screen_point.y) - center_screen_f.y;
+    const float center_dist = std::hypot(center_dx, center_dy);
+    if (center_dist <= std::max(8.0f, radius_px * 0.08f)) {
+        return PerimeterHandleHover::Center;
+    }
+
+    const float ring_dist = std::fabs(center_dist - radius_px);
+    if (ring_dist <= 8.0f) {
+        return PerimeterHandleHover::Radius;
+    }
+    return PerimeterHandleHover::None;
 }
 
 bool RoomEditor::is_asset_active_for_input(const Asset* asset) const {
@@ -6295,7 +6630,10 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) ||
         input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     bool consumed = false;
-    RoomConfigurator::CameraAdjustment adjustment{};
+    int height_delta_px = 0;
+    int zoom_delta_percent = 0;
+    float tilt_delta_deg = 0.0f;
+    float pan_delta_percent = 0.0f;
 
     const int scroll_y = input.getScrollY();
     const bool center_depth_scroll_override = oval_mode_active() && oval_edit_.center_selected;
@@ -6303,9 +6641,9 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         const int ticks = std::abs(scroll_y);
         const int direction = (scroll_y > 0) ? 1 : -1;
         if (shift_down) {
-            adjustment.zoom_delta_percent = direction * kCameraZoomScrollStep * ticks;
+            zoom_delta_percent = direction * kCameraZoomScrollStep * ticks;
         } else {
-            adjustment.height_delta_px = direction * kCameraHeightScrollStep * ticks;
+            height_delta_px = direction * kCameraHeightScrollStep * ticks;
         }
         consumed = true;
     }
@@ -6340,11 +6678,11 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
             const float delta = -static_cast<float>(dy);
             switch (camera_settings_drag_.mode) {
                 case CameraSettingsDragState::Mode::Tilt:
-                    adjustment.tilt_delta_deg = delta * kCameraTiltDegreesPerPixel;
+                    tilt_delta_deg = delta * kCameraTiltDegreesPerPixel;
                     consumed = true;
                     break;
                 case CameraSettingsDragState::Mode::Pan:
-                    adjustment.pan_delta_percent = delta * kCameraPanPercentPerPixel;
+                    pan_delta_percent = delta * kCameraPanPercentPerPixel;
                     consumed = true;
                     break;
                 case CameraSettingsDragState::Mode::None:
@@ -6353,9 +6691,10 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         }
     }
 
-    if (consumed) {
-        room_cfg_ui_->apply_camera_adjustment(adjustment);
-    }
+    (void)height_delta_px;
+    (void)zoom_delta_percent;
+    (void)tilt_delta_deg;
+    (void)pan_delta_percent;
 
     if (assets_) {
         if (camera_settings_drag_.active && !camera_settings_drag_active_notified_) {
@@ -6656,11 +6995,24 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool has_selection = !selected_assets_.empty();
     const bool has_boundary_proxy_selection = selected_dynamic_boundary_proxy_.has_value();
     const bool selection_interaction_active = shift_down || has_selection || has_boundary_proxy_selection;
+    bool perimeter_handle_blocks_pan = false;
+    if (has_selection) {
+        for (Asset* asset : selected_assets_) {
+            if (!asset || asset->spawn_method != "Perimeter" || asset->spawn_id.empty()) {
+                continue;
+            }
+            perimeter_handle_blocks_pan =
+                perimeter_handle_hover_target(asset->spawn_id, screen_pt) != PerimeterHandleHover::None;
+            break;
+        }
+    }
     const bool selection_blocks_camera_pan =
         has_selection || any_editor_point_selected();
     const bool pointer_blocks_pan = selection_blocks_camera_pan ||
                                     (!selection_interaction_active && dragging_) ||
-                                    (selection_interaction_active && !dragging_ && hit_before_pan && (left_down || left_pressed_this_frame));
+                                    (selection_interaction_active && !dragging_ &&
+                                     (hit_before_pan || perimeter_handle_blocks_pan) &&
+                                     (left_down || left_pressed_this_frame));
 
     if (selection_blocks_camera_pan && camera_controls_.is_panning()) {
         // Stop any in-progress camera drag as soon as a selection exists so asset dragging has priority.
@@ -6711,6 +7063,17 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     snapped_cursor_world_ = snap_to_grid_enabled_
         ? snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_)
         : world_pt;
+
+    perimeter_hover_target_ = PerimeterHandleHover::None;
+    if (!selected_assets_.empty()) {
+        for (Asset* asset : selected_assets_) {
+            if (!asset || asset->spawn_method != "Perimeter" || asset->spawn_id.empty()) {
+                continue;
+            }
+            perimeter_hover_target_ = perimeter_handle_hover_target(asset->spawn_id, screen_pt);
+            break;
+        }
+    }
 
     if (selected_geometry_room_) {
         clear_geometry_selection();
@@ -6763,8 +7126,15 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
         Asset* selection_hit = nullptr;
         std::optional<DynamicBoundaryProxyHit> selection_boundary_hit;
+        DragMode forced_drag_mode = DragMode::None;
         if (!selected_assets_.empty()) {
             selection_hit = selected_asset_within_interaction_radius(screen_pt);
+            if (!selection_hit && perimeter_hover_target_ != PerimeterHandleHover::None) {
+                selection_hit = selected_assets_.front();
+                forced_drag_mode =
+                    (perimeter_hover_target_ == PerimeterHandleHover::Center) ? DragMode::PerimeterCenter
+                                                                              : DragMode::Perimeter;
+            }
         } else if (shift_down) {
             selection_hit = hit_test_asset_anchor(screen_pt, kShiftAnchorSelectRadiusPx);
             if (!selection_hit) {
@@ -6787,6 +7157,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         mouse_press_state_.pressed_identity = selection_hit;
         mouse_press_state_.pressed_spawn_id = selection_hit ? selection_hit->spawn_id : std::string{};
         mouse_press_state_.pressed_has_spawn_group = selection_hit && !selection_hit->spawn_id.empty();
+        mouse_press_state_.forced_drag_mode = forced_drag_mode;
         mouse_press_state_.was_dragged = false;
         mouse_press_state_.press_screen = screen_pt;
         mouse_press_state_.valid = selection_hit != nullptr;
@@ -6840,7 +7211,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                 drag_last_world_ = snapped_cursor_world_;
                 const bool ctrl_modifier =
                     input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
-                begin_drag_session(snapped_cursor_world_, ctrl_modifier);
+                begin_drag_session(snapped_cursor_world_, ctrl_modifier, mouse_press_state_.forced_drag_mode);
             }
 
             if (mouse_press_state_.was_dragged && dragging_) {
@@ -14382,7 +14753,8 @@ bool RoomEditor::normalize_anchor_invariants_for_eligible_animations(Asset* targ
             bool frame_changed = false;
             for (const auto& anchor : frame->anchor_points) {
                 if (!devmode::room_anchor_mode::anchor_mutable_in_mode(anchor, owner, is_reserved_anchor_name)) {
-                    frame_changed = true;
+                    // Preserve anchors owned by other modes (for example oval center or non-light anchors while in light mode).
+                    deduped.push_back(anchor);
                     continue;
                 }
                 if (!seen_names.insert(anchor.name).second) {
@@ -14670,7 +15042,7 @@ bool RoomEditor::add_anchor_in_current_frame() {
             }
         }
     }
-    const std::string new_anchor_name = devmode::room_anchor_mode::next_default_anchor_name(existing_names);
+    const std::string new_anchor_name = devmode::room_anchor_mode::next_default_anchor_name(existing_names, owner);
     if (new_anchor_name.empty()) {
         return false;
     }
@@ -14795,6 +15167,16 @@ bool RoomEditor::duplicate_selected_anchor_in_current_frame() {
 
     if (!changed || duplicated_anchor_name.empty()) {
         return false;
+    }
+
+    std::shared_ptr<AssetInfo> target_info = anchor_edit_.target_asset ? anchor_edit_.target_asset->info : nullptr;
+    if (target_info) {
+        const nlohmann::json source_candidates =
+            target_info->anchor_point_child_candidate_candidates(source_anchor_name);
+        const bool source_orphan_on_end =
+            target_info->anchor_point_child_candidate_orphan_on_end(source_anchor_name);
+        target_info->upsert_anchor_point_child_candidate(duplicated_anchor_name, source_candidates);
+        target_info->set_anchor_point_child_candidate_orphan_on_end(duplicated_anchor_name, source_orphan_on_end);
     }
 
     anchor_edit_.selected_anchor_name = duplicated_anchor_name;
@@ -15244,10 +15626,10 @@ bool RoomEditor::add_oval_mapping() {
             existing_names.insert(mapping.name);
         }
     }
-    std::string name = "oval";
+    std::string name = "oval_anchorpoint_1";
     int suffix = 1;
     while (existing_names.find(name) != existing_names.end()) {
-        name = "oval_" + std::to_string(++suffix);
+        name = "oval_anchorpoint_" + std::to_string(++suffix);
     }
 
     AssetInfo::OvalAnchorMapping mapping{};
@@ -21158,109 +21540,39 @@ bool RoomEditor::focus_selection_matches_snapshot() const {
 }
 
 void RoomEditor::ensure_room_configurator() {
-    if (!room_cfg_ui_) {
-        room_cfg_ui_ = std::make_unique<RoomConfigurator>();
-    }
     if (room_cfg_ui_) {
-        room_cfg_ui_->set_room_metadata_only_mode(false);
-        room_cfg_ui_->set_manifest_store(manifest_store_);
-        room_cfg_ui_->set_assets(assets_);
-        room_cfg_ui_->set_room_save_callback([this](bool immediate) {
-            return enqueue_current_room_save(immediate
-                ? devmode::core::DevSaveCoordinator::Priority::Immediate
-                : devmode::core::DevSaveCoordinator::Priority::Debounced);
-        });
-        room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
-            room_config_panel_visible_ = visible;
-            if (header_visibility_callback_) {
-                header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
-            }
-        });
-        room_cfg_ui_->set_bounds(room_config_bounds_);
-
-        room_cfg_ui_->set_work_area(DockManager::instance().usableRect());
-        room_cfg_ui_->set_blocks_editor_interactions(false);
-        room_cfg_ui_->set_spawn_groups_provider([this]() {
-            std::vector<RoomConfigurator::SpawnGroupListItem> rows;
-            if (!current_room_) {
-                return rows;
-            }
-            auto& root = current_room_->assets_data();
-            auto& arr = ensure_spawn_groups_array(root);
-            rows.reserve(arr.size());
-            for (const auto& entry : arr) {
-                if (!entry.is_object()) {
-                    continue;
-                }
-                RoomConfigurator::SpawnGroupListItem item{};
-                item.spawn_id = entry.value("spawn_id", std::string{});
-                item.display_name = entry.value("display_name", std::string{});
-                if (item.display_name.empty()) {
-                    item.display_name = item.spawn_id.empty() ? std::string{"Spawn Group"} : item.spawn_id;
-                }
-                std::unordered_map<std::string, double> weight_by_name;
-                if (entry.contains("candidates") && entry["candidates"].is_array()) {
-                    for (const auto& candidate : entry["candidates"]) {
-                        if (!candidate.is_object()) continue;
-                        const std::string name = candidate.value("name", std::string{});
-                        if (name.empty()) continue;
-                        double weight = 1.0;
-                        if (candidate.contains("chance")) {
-                            if (candidate["chance"].is_number()) {
-                                weight = candidate["chance"].get<double>();
-                            } else if (candidate["chance"].is_string()) {
-                                try {
-                                    weight = std::stod(candidate["chance"].get<std::string>());
-                                } catch (...) {
-                                    weight = 1.0;
-                                }
-                            }
-                        }
-                        weight_by_name[name] += std::max(0.0, weight);
-                    }
-                }
-                std::string best_name;
-                double best_weight = -1.0;
-                for (const auto& pair : weight_by_name) {
-                    if (pair.second > best_weight) {
-                        best_weight = pair.second;
-                        best_name = pair.first;
-                    }
-                }
-                if (!best_name.empty()) {
-                    item.icon_label = best_name.substr(0, std::min<std::size_t>(2, best_name.size()));
-                    for (char& ch : item.icon_label) {
-                        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-                    }
-                } else {
-                    item.icon_label = "??";
-                }
-                rows.push_back(std::move(item));
-            }
-            return rows;
-        });
-        room_cfg_ui_->set_on_spawn_group_click([this](const std::string& spawn_id) {
-            focus_camera_on_spawn_group(spawn_id);
-        });
-        room_cfg_ui_->set_on_spawn_group_double_click([this](const std::string& spawn_id) {
-            open_spawn_group_editor_by_id(spawn_id);
-        });
-        room_cfg_ui_->set_on_spawn_group_delete([this](const std::string& spawn_id) {
-            const bool deleted = delete_spawn_group_internal(spawn_id);
-            if (deleted) {
-                refresh_spawn_group_config_ui();
-            }
-            return deleted;
-        });
-        room_cfg_ui_->set_on_close([this]() {
-            room_config_dock_open_ = false;
-            set_camera_settings_lock(false);
-            update_spawn_group_config_anchor();
-        });
-        room_cfg_ui_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired) {
-            return this->rename_active_room(old_name, desired);
-        });
+        return;
     }
+    room_cfg_ui_ = std::make_unique<RoomConfigurator>();
+    if (!room_cfg_ui_) {
+        return;
+    }
+    room_cfg_ui_->set_manifest_store(manifest_store_);
+    room_cfg_ui_->set_assets(assets_);
+    room_cfg_ui_->set_room_save_callback([this](bool immediate) {
+        return save_current_room_assets_json(immediate
+                                                 ? devmode::core::DevSaveCoordinator::Priority::Immediate
+                                                 : devmode::core::DevSaveCoordinator::Priority::Debounced);
+    });
+    room_cfg_ui_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired_name) {
+        return rename_active_room(old_name, desired_name);
+    });
+    room_cfg_ui_->set_on_generate_room([this](const std::string& template_key) {
+        regenerate_room_from_template(template_key);
+    });
+    room_cfg_ui_->set_on_close([this]() {
+        room_config_dock_open_ = false;
+        room_config_panel_visible_ = false;
+        update_spawn_group_config_anchor();
+    });
+    room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
+        room_config_panel_visible_ = visible;
+        room_config_dock_open_ = visible;
+        if (header_visibility_callback_) {
+            header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
+        }
+    });
+    room_cfg_ui_->set_bounds(room_config_bounds_);
 }
 
 std::string RoomEditor::rename_active_room(const std::string& old_name, const std::string& desired_name) {
@@ -21342,23 +21654,17 @@ void RoomEditor::ensure_spawn_group_config_ui() {
 }
 
 void RoomEditor::update_room_config_bounds() {
-    const int side_margin = 0;
-    const int available_width = std::max(0, screen_w_ - 2 * side_margin);
-    const int max_width = std::max(320, available_width);
-    const int desired_width = std::max(360, screen_w_ / 3);
-    const int width = std::min(max_width, desired_width);
-
-    SDL_Rect usable = DockManager::instance().usableRect();
-    const int height = std::max(1, usable.h > 0 ? usable.h : screen_h_);
-    const int max_x = std::max(0, screen_w_ - width);
-    const int desired_x = screen_w_ - width;
-    const int x = std::clamp(desired_x, 0, max_x);
-    const int y = usable.h > 0 ? usable.y : 0;
-    room_config_bounds_ = SDL_Rect{x, y, width, height};
-    if (room_cfg_ui_ && room_config_dock_open_) {
-        room_cfg_ui_->set_bounds(room_config_bounds_);
-    }
-    refresh_room_config_visibility();
+    constexpr int kPanelWidth = 420;
+    constexpr int kMargin = 12;
+    const int footer_h = (shared_footer_bar_ && shared_footer_bar_->visible()) ? shared_footer_bar_->rect().h : 0;
+    const int usable_h = std::max(240, screen_h_ - footer_h - (kMargin * 2));
+    const int panel_w = std::min(std::max(320, kPanelWidth), std::max(320, screen_w_ - (kMargin * 2)));
+    room_config_bounds_ = SDL_Rect{
+        std::max(kMargin, screen_w_ - panel_w - kMargin),
+        kMargin,
+        panel_w,
+        usable_h
+    };
 }
 
 void RoomEditor::configure_shared_panel() {
@@ -21370,21 +21676,14 @@ void RoomEditor::configure_shared_panel() {
 }
 
 void RoomEditor::refresh_room_config_visibility() {
-    ensure_room_configurator();
     if (!room_cfg_ui_) {
-        return;
-    }
-    if (active_modal_ == ActiveModal::AssetInfo) {
-        room_cfg_ui_->close();
+        room_config_dock_open_ = false;
+        room_config_panel_visible_ = false;
         update_spawn_group_config_anchor();
         return;
     }
-    if (room_config_dock_open_) {
-        room_cfg_ui_->set_bounds(room_config_bounds_);
-        room_cfg_ui_->open(current_room_);
-    } else {
-        room_cfg_ui_->close();
-    }
+    room_config_panel_visible_ = room_cfg_ui_->visible();
+    room_config_dock_open_ = room_config_panel_visible_;
     update_spawn_group_config_anchor();
 }
 
@@ -21443,7 +21742,7 @@ bool RoomEditor::delete_selected_stack_editor_entity() {
     return false;
 }
 
-void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier) {
+void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier, DragMode forced_mode) {
 
     // Dragging must remain available for all selected assets in dev mode,
     // including groups previously marked locked.
@@ -21489,6 +21788,9 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
 
     const std::string& method = primary->spawn_method;
     drag_mode_ = drag_mode_for_spawn_method(method, ctrl_modifier);
+    if (forced_mode != DragMode::None) {
+        drag_mode_ = forced_mode;
+    }
 
     bool resolve_geometry = (method == "Exact" || method == "Exact Position" || method == "Perimeter");
 
@@ -23208,15 +23510,10 @@ void RoomEditor::focus_camera_on_spawn_group(const std::string& spawn_id) {
 }
 
 void RoomEditor::reopen_room_configurator() {
-    if (spawn_group_callback_in_progress_ && !processing_pending_spawn_group_work_) {
-        enqueue_spawn_group_ui_refresh(true, false);
-        return;
-    }
-    if (!room_cfg_ui_) return;
     if (!room_config_dock_open_) {
         return;
     }
-    room_cfg_ui_->open(current_room_);
+    set_room_config_visible(true);
 }
 
 void RoomEditor::rebuild_room_spawn_id_cache() {
@@ -24025,8 +24322,9 @@ void RoomEditor::set_current_room(Room* room, bool lock_room) {
     refresh_spawn_group_config_ui();
     mark_spatial_index_dirty();
 
-    if (room_cfg_ui_) {
+    if (room_cfg_ui_ && room_config_dock_open_) {
         room_editor_trace("[RoomEditor] opening room config UI");
+        room_cfg_ui_->set_room_metadata_only_mode(false);
         room_cfg_ui_->open(current_room_);
         refresh_room_config_visibility();
     }

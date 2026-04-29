@@ -4,10 +4,11 @@
 #include <cctype>
 #include <unordered_set>
 
+#include "room.hpp"
+
 namespace map_graph {
 namespace {
 
-constexpr const char* kDefaultSpawnName = "Spawn";
 constexpr int kTrailEndpointContainmentSafetyPx = 12;
 constexpr int kTrailRoomMarginPx = 5000;
 
@@ -109,32 +110,6 @@ void normalize_candidate_entry(nlohmann::json& candidate) {
     candidate["max_instances"] = max_instances;
 }
 
-void ensure_room_entry_exists(nlohmann::json& rooms_data, const std::string& room_name) {
-    if (!rooms_data.contains(room_name) || !rooms_data[room_name].is_object()) {
-        nlohmann::json room = nlohmann::json::object();
-        room["name"] = room_name;
-        room["geometry"] = "Circle";
-        room["min_width"] = 3000;
-        room["max_width"] = 3000;
-        room["min_height"] = 3000;
-        room["max_height"] = 3000;
-        room["edge_smoothness"] = 2;
-        room["inherits_map_assets"] = false;
-        room["is_boss"] = false;
-        room["spawn_groups"] = nlohmann::json::array();
-        room["room_tags"] = nlohmann::json::array();
-        rooms_data[room_name] = std::move(room);
-        return;
-    }
-    rooms_data[room_name]["name"] = room_name;
-    if (!rooms_data[room_name].contains("spawn_groups") || !rooms_data[room_name]["spawn_groups"].is_array()) {
-        rooms_data[room_name]["spawn_groups"] = nlohmann::json::array();
-    }
-    if (!rooms_data[room_name].contains("room_tags") || !rooms_data[room_name]["room_tags"].is_array()) {
-        rooms_data[room_name]["room_tags"] = nlohmann::json::array();
-    }
-}
-
 } // namespace
 
 MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
@@ -177,42 +152,24 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
     for (auto& entry : layer0_rooms) {
         normalize_candidate_entry(entry);
     }
-    if (layer0_rooms.empty() || !layer0_rooms[0].is_object() ||
-        layer0_rooms[0].value("source_type", std::string()) != "room_name" ||
-        layer0_rooms[0].value("value", std::string()).empty()) {
-        nlohmann::json spawn_candidate = {
-            {"source_type", "room_name"},
-            {"value", std::string(kDefaultSpawnName)},
-            {"name", std::string(kDefaultSpawnName)},
-            {"min_instances", 1},
-            {"max_instances", 1},
-            {"required_children", nlohmann::json::array()}
-        };
-        layer0_rooms = nlohmann::json::array({std::move(spawn_candidate)});
-    }
     if (layer0_rooms.size() > 1) {
         layer0_rooms.erase(layer0_rooms.begin() + 1, layer0_rooms.end());
     }
-    normalize_candidate_entry(layer0_rooms[0]);
-    layer0_rooms[0]["source_type"] = "room_name";
-    layer0_rooms[0]["min_instances"] = 1;
-    layer0_rooms[0]["max_instances"] = 1;
-    layer0["min_rooms"] = 1;
-    layer0["max_rooms"] = 1;
-
-    plan.spawn_room_name = layer0_rooms[0].value("value", std::string(kDefaultSpawnName));
-    if (plan.spawn_room_name.empty()) {
-        plan.spawn_room_name = kDefaultSpawnName;
-        layer0_rooms[0]["value"] = plan.spawn_room_name;
-        layer0_rooms[0]["name"] = plan.spawn_room_name;
+    if (!layer0_rooms.empty()) {
+        normalize_candidate_entry(layer0_rooms[0]);
+        layer0_rooms[0]["min_instances"] = 1;
+        layer0_rooms[0]["max_instances"] = 1;
+        layer0["min_rooms"] = 1;
+        layer0["max_rooms"] = 1;
+    } else {
+        layer0["min_rooms"] = 0;
+        layer0["max_rooms"] = 0;
     }
-    ensure_room_entry_exists(rooms_data, plan.spawn_room_name);
 
     std::unordered_map<std::string, std::vector<std::string>> tag_index;
     for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
         if (!it.value().is_object()) continue;
         const std::string room_name = it.key();
-        ensure_room_entry_exists(rooms_data, room_name);
         it.value().erase("is_spawn");
         const std::vector<std::string> room_tags = collect_room_tags(it.value());
         for (const std::string& room_tag : room_tags) {
@@ -292,9 +249,6 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
 
         for (auto& [room_name, spec] : by_name) {
             if (spec.max_instances < 0) spec.max_instances = 0;
-            if (spec.max_instances == 0 && layer_index == 0) {
-                spec.max_instances = 1;
-            }
             layer_spec.rooms.push_back(spec);
         }
         std::sort(layer_spec.rooms.begin(), layer_spec.rooms.end(), [](const RoomSpec& a, const RoomSpec& b) {
@@ -309,17 +263,14 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
             layer_spec.max_rooms = sum;
         }
         if (layer_index == 0) {
-            layer_spec.max_rooms = 1;
-            if (layer_spec.rooms.empty()) {
-                RoomSpec root;
-                root.name = plan.spawn_room_name;
-                root.max_instances = 1;
-                layer_spec.rooms.push_back(root);
-            }
+            layer_spec.max_rooms = layer_spec.rooms.empty() ? 0 : 1;
             if (layer_spec.rooms.size() > 1) {
                 layer_spec.rooms.resize(1);
             }
-            layer_spec.rooms[0].max_instances = 1;
+            if (!layer_spec.rooms.empty()) {
+                layer_spec.rooms[0].max_instances = 1;
+                plan.spawn_room_name = layer_spec.rooms[0].name;
+            }
         }
 
         plan.resolved_layers.push_back(layer_spec);
@@ -381,6 +332,88 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
         plan.diagnostics.push_back("error: no layers resolved in map graph plan.");
     }
 
+    return plan;
+}
+
+RoomRegenSnapshot capture_room_regen_snapshot(Room* room) {
+    RoomRegenSnapshot snapshot;
+    snapshot.old_room = room;
+    if (!room) {
+        snapshot.diagnostics.push_back("error: room snapshot target is null.");
+        return snapshot;
+    }
+    if (!room->room_area) {
+        snapshot.diagnostics.push_back("error: room snapshot target has no room_area.");
+        return snapshot;
+    }
+
+    snapshot.valid = true;
+    snapshot.old_center = room->room_area->get_center();
+    snapshot.parent = room->parent;
+    snapshot.children = room->children;
+    snapshot.left_sibling = room->left_sibling;
+    snapshot.right_sibling = room->right_sibling;
+
+    std::unordered_set<Room*> seen_trails;
+    std::unordered_set<Room*> seen_neighbors;
+    for (Room* connected : room->connected_rooms) {
+        if (!connected) {
+            continue;
+        }
+        const std::string lowered_type = normalize_tag_value(connected->type);
+        if (lowered_type != "trail") {
+            continue;
+        }
+        if (seen_trails.insert(connected).second) {
+            snapshot.connected_trails.push_back(connected);
+        }
+
+        for (Room* neighbor : connected->connected_rooms) {
+            if (!neighbor || neighbor == room) {
+                continue;
+            }
+            const std::string neighbor_type = normalize_tag_value(neighbor->type);
+            if (neighbor_type == "trail") {
+                continue;
+            }
+            if (seen_neighbors.insert(neighbor).second) {
+                snapshot.connected_neighbors.push_back(neighbor);
+            }
+            snapshot.trail_pair_counts[neighbor] += 1;
+        }
+    }
+
+    if (snapshot.connected_neighbors.empty() && !snapshot.connected_trails.empty()) {
+        snapshot.diagnostics.push_back("warn: connected trails found with zero resolved non-trail neighbors.");
+    }
+    return snapshot;
+}
+
+RoomRegenPlan build_room_regen_plan(const RoomRegenSnapshot& snapshot,
+                                    const std::string& selected_template_key) {
+    RoomRegenPlan plan;
+    plan.selected_template_key = selected_template_key;
+    plan.replacement_center = snapshot.old_center;
+
+    if (!snapshot.valid || !snapshot.old_room) {
+        plan.diagnostics.push_back("error: invalid snapshot; cannot build room regen plan.");
+        return plan;
+    }
+    if (selected_template_key.empty()) {
+        plan.diagnostics.push_back("error: selected template key is empty.");
+        return plan;
+    }
+
+    for (const auto& [neighbor, count] : snapshot.trail_pair_counts) {
+        if (!neighbor || count <= 0) {
+            continue;
+        }
+        for (int i = 0; i < count; ++i) {
+            plan.planned_trail_pairs.emplace_back(snapshot.old_room, neighbor);
+        }
+    }
+
+    plan.valid = true;
     return plan;
 }
 

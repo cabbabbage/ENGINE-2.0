@@ -157,3 +157,24 @@ TEST_CASE("DynamicBoundarySystem frame advancement freezes and resumes without c
     CHECK(state.frame_index == 1);
     CHECK(state.elapsed_ms == doctest::Approx(10.0f));
 }
+
+TEST_CASE("DynamicBoundarySystem room trail promotion gate rejects boundary-domain controller promotion") {
+    CHECK(DynamicBoundarySystem::should_attempt_room_trail_promotion(1, true));
+    CHECK_FALSE(DynamicBoundarySystem::should_attempt_room_trail_promotion(0, true));
+    CHECK_FALSE(DynamicBoundarySystem::should_attempt_room_trail_promotion(1, false));
+}
+
+TEST_CASE("DynamicBoundarySystem origin slot reservation retention keeps slot occupied while in scope and alive") {
+    CHECK_FALSE(DynamicBoundarySystem::should_release_origin_slot_reservation(true, true));
+}
+
+TEST_CASE("DynamicBoundarySystem origin slot reservation releases when out of scope or asset invalid") {
+    CHECK(DynamicBoundarySystem::should_release_origin_slot_reservation(false, true));
+    CHECK(DynamicBoundarySystem::should_release_origin_slot_reservation(true, false));
+    CHECK(DynamicBoundarySystem::should_release_origin_slot_reservation(false, false));
+}
+
+TEST_CASE("DynamicBoundarySystem persistent promoted policy keeps assets alive despite domain drift") {
+    // Domain drift is modeled by keeping the promoted asset valid while origin slot remains in scope.
+    CHECK_FALSE(DynamicBoundarySystem::should_release_origin_slot_reservation(true, true));
+}

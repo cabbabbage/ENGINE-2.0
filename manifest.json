@@ -123,7 +123,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 15.0
+        "scale_percentage": 36.0
       },
       "start": "default",
       "tags": [
@@ -26231,7 +26231,7 @@
           "curvyness": 2,
           "display_color": [
             204,
-            94,
+            85,
             31,
             255
           ],
@@ -26585,9 +26585,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            140,
-            204,
-            31,
+            85,
+            134,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26610,9 +26610,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            31,
+            137,
             204,
-            133,
+            71,
             255
           ],
           "edge_smoothness": 4,
@@ -26636,8 +26636,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            36,
-            89,
+            156,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26665,9 +26665,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            155,
+            196,
             85,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -26732,8 +26732,8 @@
           "curvyness": 2,
           "display_color": [
             31,
-            32,
             204,
+            117,
             255
           ],
           "edge_smoothness": 87,
@@ -26999,8 +26999,8 @@
                 }
               ],
               "display_name": "3_candles",
-              "dx": -153,
-              "dz": -1466,
+              "dx": -130,
+              "dz": -1349,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27012,7 +27012,7 @@
               "perimeter_radius": 99,
               "position": "Perimeter",
               "priority": 8,
-              "radius": 99,
+              "radius": 137,
               "resolution": 2,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
@@ -27408,9 +27408,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            202,
-            85,
-            242,
+            204,
+            31,
+            100,
             255
           ],
           "edge_smoothness": 96,

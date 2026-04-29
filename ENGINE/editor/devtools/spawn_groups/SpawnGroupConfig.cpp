@@ -101,9 +101,10 @@ constexpr int kDefaultMaxNumber = 1;
 constexpr int kExactDefaultQuantity = 1;
 constexpr int kPerimeterRadiusSliderMin = 0;
 constexpr int kPerimeterRadiusSliderMax = 10000;
+constexpr int kPerimeterRadiusDefault = 25;
 constexpr int kEdgeInsetSliderMin = 0;
 constexpr int kEdgeInsetSliderMax = 200;
-constexpr int kEdgeInsetDefault = 100;
+constexpr int kEdgeInsetDefault = 75;
 constexpr int kDefaultPositionY = 0;
 
 std::function<std::vector<std::string>()> empty_provider() {
@@ -1600,14 +1601,19 @@ private:
             } else {
                 int min_number = safe_int(*entry, "min_number", kDefaultMinNumber);
                 int max_number = safe_int(*entry, "max_number", std::max(min_number, kDefaultMaxNumber));
+                if (method == "Perimeter" || method == "Edge") {
+                    min_number = 2;
+                    max_number = 2;
+                }
                 if (max_number < min_number) max_number = min_number;
                 (*entry)["min_number"] = min_number;
                 (*entry)["max_number"] = max_number;
                 if (method == "Edge") {
                     (*entry)["edge_inset_percent"] = kEdgeInsetDefault;
                 } else if (method == "Perimeter") {
-                    (*entry)["radius"] = kPerimeterRadiusSliderMin;
-                    (*entry)["perimeter_radius"] = kPerimeterRadiusSliderMin;
+                    (*entry)["radius"] = kPerimeterRadiusDefault;
+                    (*entry)["perimeter_radius"] = kPerimeterRadiusDefault;
+                    (*entry).erase("edge_inset_percent");
                 } else {
                     (*entry).erase("edge_inset_percent");
                 }

@@ -216,6 +216,11 @@ private:
         PerimeterCenter,
         Edge,
 };
+    enum class PerimeterHandleHover {
+        None,
+        Radius,
+        Center,
+    };
 
     enum class ActiveModal {
         None,
@@ -252,6 +257,7 @@ private:
         const void* pressed_identity = nullptr;
         std::string pressed_spawn_id{};
         bool pressed_has_spawn_group = false;
+        DragMode forced_drag_mode = DragMode::None;
         bool was_dragged = false;
         bool valid = false;
     };
@@ -267,6 +273,7 @@ private:
     };
     void handle_mouse_input(const Input& input);
     static DragMode drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
+    PerimeterHandleHover perimeter_handle_hover_target(const std::string& spawn_id, SDL_Point screen_point);
     bool is_asset_active_for_input(const Asset* asset) const;
     bool is_mouse_press_asset_valid() const;
     void clear_mouse_press_state(bool reset_click_tracking = false);
@@ -304,7 +311,7 @@ private:
     void open_room_config_for_json_entry(nlohmann::json& room_data, bool is_trail_context);
     void ensure_spawn_group_config_ui();
     void update_room_config_bounds();
-    void begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier);
+    void begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier, DragMode forced_mode = DragMode::None);
     void update_drag_session(const SDL_Point& world_mouse);
     void apply_perimeter_drag(const SDL_Point& world_mouse);
     void apply_edge_drag(const SDL_Point& world_mouse);
@@ -1163,6 +1170,7 @@ private:
     bool has_last_raw_mouse_world_ = false;
 
     bool dragging_ = false;
+    PerimeterHandleHover perimeter_hover_target_ = PerimeterHandleHover::None;
     Asset* drag_anchor_asset_ = nullptr;
     DragMode drag_mode_ = DragMode::None;
     std::vector<DraggedAssetState> drag_states_;

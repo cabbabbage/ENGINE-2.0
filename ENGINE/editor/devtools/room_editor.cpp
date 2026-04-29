@@ -5209,6 +5209,22 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
         if (overlay && overlay->radius > 0.0) {
+            std::string overlay_spawn_id;
+            if (hovered_asset_ && hovered_asset_->spawn_method == "Perimeter" && !hovered_asset_->spawn_id.empty()) {
+                overlay_spawn_id = hovered_asset_->spawn_id;
+            } else {
+                for (Asset* asset : selected_assets_) {
+                    if (!asset || asset->spawn_method != "Perimeter" || asset->spawn_id.empty()) continue;
+                    overlay_spawn_id = asset->spawn_id;
+                    break;
+                }
+            }
+            PerimeterHandleHover hover_target = PerimeterHandleHover::None;
+            if (input_ && !overlay_spawn_id.empty()) {
+                hover_target = perimeter_handle_hover_target(
+                    overlay_spawn_id,
+                    SDL_Point{input_->getX(), input_->getY()});
+            }
             SDL_FPoint screen_center_f = cam.map_to_screen(overlay->center);
             SDL_Point screen_center{static_cast<int>(std::lround(screen_center_f.x)),
                                     static_cast<int>(std::lround(screen_center_f.y))};
@@ -5222,7 +5238,13 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             radius_px = std::max(1, radius_px);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const SDL_Color accent = DMStyles::AccentButton().hover_bg;
-            SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, 210);
+            const SDL_Color ring_color =
+                (hover_target == PerimeterHandleHover::Radius) ? SDL_Color{255, 255, 255, 230}
+                                                                : SDL_Color{accent.r, accent.g, accent.b, 210};
+            const SDL_Color cross_color =
+                (hover_target == PerimeterHandleHover::Center) ? SDL_Color{255, 255, 255, 230}
+                                                                : SDL_Color{accent.r, accent.g, accent.b, 210};
+            SDL_SetRenderDrawColor(renderer, ring_color.r, ring_color.g, ring_color.b, ring_color.a);
             const int segments = std::clamp(radius_px * 4, 64, 720);
             for (int i = 0; i < segments; ++i) {
                 double angle = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * kPi;
@@ -5231,6 +5253,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 SDL_RenderPoint(renderer, px, py);
             }
             const int cross = std::max(6, radius_px / 4);
+            SDL_SetRenderDrawColor(renderer, cross_color.r, cross_color.g, cross_color.b, cross_color.a);
             SDL_RenderLine(renderer, screen_center.x - cross, screen_center.y, screen_center.x + cross, screen_center.y);
             SDL_RenderLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
         }
@@ -5920,6 +5943,39 @@ RoomEditor::DragMode RoomEditor::drag_mode_for_spawn_method(const std::string& m
         return DragMode::Edge;
     }
     return DragMode::Free;
+}
+
+RoomEditor::PerimeterHandleHover RoomEditor::perimeter_handle_hover_target(const std::string& spawn_id,
+                                                                            SDL_Point screen_point) {
+    if (spawn_id.empty() || !assets_) {
+        return PerimeterHandleHover::None;
+    }
+    auto overlay = compute_perimeter_overlay_for_spawn(spawn_id);
+    if (!overlay || overlay->radius <= 0.0) {
+        return PerimeterHandleHover::None;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    const SDL_FPoint center_screen_f = cam.map_to_screen(overlay->center);
+    const SDL_FPoint edge_screen_f = cam.map_to_screen(SDL_Point{
+        overlay->center.x + static_cast<int>(std::lround(overlay->radius)),
+        overlay->center.y});
+    const float dx = edge_screen_f.x - center_screen_f.x;
+    const float dy = edge_screen_f.y - center_screen_f.y;
+    const float radius_px = std::max(1.0f, std::hypot(dx, dy));
+
+    const float center_dx = static_cast<float>(screen_point.x) - center_screen_f.x;
+    const float center_dy = static_cast<float>(screen_point.y) - center_screen_f.y;
+    const float center_dist = std::hypot(center_dx, center_dy);
+    if (center_dist <= std::max(8.0f, radius_px * 0.08f)) {
+        return PerimeterHandleHover::Center;
+    }
+
+    const float ring_dist = std::fabs(center_dist - radius_px);
+    if (ring_dist <= 8.0f) {
+        return PerimeterHandleHover::Radius;
+    }
+    return PerimeterHandleHover::None;
 }
 
 bool RoomEditor::is_asset_active_for_input(const Asset* asset) const {
@@ -6732,11 +6788,24 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool has_selection = !selected_assets_.empty();
     const bool has_boundary_proxy_selection = selected_dynamic_boundary_proxy_.has_value();
     const bool selection_interaction_active = shift_down || has_selection || has_boundary_proxy_selection;
+    bool perimeter_handle_blocks_pan = false;
+    if (has_selection) {
+        for (Asset* asset : selected_assets_) {
+            if (!asset || asset->spawn_method != "Perimeter" || asset->spawn_id.empty()) {
+                continue;
+            }
+            perimeter_handle_blocks_pan =
+                perimeter_handle_hover_target(asset->spawn_id, screen_pt) != PerimeterHandleHover::None;
+            break;
+        }
+    }
     const bool selection_blocks_camera_pan =
         has_selection || any_editor_point_selected();
     const bool pointer_blocks_pan = selection_blocks_camera_pan ||
                                     (!selection_interaction_active && dragging_) ||
-                                    (selection_interaction_active && !dragging_ && hit_before_pan && (left_down || left_pressed_this_frame));
+                                    (selection_interaction_active && !dragging_ &&
+                                     (hit_before_pan || perimeter_handle_blocks_pan) &&
+                                     (left_down || left_pressed_this_frame));
 
     if (selection_blocks_camera_pan && camera_controls_.is_panning()) {
         // Stop any in-progress camera drag as soon as a selection exists so asset dragging has priority.
@@ -6787,6 +6856,17 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     snapped_cursor_world_ = snap_to_grid_enabled_
         ? snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_)
         : world_pt;
+
+    perimeter_hover_target_ = PerimeterHandleHover::None;
+    if (!selected_assets_.empty()) {
+        for (Asset* asset : selected_assets_) {
+            if (!asset || asset->spawn_method != "Perimeter" || asset->spawn_id.empty()) {
+                continue;
+            }
+            perimeter_hover_target_ = perimeter_handle_hover_target(asset->spawn_id, screen_pt);
+            break;
+        }
+    }
 
     if (selected_geometry_room_) {
         clear_geometry_selection();
@@ -6839,8 +6919,15 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
         Asset* selection_hit = nullptr;
         std::optional<DynamicBoundaryProxyHit> selection_boundary_hit;
+        DragMode forced_drag_mode = DragMode::None;
         if (!selected_assets_.empty()) {
             selection_hit = selected_asset_within_interaction_radius(screen_pt);
+            if (!selection_hit && perimeter_hover_target_ != PerimeterHandleHover::None) {
+                selection_hit = selected_assets_.front();
+                forced_drag_mode =
+                    (perimeter_hover_target_ == PerimeterHandleHover::Center) ? DragMode::PerimeterCenter
+                                                                              : DragMode::Perimeter;
+            }
         } else if (shift_down) {
             selection_hit = hit_test_asset_anchor(screen_pt, kShiftAnchorSelectRadiusPx);
             if (!selection_hit) {
@@ -6863,6 +6950,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         mouse_press_state_.pressed_identity = selection_hit;
         mouse_press_state_.pressed_spawn_id = selection_hit ? selection_hit->spawn_id : std::string{};
         mouse_press_state_.pressed_has_spawn_group = selection_hit && !selection_hit->spawn_id.empty();
+        mouse_press_state_.forced_drag_mode = forced_drag_mode;
         mouse_press_state_.was_dragged = false;
         mouse_press_state_.press_screen = screen_pt;
         mouse_press_state_.valid = selection_hit != nullptr;
@@ -6916,7 +7004,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                 drag_last_world_ = snapped_cursor_world_;
                 const bool ctrl_modifier =
                     input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
-                begin_drag_session(snapped_cursor_world_, ctrl_modifier);
+                begin_drag_session(snapped_cursor_world_, ctrl_modifier, mouse_press_state_.forced_drag_mode);
             }
 
             if (mouse_press_state_.was_dragged && dragging_) {
@@ -21444,7 +21532,7 @@ bool RoomEditor::delete_selected_stack_editor_entity() {
     return false;
 }
 
-void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier) {
+void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier, DragMode forced_mode) {
 
     // Dragging must remain available for all selected assets in dev mode,
     // including groups previously marked locked.
@@ -21490,6 +21578,9 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
 
     const std::string& method = primary->spawn_method;
     drag_mode_ = drag_mode_for_spawn_method(method, ctrl_modifier);
+    if (forced_mode != DragMode::None) {
+        drag_mode_ = forced_mode;
+    }
 
     bool resolve_geometry = (method == "Exact" || method == "Exact Position" || method == "Perimeter");
 

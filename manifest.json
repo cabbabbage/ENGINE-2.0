@@ -26443,9 +26443,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            157,
-            242,
             36,
+            242,
+            62,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26798,9 +26798,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            128,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26823,9 +26823,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            125,
-            71,
-            204,
+            142,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26848,9 +26848,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            168,
+            31,
+            204,
+            160,
             255
           ],
           "edge_smoothness": 4,
@@ -26908,9 +26908,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            235,
-            242,
-            85,
+            134,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -26974,9 +26974,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            204,
-            91,
-            31,
+            242,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27028,187 +27028,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "vibble"
-                }
-              ],
-              "display_name": "vibble",
-              "dx": -1690,
-              "dz": -268,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6662a4a78e7a"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy)",
-              "dx": -2819,
-              "dz": -3149,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-5e3c039bbb08"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy 3)",
-              "dx": -791,
-              "dz": -4674,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 3,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-042f5454bfef"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "skull_pile"
-                }
-              ],
-              "display_name": "skull_pile",
-              "dx": -338,
-              "dz": -3151,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 4,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-29f9f5f5762d"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy)",
-              "dx": 303,
-              "dz": -4495,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 5,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-486a80b9c3ff"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 5.0,
-                  "name": "#candle"
-                }
-              ],
-              "display_name": "3_candles",
-              "dx": -115,
-              "dz": -1383,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 15,
-              "min_number": 15,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "perimeter_radius": 320,
-              "position": "Perimeter",
-              "priority": 6,
-              "radius": 320,
-              "resolution": 2,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-380ba86eec95"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "3d_illustration_rendering_empty_parking_lots_aerial_view_56345_1435"
                 }
               ],
@@ -27224,7 +27043,7 @@
               "origional_height": 12792,
               "origional_width": 19320,
               "position": "Exact",
-              "priority": 7,
+              "priority": 1,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27254,42 +27073,12 @@
               "origional_height": 12256,
               "origional_width": 18728,
               "position": "Exact",
-              "priority": 8,
+              "priority": 2,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-cc4def7da2e8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "pngtree_electric_pole_png_image_5949632"
-                }
-              ],
-              "display_name": "pngtree_electric_pole_png_image_5949632",
-              "dx": -2231,
-              "dz": -5271,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12624,
-              "origional_width": 18688,
-              "position": "Exact",
-              "priority": 9,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-4e1488221ff3"
             },
             {
               "candidates": [
@@ -27314,7 +27103,7 @@
               "origional_height": 12256,
               "origional_width": 18728,
               "position": "Exact",
-              "priority": 10,
+              "priority": 3,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27344,42 +27133,12 @@
               "origional_height": 12624,
               "origional_width": 18688,
               "position": "Exact",
-              "priority": 11,
+              "priority": 4,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-0122669767e5"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -2001,
-              "dz": -4741,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 12,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-5302fe8ec561"
             },
             {
               "candidates": [
@@ -27404,7 +27163,7 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 13,
+              "priority": 5,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27434,7 +27193,7 @@
               "origional_height": 12256,
               "origional_width": 18728,
               "position": "Exact",
-              "priority": 14,
+              "priority": 6,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27464,72 +27223,12 @@
               "origional_height": 12344,
               "origional_width": 19440,
               "position": "Exact",
-              "priority": 15,
+              "priority": 7,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-4db6a682b907"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "tree_dark"
-                }
-              ],
-              "display_name": "tree_dark",
-              "dx": -1654,
-              "dz": -5295,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 16,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-e8eb6ab22927"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy)",
-              "dx": 303,
-              "dz": -4495,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 17,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-7c597dcf5435"
             },
             {
               "candidates": [
@@ -27554,7 +27253,7 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 18,
+              "priority": 8,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27584,7 +27283,7 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 19,
+              "priority": 9,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27598,44 +27297,13 @@
                   "name": "null"
                 },
                 {
-                  "chance": 5.0,
-                  "name": "#candle"
-                }
-              ],
-              "display_name": "3_candles (Copy)",
-              "dx": -112,
-              "dz": -1312,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 15,
-              "min_number": 15,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "perimeter_radius": 320,
-              "position": "Perimeter",
-              "priority": 20,
-              "radius": 320,
-              "resolution": 2,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-fdf0f71c9d9f"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
                   "chance": 100,
-                  "name": "lamp_left"
+                  "name": "lamp_right"
                 }
               ],
-              "display_name": "lamp_left (Copy)",
-              "dx": -2819,
-              "dz": -3149,
+              "display_name": "lamp_right (Copy)",
+              "dx": -1541,
+              "dz": 754,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27645,12 +27313,12 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 21,
+              "priority": 10,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-97bc0bc086b2"
+              "spawn_id": "spn-0e19c9135264"
             },
             {
               "candidates": [
@@ -27660,12 +27328,12 @@
                 },
                 {
                   "chance": 100,
-                  "name": "lamp_left"
+                  "name": "fly"
                 }
               ],
-              "display_name": "lamp_left (Copy)",
-              "dx": -771,
-              "dz": -4434,
+              "display_name": "fly (Copy)",
+              "dx": -892,
+              "dz": 1034,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27675,72 +27343,12 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 22,
+              "priority": 11,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6ffe9948aff3"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "skull_pile"
-                }
-              ],
-              "display_name": "skull_pile (Copy)",
-              "dx": -329,
-              "dz": -2989,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 23,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-d4992a6766e9"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "pngtree_electric_pole_png_image_5949632"
-                }
-              ],
-              "display_name": "pngtree_electric_pole_png_image_5949632 (Copy)",
-              "dx": -2209,
-              "dz": -5057,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 24,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-3d43d7d26921"
+              "spawn_id": "spn-bf1845a93955"
             },
             {
               "candidates": [
@@ -27754,8 +27362,8 @@
                 }
               ],
               "display_name": "lamp_right (Copy)",
-              "dx": -2001,
-              "dz": -4741,
+              "dx": -1541,
+              "dz": 754,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27765,12 +27373,252 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 25,
+              "priority": 12,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-33ba58f7e8b0"
+              "spawn_id": "spn-f0b416ea350a"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "fly"
+                }
+              ],
+              "display_name": "fly (Copy)",
+              "dx": -892,
+              "dz": 1034,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 13,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-644e5367f59f"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_right"
+                }
+              ],
+              "display_name": "lamp_right (Copy)",
+              "dx": -908,
+              "dz": 1215,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 14,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-13daedde1716"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "fly"
+                }
+              ],
+              "display_name": "fly (Copy)",
+              "dx": -892,
+              "dz": 1034,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 15,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a1e511238c21"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_right"
+                }
+              ],
+              "display_name": "lamp_right (Copy)",
+              "dx": -1541,
+              "dz": 754,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 16,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-61f502673fdc"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_right"
+                }
+              ],
+              "display_name": "lamp_right (Copy)",
+              "dx": -1541,
+              "dz": 754,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 17,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-55283942f4c9"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "fly"
+                }
+              ],
+              "display_name": "fly (Copy)",
+              "dx": -892,
+              "dz": 1034,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 18,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-6fe6d77181a8"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_right"
+                }
+              ],
+              "display_name": "lamp_right (Copy)",
+              "dx": -1541,
+              "dz": 754,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 19,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-16302f118c04"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "lamp_right"
+                }
+              ],
+              "display_name": "lamp_right (Copy)",
+              "dx": -908,
+              "dz": 1215,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 20,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-aea10039c9f2"
             }
           ],
           "trail_connection_sector": {
@@ -27833,9 +27681,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            31,
+            99,
             204,
-            180,
+            31,
             255
           ],
           "edge_smoothness": 96,

@@ -4487,16 +4487,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 }
             }
 
-            if (marquee_selection_.active && marquee_selection_.threshold_passed) {
-                SDL_Color preview_color{50, 150, 255, 255}; // blue marquee preview
-                for (Asset* asset : marquee_selection_.last_selection) {
-                    if (!asset_belongs_to_room(asset)) {
-                        continue;
-                    }
-                    render_asset_outline(renderer, asset, cam, preview_color, outline_offset);
-                }
-            }
-
         }
 
         if (has_shift_nav_hover) {
@@ -4504,6 +4494,18 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_Color color{50, 150, 255, 255}; // blue for ownership navigation hover
             render_asset_outline(renderer, shift_nav_hover_asset_, cam, color, 4);
+        }
+
+        if (!suppress_selection_outlines && marquee_selection_.active && marquee_selection_.threshold_passed) {
+            ensure_spatial_index(cam);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_Color preview_color{50, 150, 255, 255}; // blue marquee preview
+            for (Asset* asset : marquee_selection_.last_selection) {
+                if (!asset_belongs_to_room(asset)) {
+                    continue;
+                }
+                render_asset_outline(renderer, asset, cam, preview_color, 3);
+            }
         }
 
         if (marquee_selection_.active && marquee_selection_.threshold_passed) {
@@ -7087,6 +7089,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             return false;
         }
         marquee_selection_.current_screen = screen_pt;
+        const bool should_commit_selection = marquee_selection_.threshold_passed;
         if (marquee_selection_.threshold_passed && assets_) {
             const int left = std::min(marquee_selection_.start_screen.x, marquee_selection_.current_screen.x);
             const int top = std::min(marquee_selection_.start_screen.y, marquee_selection_.current_screen.y);
@@ -7117,6 +7120,12 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         }
         marquee_selection_.reset();
         clear_mouse_press_state(false);
+        if (should_commit_selection) {
+            suppress_next_left_click_ = true;
+            click_buffer_frames_ = 3;
+            last_click_spawn_id_.clear();
+            last_click_time_ms_ = 0;
+        }
         return true;
     };
 

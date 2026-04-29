@@ -6004,7 +6004,7 @@ void RoomEditor::regenerate_room_from_template(const std::string& template_key) 
         &map_info,
         assets_->manifest_store(),
         assets_->map_id(),
-        {});
+        Room::ManifestWriter{});
 
     Room* replacement_room_ptr = replacement_room.get();
     replacement_room_ptr->layer = old_room->layer;

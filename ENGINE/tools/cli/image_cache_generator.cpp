@@ -3,8 +3,13 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
+#include <limits>
+#include <optional>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
@@ -12,6 +17,34 @@
 namespace imgcache {
 
 namespace {
+
+struct AlphaBounds {
+    int left = 0;
+    int top = 0;
+    int right = 0;  // exclusive
+    int bottom = 0; // exclusive
+
+    [[nodiscard]] int width() const {
+        return std::max(0, right - left);
+    }
+
+    [[nodiscard]] int height() const {
+        return std::max(0, bottom - top);
+    }
+
+    [[nodiscard]] bool valid() const {
+        return right > left && bottom > top;
+    }
+};
+
+struct SharedCropSize {
+    int width = 0;
+    int height = 0;
+
+    [[nodiscard]] bool valid() const {
+        return width > 0 && height > 0;
+    }
+};
 
 std::vector<float> canonical_scale_steps() {
     return {1.0f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f, 0.4f, 0.3f, 0.2f, 0.1f};
@@ -29,8 +62,221 @@ int scale_percent(float step) {
     return std::max(1, static_cast<int>(std::lround(static_cast<double>(step) * 100.0)));
 }
 
+int scale_dimension(int value, float step) {
+    return std::max(1, static_cast<int>(std::lround(static_cast<double>(value) * static_cast<double>(step))));
+}
+
 bool has_normal_variant_mask(std::uint8_t mask) {
     return (mask & kTextureVariantMaskNormal) != 0;
+}
+
+std::vector<fs::path> EnumerateSourceFramesForAnalysis(const fs::path& anim_src_dir) {
+    std::vector<fs::path> frames;
+    std::error_code ec;
+    for (int idx = 0; idx < 100000; ++idx) {
+        fs::path frame_path = anim_src_dir / (std::to_string(idx) + ".png");
+        if (!fs::exists(frame_path, ec) || ec) {
+            break;
+        }
+        frames.push_back(frame_path);
+    }
+    return frames;
+}
+
+std::optional<ImageRGBA> LoadPngRGBAForAnalysis(const fs::path& path, std::string& err) {
+    err.clear();
+    int w = 0;
+    int h = 0;
+    int channels = 0;
+    stbi_uc* pixels = stbi_load(path.string().c_str(), &w, &h, &channels, 4);
+    if (!pixels || w <= 0 || h <= 0) {
+        err = "stbi_load failed";
+        if (pixels) {
+            stbi_image_free(pixels);
+        }
+        return std::nullopt;
+    }
+
+    ImageRGBA image;
+    image.w = w;
+    image.h = h;
+    image.pixels.assign(pixels, pixels + static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u);
+    stbi_image_free(pixels);
+    return image;
+}
+
+std::optional<AlphaBounds> FindAlphaBounds(const ImageRGBA& image) {
+    if (!image.valid()) {
+        return std::nullopt;
+    }
+
+    int left = image.w;
+    int top = image.h;
+    int right = -1;
+    int bottom = -1;
+
+    for (int y = 0; y < image.h; ++y) {
+        for (int x = 0; x < image.w; ++x) {
+            const std::size_t idx = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.w) +
+                                     static_cast<std::size_t>(x)) * 4u;
+            const std::uint8_t alpha = image.pixels[idx + 3];
+            if (alpha == 0) {
+                continue;
+            }
+
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + 1);
+            bottom = std::max(bottom, y + 1);
+        }
+    }
+
+    if (right < 0 || bottom < 0) {
+        return std::nullopt;
+    }
+
+    AlphaBounds bounds;
+    bounds.left = left;
+    bounds.top = top;
+    bounds.right = right;
+    bounds.bottom = bottom;
+    return bounds;
+}
+
+std::optional<ImageRGBA> CropToSharedCanvas(const ImageRGBA& src,
+                                            const std::optional<AlphaBounds>& bounds,
+                                            int shared_width,
+                                            int shared_height,
+                                            std::string& err) {
+    err.clear();
+
+    if (!src.valid()) {
+        err = "invalid source image";
+        return std::nullopt;
+    }
+    if (shared_width <= 0 || shared_height <= 0) {
+        err = "invalid shared crop size";
+        return std::nullopt;
+    }
+
+    ImageRGBA out;
+    out.w = shared_width;
+    out.h = shared_height;
+    out.pixels.assign(static_cast<std::size_t>(shared_width) * static_cast<std::size_t>(shared_height) * 4u, 0u);
+
+    if (!bounds.has_value()) {
+        return out;
+    }
+
+    const AlphaBounds b = bounds.value();
+    if (!b.valid()) {
+        return out;
+    }
+    if (b.left < 0 || b.top < 0 || b.right > src.w || b.bottom > src.h) {
+        err = "alpha bounds exceed source image dimensions";
+        return std::nullopt;
+    }
+    if (b.width() > shared_width || b.height() > shared_height) {
+        err = "frame alpha bounds exceed shared crop canvas";
+        return std::nullopt;
+    }
+
+    const int paste_x = (shared_width - b.width()) / 2;
+    const int paste_y = shared_height - b.height();
+
+    for (int y = 0; y < b.height(); ++y) {
+        const int src_y = b.top + y;
+        const int dst_y = paste_y + y;
+        for (int x = 0; x < b.width(); ++x) {
+            const int src_x = b.left + x;
+            const int dst_x = paste_x + x;
+
+            const std::size_t src_idx = (static_cast<std::size_t>(src_y) * static_cast<std::size_t>(src.w) +
+                                         static_cast<std::size_t>(src_x)) * 4u;
+            const std::size_t dst_idx = (static_cast<std::size_t>(dst_y) * static_cast<std::size_t>(out.w) +
+                                         static_cast<std::size_t>(dst_x)) * 4u;
+
+            out.pixels[dst_idx + 0] = src.pixels[src_idx + 0];
+            out.pixels[dst_idx + 1] = src.pixels[src_idx + 1];
+            out.pixels[dst_idx + 2] = src.pixels[src_idx + 2];
+            out.pixels[dst_idx + 3] = src.pixels[src_idx + 3];
+        }
+    }
+
+    return out;
+}
+
+bool AnimationRequestedForGeneration(const GeneratorOptions& opt,
+                                     const std::string& asset_name,
+                                     const std::string& animation_name) {
+    if (!opt.filters.matches_asset(asset_name) || !opt.filters.matches_anim(animation_name)) {
+        return false;
+    }
+
+    if (!opt.has_explicit_rebuild_requests()) {
+        return true;
+    }
+
+    for (const auto& request : opt.explicit_rebuild_requests) {
+        if (request.asset_name == asset_name && request.animation_name == animation_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<SharedCropSize> AnalyzeSharedCropSizeForAsset(
+    const GeneratorOptions& opt,
+    const std::string& asset_name,
+    const std::vector<std::pair<std::string, fs::path>>& animations,
+    std::string& err) {
+    err.clear();
+
+    SharedCropSize shared;
+    bool found_frame = false;
+    bool found_visible_pixels = false;
+
+    for (const auto& animation_entry : animations) {
+        const std::string& animation_name = animation_entry.first;
+        const fs::path& animation_src_dir = animation_entry.second;
+
+        if (!AnimationRequestedForGeneration(opt, asset_name, animation_name)) {
+            continue;
+        }
+
+        const auto frames = EnumerateSourceFramesForAnalysis(animation_src_dir);
+        for (const fs::path& frame_path : frames) {
+            found_frame = true;
+
+            std::string load_err;
+            std::optional<ImageRGBA> src_opt = LoadPngRGBAForAnalysis(frame_path, load_err);
+            if (!src_opt.has_value()) {
+                err = "Failed to load source frame '" + frame_path.string() + "' while analyzing crop bounds: " + load_err;
+                return std::nullopt;
+            }
+
+            const std::optional<AlphaBounds> bounds = FindAlphaBounds(src_opt.value());
+            if (!bounds.has_value()) {
+                continue;
+            }
+
+            found_visible_pixels = true;
+            shared.width = std::max(shared.width, bounds->width());
+            shared.height = std::max(shared.height, bounds->height());
+        }
+    }
+
+    if (!found_frame) {
+        err = "No source frames found while analyzing shared alpha crop bounds for asset '" + asset_name + "'";
+        return std::nullopt;
+    }
+
+    if (!found_visible_pixels || !shared.valid()) {
+        err = "No visible alpha pixels found while analyzing shared alpha crop bounds for asset '" + asset_name + "'";
+        return std::nullopt;
+    }
+
+    return shared;
 }
 
 } // namespace
@@ -98,6 +344,19 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
         const fs::path asset_src_dir = ResolveAssetSourceDir(manifest_dir, repo_root, asset_name, it.value());
         const auto animations = DiscoverAnimations(asset_src_dir);
+        if (animations.empty()) {
+            continue;
+        }
+
+        std::string crop_err;
+        std::optional<SharedCropSize> shared_crop_size = AnalyzeSharedCropSizeForAsset(opt,
+                                                                                       asset_name,
+                                                                                       animations,
+                                                                                       crop_err);
+        if (!shared_crop_size.has_value()) {
+            result.error = crop_err;
+            return result;
+        }
 
         for (const auto& animation_entry : animations) {
             const std::string& animation_name = animation_entry.first;
@@ -182,12 +441,27 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                         continue;
                     }
 
-                    const int dst_w = std::max(1, static_cast<int>(std::lround(static_cast<double>(src.w) * step)));
-                    const int dst_h = std::max(1, static_cast<int>(std::lround(static_cast<double>(src.h) * step)));
+                    const int dst_w = scale_dimension(src.w, step);
+                    const int dst_h = scale_dimension(src.h, step);
                     std::optional<ImageRGBA> scaled = ResizeRGBA(src, dst_w, dst_h, load_err);
                     if (!scaled.has_value()) {
                         ++result.stats.tasks_failed;
                         result.error = "Failed to resize frame '" + frames[frame_index].string() + "': " + load_err;
+                        return result;
+                    }
+
+                    const std::optional<AlphaBounds> scaled_bounds = FindAlphaBounds(scaled.value());
+                    const int shared_w = scale_dimension(shared_crop_size->width, step);
+                    const int shared_h = scale_dimension(shared_crop_size->height, step);
+
+                    std::optional<ImageRGBA> cropped = CropToSharedCanvas(scaled.value(),
+                                                                          scaled_bounds,
+                                                                          shared_w,
+                                                                          shared_h,
+                                                                          load_err);
+                    if (!cropped.has_value()) {
+                        ++result.stats.tasks_failed;
+                        result.error = "Failed to alpha crop frame '" + frames[frame_index].string() + "': " + load_err;
                         return result;
                     }
 
@@ -200,7 +474,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     }
 
                     std::string save_err;
-                    if (!SavePngRGBA(out_path, scaled.value(), save_err)) {
+                    if (!SavePngRGBA(out_path, cropped.value(), save_err)) {
                         ++result.stats.tasks_failed;
                         result.error = "Failed writing frame '" + out_path.string() + "': " + save_err;
                         return result;
@@ -237,7 +511,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     if (result.stats.tasks_total == 0) {
         log.info("No cache work required.");
     } else {
-        log.info("Generated " + std::to_string(result.stats.pngs_written) + " normal texture files.");
+        log.info("Generated " + std::to_string(result.stats.pngs_written) + " alpha-cropped normal texture files.");
     }
 
     result.ok = true;

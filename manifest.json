@@ -26772,8 +26772,8 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
+            37,
             36,
-            242,
             242,
             255
           ],
@@ -26797,9 +26797,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26824,7 +26824,7 @@
           "display_color": [
             204,
             31,
-            133,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26883,7 +26883,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            203,
+            197,
             36,
             255
           ],
@@ -26948,9 +26948,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            171,
-            85,
-            242,
+            118,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27186,16 +27186,16 @@
                 }
               ],
               "display_name": "lamp_left (Copy)",
-              "dx": 435,
-              "dz": -4498,
+              "dx": 303,
+              "dz": -4495,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
+              "origional_height": 12112,
+              "origional_width": 18504,
               "position": "Exact",
               "priority": 7,
               "quantity": 1,
@@ -27457,16 +27457,16 @@
                 }
               ],
               "display_name": "lamp_right (Copy)",
-              "dx": -5005,
-              "dz": -3157,
+              "dx": -1541,
+              "dz": 754,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
+              "origional_height": 12112,
+              "origional_width": 18504,
               "position": "Exact",
               "priority": 16,
               "quantity": 1,
@@ -27626,9 +27626,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            118,
             204,
             31,
+            117,
             255
           ],
           "edge_smoothness": 96,

@@ -55,13 +55,13 @@ SearchAssets::SearchAssets(devmode::core::ManifestStore* manifest_store)
                 selected_values_.erase(entry.value);
             }
             if (multi_apply_btn_) {
-                multi_apply_btn_->set_enabled(!selected_values_.empty());
+                /* DMButton has no enabled state; guard click in callback */
             }
         }
     });
 
     multi_apply_btn_ = std::make_unique<DMButton>("Apply", &DMStyles::CreateButton(), 140, DMButton::height());
-    multi_apply_btn_->set_enabled(false);
+    /* DMButton has no enabled state; guard click in callback */
     multi_apply_btn_widget_ = std::make_unique<ButtonWidget>(multi_apply_btn_.get(), [this]() {
         if (!multi_select_mode_ || !multi_select_cb_) {
             return;
@@ -299,9 +299,9 @@ void SearchAssets::open(Callback cb) {
     list_view_.set_multi_select_enabled(false);
     list_view_.set_selected_values({});
     if (multi_apply_btn_) {
-        multi_apply_btn_->set_enabled(false);
+        /* DMButton has no enabled state; guard click in callback */
     }
-    panel_->set_header_text("Search Assets");
+    panel_->set_title("Search Assets");
     load_assets();  // Always reload assets when opening to ensure we have the latest from manifest store
     if (embedded_) {
         if (panel_) {
@@ -362,9 +362,9 @@ void SearchAssets::open_multi_select(MultiSelectCallback cb) {
     list_view_.set_multi_select_enabled(true);
     list_view_.set_selected_values(selected_values_);
     if (multi_apply_btn_) {
-        multi_apply_btn_->set_enabled(false);
+        /* DMButton has no enabled state; guard click in callback */
     }
-    panel_->set_header_text("Select Assets To Apply");
+    panel_->set_title("Select Assets To Apply");
     load_assets();
     if (embedded_) {
         if (panel_) {
@@ -437,9 +437,9 @@ void SearchAssets::close() {
     list_view_.set_multi_select_enabled(false);
     list_view_.set_selected_values({});
     if (multi_apply_btn_) {
-        multi_apply_btn_->set_enabled(false);
+        /* DMButton has no enabled state; guard click in callback */
     }
-    panel_->set_header_text("Search Assets");
+    panel_->set_title("Search Assets");
     if (auto* box = list_view_.search_box()) {
         box->stop_editing();
     }

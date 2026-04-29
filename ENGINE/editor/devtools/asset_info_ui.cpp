@@ -975,6 +975,10 @@ AssetInfoUI::AssetInfoUI() {
         }
         if (duplicate_btn_widget_ && duplicate_btn_widget_->handle_event(e)) return true;
         if (delete_btn_widget_ && delete_btn_widget_->handle_event(e)) return true;
+        if (ownership_parent_btn_widget_ && ownership_parent_btn_widget_->handle_event(e)) return true;
+        for (const auto& child_btn : ownership_child_btn_widgets_) {
+            if (child_btn && child_btn->handle_event(e)) return true;
+        }
         return false;
     });
 }
@@ -1039,8 +1043,130 @@ void AssetInfoUI::set_save_coordinator(devmode::core::DevSaveCoordinator* coordi
 void AssetInfoUI::set_target_asset(Asset* a) {
     target_asset_ = a;
     validate_target_asset();
+    rebuild_ownership_navigation_controls();
     if (animation_editor_window_) {
         animation_editor_window_->set_target_asset(target_asset_);
+    }
+}
+
+void AssetInfoUI::set_ownership_navigation_callback(std::function<void(Asset*)> cb) {
+    ownership_navigation_callback_ = std::move(cb);
+}
+
+void AssetInfoUI::set_ownership_navigation_targets(Asset* parent, const std::vector<Asset*>& children) {
+    ownership_parent_asset_ = parent;
+    ownership_child_assets_ = children;
+    rebuild_ownership_navigation_controls();
+}
+
+void AssetInfoUI::rebuild_ownership_navigation_controls() {
+    ownership_parent_btn_widget_.reset();
+    ownership_parent_btn_.reset();
+    ownership_child_btn_widgets_.clear();
+    ownership_child_btns_.clear();
+
+    if (!ownership_navigation_callback_) {
+        return;
+    }
+
+    if (ownership_parent_asset_ && ownership_parent_asset_->info) {
+        const std::string label = "Parent: " + ownership_parent_asset_->info->name;
+        ownership_parent_btn_ = std::make_unique<DMButton>(label, &DMStyles::AccentButton(), 260, DMButton::height());
+        ownership_parent_btn_widget_ = std::make_unique<ButtonWidget>(ownership_parent_btn_.get(), [this]() {
+            if (ownership_navigation_callback_ && ownership_parent_asset_) {
+                ownership_navigation_callback_(ownership_parent_asset_);
+            }
+        });
+    }
+
+    for (Asset* child : ownership_child_assets_) {
+        if (!child || !child->info) {
+            continue;
+        }
+        const std::string label = "Child: " + child->info->name;
+        auto btn = std::make_unique<DMButton>(label, &DMStyles::HeaderButton(), 260, DMButton::height());
+        Asset* child_ptr = child;
+        auto widget = std::make_unique<ButtonWidget>(btn.get(), [this, child_ptr]() {
+            if (ownership_navigation_callback_ && child_ptr) {
+                ownership_navigation_callback_(child_ptr);
+            }
+        });
+        ownership_child_btns_.push_back(std::move(btn));
+        ownership_child_btn_widgets_.push_back(std::move(widget));
+    }
+}
+
+bool AssetInfoUI::handle_ownership_navigation_event(const SDL_Event& e) {
+    if (!ownership_navigation_callback_ || ownership_nav_hit_regions_.empty()) {
+        return false;
+    }
+    if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT) {
+        return false;
+    }
+    SDL_Point p{e.button.x, e.button.y};
+    for (const auto& entry : ownership_nav_hit_regions_) {
+        if (!entry.first) continue;
+        if (SDL_PointInRect(&p, &entry.second)) {
+            ownership_navigation_callback_(entry.first);
+            return true;
+        }
+    }
+    return false;
+}
+
+void AssetInfoUI::render_ownership_navigation_controls(SDL_Renderer* r) const {
+    ownership_nav_hit_regions_.clear();
+    if (!r || !visible_ || !ownership_navigation_callback_ || (!ownership_parent_asset_ && ownership_child_assets_.empty())) {
+        return;
+    }
+
+    const SDL_Rect panel = container_.panel_rect();
+    if (panel.w <= 0 || panel.h <= 0) {
+        return;
+    }
+
+    TTF_Font* font = devmode::utils::load_font(14);
+    if (!font) {
+        return;
+    }
+
+    int x = panel.x + 12;
+    int y = panel.y + 12;
+    const int chip_h = 24;
+    const int gap = 6;
+    const int max_w = std::max(160, panel.w - 24);
+
+    auto draw_chip = [&](Asset* asset, const std::string& label, SDL_Color fill) {
+        if (!asset) return;
+        int tw = 0;
+        int th = 0;
+        (void)ttf_util::GetStringSize(font, label, &tw, &th);
+        SDL_Rect rect{x, y, std::min(max_w, std::max(120, tw + 20)), chip_h};
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, fill.r, fill.g, fill.b, 225);
+        sdl_render::FillRect(r, &rect);
+        SDL_SetRenderDrawColor(r, 15, 20, 30, 235);
+        sdl_render::Rect(r, &rect);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(font, label.c_str(), SDL_Color{255, 255, 255, 255});
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
+            SDL_DestroySurface(surf);
+            if (tex) {
+                SDL_Rect dst{rect.x + 10, rect.y + std::max(0, (chip_h - th) / 2), std::min(tw, rect.w - 16), th};
+                sdl_render::Texture(r, tex, nullptr, &dst);
+                SDL_DestroyTexture(tex);
+            }
+        }
+        ownership_nav_hit_regions_.push_back({asset, rect});
+        y += chip_h + gap;
+    };
+
+    if (ownership_parent_asset_ && ownership_parent_asset_->info) {
+        draw_chip(ownership_parent_asset_, "Parent: " + ownership_parent_asset_->info->name, SDL_Color{45, 125, 210, 255});
+    }
+    for (Asset* child : ownership_child_assets_) {
+        if (!child || !child->info) continue;
+        draw_chip(child, "Child: " + child->info->name, SDL_Color{40, 90, 170, 255});
     }
 }
 
@@ -1384,6 +1510,10 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
 
     if (!visible_) return false;
 
+    if (handle_ownership_navigation_event(e)) {
+        return true;
+    }
+
     if (animation_editor_fullscreen_mode_) {
         if (animation_editor_window_ && animation_editor_window_->is_visible() &&
             animation_editor_window_->handle_event(e)) {
@@ -1547,6 +1677,8 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
 
     if (asset_selector_ && asset_selector_->visible())
         asset_selector_->render(r);
+
+    render_ownership_navigation_controls(r);
 
     DMDropdown::render_active_options(r);
 

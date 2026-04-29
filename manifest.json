@@ -759,7 +759,6 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
-      "asset_type": "object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
       "can_invert": true,
@@ -771,7 +770,7 @@
       "oval_anchor_mappings": [],
       "size_settings": {
         "scale_percentage": 22.0,
-        "size_variation": 3.0
+        "size_variation": 5.0
       },
       "start": "default",
       "tags": [
@@ -18867,6 +18866,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -18879,13 +18879,15 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/purple_flower",
       "asset_name": "purple_flower",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -18895,7 +18897,7 @@
       "oval_anchor_mappings": [],
       "size_settings": {
         "scale_percentage": 22.0,
-        "size_variation": 2.0
+        "size_variation": 5.0
       },
       "start": "default",
       "tags": [
@@ -18905,7 +18907,11 @@
         "purple"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 2,
+      "tilt_range_min_deg": -2,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": -4
     },
     "red_flower": {
       "anchor_point_child_candidates": [],
@@ -18950,7 +18956,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 22.0
+        "scale_percentage": 22.0,
+        "size_variation": 5.0
       },
       "start": "default",
       "tags": [
@@ -26417,9 +26424,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            148,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26772,9 +26779,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            37,
-            36,
-            242,
+            31,
+            204,
+            42,
             255
           ],
           "edge_smoothness": 4,
@@ -26797,9 +26804,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            36,
             242,
             242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26822,9 +26829,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26883,8 +26890,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            197,
             36,
+            200,
             255
           ],
           "edge_smoothness": 70,
@@ -26948,9 +26955,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            118,
-            204,
             31,
+            120,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -27066,16 +27073,16 @@
                 }
               ],
               "display_name": "lamp_left (Copy)",
-              "dx": -2565,
-              "dz": -3681,
+              "dx": -2819,
+              "dz": -3149,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
+              "origional_height": 12112,
+              "origional_width": 18504,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -27626,9 +27633,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            117,
+            36,
+            242,
+            230,
             255
           ],
           "edge_smoothness": 96,

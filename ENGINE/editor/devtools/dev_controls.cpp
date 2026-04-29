@@ -669,7 +669,6 @@ public:
     struct TemplateEntry {
         std::string key;
         std::string label;
-        std::vector<std::string> tags;
     };
 
     using Callback = std::function<void(const std::string&)>;
@@ -681,18 +680,6 @@ public:
         all_templates_ = std::move(templates);
         callback_ = std::move(cb);
         buttons_.clear();
-        current_tag_filter_.clear();
-        mode_ = Mode::TagSelection;
-        available_tags_.clear();
-        for (const TemplateEntry& entry : all_templates_) {
-            for (const std::string& tag : entry.tags) {
-                if (!tag.empty() &&
-                    std::find(available_tags_.begin(), available_tags_.end(), tag) == available_tags_.end()) {
-                    available_tags_.push_back(tag);
-                }
-            }
-        }
-        std::sort(available_tags_.begin(), available_tags_.end());
 
         if (all_templates_.empty()) {
             visible_ = false;
@@ -825,60 +812,16 @@ public:
     }
 
 private:
-    enum class Mode {
-        TagSelection,
-        RoomSelection
-    };
-
-    static std::string normalize_tag(const std::string& raw) {
-        std::string out;
-        out.reserve(raw.size());
-        bool last_space = false;
-        for (unsigned char ch : raw) {
-            if (std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.' || ch == '#') {
-                out.push_back(static_cast<char>(std::tolower(ch)));
-                last_space = false;
-                continue;
-            }
-            if (std::isspace(ch) && !out.empty() && !last_space) {
-                out.push_back(' ');
-                last_space = true;
-            }
-        }
-        while (!out.empty() && out.back() == ' ') {
-            out.pop_back();
-        }
-        return out;
-    }
-
     void rebuild_button_labels() {
         button_labels_.clear();
         visible_template_keys_.clear();
 
-        if (mode_ == Mode::TagSelection) {
-            button_labels_.push_back("all tags");
-            for (const std::string& tag : available_tags_) {
-                button_labels_.push_back(tag);
-            }
-            return;
-        }
-
-        button_labels_.push_back("< back to tags >");
         std::vector<const TemplateEntry*> filtered;
         for (const TemplateEntry& entry : all_templates_) {
             if (entry.key.empty()) {
                 continue;
             }
-            if (current_tag_filter_.empty()) {
-                filtered.push_back(&entry);
-                continue;
-            }
-            const bool has_tag = std::any_of(entry.tags.begin(), entry.tags.end(), [&](const std::string& tag) {
-                return normalize_tag(tag) == current_tag_filter_;
-            });
-            if (has_tag) {
-                filtered.push_back(&entry);
-            }
+            filtered.push_back(&entry);
         }
 
         std::sort(filtered.begin(), filtered.end(), [](const TemplateEntry* a, const TemplateEntry* b) {
@@ -897,51 +840,18 @@ private:
     }
 
     void on_button_pressed(std::size_t index) {
-        if (mode_ == Mode::TagSelection) {
-            if (index == 0) {
-                current_tag_filter_.clear();
-            } else if (index - 1 < available_tags_.size()) {
-                current_tag_filter_ = normalize_tag(available_tags_[index - 1]);
-            }
-            mode_ = Mode::RoomSelection;
-            buttons_.clear();
-            rebuild_button_labels();
-            const int button_height = DMButton::height();
-            const int button_width = rect_.w - DMSpacing::item_gap() * 2;
-            for (const std::string& label : button_labels_) {
-                buttons_.push_back(std::make_unique<DMButton>(label, &DMStyles::ListButton(), button_width, button_height));
-            }
-            return;
-        }
-
-        if (index == 0) {
-            mode_ = Mode::TagSelection;
-            buttons_.clear();
-            rebuild_button_labels();
-            const int button_height = DMButton::height();
-            const int button_width = rect_.w - DMSpacing::item_gap() * 2;
-            for (const std::string& label : button_labels_) {
-                buttons_.push_back(std::make_unique<DMButton>(label, &DMStyles::ListButton(), button_width, button_height));
-            }
-            return;
-        }
-
-        const std::size_t template_index = index - 1;
-        if (template_index >= visible_template_keys_.size()) {
+        if (index >= visible_template_keys_.size()) {
             return;
         }
         if (callback_) {
-            callback_(visible_template_keys_[template_index]);
+            callback_(visible_template_keys_[index]);
         }
         close();
     }
 
     bool visible_ = false;
     SDL_Rect rect_{0, 0, 280, 320};
-    Mode mode_ = Mode::TagSelection;
     std::vector<TemplateEntry> all_templates_;
-    std::vector<std::string> available_tags_;
-    std::string current_tag_filter_;
     std::vector<std::string> button_labels_;
     std::vector<std::string> visible_template_keys_;
     std::vector<std::unique_ptr<DMButton>> buttons_;
@@ -5348,75 +5258,6 @@ void DevControls::open_regenerate_room_popup() {
         return;
     }
 
-    auto normalize_tag = [](const std::string& raw) {
-        std::string out;
-        out.reserve(raw.size());
-        bool last_space = false;
-        for (unsigned char ch : raw) {
-            if (std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.' || ch == '#') {
-                out.push_back(static_cast<char>(std::tolower(ch)));
-                last_space = false;
-                continue;
-            }
-            if (std::isspace(ch) && !out.empty() && !last_space) {
-                out.push_back(' ');
-                last_space = true;
-            }
-        }
-        while (!out.empty() && out.back() == ' ') {
-            out.pop_back();
-        }
-        return out;
-    };
-
-    auto collect_template_tags = [&](const nlohmann::json& room_entry) {
-        std::vector<std::string> tags;
-        auto append_tag = [&](const std::string& raw) {
-            const std::string normalized = normalize_tag(raw);
-            if (normalized.empty()) {
-                return;
-            }
-            if (std::find(tags.begin(), tags.end(), normalized) == tags.end()) {
-                tags.push_back(normalized);
-            }
-        };
-        auto append_from_array = [&](const nlohmann::json& arr) {
-            if (!arr.is_array()) {
-                return;
-            }
-            for (const auto& value : arr) {
-                if (value.is_string()) {
-                    append_tag(value.get<std::string>());
-                }
-            }
-        };
-
-        if (!room_entry.is_object()) {
-            return tags;
-        }
-        auto tags_it = room_entry.find("room_tags");
-        if (tags_it != room_entry.end()) {
-            append_from_array(*tags_it);
-        }
-        tags_it = room_entry.find("tags");
-        if (tags_it != room_entry.end()) {
-            if (tags_it->is_array()) {
-                append_from_array(*tags_it);
-            } else if (tags_it->is_object()) {
-                auto include_it = tags_it->find("include");
-                if (include_it != tags_it->end()) {
-                    append_from_array(*include_it);
-                }
-                auto nested_it = tags_it->find("tags");
-                if (nested_it != tags_it->end()) {
-                    append_from_array(*nested_it);
-                }
-            }
-        }
-        std::sort(tags.begin(), tags.end());
-        return tags;
-    };
-
     std::vector<RegenerateRoomPopup::TemplateEntry> templates;
     templates.reserve(rooms_data.size());
     for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
@@ -5434,7 +5275,6 @@ void DevControls::open_regenerate_room_popup() {
         RegenerateRoomPopup::TemplateEntry entry;
         entry.key = template_key;
         entry.label = template_key;
-        entry.tags = collect_template_tags(it.value());
         templates.push_back(std::move(entry));
     }
 

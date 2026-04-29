@@ -744,9 +744,9 @@ void MapLayersPanel::rebuild_layer_rows_from_json(const nlohmann::json& layers) 
 
             if (i == 0) {
                 if (!first_room_name.empty()) {
-                    summary << " • spawn: " << first_room_name;
+                    summary << " • center: " << first_room_name;
                 } else {
-                    summary << " • spawn";
+                    summary << " • center";
                 }
             }
 
@@ -1225,7 +1225,7 @@ bool MapLayersPanel::validate_layers() {
         const auto& rooms_array = *rooms_it;
         if (rooms_array.empty()) {
             if (i == 0) {
-                errors.emplace_back("The spawn layer must include exactly one room candidate.");
+                errors.emplace_back("Layer 0 must include exactly one center-room candidate.");
                 invalid_layers_.push_back(index);
                 layer_has_error = true;
             } else {
@@ -1240,14 +1240,14 @@ bool MapLayersPanel::validate_layers() {
             } else {
                 const auto& spawn_entry = rooms_array.front();
                 if (!spawn_entry.is_object()) {
-                    errors.emplace_back("Layer '" + layer_label + "' has an invalid spawn room entry.");
+                    errors.emplace_back("Layer '" + layer_label + "' has an invalid center-room entry.");
                     invalid_layers_.push_back(index);
                     layer_has_error = true;
                 } else {
                     const int min_instances = spawn_entry.value("min_instances", 0);
                     const int max_instances = spawn_entry.value("max_instances", 0);
                     if (min_instances != 1 || max_instances != 1) {
-                        errors.emplace_back("Layer '" + layer_label + "' spawn room must allow exactly one instance.");
+                        errors.emplace_back("Layer '" + layer_label + "' center-room candidate must allow exactly one instance.");
                         invalid_layers_.push_back(index);
                         layer_has_error = true;
                     }
@@ -1500,7 +1500,7 @@ void MapLayersPanel::update_validation_summary_layout(const std::vector<std::str
     }
 
     if (!root_room_summary_.empty()) {
-        validation_lines_.push_back({"Root room: " + root_room_summary_, info_color()});
+        validation_lines_.push_back({"Center room: " + root_room_summary_, info_color()});
     }
 
     if (estimated_map_radius_ > 0.0) {
@@ -2831,6 +2831,9 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
         }
     }
 }
+
+
+
 
 
 

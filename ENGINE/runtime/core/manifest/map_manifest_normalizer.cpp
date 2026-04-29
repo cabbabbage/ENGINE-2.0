@@ -495,7 +495,7 @@ void normalize_layer_candidate_entry(nlohmann::json& candidate, bool& changed) {
     candidate["max_instances"] = max_instances;
 }
 
-bool ensure_spawn_room_via_layer_zero(nlohmann::json& map_manifest, const std::string& map_id) {
+bool ensure_layer_zero_defaults(nlohmann::json& map_manifest, const std::string& map_id) {
     bool changed = false;
     nlohmann::json& rooms_data = map_manifest["rooms_data"];
     if (!rooms_data.is_object()) {
@@ -508,6 +508,7 @@ bool ensure_spawn_room_via_layer_zero(nlohmann::json& map_manifest, const std::s
         changed = true;
     }
     nlohmann::json& layers = map_manifest["map_layers"];
+    const bool map_was_empty = layers.empty() && rooms_data.empty();
     if (layers.empty()) {
         layers.push_back(nlohmann::json::object());
         changed = true;
@@ -535,11 +536,7 @@ bool ensure_spawn_room_via_layer_zero(nlohmann::json& map_manifest, const std::s
         normalize_layer_candidate_entry(candidate, changed);
     }
 
-    bool valid_layer0 = !layer0_rooms.empty() &&
-                        layer0_rooms[0].is_object() &&
-                        layer0_rooms[0].value("source_type", std::string()) == "room_name" &&
-                        layer0_rooms[0].value("value", std::string()).size() > 0;
-    if (!valid_layer0) {
+    if (map_was_empty) {
         nlohmann::json spawn_candidate = nlohmann::json::object({
             {"source_type", "room_name"},
             {"value", std::string("Spawn")},
@@ -550,38 +547,25 @@ bool ensure_spawn_room_via_layer_zero(nlohmann::json& map_manifest, const std::s
         });
         layer0_rooms = nlohmann::json::array({std::move(spawn_candidate)});
         changed = true;
+        if (!rooms_data.contains("Spawn") || !rooms_data["Spawn"].is_object()) {
+            rooms_data["Spawn"] = make_default_spawn_room("Spawn");
+            changed = true;
+        }
     }
-    if (layer0_rooms.size() > 1) {
-        layer0_rooms.erase(layer0_rooms.begin() + 1, layer0_rooms.end());
-        changed = true;
+    if (!layer0_rooms.empty()) {
+        normalize_layer_candidate_entry(layer0_rooms[0], changed);
+        layer0_rooms[0]["min_instances"] = 1;
+        layer0_rooms[0]["max_instances"] = 1;
+        if (layer0_rooms.size() > 1) {
+            layer0_rooms.erase(layer0_rooms.begin() + 1, layer0_rooms.end());
+            changed = true;
+        }
+        layer0["min_rooms"] = 1;
+        layer0["max_rooms"] = 1;
+    } else {
+        layer0["min_rooms"] = 0;
+        layer0["max_rooms"] = 0;
     }
-
-    nlohmann::json& spawn_candidate = layer0_rooms[0];
-    normalize_layer_candidate_entry(spawn_candidate, changed);
-    spawn_candidate["source_type"] = "room_name";
-    spawn_candidate["min_instances"] = 1;
-    spawn_candidate["max_instances"] = 1;
-    layer0["min_rooms"] = 1;
-    layer0["max_rooms"] = 1;
-
-    std::string spawn_room_name = spawn_candidate.value("value", std::string("Spawn"));
-    if (spawn_room_name.empty()) {
-        spawn_room_name = "Spawn";
-        spawn_candidate["value"] = spawn_room_name;
-        spawn_candidate["name"] = spawn_room_name;
-        changed = true;
-    }
-
-    if (!rooms_data.contains(spawn_room_name) || !rooms_data[spawn_room_name].is_object()) {
-        rooms_data[spawn_room_name] = make_default_spawn_room(spawn_room_name);
-        changed = true;
-    }
-    rooms_data[spawn_room_name]["name"] = spawn_room_name;
-    if (!rooms_data[spawn_room_name].contains("room_tags") || !rooms_data[spawn_room_name]["room_tags"].is_array()) {
-        rooms_data[spawn_room_name]["room_tags"] = nlohmann::json::array();
-        changed = true;
-    }
-    rooms_data[spawn_room_name].erase("is_spawn");
 
     for (auto& room_entry : rooms_data.items()) {
         if (room_entry.value().is_object()) {
@@ -954,7 +938,7 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         changed = true;
     }
 
-    if (ensure_spawn_room_via_layer_zero(map_manifest, map_id)) {
+    if (ensure_layer_zero_defaults(map_manifest, map_id)) {
         changed = true;
     }
     if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {

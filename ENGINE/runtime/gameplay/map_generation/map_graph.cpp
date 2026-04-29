@@ -7,7 +7,6 @@
 namespace map_graph {
 namespace {
 
-constexpr const char* kDefaultSpawnName = "Spawn";
 constexpr int kTrailEndpointContainmentSafetyPx = 12;
 constexpr int kTrailRoomMarginPx = 5000;
 
@@ -109,32 +108,6 @@ void normalize_candidate_entry(nlohmann::json& candidate) {
     candidate["max_instances"] = max_instances;
 }
 
-void ensure_room_entry_exists(nlohmann::json& rooms_data, const std::string& room_name) {
-    if (!rooms_data.contains(room_name) || !rooms_data[room_name].is_object()) {
-        nlohmann::json room = nlohmann::json::object();
-        room["name"] = room_name;
-        room["geometry"] = "Circle";
-        room["min_width"] = 3000;
-        room["max_width"] = 3000;
-        room["min_height"] = 3000;
-        room["max_height"] = 3000;
-        room["edge_smoothness"] = 2;
-        room["inherits_map_assets"] = false;
-        room["is_boss"] = false;
-        room["spawn_groups"] = nlohmann::json::array();
-        room["room_tags"] = nlohmann::json::array();
-        rooms_data[room_name] = std::move(room);
-        return;
-    }
-    rooms_data[room_name]["name"] = room_name;
-    if (!rooms_data[room_name].contains("spawn_groups") || !rooms_data[room_name]["spawn_groups"].is_array()) {
-        rooms_data[room_name]["spawn_groups"] = nlohmann::json::array();
-    }
-    if (!rooms_data[room_name].contains("room_tags") || !rooms_data[room_name]["room_tags"].is_array()) {
-        rooms_data[room_name]["room_tags"] = nlohmann::json::array();
-    }
-}
-
 } // namespace
 
 MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
@@ -177,42 +150,24 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
     for (auto& entry : layer0_rooms) {
         normalize_candidate_entry(entry);
     }
-    if (layer0_rooms.empty() || !layer0_rooms[0].is_object() ||
-        layer0_rooms[0].value("source_type", std::string()) != "room_name" ||
-        layer0_rooms[0].value("value", std::string()).empty()) {
-        nlohmann::json spawn_candidate = {
-            {"source_type", "room_name"},
-            {"value", std::string(kDefaultSpawnName)},
-            {"name", std::string(kDefaultSpawnName)},
-            {"min_instances", 1},
-            {"max_instances", 1},
-            {"required_children", nlohmann::json::array()}
-        };
-        layer0_rooms = nlohmann::json::array({std::move(spawn_candidate)});
-    }
     if (layer0_rooms.size() > 1) {
         layer0_rooms.erase(layer0_rooms.begin() + 1, layer0_rooms.end());
     }
-    normalize_candidate_entry(layer0_rooms[0]);
-    layer0_rooms[0]["source_type"] = "room_name";
-    layer0_rooms[0]["min_instances"] = 1;
-    layer0_rooms[0]["max_instances"] = 1;
-    layer0["min_rooms"] = 1;
-    layer0["max_rooms"] = 1;
-
-    plan.spawn_room_name = layer0_rooms[0].value("value", std::string(kDefaultSpawnName));
-    if (plan.spawn_room_name.empty()) {
-        plan.spawn_room_name = kDefaultSpawnName;
-        layer0_rooms[0]["value"] = plan.spawn_room_name;
-        layer0_rooms[0]["name"] = plan.spawn_room_name;
+    if (!layer0_rooms.empty()) {
+        normalize_candidate_entry(layer0_rooms[0]);
+        layer0_rooms[0]["min_instances"] = 1;
+        layer0_rooms[0]["max_instances"] = 1;
+        layer0["min_rooms"] = 1;
+        layer0["max_rooms"] = 1;
+    } else {
+        layer0["min_rooms"] = 0;
+        layer0["max_rooms"] = 0;
     }
-    ensure_room_entry_exists(rooms_data, plan.spawn_room_name);
 
     std::unordered_map<std::string, std::vector<std::string>> tag_index;
     for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
         if (!it.value().is_object()) continue;
         const std::string room_name = it.key();
-        ensure_room_entry_exists(rooms_data, room_name);
         it.value().erase("is_spawn");
         const std::vector<std::string> room_tags = collect_room_tags(it.value());
         for (const std::string& room_tag : room_tags) {
@@ -292,9 +247,6 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
 
         for (auto& [room_name, spec] : by_name) {
             if (spec.max_instances < 0) spec.max_instances = 0;
-            if (spec.max_instances == 0 && layer_index == 0) {
-                spec.max_instances = 1;
-            }
             layer_spec.rooms.push_back(spec);
         }
         std::sort(layer_spec.rooms.begin(), layer_spec.rooms.end(), [](const RoomSpec& a, const RoomSpec& b) {
@@ -309,17 +261,14 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
             layer_spec.max_rooms = sum;
         }
         if (layer_index == 0) {
-            layer_spec.max_rooms = 1;
-            if (layer_spec.rooms.empty()) {
-                RoomSpec root;
-                root.name = plan.spawn_room_name;
-                root.max_instances = 1;
-                layer_spec.rooms.push_back(root);
-            }
+            layer_spec.max_rooms = layer_spec.rooms.empty() ? 0 : 1;
             if (layer_spec.rooms.size() > 1) {
                 layer_spec.rooms.resize(1);
             }
-            layer_spec.rooms[0].max_instances = 1;
+            if (!layer_spec.rooms.empty()) {
+                layer_spec.rooms[0].max_instances = 1;
+                plan.spawn_room_name = layer_spec.rooms[0].name;
+            }
         }
 
         plan.resolved_layers.push_back(layer_spec);

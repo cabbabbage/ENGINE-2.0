@@ -115,11 +115,8 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
     }
 
     if (map_layers_[0].rooms.empty()) {
-        RoomSpec rs;
-        rs.name = "Spawn";
-        rs.max_instances = 1;
-        map_layers_[0].rooms.push_back(rs);
-        vibble::log::warn("[GenerateRooms] Layer 0 had no room spec. Using default root 'Spawn'.");
+        vibble::log::error("[GenerateRooms] Layer 0 has no center-room spec. Aborting generation.");
+        return all_rooms;
     }
 
     const auto& root_spec = map_layers_[0].rooms[0];
@@ -132,24 +129,10 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
     }
 
     if (!rooms_data.contains(root_spec.name) || !rooms_data[root_spec.name].is_object()) {
-        constexpr int kSpawnRadius = 1500;
-        const int diameter = kSpawnRadius * 2;
-        nlohmann::json entry = nlohmann::json::object();
-        entry["name"] = root_spec.name;
-        entry["geometry"] = "Circle";
-        entry["min_width"] = diameter;
-        entry["max_width"] = diameter;
-        entry["min_height"] = diameter;
-        entry["max_height"] = diameter;
-        entry["edge_smoothness"] = 2;
-        entry["is_boss"] = false;
-        entry["inherits_map_assets"] = false;
-        entry["spawn_groups"] = nlohmann::json::array();
-        rooms_data[root_spec.name] = std::move(entry);
-
-        vibble::log::warn(
-            std::string("[GenerateRooms] Root room data missing. Injected default spawn room for '") +
-            root_spec.name + "'");
+        vibble::log::error(
+            std::string("[GenerateRooms] Root room data missing for center-room '") +
+            root_spec.name + "'. Aborting generation.");
+        return all_rooms;
     }
 
     std::vector<SDL_Color> room_colors = utils::display_color::collect(rooms_data);

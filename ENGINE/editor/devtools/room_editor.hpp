@@ -991,6 +991,7 @@ private:
         int hovered_point_index = -1;
         bool center_selected = false;
         bool center_hovered = false;
+        bool body_hovered = false;
         bool center_dragging = false;
         bool attachment_lock_active = false;
         bool attachment_lock_had_heading = false;
@@ -1166,6 +1167,7 @@ private:
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
     std::vector<Asset*> asset_info_parent_history_;
+    bool preserve_asset_info_parent_history_on_next_open_ = false;
     std::vector<Asset*> focus_selection_snapshot_;
     std::optional<std::string> focus_spawn_group_snapshot_{};
     Asset* focused_asset_ = nullptr;

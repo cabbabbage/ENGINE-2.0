@@ -136,7 +136,7 @@ public:
     bool is_room_config_open() const;
     bool is_camera_settings_open() const;
     void regenerate_room();
-    void regenerate_room_from_template(Room* source_room);
+    void regenerate_room_from_template(const std::string& template_key);
 
     using RoomAssetsSavedCallback = std::function<void()>;
     void set_room_assets_saved_callback(RoomAssetsSavedCallback cb);

@@ -56,6 +56,7 @@ class AnimationInspectorPanel {
     using MultiPathPicker = std::function<std::vector<std::filesystem::path>()>;
     using AnimationPicker = std::function<std::optional<std::string>()>;
     using StatusCallback = std::function<void(const std::string&)>;
+    using SourceChangedCallback = std::function<void(const SourceConfigPanel::SourceChangeEvent&)>;
     using FrameEditCallback = std::function<void(const std::string&)>;
     using FrameModeEditCallback = std::function<void(const std::string&, FrameEditorLaunchMode)>;
     using AudioFilePicker = std::function<std::optional<std::filesystem::path>()>;
@@ -74,6 +75,7 @@ class AnimationInspectorPanel {
     void set_source_gif_picker(PathPicker picker);
     void set_source_png_sequence_picker(MultiPathPicker picker);
     void set_source_status_callback(StatusCallback callback);
+    void set_source_changed_callback(SourceChangedCallback callback);
     void set_frame_edit_callback(FrameEditCallback callback);
     void set_frame_mode_edit_callback(FrameModeEditCallback callback);
     void set_navigate_to_animation_callback(AnimationNavigateCallback callback);
@@ -201,6 +203,7 @@ class AnimationInspectorPanel {
     PathPicker gif_picker_;
     MultiPathPicker png_sequence_picker_;
     StatusCallback status_callback_;
+    SourceChangedCallback source_changed_callback_;
     FrameEditCallback frame_edit_callback_;
     FrameModeEditCallback frame_mode_edit_callback_;
     AnimationNavigateCallback navigate_to_animation_callback_;

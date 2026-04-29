@@ -2,11 +2,15 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 #include "generate_rooms.hpp"
+
+class Room;
 
 namespace map_graph {
 
@@ -36,6 +40,33 @@ struct MapGraphPlan {
     std::vector<std::string> diagnostics;
 };
 
+struct RoomRegenSnapshot {
+    bool valid = false;
+    Room* old_room = nullptr;
+    SDL_Point old_center{0, 0};
+
+    Room* parent = nullptr;
+    std::vector<Room*> children;
+    Room* left_sibling = nullptr;
+    Room* right_sibling = nullptr;
+
+    std::vector<Room*> connected_trails;
+    std::vector<Room*> connected_neighbors;
+    std::unordered_map<Room*, int> trail_pair_counts;
+    std::vector<std::string> diagnostics;
+};
+
+struct RoomRegenPlan {
+    bool valid = false;
+    std::string selected_template_key;
+    SDL_Point replacement_center{0, 0};
+    std::vector<std::pair<Room*, Room*>> planned_trail_pairs;
+    std::vector<std::string> diagnostics;
+};
+
 MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest);
+RoomRegenSnapshot capture_room_regen_snapshot(Room* room);
+RoomRegenPlan build_room_regen_plan(const RoomRegenSnapshot& snapshot,
+                                    const std::string& selected_template_key);
 
 } // namespace map_graph

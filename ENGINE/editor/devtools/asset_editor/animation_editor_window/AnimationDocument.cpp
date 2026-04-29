@@ -743,6 +743,11 @@ void AnimationDocument::set_on_saved_callback(std::function<void()> callback) {
     on_saved_callback_ = std::move(callback);
 }
 
+void AnimationDocument::set_on_structure_changed_callback(
+    std::function<void(const StructureChangeEvent&)> callback) {
+    on_structure_changed_callback_ = std::move(callback);
+}
+
 void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
     animations_.clear();
     start_animation_.reset();
@@ -939,6 +944,13 @@ void AnimationDocument::create_animation(const std::string& animation_id) {
     }
     rebuild_animation_cache();
     mark_dirty();
+    if (on_structure_changed_callback_) {
+        on_structure_changed_callback_(StructureChangeEvent{
+            StructureChangeKind::Created,
+            candidate,
+            {},
+        });
+    }
 }
 
 void AnimationDocument::delete_animation(const std::string& animation_id) {
@@ -956,6 +968,13 @@ void AnimationDocument::delete_animation(const std::string& animation_id) {
         }
     }
     mark_dirty();
+    if (on_structure_changed_callback_) {
+        on_structure_changed_callback_(StructureChangeEvent{
+            StructureChangeKind::Deleted,
+            animation_id,
+            {},
+        });
+    }
 }
 
 std::vector<std::string> AnimationDocument::animation_ids() const {
@@ -1109,6 +1128,13 @@ void AnimationDocument::rename_animation(const std::string& old_id, const std::s
 
     mark_dirty();
     rebuild_animation_cache();
+    if (on_structure_changed_callback_) {
+        on_structure_changed_callback_(StructureChangeEvent{
+            StructureChangeKind::Renamed,
+            candidate,
+            old_id,
+        });
+    }
 }
 
 void AnimationDocument::replace_animation_payload(const std::string& animation_id, const std::string& payload_json) {

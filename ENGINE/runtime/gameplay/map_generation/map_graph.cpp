@@ -4,6 +4,8 @@
 #include <cctype>
 #include <unordered_set>
 
+#include "room.hpp"
+
 namespace map_graph {
 namespace {
 
@@ -330,6 +332,88 @@ MapGraphPlan build_map_graph_plan(nlohmann::json* map_manifest) {
         plan.diagnostics.push_back("error: no layers resolved in map graph plan.");
     }
 
+    return plan;
+}
+
+RoomRegenSnapshot capture_room_regen_snapshot(Room* room) {
+    RoomRegenSnapshot snapshot;
+    snapshot.old_room = room;
+    if (!room) {
+        snapshot.diagnostics.push_back("error: room snapshot target is null.");
+        return snapshot;
+    }
+    if (!room->room_area) {
+        snapshot.diagnostics.push_back("error: room snapshot target has no room_area.");
+        return snapshot;
+    }
+
+    snapshot.valid = true;
+    snapshot.old_center = room->room_area->get_center();
+    snapshot.parent = room->parent;
+    snapshot.children = room->children;
+    snapshot.left_sibling = room->left_sibling;
+    snapshot.right_sibling = room->right_sibling;
+
+    std::unordered_set<Room*> seen_trails;
+    std::unordered_set<Room*> seen_neighbors;
+    for (Room* connected : room->connected_rooms) {
+        if (!connected) {
+            continue;
+        }
+        const std::string lowered_type = normalize_tag_value(connected->type);
+        if (lowered_type != "trail") {
+            continue;
+        }
+        if (seen_trails.insert(connected).second) {
+            snapshot.connected_trails.push_back(connected);
+        }
+
+        for (Room* neighbor : connected->connected_rooms) {
+            if (!neighbor || neighbor == room) {
+                continue;
+            }
+            const std::string neighbor_type = normalize_tag_value(neighbor->type);
+            if (neighbor_type == "trail") {
+                continue;
+            }
+            if (seen_neighbors.insert(neighbor).second) {
+                snapshot.connected_neighbors.push_back(neighbor);
+            }
+            snapshot.trail_pair_counts[neighbor] += 1;
+        }
+    }
+
+    if (snapshot.connected_neighbors.empty() && !snapshot.connected_trails.empty()) {
+        snapshot.diagnostics.push_back("warn: connected trails found with zero resolved non-trail neighbors.");
+    }
+    return snapshot;
+}
+
+RoomRegenPlan build_room_regen_plan(const RoomRegenSnapshot& snapshot,
+                                    const std::string& selected_template_key) {
+    RoomRegenPlan plan;
+    plan.selected_template_key = selected_template_key;
+    plan.replacement_center = snapshot.old_center;
+
+    if (!snapshot.valid || !snapshot.old_room) {
+        plan.diagnostics.push_back("error: invalid snapshot; cannot build room regen plan.");
+        return plan;
+    }
+    if (selected_template_key.empty()) {
+        plan.diagnostics.push_back("error: selected template key is empty.");
+        return plan;
+    }
+
+    for (const auto& [neighbor, count] : snapshot.trail_pair_counts) {
+        if (!neighbor || count <= 0) {
+            continue;
+        }
+        for (int i = 0; i < count; ++i) {
+            plan.planned_trail_pairs.emplace_back(snapshot.old_room, neighbor);
+        }
+    }
+
+    plan.valid = true;
     return plan;
 }
 

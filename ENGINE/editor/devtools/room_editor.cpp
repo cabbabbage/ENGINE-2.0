@@ -55,6 +55,8 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "core/axis_convention.hpp"
 #include "gameplay/map_generation/room.hpp"
+#include "gameplay/map_generation/map_graph.hpp"
+#include "gameplay/map_generation/generate_trails.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "gameplay/spawn/check.hpp"
@@ -85,6 +87,7 @@
 #include <random>
 #include <sstream>
 #include <set>
+#include <map>
 #include <type_traits>
 #include <tuple>
 #include <vector>
@@ -5852,48 +5855,253 @@ void RoomEditor::regenerate_room() {
     regenerate_current_room();
 }
 
-void RoomEditor::regenerate_room_from_template(Room* source_room) {
+void RoomEditor::regenerate_room_from_template(const std::string& template_key) {
     if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; regeneration from template skipped.");
         return;
     }
-    if (!assets_ || !current_room_ || !source_room) return;
-
-    nlohmann::json template_root = source_room->assets_data();
-    auto& template_groups = ensure_spawn_groups_array(template_root);
-    const int template_resolution = current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
-    for (auto& entry : template_groups) {
-        if (!entry.is_object()) continue;
-        entry["spawn_id"] = generate_spawn_id();
-        devmode::spawn::ensure_spawn_group_entry_defaults(
-            entry,
-            entry.contains("display_name") && entry["display_name"].is_string()
-                ? entry["display_name"].get<std::string>()
-                : std::string{"New Spawn"},
-            template_resolution);
+    if (!assets_ || !current_room_ || !current_room_->room_area) {
+        return;
+    }
+    if (template_key.empty()) {
+        show_notice("Room regen failed: empty room template key");
+        return;
+    }
+    const std::string current_type = vibble::strings::to_lower_copy(current_room_->type);
+    if (current_type == "trail") {
+        show_notice("Room regen failed: trail rooms cannot be replaced by regen");
+        return;
     }
 
-    sanitize_perimeter_spawn_groups(template_groups);
+    nlohmann::json& map_info = assets_->map_info_json();
+    nlohmann::json& rooms_data = map_info["rooms_data"];
+    if (!rooms_data.is_object()) {
+        show_notice("Room regen failed: map rooms_data is missing");
+        return;
+    }
+    auto template_it = rooms_data.find(template_key);
+    if (template_it == rooms_data.end() || !template_it->is_object()) {
+        show_notice("Room regen failed: selected room template is missing");
+        return;
+    }
+    const std::string template_type = vibble::strings::to_lower_copy(template_it->value("type", std::string("room")));
+    if (template_type == "trail") {
+        show_notice("Room regen failed: selected template is a trail");
+        return;
+    }
 
-    auto& target_root = current_room_->assets_data();
-    nlohmann::json preserved_identity = nlohmann::json::object();
-    static const std::array<const char*, 3> preserved_keys{ "name", "key", "room_key" };
-    for (const char* key : preserved_keys) {
-        if (target_root.contains(key)) {
-            preserved_identity[key] = target_root[key];
+    map_graph::RoomRegenSnapshot snapshot = map_graph::capture_room_regen_snapshot(current_room_);
+    map_graph::RoomRegenPlan plan = map_graph::build_room_regen_plan(snapshot, template_key);
+    if (!snapshot.valid || !plan.valid || !snapshot.old_room) {
+        show_notice("Room regen failed: unable to build regen plan");
+        return;
+    }
+
+    RuntimeWorldContext* world_context = assets_->runtime_world_context();
+    if (!world_context) {
+        show_notice("Room regen failed: runtime world context unavailable");
+        return;
+    }
+
+    auto collect_spawn_ids = [](const Room* room) {
+        std::vector<std::string> spawn_ids;
+        if (!room) {
+            return spawn_ids;
+        }
+        const nlohmann::json& room_data = room->assets_data();
+        auto groups_it = room_data.find("spawn_groups");
+        if (groups_it == room_data.end() || !groups_it->is_array()) {
+            return spawn_ids;
+        }
+        spawn_ids.reserve(groups_it->size());
+        for (const auto& entry : *groups_it) {
+            if (!entry.is_object()) {
+                continue;
+            }
+            const std::string spawn_id = entry.value("spawn_id", std::string{});
+            if (!spawn_id.empty()) {
+                spawn_ids.push_back(spawn_id);
+            }
+        }
+        return spawn_ids;
+    };
+
+    std::vector<std::string> spawn_ids_to_delete = collect_spawn_ids(snapshot.old_room);
+    for (Room* trail_room : snapshot.connected_trails) {
+        std::vector<std::string> trail_spawn_ids = collect_spawn_ids(trail_room);
+        spawn_ids_to_delete.insert(spawn_ids_to_delete.end(), trail_spawn_ids.begin(), trail_spawn_ids.end());
+    }
+    std::sort(spawn_ids_to_delete.begin(), spawn_ids_to_delete.end());
+    spawn_ids_to_delete.erase(std::unique(spawn_ids_to_delete.begin(), spawn_ids_to_delete.end()),
+                              spawn_ids_to_delete.end());
+
+    clear_selection();
+    clear_room_trail_nav_entries();
+    for (const std::string& spawn_id : spawn_ids_to_delete) {
+        if (spawn_id.empty()) {
+            continue;
+        }
+        assets_->delete_assets_for_spawn_group(spawn_id);
+        prune_spawn_group_transient_references(spawn_id);
+    }
+
+    for (Room* trail_room : snapshot.connected_trails) {
+        if (!trail_room) {
+            continue;
+        }
+        std::vector<Room*> linked = trail_room->connected_rooms;
+        for (Room* linked_room : linked) {
+            if (linked_room) {
+                linked_room->remove_connecting_room(trail_room);
+            }
+        }
+        trail_room->connected_rooms.clear();
+    }
+
+    Room* old_room = snapshot.old_room;
+    std::vector<Room*> old_links = old_room->connected_rooms;
+    for (Room* linked_room : old_links) {
+        if (linked_room) {
+            linked_room->remove_connecting_room(old_room);
+        }
+    }
+    old_room->connected_rooms.clear();
+
+    for (Room* trail_room : snapshot.connected_trails) {
+        world_context->remove_room(trail_room);
+    }
+
+    auto estimate_map_radius = [](const std::vector<Room*>& rooms) -> double {
+        double max_radius = 10000.0;
+        for (Room* room : rooms) {
+            if (!room || !room->room_area) {
+                continue;
+            }
+            int min_x = 0;
+            int min_y = 0;
+            int max_x = 0;
+            int max_y = 0;
+            std::tie(min_x, min_y, max_x, max_y) = room->room_area->get_bounds();
+            max_radius = std::max(max_radius, static_cast<double>(std::max({std::abs(min_x), std::abs(min_y), std::abs(max_x), std::abs(max_y)})));
+        }
+        return std::max(1.0, max_radius);
+    };
+
+    nlohmann::json& template_data_ref = *template_it;
+    const double map_radius = estimate_map_radius(assets_->rooms());
+    auto replacement_room = std::make_unique<Room>(
+        Room::Point{plan.replacement_center.x, plan.replacement_center.y},
+        "room",
+        template_key,
+        snapshot.parent,
+        assets_->map_id(),
+        &assets_->library(),
+        nullptr,
+        &template_data_ref,
+        old_room->map_grid_settings(),
+        map_radius,
+        "rooms_data",
+        &map_info,
+        assets_->manifest_store(),
+        assets_->map_id(),
+        {});
+
+    Room* replacement_room_ptr = replacement_room.get();
+    replacement_room_ptr->layer = old_room->layer;
+    replacement_room_ptr->camera_height_px = old_room->camera_height_px;
+    replacement_room_ptr->camera_tilt_deg = old_room->camera_tilt_deg;
+    replacement_room_ptr->camera_zoom_percent = old_room->camera_zoom_percent;
+    replacement_room_ptr->camera_center_dx = old_room->camera_center_dx;
+    replacement_room_ptr->camera_center_dz = old_room->camera_center_dz;
+    replacement_room_ptr->children = snapshot.children;
+    replacement_room_ptr->set_sibling_left(snapshot.left_sibling);
+    replacement_room_ptr->set_sibling_right(snapshot.right_sibling);
+
+    for (Room* child : snapshot.children) {
+        if (child && child->parent == old_room) {
+            child->parent = replacement_room_ptr;
+        }
+    }
+    if (snapshot.parent) {
+        for (Room*& child_ref : snapshot.parent->children) {
+            if (child_ref == old_room) {
+                child_ref = replacement_room_ptr;
+            }
+        }
+    }
+    if (snapshot.left_sibling && snapshot.left_sibling->right_sibling == old_room) {
+        snapshot.left_sibling->set_sibling_right(replacement_room_ptr);
+    }
+    if (snapshot.right_sibling && snapshot.right_sibling->left_sibling == old_room) {
+        snapshot.right_sibling->set_sibling_left(replacement_room_ptr);
+    }
+
+    if (!world_context->replace_room(old_room, std::move(replacement_room))) {
+        show_notice("Room regen failed: runtime room replacement did not commit");
+        return;
+    }
+
+    std::vector<std::unique_ptr<Asset>> initial_room_assets = std::move(replacement_room_ptr->get_room_assets());
+    integrate_spawned_assets(initial_room_assets);
+
+    int requested_trail_pairs = static_cast<int>(plan.planned_trail_pairs.size());
+    int generated_trail_pairs = 0;
+    std::vector<std::unique_ptr<Room>> successful_new_trails;
+    successful_new_trails.reserve(plan.planned_trail_pairs.size());
+    nlohmann::json& trails_data = map_info["trails_data"];
+    if (!trails_data.is_object()) {
+        trails_data = nlohmann::json::object();
+    }
+
+    for (const auto& trail_pair : plan.planned_trail_pairs) {
+        Room* neighbor = trail_pair.second;
+        if (!neighbor || !neighbor->room_area) {
+            continue;
+        }
+        GenerateTrails trail_generator(trails_data);
+        std::vector<Room*> room_refs{replacement_room_ptr, neighbor};
+        trail_generator.set_all_rooms_reference(room_refs);
+        const std::vector<std::pair<Room*, Room*>> single_pair{{replacement_room_ptr, neighbor}};
+        auto generated = trail_generator.generate_trails(
+            single_pair,
+            assets_->map_id(),
+            &assets_->library(),
+            map_radius,
+            &map_info,
+            assets_->manifest_store(),
+            {});
+        if (!generated.empty()) {
+            generated_trail_pairs += static_cast<int>(generated.size());
+            for (auto& trail_room : generated) {
+                if (trail_room) {
+                    successful_new_trails.push_back(std::move(trail_room));
+                }
+            }
         }
     }
 
-    target_root = std::move(template_root);
-
-    for (auto& [key, value] : preserved_identity.items()) {
-        target_root[key] = value;
+    if (!successful_new_trails.empty()) {
+        world_context->append_rooms(std::move(successful_new_trails));
     }
 
-    regenerate_current_room();
-
+    assets_->set_editor_current_room(replacement_room_ptr);
+    assets_->notify_rooms_changed();
+    assets_->invalidate_dynamic_boundary_system();
+    assets_->rebuild_from_grid_state();
+    assets_->refresh_active_asset_lists();
+    set_current_room(replacement_room_ptr, room_locked_for_edit_);
+    clear_room_trail_nav_entries();
     rebuild_room_spawn_id_cache();
-    save_current_room_assets_json();
+    refresh_spawn_group_config_ui();
+    mark_spatial_index_dirty();
+
+    const int failed_pairs = std::max(0, requested_trail_pairs - generated_trail_pairs);
+    if (failed_pairs > 0) {
+        show_notice("Room regenerated with trail warnings (" + std::to_string(generated_trail_pairs) + "/" +
+                    std::to_string(requested_trail_pairs) + " trails rebuilt)");
+    } else {
+        show_notice("Room regenerated: " + template_key);
+    }
 }
 
 void RoomEditor::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {

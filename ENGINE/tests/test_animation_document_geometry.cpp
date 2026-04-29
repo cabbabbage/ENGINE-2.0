@@ -2,7 +2,9 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -434,4 +436,72 @@ TEST_CASE("AnimationEditorWindow user close fires closed callback once") {
     window.set_visible(false, true);
 
     CHECK(closed_callbacks == 1);
+}
+
+TEST_CASE("AnimationDocument emits structure change callbacks for create/delete/rename") {
+    animation_editor::AnimationDocument document;
+    document.load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, nullptr);
+
+    std::vector<animation_editor::AnimationDocument::StructureChangeEvent> events;
+    document.set_on_structure_changed_callback(
+        [&events](const animation_editor::AnimationDocument::StructureChangeEvent& event) {
+            events.push_back(event);
+        });
+
+    document.create_animation("swing");
+    document.rename_animation("swing", "swing_alt");
+    document.delete_animation("swing_alt");
+
+    REQUIRE(events.size() == 3);
+    CHECK(events[0].kind == animation_editor::AnimationDocument::StructureChangeKind::Created);
+    CHECK(events[0].animation_id == "swing");
+    CHECK(events[1].kind == animation_editor::AnimationDocument::StructureChangeKind::Renamed);
+    CHECK(events[1].previous_animation_id == "swing");
+    CHECK(events[1].animation_id == "swing_alt");
+    CHECK(events[2].kind == animation_editor::AnimationDocument::StructureChangeKind::Deleted);
+    CHECK(events[2].animation_id == "swing_alt");
+}
+
+TEST_CASE("AnimationEditorWindow immediately invalidates full asset cache on structural edits") {
+    const std::string asset_name = "cache_invalidate_structural_asset";
+    const std::filesystem::path asset_dir =
+        std::filesystem::temp_directory_path() / "engine_cache_invalidate_structural_asset";
+    const std::filesystem::path cache_dir = std::filesystem::path("cache") / asset_name;
+    std::error_code ec;
+    std::filesystem::remove_all(cache_dir, ec);
+    std::filesystem::create_directories(cache_dir, ec);
+    REQUIRE_FALSE(ec);
+    {
+        std::ofstream marker(cache_dir / "marker.txt", std::ios::binary);
+        marker << "marker";
+    }
+    REQUIRE(std::filesystem::exists(cache_dir / "marker.txt"));
+
+    const nlohmann::json asset_manifest = {
+        {"asset_name", asset_name},
+        {"asset_directory", asset_dir.generic_string()},
+        {"animations",
+         {{"idle",
+           {{"source", {{"kind", "folder"}, {"path", "idle"}, {"name", ""}}},
+            {"number_of_frames", 1},
+            {"on_end", "default"}}}}},
+        {"start", "idle"},
+    };
+
+    auto info = std::make_shared<AssetInfo>(asset_name, asset_manifest);
+    info->mark_bundle_refresh_on_close();
+
+    animation_editor::AnimationEditorWindow window;
+    window.set_info(info);
+    auto document = window.document();
+    REQUIRE(document);
+
+    document->create_animation("new_anim");
+    CHECK_FALSE(std::filesystem::exists(cache_dir));
+
+    const auto pending = info->consume_pending_texture_rebuild_on_close();
+    CHECK(pending.empty());
+
+    std::filesystem::remove_all(cache_dir, ec);
+    std::filesystem::remove_all(asset_dir, ec);
 }

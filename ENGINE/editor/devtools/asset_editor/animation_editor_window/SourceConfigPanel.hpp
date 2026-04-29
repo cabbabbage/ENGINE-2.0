@@ -37,6 +37,17 @@ class SourceConfigPanel {
         kAnimation,
 };
 
+    enum class SourceChangeReason {
+        SourceModeChanged,
+        SourceAnimationChanged,
+        SourceImagesReplaced,
+};
+
+    struct SourceChangeEvent {
+        std::string animation_id;
+        SourceChangeReason reason = SourceChangeReason::SourceModeChanged;
+    };
+
     void set_document(std::shared_ptr<AnimationDocument> document);
     void set_override_preview_provider(std::shared_ptr<PreviewProvider> provider);
     void set_animation_id(const std::string& animation_id);
@@ -53,7 +64,9 @@ class SourceConfigPanel {
     void set_png_sequence_picker(MultiPathPicker picker);
     void set_status_callback(std::function<void(const std::string&)> callback);
 
-    void set_on_source_changed(std::function<void(const std::string&)> callback) { on_source_changed_ = std::move(callback); }
+    void set_on_source_changed(std::function<void(const SourceChangeEvent&)> callback) {
+        on_source_changed_ = std::move(callback);
+    }
 
     void update();
     void render(SDL_Renderer* renderer) const;
@@ -147,7 +160,7 @@ class SourceConfigPanel {
     std::string animation_ids_signature_;
     std::optional<std::uint64_t> animation_ids_revision_;
     std::vector<std::string> previous_animation_options_;
-    std::function<void(const std::string&)> on_source_changed_;
+    std::function<void(const SourceChangeEvent&)> on_source_changed_;
 
     mutable Uint32 animation_start_time_ = 0;
     mutable int current_frame_ = 0;

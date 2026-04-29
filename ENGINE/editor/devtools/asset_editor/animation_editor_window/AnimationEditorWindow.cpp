@@ -523,6 +523,12 @@ namespace animation_editor {
 AnimationEditorWindow::AnimationEditorWindow() {
     document_ = std::make_shared<AnimationDocument>();
     document_->set_on_saved_callback([this]() { this->handle_document_saved(); });
+    document_->set_on_structure_changed_callback([this](const AnimationDocument::StructureChangeEvent&) {
+        std::string error;
+        if (!this->invalidate_asset_cache_now(error) && !error.empty()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AnimationEditor] %s", error.c_str());
+        }
+    });
     preview_provider_ = std::make_shared<PreviewProvider>();
     preview_provider_->set_document(document_);
     task_queue_ = std::make_shared<AsyncTaskQueue>();
@@ -548,6 +554,7 @@ AnimationEditorWindow::AnimationEditorWindow() {
 AnimationEditorWindow::~AnimationEditorWindow() {
     if (document_) {
         document_->set_on_saved_callback(nullptr);
+        document_->set_on_structure_changed_callback(nullptr);
     }
     invalidate_inspector_background_cache();
 }
@@ -595,6 +602,12 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     if (!document_) {
         document_ = std::make_shared<AnimationDocument>();
         document_->set_on_saved_callback([this]() { this->handle_document_saved(); });
+        document_->set_on_structure_changed_callback([this](const AnimationDocument::StructureChangeEvent&) {
+            std::string error;
+            if (!this->invalidate_asset_cache_now(error) && !error.empty()) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AnimationEditor] %s", error.c_str());
+            }
+        });
     }
 
     if (!info) {
@@ -925,6 +938,12 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_source_gif_picker([this]() { return this->pick_gif(); });
     inspector_panel_->set_source_png_sequence_picker([this]() { return this->pick_png_sequence(); });
     inspector_panel_->set_source_status_callback([this](const std::string& message) { this->set_status_message(message); });
+    inspector_panel_->set_source_changed_callback([this](const SourceConfigPanel::SourceChangeEvent&) {
+        std::string error;
+        if (!this->invalidate_asset_cache_now(error) && !error.empty()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AnimationEditor] %s", error.c_str());
+        }
+    });
     inspector_panel_->set_frame_edit_callback({});
     inspector_panel_->set_frame_mode_edit_callback({});
     inspector_panel_->set_navigate_to_animation_callback([this](const std::string& id) {
@@ -1314,24 +1333,17 @@ void AnimationEditorWindow::delete_animation_with_confirmation(const std::string
     }
 
     std::string source_delete_error;
-    std::string cache_delete_error;
     const bool removed_source_folder = remove_animation_source_folder(animation_id, source_delete_error);
-    const bool removed_cache_folder = remove_animation_cache_folder(animation_id, cache_delete_error);
 
     if (!removed_source_folder && !source_delete_error.empty()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
                     "[AnimationEditor] %s",
                     source_delete_error.c_str());
     }
-    if (!removed_cache_folder && !cache_delete_error.empty()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AnimationEditor] %s",
-                    cache_delete_error.c_str());
-    }
 
     document_->delete_animation(animation_id);
     preview_provider_->invalidate(animation_id);
-    if (!removed_source_folder || !removed_cache_folder) {
+    if (!removed_source_folder) {
         set_status_message("Deleted animation '" + animation_id + "' (some files could not be removed).", 300);
     } else {
         set_status_message("Deleted animation '" + animation_id + "'.", 240);
@@ -1888,15 +1900,11 @@ bool AnimationEditorWindow::remove_animation_source_folder(const std::string& an
     return true;
 }
 
-bool AnimationEditorWindow::remove_animation_cache_folder(const std::string& animation_id,
-                                                          std::string& error_message) {
+bool AnimationEditorWindow::invalidate_asset_cache_now(std::string& error_message) {
     error_message.clear();
-    if (animation_id.empty()) {
-        return true;
-    }
-
     std::string asset_cache_key;
-    if (auto info_ptr = info_.lock()) {
+    std::shared_ptr<AssetInfo> info_ptr = info_.lock();
+    if (info_ptr) {
         asset_cache_key = info_ptr->name;
     }
     if (asset_cache_key.empty()) {
@@ -1907,10 +1915,9 @@ bool AnimationEditorWindow::remove_animation_cache_folder(const std::string& ani
     }
 
     const std::filesystem::path cache_root = std::filesystem::path("cache").lexically_normal();
-    const std::filesystem::path cache_animations_root = (cache_root / asset_cache_key / "animations").lexically_normal();
-    const std::filesystem::path target_folder = (cache_animations_root / animation_id).lexically_normal();
-    if (!path_has_prefix(target_folder, cache_animations_root)) {
-        error_message = "Refusing to delete animation cache folder outside cache root: '" + target_folder.generic_string() + "'";
+    const std::filesystem::path target_folder = (cache_root / asset_cache_key).lexically_normal();
+    if (!path_has_prefix(target_folder, cache_root)) {
+        error_message = "Refusing to delete asset cache folder outside cache root: '" + target_folder.generic_string() + "'";
         return false;
     }
 
@@ -1919,19 +1926,13 @@ bool AnimationEditorWindow::remove_animation_cache_folder(const std::string& ani
         ec.clear();
         std::filesystem::remove_all(target_folder, ec);
         if (ec) {
-            error_message = "Failed to delete animation cache folder '" + target_folder.generic_string() + "': " + ec.message();
+            error_message = "Failed to delete asset cache folder '" + target_folder.generic_string() + "': " + ec.message();
             return false;
         }
     }
 
-    const std::filesystem::path bundle_path = (cache_root / asset_cache_key / "bundle.bin").lexically_normal();
-    if (path_has_prefix(bundle_path, cache_root) && std::filesystem::exists(bundle_path, ec)) {
-        ec.clear();
-        std::filesystem::remove(bundle_path, ec);
-        if (ec) {
-            error_message = "Deleted animation cache folder but failed to delete bundle cache '" + bundle_path.generic_string() + "': " + ec.message();
-            return false;
-        }
+    if (info_ptr) {
+        (void)info_ptr->consume_pending_texture_rebuild_on_close();
     }
 
     return true;

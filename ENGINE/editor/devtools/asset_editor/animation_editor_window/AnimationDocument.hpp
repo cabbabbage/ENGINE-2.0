@@ -15,6 +15,18 @@ namespace animation_editor {
 
 class AnimationDocument {
   public:
+    enum class StructureChangeKind {
+        Created,
+        Deleted,
+        Renamed,
+    };
+
+    struct StructureChangeEvent {
+        StructureChangeKind kind = StructureChangeKind::Created;
+        std::string animation_id;
+        std::string previous_animation_id;
+    };
+
     AnimationDocument();
 
     void load_from_file(const std::filesystem::path& info_path);
@@ -47,6 +59,7 @@ class AnimationDocument {
     const std::string& manifest_asset_key_debug() const { return manifest_asset_key_debug_; }
 
     void set_on_saved_callback(std::function<void()> callback);
+    void set_on_structure_changed_callback(std::function<void(const StructureChangeEvent&)> callback);
 
     double scale_percentage() const;
 
@@ -72,6 +85,7 @@ class AnimationDocument {
     std::string manifest_asset_key_debug_;
     std::function<bool(const nlohmann::json&)> persist_callback_;
     std::function<void()> on_saved_callback_;
+    std::function<void(const StructureChangeEvent&)> on_structure_changed_callback_;
 };
 
 }

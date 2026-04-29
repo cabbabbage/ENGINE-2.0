@@ -666,16 +666,40 @@ std::string make_unique_asset_area_name(const AssetInfo& info, const std::string
 
 class RegenerateRoomPopup {
 public:
-    using Callback = std::function<void(Room*)>;
+    struct TemplateEntry {
+        std::string key;
+        std::string label;
+        std::vector<std::string> tags;
+    };
 
-    void open(std::vector<std::pair<std::string, Room*>> rooms,
+    using Callback = std::function<void(const std::string&)>;
+
+    void open(std::vector<TemplateEntry> templates,
               Callback cb,
               int screen_w,
               int screen_h) {
-        rooms_ = std::move(rooms);
+        all_templates_ = std::move(templates);
         callback_ = std::move(cb);
         buttons_.clear();
-        if (rooms_.empty()) {
+        current_tag_filter_.clear();
+        mode_ = Mode::TagSelection;
+        available_tags_.clear();
+        for (const TemplateEntry& entry : all_templates_) {
+            for (const std::string& tag : entry.tags) {
+                if (!tag.empty() &&
+                    std::find(available_tags_.begin(), available_tags_.end(), tag) == available_tags_.end()) {
+                    available_tags_.push_back(tag);
+                }
+            }
+        }
+        std::sort(available_tags_.begin(), available_tags_.end());
+
+        if (all_templates_.empty()) {
+            visible_ = false;
+            return;
+        }
+        rebuild_button_labels();
+        if (button_labels_.empty()) {
             visible_ = false;
             return;
         }
@@ -684,7 +708,7 @@ public:
         const int button_height = DMButton::height();
         const int button_width = std::max(220, screen_w / 6);
         rect_.w = button_width + margin * 2;
-        const int total_buttons = static_cast<int>(rooms_.size());
+        const int total_buttons = static_cast<int>(button_labels_.size());
         const int content_height = total_buttons * button_height + std::max(0, total_buttons - 1) * spacing;
         rect_.h = margin * 2 + content_height;
         const int padding = DMSpacing::panel_padding();
@@ -710,9 +734,9 @@ public:
             rect_.y = std::clamp(centered_y, min_y, max_y);
         }
 
-        buttons_.reserve(rooms_.size());
-        for (const auto& entry : rooms_) {
-            auto btn = std::make_unique<DMButton>(entry.first, &DMStyles::ListButton(), button_width, button_height);
+        buttons_.reserve(button_labels_.size());
+        for (const std::string& label : button_labels_) {
+            auto btn = std::make_unique<DMButton>(label, &DMStyles::ListButton(), button_width, button_height);
             buttons_.push_back(std::move(btn));
         }
         visible_ = true;
@@ -758,8 +782,7 @@ public:
             if (btn->handle_event(e)) {
                 used = true;
                 if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-                    if (callback_) callback_(rooms_[i].second);
-                    close();
+                    on_button_pressed(i);
                 }
             }
             btn_rect.y += button_height + spacing;
@@ -802,9 +825,125 @@ public:
     }
 
 private:
+    enum class Mode {
+        TagSelection,
+        RoomSelection
+    };
+
+    static std::string normalize_tag(const std::string& raw) {
+        std::string out;
+        out.reserve(raw.size());
+        bool last_space = false;
+        for (unsigned char ch : raw) {
+            if (std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.' || ch == '#') {
+                out.push_back(static_cast<char>(std::tolower(ch)));
+                last_space = false;
+                continue;
+            }
+            if (std::isspace(ch) && !out.empty() && !last_space) {
+                out.push_back(' ');
+                last_space = true;
+            }
+        }
+        while (!out.empty() && out.back() == ' ') {
+            out.pop_back();
+        }
+        return out;
+    }
+
+    void rebuild_button_labels() {
+        button_labels_.clear();
+        visible_template_keys_.clear();
+
+        if (mode_ == Mode::TagSelection) {
+            button_labels_.push_back("all tags");
+            for (const std::string& tag : available_tags_) {
+                button_labels_.push_back(tag);
+            }
+            return;
+        }
+
+        button_labels_.push_back("< back to tags >");
+        std::vector<const TemplateEntry*> filtered;
+        for (const TemplateEntry& entry : all_templates_) {
+            if (entry.key.empty()) {
+                continue;
+            }
+            if (current_tag_filter_.empty()) {
+                filtered.push_back(&entry);
+                continue;
+            }
+            const bool has_tag = std::any_of(entry.tags.begin(), entry.tags.end(), [&](const std::string& tag) {
+                return normalize_tag(tag) == current_tag_filter_;
+            });
+            if (has_tag) {
+                filtered.push_back(&entry);
+            }
+        }
+
+        std::sort(filtered.begin(), filtered.end(), [](const TemplateEntry* a, const TemplateEntry* b) {
+            const std::string a_label = a ? to_lower_copy(a->label) : std::string();
+            const std::string b_label = b ? to_lower_copy(b->label) : std::string();
+            return a_label < b_label;
+        });
+
+        for (const TemplateEntry* entry : filtered) {
+            if (!entry) {
+                continue;
+            }
+            button_labels_.push_back(entry->label.empty() ? entry->key : entry->label);
+            visible_template_keys_.push_back(entry->key);
+        }
+    }
+
+    void on_button_pressed(std::size_t index) {
+        if (mode_ == Mode::TagSelection) {
+            if (index == 0) {
+                current_tag_filter_.clear();
+            } else if (index - 1 < available_tags_.size()) {
+                current_tag_filter_ = normalize_tag(available_tags_[index - 1]);
+            }
+            mode_ = Mode::RoomSelection;
+            buttons_.clear();
+            rebuild_button_labels();
+            const int button_height = DMButton::height();
+            const int button_width = rect_.w - DMSpacing::item_gap() * 2;
+            for (const std::string& label : button_labels_) {
+                buttons_.push_back(std::make_unique<DMButton>(label, &DMStyles::ListButton(), button_width, button_height));
+            }
+            return;
+        }
+
+        if (index == 0) {
+            mode_ = Mode::TagSelection;
+            buttons_.clear();
+            rebuild_button_labels();
+            const int button_height = DMButton::height();
+            const int button_width = rect_.w - DMSpacing::item_gap() * 2;
+            for (const std::string& label : button_labels_) {
+                buttons_.push_back(std::make_unique<DMButton>(label, &DMStyles::ListButton(), button_width, button_height));
+            }
+            return;
+        }
+
+        const std::size_t template_index = index - 1;
+        if (template_index >= visible_template_keys_.size()) {
+            return;
+        }
+        if (callback_) {
+            callback_(visible_template_keys_[template_index]);
+        }
+        close();
+    }
+
     bool visible_ = false;
     SDL_Rect rect_{0, 0, 280, 320};
-    std::vector<std::pair<std::string, Room*>> rooms_;
+    Mode mode_ = Mode::TagSelection;
+    std::vector<TemplateEntry> all_templates_;
+    std::vector<std::string> available_tags_;
+    std::string current_tag_filter_;
+    std::vector<std::string> button_labels_;
+    std::vector<std::string> visible_template_keys_;
     std::vector<std::unique_ptr<DMButton>> buttons_;
     Callback callback_;
 };
@@ -5186,32 +5325,124 @@ void DevControls::open_regenerate_room_popup() {
         return;
     }
 
-    std::vector<std::pair<std::string, Room*>> entries;
-    entries.reserve(1 + (rooms_ ? rooms_->size() : 0));
-    entries.emplace_back(std::string("current room"), current_room_);
-
-    if (rooms_) {
-        std::vector<std::pair<std::string, Room*>> other_entries;
-        other_entries.reserve(rooms_->size());
-        for (Room* room : *rooms_) {
-            if (!room || room == current_room_) continue;
-            if (!room->room_area) continue;
-            if (is_trail_room(room)) {
-                continue;
-            }
-            std::string name = room->room_name.empty() ? std::string("<unnamed>") : room->room_name;
-            other_entries.emplace_back(std::move(name), room);
+    if (is_trail_room(current_room_)) {
+        if (assets_) {
+            assets_->show_dev_notice("Regen is disabled for trail rooms", 1600);
         }
-
-        std::sort(other_entries.begin(), other_entries.end(), [](const auto& a, const auto& b) {
-            return to_lower_copy(a.first) < to_lower_copy(b.first);
-        });
-
-        entries.insert(entries.end(), other_entries.begin(), other_entries.end());
+        if (regenerate_popup_) regenerate_popup_->close();
+        return;
     }
 
-    if (entries.empty()) {
+    if (!assets_) {
         if (regenerate_popup_) regenerate_popup_->close();
+        return;
+    }
+
+    nlohmann::json& map_info = assets_->map_info_json();
+    nlohmann::json& rooms_data = map_info["rooms_data"];
+    if (!rooms_data.is_object()) {
+        if (assets_) {
+            assets_->show_dev_notice("No room templates found in rooms_data", 1800);
+        }
+        if (regenerate_popup_) regenerate_popup_->close();
+        return;
+    }
+
+    auto normalize_tag = [](const std::string& raw) {
+        std::string out;
+        out.reserve(raw.size());
+        bool last_space = false;
+        for (unsigned char ch : raw) {
+            if (std::isalnum(ch) || ch == '_' || ch == '-' || ch == '.' || ch == '#') {
+                out.push_back(static_cast<char>(std::tolower(ch)));
+                last_space = false;
+                continue;
+            }
+            if (std::isspace(ch) && !out.empty() && !last_space) {
+                out.push_back(' ');
+                last_space = true;
+            }
+        }
+        while (!out.empty() && out.back() == ' ') {
+            out.pop_back();
+        }
+        return out;
+    };
+
+    auto collect_template_tags = [&](const nlohmann::json& room_entry) {
+        std::vector<std::string> tags;
+        auto append_tag = [&](const std::string& raw) {
+            const std::string normalized = normalize_tag(raw);
+            if (normalized.empty()) {
+                return;
+            }
+            if (std::find(tags.begin(), tags.end(), normalized) == tags.end()) {
+                tags.push_back(normalized);
+            }
+        };
+        auto append_from_array = [&](const nlohmann::json& arr) {
+            if (!arr.is_array()) {
+                return;
+            }
+            for (const auto& value : arr) {
+                if (value.is_string()) {
+                    append_tag(value.get<std::string>());
+                }
+            }
+        };
+
+        if (!room_entry.is_object()) {
+            return tags;
+        }
+        auto tags_it = room_entry.find("room_tags");
+        if (tags_it != room_entry.end()) {
+            append_from_array(*tags_it);
+        }
+        tags_it = room_entry.find("tags");
+        if (tags_it != room_entry.end()) {
+            if (tags_it->is_array()) {
+                append_from_array(*tags_it);
+            } else if (tags_it->is_object()) {
+                auto include_it = tags_it->find("include");
+                if (include_it != tags_it->end()) {
+                    append_from_array(*include_it);
+                }
+                auto nested_it = tags_it->find("tags");
+                if (nested_it != tags_it->end()) {
+                    append_from_array(*nested_it);
+                }
+            }
+        }
+        std::sort(tags.begin(), tags.end());
+        return tags;
+    };
+
+    std::vector<RegenerateRoomPopup::TemplateEntry> templates;
+    templates.reserve(rooms_data.size());
+    for (auto it = rooms_data.begin(); it != rooms_data.end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+        const std::string template_key = it.key();
+        if (template_key.empty()) {
+            continue;
+        }
+        const std::string template_type = to_lower_copy(it.value().value("type", std::string("room")));
+        if (template_type == "trail") {
+            continue;
+        }
+        RegenerateRoomPopup::TemplateEntry entry;
+        entry.key = template_key;
+        entry.label = template_key;
+        entry.tags = collect_template_tags(it.value());
+        templates.push_back(std::move(entry));
+    }
+
+    if (templates.empty()) {
+        if (regenerate_popup_) regenerate_popup_->close();
+        if (assets_) {
+            assets_->show_dev_notice("No room templates available for regen", 1800);
+        }
         return;
     }
 
@@ -5219,14 +5450,10 @@ void DevControls::open_regenerate_room_popup() {
         regenerate_popup_ = std::make_unique<RegenerateRoomPopup>();
     }
 
-    regenerate_popup_->open(entries,
-                            [this](Room* selected) {
+    regenerate_popup_->open(templates,
+                            [this](const std::string& selected_template_key) {
                                 if (!room_editor_) return;
-                                if (!selected || selected == current_room_) {
-                                    room_editor_->regenerate_room();
-                                } else {
-                                    room_editor_->regenerate_room_from_template(selected);
-                                }
+                                room_editor_->regenerate_room_from_template(selected_template_key);
                                 if (regenerate_popup_) regenerate_popup_->close();
                                 sync_header_button_states();
                             },

@@ -277,6 +277,11 @@ void AnimationInspectorPanel::set_source_status_callback(StatusCallback callback
     apply_dependencies();
 }
 
+void AnimationInspectorPanel::set_source_changed_callback(SourceChangedCallback callback) {
+    source_changed_callback_ = std::move(callback);
+    apply_dependencies();
+}
+
 void AnimationInspectorPanel::set_frame_edit_callback(FrameEditCallback callback) {
     frame_edit_callback_ = std::move(callback);
     apply_dependencies();
@@ -1148,13 +1153,16 @@ void AnimationInspectorPanel::apply_dependencies() {
         source_config_->set_png_sequence_picker(png_sequence_picker_);
         source_config_->set_status_callback(status_callback_);
 
-        source_config_->set_on_source_changed([this](const std::string& id) {
+        source_config_->set_on_source_changed([this](const SourceConfigPanel::SourceChangeEvent& event) {
             if (playback_settings_) {
                 playback_settings_->set_document(document_);
-                playback_settings_->set_animation_id(id);
+                playback_settings_->set_animation_id(event.animation_id);
             }
             this->layout_dirty_ = true;
             notify_payload_change_if_needed(true);
+            if (source_changed_callback_) {
+                source_changed_callback_(event);
+            }
         });
     }
 

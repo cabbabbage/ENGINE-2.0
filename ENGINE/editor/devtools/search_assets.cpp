@@ -8,6 +8,7 @@
 #include "utils/input.hpp"
 #include "utils/sdl_mouse_utils.hpp"
 #include "dev_mode_utils.hpp"
+#include "widgets.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "core/AssetsManager.hpp"
@@ -44,8 +45,45 @@ SearchAssets::SearchAssets(devmode::core::ManifestStore* manifest_store)
         [this](const AssetListView::Entry& entry) { this->activate_result(Result{entry.label, entry.value, entry.is_tag, entry.manifest_name, entry.tags, entry.recommended}); },
         nullptr,
         nullptr,
-        nullptr
+        [this](const AssetListView::Entry& entry, bool selected) {
+            if (!multi_select_mode_ || entry.is_tag || entry.value.empty()) {
+                return;
+            }
+            if (selected) {
+                selected_values_.insert(entry.value);
+            } else {
+                selected_values_.erase(entry.value);
+            }
+            if (multi_apply_btn_) {
+                multi_apply_btn_->set_enabled(!selected_values_.empty());
+            }
+        }
     });
+
+    multi_apply_btn_ = std::make_unique<DMButton>("Apply", &DMStyles::CreateButton(), 140, DMButton::height());
+    multi_apply_btn_->set_enabled(false);
+    multi_apply_btn_widget_ = std::make_unique<ButtonWidget>(multi_apply_btn_.get(), [this]() {
+        if (!multi_select_mode_ || !multi_select_cb_) {
+            return;
+        }
+        std::vector<std::string> selected;
+        selected.reserve(selected_values_.size());
+        for (const auto& result : results_) {
+            if (result.value.empty() || result.value.front() == '#' || result.is_tag) {
+                continue;
+            }
+            if (selected_values_.find(result.value) != selected_values_.end()) {
+                selected.push_back(result.value);
+            }
+        }
+        if (!selected.empty()) {
+            multi_select_cb_(selected);
+        }
+        close();
+    });
+
+    multi_cancel_btn_ = std::make_unique<DMButton>("Cancel", &DMStyles::FooterToggleButton(), 140, DMButton::height());
+    multi_cancel_btn_widget_ = std::make_unique<ButtonWidget>(multi_cancel_btn_.get(), [this]() { close(); });
 
     panel_->set_rows(list_view_.rows(columns_per_row()));
     last_known_position_ = panel_->position();
@@ -254,8 +292,80 @@ std::string SearchAssets::to_lower(std::string s) {
 }
 
 void SearchAssets::open(Callback cb) {
+    multi_select_mode_ = false;
     cb_ = std::move(cb);
+    multi_select_cb_ = nullptr;
+    selected_values_.clear();
+    list_view_.set_multi_select_enabled(false);
+    list_view_.set_selected_values({});
+    if (multi_apply_btn_) {
+        multi_apply_btn_->set_enabled(false);
+    }
+    panel_->set_header_text("Search Assets");
     load_assets();  // Always reload assets when opening to ensure we have the latest from manifest store
+    if (embedded_) {
+        if (panel_) {
+            panel_->set_visible(true);
+            panel_->set_expanded(true);
+            panel_->reset_scroll();
+            panel_->force_pointer_ready();
+            SDL_Rect applied = embedded_rect_;
+            if (applied.w <= 0) applied.w = panel_->rect().w;
+            if (applied.h <= 0) applied.h = panel_->rect().h;
+            panel_->set_rect(applied);
+            Input dummy;
+            panel_->update(dummy, applied.w, applied.h);
+        }
+        list_view_.set_query("");
+        filter_assets();
+        if (auto* box = list_view_.search_box()) {
+            box->start_editing();
+        }
+        return;
+    }
+    SDL_Point target = last_known_position_;
+    if (has_pending_position_ && !has_custom_position_) {
+        target = pending_position_;
+    }
+    apply_position(target.x, target.y);
+    ensure_visible_position();
+    if (!floating_stack_key_.empty()) {
+        DockManager::instance().open_floating(
+            "Search Assets",
+            panel_.get(),
+            [this]() { this->close(); },
+            floating_stack_key_);
+    }
+    panel_->set_visible(true);
+    panel_->set_expanded(true);
+    panel_->reset_scroll();
+    Input dummy;
+    panel_->update(dummy, screen_w_, screen_h_);
+    ensure_visible_position();
+    last_known_position_ = panel_->position();
+    if (!has_custom_position_) {
+        pending_position_ = last_known_position_;
+        has_pending_position_ = true;
+    }
+    list_view_.set_query("");
+    filter_assets();
+    if (auto* box = list_view_.search_box()) {
+        box->start_editing();
+    }
+}
+
+void SearchAssets::open_multi_select(MultiSelectCallback cb) {
+    cb_ = nullptr;
+    multi_select_mode_ = true;
+    multi_select_cb_ = std::move(cb);
+    selected_values_.clear();
+    list_view_.set_multi_select_enabled(true);
+    list_view_.set_selected_values(selected_values_);
+    if (multi_apply_btn_) {
+        multi_apply_btn_->set_enabled(false);
+    }
+    panel_->set_header_text("Select Assets To Apply");
+    load_assets();
     if (embedded_) {
         if (panel_) {
             panel_->set_visible(true);
@@ -321,6 +431,15 @@ void SearchAssets::close() {
         }
     }
     cb_ = nullptr;
+    multi_select_cb_ = nullptr;
+    multi_select_mode_ = false;
+    selected_values_.clear();
+    list_view_.set_multi_select_enabled(false);
+    list_view_.set_selected_values({});
+    if (multi_apply_btn_) {
+        multi_apply_btn_->set_enabled(false);
+    }
+    panel_->set_header_text("Search Assets");
     if (auto* box = list_view_.search_box()) {
         box->stop_editing();
     }
@@ -499,8 +618,16 @@ void SearchAssets::filter_assets() {
     }
 
     list_view_.set_entries(std::move(entries));
+    list_view_.set_multi_select_enabled(multi_select_mode_);
+    list_view_.set_selected_values(selected_values_);
     list_view_.refresh_tiles();
-    panel_->set_rows(list_view_.rows(columns_per_row()));
+    if (multi_select_mode_ && multi_apply_btn_widget_ && multi_cancel_btn_widget_) {
+        DockableCollapsible::Rows rows = list_view_.rows(columns_per_row());
+        rows.push_back({multi_apply_btn_widget_.get(), multi_cancel_btn_widget_.get()});
+        panel_->set_rows(std::move(rows));
+    } else {
+        panel_->set_rows(list_view_.rows(columns_per_row()));
+    }
 
     Input dummy;
     if (embedded_) {
@@ -513,6 +640,9 @@ void SearchAssets::filter_assets() {
 }
 
 void SearchAssets::activate_result(const Result& result) {
+    if (multi_select_mode_) {
+        return;
+    }
     std::string v = result.value;
     if (result.is_tag && (v.empty() || v.front() != '#')) {
         v.insert(v.begin(), '#');

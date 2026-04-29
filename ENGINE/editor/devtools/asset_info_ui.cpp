@@ -2114,15 +2114,35 @@ void AssetInfoUI::request_apply_section(AssetInfoSectionId section_id) {
     asset_selector_->set_manifest_store(manifest_store_);
     asset_selector_->set_assets(assets_);
 
-    asset_selector_->open([this, section_id](const std::string& selection) {
-        if (selection.empty()) return;
-        if (!selection.empty() && selection.front() == '#') return;
-        std::string asset_key = resolve_asset_manifest_key(manifest_store_, selection);
-        if (asset_key.empty()) {
-            SDL_Log("Unable to resolve manifest asset for '%s'", selection.c_str());
+    asset_selector_->open_multi_select([this, section_id](const std::vector<std::string>& selections) {
+        if (selections.empty()) {
+            SDL_Log("[AssetInfoUI] Apply section requested with empty selection.");
             return;
         }
-        std::vector<std::string> assets{asset_key};
+        std::vector<std::string> assets;
+        assets.reserve(selections.size());
+        std::unordered_set<std::string> seen;
+        const std::string source_key = info_ ? resolve_asset_manifest_key(manifest_store_, info_->name) : std::string();
+        for (const auto& selection : selections) {
+            if (selection.empty() || selection.front() == '#') {
+                continue;
+            }
+            std::string asset_key = resolve_asset_manifest_key(manifest_store_, selection);
+            if (asset_key.empty()) {
+                SDL_Log("[AssetInfoUI] Unable to resolve manifest asset for '%s'", selection.c_str());
+                continue;
+            }
+            if (!source_key.empty() && asset_key == source_key) {
+                continue;
+            }
+            if (seen.insert(asset_key).second) {
+                assets.push_back(std::move(asset_key));
+            }
+        }
+        if (assets.empty()) {
+            SDL_Log("[AssetInfoUI] Apply section requested with no valid target assets.");
+            return;
+        }
         (void)apply_section_to_assets(section_id, assets);
     });
 

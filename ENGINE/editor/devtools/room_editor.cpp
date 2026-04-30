@@ -2354,9 +2354,13 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
     }
 
     pending_paste_selection_spawn_ids_ = new_ids;
-    if (try_select_spawn_groups_by_ids(new_ids)) {
-        pending_paste_selection_spawn_ids_.clear();
-    }
+    (void)try_select_spawn_groups_by_ids(new_ids);
+    clear_mouse_press_state(true);
+    suppress_next_left_click_ = true;
+    click_buffer_frames_ = 3;
+    suppress_world_left_click_frames_ = std::max(suppress_world_left_click_frames_, 2);
+    last_click_spawn_id_.clear();
+    last_click_time_ms_ = 0;
 
     if (new_ids.size() == 1) {
         active_spawn_group_id_ = new_ids.front();

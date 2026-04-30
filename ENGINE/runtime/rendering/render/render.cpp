@@ -295,18 +295,27 @@ SinkClipSubmitResult submit_sink_clipped_geometry(const RenderObject& obj,
         return SinkClipSubmitResult::Failed;
     }
 
+    const SDL_FPoint anchor_uv = sanitize_anchor_uv_for_sink_clip(obj.projection_anchor_uv);
+    const int frame_height_px = obj.has_src_rect
+        ? std::max(1, obj.src_rect.h)
+        : std::max(1, obj.texture_h);
+    const float sink_line_uv_y = anchor_uv.y + (obj.sink_height_offset_px / static_cast<float>(frame_height_px));
+    if (!std::isfinite(sink_line_uv_y)) {
+        return SinkClipSubmitResult::Failed;
+    }
+
     render_projection::ProjectedSpriteFrame projected{};
     projected.screen_tl = mesh.vertices[0].position;
     projected.screen_tr = mesh.vertices[1].position;
     projected.screen_br = mesh.vertices[2].position;
     projected.screen_bl = mesh.vertices[3].position;
-    const SDL_FPoint anchor_uv = sanitize_anchor_uv_for_sink_clip(obj.projection_anchor_uv);
-    const SDL_FPoint anchor_screen = projected.sample_screen_from_uv(anchor_uv);
-    if (!std::isfinite(anchor_screen.x) || !std::isfinite(anchor_screen.y)) {
+    const SDL_FPoint sink_uv{anchor_uv.x, sink_line_uv_y};
+    const SDL_FPoint sink_screen = projected.sample_screen_from_uv(sink_uv);
+    if (!std::isfinite(sink_screen.x) || !std::isfinite(sink_screen.y)) {
         return SinkClipSubmitResult::Failed;
     }
 
-    const float sink_line_y = anchor_screen.y + obj.sink_height_offset_px;
+    const float sink_line_y = sink_screen.y;
     if (!std::isfinite(sink_line_y)) {
         return SinkClipSubmitResult::Failed;
     }

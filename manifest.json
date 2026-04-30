@@ -13107,8 +13107,8 @@
         "plant"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 8,
-      "tilt_range_min_deg": -6,
+      "tilt_range_max_deg": 2,
+      "tilt_range_min_deg": -2,
       "weight_kg": 0.0,
       "y_pos_max": 0,
       "y_pos_min": -8
@@ -13158,11 +13158,11 @@
         "plant"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 2,
-      "tilt_range_min_deg": -2,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": -1,
       "weight_kg": 0.0,
       "y_pos_max": 0,
-      "y_pos_min": -11
+      "y_pos_min": -8
     },
     "candle_fps_12": {
       "anchor_point_child_candidates": [
@@ -14995,10 +14995,10 @@
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 922,
-                "texture_y": 744
+                "texture_y": 749
               },
               {
-                "depth_offset": -0.4000000059604645,
+                "depth_offset": -5.299999237060547,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15006,8 +15006,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 905,
-                "texture_y": 1599
+                "texture_x": 915,
+                "texture_y": 1582
               },
               {
                 "depth_offset": -0.20000001788139343,
@@ -15018,8 +15018,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 919,
-                "texture_y": 1126
+                "texture_x": 935,
+                "texture_y": 1132
               },
               {
                 "depth_offset": -0.20000001788139343,
@@ -15054,11 +15054,11 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 218,
-                "texture_y": 1633
+                "texture_x": 182,
+                "texture_y": 1562
               },
               {
-                "depth_offset": -0.4000000059604645,
+                "depth_offset": -0.10000009089708328,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15066,8 +15066,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1355,
-                "texture_y": 1615
+                "texture_x": 1362,
+                "texture_y": 1562
               },
               {
                 "depth_offset": -0.20000001788139343,
@@ -15090,8 +15090,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 170,
-                "texture_y": 1249
+                "texture_x": 182,
+                "texture_y": 1245
               },
               {
                 "depth_offset": -0.10000000149011612,
@@ -15114,8 +15114,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 429,
-                "texture_y": 874
+                "texture_x": 425,
+                "texture_y": 864
               },
               {
                 "depth_offset": -0.09999995678663254,
@@ -15138,8 +15138,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1416,
-                "texture_y": 875
+                "texture_x": 1429,
+                "texture_y": 872
               }
             ]
           ],
@@ -25396,7 +25396,7 @@
         }
       ],
       "size_settings": {
-        "scale_percentage": 26.0
+        "scale_percentage": 28.0
       },
       "start": "default",
       "tags": [],
@@ -25875,6 +25875,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -25918,6 +25919,7 @@
       "asset_directory": "resources/assets/vibble_attack_1",
       "asset_name": "vibble_attack_1",
       "attack_box_enabled": true,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -25927,7 +25929,11 @@
       "start": "default",
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "vibble_eyes": {
       "anchor_point_child_candidates": [],
@@ -26478,9 +26484,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            200,
-            85,
+            31,
+            32,
+            204,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26833,9 +26839,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
+            36,
+            149,
             242,
-            85,
-            131,
             255
           ],
           "edge_smoothness": 4,
@@ -26858,9 +26864,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            37,
-            36,
-            242,
+            224,
+            79,
+            137,
             255
           ],
           "edge_smoothness": 4,
@@ -26883,9 +26889,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            160,
-            204,
-            31,
+            144,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26943,9 +26949,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
-            215,
-            242,
+            31,
+            204,
+            111,
             255
           ],
           "edge_smoothness": 70,
@@ -27009,9 +27015,9 @@
           "camera_zoom_percent": 13,
           "curvyness": 2,
           "display_color": [
-            242,
-            118,
             36,
+            234,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27296,7 +27302,7 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            117,
+            115,
             31,
             204,
             255

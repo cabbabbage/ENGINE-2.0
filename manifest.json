@@ -14729,12 +14729,16 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 90.0
+        "scale_percentage": 138.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "chest_opening": {
       "anchor_point_child_candidates": [
@@ -27287,9 +27291,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            242,
+            242,
             85,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27642,9 +27646,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            242,
-            241,
-            36,
+            130,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27667,9 +27671,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            242,
-            139,
-            85,
+            204,
+            31,
+            136,
             255
           ],
           "edge_smoothness": 4,
@@ -27692,9 +27696,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            51,
-            142,
-            204,
+            242,
+            139,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27752,9 +27756,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            36,
-            123,
+            31,
+            146,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -27818,9 +27822,9 @@
           "camera_zoom_percent": 3,
           "curvyness": 2,
           "display_color": [
-            118,
-            85,
+            49,
             242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -28007,16 +28011,16 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1841,
-          "camera_center_dz": -1773,
-          "camera_height_px": 749,
-          "camera_tilt_deg": 51.17104721069336,
-          "camera_zoom_percent": 86,
+          "camera_center_dx": -1518,
+          "camera_center_dz": 1235,
+          "camera_height_px": 1155,
+          "camera_tilt_deg": 41.158355712890625,
+          "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
             85,
             242,
-            160,
+            170,
             255
           ],
           "edge_smoothness": 96,
@@ -28162,20 +28166,20 @@
                 }
               ],
               "display_name": "casino",
-              "dx": -3151,
-              "dz": -2806,
+              "dx": -1808,
+              "dz": -2440,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 8000,
-              "origional_width": 10752,
+              "origional_height": 6720,
+              "origional_width": 5744,
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-1d2fcba07670"
@@ -28252,20 +28256,20 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -804,
-              "dz": -2018,
+              "dx": -336,
+              "dz": -2440,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6704,
-              "origional_width": 5768,
+              "origional_height": 6720,
+              "origional_width": 5744,
               "position": "Exact",
               "priority": 7,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-cd7d0cd55e23"

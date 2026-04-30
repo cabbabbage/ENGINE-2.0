@@ -12898,6 +12898,7 @@
       "asset_name": "booze_2",
       "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -12918,10 +12919,15 @@
         "man-made",
         "small",
         "small_surface_top",
-        "table_decor"
+        "table_decor",
+        "trash"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "box": {
       "anchor_point_child_candidates": [],
@@ -13071,6 +13077,20 @@
       "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -13119,9 +13139,208 @@
       "y_pos_min": -8
     },
     "bush_fps_2": {
-      "anchor_point_child_candidates": [],
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "norm_anhor_point_1",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 160,
+                "name": "null"
+              },
+              {
+                "chance": 1,
+                "name": "#trash"
+              },
+              {
+                "chance": 1,
+                "name": "#mushroom"
+              },
+              {
+                "chance": 1,
+                "name": "#flower"
+              },
+              {
+                "chance": 8,
+                "name": "#grass"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        }
+      ],
       "animations": {
         "default": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 70,
+                "texture_y": 214
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 77,
+                "texture_y": 221
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ]
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -15003,15 +15222,15 @@
                 "texture_y": 749
               },
               {
-                "depth_offset": -5.299999237060547,
+                "depth_offset": -2.5999999046325684,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_2",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 915,
+                "texture_x": 912,
                 "texture_y": 1582
               },
               {
@@ -15044,11 +15263,11 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 533,
-                "texture_y": 1588
+                "texture_x": 498,
+                "texture_y": 1589
               },
               {
                 "depth_offset": -0.4000000059604645,
@@ -15056,35 +15275,35 @@
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4_copy",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 181,
-                "texture_y": 1561
+                "texture_x": 162,
+                "texture_y": 1556
               },
               {
-                "depth_offset": -0.10000009089708328,
+                "depth_offset": -0.10000000149011612,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4_copy_copy",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1362,
-                "texture_y": 1562
+                "texture_x": 1365,
+                "texture_y": 1565
               },
               {
-                "depth_offset": -0.20000001788139343,
+                "depth_offset": -0.4000000059604645,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4_copy_copy_copy",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1649,
-                "texture_y": 1599
+                "texture_x": 1652,
+                "texture_y": 1545
               },
               {
                 "depth_offset": -0.10000000149011612,
@@ -15107,8 +15326,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 436,
-                "texture_y": 1254
+                "texture_x": 442,
+                "texture_y": 1248
               },
               {
                 "depth_offset": -0.10000000149011612,
@@ -26489,9 +26708,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            85,
+            242,
+            238,
             255
           ],
           "edge_smoothness": 101.0,
@@ -26844,9 +27063,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            147,
-            204,
             31,
+            146,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26869,9 +27088,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            31,
+            137,
+            71,
             204,
-            146,
             255
           ],
           "edge_smoothness": 4,
@@ -26894,9 +27113,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            242,
             36,
-            220,
+            242,
+            135,
             255
           ],
           "edge_smoothness": 4,
@@ -26954,9 +27173,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            79,
-            154,
-            224,
+            152,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 70,
@@ -27022,7 +27241,7 @@
           "display_color": [
             204,
             31,
-            75,
+            95,
             255
           ],
           "edge_smoothness": 101,
@@ -27307,9 +27526,9 @@
           "camera_zoom_percent": 86,
           "curvyness": 2,
           "display_color": [
-            85,
+            102,
             242,
-            88,
+            85,
             255
           ],
           "edge_smoothness": 96,

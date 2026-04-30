@@ -1172,6 +1172,7 @@ private:
     };
     std::vector<AssetInfoParentHistoryEntry> asset_info_parent_history_;
     bool preserve_asset_info_parent_history_on_next_open_ = false;
+    int suppress_parent_asset_return_frames_ = 0;
     std::vector<Asset*> focus_selection_snapshot_;
     std::optional<std::string> focus_spawn_group_snapshot_{};
     Asset* focused_asset_ = nullptr;

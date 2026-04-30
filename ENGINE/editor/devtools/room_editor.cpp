@@ -3191,9 +3191,16 @@ void RoomEditor::update_ui(const Input& input) {
     }
     update_asset_editor_layout();
 
+    if (suppress_parent_asset_return_frames_ > 0) {
+        --suppress_parent_asset_return_frames_;
+    }
+
     if (info_ui_ && info_ui_->is_visible()) {
         info_ui_->update(input, screen_w_, screen_h_);
-    } else if (active_modal_ == ActiveModal::AssetInfo) {
+    } else if (active_modal_ == ActiveModal::AssetInfo &&
+               suppress_parent_asset_return_frames_ <= 0 &&
+               (asset_editor_subview_ == AssetEditorSubview::AssetInfo ||
+                asset_editor_subview_ == AssetEditorSubview::AnimationEditor)) {
         if (!try_return_to_parent_asset_info()) {
             active_modal_ = ActiveModal::None;
             asset_info_parent_history_.clear();
@@ -7891,7 +7898,7 @@ Asset* RoomEditor::resolve_bound_child_for_owner(
 }
 
 bool RoomEditor::navigate_to_bound_child_asset_info(Asset* child) {
-    if (!child || !child->info) {
+    if (!child || !child->info || child->dead || !is_asset_pointer_live(child) || !asset_belongs_to_room(child)) {
         return false;
     }
 
@@ -7911,12 +7918,30 @@ bool RoomEditor::navigate_to_bound_child_asset_info(Asset* child) {
         return_subview = light_mode_active() ? AssetEditorSubview::Light : AssetEditorSubview::Anchor;
     }
 
-    if (parent && parent != child) {
+    const AssetEditorSubview previous_subview = asset_editor_subview_;
+    const bool pushed_parent_history = (parent && parent != child);
+    if (pushed_parent_history) {
         asset_info_parent_history_.push_back(AssetInfoParentHistoryEntry{parent, return_subview});
     }
 
     preserve_asset_info_parent_history_on_next_open_ = true;
     open_asset_info_editor_for_asset(child, false);
+    const bool opened_child_info =
+        info_ui_ && info_ui_->is_visible() && info_ui_->get_target_asset() == child;
+    if (!opened_child_info) {
+        SDL_Log("RoomEditor: failed to open bound child asset info; staying on current editor.");
+        preserve_asset_info_parent_history_on_next_open_ = false;
+        if (pushed_parent_history && !asset_info_parent_history_.empty()) {
+            asset_info_parent_history_.pop_back();
+        }
+        if (previous_subview == AssetEditorSubview::Anchor ||
+            previous_subview == AssetEditorSubview::Light ||
+            previous_subview == AssetEditorSubview::OvalAnchor) {
+            set_asset_editor_subview(previous_subview, false);
+        }
+        return false;
+    }
+    suppress_parent_asset_return_frames_ = std::max(suppress_parent_asset_return_frames_, 2);
     return true;
 }
 
@@ -9439,8 +9464,15 @@ Asset* RoomEditor::selected_anchor_mode_asset() const {
 
     if (info_ui_ && info_ui_->is_visible()) {
         Asset* target = info_ui_->get_target_asset();
-        if (is_asset_pointer_live(target) && asset_belongs_to_room(target)) {
+        if (is_asset_pointer_live(target)) {
             return target;
+        }
+    }
+
+    if (selected_assets_.size() == 1) {
+        Asset* candidate = selected_assets_.front();
+        if (is_asset_pointer_live(candidate)) {
+            return candidate;
         }
     }
 

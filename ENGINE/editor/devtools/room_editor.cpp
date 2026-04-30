@@ -9455,17 +9455,17 @@ bool RoomEditor::is_asset_pointer_live(const Asset* asset) const {
 }
 
 Asset* RoomEditor::selected_anchor_mode_asset() const {
-    if (selected_assets_.size() == 1) {
-        Asset* candidate = selected_assets_.front();
-        if (is_asset_pointer_live(candidate) && asset_belongs_to_room(candidate)) {
-            return candidate;
-        }
-    }
-
     if (info_ui_ && info_ui_->is_visible()) {
         Asset* target = info_ui_->get_target_asset();
         if (is_asset_pointer_live(target)) {
             return target;
+        }
+    }
+
+    if (selected_assets_.size() == 1) {
+        Asset* candidate = selected_assets_.front();
+        if (is_asset_pointer_live(candidate) && asset_belongs_to_room(candidate)) {
+            return candidate;
         }
     }
 

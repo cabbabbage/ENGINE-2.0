@@ -679,9 +679,25 @@ bool GpuSceneRenderer::ensure_texture_resource(const std::string& logical_name,
     return true;
 }
 
+bool GpuSceneRenderer::register_external_texture_resource(const std::string& logical_name, SDL_GPUTexture* texture) {
+    if (logical_name.empty() || !texture) {
+        return false;
+    }
+    external_texture_resources_[logical_name] = texture;
+    return true;
+}
+
+void GpuSceneRenderer::clear_external_texture_resources() {
+    external_texture_resources_.clear();
+}
+
 SDL_GPUTexture* GpuSceneRenderer::find_texture_resource(const std::string& logical_name) const {
     const auto it = texture_resources_.find(logical_name);
-    return (it != texture_resources_.end()) ? it->second.texture : nullptr;
+    if (it != texture_resources_.end()) {
+        return it->second.texture;
+    }
+    const auto external_it = external_texture_resources_.find(logical_name);
+    return (external_it != external_texture_resources_.end()) ? external_it->second : nullptr;
 }
 
 bool GpuSceneRenderer::ensure_buffer_resource(const std::string& logical_name,
@@ -741,6 +757,7 @@ SDL_GPUBuffer* GpuSceneRenderer::find_buffer_resource(const std::string& logical
 void GpuSceneRenderer::release_runtime_resources() {
     if (!device_ || !device_->gpu_device()) {
         texture_resources_.clear();
+        external_texture_resources_.clear();
         buffer_resources_.clear();
         return;
     }
@@ -751,6 +768,7 @@ void GpuSceneRenderer::release_runtime_resources() {
             render_diagnostics::add_texture_destroy_count();
         }
     }
+    external_texture_resources_.clear();
     for (auto& entry : buffer_resources_) {
         if (entry.second.buffer) {
             SDL_ReleaseGPUBuffer(device_->gpu_device(), entry.second.buffer);

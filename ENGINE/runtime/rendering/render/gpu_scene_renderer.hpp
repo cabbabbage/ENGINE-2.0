@@ -53,6 +53,8 @@ public:
     bool ensure_texture_resource(const std::string& logical_name,
                                  const TextureResourceSpec& spec,
                                  std::string& out_error);
+    bool register_external_texture_resource(const std::string& logical_name, SDL_GPUTexture* texture);
+    void clear_external_texture_resources();
     SDL_GPUTexture* find_texture_resource(const std::string& logical_name) const;
     bool ensure_buffer_resource(const std::string& logical_name,
                                 const BufferResourceSpec& spec,
@@ -97,6 +99,7 @@ private:
     std::string backend_shader_variant_ = "unknown";
     SDL_GPUShaderFormat backend_shader_format_ = SDL_GPU_SHADERFORMAT_INVALID;
     std::unordered_map<std::string, RuntimeTextureResource> texture_resources_{};
+    std::unordered_map<std::string, SDL_GPUTexture*> external_texture_resources_{};
     std::unordered_map<std::string, RuntimeBufferResource> buffer_resources_{};
     std::uint64_t last_pipeline_hit_total_ = 0;
     std::uint64_t last_pipeline_miss_total_ = 0;

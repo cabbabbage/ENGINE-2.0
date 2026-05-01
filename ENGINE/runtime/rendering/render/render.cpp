@@ -36,7 +36,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -55,35 +54,6 @@ namespace {
 constexpr double kDepthBucketSize = 0.0625;
 constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
 constexpr float kQuadEpsilon = 1.0e-5f;
-
-std::string lowercase_ascii(std::string value) {
-    std::transform(value.begin(),
-                   value.end(),
-                   value.begin(),
-                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-    return value;
-}
-
-SceneRenderer::RuntimeRendererMode parse_runtime_renderer_mode(std::string& out_mode_name,
-                                                               bool& out_used_default) {
-    out_mode_name = "gpu";
-    out_used_default = true;
-    const char* raw = std::getenv("VIBBLE_RUNTIME_GAMEPLAY_RENDERER");
-    if (!raw || !*raw) {
-        return SceneRenderer::RuntimeRendererMode::Gpu;
-    }
-    const std::string requested = lowercase_ascii(std::string(raw));
-    if (requested == "gpu") {
-        out_mode_name = "gpu";
-        out_used_default = false;
-        return SceneRenderer::RuntimeRendererMode::Gpu;
-    }
-
-    out_mode_name = "gpu";
-    vibble::log::warn("[SceneRenderer] Unrecognized VIBBLE_RUNTIME_GAMEPLAY_RENDERER='" + requested +
-                      "'. Only 'gpu' is supported; forcing gpu.");
-    return SceneRenderer::RuntimeRendererMode::Gpu;
-}
 
 std::vector<std::filesystem::path> runtime_shader_manifest_candidates(const char* override_manifest_path) {
     std::vector<std::filesystem::path> candidates;
@@ -1088,8 +1058,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
     if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
 
-    bool used_default_mode = true;
-    runtime_renderer_mode_ = parse_runtime_renderer_mode(runtime_renderer_mode_name_, used_default_mode);
     std::string gpu_error;
     gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
     if (!gpu_scene_renderer_) {
@@ -1130,9 +1098,8 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         throw std::runtime_error(oss.str());
     }
 
-    vibble::log::info("[SceneRenderer] Runtime gameplay renderer mode: gpu" +
-                      std::string(used_default_mode ? " (default)" : " (from env)") +
-                      " manifest=" + selected_manifest.string());
+    vibble::log::info("[SceneRenderer] Runtime gameplay renderer mode: gpu-only manifest=" +
+                      selected_manifest.string());
 
     gpu_runtime_path_enabled_ = true;
     vibble::log::info("[SceneRenderer] GPU runtime renderer active.");
@@ -1275,6 +1242,106 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
     if (floor_composer_) floor_composer_->set_output_dimensions(screen_width_, screen_height_);
     if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
     if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
+}
+
+bool SceneRenderer::execute_gpu_frame_graph(SDL_Texture* scene_texture, std::string& out_error) {
+    out_error.clear();
+    if (!gpu_frame_graph_interop_supported_) {
+        return true;
+    }
+    if (!gpu_scene_renderer_) {
+        out_error = "GpuSceneRenderer is not initialized.";
+        return false;
+    }
+    if (!scene_texture) {
+        out_error = "Scene composite texture is null.";
+        return false;
+    }
+
+    const SDL_PropertiesID texture_props = SDL_GetTextureProperties(scene_texture);
+    if (!texture_props) {
+        out_error = "Failed to query scene composite texture properties: " + std::string(SDL_GetError());
+        return false;
+    }
+    SDL_GPUTexture* scene_gpu_texture = static_cast<SDL_GPUTexture*>(
+        SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
+    if (!scene_gpu_texture) {
+        gpu_frame_graph_interop_supported_ = false;
+        if (!gpu_frame_graph_interop_warning_logged_) {
+            vibble::log::warn(
+                "[SceneRenderer] Frame-graph interop disabled: scene composite texture is not backed by "
+                "SDL_GPUTexture on this backend. Continuing with GPU SDL renderer presentation.");
+            gpu_frame_graph_interop_warning_logged_ = true;
+        }
+        return true;
+    }
+
+    float scene_width_f = 0.0f;
+    float scene_height_f = 0.0f;
+    if (!SDL_GetTextureSize(scene_texture, &scene_width_f, &scene_height_f) ||
+        scene_width_f <= 0.0f ||
+        scene_height_f <= 0.0f) {
+        out_error = "Failed to query scene composite texture dimensions.";
+        return false;
+    }
+    const std::uint32_t scene_width = static_cast<std::uint32_t>(std::max(1, static_cast<int>(std::lround(scene_width_f))));
+    const std::uint32_t scene_height = static_cast<std::uint32_t>(std::max(1, static_cast<int>(std::lround(scene_height_f))));
+
+    GpuSceneRenderer::TextureResourceSpec scratch_copy_spec{};
+    scratch_copy_spec.width = scene_width;
+    scratch_copy_spec.height = scene_height;
+    scratch_copy_spec.format = gpu_scene_renderer_->device()
+        ? gpu_scene_renderer_->device()->format_policy().albedo_format
+        : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    scratch_copy_spec.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    scratch_copy_spec.layer_count_or_depth = 1;
+    scratch_copy_spec.num_levels = 1;
+    scratch_copy_spec.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    std::string frame_error;
+    if (!gpu_scene_renderer_->ensure_texture_resource("scene.frame_graph_copy", scratch_copy_spec, frame_error)) {
+        out_error = frame_error.empty()
+            ? "Failed to allocate frame-graph copy target."
+            : frame_error;
+        return false;
+    }
+
+    if (!gpu_scene_renderer_->begin_frame(&frame_error)) {
+        out_error = frame_error.empty() ? "GpuSceneRenderer::begin_frame failed." : frame_error;
+        return false;
+    }
+
+    gpu_scene_renderer_->clear_external_texture_resources();
+    if (!gpu_scene_renderer_->register_external_texture_resource("scene.composite", scene_gpu_texture)) {
+        gpu_scene_renderer_->abort_frame();
+        out_error = "Failed to register scene composite texture for frame-graph presentation.";
+        return false;
+    }
+
+    GpuFrameGraph::PassDescriptor present_pass{};
+    present_pass.type = GpuFrameGraph::PassType::Copy;
+    present_pass.name = "copy_scene_composite";
+    present_pass.resources = {
+        GpuFrameGraph::ResourceDependency{"scene.composite", false},
+        GpuFrameGraph::ResourceDependency{"scene.frame_graph_copy", true}
+    };
+    present_pass.blit.source_texture = "scene.composite";
+    present_pass.blit.destination_texture = "scene.frame_graph_copy";
+    present_pass.blit.use_swapchain_destination = false;
+    present_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
+    present_pass.blit.width = scene_width;
+    present_pass.blit.height = scene_height;
+    gpu_scene_renderer_->add_pass(std::move(present_pass));
+
+    if (!gpu_scene_renderer_->end_frame(&frame_error)) {
+        gpu_scene_renderer_->clear_external_texture_resources();
+        out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
+        return false;
+    }
+
+    gpu_scene_renderer_->clear_external_texture_resources();
+    return true;
 }
 
 std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
@@ -2443,9 +2510,18 @@ void SceneRenderer::render() {
         return;
     }
 
+    std::string frame_graph_error;
+    if (!execute_gpu_frame_graph(scene_composite_tex_, frame_graph_error)) {
+        fail_gpu_frame("Frame-graph execution failed: " + frame_graph_error, false);
+        return;
+    }
+
     clear_backbuffer_to_color(renderer_, screen_width_, screen_height_, map_clear_color_);
     render_texture_utils::draw_fullscreen_texture(renderer_, scene_composite_tex_);
-    render_diagnostics::set_renderer_runtime_info("gpu", "sdl_renderer", "vsync");
+    render_diagnostics::set_renderer_runtime_info("gpu",
+                                                  gpu_frame_graph_interop_supported_ ? "frame_graph+sdl_renderer"
+                                                                                     : "sdl_renderer",
+                                                  "vsync");
 
     finalize_render_cpu_timer();
     render_diagnostics::end_frame();

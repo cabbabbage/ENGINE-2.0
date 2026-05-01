@@ -53,6 +53,9 @@ bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
     }
 
     float travel_distance = std::max(0.0f, attack.payload.hitback_distance);
+    if (!std::isfinite(travel_distance)) {
+        return false;
+    }
     if (travel_distance <= kZeroTolerance) {
         if (max_distance <= 0.0f || max_damage <= 0) {
             return false;
@@ -63,12 +66,19 @@ bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
         if (clamped_damage <= 0.0f) {
             return false;
         }
+        float weight_kg = 1.0f;
+        if (self.info && std::isfinite(self.info->weight_kg) && self.info->weight_kg > kZeroTolerance) {
+            weight_kg = self.info->weight_kg;
+        }
         const float damage_ratio = clamped_damage / static_cast<float>(max_damage);
-        travel_distance = (damage_ratio * max_distance)/self.info->weight_kg; // Knockback is inversely proportional to weight.
+        travel_distance = (damage_ratio * max_distance) / weight_kg;
     } else if (max_distance > 0.0f) {
         travel_distance = std::min(travel_distance, max_distance);
     }
 
+    if (!std::isfinite(travel_distance)) {
+        return false;
+    }
     if (travel_distance <= kZeroTolerance) {
         return false;
     }
@@ -80,7 +90,7 @@ bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
     const float dx = source_x - attack_x;
     const float dz = source_z - attack_z;
     const float magnitude = std::sqrt(dx * dx + dz * dz);
-    if (magnitude <= kZeroTolerance) {
+    if (!std::isfinite(magnitude) || magnitude <= kZeroTolerance) {
         return false;
     }
 

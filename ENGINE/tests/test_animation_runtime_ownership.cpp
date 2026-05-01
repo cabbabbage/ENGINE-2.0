@@ -279,6 +279,26 @@ TEST_CASE("AnimationRuntime advances locked attack frames while commitment is ac
     CHECK(asset->current_frame->frame_index == 1);
 }
 
+TEST_CASE("AnimationRuntime advances locked attack frames when playing tagged attack clip") {
+    auto asset = make_attack_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    REQUIRE(asset->info != nullptr);
+
+    AnimationRuntime runtime(asset.get(), nullptr);
+    AnimationUpdate updater(asset.get(), nullptr);
+    runtime.set_planner(&updater);
+
+    asset->set_current_animation("attack_right");
+    REQUIRE(asset->current_frame != nullptr);
+    CHECK(asset->current_frame->frame_index == 0);
+    CHECK_FALSE(runtime.auto_attack_commitment_active());
+
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    REQUIRE(asset->current_frame != nullptr);
+    CHECK(asset->current_frame->frame_index == 1);
+}
+
 TEST_CASE("AnimationUpdate defers auto_move planning during committed attack follow-through") {
     auto asset = make_attack_runtime_test_asset();
     REQUIRE(asset != nullptr);

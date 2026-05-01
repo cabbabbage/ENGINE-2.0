@@ -1,10 +1,8 @@
 # SDL3 Runtime GPU Renderer
 
 ## Modes
-- `VIBBLE_RUNTIME_GAMEPLAY_RENDERER=gpu|legacy`
-- Default: `gpu`
-- `gpu` mode is strict-startup: missing GPU capabilities, unsupported required formats, or invalid shader packages fail at startup with a hard error.
-- `legacy` mode is a temporary parity/debug path.
+- Runtime gameplay renderer is GPU-only.
+- Strict-startup: missing GPU capabilities, unsupported required formats, or invalid shader packages fail at startup with a hard error.
 
 ## Startup Policy
 - Format probing uses SDL3 GPU capability checks at startup only:

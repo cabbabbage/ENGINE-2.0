@@ -919,10 +919,11 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
 
     const bool is_player = self_->info && self_->info->type == asset_types::player;
     const bool reverse_command_active = reverse_mode_applies_to_current_animation();
-    const bool committed_attack_follow_through =
-        auto_attack_commitment_active() && current_animation_is_attack();
-    const bool static_blocked = self_->static_frame && !reverse_command_active && !committed_attack_follow_through;
-    const bool locked_blocked = anim->locked && !reverse_command_active && !committed_attack_follow_through;
+    const bool attack_follow_through =
+        current_animation_is_attack() &&
+        (auto_attack_commitment_active() || committed_attack_execution_active());
+    const bool static_blocked = self_->static_frame && !reverse_command_active && !attack_follow_through;
+    const bool locked_blocked = anim->locked && !reverse_command_active && !attack_follow_through;
     bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || lock_on_end_active_);
     bool has_overriding_plan = false;
     if (planner_iface_) {

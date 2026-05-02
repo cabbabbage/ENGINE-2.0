@@ -29,6 +29,7 @@
 #include "assets/asset/anchor_point.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation/combat_geometry.hpp"
+#include "core/AssetsManager.hpp"
 #include "core/axis_convention.hpp"
 #include "utils/input.hpp"
 
@@ -96,6 +97,7 @@ public:
     bool is_asset_stack_editor_active() const;
     bool is_asset_editor_tab_scope_active() const;
     void set_room_trail_nav_visibility(bool visible);
+    Assets::DevGridOverlayContext dev_grid_overlay_context() const;
 
     void update(const Input& input);
     void update_ui(const Input& input);
@@ -547,6 +549,9 @@ private:
     };
     EditorInteractionState current_editor_interaction_state() const;
     bool any_editor_point_selected() const;
+    bool is_xy_overlay_mode_active() const;
+    bool resolve_selected_overlay_point_floor_xz(SDL_FPoint& out_world_xz) const;
+    void refresh_scroll_overlay_preview();
     enum class EditorFramePropagationScope {
         NextFrame,
         Animation,
@@ -1299,6 +1304,7 @@ private:
     };
     std::vector<RoomNavEntry> room_nav_entries_;
     bool room_nav_visible_ = false;
+    bool scroll_preview_floor_overlay_active_ = false;
 
     double height_scale_factor_ = 1.1;
     DevCameraControls camera_controls_;

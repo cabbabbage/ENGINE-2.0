@@ -260,18 +260,10 @@ void draw_room_and_trail_geometry_overlay(SDL_Renderer* renderer,
 
 void draw_grid_overlay_points(SDL_Renderer* renderer,
                               const WarpedScreenGrid& cam,
-                              int grid_cell_size_px) {
+                              int grid_cell_size_px,
+                              std::optional<SDL_Point> center_world_override = std::nullopt,
+                              std::optional<SDL_FPoint> exact_floor_center = std::nullopt) {
     if (!renderer || grid_cell_size_px <= 0) {
-        return;
-    }
-
-    float mouse_x = 0.0f;
-    float mouse_y = 0.0f;
-    SDL_GetMouseState(&mouse_x, &mouse_y);
-    const SDL_FPoint mouse_world = cam.screen_to_map(SDL_Point{
-        static_cast<int>(std::lround(mouse_x)),
-        static_cast<int>(std::lround(mouse_y))});
-    if (!std::isfinite(mouse_world.x) || !std::isfinite(mouse_world.y)) {
         return;
     }
 
@@ -281,7 +273,21 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
         const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
         return static_cast<int>(std::clamp<long long>(snapped, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
     };
-    const SDL_Point center_world{snap_axis(mouse_world.x), snap_axis(mouse_world.y)};
+    SDL_Point center_world{};
+    if (center_world_override.has_value()) {
+        center_world = *center_world_override;
+    } else {
+        float mouse_x = 0.0f;
+        float mouse_y = 0.0f;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        const SDL_FPoint mouse_world = cam.screen_to_map(SDL_Point{
+            static_cast<int>(std::lround(mouse_x)),
+            static_cast<int>(std::lround(mouse_y))});
+        if (!std::isfinite(mouse_world.x) || !std::isfinite(mouse_world.y)) {
+            return;
+        }
+        center_world = SDL_Point{snap_axis(mouse_world.x), snap_axis(mouse_world.y)};
+    }
 
     constexpr int kGridPointSizePx = 2;
     constexpr int kGridPointHalf = kGridPointSizePx / 2;
@@ -338,6 +344,17 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
                 static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx),
                 static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx)};
             SDL_RenderFillRect(renderer, &point_rect);
+        }
+    }
+
+    if (exact_floor_center.has_value()) {
+        SDL_FPoint exact_screen{};
+        if (project_floor_point_to_screen(cam, exact_floor_center->x, exact_floor_center->y, exact_screen)) {
+            const int cx = static_cast<int>(std::lround(exact_screen.x));
+            const int cy = static_cast<int>(std::lround(exact_screen.y));
+            SDL_SetRenderDrawColor(renderer, 235, 48, 48, 245);
+            SDL_RenderLine(renderer, cx - 8, cy, cx + 8, cy);
+            SDL_RenderLine(renderer, cx, cy - 8, cx, cy + 8);
         }
     }
 
@@ -709,7 +726,17 @@ SDL_Texture* FloorComposer::compose_gpu(const WarpedScreenGrid& cam,
             if (assets_ && assets_->is_dev_mode()) {
                 draw_room_and_trail_geometry_overlay(renderer_, cam, assets_->rooms());
                 if (assets_->dev_grid_overlay_enabled()) {
-                    draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
+                    const Assets::DevGridOverlayContext overlay_ctx = assets_->dev_grid_overlay_context();
+                    if (overlay_ctx.kind == Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint &&
+                        overlay_ctx.has_selected_point_center) {
+                        draw_grid_overlay_points(renderer_,
+                                                 cam,
+                                                 assets_->dev_grid_overlay_cell_size_px(),
+                                                 overlay_ctx.snapped_floor_xz,
+                                                 overlay_ctx.exact_floor_xz);
+                    } else if (overlay_ctx.kind != Assets::DevGridOverlayKind::XYPlaneAtAssetDepth) {
+                        draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
+                    }
                 }
             }
             SDL_SetRenderClipRect(renderer_, nullptr);
@@ -850,7 +877,17 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
             if (assets_ && assets_->is_dev_mode()) {
                 draw_room_and_trail_geometry_overlay(renderer_, cam, assets_->rooms());
                 if (assets_->dev_grid_overlay_enabled()) {
-                    draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
+                    const Assets::DevGridOverlayContext overlay_ctx = assets_->dev_grid_overlay_context();
+                    if (overlay_ctx.kind == Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint &&
+                        overlay_ctx.has_selected_point_center) {
+                        draw_grid_overlay_points(renderer_,
+                                                 cam,
+                                                 assets_->dev_grid_overlay_cell_size_px(),
+                                                 overlay_ctx.snapped_floor_xz,
+                                                 overlay_ctx.exact_floor_xz);
+                    } else if (overlay_ctx.kind != Assets::DevGridOverlayKind::XYPlaneAtAssetDepth) {
+                        draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
+                    }
                 }
             }
             SDL_SetRenderClipRect(renderer_, nullptr);

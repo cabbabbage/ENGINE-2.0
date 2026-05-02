@@ -2950,6 +2950,7 @@ void RoomEditor::update(const Input& input) {
 };
 
     if (!enabled_) {
+        scroll_preview_floor_overlay_active_ = false;
         if (mouse_controls_enabled_last_frame_) {
             enforce_mouse_controls_disabled();
         }
@@ -3003,6 +3004,7 @@ void RoomEditor::update(const Input& input) {
 
     validate_focus_state();
     update_highlighted_assets();
+    refresh_scroll_overlay_preview();
 }
 
 void RoomEditor::update_ui(const Input& input) {
@@ -3235,6 +3237,13 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
+
+    if (pointer_event && scroll_preview_floor_overlay_active_) {
+        scroll_preview_floor_overlay_active_ = false;
+    } else if (wheel_event && is_xy_overlay_mode_active() && any_editor_point_selected()) {
+        scroll_preview_floor_overlay_active_ = true;
+        refresh_scroll_overlay_preview();
+    }
 
     const bool allow_tab_cycle_with_dropdown =
         (asset_editor_subview_ == AssetEditorSubview::AnimationEditor);
@@ -4410,6 +4419,117 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
     }
 
     if (renderer && enabled_) {
+        if (assets_ && assets_->dev_grid_overlay_enabled()) {
+            const Assets::DevGridOverlayContext overlay_ctx = dev_grid_overlay_context();
+            if (overlay_ctx.kind == Assets::DevGridOverlayKind::XYPlaneAtAssetDepth) {
+                const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
+                const float target_world_z = overlay_ctx.target_world_z;
+
+                float mouse_x = 0.0f;
+                float mouse_y = 0.0f;
+                SDL_GetMouseState(&mouse_x, &mouse_y);
+                const SDL_FPoint mouse_screen{mouse_x, mouse_y};
+                render_projection::CameraRay ray{};
+                if (!cam.build_camera_ray_from_screen(mouse_screen, ray)) {
+                    ray.valid = false;
+                }
+
+                float center_x = 0.0f;
+                float center_y = 0.0f;
+                bool center_valid = false;
+                if (ray.valid && std::isfinite(ray.origin.z) && std::isfinite(ray.direction.z) &&
+                    std::fabs(ray.direction.z) > 1.0e-5f) {
+                    const float t = (target_world_z - ray.origin.z) / ray.direction.z;
+                    if (std::isfinite(t)) {
+                        const float x = ray.origin.x + (ray.direction.x * t);
+                        const float y = ray.origin.y + (ray.direction.y * t);
+                        if (std::isfinite(x) && std::isfinite(y)) {
+                            center_x = x;
+                            center_y = y;
+                            center_valid = true;
+                        }
+                    }
+                }
+                if (!center_valid) {
+                    center_x = static_cast<float>(cam.get_screen_center().x);
+                    center_y = 0.0f;
+                }
+
+                auto snap_axis = [cell](float value) -> int {
+                    const long double ratio = static_cast<long double>(value) / static_cast<long double>(cell);
+                    const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
+                    return static_cast<int>(std::clamp<long long>(snapped,
+                                                                   std::numeric_limits<int>::min(),
+                                                                   std::numeric_limits<int>::max()));
+                };
+                const SDL_Point center_world{snap_axis(center_x), snap_axis(center_y)};
+
+                constexpr int kGridPointSizePx = 2;
+                constexpr int kGridPointHalf = kGridPointSizePx / 2;
+                constexpr int kHighlightPointSizePx = 4;
+                constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
+
+                SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+                Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+                SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+                SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+
+                auto [view_min_x, view_min_z, view_max_x, view_max_z] = cam.get_current_view().get_bounds();
+                const float view_world_w = std::max(1.0f, static_cast<float>(std::abs(view_max_x - view_min_x)));
+                const float view_world_h = std::max(1.0f, static_cast<float>(std::abs(view_max_z - view_min_z)));
+                const float base_view_span = std::min(view_world_w, view_world_h);
+                const float radius_world = std::max(static_cast<float>(cell * 2), base_view_span * 0.055f);
+                const int radius_cells = std::max(4, static_cast<int>(std::ceil(radius_world / static_cast<float>(cell))));
+                const float radius_sq = radius_world * radius_world;
+
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                for (int gy = -radius_cells; gy <= radius_cells; ++gy) {
+                    for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
+                        const float dx = static_cast<float>(gx * cell);
+                        const float dy = static_cast<float>(gy * cell);
+                        const float dist_sq = dx * dx + dy * dy;
+                        if (dist_sq > radius_sq) {
+                            continue;
+                        }
+
+                        const float world_x = static_cast<float>(center_world.x + gx * cell);
+                        const float world_y = static_cast<float>(center_world.y + gy * cell);
+                        if (world_y > 0.0f) {
+                            continue;
+                        }
+
+                        SDL_FPoint screen_point{};
+                        if (!cam.project_world_point(SDL_FPoint{world_x, world_y}, target_world_z, screen_point) ||
+                            !std::isfinite(screen_point.x) ||
+                            !std::isfinite(screen_point.y)) {
+                            continue;
+                        }
+
+                        const float dist = std::sqrt(std::max(0.0f, dist_sq));
+                        const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);
+                        const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));
+                        const bool is_cursor_intersection = (gx == 0 && gy == 0);
+                        if (is_cursor_intersection) {
+                            SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
+                        } else {
+                            SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+                        }
+
+                        const int px = static_cast<int>(std::lround(screen_point.x));
+                        const int py = static_cast<int>(std::lround(screen_point.y));
+                        const SDL_FRect point_rect{
+                            static_cast<float>(px - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
+                            static_cast<float>(py - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
+                            static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx),
+                            static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx)};
+                        SDL_RenderFillRect(renderer, &point_rect);
+                    }
+                }
+
+                SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+                SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+            }
+        }
 
         const bool shift_now = is_shift_key_down();
 
@@ -19564,6 +19684,183 @@ RoomEditor::EditorInteractionState RoomEditor::current_editor_interaction_state(
 bool RoomEditor::any_editor_point_selected() const {
     const EditorInteractionState state = current_editor_interaction_state();
     return state.camera_blocked;
+}
+
+bool RoomEditor::is_xy_overlay_mode_active() const {
+    return anchor_mode_active() ||
+           light_mode_active() ||
+           oval_mode_active() ||
+           hitbox_mode_active() ||
+           attack_box_mode_active() ||
+           impassable_box_mode_active();
+}
+
+bool RoomEditor::resolve_selected_overlay_point_floor_xz(SDL_FPoint& out_world_xz) const {
+    out_world_xz = SDL_FPoint{0.0f, 0.0f};
+    if (!assets_) {
+        return false;
+    }
+    const WarpedScreenGrid& cam = assets_->getView();
+
+    if ((anchor_mode_active() || light_mode_active()) &&
+        anchor_edit_.target_asset &&
+        !anchor_edit_.selected_anchor_name.empty()) {
+        const auto anchor = anchor_edit_.target_asset->anchor_state(
+            anchor_edit_.selected_anchor_name,
+            anchor_points::GridMaterialization::None,
+            Asset::AnchorResolveMode::ForceRecompute);
+        if (anchor.has_value() && anchor->is_active()) {
+            out_world_xz.x = anchor->world_pos().x;
+            out_world_xz.y = static_cast<float>(anchor->world_z);
+            return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
+        }
+    }
+
+    if (oval_mode_active()) {
+        if (oval_edit_.center_selected && oval_edit_.has_center_world) {
+            out_world_xz.x = oval_edit_.center_world_x;
+            out_world_xz.y = oval_edit_.center_world_z;
+            return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
+        }
+        if (oval_edit_.selected_point_index >= 0) {
+            const int selected = oval_edit_.selected_point_index;
+            for (const auto& handle : oval_edit_.handles) {
+                if (handle.point_index == selected && handle.has_final_screen_px) {
+                    render_projection::CameraRay ray{};
+                    if (!cam.build_camera_ray_from_screen(handle.final_screen_px, ray)) {
+                        continue;
+                    }
+                    render_projection::WorldPoint3 floor_point{};
+                    if (intersect_camera_ray_on_ground_plane(ray, floor_point)) {
+                        out_world_xz.x = floor_point.x;
+                        out_world_xz.y = floor_point.z;
+                        return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    auto resolve_runtime_box_point = [&](Asset* target_asset,
+                                         int selected_box_index,
+                                         int selected_point_index,
+                                         const std::vector<Asset::RuntimeBoxVolume>& volumes) -> bool {
+        if (!target_asset || selected_box_index < 0 || selected_point_index < 0) {
+            return false;
+        }
+        if (selected_box_index >= static_cast<int>(volumes.size())) {
+            return false;
+        }
+        const auto& volume = volumes[static_cast<std::size_t>(selected_box_index)];
+        if (!volume.valid) {
+            return false;
+        }
+        const int point_index = std::clamp(selected_point_index, 0, 7);
+        const auto& point = volume.world_points[static_cast<std::size_t>(point_index)];
+        out_world_xz.x = point.x;
+        out_world_xz.y = point.z;
+        return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
+    };
+
+    if (hitbox_mode_active() &&
+        hitbox_edit_.target_asset &&
+        resolve_runtime_box_point(hitbox_edit_.target_asset,
+                                  hitbox_edit_.selected_box_index,
+                                  hitbox_edit_.selected_point_index,
+                                  hitbox_edit_.target_asset->current_hit_box_volumes())) {
+        return true;
+    }
+    if (attack_box_mode_active() &&
+        attack_box_edit_.target_asset &&
+        resolve_runtime_box_point(attack_box_edit_.target_asset,
+                                  attack_box_edit_.selected_box_index,
+                                  attack_box_edit_.selected_point_index,
+                                  attack_box_edit_.target_asset->current_attack_box_volumes())) {
+        return true;
+    }
+    if (impassable_box_mode_active() &&
+        impassable_box_edit_.target_asset &&
+        impassable_box_edit_.target_asset->info &&
+        impassable_box_edit_.selected_box_index >= 0 &&
+        impassable_box_edit_.selected_point_index >= 0) {
+        const auto& authored_shapes = impassable_box_edit_.target_asset->info->impassable_shapes_payload();
+        const int shape_index = impassable_box_edit_.selected_box_index;
+        if (shape_index < static_cast<int>(authored_shapes.size())) {
+            ImpassableShapeProjection projection{};
+            if (project_impassable_shape(*impassable_box_edit_.target_asset,
+                                         authored_shapes[static_cast<std::size_t>(shape_index)],
+                                         cam,
+                                         projection)) {
+                const int point_index = impassable_box_edit_.selected_point_index;
+                if (point_index < static_cast<int>(projection.floor_world_points.size())) {
+                    out_world_xz = projection.floor_world_points[static_cast<std::size_t>(point_index)];
+                    return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+void RoomEditor::refresh_scroll_overlay_preview() {
+    if (!scroll_preview_floor_overlay_active_) {
+        return;
+    }
+    if (!is_xy_overlay_mode_active() || !any_editor_point_selected()) {
+        scroll_preview_floor_overlay_active_ = false;
+        return;
+    }
+    SDL_FPoint selected_world_xz{};
+    if (!resolve_selected_overlay_point_floor_xz(selected_world_xz)) {
+        scroll_preview_floor_overlay_active_ = false;
+    }
+}
+
+Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
+    Assets::DevGridOverlayContext ctx{};
+    if (!enabled_ || !assets_) {
+        return ctx;
+    }
+
+    auto mode_target_asset = [&]() -> Asset* {
+        if (anchor_mode_active() || light_mode_active()) return anchor_edit_.target_asset;
+        if (oval_mode_active()) return oval_edit_.target_asset;
+        if (hitbox_mode_active()) return hitbox_edit_.target_asset;
+        if (attack_box_mode_active()) return attack_box_edit_.target_asset;
+        if (impassable_box_mode_active()) return impassable_box_edit_.target_asset;
+        return nullptr;
+    };
+
+    Asset* target = mode_target_asset();
+    if (!is_xy_overlay_mode_active() || !target) {
+        return ctx;
+    }
+
+    ctx.kind = Assets::DevGridOverlayKind::XYPlaneAtAssetDepth;
+    ctx.target_world_z = static_cast<float>(target->world_z());
+
+    if (scroll_preview_floor_overlay_active_) {
+        SDL_FPoint selected_world_xz{};
+        if (resolve_selected_overlay_point_floor_xz(selected_world_xz)) {
+            const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
+            auto snap_axis = [cell](float value) -> int {
+                const long double ratio = static_cast<long double>(value) / static_cast<long double>(cell);
+                const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
+                return static_cast<int>(std::clamp<long long>(snapped,
+                                                               std::numeric_limits<int>::min(),
+                                                               std::numeric_limits<int>::max()));
+            };
+
+            ctx.kind = Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint;
+            ctx.exact_floor_xz = selected_world_xz;
+            ctx.snapped_floor_xz = SDL_Point{snap_axis(selected_world_xz.x), snap_axis(selected_world_xz.y)};
+            ctx.has_selected_point_center = true;
+        }
+    }
+
+    return ctx;
 }
 
 int RoomEditor::find_hitbox_corner_at_screen_point(SDL_Point screen_point,

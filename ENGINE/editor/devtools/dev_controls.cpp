@@ -4276,6 +4276,13 @@ bool DevControls::is_runtime_light_editor_active() const {
     return room_editor_->is_light_edit_mode_active();
 }
 
+Assets::DevGridOverlayContext DevControls::dev_grid_overlay_context() const {
+    if (!room_editor_ || !room_editor_->is_enabled()) {
+        return {};
+    }
+    return room_editor_->dev_grid_overlay_context();
+}
+
 const Asset* DevControls::frame_editor_target() const {
     if (!frame_editor_session_ || !frame_editor_session_->is_active()) {
         return nullptr;

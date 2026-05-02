@@ -139,6 +139,7 @@ public:
     bool is_grid_overlay_enabled() const { return grid_overlay_enabled_; }
     bool is_snap_to_grid_enabled() const { return snap_to_grid_enabled_; }
     int  grid_cell_size_px() const { return grid_cell_size_px_; }
+    Assets::DevGridOverlayContext dev_grid_overlay_context() const;
 
     void begin_frame_editor_session(Asset* asset,
                                     std::shared_ptr<animation_editor::AnimationDocument> document,

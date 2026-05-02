@@ -971,6 +971,13 @@ int Assets::dev_grid_overlay_cell_size_px() const {
     return std::max(1, dev_controls_->grid_cell_size_px());
 }
 
+Assets::DevGridOverlayContext Assets::dev_grid_overlay_context() const {
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return {};
+    }
+    return dev_controls_->dev_grid_overlay_context();
+}
+
 float Assets::boundary_min_visible_screen_ratio() const {
     return boundary_min_visible_screen_ratio_;
 }

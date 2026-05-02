@@ -54,6 +54,20 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
+    enum class DevGridOverlayKind {
+        FloorMouseCentered,
+        XYPlaneAtAssetDepth,
+        FloorCenteredOnSelectedPoint,
+    };
+
+    struct DevGridOverlayContext {
+        DevGridOverlayKind kind = DevGridOverlayKind::FloorMouseCentered;
+        float target_world_z = 0.0f;
+        SDL_FPoint exact_floor_xz{0.0f, 0.0f};
+        SDL_Point snapped_floor_xz{0, 0};
+        bool has_selected_point_center = false;
+    };
+
     class WorldMutationBatch {
     public:
         explicit WorldMutationBatch(Assets* owner = nullptr) : owner_(owner) {}
@@ -257,6 +271,7 @@ public:
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }
     bool dev_grid_overlay_enabled() const;
     int dev_grid_overlay_cell_size_px() const;
+    DevGridOverlayContext dev_grid_overlay_context() const;
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
 

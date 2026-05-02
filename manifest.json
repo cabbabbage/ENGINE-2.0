@@ -27291,9 +27291,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            85,
-            173,
+            129,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27348,7 +27348,7 @@
           "display_color": [
             36,
             242,
-            182,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27371,9 +27371,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            31,
-            66,
             204,
+            134,
+            71,
             255
           ],
           "edge_smoothness": 4,
@@ -27396,9 +27396,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            31,
             204,
-            31,
+            51,
+            122,
             255
           ],
           "edge_smoothness": 4,
@@ -27456,8 +27456,8 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            215,
             36,
+            68,
             242,
             255
           ],
@@ -27515,16 +27515,16 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -7448,
-          "camera_center_dz": -2983,
-          "camera_height_px": 242,
-          "camera_tilt_deg": 47.85535430908203,
-          "camera_zoom_percent": 30,
+          "camera_center_dx": -4727,
+          "camera_center_dz": -2636,
+          "camera_height_px": 1030,
+          "camera_tilt_deg": 37.847530364990234,
+          "camera_zoom_percent": 14,
           "curvyness": 2,
           "display_color": [
-            242,
-            110,
+            174,
             85,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27710,6 +27710,7 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
+              "priority": 5,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27777,9 +27778,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            114,
+            36,
+            242,
+            44,
             255
           ],
           "edge_smoothness": 96,

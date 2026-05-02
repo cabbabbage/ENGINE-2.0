@@ -298,7 +298,8 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
     const float view_world_h = std::max(1.0f, static_cast<float>(std::abs(view_max_z - view_min_z)));
     const float base_view_span = std::min(view_world_w, view_world_h);
     // Keep a stable on-screen footprint by basing radius on current visible world span.
-    const float radius_world = std::max(static_cast<float>(cell * 4), base_view_span * 0.11f);
+    // Requested tuning: render this screen-relative radius at half of its previous size.
+    const float radius_world = std::max(static_cast<float>(cell * 2), base_view_span * 0.055f);
     const int radius_cells = std::max(4, static_cast<int>(std::ceil(radius_world / static_cast<float>(cell))));
     const float radius_sq = radius_world * radius_world;
 
@@ -320,7 +321,8 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
 
             const float dist = std::sqrt(std::max(0.0f, dist_sq));
             const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);
-            const Uint8 alpha = static_cast<Uint8>(std::lround(24.0f + (1.0f - edge_t) * 156.0f));
+            // Fade all the way to transparent at the edge (avoid residual dark/black ring).
+            const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));
             const bool is_cursor_intersection = (gx == 0 && gy == 0);
             if (is_cursor_intersection) {
                 SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);

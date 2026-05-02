@@ -342,6 +342,9 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     if (committed_cycle_boundary) {
         clear_attack_commitment();
     }
+    if (attack_recovery_sequence_active()) {
+        return false;
+    }
     if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
         if (committed_cycle_boundary && current_animation_is_attack()) {
             switch_to(animation_update::detail::kDefaultAnimation,
@@ -466,6 +469,9 @@ bool AnimationRuntime::current_animation_is_attack() const {
 }
 
 bool AnimationRuntime::auto_attack_commitment_active() const {
+    if (attack_recovery_sequence_active()) {
+        return true;
+    }
     if (!self_ || !self_->info || !current_animation_is_attack()) {
         return false;
     }
@@ -481,9 +487,18 @@ void AnimationRuntime::clear_attack_commitment() {
     committed_attack_animation_id_.clear();
     committed_attack_last_dispatched_frame_index_ = -1;
     committed_attack_last_payload_id_.clear();
+    attack_recovery_pending_ = false;
+    attack_recovery_animation_id_.clear();
+}
+
+bool AnimationRuntime::attack_recovery_sequence_active() const {
+    return attack_recovery_pending_ && !attack_recovery_animation_id_.empty();
 }
 
 void AnimationRuntime::dispatch_active_attack_payload() {
+    if (attack_recovery_sequence_active()) {
+        return;
+    }
     if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
         clear_attack_commitment();
         return;
@@ -1029,6 +1044,10 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
                                               ? std::string{animation_update::detail::kDefaultAnimation}
                                               : anim->on_end_animation;
             const std::string resolved = resolve_animation(*self_, requested);
+            if (current_animation_is_attack()) {
+                attack_recovery_pending_ = true;
+                attack_recovery_animation_id_ = resolved;
+            }
             switch_to(resolved, path_index_for(requested));
             frame = self_->current_frame;
             if (!frame) {
@@ -1094,6 +1113,11 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     AnimationFrame* new_frame = anim.get_first_frame(path_index);
     self_->current_animation = it->first;
     self_->current_frame     = new_frame;
+    if (attack_recovery_pending_ &&
+        self_->current_animation != attack_recovery_animation_id_) {
+        attack_recovery_pending_ = false;
+        attack_recovery_animation_id_.clear();
+    }
     const bool switched_to_attack =
         animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
     if (!switched_to_attack) {

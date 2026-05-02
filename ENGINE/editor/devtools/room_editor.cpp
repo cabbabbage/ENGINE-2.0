@@ -4462,17 +4462,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     center_y = 0.0f;
                 }
 
-                auto snap_axis = [cell](float value) -> int {
-                    const long double ratio = static_cast<long double>(value) / static_cast<long double>(cell);
-                    const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
-                    return static_cast<int>(std::clamp<long long>(snapped,
-                                                                   std::numeric_limits<int>::min(),
-                                                                   std::numeric_limits<int>::max()));
-                };
-                const SDL_Point center_world{snap_axis(center_x), snap_axis(center_y)};
                 SDL_FPoint center_screen{};
                 if (!cam.project_world_point(
-                        SDL_FPoint{static_cast<float>(center_world.x), static_cast<float>(center_world.y)},
+                        SDL_FPoint{center_x, center_y},
                         target_world_z,
                         center_screen) ||
                     !std::isfinite(center_screen.x) ||
@@ -4506,7 +4498,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 float screen_step_y = static_cast<float>(cell);
                 SDL_FPoint sample_screen{};
                 if (cam.project_world_point(
-                        SDL_FPoint{static_cast<float>(center_world.x + cell), static_cast<float>(center_world.y)},
+                        SDL_FPoint{center_x + static_cast<float>(cell), center_y},
                         target_world_z,
                         sample_screen) &&
                     std::isfinite(sample_screen.x) &&
@@ -4519,7 +4511,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     }
                 }
                 if (cam.project_world_point(
-                        SDL_FPoint{static_cast<float>(center_world.x), static_cast<float>(center_world.y + cell)},
+                        SDL_FPoint{center_x, center_y + static_cast<float>(cell)},
                         target_world_z,
                         sample_screen) &&
                     std::isfinite(sample_screen.x) &&
@@ -4542,7 +4534,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                             continue;
                         }
 
-                        const float world_y = static_cast<float>(center_world.y + gy * cell);
+                        const float world_y = center_y + static_cast<float>(gy * cell);
                         if (world_y < 0.0f) {
                             continue;
                         }

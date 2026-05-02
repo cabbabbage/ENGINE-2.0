@@ -33,10 +33,10 @@
             }
         },
         "grid": {
-            "cell_size_px": 81.0,
+            "cell_size_px": 27.0,
             "overlay": {
                 "enabled": true,
-                "r": 4.0
+                "r": 3.0
             },
             "snap": {
                 "enabled": false

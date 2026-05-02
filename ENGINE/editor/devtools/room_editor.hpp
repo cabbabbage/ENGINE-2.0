@@ -550,6 +550,7 @@ private:
     EditorInteractionState current_editor_interaction_state() const;
     bool any_editor_point_selected() const;
     bool is_xy_overlay_mode_active() const;
+    bool is_xy_floor_preview_mode_active() const;
     bool resolve_selected_overlay_point_floor_xz(SDL_FPoint& out_world_xz) const;
     void refresh_scroll_overlay_preview();
     enum class EditorFramePropagationScope {
@@ -1305,6 +1306,7 @@ private:
     std::vector<RoomNavEntry> room_nav_entries_;
     bool room_nav_visible_ = false;
     bool scroll_preview_floor_overlay_active_ = false;
+    bool scroll_preview_xy_overlay_active_for_movement_ = false;
 
     double height_scale_factor_ = 1.1;
     DevCameraControls camera_controls_;

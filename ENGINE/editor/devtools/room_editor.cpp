@@ -2951,6 +2951,7 @@ void RoomEditor::update(const Input& input) {
 
     if (!enabled_) {
         scroll_preview_floor_overlay_active_ = false;
+        scroll_preview_xy_overlay_active_for_movement_ = false;
         if (mouse_controls_enabled_last_frame_) {
             enforce_mouse_controls_disabled();
         }
@@ -3238,11 +3239,20 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
 
-    if (pointer_event && scroll_preview_floor_overlay_active_) {
+    if (pointer_event && (scroll_preview_floor_overlay_active_ || scroll_preview_xy_overlay_active_for_movement_)) {
         scroll_preview_floor_overlay_active_ = false;
-    } else if (wheel_event && is_xy_overlay_mode_active() && any_editor_point_selected()) {
-        scroll_preview_floor_overlay_active_ = true;
-        refresh_scroll_overlay_preview();
+        scroll_preview_xy_overlay_active_for_movement_ = false;
+    } else if (wheel_event) {
+        if (movement_mode_active() &&
+            movement_edit_.point_selected &&
+            movement_edit_.frame_index > 0) {
+            scroll_preview_xy_overlay_active_for_movement_ = true;
+            scroll_preview_floor_overlay_active_ = false;
+        } else if (is_xy_floor_preview_mode_active() && any_editor_point_selected()) {
+            scroll_preview_floor_overlay_active_ = true;
+            scroll_preview_xy_overlay_active_for_movement_ = false;
+            refresh_scroll_overlay_preview();
+        }
     }
 
     const bool allow_tab_cycle_with_dropdown =
@@ -4463,6 +4473,42 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                                                    std::numeric_limits<int>::max()));
                 };
                 const SDL_Point center_world{snap_axis(center_x), snap_axis(center_y)};
+                SDL_FPoint center_screen{};
+                if (!cam.project_world_point(
+                        SDL_FPoint{static_cast<float>(center_world.x), static_cast<float>(center_world.y)},
+                        target_world_z,
+                        center_screen) ||
+                    !std::isfinite(center_screen.x) ||
+                    !std::isfinite(center_screen.y)) {
+                    center_screen = mouse_screen;
+                }
+
+                SDL_FPoint x_step_screen{};
+                SDL_FPoint y_step_screen{};
+                bool x_step_ok = cam.project_world_point(
+                    SDL_FPoint{static_cast<float>(center_world.x + cell), static_cast<float>(center_world.y)},
+                    target_world_z,
+                    x_step_screen);
+                bool y_step_ok = cam.project_world_point(
+                    SDL_FPoint{static_cast<float>(center_world.x), static_cast<float>(center_world.y + cell)},
+                    target_world_z,
+                    y_step_screen);
+                float spacing_px = static_cast<float>(cell);
+                if (x_step_ok && y_step_ok &&
+                    std::isfinite(x_step_screen.x) && std::isfinite(x_step_screen.y) &&
+                    std::isfinite(y_step_screen.x) && std::isfinite(y_step_screen.y)) {
+                    const float dx_x = x_step_screen.x - center_screen.x;
+                    const float dx_y = x_step_screen.y - center_screen.y;
+                    const float dy_x = y_step_screen.x - center_screen.x;
+                    const float dy_y = y_step_screen.y - center_screen.y;
+                    const float x_len = std::hypot(dx_x, dx_y);
+                    const float y_len = std::hypot(dy_x, dy_y);
+                    spacing_px = std::max(1.0f, (x_len + y_len) * 0.5f);
+                } else if (x_step_ok && std::isfinite(x_step_screen.x) && std::isfinite(x_step_screen.y)) {
+                    spacing_px = std::max(
+                        1.0f,
+                        std::hypot(x_step_screen.x - center_screen.x, x_step_screen.y - center_screen.y));
+                }
 
                 constexpr int kGridPointSizePx = 2;
                 constexpr int kGridPointHalf = kGridPointSizePx / 2;
@@ -4494,16 +4540,13 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
                         const float world_x = static_cast<float>(center_world.x + gx * cell);
                         const float world_y = static_cast<float>(center_world.y + gy * cell);
-                        if (world_y > 0.0f) {
+                        if (world_y < 0.0f) {
                             continue;
                         }
 
-                        SDL_FPoint screen_point{};
-                        if (!cam.project_world_point(SDL_FPoint{world_x, world_y}, target_world_z, screen_point) ||
-                            !std::isfinite(screen_point.x) ||
-                            !std::isfinite(screen_point.y)) {
-                            continue;
-                        }
+                        SDL_FPoint screen_point{
+                            center_screen.x + (static_cast<float>(gx) * spacing_px),
+                            center_screen.y + (static_cast<float>(gy) * spacing_px)};
 
                         const float dist = std::sqrt(std::max(0.0f, dist_sq));
                         const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);
@@ -19687,6 +19730,16 @@ bool RoomEditor::any_editor_point_selected() const {
 }
 
 bool RoomEditor::is_xy_overlay_mode_active() const {
+    if (scroll_preview_xy_overlay_active_for_movement_ &&
+        movement_mode_active() &&
+        movement_edit_.point_selected &&
+        movement_edit_.frame_index > 0) {
+        return true;
+    }
+    return is_xy_floor_preview_mode_active();
+}
+
+bool RoomEditor::is_xy_floor_preview_mode_active() const {
     return anchor_mode_active() ||
            light_mode_active() ||
            oval_mode_active() ||
@@ -19805,10 +19858,18 @@ bool RoomEditor::resolve_selected_overlay_point_floor_xz(SDL_FPoint& out_world_x
 }
 
 void RoomEditor::refresh_scroll_overlay_preview() {
+    if (scroll_preview_xy_overlay_active_for_movement_) {
+        if (!(movement_mode_active() &&
+              movement_edit_.point_selected &&
+              movement_edit_.frame_index > 0)) {
+            scroll_preview_xy_overlay_active_for_movement_ = false;
+        }
+    }
+
     if (!scroll_preview_floor_overlay_active_) {
         return;
     }
-    if (!is_xy_overlay_mode_active() || !any_editor_point_selected()) {
+    if (!is_xy_floor_preview_mode_active() || !any_editor_point_selected()) {
         scroll_preview_floor_overlay_active_ = false;
         return;
     }
@@ -19827,6 +19888,7 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
     auto mode_target_asset = [&]() -> Asset* {
         if (anchor_mode_active() || light_mode_active()) return anchor_edit_.target_asset;
         if (oval_mode_active()) return oval_edit_.target_asset;
+        if (movement_mode_active()) return movement_edit_.target_asset;
         if (hitbox_mode_active()) return hitbox_edit_.target_asset;
         if (attack_box_mode_active()) return attack_box_edit_.target_asset;
         if (impassable_box_mode_active()) return impassable_box_edit_.target_asset;
@@ -19834,7 +19896,29 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
     };
 
     Asset* target = mode_target_asset();
-    if (!is_xy_overlay_mode_active() || !target) {
+    if (!target) {
+        return ctx;
+    }
+
+    if (movement_mode_active()) {
+        if (!scroll_preview_xy_overlay_active_for_movement_) {
+            return ctx;
+        }
+        if (movement_edit_.rel_positions.empty()) {
+            return ctx;
+        }
+        const int index = std::clamp(
+            movement_edit_.frame_index,
+            0,
+            static_cast<int>(movement_edit_.rel_positions.size()) - 1);
+        const SDL_Point anchor = movement_asset_anchor_world();
+        ctx.kind = Assets::DevGridOverlayKind::XYPlaneAtAssetDepth;
+        ctx.target_world_z = movement_edit_.rel_positions[static_cast<std::size_t>(index)].y +
+                             static_cast<float>(anchor.y);
+        return ctx;
+    }
+
+    if (!is_xy_floor_preview_mode_active()) {
         return ctx;
     }
 

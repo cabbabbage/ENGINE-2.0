@@ -1524,9 +1524,6 @@ void DevControls::apply_grid_resolution_change(int resolution) {
     if (assets_) {
         assets_->apply_map_grid_settings(settings, false);
     }
-    if (!grid_overlay_resolution_user_override_) {
-        apply_overlay_grid_resolution(clamped, false, false, true);
-    }
     if (map_grid_save_cb_) {
         map_grid_save_cb_();
     } else {
@@ -1690,11 +1687,9 @@ void DevControls::sync_misc_options_from_map_info() {
     const int tile_size = read_map_tile_size_or_default8();
     write_map_tile_size(tile_size);
     grid_resolution_r_ = tile_size;
-    if (!grid_overlay_resolution_user_override_) {
-        apply_overlay_grid_resolution(tile_size, false, false, true);
-    } else {
-        apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, false, true);
-    }
+    // Overlay resolution is owned by user dev setting (Ctrl+Up/Down path).
+    // Never sync overlay resolution from map tile/grid resolution.
+    apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, false, true);
     if (assets_) {
         MapGridSettings settings = MapGridSettings::from_json(&(*map_info_json_)["map_grid_settings"]);
         assets_->apply_map_grid_settings(settings, false);

@@ -966,7 +966,7 @@ bool Assets::dev_grid_overlay_enabled() const {
 
 int Assets::dev_grid_overlay_cell_size_px() const {
     if (!dev_controls_ || !dev_controls_->is_enabled()) {
-        return map_grid_settings_.spacing();
+        return 1;
     }
     return std::max(1, dev_controls_->grid_cell_size_px());
 }

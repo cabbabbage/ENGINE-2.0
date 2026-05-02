@@ -24077,6 +24077,13 @@ void RoomEditor::update_grid_resolution_for_selection(Asset* primary) {
         return;
     }
 
+    // Resolution overrides are allowed only while spawn-group config is open.
+    // This keeps overlay resolution independent from editor/selection changes.
+    if (!is_spawn_group_panel_visible()) {
+        clear_selection_grid_resolution_override();
+        return;
+    }
+
     if (snap_to_grid_enabled_) {
         clear_selection_grid_resolution_override();
         return;

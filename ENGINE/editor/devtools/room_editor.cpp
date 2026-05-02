@@ -4502,6 +4502,36 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 const int radius_cells = std::max(4, static_cast<int>(std::ceil(radius_world / static_cast<float>(cell))));
                 const float radius_sq = radius_world * radius_world;
 
+                float screen_step_x = static_cast<float>(cell);
+                float screen_step_y = static_cast<float>(cell);
+                SDL_FPoint sample_screen{};
+                if (cam.project_world_point(
+                        SDL_FPoint{static_cast<float>(center_world.x + cell), static_cast<float>(center_world.y)},
+                        target_world_z,
+                        sample_screen) &&
+                    std::isfinite(sample_screen.x) &&
+                    std::isfinite(sample_screen.y)) {
+                    const float dx = sample_screen.x - center_screen.x;
+                    const float dy = sample_screen.y - center_screen.y;
+                    const float len = std::sqrt(dx * dx + dy * dy);
+                    if (std::isfinite(len) && len >= 1.0f) {
+                        screen_step_x = len;
+                    }
+                }
+                if (cam.project_world_point(
+                        SDL_FPoint{static_cast<float>(center_world.x), static_cast<float>(center_world.y + cell)},
+                        target_world_z,
+                        sample_screen) &&
+                    std::isfinite(sample_screen.x) &&
+                    std::isfinite(sample_screen.y)) {
+                    const float dx = sample_screen.x - center_screen.x;
+                    const float dy = sample_screen.y - center_screen.y;
+                    const float len = std::sqrt(dx * dx + dy * dy);
+                    if (std::isfinite(len) && len >= 1.0f) {
+                        screen_step_y = len;
+                    }
+                }
+
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
                 for (int gy = -radius_cells; gy <= radius_cells; ++gy) {
                     for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
@@ -4512,15 +4542,14 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                             continue;
                         }
 
-                        const float world_x = static_cast<float>(center_world.x + gx * cell);
                         const float world_y = static_cast<float>(center_world.y + gy * cell);
-                        if (world_y > 0.0f) {
+                        if (world_y < 0.0f) {
                             continue;
                         }
-                        SDL_FPoint screen_point{};
-                        if (!cam.project_world_point(SDL_FPoint{world_x, world_y}, target_world_z, screen_point)) {
-                            continue;
-                        }
+                        const SDL_FPoint screen_point{
+                            center_screen.x + static_cast<float>(gx) * screen_step_x,
+                            center_screen.y - static_cast<float>(gy) * screen_step_y
+                        };
 
                         const float dist = std::sqrt(std::max(0.0f, dist_sq));
                         const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);

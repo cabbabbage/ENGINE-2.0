@@ -4445,127 +4445,102 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     return nullptr;
                 };
 
-                float center_x = 0.0f;
-                float center_y = 0.0f;
-                bool center_valid = false;
-                if (Asset* overlay_target = mode_target_asset(); overlay_target) {
-                    const float world_x = static_cast<float>(overlay_target->world_x());
-                    const float world_y = static_cast<float>(overlay_target->world_y());
-                    if (std::isfinite(world_x) && std::isfinite(world_y)) {
-                        center_x = world_x;
-                        center_y = world_y;
-                        center_valid = true;
+                Asset* overlay_target = mode_target_asset();
+                if (!overlay_target) {
+                    // No active editable target for XY overlay.
+                } else {
+                    const SDL_Point frame_dims = resolve_anchor_editor_frame_dimensions(overlay_target, nullptr);
+                    const int frame_w = std::max(1, frame_dims.x);
+                    const int frame_h = std::max(1, frame_dims.y);
+                    int sample_step_px = std::max(1, cell);
+                    constexpr int kMaxGridSamples = 32000;
+                    const int base_samples_x = (frame_w + sample_step_px - 1) / sample_step_px + 1;
+                    const int base_samples_y = (frame_h + sample_step_px - 1) / sample_step_px + 1;
+                    const int base_sample_count = base_samples_x * base_samples_y;
+                    if (base_sample_count > kMaxGridSamples) {
+                        const float oversample = std::sqrt(static_cast<float>(base_sample_count) /
+                                                           static_cast<float>(kMaxGridSamples));
+                        const int scale = std::max(1, static_cast<int>(std::ceil(oversample)));
+                        sample_step_px = std::max(sample_step_px, cell * scale);
                     }
-                }
-                if (!center_valid) {
-                    center_x = 0.0f;
-                    center_y = 0.0f;
-                }
 
-                SDL_FPoint center_screen{};
-                if (!cam.project_world_point(
-                        SDL_FPoint{center_x, center_y},
-                        target_world_z,
-                        center_screen) ||
-                    !std::isfinite(center_screen.x) ||
-                    !std::isfinite(center_screen.y)) {
-                    const SDL_Point fallback_screen_center = cam.get_screen_center();
-                    center_screen = SDL_FPoint{
-                        static_cast<float>(fallback_screen_center.x),
-                        static_cast<float>(fallback_screen_center.y)
+                    auto snap_tex = [sample_step_px](int value) -> int {
+                        return (value / sample_step_px) * sample_step_px;
                     };
-                }
+                    const int center_tex_x = std::clamp(snap_tex(frame_w / 2), 0, frame_w - 1);
+                    const int center_tex_y = std::clamp(snap_tex(frame_h / 2), 0, frame_h - 1);
+                    const float radius_tex_x = static_cast<float>(std::max(1, frame_w / 2));
+                    const float radius_tex_y = static_cast<float>(std::max(1, frame_h / 2));
+                    const float radius_tex_sq = radius_tex_x * radius_tex_x + radius_tex_y * radius_tex_y;
 
-                constexpr int kGridPointSizePx = 2;
-                constexpr int kGridPointHalf = kGridPointSizePx / 2;
-                constexpr int kHighlightPointSizePx = 4;
-                constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
+                    constexpr int kGridPointSizePx = 2;
+                    constexpr int kGridPointHalf = kGridPointSizePx / 2;
+                    constexpr int kHighlightPointSizePx = 4;
+                    constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
 
-                SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
-                Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
-                SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
-                SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+                    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+                    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+                    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+                    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
 
-                auto [view_min_x, view_min_z, view_max_x, view_max_z] = cam.get_current_view().get_bounds();
-                const float view_world_w = std::max(1.0f, static_cast<float>(std::abs(view_max_x - view_min_x)));
-                const float view_world_h = std::max(1.0f, static_cast<float>(std::abs(view_max_z - view_min_z)));
-                const float base_view_span = std::min(view_world_w, view_world_h);
-                const float radius_world = std::max(static_cast<float>(cell * 2), base_view_span * 0.055f);
-                const int radius_cells = std::max(4, static_cast<int>(std::ceil(radius_world / static_cast<float>(cell))));
-                const float radius_sq = radius_world * radius_world;
+                    DisplacedAssetAnchorPoint sample_anchor{};
+                    sample_anchor.name = "__xy_overlay_grid_point";
+                    sample_anchor.depth_offset =
+                        std::isfinite(target_world_z)
+                            ? (target_world_z - static_cast<float>(overlay_target->world_z()))
+                            : 0.0f;
+                    sample_anchor.resolve_x = true;
 
-                float screen_step_x = static_cast<float>(cell);
-                float screen_step_y = static_cast<float>(cell);
-                SDL_FPoint sample_screen{};
-                if (cam.project_world_point(
-                        SDL_FPoint{center_x + static_cast<float>(cell), center_y},
-                        target_world_z,
-                        sample_screen) &&
-                    std::isfinite(sample_screen.x) &&
-                    std::isfinite(sample_screen.y)) {
-                    const float dx = sample_screen.x - center_screen.x;
-                    const float dy = sample_screen.y - center_screen.y;
-                    const float len = std::sqrt(dx * dx + dy * dy);
-                    if (std::isfinite(len) && len >= 1.0f) {
-                        screen_step_x = len;
-                    }
-                }
-                if (cam.project_world_point(
-                        SDL_FPoint{center_x, center_y + static_cast<float>(cell)},
-                        target_world_z,
-                        sample_screen) &&
-                    std::isfinite(sample_screen.x) &&
-                    std::isfinite(sample_screen.y)) {
-                    const float dx = sample_screen.x - center_screen.x;
-                    const float dy = sample_screen.y - center_screen.y;
-                    const float len = std::sqrt(dx * dx + dy * dy);
-                    if (std::isfinite(len) && len >= 1.0f) {
-                        screen_step_y = len;
-                    }
-                }
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                    for (int tex_y = 0; tex_y < frame_h; tex_y += sample_step_px) {
+                        for (int tex_x = 0; tex_x < frame_w; tex_x += sample_step_px) {
+                            sample_anchor.texture_x = tex_x;
+                            sample_anchor.texture_y = tex_y;
+                            const auto resolved_sample = anchor_points::resolve_frame_anchor_sample(
+                                *overlay_target,
+                                sample_anchor,
+                                anchor_points::GridMaterialization::None);
+                            if (resolved_sample.resolved.missing ||
+                                !resolved_sample.has_flat_screen_px ||
+                                !resolved_sample.flat_relative_pixel_point.valid) {
+                                continue;
+                            }
+                            // Hide underground points for the XY overlay (floor is y=0).
+                            if (resolved_sample.flat_relative_pixel_point.y < 0.0f) {
+                                continue;
+                            }
+                            const SDL_FPoint screen_point = resolved_sample.flat_screen_px;
+                            if (!std::isfinite(screen_point.x) || !std::isfinite(screen_point.y)) {
+                                continue;
+                            }
 
-                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                for (int gy = -radius_cells; gy <= radius_cells; ++gy) {
-                    for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
-                        const float dx = static_cast<float>(gx * cell);
-                        const float dy = static_cast<float>(gy * cell);
-                        const float dist_sq = dx * dx + dy * dy;
-                        if (dist_sq > radius_sq) {
-                            continue;
+                            const float dx = static_cast<float>(tex_x - center_tex_x);
+                            const float dy = static_cast<float>(tex_y - center_tex_y);
+                            const float dist_sq = dx * dx + dy * dy;
+                            const float edge_t =
+                                std::clamp(std::sqrt(std::max(0.0f, dist_sq) / std::max(1.0f, radius_tex_sq)), 0.0f, 1.0f);
+                            const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));
+                            const bool is_cursor_intersection = (tex_x == center_tex_x && tex_y == center_tex_y);
+                            if (is_cursor_intersection) {
+                                SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
+                            } else {
+                                SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+                            }
+
+                            const int px = static_cast<int>(std::lround(screen_point.x));
+                            const int py = static_cast<int>(std::lround(screen_point.y));
+                            const SDL_FRect point_rect{
+                                static_cast<float>(px - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
+                                static_cast<float>(py - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
+                                static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx),
+                                static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx)};
+                            SDL_RenderFillRect(renderer, &point_rect);
                         }
-
-                        const float world_y = center_y + static_cast<float>(gy * cell);
-                        if (world_y < 0.0f) {
-                            continue;
-                        }
-                        const SDL_FPoint screen_point{
-                            center_screen.x + static_cast<float>(gx) * screen_step_x,
-                            center_screen.y - static_cast<float>(gy) * screen_step_y
-                        };
-
-                        const float dist = std::sqrt(std::max(0.0f, dist_sq));
-                        const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);
-                        const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));
-                        const bool is_cursor_intersection = (gx == 0 && gy == 0);
-                        if (is_cursor_intersection) {
-                            SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
-                        } else {
-                            SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
-                        }
-
-                        const int px = static_cast<int>(std::lround(screen_point.x));
-                        const int py = static_cast<int>(std::lround(screen_point.y));
-                        const SDL_FRect point_rect{
-                            static_cast<float>(px - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
-                            static_cast<float>(py - (is_cursor_intersection ? kHighlightPointHalf : kGridPointHalf)),
-                            static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx),
-                            static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx)};
-                        SDL_RenderFillRect(renderer, &point_rect);
                     }
-                }
 
-                SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
-                SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+                    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+                    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+                }
             }
         }
 

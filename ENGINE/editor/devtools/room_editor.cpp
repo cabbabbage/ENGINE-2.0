@@ -1578,6 +1578,7 @@ SDL_Point resolve_anchor_editor_frame_dimensions(const Asset* asset, const Anima
                 }
             }
         }
+
     }
 
     if ((frame_w <= 0 || frame_h <= 0) && asset) {
@@ -4544,6 +4545,46 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
+        struct FloorProjectionMarker {
+            SDL_FPoint floor_world_xz{0.0f, 0.0f};
+            SDL_Color color{255, 255, 255, 200};
+            float world_half_extent = 8.0f;
+        };
+        std::vector<FloorProjectionMarker> floor_projection_markers;
+        floor_projection_markers.reserve(256);
+
+        const int overlay_cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
+        auto add_floor_projection_marker_xz = [&](const SDL_FPoint& floor_world_xz,
+                                                  SDL_Color color,
+                                                  bool emphasized) {
+            if (!std::isfinite(floor_world_xz.x) || !std::isfinite(floor_world_xz.y)) {
+                return;
+            }
+            FloorProjectionMarker marker{};
+            marker.floor_world_xz = floor_world_xz;
+            marker.color = color;
+            marker.color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(color.a), 90, 255));
+            marker.world_half_extent =
+                static_cast<float>(std::max(2, overlay_cell / 2)) * (emphasized ? 1.3f : 1.0f);
+            floor_projection_markers.push_back(marker);
+        };
+        auto add_floor_projection_marker_screen = [&](const SDL_FPoint& screen_px,
+                                                      SDL_Color color,
+                                                      bool emphasized) {
+            if (!std::isfinite(screen_px.x) || !std::isfinite(screen_px.y)) {
+                return;
+            }
+            render_projection::CameraRay ray{};
+            if (!cam.build_camera_ray_from_screen(screen_px, ray)) {
+                return;
+            }
+            render_projection::WorldPoint3 floor_point{};
+            if (!intersect_camera_ray_on_ground_plane(ray, floor_point)) {
+                return;
+            }
+            add_floor_projection_marker_xz(SDL_FPoint{floor_point.x, floor_point.z}, color, emphasized);
+        };
+
         const bool shift_now = is_shift_key_down();
 
         if (shift_now && assets_ && !asset_editor_tab_scope_active()) {
@@ -4818,6 +4859,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                     sdl_render::Rect(renderer, &outline);
                 }
+                add_floor_projection_marker_screen(handle.final_screen_px, color, selected || hovered);
             }
         }
 
@@ -4842,6 +4884,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_Rect ring{cx - 11, cy - 11, 23, 23};
                     sdl_render::Rect(renderer, &ring);
                 }
+                add_floor_projection_marker_screen(oval_edit_.center_screen_px,
+                                                   center_color,
+                                                   oval_edit_.center_selected || oval_edit_.center_hovered);
             }
 
             if (oval_edit_.guide_screen_samples.size() >= 2) {
@@ -4926,6 +4971,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                     sdl_render::Rect(renderer, &outline);
                 }
+                add_floor_projection_marker_screen(handle.final_screen_px, color, selected || hovered);
             }
         }
 
@@ -4953,6 +4999,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     continue;
                 }
                 SDL_FPoint floor_screen = screen;
+                bool has_floor_world_xz = false;
+                SDL_FPoint floor_world_xz{0.0f, 0.0f};
                 if (movement_edit_.target_asset &&
                     static_cast<std::size_t>(i) < movement_edit_.rel_positions.size() &&
                     static_cast<std::size_t>(i) < movement_edit_.rel_positions_z.size()) {
@@ -4964,6 +5012,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     const float floor_world_z =
                         movement_edit_.rel_positions[static_cast<std::size_t>(i)].y +
                         static_cast<float>(anchor.y);
+                    floor_world_xz = SDL_FPoint{floor_world_xy.x, floor_world_z};
+                    has_floor_world_xz = std::isfinite(floor_world_xz.x) && std::isfinite(floor_world_xz.y);
                     if (!cam.project_world_point(floor_world_xy, floor_world_z, floor_screen)) {
                         floor_screen = cam.map_to_screen_f(SDL_FPoint{
                             floor_world_xy.x,
@@ -4978,9 +5028,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
                 const int floor_cx = static_cast<int>(std::lround(floor_screen.x));
                 const int floor_cy = static_cast<int>(std::lround(floor_screen.y));
-                SDL_SetRenderDrawColor(renderer, 70, 220, 255, 140);
-                SDL_Rect floor_rect{floor_cx - 3, floor_cy - 3, 7, 7};
-                sdl_render::FillRect(renderer, &floor_rect);
                 if (std::abs(cy - floor_cy) > 1 || std::abs(cx - floor_cx) > 1) {
                     SDL_SetRenderDrawColor(renderer, 70, 220, 255, 120);
                     SDL_RenderLine(renderer, floor_cx, floor_cy, cx, cy);
@@ -4999,6 +5046,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_Rect outline{point_rect.x - 1, point_rect.y - 1, point_rect.w + 2, point_rect.h + 2};
                     SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                     sdl_render::Rect(renderer, &outline);
+                }
+                if (has_floor_world_xz) {
+                    add_floor_projection_marker_xz(floor_world_xz, color, selected || hovered);
+                } else {
+                    add_floor_projection_marker_screen(screen, color, selected || hovered);
                 }
             }
         }
@@ -5019,6 +5071,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 int box_index = -1;
                 bool selected = false;
                 bool hovered = false;
+                std::array<Asset::RuntimeBoxPoint3, 8> world_points{};
                 std::array<SDL_FPoint, 8> points{};
                 BoxExtrusionHandleProjection extrusion_projection{};
             };
@@ -5039,6 +5092,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 entry.selected = render_handles && (entry.box_index == selected_box);
                 entry.hovered = render_handles && (entry.box_index == hovered_box);
                 for (int point_index = 0; point_index < 8; ++point_index) {
+                    entry.world_points[static_cast<std::size_t>(point_index)] =
+                        volume.world_points[static_cast<std::size_t>(point_index)];
                     project_runtime_box_point_to_screen(volume.world_points[static_cast<std::size_t>(point_index)],
                                                         cam,
                                                         entry.points[static_cast<std::size_t>(point_index)]);
@@ -5131,6 +5186,10 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                         sdl_render::Rect(renderer, &outline);
                     }
+                    const auto& wp = box.world_points[static_cast<std::size_t>(point_index)];
+                    add_floor_projection_marker_xz(SDL_FPoint{wp.x, wp.z},
+                                                   draw_color,
+                                                   selected_corner_point || hovered_corner_point);
                 }
                 if (!box.selected) {
                     continue;
@@ -5383,6 +5442,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         static_cast<float>(radius * 2 + 1)};
                     SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, point_color.a);
                     SDL_RenderFillRect(renderer, &handle_rect);
+                    if (point_index < projection.floor_world_points.size()) {
+                        add_floor_projection_marker_xz(projection.floor_world_points[point_index],
+                                                       point_color,
+                                                       point_selected || point_hovered);
+                    }
                 }
             }
         }
@@ -5539,6 +5603,51 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 }
             }
         }
+
+        auto render_floor_projection_markers = [&]() {
+            if (floor_projection_markers.empty()) {
+                return;
+            }
+            SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+            Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+            SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+            SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            for (const FloorProjectionMarker& marker : floor_projection_markers) {
+                SDL_FPoint x0 = cam.map_to_screen_f(SDL_FPoint{
+                    marker.floor_world_xz.x - marker.world_half_extent,
+                    marker.floor_world_xz.y});
+                SDL_FPoint x1 = cam.map_to_screen_f(SDL_FPoint{
+                    marker.floor_world_xz.x + marker.world_half_extent,
+                    marker.floor_world_xz.y});
+                SDL_FPoint z0 = cam.map_to_screen_f(SDL_FPoint{
+                    marker.floor_world_xz.x,
+                    marker.floor_world_xz.y - marker.world_half_extent});
+                SDL_FPoint z1 = cam.map_to_screen_f(SDL_FPoint{
+                    marker.floor_world_xz.x,
+                    marker.floor_world_xz.y + marker.world_half_extent});
+                if (!std::isfinite(x0.x) || !std::isfinite(x0.y) ||
+                    !std::isfinite(x1.x) || !std::isfinite(x1.y) ||
+                    !std::isfinite(z0.x) || !std::isfinite(z0.y) ||
+                    !std::isfinite(z1.x) || !std::isfinite(z1.y)) {
+                    continue;
+                }
+                SDL_SetRenderDrawColor(renderer, marker.color.r, marker.color.g, marker.color.b, marker.color.a);
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(x0.x)),
+                               static_cast<int>(std::lround(x0.y)),
+                               static_cast<int>(std::lround(x1.x)),
+                               static_cast<int>(std::lround(x1.y)));
+                SDL_RenderLine(renderer,
+                               static_cast<int>(std::lround(z0.x)),
+                               static_cast<int>(std::lround(z0.y)),
+                               static_cast<int>(std::lround(z1.x)),
+                               static_cast<int>(std::lround(z1.y)));
+            }
+            SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+            SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+        };
+        render_floor_projection_markers();
     }
 
     if (library_ui_ && library_ui_->is_visible()) {

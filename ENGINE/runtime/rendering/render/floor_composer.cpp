@@ -348,13 +348,21 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
     }
 
     if (exact_floor_center.has_value()) {
-        SDL_FPoint exact_screen{};
-        if (project_floor_point_to_screen(cam, exact_floor_center->x, exact_floor_center->y, exact_screen)) {
-            const int cx = static_cast<int>(std::lround(exact_screen.x));
-            const int cy = static_cast<int>(std::lround(exact_screen.y));
+        SDL_FPoint c{};
+        SDL_FPoint x0{};
+        SDL_FPoint x1{};
+        SDL_FPoint z0{};
+        SDL_FPoint z1{};
+        const float cross_half_world = static_cast<float>(std::max(2, cell / 2));
+        if (project_floor_point_to_screen(cam, exact_floor_center->x, exact_floor_center->y, c) &&
+            project_floor_point_to_screen(cam, exact_floor_center->x - cross_half_world, exact_floor_center->y, x0) &&
+            project_floor_point_to_screen(cam, exact_floor_center->x + cross_half_world, exact_floor_center->y, x1) &&
+            project_floor_point_to_screen(cam, exact_floor_center->x, exact_floor_center->y - cross_half_world, z0) &&
+            project_floor_point_to_screen(cam, exact_floor_center->x, exact_floor_center->y + cross_half_world, z1)) {
             SDL_SetRenderDrawColor(renderer, 235, 48, 48, 245);
-            SDL_RenderLine(renderer, cx - 8, cy, cx + 8, cy);
-            SDL_RenderLine(renderer, cx, cy - 8, cx, cy + 8);
+            SDL_RenderLine(renderer, x0.x, x0.y, x1.x, x1.y);
+            SDL_RenderLine(renderer, z0.x, z0.y, z1.x, z1.y);
+            SDL_RenderPoint(renderer, c.x, c.y);
         }
     }
 

@@ -4435,33 +4435,30 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
                 const float target_world_z = overlay_ctx.target_world_z;
 
-                float mouse_x = 0.0f;
-                float mouse_y = 0.0f;
-                SDL_GetMouseState(&mouse_x, &mouse_y);
-                const SDL_FPoint mouse_screen{mouse_x, mouse_y};
-                render_projection::CameraRay ray{};
-                if (!cam.build_camera_ray_from_screen(mouse_screen, ray)) {
-                    ray.valid = false;
-                }
+                auto mode_target_asset = [&]() -> Asset* {
+                    if (anchor_mode_active() || light_mode_active()) return anchor_edit_.target_asset;
+                    if (oval_mode_active()) return oval_edit_.target_asset;
+                    if (movement_mode_active()) return movement_edit_.target_asset;
+                    if (hitbox_mode_active()) return hitbox_edit_.target_asset;
+                    if (attack_box_mode_active()) return attack_box_edit_.target_asset;
+                    if (impassable_box_mode_active()) return impassable_box_edit_.target_asset;
+                    return nullptr;
+                };
 
                 float center_x = 0.0f;
                 float center_y = 0.0f;
                 bool center_valid = false;
-                if (ray.valid && std::isfinite(ray.origin.z) && std::isfinite(ray.direction.z) &&
-                    std::fabs(ray.direction.z) > 1.0e-5f) {
-                    const float t = (target_world_z - ray.origin.z) / ray.direction.z;
-                    if (std::isfinite(t)) {
-                        const float x = ray.origin.x + (ray.direction.x * t);
-                        const float y = ray.origin.y + (ray.direction.y * t);
-                        if (std::isfinite(x) && std::isfinite(y)) {
-                            center_x = x;
-                            center_y = y;
-                            center_valid = true;
-                        }
+                if (Asset* overlay_target = mode_target_asset(); overlay_target) {
+                    const float world_x = static_cast<float>(overlay_target->world_x());
+                    const float world_y = static_cast<float>(overlay_target->world_y());
+                    if (std::isfinite(world_x) && std::isfinite(world_y)) {
+                        center_x = world_x;
+                        center_y = world_y;
+                        center_valid = true;
                     }
                 }
                 if (!center_valid) {
-                    center_x = static_cast<float>(cam.get_screen_center().x);
+                    center_x = 0.0f;
                     center_y = 0.0f;
                 }
 
@@ -4480,34 +4477,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         center_screen) ||
                     !std::isfinite(center_screen.x) ||
                     !std::isfinite(center_screen.y)) {
-                    center_screen = mouse_screen;
-                }
-
-                SDL_FPoint x_step_screen{};
-                SDL_FPoint y_step_screen{};
-                bool x_step_ok = cam.project_world_point(
-                    SDL_FPoint{static_cast<float>(center_world.x + cell), static_cast<float>(center_world.y)},
-                    target_world_z,
-                    x_step_screen);
-                bool y_step_ok = cam.project_world_point(
-                    SDL_FPoint{static_cast<float>(center_world.x), static_cast<float>(center_world.y + cell)},
-                    target_world_z,
-                    y_step_screen);
-                float spacing_px = static_cast<float>(cell);
-                if (x_step_ok && y_step_ok &&
-                    std::isfinite(x_step_screen.x) && std::isfinite(x_step_screen.y) &&
-                    std::isfinite(y_step_screen.x) && std::isfinite(y_step_screen.y)) {
-                    const float dx_x = x_step_screen.x - center_screen.x;
-                    const float dx_y = x_step_screen.y - center_screen.y;
-                    const float dy_x = y_step_screen.x - center_screen.x;
-                    const float dy_y = y_step_screen.y - center_screen.y;
-                    const float x_len = std::hypot(dx_x, dx_y);
-                    const float y_len = std::hypot(dy_x, dy_y);
-                    spacing_px = std::max(1.0f, (x_len + y_len) * 0.5f);
-                } else if (x_step_ok && std::isfinite(x_step_screen.x) && std::isfinite(x_step_screen.y)) {
-                    spacing_px = std::max(
-                        1.0f,
-                        std::hypot(x_step_screen.x - center_screen.x, x_step_screen.y - center_screen.y));
+                    const SDL_Point fallback_screen_center = cam.get_screen_center();
+                    center_screen = SDL_FPoint{
+                        static_cast<float>(fallback_screen_center.x),
+                        static_cast<float>(fallback_screen_center.y)
+                    };
                 }
 
                 constexpr int kGridPointSizePx = 2;
@@ -4540,13 +4514,13 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
                         const float world_x = static_cast<float>(center_world.x + gx * cell);
                         const float world_y = static_cast<float>(center_world.y + gy * cell);
-                        if (world_y < 0.0f) {
+                        if (world_y > 0.0f) {
                             continue;
                         }
-
-                        SDL_FPoint screen_point{
-                            center_screen.x + (static_cast<float>(gx) * spacing_px),
-                            center_screen.y + (static_cast<float>(gy) * spacing_px)};
+                        SDL_FPoint screen_point{};
+                        if (!cam.project_world_point(SDL_FPoint{world_x, world_y}, target_world_z, screen_point)) {
+                            continue;
+                        }
 
                         const float dist = std::sqrt(std::max(0.0f, dist_sq));
                         const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);
@@ -22042,7 +22016,15 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
         movement_edit_.frame_index > 0 &&
         !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
         const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions_z.size()) - 1);
-        movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] += static_cast<float>(scroll_y * 4);
+        float next_z = movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] + static_cast<float>(scroll_y * 4);
+        if (snap_to_grid_enabled_) {
+            const int resolution = current_grid_resolution();
+            const float cell = std::ldexp(1.0f, std::max(0, resolution));
+            if (std::isfinite(cell) && cell > 0.0f) {
+                next_z = std::round(next_z / cell) * cell;
+            }
+        }
+        movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] = next_z;
         redistribute_movement_points_after_adjustment(index);
         sync_movement_panel_frame_values();
         if (input_) {
@@ -24073,48 +24055,9 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
 }
 
 void RoomEditor::update_grid_resolution_for_selection(Asset* primary) {
-    if (!shared_footer_bar_) {
-        return;
-    }
-
-    // Resolution overrides are allowed only while spawn-group config is open.
-    // This keeps overlay resolution independent from editor/selection changes.
-    if (!is_spawn_group_panel_visible()) {
-        clear_selection_grid_resolution_override();
-        return;
-    }
-
-    if (snap_to_grid_enabled_) {
-        clear_selection_grid_resolution_override();
-        return;
-    }
-
-    if (!primary || primary->spawn_id.empty()) {
-        clear_selection_grid_resolution_override();
-        return;
-    }
-
-    int selected_resolution = 0;
-    SpawnEntryResolution resolved = locate_spawn_entry(primary->spawn_id);
-    if (resolved.entry) {
-        selected_resolution = resolved.entry->value("resolution", 0);
-    } else if (primary->grid_resolution > 0) {
-        selected_resolution = primary->grid_resolution;
-    }
-    selected_resolution = vibble::grid::clamp_resolution(std::max(0, selected_resolution));
-    if (selected_resolution <= 0) {
-        clear_selection_grid_resolution_override();
-        return;
-    }
-
-    if (!selection_overlay_resolution_before_override_.has_value()) {
-        selection_overlay_resolution_before_override_ = vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
-    }
-    selection_overlay_resolution_override_ = selected_resolution;
-
-    if (vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution()) != selected_resolution) {
-        shared_footer_bar_->set_grid_resolution(selected_resolution);
-    }
+    (void)primary;
+    // Guardrail: selection changes must never mutate the global overlay resolution.
+    clear_selection_grid_resolution_override();
 }
 
 void RoomEditor::clear_selection_grid_resolution_override() {

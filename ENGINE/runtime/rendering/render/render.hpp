@@ -332,11 +332,10 @@ private:
     int screen_height_ = 1;
     SDL_Color map_clear_color_{69, 101, 74, 255};
 
-    // Optional SDL wrapper for scene.composite. The frame-graph texture resource
-    // remains authoritative even when SDL_GPUTexture interop is unavailable.
+    // Optional SDL wrapper for scene.composite (diagnostics/debug only).
+    // Frame-graph textures/resources remain authoritative for core rendering.
     SDL_Texture* scene_composite_resource_ = nullptr;
     GpuSceneRenderer::TextureResourceSpec scene_composite_resource_spec_{};
-    bool scene_composite_sdl_gpu_interop_available_ = true;
     SDL_Texture* scene_preblur_tex_ = nullptr;
     SDL_Texture* far_backdrop_sky_tex_ = nullptr;
     SDL_Texture* far_backdrop_mountains_tex_ = nullptr;

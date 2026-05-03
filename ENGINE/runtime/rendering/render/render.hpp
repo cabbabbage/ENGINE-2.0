@@ -326,7 +326,7 @@ private:
     int screen_height_ = 1;
     SDL_Color map_clear_color_{69, 101, 74, 255};
 
-    SDL_Texture* scene_composite_tex_ = nullptr;
+    SDL_Texture* scene_composite_resource_ = nullptr;
     GpuSceneRenderer::TextureResourceSpec scene_composite_resource_spec_{};
     SDL_Texture* scene_preblur_tex_ = nullptr;
     SDL_Texture* far_backdrop_sky_tex_ = nullptr;
@@ -344,7 +344,6 @@ private:
     std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
     bool gpu_runtime_path_enabled_ = false;
     bool gpu_frame_graph_strict_mode_ = true;
-    bool gpu_frame_graph_interop_supported_ = true;
     bool render_path_status_logged_ = false;
 
     bool debug_auto_paths_ = false;

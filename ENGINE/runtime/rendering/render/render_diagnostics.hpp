@@ -85,6 +85,12 @@ SDL_Texture* create_texture(SDL_Renderer* renderer,
                             SDL_TextureAccess access,
                             int w,
                             int h);
+SDL_Texture* create_frame_graph_texture(SDL_Renderer* renderer,
+                                        const std::string& resource_name,
+                                        SDL_PixelFormat format,
+                                        SDL_TextureAccess access,
+                                        int w,
+                                        int h);
 bool set_render_target(SDL_Renderer* renderer, SDL_Texture* texture);
 bool render_texture(SDL_Renderer* renderer,
                     SDL_Texture* texture,

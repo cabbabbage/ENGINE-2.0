@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -294,6 +295,10 @@ private:
                   const std::string& map_id);
 
     bool ensure_scene_target();
+    void enqueue_scene_composite_copy_pass_sequence(std::string_view writer_pass_name,
+                                                    std::string_view copy_pass_name,
+                                                    std::uint32_t scene_width,
+                                                    std::uint32_t scene_height);
     bool probe_frame_graph_interop(std::string& out_error);
     bool execute_gpu_frame_graph(std::string& out_error);
     bool ensure_far_backdrop_resources();

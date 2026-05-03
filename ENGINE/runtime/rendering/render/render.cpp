@@ -1180,6 +1180,43 @@ bool SceneRenderer::ensure_scene_target() {
     return scene_composite_resource_ != nullptr;
 }
 
+void SceneRenderer::enqueue_scene_composite_copy_pass_sequence(std::string_view writer_pass_name,
+                                                              std::string_view copy_pass_name,
+                                                              std::uint32_t scene_width,
+                                                              std::uint32_t scene_height) {
+    GpuFrameGraph::PassDescriptor write_pass{};
+    write_pass.type = GpuFrameGraph::PassType::Render;
+    write_pass.name = std::string(writer_pass_name);
+    write_pass.resources = {
+        GpuFrameGraph::ResourceDependency::write_resource("scene.composite")
+    };
+    write_pass.color_targets = {
+        GpuFrameGraph::ColorTargetBinding{
+            "scene.composite",
+            SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f},
+            SDL_GPU_LOADOP_CLEAR,
+            SDL_GPU_STOREOP_STORE
+        }
+    };
+    gpu_scene_renderer_->add_pass(std::move(write_pass));
+
+    GpuFrameGraph::PassDescriptor copy_pass{};
+    copy_pass.type = GpuFrameGraph::PassType::Copy;
+    copy_pass.name = std::string(copy_pass_name);
+    copy_pass.resources = {
+        GpuFrameGraph::ResourceDependency::read("scene.composite"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
+    };
+    copy_pass.blit.source_texture = "scene.composite";
+    copy_pass.blit.destination_texture = "scene.frame_graph_copy";
+    copy_pass.blit.use_swapchain_destination = false;
+    copy_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    copy_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
+    copy_pass.blit.width = scene_width;
+    copy_pass.blit.height = scene_height;
+    gpu_scene_renderer_->add_pass(std::move(copy_pass));
+}
+
 bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     out_error.clear();
 
@@ -1224,37 +1261,10 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
         return false;
     }
 
-    GpuFrameGraph::PassDescriptor probe_write_pass{};
-    probe_write_pass.type = GpuFrameGraph::PassType::Render;
-    probe_write_pass.name = "startup_probe_write_scene_composite";
-    probe_write_pass.resources = {
-        GpuFrameGraph::ResourceDependency::write_resource("scene.composite")
-    };
-    probe_write_pass.color_targets = {
-        GpuFrameGraph::ColorTargetBinding{
-            "scene.composite",
-            SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f},
-            SDL_GPU_LOADOP_CLEAR,
-            SDL_GPU_STOREOP_STORE
-        }
-    };
-    gpu_scene_renderer_->add_pass(std::move(probe_write_pass));
-
-    GpuFrameGraph::PassDescriptor probe_copy_pass{};
-    probe_copy_pass.type = GpuFrameGraph::PassType::Copy;
-    probe_copy_pass.name = "startup_probe_copy_scene_composite";
-    probe_copy_pass.resources = {
-        GpuFrameGraph::ResourceDependency::read("scene.composite"),
-        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
-    };
-    probe_copy_pass.blit.source_texture = "scene.composite";
-    probe_copy_pass.blit.destination_texture = "scene.frame_graph_copy";
-    probe_copy_pass.blit.use_swapchain_destination = false;
-    probe_copy_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
-    probe_copy_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    probe_copy_pass.blit.width = scene_width;
-    probe_copy_pass.blit.height = scene_height;
-    gpu_scene_renderer_->add_pass(std::move(probe_copy_pass));
+    enqueue_scene_composite_copy_pass_sequence("startup_probe_write_scene_composite",
+                                               "startup_probe_copy_scene_composite",
+                                               scene_width,
+                                               scene_height);
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed during startup probe." : frame_error;
@@ -1421,21 +1431,10 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
         return false;
     }
 
-    GpuFrameGraph::PassDescriptor present_pass{};
-    present_pass.type = GpuFrameGraph::PassType::Copy;
-    present_pass.name = "copy_scene_composite";
-    present_pass.resources = {
-        GpuFrameGraph::ResourceDependency::read("scene.composite"),
-        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
-    };
-    present_pass.blit.source_texture = "scene.composite";
-    present_pass.blit.destination_texture = "scene.frame_graph_copy";
-    present_pass.blit.use_swapchain_destination = false;
-    present_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
-    present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    present_pass.blit.width = scene_width;
-    present_pass.blit.height = scene_height;
-    gpu_scene_renderer_->add_pass(std::move(present_pass));
+    enqueue_scene_composite_copy_pass_sequence("runtime_validation_write_scene_composite",
+                                               "copy_scene_composite",
+                                               scene_width,
+                                               scene_height);
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;

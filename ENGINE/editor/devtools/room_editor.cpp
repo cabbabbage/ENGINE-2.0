@@ -23878,13 +23878,49 @@ std::pair<int, int> RoomEditor::get_room_dimensions() const {
     return {width, height};
 }
 
-int RoomEditor::current_grid_resolution() const {
+
+void RoomEditor::set_overlay_snap_resolution(int resolution) {
+    overlay_snap_resolution_ = vibble::grid::clamp_resolution(resolution);
     if (shared_footer_bar_) {
-        return vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
+        shared_footer_bar_->set_grid_resolution(overlay_snap_resolution_, false);
     }
-    MapGridSettings settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
-    settings.clamp();
-    return vibble::grid::clamp_resolution(settings.grid_resolution);
+}
+
+void RoomEditor::resnap_spawn_groups_to_overlay_resolution(int resolution) {
+    if (!snap_to_grid_enabled_ || !active_assets_) {
+        return;
+    }
+
+    const int clamped = vibble::grid::clamp_resolution(resolution);
+    std::unordered_set<std::string> processed_spawn_ids;
+    std::vector<Asset*> anchors;
+    anchors.reserve(selected_assets_.size());
+
+    for (Asset* asset : selected_assets_) {
+        if (!asset || asset->dead) continue;
+        if (!asset_belongs_to_room(asset)) continue;
+        if (asset->spawn_id.empty()) continue;
+        if (spawn_group_locked(asset->spawn_id)) continue;
+        if (!processed_spawn_ids.insert(asset->spawn_id).second) continue;
+        anchors.push_back(asset);
+    }
+
+    if (anchors.empty()) {
+        return;
+    }
+
+    bool any_changed = false;
+    for (Asset* anchor : anchors) {
+        any_changed = snap_spawn_group_to_resolution(anchor, clamped) || any_changed;
+    }
+
+    if (any_changed) {
+        refresh_spawn_group_config_ui();
+    }
+}
+
+int RoomEditor::current_grid_resolution() const {
+    return vibble::grid::clamp_resolution(overlay_snap_resolution_);
 }
 
 void RoomEditor::refresh_cursor_snap() {
@@ -26367,6 +26403,18 @@ void RoomEditorTestAccess::set_snap_to_grid_enabled(RoomEditor& editor, bool ena
 
 void RoomEditorTestAccess::set_shared_footer_present(RoomEditor& editor, bool present) {
     editor.shared_footer_bar_ = present ? reinterpret_cast<DevFooterBar*>(static_cast<std::uintptr_t>(1)) : nullptr;
+}
+
+void RoomEditorTestAccess::set_overlay_snap_resolution(RoomEditor& editor, int resolution) {
+    editor.overlay_snap_resolution_ = vibble::grid::clamp_resolution(resolution);
+}
+
+int RoomEditorTestAccess::current_grid_resolution(const RoomEditor& editor) {
+    return editor.current_grid_resolution();
+}
+
+void RoomEditorTestAccess::resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution) {
+    editor.resnap_spawn_groups_to_overlay_resolution(resolution);
 }
 
 void RoomEditorTestAccess::update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity) {

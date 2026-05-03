@@ -656,6 +656,32 @@ TEST_CASE("RoomEditor selection sync with snap enabled does not trigger spawn-gr
     CHECK(RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(editor) == 0);
 }
 
+TEST_CASE("RoomEditor explicit overlay snap resolution is source of truth") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_shared_footer_present(editor, true);
+
+    RoomEditorTestAccess::set_overlay_snap_resolution(editor, 6);
+    CHECK(RoomEditorTestAccess::current_grid_resolution(editor) == 6);
+
+    RoomEditorTestAccess::update_grid_resolution_for_selection(
+        editor,
+        reinterpret_cast<const void*>(static_cast<std::uintptr_t>(0x5678)));
+    CHECK(RoomEditorTestAccess::current_grid_resolution(editor) == 6);
+}
+
+TEST_CASE("RoomEditor overlay resolution resnap respects snap toggle") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::reset_snap_spawn_group_to_resolution_call_count(editor);
+
+    RoomEditorTestAccess::set_snap_to_grid_enabled(editor, false);
+    RoomEditorTestAccess::resnap_spawn_groups_to_overlay_resolution(editor, 5);
+    CHECK(RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(editor) == 0);
+
+    RoomEditorTestAccess::set_snap_to_grid_enabled(editor, true);
+    RoomEditorTestAccess::resnap_spawn_groups_to_overlay_resolution(editor, 5);
+    CHECK(RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(editor) == 0);
+}
+
 TEST_CASE("RoomEditor suppresses release action when pressed selection becomes invalid") {
     RoomEditor editor(nullptr, 1280, 720);
     int asset_a = 1;

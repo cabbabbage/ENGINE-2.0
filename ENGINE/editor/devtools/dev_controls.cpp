@@ -1502,7 +1502,11 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
         frame_editor_session_->set_snap_resolution(clamped);
     }
     if (room_editor_) {
+        room_editor_->set_overlay_snap_resolution(clamped);
         room_editor_->refresh_cursor_snap();
+        if (snap_to_grid_enabled_) {
+            room_editor_->resnap_spawn_groups_to_overlay_resolution(clamped);
+        }
     }
 }
 

@@ -111,6 +111,8 @@ public:
     SDL_Point camera_lock_target() const;
     void render_overlays(SDL_Renderer* renderer);
     void refresh_cursor_snap();
+    void set_overlay_snap_resolution(int resolution);
+    void resnap_spawn_groups_to_overlay_resolution(int resolution);
 
     void toggle_asset_library();
     void open_asset_library();
@@ -1237,6 +1239,7 @@ private:
 
     std::optional<int> selection_overlay_resolution_before_override_{};
     std::optional<int> selection_overlay_resolution_override_{};
+    int overlay_snap_resolution_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
 
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;
@@ -1428,6 +1431,9 @@ struct RoomEditorTestAccess {
     static void invoke_on_animation_editor_closed(RoomEditor& editor);
     static void set_snap_to_grid_enabled(RoomEditor& editor, bool enabled);
     static void set_shared_footer_present(RoomEditor& editor, bool present);
+    static void set_overlay_snap_resolution(RoomEditor& editor, int resolution);
+    static int current_grid_resolution(const RoomEditor& editor);
+    static void resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution);
     static void update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity);
     static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
     static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);

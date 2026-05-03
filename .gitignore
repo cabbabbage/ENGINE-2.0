@@ -24,7 +24,6 @@ x64/
 *.user
 *.obj
 *.log
-log.txt
 *.tlog
 *.pdb
 *.idb

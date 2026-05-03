@@ -1196,15 +1196,16 @@ bool SceneRenderer::ensure_scene_target() {
                                                               target_height);
     if (scene_composite_tex_) {
         SDL_SetTextureBlendMode(scene_composite_tex_, SDL_BLENDMODE_BLEND);
-        const SDL_PropertiesID props = SDL_GetTextureProperties(scene_composite_tex_);
-        SDL_GPUTexture* gpu_texture = props
-            ? static_cast<SDL_GPUTexture*>(SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr))
-            : nullptr;
-        if (!gpu_texture) {
+        // Force target initialization on backends that lazily materialize underlying GPU resources.
+        SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
+        if (!SDL_SetRenderTarget(renderer_, scene_composite_tex_)) {
             destroy_texture(scene_composite_tex_);
             scene_composite_tex_ = nullptr;
             return false;
         }
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        SDL_SetRenderTarget(renderer_, previous_target);
     }
     return scene_composite_tex_ != nullptr;
 }
@@ -1227,7 +1228,9 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     SDL_GPUTexture* gpu_texture = static_cast<SDL_GPUTexture*>(
         SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
     if (!gpu_texture) {
-        out_error = "SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER unavailable for scene composite texture.";
+        const char* renderer_name = SDL_GetRendererName(renderer_);
+        out_error = "SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER unavailable for scene composite texture. renderer=" +
+            std::string(renderer_name ? renderer_name : "unknown");
         return false;
     }
     if (!gpu_scene_renderer_->register_external_texture_resource("scene.interop_probe", gpu_texture)) {

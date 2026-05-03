@@ -38,6 +38,14 @@ bool GpuFrameGraph::fail_or_warn_missing(const std::string& message,
 
 GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& context,
                                                      const ExecuteOptions& options) const {
+    // Frame-graph resource dependency rule:
+    // - Any in-frame read (Source::FrameGraph + write=false) must have an earlier writer pass
+    //   in this same execute() call.
+    // - Resources that are intentionally provided by systems outside this frame graph (for
+    //   example imported history buffers or external producer outputs) must be declared as
+    //   Source::ExternalInput via ResourceDependency::imported_read().
+    // This keeps validation strict for accidental read-before-write while still supporting
+    // legitimate external inputs with an explicit annotation.
     ExecutionStats stats{};
     if (!options.dry_run && !context.command_buffer) {
         stats.success = false;
@@ -67,7 +75,9 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             if (dep.name.empty()) {
                 continue;
             }
-            if (!dep.write && resource_last_writer.find(dep.name) == resource_last_writer.end()) {
+            const bool is_external_input = dep.source == ResourceDependency::Source::ExternalInput;
+            if (!dep.write && !is_external_input &&
+                resource_last_writer.find(dep.name) == resource_last_writer.end()) {
                 const std::string message = "[GpuFrameGraph] Pass '" + pass.name +
                                             "' reads resource '" + dep.name +
                                             "' before any writer pass.";

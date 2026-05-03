@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 class GpuFrameGraph {
@@ -16,8 +17,26 @@ public:
     };
 
     struct ResourceDependency {
+        enum class Source {
+            FrameGraph,
+            ExternalInput
+        };
+
         std::string name;
         bool write = false;
+        Source source = Source::FrameGraph;
+
+        static ResourceDependency read(std::string resource_name) {
+            return ResourceDependency{std::move(resource_name), false, Source::FrameGraph};
+        }
+
+        static ResourceDependency write_resource(std::string resource_name) {
+            return ResourceDependency{std::move(resource_name), true, Source::FrameGraph};
+        }
+
+        static ResourceDependency imported_read(std::string resource_name) {
+            return ResourceDependency{std::move(resource_name), false, Source::ExternalInput};
+        }
     };
 
     struct RenderPassPayload {

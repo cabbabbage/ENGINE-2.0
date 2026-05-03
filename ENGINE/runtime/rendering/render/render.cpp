@@ -1278,7 +1278,7 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     probe_write_pass.type = GpuFrameGraph::PassType::Render;
     probe_write_pass.name = "startup_probe_write_scene_composite";
     probe_write_pass.resources = {
-        GpuFrameGraph::ResourceDependency{"scene.composite", true}
+        GpuFrameGraph::ResourceDependency::write_resource("scene.composite")
     };
     probe_write_pass.color_targets = {
         GpuFrameGraph::ColorTargetBinding{
@@ -1294,8 +1294,8 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     probe_copy_pass.type = GpuFrameGraph::PassType::Copy;
     probe_copy_pass.name = "startup_probe_copy_scene_composite";
     probe_copy_pass.resources = {
-        GpuFrameGraph::ResourceDependency{"scene.composite", false},
-        GpuFrameGraph::ResourceDependency{"scene.frame_graph_copy", true}
+        GpuFrameGraph::ResourceDependency::read("scene.composite"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
     };
     probe_copy_pass.blit.source_texture = "scene.composite";
     probe_copy_pass.blit.destination_texture = "scene.frame_graph_copy";
@@ -1475,8 +1475,8 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
     present_pass.type = GpuFrameGraph::PassType::Copy;
     present_pass.name = "copy_scene_composite";
     present_pass.resources = {
-        GpuFrameGraph::ResourceDependency{"scene.composite", false},
-        GpuFrameGraph::ResourceDependency{"scene.frame_graph_copy", true}
+        GpuFrameGraph::ResourceDependency::read("scene.composite"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
     };
     present_pass.blit.source_texture = "scene.composite";
     present_pass.blit.destination_texture = "scene.frame_graph_copy";

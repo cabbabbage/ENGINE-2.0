@@ -2441,7 +2441,8 @@ void SceneRenderer::render() {
     const render_pipeline::CompactLayerRenderResult layer_render = layer_stack_renderer_
         ? layer_stack_renderer_->render_gpu_compact(layer_build,
                                                     runtime_lights,
-                                                    runtime_lighting_enabled)
+                                                    runtime_lighting_enabled,
+                                                    true)
         : render_pipeline::CompactLayerRenderResult{};
 
     SDL_Texture* scene_for_blur = layer_render.final_texture;

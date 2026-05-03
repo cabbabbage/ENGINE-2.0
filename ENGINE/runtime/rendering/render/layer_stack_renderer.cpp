@@ -766,8 +766,52 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         render_layer_base(build, layer, targets.base);
 
         const std::size_t li = static_cast<std::size_t>(layer_index);
-        out.owning_body_lights[li].clear();
-        out.final_layer_textures[static_cast<std::size_t>(layer_index)] = targets.base;
+        const render_internal::DepthInterval& layer_depth = frame_scratch_.layer_metadata[li].depth_interval;
+
+        frame_scratch_.layer_light_buffer.clear();
+        frame_scratch_.owner_light_buffer.clear();
+        const std::vector<std::uint32_t>& indices = frame_scratch_.per_layer_light_indices[li];
+        frame_scratch_.layer_light_buffer.reserve(
+            std::max(frame_scratch_.layer_light_buffer.capacity(), indices.size()));
+        frame_scratch_.owner_light_buffer.reserve(
+            std::max(frame_scratch_.owner_light_buffer.capacity(), indices.size()));
+        for (const std::uint32_t light_index : indices) {
+            if (light_index >= runtime_lights.size()) {
+                continue;
+            }
+            LayerEffectProcessor::RuntimeLight adjusted = runtime_lights[light_index];
+            const int signed_separation = render_internal::compare_depth_intervals_signed(
+                frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval,
+                layer_depth);
+            (void)lighting_v2_enabled;
+            adjusted.intensity = render_internal::LightingSystemV2::attenuate_for_layer(
+                adjusted,
+                layer_depth,
+                frame_scratch_.layer_metadata[li].screen_bounds);
+            if (adjusted.intensity <= 0.0005f) {
+                continue;
+            }
+            frame_scratch_.layer_light_buffer.push_back(adjusted);
+            if (signed_separation == 0) {
+                frame_scratch_.owner_light_buffer.push_back(adjusted);
+            }
+        }
+        out.owning_body_lights[li] = frame_scratch_.owner_light_buffer;
+
+        LayerEffectProcessor::LayerScratchTextures scratch{};
+        scratch.dark_mask_texture = targets.dark_mask;
+
+        LayerEffectProcessor::LayerProcessResult result = layer_effect_processor_.process_layer(
+            targets.base,
+            targets.lit,
+            layer_depth.min,
+            layer_depth.max,
+            lighting_params,
+            frame_scratch_.layer_light_buffer,
+            scratch);
+
+        out.final_layer_textures[static_cast<std::size_t>(layer_index)] =
+            result.final_texture ? result.final_texture : targets.lit;
     }
 
     out.valid = true;

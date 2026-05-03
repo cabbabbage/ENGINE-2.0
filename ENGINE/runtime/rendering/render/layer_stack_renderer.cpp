@@ -666,8 +666,7 @@ void LayerStackRenderer::render_layer_base(const render_pipeline::LayerBuildResu
 render_pipeline::LayerRenderResult LayerStackRenderer::render(
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-    bool runtime_lighting_enabled,
-    bool lighting_v2_enabled) {
+    bool runtime_lighting_enabled) {
     render_pipeline::LayerRenderResult out{};
     out.layer_count = build.layer_count;
     out.player_layer_index = build.player_layer_index;
@@ -755,9 +754,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         }
     }
 
-    LayerEffectProcessor::LayerLightingParams lighting_params{};
-    lighting_params.enabled = runtime_lighting_enabled;
-    lighting_params.ambient_color = SDL_Color{18, 20, 24, 255};
+    (void)runtime_lighting_enabled;
 
     for (int layer_index : build.non_empty_layers) {
         if (layer_index < 0 || layer_index >= build.layer_count) {
@@ -824,8 +821,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact(
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-    bool runtime_lighting_enabled,
-    bool lighting_v2_enabled) {
+    bool runtime_lighting_enabled) {
     render_pipeline::CompactLayerRenderResult out{};
     out.gpu_submission = current_gpu_submission_stats();
     if (!renderer_ ||

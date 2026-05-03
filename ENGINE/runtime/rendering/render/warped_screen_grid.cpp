@@ -1518,7 +1518,13 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("shadow_quality_budget", updated.shadow_quality_budget, 0.0f, 4.0f);
     read_float("global_ambient", updated.global_ambient, 0.0f, 1.0f);
     read_float("global_exposure", updated.global_exposure, 0.1f, 8.0f);
-    read_bool("lighting_v2_enabled", updated.lighting_v2_enabled);
+    if (data.contains("lighting_v2_enabled")) {
+        static bool s_warned_legacy_lighting_v2_toggle = false;
+        if (!s_warned_legacy_lighting_v2_toggle) {
+            SDL_Log("[WarpedScreenGrid] Ignoring obsolete lighting_v2_enabled toggle; Lighting V2 is always active.");
+            s_warned_legacy_lighting_v2_toggle = true;
+        }
+    }
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
     read_bool("light_fade_smoothing_enabled", updated.light_fade_smoothing_enabled);
     read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
@@ -1620,7 +1626,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["shadow_quality_budget"] = settings_.shadow_quality_budget;
     result["global_ambient"] = settings_.global_ambient;
     result["global_exposure"] = settings_.global_exposure;
-    result["lighting_v2_enabled"] = settings_.lighting_v2_enabled;
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
     result["light_fade_smoothing_enabled"] = settings_.light_fade_smoothing_enabled;
     result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;

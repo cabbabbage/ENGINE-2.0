@@ -89,7 +89,6 @@ public:
         float global_exposure = 1.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
-        bool lighting_v2_enabled = true;
         bool light_radius_overlap_culling_enabled = true;
         bool light_fade_smoothing_enabled = true;
         float light_fade_in_seconds = 0.16f;

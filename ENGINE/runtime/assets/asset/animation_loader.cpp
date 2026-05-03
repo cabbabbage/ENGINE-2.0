@@ -1101,6 +1101,10 @@ void AnimationLoader::load(Animation& animation,
                 } catch (...) { animation.source.name.clear(); }
         }
         animation.tags = parse_animation_tags(anim_json);
+        // Optional lighting channels are asset-level metadata; runtime falls back to flat normal + diffuse when unavailable.
+        (void)info.lighting_normal_map;
+        info.lighting_roughness = std::clamp(info.lighting_roughness, 0.0f, 1.0f);
+        if (!std::isfinite(info.lighting_height_bias)) info.lighting_height_bias = 0.0f;
 
         if (animation.source.kind == "animation" && !animation.source.name.empty()) {
                 auto it = info.animations.find(animation.source.name);

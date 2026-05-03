@@ -786,12 +786,11 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             const int signed_separation = render_internal::compare_depth_intervals_signed(
                 frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval,
                 layer_depth);
-            if (lighting_v2_enabled) {
-                adjusted.intensity = render_internal::LightingSystemV2::attenuate_for_layer(
-                    adjusted,
-                    layer_depth,
-                    frame_scratch_.layer_metadata[li].screen_bounds);
-            }
+            (void)lighting_v2_enabled;
+            adjusted.intensity = render_internal::LightingSystemV2::attenuate_for_layer(
+                adjusted,
+                layer_depth,
+                frame_scratch_.layer_metadata[li].screen_bounds);
             if (adjusted.intensity <= 0.0005f) {
                 continue;
             }
@@ -930,14 +929,13 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
                 frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval;
             const int signed_separation = render_internal::compare_depth_intervals_signed(light_depth, layer_depth);
             float adjusted_intensity = light.intensity;
-            adjusted_intensity = render_internal::apply_layer_light_strength_bias(adjusted_intensity, signed_separation, 1.0f, 0.65f);
             if (tier == ClusterTier::Mid && accepted_in_cluster >= (kMaxLightsPerCluster / 2)) {
                 continue;
             }
             if (tier == ClusterTier::Far && accepted_in_cluster >= kFarTierDominantLightCount) {
                 continue;
             }
-            if (lighting_v2_enabled && tier != ClusterTier::Far) {
+            if (tier != ClusterTier::Far) {
                 adjusted_intensity = render_internal::LightingSystemV2::attenuate_for_layer(
                     light,
                     layer_depth,

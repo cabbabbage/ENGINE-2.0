@@ -1218,7 +1218,7 @@ void SceneRenderer::enqueue_scene_composite_frame_graph_pass_sequence(std::strin
     present_pass.blit.source_texture = "scene.composite";
     present_pass.blit.destination_texture.clear();
     present_pass.blit.use_swapchain_destination = true;
-    present_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    present_pass.blit.load_op = SDL_GPU_LOADOP_CLEAR;
     present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
     present_pass.blit.width = scene_width;
     present_pass.blit.height = scene_height;

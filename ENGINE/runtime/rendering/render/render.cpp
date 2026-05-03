@@ -1161,7 +1161,7 @@ bool SceneRenderer::ensure_scene_target() {
     if (scene_composite_resource_) {
         SDL_PropertiesID props = SDL_GetTextureProperties(scene_composite_resource_);
         void* gpu_ptr = props
-            ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_OPENGLES2_TEXTURE_NUMBER, nullptr)
+            ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr)
             : nullptr;
         if (!gpu_ptr) {
             vibble::log::error("[SceneRenderer] GPU-only invariant violation: frame-graph target scene.composite is not GPU-backed.");

@@ -289,7 +289,7 @@ SDL_Texture* create_frame_graph_texture(SDL_Renderer* renderer,
     void* gpu_ptr = nullptr;
     SDL_PropertiesID props = SDL_GetTextureProperties(texture);
     if (props) {
-        gpu_ptr = SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_OPENGLES2_TEXTURE_NUMBER, nullptr);
+        gpu_ptr = SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr);
     }
     if (!gpu_ptr) {
         vibble::log::error("[RenderDiagnostics] Frame-graph-critical texture '" + resource_name +

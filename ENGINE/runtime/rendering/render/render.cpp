@@ -1274,21 +1274,37 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
         return false;
     }
 
-    GpuFrameGraph::PassDescriptor probe_pass{};
-    probe_pass.type = GpuFrameGraph::PassType::Copy;
-    probe_pass.name = "startup_probe_copy_scene_composite";
-    probe_pass.resources = {
+    GpuFrameGraph::PassDescriptor probe_write_pass{};
+    probe_write_pass.type = GpuFrameGraph::PassType::Render;
+    probe_write_pass.name = "startup_probe_write_scene_composite";
+    probe_write_pass.resources = {
+        GpuFrameGraph::ResourceDependency{"scene.composite", true}
+    };
+    probe_write_pass.color_targets = {
+        GpuFrameGraph::ColorTargetBinding{
+            "scene.composite",
+            SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f},
+            SDL_GPU_LOADOP_CLEAR,
+            SDL_GPU_STOREOP_STORE
+        }
+    };
+    gpu_scene_renderer_->add_pass(std::move(probe_write_pass));
+
+    GpuFrameGraph::PassDescriptor probe_copy_pass{};
+    probe_copy_pass.type = GpuFrameGraph::PassType::Copy;
+    probe_copy_pass.name = "startup_probe_copy_scene_composite";
+    probe_copy_pass.resources = {
         GpuFrameGraph::ResourceDependency{"scene.composite", false},
         GpuFrameGraph::ResourceDependency{"scene.frame_graph_copy", true}
     };
-    probe_pass.blit.source_texture = "scene.composite";
-    probe_pass.blit.destination_texture = "scene.frame_graph_copy";
-    probe_pass.blit.use_swapchain_destination = false;
-    probe_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
-    probe_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    probe_pass.blit.width = scene_width;
-    probe_pass.blit.height = scene_height;
-    gpu_scene_renderer_->add_pass(std::move(probe_pass));
+    probe_copy_pass.blit.source_texture = "scene.composite";
+    probe_copy_pass.blit.destination_texture = "scene.frame_graph_copy";
+    probe_copy_pass.blit.use_swapchain_destination = false;
+    probe_copy_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    probe_copy_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
+    probe_copy_pass.blit.width = scene_width;
+    probe_copy_pass.blit.height = scene_height;
+    gpu_scene_renderer_->add_pass(std::move(probe_copy_pass));
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed during startup probe." : frame_error;

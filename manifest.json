@@ -15592,7 +15592,7 @@
                 "texture_y": 1112
               },
               {
-                "depth_offset": -6.099999904632568,
+                "depth_offset": -7.09999942779541,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15614,8 +15614,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 977,
-                "texture_y": 939
+                "texture_x": 865,
+                "texture_y": 1059
               }
             ]
           ],
@@ -27301,7 +27301,7 @@
           "curvyness": 2,
           "display_color": [
             36,
-            157,
+            242,
             242,
             255
           ],
@@ -27355,9 +27355,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            203,
-            242,
-            36,
+            31,
+            125,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27380,9 +27380,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            242,
+            36,
+            208,
             255
           ],
           "edge_smoothness": 4,
@@ -27405,9 +27405,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            104,
-            85,
-            242,
+            71,
+            204,
+            145,
             255
           ],
           "edge_smoothness": 4,
@@ -27465,9 +27465,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            61,
             242,
-            242,
+            223,
+            36,
             255
           ],
           "edge_smoothness": 70,
@@ -27531,9 +27531,9 @@
           "camera_zoom_percent": 14,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            100,
+            242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -27787,9 +27787,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            138,
-            204,
-            71,
+            36,
+            45,
+            242,
             255
           ],
           "edge_smoothness": 96,

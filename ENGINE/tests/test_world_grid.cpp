@@ -661,8 +661,7 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
-    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
-    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
+    CHECK(after.light_distance_fade_start_ratio == doctest::Approx(before.light_distance_fade_start_ratio));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys handled by Assets") {
@@ -681,8 +680,7 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
-    CHECK(after.front_layer_light_strength_multiplier == doctest::Approx(before.front_layer_light_strength_multiplier));
-    CHECK(after.behind_layer_light_strength_multiplier == doctest::Approx(before.behind_layer_light_strength_multiplier));
+    CHECK(after.light_distance_fade_start_ratio == doctest::Approx(before.light_distance_fade_start_ratio));
 }
 
 TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer and DoF controls") {
@@ -693,8 +691,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"dynamic_renderer_depth_efficiency_min_density_ratio", 0.2},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
-        {"front_layer_light_strength_multiplier", 1.4},
-        {"behind_layer_light_strength_multiplier", 0.65},
+        {"light_distance_fade_start_ratio", 0.8},
         {"min_visible_uses_light_radius", true},
         {"light_radius_overlap_culling_enabled", true},
         {"light_fade_smoothing_enabled", true},
@@ -722,8 +719,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(0.2f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
-    CHECK(settings.front_layer_light_strength_multiplier == doctest::Approx(1.4f));
-    CHECK(settings.behind_layer_light_strength_multiplier == doctest::Approx(0.65f));
+    CHECK(settings.light_distance_fade_start_ratio == doctest::Approx(0.8f));
     CHECK(settings.min_visible_uses_light_radius);
     CHECK(settings.light_radius_overlap_culling_enabled);
     CHECK(settings.light_fade_smoothing_enabled);
@@ -752,8 +748,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(serialized["dynamic_renderer_depth_efficiency_min_density_ratio"] == doctest::Approx(0.2));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
-    CHECK(serialized["front_layer_light_strength_multiplier"] == doctest::Approx(1.4));
-    CHECK(serialized["behind_layer_light_strength_multiplier"] == doctest::Approx(0.65));
+    CHECK(serialized["light_distance_fade_start_ratio"] == doctest::Approx(0.8));
     CHECK(serialized["min_visible_uses_light_radius"] == true);
     CHECK(serialized["light_radius_overlap_culling_enabled"] == true);
     CHECK(serialized["light_fade_smoothing_enabled"] == true);

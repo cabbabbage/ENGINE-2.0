@@ -260,7 +260,7 @@ TEST_CASE("GPU compact render path reduces fanout passes and CPU light-mask work
     stack.set_output_dimensions(64, 64);
 
     render_diagnostics::begin_frame();
-    const render_pipeline::LayerRenderResult legacy = stack.render(build, lights, true, 1.4f, 0.55f);
+    const render_pipeline::LayerRenderResult legacy = stack.render(build, lights, true, true);
     render_diagnostics::end_frame();
     const RenderFrameStats legacy_stats = render_diagnostics::current_frame_stats();
     REQUIRE(legacy.valid);
@@ -268,7 +268,7 @@ TEST_CASE("GPU compact render path reduces fanout passes and CPU light-mask work
     render_diagnostics::begin_frame();
     stack.build_gpu_tiled_light_bins(build, lights);
     const render_pipeline::CompactLayerRenderResult compact =
-        stack.render_gpu_compact(build, lights, true, 1.4f, 0.55f);
+        stack.render_gpu_compact(build, lights, true, true);
     render_diagnostics::end_frame();
     const RenderFrameStats compact_stats = render_diagnostics::current_frame_stats();
     REQUIRE(compact.valid);
@@ -312,7 +312,7 @@ TEST_CASE("GPU compact high-light scenes stay deterministic and tile-culling bea
 
     stack.build_gpu_tiled_light_bins(build, lights);
     const render_pipeline::CompactLayerRenderResult frame_one =
-        stack.render_gpu_compact(build, lights, true, 1.2f, 0.7f);
+        stack.render_gpu_compact(build, lights, true, true);
     REQUIRE(frame_one.valid);
     REQUIRE(frame_one.final_texture != nullptr);
     CHECK(frame_one.compact_stats.tiled_light_evaluations <
@@ -320,7 +320,7 @@ TEST_CASE("GPU compact high-light scenes stay deterministic and tile-culling bea
 
     stack.build_gpu_tiled_light_bins(build, lights);
     const render_pipeline::CompactLayerRenderResult frame_two =
-        stack.render_gpu_compact(build, lights, true, 1.2f, 0.7f);
+        stack.render_gpu_compact(build, lights, true, true);
     REQUIRE(frame_two.valid);
     REQUIRE(frame_two.final_texture != nullptr);
 

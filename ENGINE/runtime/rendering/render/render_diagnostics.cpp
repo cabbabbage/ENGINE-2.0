@@ -1,4 +1,5 @@
 #include "rendering/render/render_diagnostics.hpp"
+#include "utils/log.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -268,6 +269,32 @@ SDL_Texture* create_texture(SDL_Renderer* renderer,
     SDL_Texture* texture = SDL_CreateTexture(renderer, format, access, w, h);
     if (texture) {
         note_texture_created(texture);
+    }
+    return texture;
+}
+
+SDL_Texture* create_frame_graph_texture(SDL_Renderer* renderer,
+                                        const std::string& resource_name,
+                                        SDL_PixelFormat format,
+                                        SDL_TextureAccess access,
+                                        int w,
+                                        int h) {
+    SDL_Texture* texture = create_texture(renderer, format, access, w, h);
+    if (!texture) {
+        vibble::log::error("[RenderDiagnostics] Failed to create frame-graph-critical SDL texture for resource '" +
+                           resource_name + "' size=" + std::to_string(w) + "x" + std::to_string(h) + ".");
+        return nullptr;
+    }
+
+    void* gpu_ptr = nullptr;
+    SDL_PropertiesID props = SDL_GetTextureProperties(texture);
+    if (props) {
+        gpu_ptr = SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_OPENGLES2_TEXTURE_NUMBER, nullptr);
+    }
+    if (!gpu_ptr) {
+        vibble::log::error("[RenderDiagnostics] Frame-graph-critical texture '" + resource_name +
+                           "' is not GPU-backed (missing SDL GPU pointer).");
+        return texture;
     }
     return texture;
 }

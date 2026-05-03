@@ -1189,6 +1189,22 @@ bool SceneRenderer::ensure_scene_target() {
         }
         destroy_texture(scene_composite_tex_);
     }
+    scene_composite_resource_spec_.width = static_cast<Uint32>(target_width);
+    scene_composite_resource_spec_.height = static_cast<Uint32>(target_height);
+    scene_composite_resource_spec_.format = gpu_scene_renderer_ && gpu_scene_renderer_->device()
+        ? gpu_scene_renderer_->device()->format_policy().albedo_format
+        : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    scene_composite_resource_spec_.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    scene_composite_resource_spec_.layer_count_or_depth = 1;
+    scene_composite_resource_spec_.num_levels = 1;
+    scene_composite_resource_spec_.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    if (gpu_scene_renderer_) {
+        std::string ensure_error;
+        if (!gpu_scene_renderer_->ensure_texture_resource("scene.composite", scene_composite_resource_spec_, ensure_error)) {
+            vibble::log::error("[SceneRenderer] Failed to allocate internal scene.composite resource: " + ensure_error);
+            return false;
+        }
+    }
     scene_composite_tex_ = render_diagnostics::create_texture(renderer_,
                                                               SDL_PIXELFORMAT_RGBA8888,
                                                               SDL_TEXTUREACCESS_TARGET,
@@ -1220,24 +1236,10 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
             " sdl_error=" + std::string(SDL_GetError());
         return false;
     }
-    const SDL_PropertiesID texture_props = SDL_GetTextureProperties(scene_composite_tex_);
-    if (!texture_props) {
-        out_error = "Missing scene composite texture properties during startup probe.";
+    if (!gpu_scene_renderer_->find_texture_resource("scene.composite")) {
+        out_error = "GpuSceneRenderer failed to retain internal scene.composite resource during startup probe.";
         return false;
     }
-    SDL_GPUTexture* gpu_texture = static_cast<SDL_GPUTexture*>(
-        SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
-    if (!gpu_texture) {
-        const char* renderer_name = SDL_GetRendererName(renderer_);
-        out_error = "SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER unavailable for scene composite texture. renderer=" +
-            std::string(renderer_name ? renderer_name : "unknown");
-        return false;
-    }
-    if (!gpu_scene_renderer_->register_external_texture_resource("scene.interop_probe", gpu_texture)) {
-        out_error = "GpuSceneRenderer external texture registration failed during startup probe.";
-        return false;
-    }
-    gpu_scene_renderer_->clear_external_texture_resources();
     return true;
 }
 
@@ -1346,7 +1348,7 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
     if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
 }
 
-bool SceneRenderer::execute_gpu_frame_graph(SDL_Texture* scene_texture, std::string& out_error) {
+bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
     out_error.clear();
     if (!gpu_frame_graph_interop_supported_) {
         out_error = "Frame-graph interop has been previously disabled.";
@@ -1356,43 +1358,13 @@ bool SceneRenderer::execute_gpu_frame_graph(SDL_Texture* scene_texture, std::str
         out_error = "GpuSceneRenderer is not initialized.";
         return false;
     }
-    if (!scene_texture) {
-        out_error = "Scene composite texture is null.";
+    if (!gpu_scene_renderer_->find_texture_resource("scene.composite")) {
+        out_error = "Internal scene.composite resource is unavailable.";
         return false;
     }
 
-    const SDL_PropertiesID texture_props = SDL_GetTextureProperties(scene_texture);
-    if (!texture_props) {
-        out_error = "Failed to query scene composite texture properties: " + std::string(SDL_GetError());
-        return false;
-    }
-    SDL_GPUTexture* scene_gpu_texture = static_cast<SDL_GPUTexture*>(
-        SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
-    if (!scene_gpu_texture) {
-        gpu_frame_graph_interop_supported_ = false;
-        const std::string backend_name = SDL_GetRendererName(renderer_) ? SDL_GetRendererName(renderer_) : "unknown";
-        const std::string details =
-            "backend=" + backend_name +
-            " texture_access=target" +
-            " texture_format=RGBA8888" +
-            " texture_usage=" + texture_usage_flags_to_string(SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER) +
-            " allocation_tag=SceneRenderer::ensure_scene_target" +
-            " texture_origin=SDL_Renderer_API";
-        out_error = "Frame-graph interop unavailable: scene composite texture is not backed by SDL_GPUTexture; " + details;
-        vibble::log::error("[SceneRenderer] " + out_error);
-        return false;
-    }
-
-    float scene_width_f = 0.0f;
-    float scene_height_f = 0.0f;
-    if (!SDL_GetTextureSize(scene_texture, &scene_width_f, &scene_height_f) ||
-        scene_width_f <= 0.0f ||
-        scene_height_f <= 0.0f) {
-        out_error = "Failed to query scene composite texture dimensions.";
-        return false;
-    }
-    const std::uint32_t scene_width = static_cast<std::uint32_t>(std::max(1, static_cast<int>(std::lround(scene_width_f))));
-    const std::uint32_t scene_height = static_cast<std::uint32_t>(std::max(1, static_cast<int>(std::lround(scene_height_f))));
+    const std::uint32_t scene_width = scene_composite_resource_spec_.width;
+    const std::uint32_t scene_height = scene_composite_resource_spec_.height;
 
     GpuSceneRenderer::TextureResourceSpec scratch_copy_spec{};
     scratch_copy_spec.width = scene_width;
@@ -1418,13 +1390,6 @@ bool SceneRenderer::execute_gpu_frame_graph(SDL_Texture* scene_texture, std::str
         return false;
     }
 
-    gpu_scene_renderer_->clear_external_texture_resources();
-    if (!gpu_scene_renderer_->register_external_texture_resource("scene.composite", scene_gpu_texture)) {
-        gpu_scene_renderer_->abort_frame();
-        out_error = "Failed to register scene composite texture for frame-graph presentation.";
-        return false;
-    }
-
     GpuFrameGraph::PassDescriptor present_pass{};
     present_pass.type = GpuFrameGraph::PassType::Copy;
     present_pass.name = "copy_scene_composite";
@@ -1442,12 +1407,10 @@ bool SceneRenderer::execute_gpu_frame_graph(SDL_Texture* scene_texture, std::str
     gpu_scene_renderer_->add_pass(std::move(present_pass));
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
-        gpu_scene_renderer_->clear_external_texture_resources();
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
         return false;
     }
 
-    gpu_scene_renderer_->clear_external_texture_resources();
     return true;
 }
 
@@ -2616,7 +2579,7 @@ void SceneRenderer::render() {
     }
 
     std::string frame_graph_error;
-    if (!execute_gpu_frame_graph(scene_composite_tex_, frame_graph_error)) {
+    if (!execute_gpu_frame_graph(frame_graph_error)) {
         fail_gpu_frame("Frame-graph execution failed: " + frame_graph_error, false);
         return;
     }
@@ -2631,29 +2594,4 @@ void SceneRenderer::render() {
     finalize_render_cpu_timer();
     render_diagnostics::end_frame();
     return;
-}
-bool read_env_bool(const char* name, bool fallback) {
-    const char* raw = SDL_getenv(name);
-    if (!raw || !*raw) {
-        return fallback;
-    }
-    const std::string value(raw);
-    return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
-}
-
-std::string texture_usage_flags_to_string(SDL_GPUTextureUsageFlags usage) {
-    std::vector<std::string> flags;
-    if ((usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0) flags.emplace_back("sampler");
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) != 0) flags.emplace_back("color_target");
-    if ((usage & SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET) != 0) flags.emplace_back("depth_stencil");
-    if ((usage & SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ) != 0) flags.emplace_back("graphics_storage_read");
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ) != 0) flags.emplace_back("compute_storage_read");
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE) != 0) flags.emplace_back("compute_storage_write");
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_SIMULTANEOUS_READ_WRITE) != 0) flags.emplace_back("compute_storage_rw");
-    std::ostringstream oss;
-    for (std::size_t i = 0; i < flags.size(); ++i) {
-        if (i > 0) oss << "|";
-        oss << flags[i];
-    }
-    return flags.empty() ? std::string{"none"} : oss.str();
 }

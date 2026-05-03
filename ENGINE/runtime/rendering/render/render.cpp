@@ -1159,15 +1159,6 @@ bool SceneRenderer::ensure_scene_target() {
                                                                                target_width,
                                                                                target_height);
     if (scene_composite_resource_) {
-        SDL_PropertiesID props = SDL_GetTextureProperties(scene_composite_resource_);
-        void* gpu_ptr = props
-            ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr)
-            : nullptr;
-        if (!gpu_ptr) {
-            vibble::log::error("[SceneRenderer] GPU-only invariant violation: frame-graph target scene.composite is not GPU-backed.");
-            destroy_texture(scene_composite_resource_);
-            return false;
-        }
         SDL_SetTextureBlendMode(scene_composite_resource_, SDL_BLENDMODE_BLEND);
         // Force target initialization on backends that lazily materialize underlying GPU resources.
         SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
@@ -1180,6 +1171,16 @@ bool SceneRenderer::ensure_scene_target() {
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
         SDL_RenderClear(renderer_);
         SDL_SetRenderTarget(renderer_, previous_target);
+
+        SDL_PropertiesID props = SDL_GetTextureProperties(scene_composite_resource_);
+        void* gpu_ptr = props
+            ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr)
+            : nullptr;
+        if (!gpu_ptr) {
+            vibble::log::error("[SceneRenderer] GPU-only invariant violation: frame-graph target scene.composite is not GPU-backed.");
+            destroy_texture(scene_composite_resource_);
+            return false;
+        }
     }
     if (!scene_composite_resource_) {
         vibble::log::error("[SceneRenderer] GPU-only invariant violation: scene.composite target creation returned null.");

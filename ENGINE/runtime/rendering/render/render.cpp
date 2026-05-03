@@ -2597,3 +2597,28 @@ void SceneRenderer::render() {
     render_diagnostics::end_frame();
     return;
 }
+bool read_env_bool(const char* name, bool fallback) {
+    const char* raw = SDL_getenv(name);
+    if (!raw || !*raw) {
+        return fallback;
+    }
+    const std::string value(raw);
+    return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
+}
+
+std::string texture_usage_flags_to_string(SDL_GPUTextureUsageFlags usage) {
+    std::vector<std::string> flags;
+    if ((usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0) flags.emplace_back("sampler");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) != 0) flags.emplace_back("color_target");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET) != 0) flags.emplace_back("depth_stencil");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ) != 0) flags.emplace_back("graphics_storage_read");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ) != 0) flags.emplace_back("compute_storage_read");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE) != 0) flags.emplace_back("compute_storage_write");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_SIMULTANEOUS_READ_WRITE) != 0) flags.emplace_back("compute_storage_rw");
+    std::ostringstream oss;
+    for (std::size_t i = 0; i < flags.size(); ++i) {
+        if (i > 0) oss << "|";
+        oss << flags[i];
+    }
+    return flags.empty() ? std::string{"none"} : oss.str();
+}

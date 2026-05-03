@@ -809,7 +809,7 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                                 continue;
                         }
                         stats.cache_reused.push_back(name);
-                        vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_reused '" + name + "'");
+                       // vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_reused '" + name + "'");
                 }
         }
 

@@ -15460,7 +15460,7 @@
                 "texture_y": 1583
               },
               {
-                "depth_offset": -4.4000020027160645,
+                "depth_offset": -24.0000057220459,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15468,8 +15468,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 935,
-                "texture_y": 1135
+                "texture_x": 865,
+                "texture_y": 1059
               },
               {
                 "depth_offset": -15.0,
@@ -15568,7 +15568,7 @@
                 "texture_y": 1279
               },
               {
-                "depth_offset": -2.0,
+                "depth_offset": -2.9000003337860107,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15576,8 +15576,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1325,
-                "texture_y": 1265
+                "texture_x": 1352,
+                "texture_y": 1269
               },
               {
                 "depth_offset": 52.899993896484375,
@@ -27300,9 +27300,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            36,
+            157,
+            242,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27355,7 +27355,7 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            239,
+            203,
             242,
             36,
             255
@@ -27380,9 +27380,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            129,
-            85,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27405,9 +27405,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            31,
-            148,
-            204,
+            104,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27465,9 +27465,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            151,
-            204,
-            71,
+            61,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -27531,9 +27531,9 @@
           "camera_zoom_percent": 14,
           "curvyness": 2,
           "display_color": [
-            242,
-            167,
-            85,
+            31,
+            204,
+            100,
             255
           ],
           "edge_smoothness": 101,
@@ -27678,8 +27678,8 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -2484,
-              "dz": 1168,
+              "dx": -2580,
+              "dz": 1392,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27691,7 +27691,7 @@
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
-              "resolution": 5,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-8888611014e8"
@@ -27787,9 +27787,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            31,
+            138,
             204,
-            105,
+            71,
             255
           ],
           "edge_smoothness": 96,

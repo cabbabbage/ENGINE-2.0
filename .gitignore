@@ -35,6 +35,5 @@ __pycache__/
 *.dll
 *.lib
 *.out
-log.txt
 assets_coppy/
 docs/screen_shots/

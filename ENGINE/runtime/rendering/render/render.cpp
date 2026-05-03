@@ -55,6 +55,32 @@ constexpr double kDepthBucketSize = 0.0625;
 constexpr double kDepthBucketScale = 1.0 / kDepthBucketSize;
 constexpr float kQuadEpsilon = 1.0e-5f;
 
+bool read_env_bool(const char* name, bool fallback) {
+    const char* raw = SDL_getenv(name);
+    if (!raw || !*raw) {
+        return fallback;
+    }
+    const std::string value(raw);
+    return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
+}
+
+std::string texture_usage_flags_to_string(SDL_GPUTextureUsageFlags usage) {
+    std::vector<std::string> flags;
+    if ((usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0) flags.emplace_back("sampler");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) != 0) flags.emplace_back("color_target");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET) != 0) flags.emplace_back("depth_stencil");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ) != 0) flags.emplace_back("graphics_storage_read");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ) != 0) flags.emplace_back("compute_storage_read");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE) != 0) flags.emplace_back("compute_storage_write");
+    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_SIMULTANEOUS_READ_WRITE) != 0) flags.emplace_back("compute_storage_rw");
+    std::ostringstream oss;
+    for (std::size_t i = 0; i < flags.size(); ++i) {
+        if (i > 0) oss << "|";
+        oss << flags[i];
+    }
+    return flags.empty() ? std::string{"none"} : oss.str();
+}
+
 std::vector<std::filesystem::path> runtime_shader_manifest_candidates(const char* override_manifest_path) {
     std::vector<std::filesystem::path> candidates;
     auto push_unique = [&](const std::filesystem::path& path) {
@@ -1105,10 +1131,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         read_env_bool("CI", false);
 #endif
     gpu_frame_graph_strict_mode_ = read_env_bool("VIBBLE_GPU_FRAME_GRAPH_STRICT", dev_default_strict);
-    gpu_allow_fallback_present_path_ = read_env_bool("VIBBLE_GPU_ALLOW_FALLBACK_PRESENT", false);
-    if (gpu_allow_fallback_present_path_) {
-        gpu_frame_graph_strict_mode_ = false;
-    }
     std::string interop_probe_error;
     if (!probe_frame_graph_interop(interop_probe_error)) {
         throw std::runtime_error("[SceneRenderer] GPU frame-graph interop startup probe failed: " + interop_probe_error);
@@ -1323,13 +1345,6 @@ bool SceneRenderer::execute_gpu_frame_graph(SDL_Texture* scene_texture, std::str
             " texture_origin=SDL_Renderer_API";
         out_error = "Frame-graph interop unavailable: scene composite texture is not backed by SDL_GPUTexture; " + details;
         vibble::log::error("[SceneRenderer] " + out_error);
-        if (gpu_allow_fallback_present_path_ && !gpu_frame_graph_strict_mode_) {
-            if (!gpu_frame_graph_interop_warning_logged_) {
-                vibble::log::warn("[SceneRenderer] render_path=fallback (explicitly allowed by VIBBLE_GPU_ALLOW_FALLBACK_PRESENT=1)");
-                gpu_frame_graph_interop_warning_logged_ = true;
-            }
-            return true;
-        }
         return false;
     }
 
@@ -2571,16 +2586,9 @@ void SceneRenderer::render() {
         return;
     }
 
-    if (!gpu_frame_graph_interop_supported_ && gpu_allow_fallback_present_path_) {
-        clear_backbuffer_to_color(renderer_, screen_width_, screen_height_, map_clear_color_);
-        render_texture_utils::draw_fullscreen_texture(renderer_, scene_composite_tex_);
-    }
-
     if (!render_path_status_logged_) {
         vibble::log::info(std::string{"[SceneRenderer] render_path="} +
-                          ((gpu_frame_graph_interop_supported_ || gpu_frame_graph_strict_mode_)
-                               ? "frame_graph_strict"
-                               : "fallback"));
+                          (gpu_frame_graph_strict_mode_ ? "frame_graph_strict" : "frame_graph"));
         render_path_status_logged_ = true;
     }
     render_diagnostics::set_renderer_runtime_info("gpu", "frame_graph_strict", "vsync");

@@ -342,9 +342,7 @@ private:
     std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
     bool gpu_runtime_path_enabled_ = false;
     bool gpu_frame_graph_strict_mode_ = true;
-    bool gpu_allow_fallback_present_path_ = false;
     bool gpu_frame_graph_interop_supported_ = true;
-    bool gpu_frame_graph_interop_warning_logged_ = false;
     bool render_path_status_logged_ = false;
 
     bool debug_auto_paths_ = false;

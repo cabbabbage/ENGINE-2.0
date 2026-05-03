@@ -1189,27 +1189,40 @@ bool SceneRenderer::ensure_scene_target() {
                                : scene_composite_resource_ != nullptr;
 }
 
-void SceneRenderer::enqueue_scene_composite_copy_pass_sequence(std::string_view writer_pass_name,
-                                                              std::string_view copy_pass_name,
-                                                              std::uint32_t scene_width,
-                                                              std::uint32_t scene_height) {
-    (void)writer_pass_name;
-
-    GpuFrameGraph::PassDescriptor copy_pass{};
-    copy_pass.type = GpuFrameGraph::PassType::Copy;
-    copy_pass.name = std::string(copy_pass_name);
-    copy_pass.resources = {
-        GpuFrameGraph::ResourceDependency::imported_read("scene.composite"),
-        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
+void SceneRenderer::enqueue_scene_composite_frame_graph_pass_sequence(std::string_view producer_pass_name,
+                                                                      std::string_view present_pass_name,
+                                                                      std::uint32_t scene_width,
+                                                                      std::uint32_t scene_height) {
+    GpuFrameGraph::PassDescriptor producer_pass{};
+    producer_pass.type = GpuFrameGraph::PassType::Copy;
+    producer_pass.name = std::string(producer_pass_name);
+    producer_pass.resources = {
+        GpuFrameGraph::ResourceDependency::read("scene.frame_graph_source"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.composite")
     };
-    copy_pass.blit.source_texture = "scene.composite";
-    copy_pass.blit.destination_texture = "scene.frame_graph_copy";
-    copy_pass.blit.use_swapchain_destination = false;
-    copy_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
-    copy_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    copy_pass.blit.width = scene_width;
-    copy_pass.blit.height = scene_height;
-    gpu_scene_renderer_->add_pass(std::move(copy_pass));
+    producer_pass.blit.source_texture = "scene.frame_graph_source";
+    producer_pass.blit.destination_texture = "scene.composite";
+    producer_pass.blit.use_swapchain_destination = false;
+    producer_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    producer_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
+    producer_pass.blit.width = scene_width;
+    producer_pass.blit.height = scene_height;
+    gpu_scene_renderer_->add_pass(std::move(producer_pass));
+
+    GpuFrameGraph::PassDescriptor present_pass{};
+    present_pass.type = GpuFrameGraph::PassType::Copy;
+    present_pass.name = std::string(present_pass_name);
+    present_pass.resources = {
+        GpuFrameGraph::ResourceDependency::read("scene.composite")
+    };
+    present_pass.blit.source_texture = "scene.composite";
+    present_pass.blit.destination_texture.clear();
+    present_pass.blit.use_swapchain_destination = true;
+    present_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
+    present_pass.blit.width = scene_width;
+    present_pass.blit.height = scene_height;
+    gpu_scene_renderer_->add_pass(std::move(present_pass));
 }
 
 bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
@@ -1244,9 +1257,9 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     }
 
     GpuSceneRenderer::TextureResourceSpec scratch_copy_spec = scene_composite_resource_spec_;
-    if (!gpu_scene_renderer_->ensure_texture_resource("scene.frame_graph_copy", scratch_copy_spec, frame_error)) {
+    if (!gpu_scene_renderer_->ensure_texture_resource("scene.frame_graph_source", scratch_copy_spec, frame_error)) {
         out_error = frame_error.empty()
-            ? "Failed to allocate scene.frame_graph_copy resource during startup probe."
+            ? "Failed to allocate scene.frame_graph_source resource during startup probe."
             : frame_error;
         return false;
     }
@@ -1256,8 +1269,8 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
         return false;
     }
 
-    enqueue_scene_composite_copy_pass_sequence("startup_probe_write_scene_composite",
-                                               "startup_probe_copy_scene_composite",
+    enqueue_scene_composite_frame_graph_pass_sequence("startup_probe_produce_scene_composite",
+                                               "startup_probe_present_scene_composite",
                                                scene_width,
                                                scene_height);
 
@@ -1381,7 +1394,7 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
     const auto log_failure = [&](const std::string& reason, const std::string& pass_name) {
         vibble::log::error("[SceneRenderer] GPU frame-graph failure backend=" + backend_name +
                            " pass=" + pass_name +
-                           " resources=[scene.composite,scene.frame_graph_copy] scene.composite.spec={w=" +
+                           " resources=[scene.frame_graph_source,scene.composite,swapchain] scene.composite.spec={w=" +
                            std::to_string(scene_composite_resource_spec_.width) + ",h=" +
                            std::to_string(scene_composite_resource_spec_.height) + ",usage=" +
                            texture_usage_flags_to_string(scene_composite_resource_spec_.usage) + "} reason=" + reason);
@@ -1412,9 +1425,9 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
     scratch_copy_spec.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
     std::string frame_error;
-    if (!gpu_scene_renderer_->ensure_texture_resource("scene.frame_graph_copy", scratch_copy_spec, frame_error)) {
+    if (!gpu_scene_renderer_->ensure_texture_resource("scene.frame_graph_source", scratch_copy_spec, frame_error)) {
         out_error = frame_error.empty()
-            ? "Failed to allocate frame-graph copy target."
+            ? "Failed to allocate frame-graph source target."
             : frame_error;
         log_failure(out_error, "resource_setup");
         return false;
@@ -1426,14 +1439,14 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
         return false;
     }
 
-    enqueue_scene_composite_copy_pass_sequence("runtime_validation_write_scene_composite",
-                                               "copy_scene_composite",
+    enqueue_scene_composite_frame_graph_pass_sequence("runtime_produce_scene_composite",
+                                               "runtime_present_scene_composite",
                                                scene_width,
                                                scene_height);
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
-        log_failure(out_error, "copy_scene_composite");
+        log_failure(out_error, "runtime_present_scene_composite");
         return false;
     }
 
@@ -2611,7 +2624,7 @@ void SceneRenderer::render() {
             return;
         }
     } else {
-        vibble::log::debug("[SceneRenderer] Skipping frame-graph SDL interop validation copy because SDL GPU pointer bridge is unavailable.");
+        vibble::log::debug("[SceneRenderer] Skipping frame-graph execution because SDL GPU pointer bridge is unavailable.");
     }
 
     if (!render_path_status_logged_) {

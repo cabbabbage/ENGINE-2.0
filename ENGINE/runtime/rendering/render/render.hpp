@@ -98,6 +98,7 @@ bool dof_blur_chain_enabled(bool depth_of_field_enabled,
                             float radial_blur_px);
 std::vector<int> distributed_blur_repeat_counts(std::size_t target_blur_pass_count,
                                                 std::size_t layer_count);
+std::filesystem::path runtime_gpu_shader_manifest_path();
 float dof_quality_scale(int screen_width,
                         int screen_height,
                         float blur_px,

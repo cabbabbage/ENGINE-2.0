@@ -104,38 +104,12 @@ int clamp_dimension_to_renderer_limit(int value, int renderer_limit, const char*
     return renderer_limit;
 }
 
-std::vector<std::filesystem::path> runtime_shader_manifest_candidates(const char* override_manifest_path) {
-    std::vector<std::filesystem::path> candidates;
-    auto push_unique = [&](const std::filesystem::path& path) {
-        if (path.empty()) {
-            return;
-        }
-        const auto it = std::find(candidates.begin(), candidates.end(), path);
-        if (it == candidates.end()) {
-            candidates.push_back(path);
-        }
-    };
-
-    if (override_manifest_path && *override_manifest_path) {
-        push_unique(std::filesystem::path(override_manifest_path));
-        return candidates;
+std::filesystem::path render_internal::runtime_gpu_shader_manifest_path() {
+    if (const char* override_manifest_path = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
+        override_manifest_path && *override_manifest_path) {
+        return std::filesystem::path(override_manifest_path);
     }
-
-    push_unique(std::filesystem::path("ENGINE/runtime/rendering/shaders/runtime_shaders.json"));
-    push_unique(std::filesystem::path("build/runtime_shaders/runtime_shaders.json"));
-    push_unique(std::filesystem::path("build_codex/runtime_shaders/runtime_shaders.json"));
-    push_unique(std::filesystem::path("build-vs/runtime_shaders/runtime_shaders.json"));
-    push_unique(std::filesystem::path("build_vs_test/runtime_shaders/runtime_shaders.json"));
-
-    if (const char* base_path_raw = SDL_GetBasePath()) {
-        const std::filesystem::path base_path = std::filesystem::path(base_path_raw);
-        push_unique(base_path / "runtime_shaders" / "runtime_shaders.json");
-        push_unique(base_path.parent_path() / "runtime_shaders" / "runtime_shaders.json");
-        push_unique(base_path.parent_path() / "build" / "runtime_shaders" / "runtime_shaders.json");
-        push_unique(base_path.parent_path() / "build_codex" / "runtime_shaders" / "runtime_shaders.json");
-    }
-
-    return candidates;
+    return std::filesystem::path("ENGINE/runtime/rendering/shaders/runtime_shaders.json");
 }
 
 std::filesystem::path runtime_project_root_path() {
@@ -1109,44 +1083,20 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         throw std::runtime_error("[SceneRenderer] GPU runtime renderer initialization failed: " + gpu_error);
     }
 
-    const char* shader_manifest_env = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
-    const std::vector<std::filesystem::path> shader_manifest_candidates =
-        runtime_shader_manifest_candidates(shader_manifest_env);
-    std::string last_load_error;
-    std::filesystem::path selected_manifest;
-    bool loaded_manifest = false;
-    for (const std::filesystem::path& candidate : shader_manifest_candidates) {
-        if (!shader_manifest_env && !std::filesystem::exists(candidate)) {
-            continue;
-        }
-        if (gpu_scene_renderer_->load_shader_packages(candidate.string(), gpu_error)) {
-            selected_manifest = candidate;
-            loaded_manifest = true;
-            break;
-        }
-        last_load_error = gpu_error;
+    const std::filesystem::path shader_manifest_path = render_internal::runtime_gpu_shader_manifest_path();
+    if (!std::filesystem::exists(shader_manifest_path)) {
+        throw std::runtime_error("[SceneRenderer] GPU runtime manifest missing: " +
+                                 shader_manifest_path.string());
     }
-
-    if (!loaded_manifest) {
-        std::ostringstream oss;
-        oss << "[SceneRenderer] GPU shader package load failed";
-        if (!last_load_error.empty()) {
-            oss << ": " << last_load_error;
-        }
-        if (!shader_manifest_candidates.empty()) {
-            oss << " (candidates:";
-            for (const std::filesystem::path& candidate : shader_manifest_candidates) {
-                oss << " " << candidate.string();
-            }
-            oss << ")";
-        }
-        throw std::runtime_error(oss.str());
+    if (!gpu_scene_renderer_->load_shader_packages(shader_manifest_path.string(), gpu_error)) {
+        throw std::runtime_error("[SceneRenderer] GPU shader package load failed: " + gpu_error +
+                                 " manifest=" + shader_manifest_path.string());
     }
-
-    vibble::log::info("[SceneRenderer] Runtime gameplay renderer mode: gpu-only manifest=" +
-                      selected_manifest.string());
 
     gpu_runtime_path_enabled_ = true;
+    vibble::log::info("[SceneRenderer] Runtime gameplay renderer mode manifest=" +
+                      shader_manifest_path.string());
+    vibble::log::info("[SceneRenderer] GPU-only initialization state: enabled");
     gpu_frame_graph_strict_mode_ = read_env_bool("VIBBLE_GPU_FRAME_GRAPH_STRICT", true);
     std::string interop_probe_error;
     if (!probe_frame_graph_interop(interop_probe_error)) {

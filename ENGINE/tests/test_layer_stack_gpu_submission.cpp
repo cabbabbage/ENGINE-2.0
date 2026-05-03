@@ -165,8 +165,7 @@ TEST_CASE("LayerStackRenderer keeps GPU submission buffers steady in stable fram
     const render_pipeline::LayerRenderResult first = stack.render(
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{},
-        false,
-        true);
+        false);
     REQUIRE(first.valid);
 
     // Skip on platforms where SDL_Renderer does not expose an SDL_GPUDevice.
@@ -178,8 +177,7 @@ TEST_CASE("LayerStackRenderer keeps GPU submission buffers steady in stable fram
     const render_pipeline::LayerRenderResult second = stack.render(
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{},
-        false,
-        true);
+        false);
     REQUIRE(second.valid);
     CHECK(second.gpu_submission.active);
     CHECK(second.gpu_submission.buffer_create_count == first.gpu_submission.buffer_create_count);

@@ -739,8 +739,7 @@ TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
     const render_pipeline::LayerRenderResult frame_one = stack_renderer.render(
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_one_light},
-        false,
-        true);
+        false);
     REQUIRE(frame_one.valid);
     REQUIRE(frame_one.owning_body_lights.size() == 1);
     CHECK(frame_one.owning_body_lights[0].size() == 1);
@@ -752,8 +751,7 @@ TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
     const render_pipeline::LayerRenderResult frame_two_same_id = stack_renderer.render(
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_light},
-        false,
-        true);
+        false);
     REQUIRE(frame_two_same_id.valid);
     REQUIRE(frame_two_same_id.owning_body_lights.size() == 1);
     CHECK(frame_two_same_id.owning_body_lights[0].empty());
@@ -764,8 +762,7 @@ TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
     const render_pipeline::LayerRenderResult frame_two_new_id = stack_renderer.render(
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_changed_id},
-        false,
-        true);
+        false);
     REQUIRE(frame_two_new_id.valid);
     REQUIRE(frame_two_new_id.owning_body_lights.size() == 1);
     CHECK(frame_two_new_id.owning_body_lights[0].empty());
@@ -816,8 +813,7 @@ TEST_CASE("LayerStackRenderer light assignment is invariant to player_layer_inde
     const render_pipeline::LayerRenderResult player_front = stack_renderer.render(
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{light},
-        false,
-        true);
+        false);
     REQUIRE(player_front.valid);
     REQUIRE(player_front.owning_body_lights.size() == 2);
 
@@ -825,8 +821,7 @@ TEST_CASE("LayerStackRenderer light assignment is invariant to player_layer_inde
     const render_pipeline::LayerRenderResult player_back = stack_renderer.render(
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{light},
-        false,
-        true);
+        false);
     REQUIRE(player_back.valid);
     REQUIRE(player_back.owning_body_lights.size() == 2);
 

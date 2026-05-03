@@ -83,13 +83,6 @@ DepthInterval make_sorted_depth_interval(double depth_min, double depth_max);
 DepthInterval light_depth_interval(const LayerEffectProcessor::RuntimeLight& light);
 int compare_depth_intervals_signed(const DepthInterval& light_interval, const DepthInterval& layer_interval);
 bool screen_aabb_overlaps(const ScreenAabb& lhs, const ScreenAabb& rhs);
-float layer_light_strength_multiplier_for_depth_interval(int signed_depth_separation,
-                                                float front_multiplier,
-                                                float behind_multiplier);
-float apply_layer_light_strength_bias(float intensity,
-                                      int signed_depth_separation,
-                                      float front_multiplier,
-                                      float behind_multiplier);
 bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
                                 const DepthInterval& light_interval,
                                 const DepthInterval& layer_interval,

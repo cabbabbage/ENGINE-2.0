@@ -755,18 +755,6 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.layer_depth_curve = 0.0f;
     }
     settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
-    if (!std::isfinite(settings_.front_layer_light_strength_multiplier) ||
-        settings_.front_layer_light_strength_multiplier < 0.0f) {
-        settings_.front_layer_light_strength_multiplier = 1.0f;
-    }
-    settings_.front_layer_light_strength_multiplier =
-        std::min(settings_.front_layer_light_strength_multiplier, 4.0f);
-    if (!std::isfinite(settings_.behind_layer_light_strength_multiplier) ||
-        settings_.behind_layer_light_strength_multiplier < 0.0f) {
-        settings_.behind_layer_light_strength_multiplier = 1.0f;
-    }
-    settings_.behind_layer_light_strength_multiplier =
-        std::min(settings_.behind_layer_light_strength_multiplier, 4.0f);
     if (!std::isfinite(settings_.light_fade_in_seconds) || settings_.light_fade_in_seconds < 0.0f) {
         settings_.light_fade_in_seconds = 0.0f;
     }
@@ -1523,14 +1511,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
                1.0f);
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
     read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
-    read_float("front_layer_light_strength_multiplier",
-               updated.front_layer_light_strength_multiplier,
-               0.0f,
-               4.0f);
-    read_float("behind_layer_light_strength_multiplier",
-               updated.behind_layer_light_strength_multiplier,
-               0.0f,
-               4.0f);
+    read_bool("lighting_v2_enabled", updated.lighting_v2_enabled);
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
     read_bool("light_fade_smoothing_enabled", updated.light_fade_smoothing_enabled);
     read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
@@ -1620,8 +1601,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
         settings_.dynamic_renderer_depth_efficiency_min_density_ratio;
     result["layer_depth_interval"] = settings_.layer_depth_interval;
     result["layer_depth_curve"] = settings_.layer_depth_curve;
-    result["front_layer_light_strength_multiplier"] = settings_.front_layer_light_strength_multiplier;
-    result["behind_layer_light_strength_multiplier"] = settings_.behind_layer_light_strength_multiplier;
+    result["lighting_v2_enabled"] = settings_.lighting_v2_enabled;
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
     result["light_fade_smoothing_enabled"] = settings_.light_fade_smoothing_enabled;
     result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;

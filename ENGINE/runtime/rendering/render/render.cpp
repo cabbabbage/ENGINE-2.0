@@ -698,24 +698,6 @@ bool screen_aabb_overlaps(const ScreenAabb& lhs, const ScreenAabb& rhs) {
            lhs.min_y <= rhs.max_y;
 }
 
-float layer_light_strength_multiplier_for_depth_interval(int signed_depth_separation,
-                                                         float front_multiplier,
-                                                         float behind_multiplier) {
-    const float safe_front = std::clamp(std::isfinite(front_multiplier) ? front_multiplier : 1.0f, 0.0f, 4.0f);
-    const float safe_behind = std::clamp(std::isfinite(behind_multiplier) ? behind_multiplier : 1.0f, 0.0f, 4.0f);
-    return (signed_depth_separation <= 0) ? safe_front : safe_behind;
-}
-
-float apply_layer_light_strength_bias(float intensity,
-                                      int signed_depth_separation,
-                                      float front_multiplier,
-                                      float behind_multiplier) {
-    const float safe_intensity = (std::isfinite(intensity) && intensity > 0.0f) ? intensity : 0.0f;
-    return safe_intensity * layer_light_strength_multiplier_for_depth_interval(signed_depth_separation,
-                                                                               front_multiplier,
-                                                                               behind_multiplier);
-}
-
 bool light_overlaps_layer_slice(const LayerEffectProcessor::RuntimeLight& light,
                                 const DepthInterval& light_interval,
                                 const DepthInterval& layer_interval,
@@ -2446,8 +2428,7 @@ void SceneRenderer::render() {
         ? layer_stack_renderer_->render_gpu_compact(layer_build,
                                                     runtime_lights,
                                                     runtime_lighting_enabled,
-                                                    realism.front_layer_light_strength_multiplier,
-                                                    realism.behind_layer_light_strength_multiplier)
+                                                    realism.lighting_v2_enabled)
         : render_pipeline::CompactLayerRenderResult{};
 
     SDL_Texture* scene_for_blur = layer_render.final_texture;

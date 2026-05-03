@@ -80,8 +80,7 @@ public:
         float dynamic_renderer_depth_efficiency_min_density_ratio = 0.10f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
-        float front_layer_light_strength_multiplier = 1.0f;
-        float behind_layer_light_strength_multiplier = 1.0f;
+        bool lighting_v2_enabled = true;
         bool light_radius_overlap_culling_enabled = true;
         bool light_fade_smoothing_enabled = true;
         float light_fade_in_seconds = 0.16f;

@@ -55,6 +55,28 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
     }
 
     std::unordered_map<std::string, std::size_t> resource_last_writer{};
+    bool swapchain_touched = false;
+    bool swapchain_cleared = false;
+    bool swapchain_fully_written = false;
+    std::string first_swapchain_pass_name{};
+    std::string first_swapchain_load_op{"none"};
+    std::string first_swapchain_store_op{"none"};
+
+    const auto load_op_name = [](SDL_GPULoadOp op) -> const char* {
+        switch (op) {
+        case SDL_GPU_LOADOP_LOAD: return "LOAD";
+        case SDL_GPU_LOADOP_CLEAR: return "CLEAR";
+        case SDL_GPU_LOADOP_DONT_CARE: return "DONT_CARE";
+        default: return "UNKNOWN";
+        }
+    };
+    const auto store_op_name = [](SDL_GPUStoreOp op) -> const char* {
+        switch (op) {
+        case SDL_GPU_STOREOP_STORE: return "STORE";
+        case SDL_GPU_STOREOP_DONT_CARE: return "DONT_CARE";
+        default: return "UNKNOWN";
+        }
+    };
     for (const PassDescriptor& pass : passes_) {
         switch (pass.type) {
         case PassType::Render:
@@ -126,6 +148,21 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             target_info.clear_color = pass.render.clear_color;
             target_info.load_op = pass.render.load_op;
             target_info.store_op = pass.render.store_op;
+            if (pass.render.use_swapchain_target) {
+                if (!swapchain_touched) {
+                    swapchain_touched = true;
+                    first_swapchain_pass_name = pass.name;
+                    first_swapchain_load_op = load_op_name(pass.render.load_op);
+                    first_swapchain_store_op = store_op_name(pass.render.store_op);
+                }
+                swapchain_cleared = swapchain_cleared || (pass.render.load_op == SDL_GPU_LOADOP_CLEAR);
+                swapchain_fully_written = swapchain_fully_written ||
+                                          (pass.render.load_op == SDL_GPU_LOADOP_CLEAR);
+                if (pass.render.load_op == SDL_GPU_LOADOP_LOAD) {
+                    vibble::log::warn("[GpuFrameGraph] Swapchain render pass '" + pass.name +
+                                      "' uses load_op=LOAD. This is only valid when intentionally compositing from known in-frame content.");
+                }
+            }
             target_info.resolve_texture = nullptr;
             target_info.resolve_mip_level = 0;
             target_info.resolve_layer = 0;
@@ -272,6 +309,21 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             blit_info.destination.w = copy_width;
             blit_info.destination.h = copy_height;
             blit_info.load_op = pass.blit.load_op;
+            if (pass.blit.use_swapchain_destination) {
+                if (!swapchain_touched) {
+                    swapchain_touched = true;
+                    first_swapchain_pass_name = pass.name;
+                    first_swapchain_load_op = load_op_name(pass.blit.load_op);
+                    first_swapchain_store_op = "STORE";
+                }
+                swapchain_cleared = swapchain_cleared || (pass.blit.load_op == SDL_GPU_LOADOP_CLEAR);
+                swapchain_fully_written = swapchain_fully_written ||
+                                          (pass.blit.load_op == SDL_GPU_LOADOP_CLEAR);
+                if (pass.blit.load_op == SDL_GPU_LOADOP_LOAD) {
+                    vibble::log::warn("[GpuFrameGraph] Swapchain copy pass '" + pass.name +
+                                      "' uses load_op=LOAD. This is only valid when intentionally compositing from known in-frame content.");
+                }
+            }
             blit_info.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
             blit_info.flip_mode = SDL_FLIP_NONE;
             blit_info.filter = pass.blit.filter;
@@ -279,6 +331,14 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             SDL_BlitGPUTexture(context.command_buffer, &blit_info);
             continue;
         }
+    }
+
+    if (swapchain_touched && (!swapchain_cleared || !swapchain_fully_written)) {
+        vibble::log::error("[GpuFrameGraph] Final presented target may be invalid for this frame. first_swapchain_pass='" +
+                           first_swapchain_pass_name + "' load_op=" + first_swapchain_load_op +
+                           " store_op=" + first_swapchain_store_op +
+                           " cleared=" + (swapchain_cleared ? std::string("true") : std::string("false")) +
+                           " fully_written=" + (swapchain_fully_written ? std::string("true") : std::string("false")) + ".");
     }
 
     stats.success = true;

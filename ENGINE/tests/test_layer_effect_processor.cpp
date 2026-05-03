@@ -740,8 +740,7 @@ TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_one_light},
         false,
-        1.0f,
-        1.0f);
+        true);
     REQUIRE(frame_one.valid);
     REQUIRE(frame_one.owning_body_lights.size() == 1);
     CHECK(frame_one.owning_body_lights[0].size() == 1);
@@ -754,8 +753,7 @@ TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_light},
         false,
-        1.0f,
-        1.0f);
+        true);
     REQUIRE(frame_two_same_id.valid);
     REQUIRE(frame_two_same_id.owning_body_lights.size() == 1);
     CHECK(frame_two_same_id.owning_body_lights[0].empty());
@@ -767,8 +765,7 @@ TEST_CASE("LayerStackRenderer updates owning-body overlaps across frames") {
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{frame_two_changed_id},
         false,
-        1.0f,
-        1.0f);
+        true);
     REQUIRE(frame_two_new_id.valid);
     REQUIRE(frame_two_new_id.owning_body_lights.size() == 1);
     CHECK(frame_two_new_id.owning_body_lights[0].empty());
@@ -820,8 +817,7 @@ TEST_CASE("LayerStackRenderer light assignment is invariant to player_layer_inde
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{light},
         false,
-        1.0f,
-        1.0f);
+        true);
     REQUIRE(player_front.valid);
     REQUIRE(player_front.owning_body_lights.size() == 2);
 
@@ -830,8 +826,7 @@ TEST_CASE("LayerStackRenderer light assignment is invariant to player_layer_inde
         build,
         std::vector<LayerEffectProcessor::RuntimeLight>{light},
         false,
-        1.0f,
-        1.0f);
+        true);
     REQUIRE(player_back.valid);
     REQUIRE(player_back.owning_body_lights.size() == 2);
 

@@ -890,6 +890,13 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
                 light.screen_center.y + light.radius_px};
     }
 
+    constexpr std::size_t kMaxLightsPerCluster = 32;
+    constexpr std::size_t kMaxLightsPerFrame = 256;
+    constexpr std::size_t kFarTierDominantLightCount = 1;
+    constexpr float kNearTierDepth = 12.0f;
+    constexpr float kMidTierDepth = 42.0f;
+    constexpr float kSmallFootprintPx = 24.0f;
+
     std::vector<float> effective_light_intensity(runtime_lights.size(), 0.0f);
     std::vector<std::uint32_t> tile_candidates{};
     for (const std::size_t li : frame_scratch_.layer_order_by_depth_start) {
@@ -898,8 +905,22 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
         if (!query_gpu_tiled_light_candidates(layer_bounds, tile_candidates)) {
             continue;
         }
+        std::sort(tile_candidates.begin(), tile_candidates.end());
+        if (tile_candidates.size() > kMaxLightsPerCluster) {
+            tile_candidates.resize(kMaxLightsPerCluster);
+        }
         compact_stats.tiled_light_evaluations += static_cast<std::uint32_t>(tile_candidates.size());
         const render_internal::DepthInterval& layer_depth = frame_scratch_.layer_metadata[li].depth_interval;
+        const float layer_depth_abs = static_cast<float>(std::max(std::fabs(layer_depth.min), std::fabs(layer_depth.max)));
+        const float layer_w = std::max(0.0f, layer_bounds.max_x - layer_bounds.min_x);
+        const float layer_h = std::max(0.0f, layer_bounds.max_y - layer_bounds.min_y);
+        const float layer_footprint_px = std::max(layer_w, layer_h);
+        enum class ClusterTier { Near, Mid, Far };
+        ClusterTier tier = ClusterTier::Near;
+        if (layer_depth_abs >= kMidTierDepth || layer_footprint_px <= kSmallFootprintPx) tier = ClusterTier::Far;
+        else if (layer_depth_abs >= kNearTierDepth) tier = ClusterTier::Mid;
+
+        std::size_t accepted_in_cluster = 0;
         for (const std::uint32_t light_index : tile_candidates) {
             if (light_index >= runtime_lights.size()) {
                 continue;
@@ -909,7 +930,14 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
                 frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval;
             const int signed_separation = render_internal::compare_depth_intervals_signed(light_depth, layer_depth);
             float adjusted_intensity = light.intensity;
-            if (lighting_v2_enabled) {
+            adjusted_intensity = render_internal::apply_layer_light_strength_bias(adjusted_intensity, signed_separation, 1.0f, 0.65f);
+            if (tier == ClusterTier::Mid && accepted_in_cluster >= (kMaxLightsPerCluster / 2)) {
+                continue;
+            }
+            if (tier == ClusterTier::Far && accepted_in_cluster >= kFarTierDominantLightCount) {
+                continue;
+            }
+            if (lighting_v2_enabled && tier != ClusterTier::Far) {
                 adjusted_intensity = render_internal::LightingSystemV2::attenuate_for_layer(
                     light,
                     layer_depth,
@@ -917,6 +945,7 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
             }
             if (adjusted_intensity > effective_light_intensity[light_index]) {
                 effective_light_intensity[light_index] = adjusted_intensity;
+                ++accepted_in_cluster;
             }
         }
     }
@@ -939,6 +968,8 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
         light.falloff = std::max(0.05f, source.falloff);
         aggregated_lights.push_back(light);
     }
+    std::stable_sort(aggregated_lights.begin(), aggregated_lights.end(), [](const auto& a, const auto& b){ return a.intensity > b.intensity; });
+    if (aggregated_lights.size() > kMaxLightsPerFrame) aggregated_lights.resize(kMaxLightsPerFrame);
     compact_stats.aggregated_light_count = static_cast<std::uint32_t>(aggregated_lights.size());
 
     if (!render_diagnostics::set_render_target(renderer_, gpu_compact_geometry_)) {

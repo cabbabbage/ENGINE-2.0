@@ -682,6 +682,20 @@ int compare_depth_intervals_signed(const DepthInterval& light_interval, const De
     return 0;
 }
 
+float apply_layer_light_strength_bias(float base_intensity,
+                                      int signed_depth_separation,
+                                      float front_layer_multiplier,
+                                      float behind_layer_multiplier) {
+    const float base = std::max(0.0f, base_intensity);
+    if (signed_depth_separation < 0) {
+        return base * std::max(0.0f, front_layer_multiplier);
+    }
+    if (signed_depth_separation > 0) {
+        return base * std::max(0.0f, behind_layer_multiplier);
+    }
+    return base;
+}
+
 bool screen_aabb_overlaps(const ScreenAabb& lhs, const ScreenAabb& rhs) {
     if (!std::isfinite(lhs.min_x) || !std::isfinite(lhs.min_y) ||
         !std::isfinite(lhs.max_x) || !std::isfinite(lhs.max_y) ||

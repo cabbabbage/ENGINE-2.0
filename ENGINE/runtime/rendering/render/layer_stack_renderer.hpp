@@ -25,16 +25,14 @@ public:
     render_pipeline::LayerRenderResult render(
         const render_pipeline::LayerBuildResult& build,
         const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-        bool runtime_lighting_enabled,
-        bool lighting_v2_enabled);
+        bool runtime_lighting_enabled);
     render_pipeline::GpuCompactRenderStats build_gpu_tiled_light_bins(
         const render_pipeline::LayerBuildResult& build,
         const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights);
     render_pipeline::CompactLayerRenderResult render_gpu_compact(
         const render_pipeline::LayerBuildResult& build,
         const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-        bool runtime_lighting_enabled,
-        bool lighting_v2_enabled);
+        bool runtime_lighting_enabled);
     const render_pipeline::GpuCompactRenderStats& gpu_tiled_light_bin_stats() const {
         return gpu_compact_stats_;
     }

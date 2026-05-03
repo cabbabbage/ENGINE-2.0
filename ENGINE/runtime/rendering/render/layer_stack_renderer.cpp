@@ -666,8 +666,7 @@ void LayerStackRenderer::render_layer_base(const render_pipeline::LayerBuildResu
 render_pipeline::LayerRenderResult LayerStackRenderer::render(
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-    bool runtime_lighting_enabled,
-    bool lighting_v2_enabled) {
+    bool runtime_lighting_enabled) {
     render_pipeline::LayerRenderResult out{};
     out.layer_count = build.layer_count;
     out.player_layer_index = build.player_layer_index;
@@ -755,9 +754,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         }
     }
 
-    LayerEffectProcessor::LayerLightingParams lighting_params{};
-    lighting_params.enabled = runtime_lighting_enabled;
-    lighting_params.ambient_color = SDL_Color{18, 20, 24, 255};
+    (void)runtime_lighting_enabled;
 
     for (int layer_index : build.non_empty_layers) {
         if (layer_index < 0 || layer_index >= build.layer_count) {
@@ -769,53 +766,8 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         render_layer_base(build, layer, targets.base);
 
         const std::size_t li = static_cast<std::size_t>(layer_index);
-        const render_internal::DepthInterval& layer_depth = frame_scratch_.layer_metadata[li].depth_interval;
-
-        frame_scratch_.layer_light_buffer.clear();
-        frame_scratch_.owner_light_buffer.clear();
-        const std::vector<std::uint32_t>& indices = frame_scratch_.per_layer_light_indices[li];
-        frame_scratch_.layer_light_buffer.reserve(
-            std::max(frame_scratch_.layer_light_buffer.capacity(), indices.size()));
-        frame_scratch_.owner_light_buffer.reserve(
-            std::max(frame_scratch_.owner_light_buffer.capacity(), indices.size()));
-        for (const std::uint32_t light_index : indices) {
-            if (light_index >= runtime_lights.size()) {
-                continue;
-            }
-            LayerEffectProcessor::RuntimeLight adjusted = runtime_lights[light_index];
-            const int signed_separation = render_internal::compare_depth_intervals_signed(
-                frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval,
-                layer_depth);
-            if (lighting_v2_enabled) {
-                adjusted.intensity = render_internal::LightingSystemV2::attenuate_for_layer(
-                    adjusted,
-                    layer_depth,
-                    frame_scratch_.layer_metadata[li].screen_bounds);
-            }
-            if (adjusted.intensity <= 0.0005f) {
-                continue;
-            }
-            frame_scratch_.layer_light_buffer.push_back(adjusted);
-            if (signed_separation == 0) {
-                frame_scratch_.owner_light_buffer.push_back(adjusted);
-            }
-        }
-        out.owning_body_lights[li] = frame_scratch_.owner_light_buffer;
-
-        LayerEffectProcessor::LayerScratchTextures scratch{};
-        scratch.dark_mask_texture = targets.dark_mask;
-
-        LayerEffectProcessor::LayerProcessResult result = layer_effect_processor_.process_layer(
-            targets.base,
-            targets.lit,
-            layer_depth.min,
-            layer_depth.max,
-            lighting_params,
-            frame_scratch_.layer_light_buffer,
-            scratch);
-
-        out.final_layer_textures[static_cast<std::size_t>(layer_index)] =
-            result.final_texture ? result.final_texture : targets.lit;
+        out.owning_body_lights[li].clear();
+        out.final_layer_textures[static_cast<std::size_t>(layer_index)] = targets.base;
     }
 
     out.valid = true;
@@ -825,8 +777,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
 render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact(
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
-    bool runtime_lighting_enabled,
-    bool lighting_v2_enabled) {
+    bool runtime_lighting_enabled) {
     render_pipeline::CompactLayerRenderResult out{};
     out.gpu_submission = current_gpu_submission_stats();
     if (!renderer_ ||
@@ -930,14 +881,13 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
                 frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval;
             const int signed_separation = render_internal::compare_depth_intervals_signed(light_depth, layer_depth);
             float adjusted_intensity = light.intensity;
-            adjusted_intensity = render_internal::apply_layer_light_strength_bias(adjusted_intensity, signed_separation, 1.0f, 0.65f);
             if (tier == ClusterTier::Mid && accepted_in_cluster >= (kMaxLightsPerCluster / 2)) {
                 continue;
             }
             if (tier == ClusterTier::Far && accepted_in_cluster >= kFarTierDominantLightCount) {
                 continue;
             }
-            if (lighting_v2_enabled && tier != ClusterTier::Far) {
+            if (tier != ClusterTier::Far) {
                 adjusted_intensity = render_internal::LightingSystemV2::attenuate_for_layer(
                     light,
                     layer_depth,

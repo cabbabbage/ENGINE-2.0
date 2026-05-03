@@ -754,7 +754,10 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
         }
     }
 
-    (void)runtime_lighting_enabled;
+    const LayerEffectProcessor::LayerLightingParams lighting_params{
+        runtime_lighting_enabled,
+        SDL_Color{18, 20, 24, 255},
+    };
 
     for (int layer_index : build.non_empty_layers) {
         if (layer_index < 0 || layer_index >= build.layer_count) {
@@ -783,7 +786,6 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             const int signed_separation = render_internal::compare_depth_intervals_signed(
                 frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval,
                 layer_depth);
-            (void)lighting_v2_enabled;
             adjusted.intensity = render_internal::LightingSystemV2::attenuate_for_layer(
                 adjusted,
                 layer_depth,

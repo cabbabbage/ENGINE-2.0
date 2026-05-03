@@ -292,6 +292,7 @@ private:
                   const std::string& map_id);
 
     bool ensure_scene_target();
+    bool probe_frame_graph_interop(std::string& out_error);
     bool execute_gpu_frame_graph(SDL_Texture* scene_texture, std::string& out_error);
     bool ensure_far_backdrop_resources();
     bool ensure_far_backdrop_composite_target();
@@ -340,8 +341,9 @@ private:
     std::unique_ptr<DebugOverlayRenderer> debug_overlay_renderer_;
     std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
     bool gpu_runtime_path_enabled_ = false;
+    bool gpu_frame_graph_strict_mode_ = true;
     bool gpu_frame_graph_interop_supported_ = true;
-    bool gpu_frame_graph_interop_warning_logged_ = false;
+    bool render_path_status_logged_ = false;
 
     bool debug_auto_paths_ = false;
     bool movement_debug_visible_ = true;

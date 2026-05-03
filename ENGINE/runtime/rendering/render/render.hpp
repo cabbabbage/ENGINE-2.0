@@ -21,6 +21,7 @@
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "rendering/render/debug_overlay_renderer.hpp"
+#include "rendering/render/gpu_scene_renderer.hpp"
 #include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_builder.hpp"
 
@@ -293,7 +294,7 @@ private:
 
     bool ensure_scene_target();
     bool probe_frame_graph_interop(std::string& out_error);
-    bool execute_gpu_frame_graph(SDL_Texture* scene_texture, std::string& out_error);
+    bool execute_gpu_frame_graph(std::string& out_error);
     bool ensure_far_backdrop_resources();
     bool ensure_far_backdrop_composite_target();
     std::filesystem::path resolve_misc_content_path(const std::string& filename) const;
@@ -326,6 +327,7 @@ private:
     SDL_Color map_clear_color_{69, 101, 74, 255};
 
     SDL_Texture* scene_composite_tex_ = nullptr;
+    GpuSceneRenderer::TextureResourceSpec scene_composite_resource_spec_{};
     SDL_Texture* scene_preblur_tex_ = nullptr;
     SDL_Texture* far_backdrop_sky_tex_ = nullptr;
     SDL_Texture* far_backdrop_mountains_tex_ = nullptr;

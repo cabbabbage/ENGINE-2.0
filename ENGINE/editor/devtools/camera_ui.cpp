@@ -191,12 +191,6 @@ void CameraUIPanel::sync_from_camera() {
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
     sync_debug_controls_from_settings(settings);
-    if (front_layer_light_strength_multiplier_slider_) {
-        front_layer_light_strength_multiplier_slider_->set_value(settings.front_layer_light_strength_multiplier);
-    }
-    if (behind_layer_light_strength_multiplier_slider_) {
-        behind_layer_light_strength_multiplier_slider_->set_value(settings.behind_layer_light_strength_multiplier);
-    }
     if (blur_px_slider_) blur_px_slider_->set_value(settings.blur_px);
     if (radial_blur_px_slider_) radial_blur_px_slider_->set_value(settings.radial_blur_px);
     if (depth_of_field_checkbox_) {
@@ -308,26 +302,6 @@ void CameraUIPanel::build_ui() {
         2);
     layer_depth_curve_slider_->set_tooltip("Non-linear bin growth with distance. Higher values create fewer far-depth layers.");
     layer_depth_curve_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    front_layer_light_strength_multiplier_slider_ = std::make_unique<FloatSliderWidget>(
-        "Front Layer Light Strength",
-        0.0f,
-        4.0f,
-        0.01f,
-        defaults.front_layer_light_strength_multiplier,
-        2);
-    front_layer_light_strength_multiplier_slider_->set_tooltip(
-        "Scales lighting energy for layers in front of the camera plane. Higher values punch up nearby lights and may increase additive light passes.");
-    front_layer_light_strength_multiplier_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    behind_layer_light_strength_multiplier_slider_ = std::make_unique<FloatSliderWidget>(
-        "Behind Layer Light Strength",
-        0.0f,
-        4.0f,
-        0.01f,
-        defaults.behind_layer_light_strength_multiplier,
-        2);
-    behind_layer_light_strength_multiplier_slider_->set_tooltip(
-        "Scales lighting energy for layers behind the camera plane. Raise to keep deep background lights readable; lower to reduce distant glow and cost.");
-    behind_layer_light_strength_multiplier_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     blur_px_slider_ = std::make_unique<FloatSliderWidget>("Blur (px)", 0.0f, 128.0f, 0.01f, defaults.blur_px, 3);
     blur_px_slider_->set_tooltip("Per-layer Gaussian-like blur budget. Larger values produce softer focus transitions and increase blur processing cost.");
     blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
@@ -463,8 +437,6 @@ void CameraUIPanel::rebuild_rows() {
         if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
         if (blur_px_slider_) rows.push_back({ blur_px_slider_.get() });
         if (radial_blur_px_slider_) rows.push_back({ radial_blur_px_slider_.get() });
-        if (front_layer_light_strength_multiplier_slider_) rows.push_back({ front_layer_light_strength_multiplier_slider_.get() });
-        if (behind_layer_light_strength_multiplier_slider_) rows.push_back({ behind_layer_light_strength_multiplier_slider_.get() });
     }
 
     if (debug_section_widget_) rows.push_back({ debug_section_widget_.get() });
@@ -513,12 +485,6 @@ void CameraUIPanel::apply_settings_if_needed() {
     }
     if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
     if (layer_depth_curve_slider_) updated.layer_depth_curve = layer_depth_curve_slider_->value();
-    if (front_layer_light_strength_multiplier_slider_) {
-        updated.front_layer_light_strength_multiplier = front_layer_light_strength_multiplier_slider_->value();
-    }
-    if (behind_layer_light_strength_multiplier_slider_) {
-        updated.behind_layer_light_strength_multiplier = behind_layer_light_strength_multiplier_slider_->value();
-    }
     if (blur_px_slider_) updated.blur_px = blur_px_slider_->value();
     if (radial_blur_px_slider_) updated.radial_blur_px = radial_blur_px_slider_->value();
     if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
@@ -535,8 +501,6 @@ void CameraUIPanel::apply_settings_if_needed() {
                       current.dynamic_renderer_depth_efficiency_min_density_ratio) ||
         float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
-        float_changed(updated.front_layer_light_strength_multiplier, current.front_layer_light_strength_multiplier) ||
-        float_changed(updated.behind_layer_light_strength_multiplier, current.behind_layer_light_strength_multiplier) ||
         float_changed(updated.blur_px, current.blur_px) ||
         float_changed(updated.radial_blur_px, current.radial_blur_px) ||
         (updated.depth_of_field_enabled != current.depth_of_field_enabled);

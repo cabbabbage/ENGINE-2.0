@@ -99,6 +99,9 @@ class AssetInfo {
     int original_canvas_height = 0;
     bool flipable;
     bool tillable = false;
+    std::string lighting_normal_map;
+    float lighting_roughness = 1.0f;
+    float lighting_height_bias = 0.0f;
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
 

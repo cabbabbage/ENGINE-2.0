@@ -2098,6 +2098,11 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                 info_json_.erase("apply_parallax");
         }
         starting_health = data.value("starting_health", starting_health);
+        lighting_normal_map = data.value("lighting_normal_map", std::string{});
+        lighting_roughness = std::clamp(data.value("lighting_roughness", 1.0f), 0.0f, 1.0f);
+        lighting_height_bias = data.value("lighting_height_bias", 0.0f);
+        if (!std::isfinite(lighting_height_bias)) lighting_height_bias = 0.0f;
+        if (!std::isfinite(lighting_roughness)) lighting_roughness = 1.0f;
 }
 
 bool AssetInfo::has_tag(const std::string &tag) const {
@@ -2458,6 +2463,9 @@ nlohmann::json AssetInfo::manifest_payload() const {
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
+        payload["lighting_normal_map"] = lighting_normal_map;
+        payload["lighting_roughness"] = std::clamp(lighting_roughness, 0.0f, 1.0f);
+        payload["lighting_height_bias"] = std::isfinite(lighting_height_bias) ? lighting_height_bias : 0.0f;
         if (payload.contains("animations") && payload["animations"].is_object()) {
                 for (auto it = payload["animations"].begin(); it != payload["animations"].end(); ++it) {
                         if (!it.value().is_object()) {

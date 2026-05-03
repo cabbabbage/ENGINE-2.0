@@ -1191,27 +1191,13 @@ void SceneRenderer::enqueue_scene_composite_copy_pass_sequence(std::string_view 
                                                               std::string_view copy_pass_name,
                                                               std::uint32_t scene_width,
                                                               std::uint32_t scene_height) {
-    GpuFrameGraph::PassDescriptor write_pass{};
-    write_pass.type = GpuFrameGraph::PassType::Render;
-    write_pass.name = std::string(writer_pass_name);
-    write_pass.resources = {
-        GpuFrameGraph::ResourceDependency::write_resource("scene.composite")
-    };
-    write_pass.color_targets = {
-        GpuFrameGraph::ColorTargetBinding{
-            "scene.composite",
-            SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f},
-            SDL_GPU_LOADOP_CLEAR,
-            SDL_GPU_STOREOP_STORE
-        }
-    };
-    gpu_scene_renderer_->add_pass(std::move(write_pass));
+    (void)writer_pass_name;
 
     GpuFrameGraph::PassDescriptor copy_pass{};
     copy_pass.type = GpuFrameGraph::PassType::Copy;
     copy_pass.name = std::string(copy_pass_name);
     copy_pass.resources = {
-        GpuFrameGraph::ResourceDependency::read("scene.composite"),
+        GpuFrameGraph::ResourceDependency::imported_read("scene.composite"),
         GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
     };
     copy_pass.blit.source_texture = "scene.composite";

@@ -292,8 +292,8 @@ SDL_Texture* create_frame_graph_texture(SDL_Renderer* renderer,
         gpu_ptr = SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr);
     }
     if (!gpu_ptr) {
-        vibble::log::error("[RenderDiagnostics] Frame-graph-critical texture '" + resource_name +
-                           "' is not GPU-backed (missing SDL GPU pointer).");
+        vibble::log::warn("[RenderDiagnostics] Frame-graph texture '" + resource_name +
+                          "' has no SDL GPU pointer bridge on this backend; continuing with graph-native resource binding.");
         return texture;
     }
     return texture;

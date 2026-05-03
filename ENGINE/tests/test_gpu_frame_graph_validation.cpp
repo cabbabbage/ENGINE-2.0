@@ -138,3 +138,61 @@ TEST_CASE("GpuFrameGraph strict validation allows explicitly imported external r
     CHECK(stats.dependency_error_count == 0);
     CHECK(stats.dependency_warning_count == 0);
 }
+
+TEST_CASE("GpuFrameGraph strict validation fails immediately when scene.composite is read without write in startup sequence") {
+    GpuFrameGraph graph;
+
+    GpuFrameGraph::PassDescriptor copy_pass{};
+    copy_pass.type = GpuFrameGraph::PassType::Copy;
+    copy_pass.name = "startup_probe_copy_scene_composite";
+    copy_pass.resources = {
+        GpuFrameGraph::ResourceDependency::read("scene.composite"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
+    };
+    copy_pass.blit.source_texture = "scene.composite";
+    copy_pass.blit.destination_texture = "scene.frame_graph_copy";
+    graph.add_pass(std::move(copy_pass));
+
+    GpuFrameGraph::ExecuteContext context{};
+    GpuFrameGraph::ExecuteOptions options{};
+    options.strict_resource_validation = true;
+    options.fail_on_validation_error = true;
+    options.dry_run = true;
+
+    const GpuFrameGraph::ExecutionStats stats = graph.execute(context, options);
+    CHECK_FALSE(stats.success);
+    CHECK(stats.dependency_error_count == 1);
+    CHECK(stats.render_pass_count == 0);
+    CHECK(stats.copy_pass_count == 1);
+}
+
+TEST_CASE("GpuFrameGraph strict validation fails immediately when runtime scene.composite writer is missing") {
+    GpuFrameGraph graph;
+
+    GpuFrameGraph::PassDescriptor write_other{};
+    write_other.type = GpuFrameGraph::PassType::Render;
+    write_other.name = "runtime_validation_write_other";
+    write_other.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.other")};
+    graph.add_pass(std::move(write_other));
+
+    GpuFrameGraph::PassDescriptor copy_pass{};
+    copy_pass.type = GpuFrameGraph::PassType::Copy;
+    copy_pass.name = "copy_scene_composite";
+    copy_pass.resources = {
+        GpuFrameGraph::ResourceDependency::read("scene.composite"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
+    };
+    copy_pass.blit.source_texture = "scene.composite";
+    copy_pass.blit.destination_texture = "scene.frame_graph_copy";
+    graph.add_pass(std::move(copy_pass));
+
+    GpuFrameGraph::ExecuteContext context{};
+    GpuFrameGraph::ExecuteOptions options{};
+    options.strict_resource_validation = true;
+    options.fail_on_validation_error = true;
+    options.dry_run = true;
+
+    const GpuFrameGraph::ExecutionStats stats = graph.execute(context, options);
+    CHECK_FALSE(stats.success);
+    CHECK(stats.dependency_error_count == 1);
+}

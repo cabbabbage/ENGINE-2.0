@@ -1102,6 +1102,9 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (!probe_frame_graph_interop(interop_probe_error)) {
         throw std::runtime_error("[SceneRenderer] GPU frame-graph startup probe failed: " + interop_probe_error);
     }
+    if (!ensure_scene_target()) {
+        throw std::runtime_error("[SceneRenderer] GPU-only initialization failed: scene.composite must be GPU frame-graph resource-backed.");
+    }
     vibble::log::info("[SceneRenderer] GPU runtime renderer active.");
 
     vibble::log::debug(std::string{"[SceneRenderer] מתחיל אתחול עבור מפה '"} + map_id +
@@ -1145,7 +1148,7 @@ bool SceneRenderer::ensure_scene_target() {
     if (gpu_scene_renderer_) {
         std::string ensure_error;
         if (!gpu_scene_renderer_->ensure_texture_resource("scene.composite", scene_composite_resource_spec_, ensure_error)) {
-            vibble::log::error("[SceneRenderer] Failed to allocate internal scene.composite resource: " + ensure_error);
+            vibble::log::error("[SceneRenderer] GPU-only invariant violation: failed to allocate internal frame-graph resource scene.composite: " + ensure_error);
             return false;
         }
     }
@@ -1161,7 +1164,7 @@ bool SceneRenderer::ensure_scene_target() {
             ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_OPENGLES2_TEXTURE_NUMBER, nullptr)
             : nullptr;
         if (!gpu_ptr) {
-            vibble::log::error("[SceneRenderer] Critical frame-graph target scene.composite is not GPU-backed.");
+            vibble::log::error("[SceneRenderer] GPU-only invariant violation: frame-graph target scene.composite is not GPU-backed.");
             destroy_texture(scene_composite_resource_);
             return false;
         }
@@ -1169,6 +1172,7 @@ bool SceneRenderer::ensure_scene_target() {
         // Force target initialization on backends that lazily materialize underlying GPU resources.
         SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
         if (!SDL_SetRenderTarget(renderer_, scene_composite_resource_)) {
+            vibble::log::error("[SceneRenderer] GPU-only invariant violation: unable to bind scene.composite as render target during initialization.");
             destroy_texture(scene_composite_resource_);
             scene_composite_resource_ = nullptr;
             return false;
@@ -1176,6 +1180,9 @@ bool SceneRenderer::ensure_scene_target() {
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
         SDL_RenderClear(renderer_);
         SDL_SetRenderTarget(renderer_, previous_target);
+    }
+    if (!scene_composite_resource_) {
+        vibble::log::error("[SceneRenderer] GPU-only invariant violation: scene.composite target creation returned null.");
     }
     return scene_composite_resource_ != nullptr;
 }

@@ -1103,7 +1103,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         throw std::runtime_error("[SceneRenderer] GPU frame-graph startup probe failed: " + interop_probe_error);
     }
     if (!ensure_scene_target()) {
-        throw std::runtime_error("[SceneRenderer] GPU-only initialization failed: scene.composite must be GPU frame-graph resource-backed.");
+        throw std::runtime_error("[SceneRenderer] GPU-only initialization failed: could not initialize scene composite targets/resources.");
     }
     vibble::log::info("[SceneRenderer] GPU runtime renderer active.");
 
@@ -1158,34 +1158,35 @@ bool SceneRenderer::ensure_scene_target() {
                                                                                SDL_TEXTUREACCESS_TARGET,
                                                                                target_width,
                                                                                target_height);
+    scene_composite_sdl_gpu_interop_available_ = false;
     if (scene_composite_resource_) {
         SDL_SetTextureBlendMode(scene_composite_resource_, SDL_BLENDMODE_BLEND);
         // Force target initialization on backends that lazily materialize underlying GPU resources.
         SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
         if (!SDL_SetRenderTarget(renderer_, scene_composite_resource_)) {
-            vibble::log::error("[SceneRenderer] GPU-only invariant violation: unable to bind scene.composite as render target during initialization.");
+            vibble::log::error("[SceneRenderer] Failed to bind SDL scene.composite wrapper as render target during initialization.");
             destroy_texture(scene_composite_resource_);
             scene_composite_resource_ = nullptr;
-            return false;
-        }
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-        SDL_RenderClear(renderer_);
-        SDL_SetRenderTarget(renderer_, previous_target);
+        } else {
+            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+            SDL_RenderClear(renderer_);
+            SDL_SetRenderTarget(renderer_, previous_target);
 
-        SDL_PropertiesID props = SDL_GetTextureProperties(scene_composite_resource_);
-        void* gpu_ptr = props
-            ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr)
-            : nullptr;
-        if (!gpu_ptr) {
-            vibble::log::error("[SceneRenderer] GPU-only invariant violation: frame-graph target scene.composite is not GPU-backed.");
-            destroy_texture(scene_composite_resource_);
-            return false;
+            SDL_PropertiesID props = SDL_GetTextureProperties(scene_composite_resource_);
+            void* gpu_ptr = props
+                ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr)
+                : nullptr;
+            scene_composite_sdl_gpu_interop_available_ = (gpu_ptr != nullptr);
+            if (!scene_composite_sdl_gpu_interop_available_) {
+                vibble::log::warn("[SceneRenderer] SDL scene.composite GPU interop is unavailable; using frame-graph resource without SDL GPU pointer bridge.");
+            }
         }
     }
     if (!scene_composite_resource_) {
-        vibble::log::error("[SceneRenderer] GPU-only invariant violation: scene.composite target creation returned null.");
+        vibble::log::warn("[SceneRenderer] SDL scene.composite wrapper creation returned null; continuing with frame-graph-only scene.composite resource.");
     }
-    return scene_composite_resource_ != nullptr;
+    return gpu_scene_renderer_ ? gpu_scene_renderer_->find_texture_resource("scene.composite") != nullptr
+                               : scene_composite_resource_ != nullptr;
 }
 
 void SceneRenderer::enqueue_scene_composite_copy_pass_sequence(std::string_view writer_pass_name,
@@ -1441,7 +1442,7 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
 
 std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
     if (!scene_composite_resource_) {
-        return std::nullopt;
+        return SDL_Point{static_cast<int>(scene_composite_resource_spec_.width), static_cast<int>(scene_composite_resource_spec_.height)};
     }
     float w = 0.0f;
     float h = 0.0f;
@@ -2591,7 +2592,7 @@ void SceneRenderer::render() {
                                                 static_cast<float>(screen_width_) * 0.5f,
                                                 static_cast<float>(screen_height_) * 0.5f})
         : render_pipeline::BlurCompositeResult{};
-    const bool composed = scene_composite_pass_ &&
+    const bool composed = scene_composite_pass_ && scene_composite_resource_ &&
                           scene_composite_pass_->compose_gpu(scene_composite_resource_,
                                                              floor_texture,
                                                              floor_composer_ ? floor_composer_->floor_dark_mask_texture() : nullptr,
@@ -2603,10 +2604,14 @@ void SceneRenderer::render() {
         return;
     }
 
-    std::string frame_graph_error;
-    if (!execute_gpu_frame_graph(frame_graph_error)) {
-        fail_gpu_frame("Frame-graph execution failed: " + frame_graph_error, false);
-        return;
+    if (scene_composite_sdl_gpu_interop_available_) {
+        std::string frame_graph_error;
+        if (!execute_gpu_frame_graph(frame_graph_error)) {
+            fail_gpu_frame("Frame-graph execution failed: " + frame_graph_error, false);
+            return;
+        }
+    } else {
+        vibble::log::debug("[SceneRenderer] Skipping frame-graph SDL interop validation copy because SDL GPU pointer bridge is unavailable.");
     }
 
     if (!render_path_status_logged_) {

@@ -78,6 +78,15 @@ public:
         float light_max_cull_depth         = 32000.0f;
         float dynamic_renderer_depth_efficiency_depth = 2000.0f;
         float dynamic_renderer_depth_efficiency_min_density_ratio = 0.10f;
+        float near_light_depth_threshold = 250.0f;
+        float mid_light_depth_threshold  = 1200.0f;
+        float far_light_depth_threshold  = 4000.0f;
+        float near_light_cap = 12.0f;
+        float mid_light_cap  = 24.0f;
+        float far_light_cap  = 32.0f;
+        float shadow_quality_budget = 1.0f;
+        float global_ambient = 0.08f;
+        float global_exposure = 1.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
         bool lighting_v2_enabled = true;

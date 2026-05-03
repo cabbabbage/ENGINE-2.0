@@ -1360,13 +1360,7 @@ void DevControls::rebuild_settings_schema() {
         0,
         [this]() { return grid_overlay_enabled_; },
         [this](bool enabled) {
-            grid_overlay_enabled_ = enabled;
-            persist_dev_bool(kGridOverlayEnabledKey, enabled);
-            if (map_mode_ui_) {
-                if (auto* footer = map_mode_ui_->get_footer_bar()) {
-                    footer->set_grid_overlay_enabled(enabled, false);
-                }
-            }
+            sync_grid_overlay_enabled(enabled, true);
         },
         {},
         {},
@@ -1438,6 +1432,25 @@ void DevControls::rebuild_settings_schema() {
 
     other_settings_.set_settings_schema(global_settings_schema_);
     other_settings_.refresh_setting_values();
+}
+
+void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
+    grid_overlay_enabled_ = enabled;
+    persist_dev_bool(kGridOverlayEnabledKey, enabled);
+    if (!enabled) {
+        snap_to_grid_enabled_ = false;
+        persist_dev_bool(kGridSnapEnabledKey, false);
+        other_settings_.set_setting_value(OtherSettingsAndControls::kSnapToGridSettingId, false);
+        if (room_editor_) {
+            room_editor_->set_snap_to_grid_enabled(false);
+            room_editor_->refresh_cursor_snap();
+        }
+    }
+    if (update_footer && map_mode_ui_) {
+        if (auto* footer = map_mode_ui_->get_footer_bar()) {
+            footer->set_grid_overlay_enabled(enabled, false);
+        }
+    }
 }
 
 void DevControls::apply_bool_setting(const char* id, bool value, bool sync_other_settings) {
@@ -2194,13 +2207,8 @@ void DevControls::set_enabled(bool enabled) {
             room_editor_->set_room_trail_nav_visibility(false);
         }
         WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
-        grid_overlay_enabled_ = false;
+        sync_grid_overlay_enabled(false, true);
         other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, false);
-        if (map_mode_ui_) {
-            if (auto* footer = map_mode_ui_->get_footer_bar()) {
-                footer->set_grid_overlay_enabled(false, false);
-            }
-        }
         close_all_floating_panels();
         if (map_editor_ && map_editor_->is_enabled()) {
             map_editor_->exit(true, false);
@@ -4194,13 +4202,8 @@ void DevControls::begin_frame_editor_session(Asset* asset,
     frame_editor_session_->set_snap_resolution(grid_overlay_resolution_r_);
 
     frame_editor_prev_grid_overlay_ = grid_overlay_enabled_;
-    grid_overlay_enabled_ = true;
+    sync_grid_overlay_enabled(true, true);
     other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, grid_overlay_enabled_);
-    if (map_mode_ui_) {
-        if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            footer->set_grid_overlay_enabled(grid_overlay_enabled_, false);
-        }
-    }
 
     frame_editor_prev_asset_info_open_ = false;
     frame_editor_asset_for_reopen_ = nullptr;
@@ -4225,13 +4228,8 @@ void DevControls::begin_frame_editor_session(Asset* asset,
                                  std::move(on_host_closed),
                                  [this]() {
 
-        this->grid_overlay_enabled_ = this->frame_editor_prev_grid_overlay_;
+        this->sync_grid_overlay_enabled(this->frame_editor_prev_grid_overlay_, true);
         other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, this->grid_overlay_enabled_);
-        if (this->map_mode_ui_) {
-            if (auto* footer = this->map_mode_ui_->get_footer_bar()) {
-                footer->set_grid_overlay_enabled(this->grid_overlay_enabled_, false);
-            }
-        }
 
         if (this->frame_editor_prev_asset_info_open_ && this->room_editor_ && this->frame_editor_asset_for_reopen_) {
             this->room_editor_->open_asset_info_editor_for_asset(this->frame_editor_asset_for_reopen_);
@@ -4250,13 +4248,8 @@ void DevControls::end_frame_editor_session() {
     if (frame_editor_session_) {
         frame_editor_session_->end();
     }
-    grid_overlay_enabled_ = frame_editor_prev_grid_overlay_;
+    sync_grid_overlay_enabled(frame_editor_prev_grid_overlay_, true);
     other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, grid_overlay_enabled_);
-    if (map_mode_ui_) {
-        if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            footer->set_grid_overlay_enabled(grid_overlay_enabled_, false);
-        }
-    }
     apply_header_suppression();
 }
 

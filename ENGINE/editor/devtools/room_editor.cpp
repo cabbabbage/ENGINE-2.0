@@ -1454,6 +1454,7 @@ constexpr float kCameraPanPercentPerPixel = 0.2f;
 constexpr std::int64_t kMaxSpatialCellsPerAsset = 4096;
 constexpr int kMaxScreenCoordMagnitude = 1 << 20;
 constexpr int kAnchorHandlePickRadiusPx = 12;
+constexpr float kAnchorPointSnapRadiusPx = 18.0f;
 constexpr int kShiftAnchorHoverRadiusPx = 20;
 constexpr int kShiftAnchorSelectRadiusPx = 24;
 constexpr float kAnchorDepthScrollStepWorldPx = 0.1f;
@@ -15442,6 +15443,38 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
                     best_x,
                     best_y)) {
                 return false;
+            }
+            if (snap_to_grid_enabled_) {
+                float best_snap_dist_sq = kAnchorPointSnapRadiusPx * kAnchorPointSnapRadiusPx;
+                int snap_x = best_x;
+                int snap_y = best_y;
+                for (const auto& candidate : anchors) {
+                    if (candidate.name == anchor_name) {
+                        continue;
+                    }
+                    const auto sample = anchor_points::resolve_frame_anchor_sample(
+                        *target,
+                        candidate,
+                        anchor_points::GridMaterialization::None);
+                    if (sample.resolved.missing) {
+                        continue;
+                    }
+                    const SDL_FPoint candidate_screen =
+                        sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
+                    if (!std::isfinite(candidate_screen.x) || !std::isfinite(candidate_screen.y)) {
+                        continue;
+                    }
+                    const float dx = candidate_screen.x - desired_screen.x;
+                    const float dy = candidate_screen.y - desired_screen.y;
+                    const float dist_sq = dx * dx + dy * dy;
+                    if (dist_sq <= best_snap_dist_sq) {
+                        best_snap_dist_sq = dist_sq;
+                        snap_x = candidate.texture_x;
+                        snap_y = candidate.texture_y;
+                    }
+                }
+                best_x = snap_x;
+                best_y = snap_y;
             }
 
             if (it->texture_x == best_x && it->texture_y == best_y) {

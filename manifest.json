@@ -15592,7 +15592,7 @@
                 "texture_y": 1112
               },
               {
-                "depth_offset": 0.0,
+                "depth_offset": -6.099999904632568,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15614,8 +15614,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 942,
-                "texture_y": 952
+                "texture_x": 977,
+                "texture_y": 939
               }
             ]
           ],
@@ -15645,6 +15645,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
@@ -27103,7 +27106,6 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 1.809999942779541,
         "blur_px": 1.71999990940094,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
@@ -27111,9 +27113,10 @@
         "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 529.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
-        "front_layer_light_strength_multiplier": 1.350000023841858,
-        "layer_depth_curve": 70.4000015258789,
-        "layer_depth_interval": 91.0,
+        "far_light_cap": 32.0,
+        "far_light_depth_threshold": 4000.0,
+        "global_ambient": 0.07999999821186066,
+        "global_exposure": 1.0,
         "light_culling_debug_overlay": false,
         "light_distance_fade_start_ratio": 0.800000011920929,
         "light_fade_in_seconds": 0.07999999821186066,
@@ -27122,11 +27125,16 @@
         "light_max_cull_depth": 15135.0,
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
+        "lighting_v2_enabled": true,
         "max_camera_velocity": 2200.0,
         "max_cull_depth": 6952.0,
+        "mid_light_cap": 24.0,
+        "mid_light_depth_threshold": 251.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
+        "near_light_cap": 12.0,
+        "near_light_depth_threshold": 250.0,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
@@ -27135,6 +27143,7 @@
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
+        "shadow_quality_budget": 1.0,
         "transition_damping": 9.0
       },
       "content_root": "content/forrest",
@@ -27292,8 +27301,8 @@
           "curvyness": 2,
           "display_color": [
             31,
+            32,
             204,
-            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27346,9 +27355,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            31,
-            146,
-            204,
+            239,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -27371,9 +27380,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            147,
-            204,
-            31,
+            129,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27396,9 +27405,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            242,
-            138,
-            36,
+            31,
+            148,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27456,9 +27465,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            149,
-            85,
-            242,
+            151,
+            204,
+            71,
             255
           ],
           "edge_smoothness": 70,
@@ -27522,9 +27531,9 @@
           "camera_zoom_percent": 14,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            122,
+            242,
+            167,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27780,7 +27789,7 @@
           "display_color": [
             31,
             204,
-            114,
+            105,
             255
           ],
           "edge_smoothness": 96,

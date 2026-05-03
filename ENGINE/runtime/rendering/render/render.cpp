@@ -1156,7 +1156,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     gpu_frame_graph_strict_mode_ = read_env_bool("VIBBLE_GPU_FRAME_GRAPH_STRICT", dev_default_strict);
     std::string interop_probe_error;
     if (!probe_frame_graph_interop(interop_probe_error)) {
-        throw std::runtime_error("[SceneRenderer] GPU frame-graph interop startup probe failed: " + interop_probe_error);
+        throw std::runtime_error("[SceneRenderer] GPU frame-graph startup probe failed: " + interop_probe_error);
     }
     vibble::log::info("[SceneRenderer] GPU runtime renderer active.");
 
@@ -1228,18 +1228,69 @@ bool SceneRenderer::ensure_scene_target() {
 
 bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     out_error.clear();
-    if (!ensure_scene_target()) {
-        const int max_texture_size = renderer_max_texture_size(renderer_);
-        out_error = "Scene composite target allocation failed during interop probe. requested=" +
-            std::to_string(screen_width_) + "x" + std::to_string(screen_height_) +
-            " renderer_max=" + std::to_string(max_texture_size) +
-            " sdl_error=" + std::string(SDL_GetError());
+
+    if (!gpu_scene_renderer_) {
+        out_error = "GpuSceneRenderer is not initialized.";
         return false;
     }
-    if (!gpu_scene_renderer_->find_texture_resource("scene.composite")) {
-        out_error = "GpuSceneRenderer failed to retain internal scene.composite resource during startup probe.";
+    if (!gpu_scene_renderer_->device()) {
+        out_error = "GpuSceneRenderer device is not initialized.";
         return false;
     }
+
+    const std::uint32_t scene_width = static_cast<std::uint32_t>(std::max(1, screen_width_));
+    const std::uint32_t scene_height = static_cast<std::uint32_t>(std::max(1, screen_height_));
+
+    scene_composite_resource_spec_.width = scene_width;
+    scene_composite_resource_spec_.height = scene_height;
+    scene_composite_resource_spec_.format = gpu_scene_renderer_->device()->format_policy().albedo_format;
+    scene_composite_resource_spec_.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    scene_composite_resource_spec_.layer_count_or_depth = 1;
+    scene_composite_resource_spec_.num_levels = 1;
+    scene_composite_resource_spec_.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+    std::string frame_error;
+    if (!gpu_scene_renderer_->ensure_texture_resource("scene.composite", scene_composite_resource_spec_, frame_error)) {
+        out_error = frame_error.empty()
+            ? "Failed to allocate scene.composite resource during startup probe."
+            : frame_error;
+        return false;
+    }
+
+    GpuSceneRenderer::TextureResourceSpec scratch_copy_spec = scene_composite_resource_spec_;
+    if (!gpu_scene_renderer_->ensure_texture_resource("scene.frame_graph_copy", scratch_copy_spec, frame_error)) {
+        out_error = frame_error.empty()
+            ? "Failed to allocate scene.frame_graph_copy resource during startup probe."
+            : frame_error;
+        return false;
+    }
+
+    if (!gpu_scene_renderer_->begin_frame(&frame_error)) {
+        out_error = frame_error.empty() ? "GpuSceneRenderer::begin_frame failed during startup probe." : frame_error;
+        return false;
+    }
+
+    GpuFrameGraph::PassDescriptor probe_pass{};
+    probe_pass.type = GpuFrameGraph::PassType::Copy;
+    probe_pass.name = "startup_probe_copy_scene_composite";
+    probe_pass.resources = {
+        GpuFrameGraph::ResourceDependency{"scene.composite", false},
+        GpuFrameGraph::ResourceDependency{"scene.frame_graph_copy", true}
+    };
+    probe_pass.blit.source_texture = "scene.composite";
+    probe_pass.blit.destination_texture = "scene.frame_graph_copy";
+    probe_pass.blit.use_swapchain_destination = false;
+    probe_pass.blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+    probe_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
+    probe_pass.blit.width = scene_width;
+    probe_pass.blit.height = scene_height;
+    gpu_scene_renderer_->add_pass(std::move(probe_pass));
+
+    if (!gpu_scene_renderer_->end_frame(&frame_error)) {
+        out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed during startup probe." : frame_error;
+        return false;
+    }
+
     return true;
 }
 

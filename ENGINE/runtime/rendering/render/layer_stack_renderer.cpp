@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "rendering/render/render_diagnostics.hpp"
+#include "rendering/render/lighting_system_v2.hpp"
 
 namespace {
 
@@ -666,8 +667,7 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
     bool runtime_lighting_enabled,
-    float front_layer_light_strength_multiplier,
-    float behind_layer_light_strength_multiplier) {
+    bool lighting_v2_enabled) {
     render_pipeline::LayerRenderResult out{};
     out.layer_count = build.layer_count;
     out.player_layer_index = build.player_layer_index;
@@ -786,11 +786,12 @@ render_pipeline::LayerRenderResult LayerStackRenderer::render(
             const int signed_separation = render_internal::compare_depth_intervals_signed(
                 frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval,
                 layer_depth);
-            adjusted.intensity = render_internal::apply_layer_light_strength_bias(
-                adjusted.intensity,
-                signed_separation,
-                front_layer_light_strength_multiplier,
-                behind_layer_light_strength_multiplier);
+            if (lighting_v2_enabled) {
+                adjusted.intensity = render_internal::LightingSystemV2::attenuate_for_layer(
+                    adjusted,
+                    layer_depth,
+                    frame_scratch_.layer_metadata[li].screen_bounds);
+            }
             if (adjusted.intensity <= 0.0005f) {
                 continue;
             }
@@ -825,8 +826,7 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
     const render_pipeline::LayerBuildResult& build,
     const std::vector<LayerEffectProcessor::RuntimeLight>& runtime_lights,
     bool runtime_lighting_enabled,
-    float front_layer_light_strength_multiplier,
-    float behind_layer_light_strength_multiplier) {
+    bool lighting_v2_enabled) {
     render_pipeline::CompactLayerRenderResult out{};
     out.gpu_submission = current_gpu_submission_stats();
     if (!renderer_ ||
@@ -908,11 +908,13 @@ render_pipeline::CompactLayerRenderResult LayerStackRenderer::render_gpu_compact
             const render_internal::DepthInterval& light_depth =
                 frame_scratch_.light_metadata[static_cast<std::size_t>(light_index)].depth_interval;
             const int signed_separation = render_internal::compare_depth_intervals_signed(light_depth, layer_depth);
-            const float adjusted_intensity = render_internal::apply_layer_light_strength_bias(
-                light.intensity,
-                signed_separation,
-                front_layer_light_strength_multiplier,
-                behind_layer_light_strength_multiplier);
+            float adjusted_intensity = light.intensity;
+            if (lighting_v2_enabled) {
+                adjusted_intensity = render_internal::LightingSystemV2::attenuate_for_layer(
+                    light,
+                    layer_depth,
+                    frame_scratch_.layer_metadata[li].screen_bounds);
+            }
             if (adjusted_intensity > effective_light_intensity[light_index]) {
                 effective_light_intensity[light_index] = adjusted_intensity;
             }

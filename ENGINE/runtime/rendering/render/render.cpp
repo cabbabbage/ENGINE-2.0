@@ -104,14 +104,6 @@ int clamp_dimension_to_renderer_limit(int value, int renderer_limit, const char*
     return renderer_limit;
 }
 
-std::filesystem::path render_internal::runtime_gpu_shader_manifest_path() {
-    if (const char* override_manifest_path = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
-        override_manifest_path && *override_manifest_path) {
-        return std::filesystem::path(override_manifest_path);
-    }
-    return std::filesystem::path("ENGINE/runtime/rendering/shaders/runtime_shaders.json");
-}
-
 std::filesystem::path runtime_project_root_path() {
 #ifdef PROJECT_ROOT
     return std::filesystem::path(PROJECT_ROOT);
@@ -557,6 +549,14 @@ void draw_gpu_failure_overlay(SDL_Renderer* renderer,
 } // namespace
 
 namespace render_internal {
+
+std::filesystem::path runtime_gpu_shader_manifest_path() {
+    if (const char* override_manifest_path = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
+        override_manifest_path && *override_manifest_path) {
+        return std::filesystem::path(override_manifest_path);
+    }
+    return std::filesystem::path("ENGINE/runtime/rendering/shaders/runtime_shaders.json");
+}
 
 bool clear_gameplay_target_to_color(SDL_Renderer* renderer,
                                     SDL_Texture* gameplay_target,

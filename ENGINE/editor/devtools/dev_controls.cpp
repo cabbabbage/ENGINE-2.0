@@ -4278,6 +4278,13 @@ Assets::DevGridOverlayContext DevControls::dev_grid_overlay_context() const {
     return room_editor_->dev_grid_overlay_context();
 }
 
+std::vector<Assets::DevFloorProjectionMarker> DevControls::floor_projection_markers_for_floor_pass() {
+    if (!room_editor_ || !room_editor_->is_enabled()) {
+        return {};
+    }
+    return room_editor_->floor_projection_markers_for_floor_pass();
+}
+
 const Asset* DevControls::frame_editor_target() const {
     if (!frame_editor_session_ || !frame_editor_session_->is_active()) {
         return nullptr;

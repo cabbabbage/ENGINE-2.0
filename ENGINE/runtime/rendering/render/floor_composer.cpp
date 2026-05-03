@@ -352,6 +352,44 @@ void draw_grid_overlay_points(SDL_Renderer* renderer,
     SDL_SetRenderDrawBlendMode(renderer, prev_blend);
 }
 
+void draw_floor_projection_markers(SDL_Renderer* renderer,
+                                   const WarpedScreenGrid& cam,
+                                   const std::vector<Assets::DevFloorProjectionMarker>& markers) {
+    if (!renderer || markers.empty()) {
+        return;
+    }
+
+    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    for (const auto& marker : markers) {
+        if (!std::isfinite(marker.floor_world_xz.x) || !std::isfinite(marker.floor_world_xz.y)) {
+            continue;
+        }
+        const float half_extent = std::max(0.5f, marker.world_half_extent);
+        SDL_FPoint x0{};
+        SDL_FPoint x1{};
+        SDL_FPoint z0{};
+        SDL_FPoint z1{};
+        if (!project_floor_point_to_screen(cam, marker.floor_world_xz.x - half_extent, marker.floor_world_xz.y, x0) ||
+            !project_floor_point_to_screen(cam, marker.floor_world_xz.x + half_extent, marker.floor_world_xz.y, x1) ||
+            !project_floor_point_to_screen(cam, marker.floor_world_xz.x, marker.floor_world_xz.y - half_extent, z0) ||
+            !project_floor_point_to_screen(cam, marker.floor_world_xz.x, marker.floor_world_xz.y + half_extent, z1)) {
+            continue;
+        }
+
+        SDL_SetRenderDrawColor(renderer, marker.color.r, marker.color.g, marker.color.b, marker.color.a);
+        SDL_RenderLine(renderer, x0.x, x0.y, x1.x, x1.y);
+        SDL_RenderLine(renderer, z0.x, z0.y, z1.x, z1.y);
+    }
+
+    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+}
+
 } // namespace
 
 GridTileRenderer::GridTileRenderer(Assets* assets)
@@ -728,6 +766,7 @@ SDL_Texture* FloorComposer::compose_gpu(const WarpedScreenGrid& cam,
                         draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
                     }
                 }
+                draw_floor_projection_markers(renderer_, cam, assets_->dev_floor_projection_markers());
             }
             SDL_SetRenderClipRect(renderer_, nullptr);
         }
@@ -879,6 +918,7 @@ SDL_Texture* FloorComposer::compose(const WarpedScreenGrid& cam,
                         draw_grid_overlay_points(renderer_, cam, assets_->dev_grid_overlay_cell_size_px());
                     }
                 }
+                draw_floor_projection_markers(renderer_, cam, assets_->dev_floor_projection_markers());
             }
             SDL_SetRenderClipRect(renderer_, nullptr);
         }

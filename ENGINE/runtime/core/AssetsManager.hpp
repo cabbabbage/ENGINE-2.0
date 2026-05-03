@@ -68,6 +68,12 @@ public:
         bool has_selected_point_center = false;
     };
 
+    struct DevFloorProjectionMarker {
+        SDL_FPoint floor_world_xz{0.0f, 0.0f};
+        SDL_Color color{255, 255, 255, 200};
+        float world_half_extent = 8.0f;
+    };
+
     class WorldMutationBatch {
     public:
         explicit WorldMutationBatch(Assets* owner = nullptr) : owner_(owner) {}
@@ -272,6 +278,7 @@ public:
     bool dev_grid_overlay_enabled() const;
     int dev_grid_overlay_cell_size_px() const;
     DevGridOverlayContext dev_grid_overlay_context() const;
+    std::vector<DevFloorProjectionMarker> dev_floor_projection_markers();
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
 

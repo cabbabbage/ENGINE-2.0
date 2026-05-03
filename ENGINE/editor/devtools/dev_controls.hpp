@@ -140,6 +140,7 @@ public:
     bool is_snap_to_grid_enabled() const { return snap_to_grid_enabled_; }
     int  grid_cell_size_px() const { return grid_cell_size_px_; }
     Assets::DevGridOverlayContext dev_grid_overlay_context() const;
+    std::vector<Assets::DevFloorProjectionMarker> floor_projection_markers_for_floor_pass();
 
     void begin_frame_editor_session(Asset* asset,
                                     std::shared_ptr<animation_editor::AnimationDocument> document,

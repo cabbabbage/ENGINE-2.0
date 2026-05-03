@@ -15436,7 +15436,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.10000001639127731,
+                "depth_offset": -0.5,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15444,8 +15444,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 919,
-                "texture_y": 732
+                "texture_x": 934,
+                "texture_y": 759
               },
               {
                 "depth_offset": -15.0,
@@ -15460,7 +15460,7 @@
                 "texture_y": 1583
               },
               {
-                "depth_offset": -4.400001525878906,
+                "depth_offset": -4.4000020027160645,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15468,8 +15468,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 931,
-                "texture_y": 1182
+                "texture_x": 935,
+                "texture_y": 1135
               },
               {
                 "depth_offset": -15.0,
@@ -15480,8 +15480,8 @@
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 507,
-                "texture_y": 1557
+                "texture_x": 471,
+                "texture_y": 1553
               },
               {
                 "depth_offset": -15.0,
@@ -15496,7 +15496,7 @@
                 "texture_y": 1558
               },
               {
-                "depth_offset": -15.0,
+                "depth_offset": -23.400005340576172,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15504,8 +15504,8 @@
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1368,
-                "texture_y": 1568
+                "texture_x": 1311,
+                "texture_y": 1577
               },
               {
                 "depth_offset": -15.0,
@@ -15580,7 +15580,7 @@
                 "texture_y": 1265
               },
               {
-                "depth_offset": 56.69998550415039,
+                "depth_offset": 52.899993896484375,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15588,8 +15588,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 454,
-                "texture_y": 1249
+                "texture_x": 279,
+                "texture_y": 1112
               },
               {
                 "depth_offset": 0.0,
@@ -27291,9 +27291,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            139,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27346,8 +27346,8 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
+            31,
             146,
-            71,
             204,
             255
           ],
@@ -27371,9 +27371,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            31,
+            147,
             204,
-            42,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27397,8 +27397,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            85,
-            153,
+            138,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -27456,9 +27456,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            223,
+            149,
+            85,
             242,
-            36,
             255
           ],
           "edge_smoothness": 70,
@@ -27522,9 +27522,9 @@
           "camera_zoom_percent": 14,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            230,
+            204,
+            31,
+            122,
             255
           ],
           "edge_smoothness": 101,
@@ -27669,8 +27669,8 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -2738,
-              "dz": -1519,
+              "dx": -2484,
+              "dz": 1168,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27682,7 +27682,7 @@
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-8888611014e8"
@@ -27779,8 +27779,8 @@
           "curvyness": 2,
           "display_color": [
             31,
-            112,
             204,
+            114,
             255
           ],
           "edge_smoothness": 96,

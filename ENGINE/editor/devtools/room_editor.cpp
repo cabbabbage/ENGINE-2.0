@@ -813,26 +813,23 @@ void normalize_impassable_shape_winding(std::vector<AssetInfo::ImpassableShapePo
     }
 }
 
-bool intersect_camera_ray_on_ground_plane(const render_projection::CameraRay& ray,
-                                          render_projection::WorldPoint3& out_world_point) {
-    out_world_point = render_projection::WorldPoint3{};
-    if (!ray.valid || !ray.origin.valid || !ray.direction.valid) {
+bool project_floor_world_xz_to_screen(const WarpedScreenGrid& cam,
+                                      const SDL_FPoint& floor_world_xz,
+                                      SDL_FPoint& out_screen) {
+    SDL_FPoint linear_screen{};
+    if (!cam.project_world_point(SDL_FPoint{floor_world_xz.x, 0.0f},
+                                 floor_world_xz.y,
+                                 linear_screen) ||
+        !std::isfinite(linear_screen.x) ||
+        !std::isfinite(linear_screen.y)) {
         return false;
     }
-    if (std::abs(ray.direction.y) <= 1e-6f) {
+    linear_screen.y = cam.warp_floor_screen_y(0.0f, linear_screen.y);
+    if (!std::isfinite(linear_screen.y)) {
         return false;
     }
-    const float t = -ray.origin.y / ray.direction.y;
-    if (!std::isfinite(t) || t <= 0.0f) {
-        return false;
-    }
-    out_world_point.x = ray.origin.x + ray.direction.x * t;
-    out_world_point.y = 0.0f;
-    out_world_point.z = ray.origin.z + ray.direction.z * t;
-    out_world_point.valid = std::isfinite(out_world_point.x) &&
-                            std::isfinite(out_world_point.y) &&
-                            std::isfinite(out_world_point.z);
-    return out_world_point.valid;
+    out_screen = linear_screen;
+    return true;
 }
 
 bool project_impassable_shape(const Asset& target,
@@ -862,19 +859,22 @@ bool project_impassable_shape(const Asset& target,
             return false;
         }
 
-        render_projection::CameraRay ray{};
-        if (!cam.build_camera_ray_from_screen(sample.flat_screen_px, ray)) {
-            return false;
-        }
-        render_projection::WorldPoint3 floor_point{};
-        if (!intersect_camera_ray_on_ground_plane(ray, floor_point)) {
+        const anchor_points::AnchorWorldPoint3 floor_projection_point =
+            sample.final_anchor_point.valid ? sample.final_anchor_point : sample.flat_relative_pixel_point;
+        if (!floor_projection_point.valid ||
+            !std::isfinite(floor_projection_point.x) ||
+            !std::isfinite(floor_projection_point.z)) {
             return false;
         }
 
         out_projection.anchor_screen_points.push_back(sample.flat_screen_px);
-        out_projection.floor_world_points.push_back(SDL_FPoint{floor_point.x, floor_point.z});
-        const SDL_FPoint floor_screen = cam.map_to_screen_f(SDL_FPoint{floor_point.x, floor_point.z});
-        if (!std::isfinite(floor_screen.x) || !std::isfinite(floor_screen.y)) {
+        out_projection.floor_world_points.push_back(
+            SDL_FPoint{floor_projection_point.x, floor_projection_point.z});
+        SDL_FPoint floor_screen{};
+        if (!project_floor_world_xz_to_screen(
+                cam,
+                SDL_FPoint{floor_projection_point.x, floor_projection_point.z},
+                floor_screen)) {
             return false;
         }
         out_projection.floor_screen_points.push_back(floor_screen);
@@ -4454,25 +4454,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     const int frame_w = std::max(1, frame_dims.x);
                     const int frame_h = std::max(1, frame_dims.y);
                     int sample_step_px = std::max(1, cell);
-                    constexpr int kMaxGridSamples = 32000;
-                    const int base_samples_x = (frame_w + sample_step_px - 1) / sample_step_px + 1;
-                    const int base_samples_y = (frame_h + sample_step_px - 1) / sample_step_px + 1;
-                    const int base_sample_count = base_samples_x * base_samples_y;
-                    if (base_sample_count > kMaxGridSamples) {
-                        const float oversample = std::sqrt(static_cast<float>(base_sample_count) /
-                                                           static_cast<float>(kMaxGridSamples));
-                        const int scale = std::max(1, static_cast<int>(std::ceil(oversample)));
-                        sample_step_px = std::max(sample_step_px, cell * scale);
-                    }
-
-                    auto snap_tex = [sample_step_px](int value) -> int {
-                        return (value / sample_step_px) * sample_step_px;
-                    };
-                    const int center_tex_x = std::clamp(snap_tex(frame_w / 2), 0, frame_w - 1);
-                    const int center_tex_y = std::clamp(snap_tex(frame_h / 2), 0, frame_h - 1);
-                    const float radius_tex_x = static_cast<float>(std::max(1, frame_w / 2));
-                    const float radius_tex_y = static_cast<float>(std::max(1, frame_h / 2));
-                    const float radius_tex_sq = radius_tex_x * radius_tex_x + radius_tex_y * radius_tex_y;
+                    constexpr int kMaxSamplesPerPass = 32000;
 
                     constexpr int kGridPointSizePx = 2;
                     constexpr int kGridPointHalf = kGridPointSizePx / 2;
@@ -4492,36 +4474,95 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                             : 0.0f;
                     sample_anchor.resolve_x = true;
 
-                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                    for (int tex_y = 0; tex_y < frame_h; tex_y += sample_step_px) {
-                        for (int tex_x = 0; tex_x < frame_w; tex_x += sample_step_px) {
-                            sample_anchor.texture_x = tex_x;
-                            sample_anchor.texture_y = tex_y;
-                            const auto resolved_sample = anchor_points::resolve_frame_anchor_sample(
-                                *overlay_target,
-                                sample_anchor,
-                                anchor_points::GridMaterialization::None);
-                            if (resolved_sample.resolved.missing ||
-                                !resolved_sample.has_flat_screen_px ||
-                                !resolved_sample.flat_relative_pixel_point.valid) {
-                                continue;
-                            }
-                            // Hide underground points for the XY overlay (floor is y=0).
-                            if (resolved_sample.flat_relative_pixel_point.y < 0.0f) {
-                                continue;
-                            }
-                            const SDL_FPoint screen_point = resolved_sample.flat_screen_px;
-                            if (!std::isfinite(screen_point.x) || !std::isfinite(screen_point.y)) {
-                                continue;
-                            }
+                    auto sample_screen_for_texture = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
+                        sample_anchor.texture_x = texture_x;
+                        sample_anchor.texture_y = texture_y;
+                        const auto resolved_sample = anchor_points::resolve_frame_anchor_sample(
+                            *overlay_target,
+                            sample_anchor,
+                            anchor_points::GridMaterialization::None);
+                        if (resolved_sample.resolved.missing || !resolved_sample.has_flat_screen_px) {
+                            return false;
+                        }
+                        out_screen = resolved_sample.flat_screen_px;
+                        return std::isfinite(out_screen.x) && std::isfinite(out_screen.y);
+                    };
 
-                            const float dx = static_cast<float>(tex_x - center_tex_x);
-                            const float dy = static_cast<float>(tex_y - center_tex_y);
-                            const float dist_sq = dx * dx + dy * dy;
+                    float mouse_x = 0.0f;
+                    float mouse_y = 0.0f;
+                    if (input_) {
+                        mouse_x = static_cast<float>(input_->getX());
+                        mouse_y = static_cast<float>(input_->getY());
+                    } else {
+                        SDL_GetMouseState(&mouse_x, &mouse_y);
+                    }
+                    const SDL_FPoint desired_screen{
+                        static_cast<float>(std::lround(mouse_x)),
+                        static_cast<float>(std::lround(mouse_y))
+                    };
+
+                    const bool same_target =
+                        xy_overlay_cursor_state_.valid &&
+                        xy_overlay_cursor_state_.target_asset == overlay_target &&
+                        std::fabs(xy_overlay_cursor_state_.target_world_z - target_world_z) < 1e-3f;
+                    int seed_x = same_target
+                        ? xy_overlay_cursor_state_.tex_x
+                        : frame_w / 2;
+                    int seed_y = same_target
+                        ? xy_overlay_cursor_state_.tex_y
+                        : frame_h / 2;
+                    int solved_x = seed_x;
+                    int solved_y = seed_y;
+                    if (!solve_texture_point_for_screen_target(
+                            seed_x,
+                            seed_y,
+                            desired_screen,
+                            sample_screen_for_texture,
+                            solved_x,
+                            solved_y)) {
+                        solved_x = seed_x;
+                        solved_y = seed_y;
+                    }
+                    xy_overlay_cursor_state_.target_asset = overlay_target;
+                    xy_overlay_cursor_state_.target_world_z = target_world_z;
+                    xy_overlay_cursor_state_.tex_x = solved_x;
+                    xy_overlay_cursor_state_.tex_y = solved_y;
+                    xy_overlay_cursor_state_.valid = true;
+
+                    auto snap_tex = [sample_step_px](int value) -> int {
+                        return (value / sample_step_px) * sample_step_px;
+                    };
+                    const int center_tex_x = snap_tex(solved_x);
+                    const int center_tex_y = snap_tex(solved_y);
+                    int radius_cells = std::clamp(
+                        std::max(screen_w_, screen_h_) / std::max(4, cell),
+                        24,
+                        320);
+                    while (((2 * radius_cells + 1) * (2 * radius_cells + 1)) > kMaxSamplesPerPass &&
+                           radius_cells > 12) {
+                        --radius_cells;
+                    }
+                    const float radius_cells_f = static_cast<float>(std::max(1, radius_cells));
+                    const float radius_cells_sq = radius_cells_f * radius_cells_f;
+
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                    for (int gy = -radius_cells; gy <= radius_cells; ++gy) {
+                        for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
+                            const float dist_cells_sq =
+                                static_cast<float>(gx * gx + gy * gy);
+                            if (dist_cells_sq > radius_cells_sq) {
+                                continue;
+                            }
+                            const int tex_x = center_tex_x + gx * sample_step_px;
+                            const int tex_y = center_tex_y + gy * sample_step_px;
+                            SDL_FPoint screen_point{};
+                            if (!sample_screen_for_texture(tex_x, tex_y, screen_point)) {
+                                continue;
+                            }
                             const float edge_t =
-                                std::clamp(std::sqrt(std::max(0.0f, dist_sq) / std::max(1.0f, radius_tex_sq)), 0.0f, 1.0f);
+                                std::clamp(std::sqrt(std::max(0.0f, dist_cells_sq) / radius_cells_sq), 0.0f, 1.0f);
                             const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));
-                            const bool is_cursor_intersection = (tex_x == center_tex_x && tex_y == center_tex_y);
+                            const bool is_cursor_intersection = (gx == 0 && gy == 0);
                             if (is_cursor_intersection) {
                                 SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
                             } else {
@@ -4544,46 +4585,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 }
             }
         }
-
-        struct FloorProjectionMarker {
-            SDL_FPoint floor_world_xz{0.0f, 0.0f};
-            SDL_Color color{255, 255, 255, 200};
-            float world_half_extent = 8.0f;
-        };
-        std::vector<FloorProjectionMarker> floor_projection_markers;
-        floor_projection_markers.reserve(256);
-
-        const int overlay_cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
-        auto add_floor_projection_marker_xz = [&](const SDL_FPoint& floor_world_xz,
-                                                  SDL_Color color,
-                                                  bool emphasized) {
-            if (!std::isfinite(floor_world_xz.x) || !std::isfinite(floor_world_xz.y)) {
-                return;
-            }
-            FloorProjectionMarker marker{};
-            marker.floor_world_xz = floor_world_xz;
-            marker.color = color;
-            marker.color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(color.a), 90, 255));
-            marker.world_half_extent =
-                static_cast<float>(std::max(2, overlay_cell / 2)) * (emphasized ? 1.3f : 1.0f);
-            floor_projection_markers.push_back(marker);
-        };
-        auto add_floor_projection_marker_screen = [&](const SDL_FPoint& screen_px,
-                                                      SDL_Color color,
-                                                      bool emphasized) {
-            if (!std::isfinite(screen_px.x) || !std::isfinite(screen_px.y)) {
-                return;
-            }
-            render_projection::CameraRay ray{};
-            if (!cam.build_camera_ray_from_screen(screen_px, ray)) {
-                return;
-            }
-            render_projection::WorldPoint3 floor_point{};
-            if (!intersect_camera_ray_on_ground_plane(ray, floor_point)) {
-                return;
-            }
-            add_floor_projection_marker_xz(SDL_FPoint{floor_point.x, floor_point.z}, color, emphasized);
-        };
 
         const bool shift_now = is_shift_key_down();
 
@@ -4859,7 +4860,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                     sdl_render::Rect(renderer, &outline);
                 }
-                add_floor_projection_marker_screen(handle.final_screen_px, color, selected || hovered);
             }
         }
 
@@ -4884,9 +4884,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_Rect ring{cx - 11, cy - 11, 23, 23};
                     sdl_render::Rect(renderer, &ring);
                 }
-                add_floor_projection_marker_screen(oval_edit_.center_screen_px,
-                                                   center_color,
-                                                   oval_edit_.center_selected || oval_edit_.center_hovered);
             }
 
             if (oval_edit_.guide_screen_samples.size() >= 2) {
@@ -4971,7 +4968,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                     sdl_render::Rect(renderer, &outline);
                 }
-                add_floor_projection_marker_screen(handle.final_screen_px, color, selected || hovered);
             }
         }
 
@@ -4999,8 +4995,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     continue;
                 }
                 SDL_FPoint floor_screen = screen;
-                bool has_floor_world_xz = false;
-                SDL_FPoint floor_world_xz{0.0f, 0.0f};
                 if (movement_edit_.target_asset &&
                     static_cast<std::size_t>(i) < movement_edit_.rel_positions.size() &&
                     static_cast<std::size_t>(i) < movement_edit_.rel_positions_z.size()) {
@@ -5012,8 +5006,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     const float floor_world_z =
                         movement_edit_.rel_positions[static_cast<std::size_t>(i)].y +
                         static_cast<float>(anchor.y);
-                    floor_world_xz = SDL_FPoint{floor_world_xy.x, floor_world_z};
-                    has_floor_world_xz = std::isfinite(floor_world_xz.x) && std::isfinite(floor_world_xz.y);
                     if (!cam.project_world_point(floor_world_xy, floor_world_z, floor_screen)) {
                         floor_screen = cam.map_to_screen_f(SDL_FPoint{
                             floor_world_xy.x,
@@ -5046,11 +5038,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_Rect outline{point_rect.x - 1, point_rect.y - 1, point_rect.w + 2, point_rect.h + 2};
                     SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                     sdl_render::Rect(renderer, &outline);
-                }
-                if (has_floor_world_xz) {
-                    add_floor_projection_marker_xz(floor_world_xz, color, selected || hovered);
-                } else {
-                    add_floor_projection_marker_screen(screen, color, selected || hovered);
                 }
             }
         }
@@ -5187,9 +5174,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         sdl_render::Rect(renderer, &outline);
                     }
                     const auto& wp = box.world_points[static_cast<std::size_t>(point_index)];
-                    add_floor_projection_marker_xz(SDL_FPoint{wp.x, wp.z},
-                                                   draw_color,
-                                                   selected_corner_point || hovered_corner_point);
                 }
                 if (!box.selected) {
                     continue;
@@ -5442,11 +5426,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         static_cast<float>(radius * 2 + 1)};
                     SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, point_color.a);
                     SDL_RenderFillRect(renderer, &handle_rect);
-                    if (point_index < projection.floor_world_points.size()) {
-                        add_floor_projection_marker_xz(projection.floor_world_points[point_index],
-                                                       point_color,
-                                                       point_selected || point_hovered);
-                    }
                 }
             }
         }
@@ -5604,50 +5583,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
-        auto render_floor_projection_markers = [&]() {
-            if (floor_projection_markers.empty()) {
-                return;
-            }
-            SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
-            Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
-            SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
-            SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            for (const FloorProjectionMarker& marker : floor_projection_markers) {
-                SDL_FPoint x0 = cam.map_to_screen_f(SDL_FPoint{
-                    marker.floor_world_xz.x - marker.world_half_extent,
-                    marker.floor_world_xz.y});
-                SDL_FPoint x1 = cam.map_to_screen_f(SDL_FPoint{
-                    marker.floor_world_xz.x + marker.world_half_extent,
-                    marker.floor_world_xz.y});
-                SDL_FPoint z0 = cam.map_to_screen_f(SDL_FPoint{
-                    marker.floor_world_xz.x,
-                    marker.floor_world_xz.y - marker.world_half_extent});
-                SDL_FPoint z1 = cam.map_to_screen_f(SDL_FPoint{
-                    marker.floor_world_xz.x,
-                    marker.floor_world_xz.y + marker.world_half_extent});
-                if (!std::isfinite(x0.x) || !std::isfinite(x0.y) ||
-                    !std::isfinite(x1.x) || !std::isfinite(x1.y) ||
-                    !std::isfinite(z0.x) || !std::isfinite(z0.y) ||
-                    !std::isfinite(z1.x) || !std::isfinite(z1.y)) {
-                    continue;
-                }
-                SDL_SetRenderDrawColor(renderer, marker.color.r, marker.color.g, marker.color.b, marker.color.a);
-                SDL_RenderLine(renderer,
-                               static_cast<int>(std::lround(x0.x)),
-                               static_cast<int>(std::lround(x0.y)),
-                               static_cast<int>(std::lround(x1.x)),
-                               static_cast<int>(std::lround(x1.y)));
-                SDL_RenderLine(renderer,
-                               static_cast<int>(std::lround(z0.x)),
-                               static_cast<int>(std::lround(z0.y)),
-                               static_cast<int>(std::lround(z1.x)),
-                               static_cast<int>(std::lround(z1.y)));
-            }
-            SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
-            SDL_SetRenderDrawBlendMode(renderer, prev_blend);
-        };
-        render_floor_projection_markers();
     }
 
     if (library_ui_ && library_ui_->is_visible()) {
@@ -12762,6 +12697,13 @@ void RoomEditor::refresh_oval_mode_handles() {
         handle.has_flat_screen_px = has_flat_screen;
         handle.final_screen_px = has_final_screen ? final_screen : flat_screen;
         handle.has_final_screen_px = has_final_screen || has_flat_screen;
+        const oval_anchor_math::WorldPoint3 floor_projection_point = final_point.valid ? final_point : flat_point;
+        if (floor_projection_point.valid &&
+            std::isfinite(floor_projection_point.x) &&
+            std::isfinite(floor_projection_point.z)) {
+            handle.floor_world_xz = SDL_FPoint{floor_projection_point.x, floor_projection_point.z};
+            handle.has_floor_world_xz = true;
+        }
         oval_edit_.handles.push_back(handle);
     }
 
@@ -14518,6 +14460,17 @@ void RoomEditor::refresh_anchor_mode_handles() {
         handle.final_screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.screen_px;
         handle.has_final_screen_px = sample.has_final_screen_px ||
                                      (std::isfinite(sample.screen_px.x) && std::isfinite(sample.screen_px.y));
+        if (sample.final_anchor_point.valid &&
+            std::isfinite(sample.final_anchor_point.x) &&
+            std::isfinite(sample.final_anchor_point.z)) {
+            handle.floor_world_xz = SDL_FPoint{sample.final_anchor_point.x, sample.final_anchor_point.z};
+            handle.has_floor_world_xz = true;
+        } else if (!sample.resolved.missing &&
+                   std::isfinite(sample.resolved.world_exact_pos_2d.x) &&
+                   std::isfinite(sample.resolved.world_exact_z)) {
+            handle.floor_world_xz = SDL_FPoint{sample.resolved.world_exact_pos_2d.x, sample.resolved.world_exact_z};
+            handle.has_floor_world_xz = true;
+        }
         anchor_edit_.handles.push_back(handle);
     }
 
@@ -19857,18 +19810,57 @@ bool RoomEditor::resolve_selected_overlay_point_floor_xz(SDL_FPoint& out_world_x
         if (oval_edit_.selected_point_index >= 0) {
             const int selected = oval_edit_.selected_point_index;
             for (const auto& handle : oval_edit_.handles) {
-                if (handle.point_index == selected && handle.has_final_screen_px) {
-                    render_projection::CameraRay ray{};
-                    if (!cam.build_camera_ray_from_screen(handle.final_screen_px, ray)) {
-                        continue;
+                if (handle.point_index == selected && handle.has_floor_world_xz) {
+                    out_world_xz = handle.floor_world_xz;
+                    return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
+                }
+            }
+
+            if (oval_edit_.target_asset && oval_edit_.target_asset->info) {
+                const auto& mappings = oval_edit_.target_asset->info->oval_anchor_mappings;
+                if (oval_edit_.selected_oval_index >= 0 &&
+                    oval_edit_.selected_oval_index < static_cast<int>(mappings.size())) {
+                    const auto& mapping = mappings[static_cast<std::size_t>(oval_edit_.selected_oval_index)];
+                    if (selected < static_cast<int>(mapping.points.size())) {
+                        const std::string center_anchor_name =
+                            AssetInfo::oval_center_anchor_name_for_mapping(mapping.name);
+                        const auto center_anchor_state = oval_edit_.target_asset->anchor_state(
+                            center_anchor_name,
+                            anchor_points::GridMaterialization::None,
+                            Asset::AnchorResolveMode::ForceRecompute);
+
+                        const SDL_Point origin_world = oval_edit_.target_asset->world_xy_point();
+                        const float fallback_world_z =
+                            static_cast<float>(oval_edit_.target_asset->world_z()) +
+                            oval_edit_.target_asset->world_z_offset();
+                        const bool center_exists = center_anchor_state.has_value() && center_anchor_state->exists;
+                        const float center_x = center_exists
+                            ? center_anchor_state->world_exact_pos_2d.x
+                            : static_cast<float>(origin_world.x);
+                        const float center_y = center_exists
+                            ? center_anchor_state->world_exact_pos_2d.y
+                            : static_cast<float>(origin_world.y);
+                        const float center_z = center_exists ? center_anchor_state->world_exact_z : fallback_world_z;
+
+                        const auto& point = mapping.points[static_cast<std::size_t>(selected)];
+                        const oval_anchor_math::WorldPoint3 flat_point =
+                            oval_anchor_math::make_flat_xz_point(center_x,
+                                                                 center_y,
+                                                                 center_z,
+                                                                 point.texture_x,
+                                                                 point.texture_y);
+                        oval_anchor_math::WorldPoint3 final_point =
+                            oval_anchor_math::apply_vertical_offset(flat_point, point.depth_offset);
+                        if (!final_point.valid) {
+                            final_point = flat_point;
+                        }
+                        if (final_point.valid &&
+                            std::isfinite(final_point.x) &&
+                            std::isfinite(final_point.z)) {
+                            out_world_xz = SDL_FPoint{final_point.x, final_point.z};
+                            return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
+                        }
                     }
-                    render_projection::WorldPoint3 floor_point{};
-                    if (intersect_camera_ray_on_ground_plane(ray, floor_point)) {
-                        out_world_xz.x = floor_point.x;
-                        out_world_xz.y = floor_point.z;
-                        return std::isfinite(out_world_xz.x) && std::isfinite(out_world_xz.y);
-                    }
-                    break;
                 }
             }
         }
@@ -19956,6 +19948,225 @@ void RoomEditor::refresh_scroll_overlay_preview() {
     if (!resolve_selected_overlay_point_floor_xz(selected_world_xz)) {
         scroll_preview_floor_overlay_active_ = false;
     }
+}
+
+std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_markers_for_floor_pass() {
+    std::vector<Assets::DevFloorProjectionMarker> markers;
+    if (!enabled_ || !assets_) {
+        return markers;
+    }
+
+    const bool suppress_asset_info_overlays =
+        (info_ui_ && info_ui_->is_visible() && !is_asset_stack_editor_active());
+    if (suppress_asset_info_overlays) {
+        return markers;
+    }
+
+    markers.reserve(256);
+    const int overlay_cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
+    auto add_marker = [&](const SDL_FPoint& floor_world_xz, SDL_Color color, bool emphasized) {
+        if (!std::isfinite(floor_world_xz.x) || !std::isfinite(floor_world_xz.y)) {
+            return;
+        }
+        Assets::DevFloorProjectionMarker marker{};
+        marker.floor_world_xz = floor_world_xz;
+        marker.color = color;
+        marker.color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(color.a), 90, 255));
+        marker.world_half_extent =
+            static_cast<float>(std::max(2, overlay_cell / 2)) * (emphasized ? 1.3f : 1.0f);
+        markers.push_back(marker);
+    };
+
+    if (anchor_mode_active()) {
+        refresh_anchor_mode_handles();
+        const bool isolate_selected_anchor =
+            anchor_edit_.point_selected && !anchor_edit_.selected_anchor_name.empty();
+        for (const AnchorHandleSample& handle : anchor_edit_.handles) {
+            if (!handle.has_final_screen_px || !handle.has_floor_world_xz) {
+                continue;
+            }
+            const bool selected = (handle.name == anchor_edit_.selected_anchor_name);
+            const bool hovered = !isolate_selected_anchor && (handle.name == anchor_edit_.hovered_anchor_name);
+            const bool subdued = isolate_selected_anchor && !selected;
+            SDL_Color color{255, 165, 0, 235};
+            if (selected) {
+                color = SDL_Color{255, 255, 255, 255};
+            } else if (subdued) {
+                color = SDL_Color{145, 145, 145, 105};
+            }
+            add_marker(handle.floor_world_xz, color, selected || hovered);
+        }
+    }
+
+    if (oval_mode_active()) {
+        refresh_oval_mode_handles();
+        if (oval_edit_.has_center_world) {
+            SDL_Color center_color{250, 205, 90, 220};
+            if (oval_edit_.center_selected) {
+                center_color = SDL_Color{255, 255, 255, 255};
+            } else if (oval_edit_.center_hovered) {
+                center_color = SDL_Color{255, 228, 128, 255};
+            }
+            add_marker(SDL_FPoint{oval_edit_.center_world_x, oval_edit_.center_world_z},
+                       center_color,
+                       oval_edit_.center_selected || oval_edit_.center_hovered);
+        }
+        for (const auto& handle : oval_edit_.handles) {
+            if (!handle.has_floor_world_xz) {
+                continue;
+            }
+            const bool selected = (handle.point_index == oval_edit_.selected_point_index);
+            const bool hovered = (handle.point_index == oval_edit_.hovered_point_index);
+            SDL_Color color{255, 165, 0, 235};
+            if (selected) {
+                color = SDL_Color{255, 255, 255, 255};
+            } else if (hovered) {
+                color = SDL_Color{255, 220, 120, 255};
+            }
+            add_marker(handle.floor_world_xz, color, selected || hovered);
+        }
+    }
+
+    if (movement_mode_active() && movement_edit_.target_asset) {
+        const SDL_Point anchor = movement_asset_anchor_world();
+        for (std::size_t i = 0; i < movement_edit_.rel_positions.size(); ++i) {
+            if (i >= movement_edit_.rel_positions_z.size()) {
+                break;
+            }
+            const bool selected = movement_edit_.selected_point_active && static_cast<int>(i) == movement_edit_.frame_index;
+            const bool hovered = static_cast<int>(i) == movement_edit_.hovered_point_index;
+            SDL_Color color{255, 165, 0, 235};
+            if (selected) {
+                color = SDL_Color{255, 255, 255, 255};
+            }
+            const SDL_FPoint floor_world_xz{
+                movement_edit_.rel_positions[i].x + static_cast<float>(anchor.x),
+                movement_edit_.rel_positions[i].y + static_cast<float>(anchor.y)
+            };
+            add_marker(floor_world_xz, color, selected || hovered);
+        }
+    }
+
+    auto add_runtime_box_markers =
+        [&](const std::vector<Asset::RuntimeBoxVolume>& volumes,
+            int selected_box,
+            int selected_point,
+            int hovered_box,
+            int hovered_point,
+            const SDL_Color& line_color,
+            bool isolate_to_selected_box) {
+            for (std::size_t box_index = 0; box_index < volumes.size(); ++box_index) {
+                const auto& volume = volumes[box_index];
+                if (!volume.valid) {
+                    continue;
+                }
+                if (isolate_to_selected_box && selected_box >= 0 && static_cast<int>(box_index) != selected_box) {
+                    continue;
+                }
+                const bool box_selected = static_cast<int>(box_index) == selected_box;
+                for (int point_index = 0; point_index < 8; ++point_index) {
+                    const bool selected_corner_point = box_selected && point_index == selected_point;
+                    const bool hovered_corner_point =
+                        static_cast<int>(box_index) == hovered_box && point_index == hovered_point;
+                    SDL_Color draw_color{line_color.r, line_color.g, line_color.b, 230};
+                    if (hovered_corner_point) {
+                        draw_color = SDL_Color{255, 165, 0, 240};
+                    }
+                    if (selected_corner_point) {
+                        draw_color = SDL_Color{255, 255, 255, 255};
+                    }
+                    const auto& wp = volume.world_points[static_cast<std::size_t>(point_index)];
+                    add_marker(SDL_FPoint{wp.x, wp.z}, draw_color, selected_corner_point || hovered_corner_point);
+                }
+            }
+        };
+
+    if (hitbox_mode_active() &&
+        hitbox_edit_.target_asset &&
+        hitbox_edit_.target_asset->info &&
+        hitbox_edit_.target_asset->info->is_hitbox_enabled()) {
+        const bool isolate_selected_box = hitbox_edit_.selected_box_index >= 0;
+        add_runtime_box_markers(hitbox_edit_.target_asset->current_hit_box_volumes(),
+                                hitbox_edit_.selected_box_index,
+                                hitbox_edit_.point_selected ? hitbox_edit_.selected_point_index : -1,
+                                hitbox_edit_.hovered_box_index,
+                                hitbox_edit_.hovered_point_index,
+                                SDL_Color{90, 195, 255, 210},
+                                isolate_selected_box);
+    }
+
+    if (attack_box_mode_active() &&
+        attack_box_edit_.target_asset &&
+        attack_box_edit_.target_asset->info &&
+        attack_box_edit_.target_asset->info->is_attack_box_enabled()) {
+        const bool isolate_selected_box = attack_box_edit_.selected_box_index >= 0;
+        add_runtime_box_markers(attack_box_edit_.target_asset->current_attack_box_volumes(),
+                                attack_box_edit_.selected_box_index,
+                                attack_box_edit_.point_selected ? attack_box_edit_.selected_point_index : -1,
+                                attack_box_edit_.hovered_box_index,
+                                attack_box_edit_.hovered_point_index,
+                                SDL_Color{255, 120, 120, 215},
+                                isolate_selected_box);
+    }
+
+    if (impassable_box_mode_active() &&
+        impassable_box_edit_.target_asset &&
+        impassable_box_edit_.target_asset->info &&
+        impassable_box_edit_.target_asset->info->is_impassable_box_enabled()) {
+        const WarpedScreenGrid& cam = assets_->getView();
+        const auto& authored_shapes = impassable_box_edit_.target_asset->info->impassable_shapes_payload();
+        std::vector<ImpassableShapeProjection> projections(authored_shapes.size());
+        std::vector<bool> projected(authored_shapes.size(), false);
+        for (std::size_t shape_index = 0; shape_index < authored_shapes.size(); ++shape_index) {
+            projected[shape_index] = project_impassable_shape(*impassable_box_edit_.target_asset,
+                                                              authored_shapes[shape_index],
+                                                              cam,
+                                                              projections[shape_index]);
+        }
+
+        for (std::size_t shape_index = 0; shape_index < authored_shapes.size(); ++shape_index) {
+            if (!projected[shape_index]) {
+                continue;
+            }
+            const auto& shape = authored_shapes[shape_index];
+            const auto& projection = projections[shape_index];
+            const bool is_selected = impassable_box_edit_.selected_box_index == static_cast<int>(shape_index);
+            const bool is_hovered = impassable_box_edit_.hovered_box_index == static_cast<int>(shape_index);
+            SDL_Color edge{
+                static_cast<Uint8>(120),
+                static_cast<Uint8>(220),
+                static_cast<Uint8>(140),
+                static_cast<Uint8>(shape.enabled ? 220 : 140)};
+            if (is_selected) {
+                edge = SDL_Color{255, 208, 120, 250};
+            } else if (is_hovered) {
+                edge = SDL_Color{
+                    static_cast<Uint8>(206),
+                    static_cast<Uint8>(244),
+                    static_cast<Uint8>(186),
+                    static_cast<Uint8>(shape.enabled ? 235 : 170)};
+            }
+
+            for (std::size_t point_index = 0; point_index < projection.floor_world_points.size(); ++point_index) {
+                SDL_Color point_color = edge;
+                const bool point_selected =
+                    is_selected &&
+                    impassable_box_edit_.point_selected &&
+                    impassable_box_edit_.selected_point_index == static_cast<int>(point_index);
+                const bool point_hovered =
+                    is_hovered &&
+                    impassable_box_edit_.hovered_point_index == static_cast<int>(point_index);
+                if (point_selected) {
+                    point_color = SDL_Color{255, 255, 255, 255};
+                } else if (point_hovered) {
+                    point_color = SDL_Color{255, 240, 176, 255};
+                }
+                add_marker(projection.floor_world_points[point_index], point_color, point_selected || point_hovered);
+            }
+        }
+    }
+
+    return markers;
 }
 
 Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {

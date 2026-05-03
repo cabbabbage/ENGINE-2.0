@@ -978,6 +978,13 @@ Assets::DevGridOverlayContext Assets::dev_grid_overlay_context() const {
     return dev_controls_->dev_grid_overlay_context();
 }
 
+std::vector<Assets::DevFloorProjectionMarker> Assets::dev_floor_projection_markers() {
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return {};
+    }
+    return dev_controls_->floor_projection_markers_for_floor_pass();
+}
+
 float Assets::boundary_min_visible_screen_ratio() const {
     return boundary_min_visible_screen_ratio_;
 }

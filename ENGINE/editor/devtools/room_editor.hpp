@@ -98,6 +98,7 @@ public:
     bool is_asset_editor_tab_scope_active() const;
     void set_room_trail_nav_visibility(bool visible);
     Assets::DevGridOverlayContext dev_grid_overlay_context() const;
+    std::vector<Assets::DevFloorProjectionMarker> floor_projection_markers_for_floor_pass();
 
     void update(const Input& input);
     void update_ui(const Input& input);
@@ -960,6 +961,8 @@ private:
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};
         bool has_final_screen_px = false;
+        SDL_FPoint floor_world_xz{0.0f, 0.0f};
+        bool has_floor_world_xz = false;
     };
 
     struct AnchorEditState {
@@ -986,6 +989,8 @@ private:
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};
         bool has_final_screen_px = false;
+        SDL_FPoint floor_world_xz{0.0f, 0.0f};
+        bool has_floor_world_xz = false;
     };
 
     struct OvalAnchorEditState {
@@ -1132,6 +1137,15 @@ private:
         bool dirty_since_last_flush = false;
     };
     FloorBoxEditState floor_box_edit_;
+
+    struct XYOverlayCursorState {
+        Asset* target_asset = nullptr;
+        float target_world_z = 0.0f;
+        int tex_x = 0;
+        int tex_y = 0;
+        bool valid = false;
+    };
+    XYOverlayCursorState xy_overlay_cursor_state_{};
 
     struct AssetEditorTransitionState {
         bool active = false;

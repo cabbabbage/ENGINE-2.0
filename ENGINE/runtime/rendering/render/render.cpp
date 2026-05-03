@@ -1158,7 +1158,6 @@ bool SceneRenderer::ensure_scene_target() {
                                                                                SDL_TEXTUREACCESS_TARGET,
                                                                                target_width,
                                                                                target_height);
-    scene_composite_sdl_gpu_interop_available_ = false;
     if (scene_composite_resource_) {
         SDL_SetTextureBlendMode(scene_composite_resource_, SDL_BLENDMODE_BLEND);
         // Force target initialization on backends that lazily materialize underlying GPU resources.
@@ -1176,10 +1175,10 @@ bool SceneRenderer::ensure_scene_target() {
             void* gpu_ptr = props
                 ? SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr)
                 : nullptr;
-            scene_composite_sdl_gpu_interop_available_ = (gpu_ptr != nullptr);
-            if (!scene_composite_sdl_gpu_interop_available_) {
-                vibble::log::warn("[SceneRenderer] SDL scene.composite GPU interop is unavailable; using frame-graph resource without SDL GPU pointer bridge.");
-            }
+            const bool sdl_gpu_interop_available = (gpu_ptr != nullptr);
+            vibble::log::info(std::string{"[SceneRenderer] scene.composite.sdl_bridge="} +
+                              (sdl_gpu_interop_available ? "available" : "unavailable") +
+                              " (diagnostic-only; frame-graph path remains authoritative).");
         }
     }
     if (!scene_composite_resource_) {
@@ -1409,6 +1408,11 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
         log_failure(out_error, "preflight");
         return false;
     }
+    if (scene_composite_resource_spec_.width == 0 || scene_composite_resource_spec_.height == 0) {
+        out_error = "scene.composite resource spec has invalid dimensions.";
+        log_failure(out_error, "preflight");
+        return false;
+    }
 
     const std::uint32_t scene_width = scene_composite_resource_spec_.width;
     const std::uint32_t scene_height = scene_composite_resource_spec_.height;
@@ -1439,8 +1443,15 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
         return false;
     }
 
-    enqueue_scene_composite_frame_graph_pass_sequence("runtime_produce_scene_composite",
-                                               "runtime_present_scene_composite",
+    constexpr std::string_view kProducerPassName = "runtime_produce_scene_composite";
+    constexpr std::string_view kPresentPassName = "runtime_present_scene_composite";
+    if (kProducerPassName.empty() || kPresentPassName.empty()) {
+        out_error = "Required frame-graph pass names are missing.";
+        log_failure(out_error, "pass_registration");
+        return false;
+    }
+    enqueue_scene_composite_frame_graph_pass_sequence(kProducerPassName,
+                                               kPresentPassName,
                                                scene_width,
                                                scene_height);
 
@@ -2617,22 +2628,18 @@ void SceneRenderer::render() {
         return;
     }
 
-    if (scene_composite_sdl_gpu_interop_available_) {
-        std::string frame_graph_error;
-        if (!execute_gpu_frame_graph(frame_graph_error)) {
-            fail_gpu_frame("Frame-graph execution failed: " + frame_graph_error, false);
-            return;
-        }
-    } else {
-        vibble::log::debug("[SceneRenderer] Skipping frame-graph execution because SDL GPU pointer bridge is unavailable.");
+    std::string frame_graph_error;
+    if (!execute_gpu_frame_graph(frame_graph_error)) {
+        fail_gpu_frame("Frame-graph execution failed: " + frame_graph_error, false);
+        return;
     }
 
+    constexpr const char* kCanonicalRuntimePath = "frame_graph_authoritative";
     if (!render_path_status_logged_) {
-        vibble::log::info(std::string{"[SceneRenderer] render_path="} +
-                          (gpu_frame_graph_strict_mode_ ? "frame_graph_strict" : "frame_graph"));
+        vibble::log::info(std::string{"[SceneRenderer] runtime_path="} + kCanonicalRuntimePath);
         render_path_status_logged_ = true;
     }
-    render_diagnostics::set_renderer_runtime_info("gpu", "frame_graph_strict", "vsync");
+    render_diagnostics::set_renderer_runtime_info("gpu", kCanonicalRuntimePath, "vsync");
 
     finalize_render_cpu_timer();
     render_diagnostics::end_frame();

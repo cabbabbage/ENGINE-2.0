@@ -259,6 +259,7 @@ public:
     void set_mode(Mode new_mode);
     void update_movement_debug_visibility();
     void rebuild_settings_schema();
+    void sync_grid_overlay_enabled(bool enabled, bool update_footer);
     void apply_bool_setting(const char* id, bool value, bool sync_other_settings);
     void apply_int_setting(const char* id, int value, bool sync_other_settings);
     void apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer);

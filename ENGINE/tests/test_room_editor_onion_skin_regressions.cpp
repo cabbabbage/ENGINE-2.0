@@ -58,3 +58,21 @@ TEST_CASE("Room editor overlay paths do not emit onion overlays in any mode") {
     require_missing_token(editor_cpp, "build_hitbox_overlay_volumes_for_frame", "room_editor.cpp");
     require_missing_token(editor_cpp, "build_attack_box_overlay_volumes_for_frame", "room_editor.cpp");
 }
+
+TEST_CASE("Anchor drag snap logic gates snapping by grid toggle") {
+    const auto root = repo_root();
+    const std::string editor_cpp = read_text_file(root / "ENGINE" / "editor" / "devtools" / "room_editor.cpp");
+    CHECK(editor_cpp.find("if (snap_to_grid_enabled_)") != std::string::npos);
+}
+
+TEST_CASE("Anchor drag snap logic excludes dragged anchor as candidate") {
+    const auto root = repo_root();
+    const std::string editor_cpp = read_text_file(root / "ENGINE" / "editor" / "devtools" / "room_editor.cpp");
+    CHECK(editor_cpp.find("if (candidate.name == anchor_name)") != std::string::npos);
+}
+
+TEST_CASE("Anchor drag snap logic uses fixed screen threshold") {
+    const auto root = repo_root();
+    const std::string editor_cpp = read_text_file(root / "ENGINE" / "editor" / "devtools" / "room_editor.cpp");
+    CHECK(editor_cpp.find("kAnchorPointSnapRadiusPx") != std::string::npos);
+}

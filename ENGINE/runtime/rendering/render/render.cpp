@@ -81,6 +81,29 @@ std::string texture_usage_flags_to_string(SDL_GPUTextureUsageFlags usage) {
     return flags.empty() ? std::string{"none"} : oss.str();
 }
 
+int renderer_max_texture_size(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return 0;
+    }
+    const SDL_PropertiesID renderer_props = SDL_GetRendererProperties(renderer);
+    if (!renderer_props) {
+        return 0;
+    }
+    return static_cast<int>(
+        SDL_GetNumberProperty(renderer_props, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0));
+}
+
+int clamp_dimension_to_renderer_limit(int value, int renderer_limit, const char* axis_label) {
+    const int safe_value = std::max(1, value);
+    if (renderer_limit <= 0 || safe_value <= renderer_limit) {
+        return safe_value;
+    }
+    vibble::log::warn(std::string{"[SceneRenderer] Clamping "} + axis_label +
+                      " dimension from " + std::to_string(safe_value) +
+                      " to renderer max texture size " + std::to_string(renderer_limit) + ".");
+    return renderer_limit;
+}
+
 std::vector<std::filesystem::path> runtime_shader_manifest_candidates(const char* override_manifest_path) {
     std::vector<std::filesystem::path> candidates;
     auto push_unique = [&](const std::filesystem::path& path) {
@@ -1151,6 +1174,11 @@ bool SceneRenderer::ensure_scene_target() {
     if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return false;
     }
+    const int max_texture_size = renderer_max_texture_size(renderer_);
+    const int target_width = clamp_dimension_to_renderer_limit(screen_width_, max_texture_size, "scene target width");
+    const int target_height = clamp_dimension_to_renderer_limit(screen_height_, max_texture_size, "scene target height");
+    screen_width_ = target_width;
+    screen_height_ = target_height;
     if (scene_composite_tex_) {
         float w = 0.0f;
         float h = 0.0f;
@@ -1164,19 +1192,20 @@ bool SceneRenderer::ensure_scene_target() {
     scene_composite_tex_ = render_diagnostics::create_texture(renderer_,
                                                               SDL_PIXELFORMAT_RGBA8888,
                                                               SDL_TEXTUREACCESS_TARGET,
-                                                              screen_width_,
-                                                              screen_height_);
+                                                              target_width,
+                                                              target_height);
     if (scene_composite_tex_) {
         SDL_SetTextureBlendMode(scene_composite_tex_, SDL_BLENDMODE_BLEND);
-        const SDL_PropertiesID props = SDL_GetTextureProperties(scene_composite_tex_);
-        SDL_GPUTexture* gpu_texture = props
-            ? static_cast<SDL_GPUTexture*>(SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr))
-            : nullptr;
-        if (!gpu_texture) {
+        // Force target initialization on backends that lazily materialize underlying GPU resources.
+        SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
+        if (!SDL_SetRenderTarget(renderer_, scene_composite_tex_)) {
             destroy_texture(scene_composite_tex_);
             scene_composite_tex_ = nullptr;
             return false;
         }
+        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
+        SDL_RenderClear(renderer_);
+        SDL_SetRenderTarget(renderer_, previous_target);
     }
     return scene_composite_tex_ != nullptr;
 }
@@ -1184,7 +1213,11 @@ bool SceneRenderer::ensure_scene_target() {
 bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     out_error.clear();
     if (!ensure_scene_target()) {
-        out_error = "Scene composite target allocation failed during interop probe.";
+        const int max_texture_size = renderer_max_texture_size(renderer_);
+        out_error = "Scene composite target allocation failed during interop probe. requested=" +
+            std::to_string(screen_width_) + "x" + std::to_string(screen_height_) +
+            " renderer_max=" + std::to_string(max_texture_size) +
+            " sdl_error=" + std::string(SDL_GetError());
         return false;
     }
     const SDL_PropertiesID texture_props = SDL_GetTextureProperties(scene_composite_tex_);
@@ -1195,7 +1228,9 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     SDL_GPUTexture* gpu_texture = static_cast<SDL_GPUTexture*>(
         SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
     if (!gpu_texture) {
-        out_error = "SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER unavailable for scene composite texture.";
+        const char* renderer_name = SDL_GetRendererName(renderer_);
+        out_error = "SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER unavailable for scene composite texture. renderer=" +
+            std::string(renderer_name ? renderer_name : "unknown");
         return false;
     }
     if (!gpu_scene_renderer_->register_external_texture_resource("scene.interop_probe", gpu_texture)) {

@@ -27299,9 +27299,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            204,
-            71,
-            133,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27354,9 +27354,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            242,
+            31,
+            204,
+            122,
             255
           ],
           "edge_smoothness": 4,
@@ -27379,8 +27379,8 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            161,
-            85,
+            36,
+            123,
             242,
             255
           ],
@@ -27404,9 +27404,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            47,
+            207,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27464,9 +27464,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            184,
+            37,
             242,
-            85,
+            36,
             255
           ],
           "edge_smoothness": 70,
@@ -27530,9 +27530,9 @@
           "camera_zoom_percent": 12,
           "curvyness": 2,
           "display_color": [
-            204,
-            114,
-            51,
+            157,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27786,9 +27786,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            36,
-            84,
+            85,
             242,
+            173,
             255
           ],
           "edge_smoothness": 96,

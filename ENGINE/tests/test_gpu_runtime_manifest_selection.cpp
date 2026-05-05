@@ -7,7 +7,7 @@
 #include "rendering/render/render.hpp"
 
 TEST_CASE("GPU runtime manifest path uses single authoritative default when env is unset") {
-    SDL_setenv("VIBBLE_GPU_SHADER_MANIFEST", "", 1);
+    SDL_SetEnvironmentVariable("VIBBLE_GPU_SHADER_MANIFEST", "");
 
     const std::filesystem::path manifest = render_internal::runtime_gpu_shader_manifest_path();
     CHECK(manifest == std::filesystem::path("ENGINE/runtime/rendering/shaders/runtime_shaders.json"));
@@ -15,7 +15,7 @@ TEST_CASE("GPU runtime manifest path uses single authoritative default when env 
 
 TEST_CASE("GPU runtime manifest path uses configured override directly without fallback chain") {
     const char* configured_path = "/tmp/custom_runtime_manifest.json";
-    SDL_setenv("VIBBLE_GPU_SHADER_MANIFEST", configured_path, 1);
+    SDL_SetEnvironmentVariable("VIBBLE_GPU_SHADER_MANIFEST", configured_path);
 
     const std::filesystem::path manifest = render_internal::runtime_gpu_shader_manifest_path();
     CHECK(manifest == std::filesystem::path(configured_path));

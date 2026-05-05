@@ -253,7 +253,7 @@ endif()
 # Unit tests (doctest-based)
 # ------------------------------------------
 set(RUNTIME_SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/runtime/rendering/shaders")
-set(RUNTIME_SHADER_PACKAGE_DIR "${CMAKE_BINARY_DIR}/runtime_shaders")
+set(RUNTIME_SHADER_PACKAGE_DIR "${RUNTIME_SHADER_SOURCE_DIR}")
 add_custom_target(runtime_gpu_preflight
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/rendering/runtime_gpu_preflight.py"
             --workspace "${CMAKE_SOURCE_DIR}"
@@ -272,8 +272,9 @@ add_custom_target(runtime_shader_packages ALL
     BYPRODUCTS "${RUNTIME_SHADER_PACKAGE_DIR}/runtime_shaders.json"
     COMMENT "Packaging deterministic runtime shader bundles (DXIL/SPIR-V)"
     VERBATIM)
-add_dependencies(engine runtime_shader_packages)
-add_dependencies(runtime_shader_packages runtime_gpu_preflight)
+add_dependencies(runtime_gpu_preflight runtime_shader_packages)
+add_dependencies(runtime_gpu_preflight_strict runtime_shader_packages)
+add_dependencies(engine runtime_gpu_preflight)
 
 set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")

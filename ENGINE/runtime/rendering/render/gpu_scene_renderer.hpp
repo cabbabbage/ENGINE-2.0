@@ -31,6 +31,22 @@ public:
         SDL_GPUBufferUsageFlags usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ;
     };
 
+    struct SamplerResourceSpec {
+        SDL_GPUFilter min_filter = SDL_GPU_FILTER_LINEAR;
+        SDL_GPUFilter mag_filter = SDL_GPU_FILTER_LINEAR;
+        SDL_GPUSamplerMipmapMode mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+        SDL_GPUSamplerAddressMode address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        SDL_GPUSamplerAddressMode address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        SDL_GPUSamplerAddressMode address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        float mip_lod_bias = 0.0f;
+        float max_anisotropy = 1.0f;
+        SDL_GPUCompareOp compare_op = SDL_GPU_COMPAREOP_ALWAYS;
+        float min_lod = 0.0f;
+        float max_lod = 16.0f;
+        bool enable_anisotropy = false;
+        bool enable_compare = false;
+    };
+
     static std::unique_ptr<GpuSceneRenderer> Create(SDL_Renderer* renderer,
                                                     bool prefer_depth32,
                                                     std::string& out_error);
@@ -60,6 +76,10 @@ public:
                                 const BufferResourceSpec& spec,
                                 std::string& out_error);
     SDL_GPUBuffer* find_buffer_resource(const std::string& logical_name) const;
+    bool ensure_sampler_resource(const std::string& logical_name,
+                                 const SamplerResourceSpec& spec,
+                                 std::string& out_error);
+    SDL_GPUSampler* find_sampler_resource(const std::string& logical_name) const;
     void release_runtime_resources();
 
 private:
@@ -72,6 +92,11 @@ private:
     struct RuntimeBufferResource {
         SDL_GPUBuffer* buffer = nullptr;
         BufferResourceSpec spec{};
+    };
+
+    struct RuntimeSamplerResource {
+        SDL_GPUSampler* sampler = nullptr;
+        SamplerResourceSpec spec{};
     };
 
     explicit GpuSceneRenderer(std::unique_ptr<GpuRenderDevice> device);
@@ -101,6 +126,7 @@ private:
     std::unordered_map<std::string, RuntimeTextureResource> texture_resources_{};
     std::unordered_map<std::string, SDL_GPUTexture*> external_texture_resources_{};
     std::unordered_map<std::string, RuntimeBufferResource> buffer_resources_{};
+    std::unordered_map<std::string, RuntimeSamplerResource> sampler_resources_{};
     std::uint64_t last_pipeline_hit_total_ = 0;
     std::uint64_t last_pipeline_miss_total_ = 0;
 };

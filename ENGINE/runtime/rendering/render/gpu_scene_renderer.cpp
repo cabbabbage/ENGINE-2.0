@@ -86,6 +86,23 @@ bool buffer_spec_matches(const GpuSceneRenderer::BufferResourceSpec& lhs,
            lhs.usage == rhs.usage;
 }
 
+bool sampler_spec_matches(const GpuSceneRenderer::SamplerResourceSpec& lhs,
+                          const GpuSceneRenderer::SamplerResourceSpec& rhs) {
+    return lhs.min_filter == rhs.min_filter &&
+           lhs.mag_filter == rhs.mag_filter &&
+           lhs.mipmap_mode == rhs.mipmap_mode &&
+           lhs.address_mode_u == rhs.address_mode_u &&
+           lhs.address_mode_v == rhs.address_mode_v &&
+           lhs.address_mode_w == rhs.address_mode_w &&
+           lhs.mip_lod_bias == rhs.mip_lod_bias &&
+           lhs.max_anisotropy == rhs.max_anisotropy &&
+           lhs.compare_op == rhs.compare_op &&
+           lhs.min_lod == rhs.min_lod &&
+           lhs.max_lod == rhs.max_lod &&
+           lhs.enable_anisotropy == rhs.enable_anisotropy &&
+           lhs.enable_compare == rhs.enable_compare;
+}
+
 std::uint64_t estimate_gpu_texture_bytes(const GpuSceneRenderer::TextureResourceSpec& spec) {
     const std::uint64_t width = std::max<std::uint64_t>(1u, spec.width);
     const std::uint64_t height = std::max<std::uint64_t>(1u, spec.height);
@@ -548,6 +565,9 @@ bool GpuSceneRenderer::end_frame(std::string* out_error) {
     execute_context.resolve_texture = [this](const std::string& name) {
         return find_texture_resource(name);
     };
+    execute_context.resolve_sampler = [this](const std::string& name) {
+        return find_sampler_resource(name);
+    };
     execute_context.resolve_buffer = [this](const std::string& name) {
         return find_buffer_resource(name);
     };
@@ -754,11 +774,72 @@ SDL_GPUBuffer* GpuSceneRenderer::find_buffer_resource(const std::string& logical
     return (it != buffer_resources_.end()) ? it->second.buffer : nullptr;
 }
 
+bool GpuSceneRenderer::ensure_sampler_resource(const std::string& logical_name,
+                                               const SamplerResourceSpec& spec,
+                                               std::string& out_error) {
+    if (!device_ || !device_->gpu_device()) {
+        out_error = "GPU device unavailable while creating sampler resource '" + logical_name + "'";
+        return false;
+    }
+    if (logical_name.empty()) {
+        out_error = "Sampler resource name cannot be empty";
+        return false;
+    }
+
+    const auto it = sampler_resources_.find(logical_name);
+    if (it != sampler_resources_.end() &&
+        it->second.sampler &&
+        sampler_spec_matches(it->second.spec, spec)) {
+        out_error.clear();
+        return true;
+    }
+
+    if (it != sampler_resources_.end() && it->second.sampler) {
+        SDL_ReleaseGPUSampler(device_->gpu_device(), it->second.sampler);
+        it->second.sampler = nullptr;
+    }
+
+    SDL_GPUSamplerCreateInfo create_info{};
+    create_info.min_filter = spec.min_filter;
+    create_info.mag_filter = spec.mag_filter;
+    create_info.mipmap_mode = spec.mipmap_mode;
+    create_info.address_mode_u = spec.address_mode_u;
+    create_info.address_mode_v = spec.address_mode_v;
+    create_info.address_mode_w = spec.address_mode_w;
+    create_info.mip_lod_bias = spec.mip_lod_bias;
+    create_info.max_anisotropy = spec.max_anisotropy;
+    create_info.compare_op = spec.compare_op;
+    create_info.min_lod = spec.min_lod;
+    create_info.max_lod = spec.max_lod;
+    create_info.enable_anisotropy = spec.enable_anisotropy;
+    create_info.enable_compare = spec.enable_compare;
+    create_info.props = 0;
+
+    SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device_->gpu_device(), &create_info);
+    if (!sampler) {
+        out_error = "SDL_CreateGPUSampler failed for '" + logical_name + "': " + SDL_GetError();
+        return false;
+    }
+
+    RuntimeSamplerResource resource{};
+    resource.sampler = sampler;
+    resource.spec = spec;
+    sampler_resources_[logical_name] = resource;
+    out_error.clear();
+    return true;
+}
+
+SDL_GPUSampler* GpuSceneRenderer::find_sampler_resource(const std::string& logical_name) const {
+    const auto it = sampler_resources_.find(logical_name);
+    return (it != sampler_resources_.end()) ? it->second.sampler : nullptr;
+}
+
 void GpuSceneRenderer::release_runtime_resources() {
     if (!device_ || !device_->gpu_device()) {
         texture_resources_.clear();
         external_texture_resources_.clear();
         buffer_resources_.clear();
+        sampler_resources_.clear();
         return;
     }
     for (auto& entry : texture_resources_) {
@@ -776,6 +857,13 @@ void GpuSceneRenderer::release_runtime_resources() {
             render_diagnostics::add_gpu_buffer_destroy_count();
         }
     }
+    for (auto& entry : sampler_resources_) {
+        if (entry.second.sampler) {
+            SDL_ReleaseGPUSampler(device_->gpu_device(), entry.second.sampler);
+            entry.second.sampler = nullptr;
+        }
+    }
     texture_resources_.clear();
     buffer_resources_.clear();
+    sampler_resources_.clear();
 }

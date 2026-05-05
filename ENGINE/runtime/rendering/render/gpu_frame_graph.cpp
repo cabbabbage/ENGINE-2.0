@@ -7,6 +7,20 @@
 #include <unordered_map>
 #include <utility>
 
+namespace {
+
+bool has_read_dependency_for_resource(const GpuFrameGraph::PassDescriptor& pass,
+                                      const std::string& resource_name) {
+    for (const GpuFrameGraph::ResourceDependency& dependency : pass.resources) {
+        if (dependency.name == resource_name && !dependency.write) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 void GpuFrameGraph::reset() {
     passes_.clear();
     last_execution_stats_ = ExecutionStats{};
@@ -118,6 +132,37 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             }
         }
 
+        if (pass.type == PassType::Render) {
+            for (const RenderPassPayload::SampledTextureBinding& sampled :
+                 pass.render.fragment_sampled_textures) {
+                if (sampled.texture.empty()) {
+                    const std::string message = "[GpuFrameGraph] Pass '" + pass.name +
+                                                "' has a sampled fragment texture binding with an empty texture name.";
+                    if (!fail_or_warn_missing(message, true, true, stats)) {
+                        last_execution_stats_ = stats;
+                        return stats;
+                    }
+                }
+                if (sampled.sampler.empty()) {
+                    const std::string message = "[GpuFrameGraph] Pass '" + pass.name +
+                                                "' has a sampled fragment texture binding with an empty sampler name.";
+                    if (!fail_or_warn_missing(message, true, true, stats)) {
+                        last_execution_stats_ = stats;
+                        return stats;
+                    }
+                }
+                if (!has_read_dependency_for_resource(pass, sampled.texture)) {
+                    const std::string message = "[GpuFrameGraph] Pass '" + pass.name +
+                                                "' samples texture '" + sampled.texture +
+                                                "' without declaring it as a read dependency.";
+                    if (!fail_or_warn_missing(message, true, true, stats)) {
+                        last_execution_stats_ = stats;
+                        return stats;
+                    }
+                }
+            }
+        }
+
         if (options.dry_run) {
             continue;
         }
@@ -196,6 +241,42 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             }
 
             SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
+            if (!pass.render.fragment_sampled_textures.empty()) {
+                std::vector<SDL_GPUTextureSamplerBinding> fragment_sampler_bindings{};
+                fragment_sampler_bindings.reserve(pass.render.fragment_sampled_textures.size());
+                for (const RenderPassPayload::SampledTextureBinding& sampled :
+                     pass.render.fragment_sampled_textures) {
+                    SDL_GPUTexture* sampled_texture = context.resolve_texture
+                        ? context.resolve_texture(sampled.texture)
+                        : nullptr;
+                    SDL_GPUSampler* sampler = context.resolve_sampler
+                        ? context.resolve_sampler(sampled.sampler)
+                        : nullptr;
+                    if (!sampled_texture || !sampler) {
+                        SDL_EndGPURenderPass(render_pass);
+                        const std::string message = "[GpuFrameGraph] Pass '" + pass.name +
+                                                    "' failed to resolve sampled texture binding texture='" +
+                                                    sampled.texture + "' sampler='" + sampled.sampler + "'.";
+                        if (!fail_or_warn_missing(message, options.fail_on_missing_resource, false, stats)) {
+                            last_execution_stats_ = stats;
+                            return stats;
+                        }
+                        fragment_sampler_bindings.clear();
+                        break;
+                    }
+                    SDL_GPUTextureSamplerBinding binding{};
+                    binding.texture = sampled_texture;
+                    binding.sampler = sampler;
+                    fragment_sampler_bindings.push_back(binding);
+                }
+                if (fragment_sampler_bindings.empty() && !pass.render.fragment_sampled_textures.empty()) {
+                    continue;
+                }
+                SDL_BindGPUFragmentSamplers(render_pass,
+                                            0u,
+                                            fragment_sampler_bindings.data(),
+                                            static_cast<Uint32>(fragment_sampler_bindings.size()));
+            }
             SDL_DrawGPUPrimitives(render_pass,
                                   std::max<Uint32>(1u, static_cast<Uint32>(pass.render.vertex_count)),
                                   std::max<Uint32>(1u, static_cast<Uint32>(pass.render.instance_count)),

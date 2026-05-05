@@ -40,6 +40,11 @@ public:
     };
 
     struct RenderPassPayload {
+        struct SampledTextureBinding {
+            std::string texture;
+            std::string sampler;
+        };
+
         std::string pipeline_id;
         std::uint32_t render_state_key = 0;
         std::string color_target;
@@ -49,6 +54,7 @@ public:
         SDL_GPUStoreOp store_op = SDL_GPU_STOREOP_STORE;
         std::uint32_t vertex_count = 3;
         std::uint32_t instance_count = 1;
+        std::vector<SampledTextureBinding> fragment_sampled_textures{};
     };
 
     struct ComputePassPayload {
@@ -85,6 +91,7 @@ public:
         std::uint32_t swapchain_width = 0;
         std::uint32_t swapchain_height = 0;
         std::function<SDL_GPUTexture*(const std::string&)> resolve_texture{};
+        std::function<SDL_GPUSampler*(const std::string&)> resolve_sampler{};
         std::function<SDL_GPUGraphicsPipeline*(const std::string&, std::uint32_t)> resolve_graphics_pipeline{};
         std::function<SDL_GPUComputePipeline*(const std::string&, std::uint32_t)> resolve_compute_pipeline{};
         std::function<SDL_GPUBuffer*(const std::string&)> resolve_buffer{};

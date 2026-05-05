@@ -70,27 +70,79 @@ TEST_CASE("GpuFrameGraph non-strict validation warns and continues") {
     CHECK(stats.dependency_error_count == 0);
 }
 
-TEST_CASE("GpuFrameGraph strict validation accepts identical startup and runtime scene composite copy dependencies") {
-    const auto execute_scene_composite_copy_sequence = [](const std::string& write_pass_name,
-                                                          const std::string& copy_pass_name) {
+TEST_CASE("GpuFrameGraph strict validation accepts identical startup and runtime authoritative topology") {
+    const auto execute_authoritative_sequence = [](const std::string& prefix) {
         GpuFrameGraph graph;
 
-        GpuFrameGraph::PassDescriptor write_pass{};
-        write_pass.type = GpuFrameGraph::PassType::Render;
-        write_pass.name = write_pass_name;
-        write_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.composite")};
-        graph.add_pass(std::move(write_pass));
+        GpuFrameGraph::PassDescriptor floor_pass{};
+        floor_pass.type = GpuFrameGraph::PassType::Render;
+        floor_pass.name = prefix + "_render_floor";
+        floor_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
+        floor_pass.render.pipeline_id = "floor_compose";
+        graph.add_pass(std::move(floor_pass));
 
-        GpuFrameGraph::PassDescriptor copy_pass{};
-        copy_pass.type = GpuFrameGraph::PassType::Copy;
-        copy_pass.name = copy_pass_name;
-        copy_pass.resources = {
-            GpuFrameGraph::ResourceDependency::read("scene.composite"),
-            GpuFrameGraph::ResourceDependency::write_resource("scene.frame_graph_copy")
+        GpuFrameGraph::PassDescriptor layers_pass{};
+        layers_pass.type = GpuFrameGraph::PassType::Render;
+        layers_pass.name = prefix + "_render_layers";
+        layers_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.layers")};
+        layers_pass.render.pipeline_id = "sprite_textured";
+        graph.add_pass(std::move(layers_pass));
+
+        GpuFrameGraph::PassDescriptor blur_bg_pass{};
+        blur_bg_pass.type = GpuFrameGraph::PassType::Render;
+        blur_bg_pass.name = prefix + "_render_blur_background";
+        blur_bg_pass.resources = {
+            GpuFrameGraph::ResourceDependency::read("scene.layers"),
+            GpuFrameGraph::ResourceDependency::write_resource("scene.blur_background"),
         };
-        copy_pass.blit.source_texture = "scene.composite";
-        copy_pass.blit.destination_texture = "scene.frame_graph_copy";
-        graph.add_pass(std::move(copy_pass));
+        blur_bg_pass.render.pipeline_id = "dark_mask";
+        blur_bg_pass.render.fragment_sampled_textures = {
+            GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
+        };
+        graph.add_pass(std::move(blur_bg_pass));
+
+        GpuFrameGraph::PassDescriptor blur_fg_pass{};
+        blur_fg_pass.type = GpuFrameGraph::PassType::Render;
+        blur_fg_pass.name = prefix + "_render_blur_foreground";
+        blur_fg_pass.resources = {
+            GpuFrameGraph::ResourceDependency::read("scene.layers"),
+            GpuFrameGraph::ResourceDependency::write_resource("scene.blur_foreground"),
+        };
+        blur_fg_pass.render.pipeline_id = "light_eval";
+        blur_fg_pass.render.fragment_sampled_textures = {
+            GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
+        };
+        graph.add_pass(std::move(blur_fg_pass));
+
+        GpuFrameGraph::PassDescriptor composite_pass{};
+        composite_pass.type = GpuFrameGraph::PassType::Render;
+        composite_pass.name = prefix + "_render_scene_composite";
+        composite_pass.resources = {
+            GpuFrameGraph::ResourceDependency::read("scene.floor"),
+            GpuFrameGraph::ResourceDependency::read("scene.layers"),
+            GpuFrameGraph::ResourceDependency::read("scene.blur_background"),
+            GpuFrameGraph::ResourceDependency::read("scene.blur_foreground"),
+            GpuFrameGraph::ResourceDependency::write_resource("scene.composite"),
+        };
+        composite_pass.render.pipeline_id = "final_compose";
+        composite_pass.render.fragment_sampled_textures = {
+            GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.floor", "linear_clamp"},
+            GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
+            GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.blur_background", "linear_clamp"},
+            GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.blur_foreground", "linear_clamp"},
+        };
+        graph.add_pass(std::move(composite_pass));
+
+        GpuFrameGraph::PassDescriptor present_pass{};
+        present_pass.type = GpuFrameGraph::PassType::Copy;
+        present_pass.name = prefix + "_present_scene_composite";
+        present_pass.resources = {
+            GpuFrameGraph::ResourceDependency::read("scene.composite"),
+            GpuFrameGraph::ResourceDependency::write_resource("scene.swapchain"),
+        };
+        present_pass.blit.source_texture = "scene.composite";
+        present_pass.blit.destination_texture = "scene.swapchain";
+        graph.add_pass(std::move(present_pass));
 
         GpuFrameGraph::ExecuteContext context{};
         GpuFrameGraph::ExecuteOptions options{};
@@ -101,11 +153,9 @@ TEST_CASE("GpuFrameGraph strict validation accepts identical startup and runtime
     };
 
     const GpuFrameGraph::ExecutionStats startup_stats =
-        execute_scene_composite_copy_sequence("startup_probe_write_scene_composite",
-                                              "startup_probe_copy_scene_composite");
+        execute_authoritative_sequence("startup_probe");
     const GpuFrameGraph::ExecutionStats runtime_stats =
-        execute_scene_composite_copy_sequence("runtime_validation_write_scene_composite",
-                                              "copy_scene_composite");
+        execute_authoritative_sequence("runtime");
 
     CHECK(startup_stats.success);
     CHECK(runtime_stats.success);
@@ -195,4 +245,68 @@ TEST_CASE("GpuFrameGraph strict validation fails immediately when runtime scene.
     const GpuFrameGraph::ExecutionStats stats = graph.execute(context, options);
     CHECK_FALSE(stats.success);
     CHECK(stats.dependency_error_count == 1);
+}
+
+TEST_CASE("GpuFrameGraph sampled texture contract requires declared read dependency") {
+    GpuFrameGraph graph;
+
+    GpuFrameGraph::PassDescriptor pass{};
+    pass.type = GpuFrameGraph::PassType::Render;
+    pass.name = "missing_read_dependency_for_sample";
+    pass.resources = {
+        GpuFrameGraph::ResourceDependency::write_resource("scene.composite"),
+    };
+    pass.render.pipeline_id = "final_compose";
+    pass.render.fragment_sampled_textures = {
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
+    };
+    graph.add_pass(std::move(pass));
+
+    GpuFrameGraph::ExecuteContext context{};
+    GpuFrameGraph::ExecuteOptions options{};
+    options.strict_resource_validation = true;
+    options.fail_on_validation_error = true;
+    options.dry_run = true;
+
+    const GpuFrameGraph::ExecutionStats stats = graph.execute(context, options);
+    CHECK_FALSE(stats.success);
+    CHECK(stats.dependency_error_count == 1);
+    CHECK(stats.error_message.find("without declaring it as a read dependency") != std::string::npos);
+}
+
+TEST_CASE("GpuFrameGraph sampled texture contract rejects empty sampler names") {
+    GpuFrameGraph graph;
+
+    GpuFrameGraph::PassDescriptor write_input{};
+    write_input.type = GpuFrameGraph::PassType::Render;
+    write_input.name = "write_scene_layers";
+    write_input.resources = {
+        GpuFrameGraph::ResourceDependency::write_resource("scene.layers"),
+    };
+    write_input.render.pipeline_id = "sprite_textured";
+    graph.add_pass(std::move(write_input));
+
+    GpuFrameGraph::PassDescriptor pass{};
+    pass.type = GpuFrameGraph::PassType::Render;
+    pass.name = "empty_sampler_binding";
+    pass.resources = {
+        GpuFrameGraph::ResourceDependency::read("scene.layers"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.composite"),
+    };
+    pass.render.pipeline_id = "final_compose";
+    pass.render.fragment_sampled_textures = {
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", ""},
+    };
+    graph.add_pass(std::move(pass));
+
+    GpuFrameGraph::ExecuteContext context{};
+    GpuFrameGraph::ExecuteOptions options{};
+    options.strict_resource_validation = true;
+    options.fail_on_validation_error = true;
+    options.dry_run = true;
+
+    const GpuFrameGraph::ExecutionStats stats = graph.execute(context, options);
+    CHECK_FALSE(stats.success);
+    CHECK(stats.dependency_error_count == 1);
+    CHECK(stats.error_message.find("empty sampler name") != std::string::npos);
 }

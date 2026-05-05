@@ -5,11 +5,15 @@
     "compute_light_binning": {
       "dxil": {
         "entrypoint": "main",
+        "file_size_bytes": 2760,
+        "hash_fnv1a64": "0xd81fe725e393800d",
         "path": "dxil/compute_light_binning.dxil",
         "stage": "compute"
       },
       "spirv": {
         "entrypoint": "main",
+        "file_size_bytes": 1000,
+        "hash_fnv1a64": "0xea9024212c3a150e",
         "path": "spirv/compute_light_binning.spv",
         "stage": "compute"
       }
@@ -97,11 +101,15 @@
     "sprite_batched": {
       "dxil": {
         "entrypoint": "main",
+        "file_size_bytes": 2972,
+        "hash_fnv1a64": "0x3bcb43214ebc62e7",
         "path": "dxil/sprite_batched.dxil",
         "stage": "fragment"
       },
       "spirv": {
         "entrypoint": "main",
+        "file_size_bytes": 684,
+        "hash_fnv1a64": "0x001b25ceba2a3506",
         "path": "spirv/sprite_batched.spv",
         "stage": "fragment"
       }
@@ -109,15 +117,15 @@
     "sprite_textured": {
       "dxil": {
         "entrypoint": "main",
-        "file_size_bytes": 2972,
-        "hash_fnv1a64": "0x3bcb43214ebc62e7",
+        "file_size_bytes": 2988,
+        "hash_fnv1a64": "0x31446e9dbfefcf0b",
         "path": "dxil/sprite_textured.dxil",
         "stage": "fragment"
       },
       "spirv": {
         "entrypoint": "main",
-        "file_size_bytes": 684,
-        "hash_fnv1a64": "0x001b25ceba2a3506",
+        "file_size_bytes": 2484,
+        "hash_fnv1a64": "0xd9dac9e38b7b6f62",
         "path": "spirv/sprite_textured.spv",
         "stage": "fragment"
       }

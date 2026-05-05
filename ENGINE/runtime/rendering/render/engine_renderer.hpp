@@ -14,19 +14,15 @@
  * Startup fails when a compatible GPU backend cannot be created.
  */
 enum class RenderBackendType {
-    GPU,
-    Render2D,
-    Software
+    GPU
 };
 
 enum class RenderQualityTier {
-    GPU,
-    Accelerated,
-    Software
+    GPU
 };
 
 struct RenderCaps {
-    RenderBackendType backend_type = RenderBackendType::Render2D;
+    RenderBackendType backend_type = RenderBackendType::GPU;
     bool supports_render_targets = false;
     bool supports_texture_scale_modes = true;
     int max_texture_size = 0;
@@ -81,13 +77,12 @@ private:
     static AttemptResult try_create_gpu(SDL_Window* window, bool prefer_vsync, const char* gpu_driver_hint);
 
     static RenderCaps build_caps(SDL_Renderer* renderer, RenderBackendType backend_type);
-    static RenderQualityTier choose_quality_tier(const RenderCaps& caps);
     static void log_caps(const RenderCaps& caps);
 
     SDL_Renderer* renderer_ = nullptr;
     SDL_Window* window_ = nullptr;
     RenderCaps caps_{};
-    RenderQualityTier quality_tier_ = RenderQualityTier::Accelerated;
+    RenderQualityTier quality_tier_ = RenderQualityTier::GPU;
     std::string present_mode_name_ = "vsync";
     RuntimeGpuFormatPolicy gpu_format_policy_{};
     bool has_gpu_format_policy_ = false;

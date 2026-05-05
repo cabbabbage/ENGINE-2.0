@@ -19,7 +19,6 @@
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include "rendering/render/layer_effect_processor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {

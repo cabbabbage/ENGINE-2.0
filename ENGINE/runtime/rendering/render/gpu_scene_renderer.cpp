@@ -11,16 +11,13 @@
 
 namespace {
 
-constexpr std::uint32_t kComputeLightBinningStateKey = 0x0000C011u;
-constexpr std::array<const char*, 6> kRequiredGraphicsPipelines = {
+constexpr std::array<const char*, 5> kRequiredGraphicsPipelines = {
     "sprite_textured",
-    "sprite_batched",
     "light_eval",
     "floor_compose",
     "dark_mask",
     "final_compose",
 };
-constexpr const char* kRequiredComputePipeline = "compute_light_binning";
 constexpr const char* kFullscreenVertexVariant = "fullscreen_vertex";
 
 std::string lowercase_ascii(std::string value) {
@@ -390,18 +387,6 @@ bool GpuSceneRenderer::warmup_required_pipelines(std::string& out_error) {
     }
 
     std::string pipeline_error;
-    {
-        const ShaderPipelineKey key = make_pipeline_key(kRequiredComputePipeline, kComputeLightBinningStateKey);
-        SDL_GPUComputePipeline* pipeline = pipeline_cache_.get_or_create_compute_pipeline(
-            key,
-            [&]() { return create_compute_pipeline(kRequiredComputePipeline, pipeline_error); });
-        if (!pipeline) {
-            out_error = "Failed to warmup compute pipeline '" +
-                        std::string(kRequiredComputePipeline) + "': " + pipeline_error;
-            return false;
-        }
-    }
-
     for (std::size_t i = 0; i < kRequiredGraphicsPipelines.size(); ++i) {
         const std::string pipeline_name = kRequiredGraphicsPipelines[i];
         const ShaderPackageLibrary::ShaderVariantPath* variant = shader_packages_.find(pipeline_name);
@@ -445,14 +430,6 @@ bool GpuSceneRenderer::load_shader_packages(const std::string& manifest_path, st
                                       backend_shader_variant_,
                                       backend_shader_format_,
                                       out_error)) {
-        vibble::log::error("[GpuSceneRenderer] " + out_error);
-        return false;
-    }
-
-    const ShaderPackageLibrary::ShaderVariantPath* compute_variant = shader_packages_.find(kRequiredComputePipeline);
-    if (!compute_variant || !select_backend_binary(*compute_variant)) {
-        out_error = std::string("Missing ") + backend_shader_variant_ +
-                    " binary for required variant: " + kRequiredComputePipeline;
         vibble::log::error("[GpuSceneRenderer] " + out_error);
         return false;
     }

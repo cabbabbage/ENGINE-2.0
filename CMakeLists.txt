@@ -330,28 +330,19 @@ add_executable(engine_tests
     ENGINE/tests/test_dev_mode_animation_policy.cpp
     ENGINE/tests/test_playback_settings_inheritance.cpp
     
-    ENGINE/tests/test_geometry_batcher_ordering.cpp
     ENGINE/tests/test_screen_space_math.cpp
     ENGINE/tests/test_sink_clip.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
-    ENGINE/tests/test_layer_effect_processor.cpp
-    ENGINE/tests/test_render_dof_composite_target.cpp
-    ENGINE/tests/test_layer_submission_player_split.cpp
-    ENGINE/tests/test_layer_submission_packets.cpp
-    ENGINE/tests/test_layer_stack_gpu_submission.cpp
-    ENGINE/tests/test_gpu_compact_pass_graph.cpp
     ENGINE/tests/test_gpu_frame_graph_validation.cpp
+    ENGINE/tests/test_gpu_runtime_manifest_selection.cpp
     ENGINE/tests/test_gpu_runtime_no_sdl_renderer_calls.cpp
     ENGINE/tests/test_shader_package_library.cpp
     ENGINE/tests/test_shader_pipeline_cache.cpp
-    ENGINE/tests/test_floor_light_mask.cpp
-    ENGINE/tests/test_floor_tile_renderer.cpp
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_child_asset_runtime.cpp
     ENGINE/tests/test_floor_box_candidate_spawning.cpp
     ENGINE/tests/test_asset_collision_context_policy.cpp
     ENGINE/tests/test_impassable_geometry_signature.cpp
-    ENGINE/tests/test_dynamic_boundary_size_variation.cpp
     ENGINE/tests/test_save_orchestrator.cpp
     ENGINE/tests/test_save_manager_reentrancy.cpp
 )

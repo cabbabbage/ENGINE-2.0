@@ -4650,7 +4650,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
-        if (assets_->anchor_point_debug_enabled()) {
+        if (false) {
             const auto bindings =
                 anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().debug_bindings_snapshot();
             constexpr SDL_Color kAnchorParityColor{255, 224, 64, 255};
@@ -6498,7 +6498,6 @@ void RoomEditor::regenerate_room_from_template(const std::string& template_key) 
 
     assets_->set_editor_current_room(replacement_room_ptr);
     assets_->notify_rooms_changed();
-    assets_->invalidate_dynamic_boundary_system();
     assets_->rebuild_from_grid_state();
     assets_->refresh_active_asset_lists();
     set_current_room(replacement_room_ptr, room_locked_for_edit_);
@@ -8933,7 +8932,6 @@ bool RoomEditor::regenerate_geometry(Room* room) {
     regenerate_current_room();
     current_room_ = previous;
 
-    assets_->invalidate_dynamic_boundary_system();
     mark_geometry_dirty(room);
     return true;
 }
@@ -25834,99 +25832,12 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
 }
 
 std::optional<RoomEditor::DynamicBoundaryProxyHit> RoomEditor::hit_test_dynamic_boundary_sprite(SDL_Point screen_point) const {
-    if (!assets_) {
-        return std::nullopt;
-    }
-
-    const auto filter = effective_selection_filter();
-    if (filter != devmode::room_selection_filter::SelectionFilter::Boundary &&
-        filter != devmode::room_selection_filter::SelectionFilter::All) {
-        return std::nullopt;
-    }
-
-    const auto& sprites = assets_->dynamic_boundary_sprites();
-    if (sprites.empty()) {
-        return std::nullopt;
-    }
-
-    const float vertical_offset = DynamicBoundarySystem::vertical_offset();
-    for (auto it = sprites.rbegin(); it != sprites.rend(); ++it) {
-        const DynamicBoundarySystem::BoundarySprite& sprite = *it;
-        if (sprite.spawn_id.empty() ||
-            sprite.world_width <= 0.0f ||
-            sprite.world_height <= 0.0f ||
-            !std::isfinite(sprite.screen_pos.x) ||
-            !std::isfinite(sprite.screen_pos.y)) {
-            continue;
-        }
-        if (classify_spawn_group_ownership(sprite.spawn_id) != devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
-            continue;
-        }
-
-        const float adjusted_y = sprite.screen_pos.y + vertical_offset;
-        const SDL_FRect rect{
-            sprite.screen_pos.x - (sprite.world_width * 0.5f),
-            adjusted_y - sprite.world_height,
-            sprite.world_width,
-            sprite.world_height
-        };
-        if (rect.w <= 0.0f || rect.h <= 0.0f) {
-            continue;
-        }
-        const bool inside =
-            static_cast<float>(screen_point.x) >= rect.x &&
-            static_cast<float>(screen_point.x) <= (rect.x + rect.w) &&
-            static_cast<float>(screen_point.y) >= rect.y &&
-            static_cast<float>(screen_point.y) <= (rect.y + rect.h);
-        if (!inside) {
-            continue;
-        }
-
-        DynamicBoundaryProxyHit hit;
-        hit.key.spawn_id = sprite.spawn_id;
-        hit.key.asset_name = sprite.asset_name;
-        hit.key.boundary_type_index = sprite.boundary_type_index;
-        hit.key.candidate_index = sprite.candidate_index;
-        hit.key.world_x = static_cast<int>(std::lround(sprite.world_pos.x));
-        hit.key.world_z = sprite.world_z;
-        hit.screen_rect = rect;
-        hit.world_z = sprite.world_z;
-        return hit;
-    }
-
+    (void)screen_point;
     return std::nullopt;
 }
 
 std::optional<SDL_FRect> RoomEditor::dynamic_boundary_proxy_rect(const DynamicBoundaryProxyKey& key) const {
-    if (!assets_ || !key.valid()) {
-        return std::nullopt;
-    }
-    const auto& sprites = assets_->dynamic_boundary_sprites();
-    if (sprites.empty()) {
-        return std::nullopt;
-    }
-
-    const float vertical_offset = DynamicBoundarySystem::vertical_offset();
-    for (const auto& sprite : sprites) {
-        if (sprite.spawn_id != key.spawn_id ||
-            sprite.asset_name != key.asset_name ||
-            sprite.boundary_type_index != key.boundary_type_index ||
-            sprite.candidate_index != key.candidate_index ||
-            sprite.world_z != key.world_z ||
-            static_cast<int>(std::lround(sprite.world_pos.x)) != key.world_x) {
-            continue;
-        }
-        const float adjusted_y = sprite.screen_pos.y + vertical_offset;
-        SDL_FRect rect{
-            sprite.screen_pos.x - (sprite.world_width * 0.5f),
-            adjusted_y - sprite.world_height,
-            sprite.world_width,
-            sprite.world_height
-        };
-        if (rect.w > 0.0f && rect.h > 0.0f) {
-            return rect;
-        }
-    }
+    (void)key;
     return std::nullopt;
 }
 
@@ -25936,20 +25847,8 @@ void RoomEditor::clear_dynamic_boundary_proxy_selection() {
 }
 
 bool RoomEditor::open_asset_info_for_dynamic_boundary(const DynamicBoundaryProxyHit& hit) {
-    if (!assets_) {
-        return false;
-    }
-    if (hit.key.asset_name.empty()) {
-        show_notice("Boundary sprite has no asset metadata");
-        return false;
-    }
-    std::shared_ptr<AssetInfo> info = assets_->library().get(hit.key.asset_name);
-    if (!info) {
-        show_notice("Unable to resolve boundary asset info");
-        return false;
-    }
-    open_asset_info_editor(info);
-    return true;
+    (void)hit;
+    return false;
 }
 
 void RoomEditor::render_dynamic_boundary_proxy_overlay(SDL_Renderer* renderer) const {

@@ -408,20 +408,9 @@ bool probe_texture_scale_mode(SDL_Renderer* renderer) {
 }
 
 RenderBackendType classify_backend(SDL_Renderer* renderer, RenderBackendType hinted) {
-    if (!renderer) {
-        return hinted;
-    }
-    SDL_PropertiesID props = SDL_GetRendererProperties(renderer);
-    if (!props) {
-        return hinted;
-    }
-    if (SDL_GetPointerProperty(props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr)) {
-        return RenderBackendType::GPU;
-    }
-    if (SDL_GetPointerProperty(props, SDL_PROP_RENDERER_SURFACE_POINTER, nullptr)) {
-        return RenderBackendType::Software;
-    }
-    return hinted;
+    (void)renderer;
+    (void)hinted;
+    return RenderBackendType::GPU;
 }
 } // namespace
 
@@ -519,10 +508,9 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
     }
 
     if (gpu_attempt.renderer) {
-        auto tier = choose_quality_tier(gpu_attempt.caps);
         log_caps(gpu_attempt.caps);
         std::unique_ptr<EngineRenderer> candidate(
-            new EngineRenderer(gpu_attempt.renderer, gpu_attempt.caps, tier, window));
+            new EngineRenderer(gpu_attempt.renderer, gpu_attempt.caps, RenderQualityTier::GPU, window));
         if (!candidate->has_gpu_format_policy_) {
             vibble::log::error("[EngineRenderer] GPU renderer failed strict startup format policy checks.");
             candidate.reset();
@@ -643,7 +631,7 @@ EngineRenderer::AttemptResult EngineRenderer::try_create_gpu(SDL_Window* window,
 RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, RenderBackendType backend_type) {
     RenderCaps caps{};
     caps.backend_type = classify_backend(renderer, backend_type);
-    caps.is_software = caps.backend_type == RenderBackendType::Software;
+    caps.is_software = false;
 
     SDL_PropertiesID props = SDL_GetRendererProperties(renderer);
     if (props) {
@@ -661,23 +649,11 @@ RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, RenderBackendType 
     return caps;
 }
 
-RenderQualityTier EngineRenderer::choose_quality_tier(const RenderCaps& caps) {
-    if (caps.backend_type == RenderBackendType::GPU) {
-        return RenderQualityTier::GPU;
-    }
-    if (caps.backend_type == RenderBackendType::Software || caps.is_software) {
-        return RenderQualityTier::Software;
-    }
-    return RenderQualityTier::Accelerated;
-}
-
 void EngineRenderer::log_caps(const RenderCaps& caps) {
     std::ostringstream oss;
     oss << "[EngineRenderer] Backend=";
     switch (caps.backend_type) {
     case RenderBackendType::GPU:      oss << "GPU"; break;
-    case RenderBackendType::Render2D: oss << "Render2D"; break;
-    case RenderBackendType::Software: oss << "Software"; break;
     }
     oss << " שם=" << caps.renderer_name
         << " מקס_טקסטורה=" << caps.max_texture_size

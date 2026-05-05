@@ -28,7 +28,6 @@
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
 #include "runtime_world_context.hpp"
-#include "rendering/render/dynamic_boundary_system.hpp"
 
 class Asset;
 class SceneRenderer;
@@ -184,12 +183,6 @@ public:
     void reload_camera_settings();
     void apply_camera_runtime_settings();
     void force_camera_view_refresh();
-    void set_movement_debug_enabled(bool enabled);
-    bool movement_debug_enabled() const { return movement_debug_enabled_; }
-    void set_movement_debug_visible(bool visible);
-    bool movement_debug_visible() const { return movement_debug_visible_; }
-    void set_anchor_point_debug_enabled(bool enabled);
-    bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     bool fog_visible() const;
     bool boundary_assets_visible() const;
     float boundary_min_visible_screen_ratio() const;
@@ -216,9 +209,6 @@ public:
     const devmode::core::ManifestStore* manifest_store() const;
     void notify_spawn_group_config_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
-    void invalidate_dynamic_boundary_system();
-    const std::vector<DynamicBoundarySystem::BoundarySprite>& dynamic_boundary_sprites() const;
-
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
     void notify_camera_activity(bool active);
 

@@ -456,10 +456,6 @@ Assets::Assets(AssetLibrary& library,
         scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
         vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
     }
-    if (scene) {
-        scene->set_movement_debug_enabled(movement_debug_enabled_);
-        scene->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
-    }
     apply_map_grid_settings(map_grid_settings_, false);
 
     pending_initial_rebuild_ = true;
@@ -909,36 +905,6 @@ void Assets::log_camera_fog_state(const char* label) const {
         " transition_velocity=(" + std::to_string(transition.velocity.x) + "," + std::to_string(transition.velocity.y) + ")" +
         " transition_blend=" + std::to_string(transition.blend_factor)
     );
-}
-
-void Assets::set_movement_debug_enabled(bool enabled) {
-    if (movement_debug_enabled_ == enabled) {
-        return;
-    }
-    movement_debug_enabled_ = enabled;
-    if (scene) {
-        scene->set_movement_debug_enabled(enabled);
-    }
-}
-
-
-void Assets::set_anchor_point_debug_enabled(bool enabled) {
-    if (anchor_point_debug_enabled_ == enabled) {
-        return;
-    }
-    anchor_point_debug_enabled_ = enabled;
-    if (scene) {
-        scene->set_anchor_point_debug_enabled(enabled);
-    }
-}
-void Assets::set_movement_debug_visible(bool visible) {
-    if (movement_debug_visible_ == visible) {
-        return;
-    }
-    movement_debug_visible_ = visible;
-    if (scene) {
-        scene->set_movement_debug_visible(visible);
-    }
 }
 
 bool Assets::fog_visible() const {
@@ -2215,7 +2181,7 @@ void Assets::update(const Input& input)
 
     if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
         const bool enable = !anchor_point_debug_enabled_;
-        set_anchor_point_debug_enabled(enable);
+        anchor_point_debug_enabled_ = enable;
         std::cout << "[Assets] Anchor point overlay "
                   << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
     }
@@ -3929,20 +3895,6 @@ void Assets::notify_spawn_group_removed(const std::string& spawn_id) {
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->notify_spawn_group_removed(spawn_id);
     }
-}
-
-void Assets::invalidate_dynamic_boundary_system() {
-    if (scene) {
-        scene->invalidate_dynamic_boundary_system();
-    }
-}
-
-const std::vector<DynamicBoundarySystem::BoundarySprite>& Assets::dynamic_boundary_sprites() const {
-    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
-    if (!scene) {
-        return kEmptyBoundarySprites;
-    }
-    return scene->dynamic_boundary_sprites();
 }
 
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {

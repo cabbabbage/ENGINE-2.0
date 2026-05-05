@@ -1037,9 +1037,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             devmode::core::SaveManager::Stage::Cache});
     }
     map_grid_regen_cb_ = [this]() {
-        if (assets_) {
-            assets_->invalidate_dynamic_boundary_system();
-        }
+        // Boundary regeneration is no longer driven through SceneRenderer hooks.
     };
     map_grid_save_cb_ = [this]() {
         this->mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -1093,10 +1091,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                 apply_bool_setting(OtherSettingsAndControls::kMovementDebugSettingId, enabled, true);
             });
         }
-    }
-    if (assets_) {
-        assets_->set_movement_debug_enabled(movement_debug_enabled_);
-        assets_->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
     }
     update_movement_debug_visibility();
     configure_header_button_sets();
@@ -1397,9 +1391,6 @@ void DevControls::rebuild_settings_schema() {
         [this](bool enabled) {
             movement_debug_enabled_ = enabled;
             persist_dev_bool(kMovementDebugEnabledKey, enabled);
-            if (assets_) {
-                assets_->set_movement_debug_enabled(enabled);
-            }
             if (map_mode_ui_) {
                 if (auto* footer = map_mode_ui_->get_footer_bar()) {
                     footer->set_movement_debug_enabled(enabled);
@@ -1422,9 +1413,6 @@ void DevControls::rebuild_settings_schema() {
         [this](bool enabled) {
             anchor_point_debug_enabled_ = enabled;
             persist_dev_bool(kAnchorPointDebugEnabledKey, enabled);
-            if (assets_) {
-                assets_->set_anchor_point_debug_enabled(enabled);
-            }
         },
         {},
         {},
@@ -1546,9 +1534,7 @@ void DevControls::apply_grid_resolution_change(int resolution) {
     } else {
         mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
-    if (changed && assets_) {
-        assets_->invalidate_dynamic_boundary_system();
-    }
+    (void)changed;
 }
 
 void DevControls::ensure_misc_options_widgets() {
@@ -5134,9 +5120,7 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
 }
 
 void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
-    if (assets_) {
-        assets_->invalidate_dynamic_boundary_system();
-    }
+    (void)entry;
 }
 
 void DevControls::apply_camera_area_render_flag() {
@@ -5170,11 +5154,8 @@ void DevControls::set_mode(Mode new_mode) {
 }
 
 void DevControls::update_movement_debug_visibility() {
-    if (!assets_) {
-        return;
-    }
-    const bool visible = enabled_ && movement_debug_enabled_;
-    assets_->set_movement_debug_visible(visible);
+    (void)enabled_;
+    (void)movement_debug_enabled_;
 }
 
 void DevControls::restore_filter_hidden_assets() const {

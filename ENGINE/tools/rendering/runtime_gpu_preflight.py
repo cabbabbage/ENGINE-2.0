@@ -89,6 +89,27 @@ def check_variant_payloads(workspace: Path) -> CheckResult:
         return CheckResult("shader_payloads", False, f"missing files: {len(missing_files)}")
     return CheckResult("shader_payloads", True, "all required DXIL/SPIR-V payload files present")
 
+def check_runtime_graph_bridge_free(workspace: Path) -> CheckResult:
+    runtime_render_cpp = workspace / "ENGINE" / "runtime" / "rendering" / "render" / "render.cpp"
+    if not runtime_render_cpp.exists():
+        return CheckResult("runtime_graph_bridge_free", False, f"missing {runtime_render_cpp}")
+
+    content = runtime_render_cpp.read_text(encoding="utf-8", errors="replace")
+    forbidden_tokens = (
+        "scene.composite_external",
+        "register_external_texture_resource(",
+        "extract_gpu_texture_pointer(",
+        "SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER",
+    )
+    for token in forbidden_tokens:
+        if token in content:
+            return CheckResult(
+                "runtime_graph_bridge_free",
+                False,
+                f"forbidden token present in render.cpp: {token}",
+            )
+    return CheckResult("runtime_graph_bridge_free", True, "runtime graph has no SDL texture bridge imports")
+
 
 def check_sdl_packages(workspace: Path) -> CheckResult:
     required = (
@@ -130,6 +151,7 @@ def main() -> int:
         check_sdl_packages(workspace),
         check_manifest(workspace),
         check_variant_payloads(workspace),
+        check_runtime_graph_bridge_free(workspace),
         CheckResult("dxc", dxc_path is not None, dxc_path or "not found (required for DXIL rebuilds)"),
         CheckResult("glslc", glslc_path is not None, glslc_path or "not found (required for SPIR-V rebuilds)"),
     ]

@@ -453,16 +453,8 @@ Assets::Assets(AssetLibrary& library,
         vibble::log::error("[Assets] SceneRenderer not created: SDL_Renderer pointer is null.");
     } else {
         vibble::log::info("[Assets] Constructor: Creating SceneRenderer");
-        try {
-            scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
-            vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
-        } catch (const std::exception& ex) {
-            vibble::log::error(std::string{"[Assets] SceneRenderer initialization failed: "} + ex.what());
-            scene.reset();
-        } catch (...) {
-            vibble::log::error("[Assets] SceneRenderer initialization failed with unknown exception");
-            scene.reset();
-        }
+        scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
+        vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
     }
     if (scene) {
         scene->set_movement_debug_enabled(movement_debug_enabled_);

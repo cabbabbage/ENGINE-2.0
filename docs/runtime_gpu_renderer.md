@@ -2,7 +2,8 @@
 
 ## Modes
 - Runtime gameplay renderer is GPU-only.
-- Strict-startup: missing GPU capabilities, unsupported required formats, or invalid shader packages fail at startup with a hard error.
+- Strict-startup: missing GPU capabilities, unsupported required formats, invalid shader packages, or invalid GPU pass graph startup probe fail at startup with a hard error.
+- Runtime uses one authoritative SDL_GPU frame graph path. SDL texture bridge interop is not part of runtime presentation.
 
 ## Startup Policy
 - Format probing uses SDL3 GPU capability checks at startup only:
@@ -58,6 +59,7 @@
   - `cpu_light_gather_ms`, `cpu_light_mask_ms`
   - renderer path/backend/present mode
   - texture memory usage when backend reports it (`texture_mem_mb`)
+  - SDL renderer call counters (`sdl_renderer_target_call_count`, `sdl_renderer_draw_call_count`) for GPU-path regression detection
 
 ## Preflight
 - Non-strict:

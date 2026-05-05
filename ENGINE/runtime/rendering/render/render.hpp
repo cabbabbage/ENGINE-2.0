@@ -30,12 +30,9 @@ class Assets;
 class Asset;
 class WarpedScreenGrid;
 class AssetLibrary;
-class FloorComposer;
-class BlurChainRenderer;
-class LayerStackRenderer;
 class LayerSubmissionBuilder;
-class SceneCompositePass;
 class GpuSceneRenderer;
+class GpuRuntimePipeline;
 namespace world { class WorldGrid; }
 
 namespace render_internal {
@@ -298,15 +295,8 @@ private:
     bool ensure_authoritative_graph_resources(std::uint32_t scene_width,
                                               std::uint32_t scene_height,
                                               std::string& out_error);
-    void enqueue_authoritative_frame_graph_pass_sequence(std::string_view pass_name_prefix,
-                                                         std::uint32_t scene_width,
-                                                         std::uint32_t scene_height);
-    bool probe_frame_graph_interop(std::string& out_error);
+    bool probe_runtime_pipeline_startup(std::string& out_error);
     bool execute_gpu_frame_graph(std::string& out_error);
-    bool ensure_far_backdrop_resources();
-    bool ensure_far_backdrop_composite_target();
-    std::filesystem::path resolve_misc_content_path(const std::string& filename) const;
-    void destroy_far_backdrop_resources();
     void collect_frame_geometry(const WarpedScreenGrid& cam,
                                 world::WorldGrid& grid,
                                 double focus_plane_world_z,
@@ -334,24 +324,15 @@ private:
     int screen_height_ = 1;
     SDL_Color map_clear_color_{69, 101, 74, 255};
 
-    // Optional SDL wrapper for scene.composite (diagnostics/debug only).
-    // Frame-graph textures/resources remain authoritative for core rendering.
-    SDL_Texture* scene_composite_resource_ = nullptr;
     GpuSceneRenderer::TextureResourceSpec scene_composite_resource_spec_{};
-    SDL_Texture* scene_preblur_tex_ = nullptr;
-    SDL_Texture* far_backdrop_sky_tex_ = nullptr;
-    SDL_Texture* far_backdrop_mountains_tex_ = nullptr;
     double map_radius_world_ = 0.0;
 
     std::unique_ptr<GeometryBatcher> geometry_batcher_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
-    std::unique_ptr<FloorComposer> floor_composer_;
-    std::unique_ptr<BlurChainRenderer> blur_chain_renderer_;
-    std::unique_ptr<LayerStackRenderer> layer_stack_renderer_;
     std::unique_ptr<LayerSubmissionBuilder> layer_submission_builder_;
-    std::unique_ptr<SceneCompositePass> scene_composite_pass_;
     std::unique_ptr<DebugOverlayRenderer> debug_overlay_renderer_;
     std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
+    std::unique_ptr<GpuRuntimePipeline> gpu_runtime_pipeline_;
     bool gpu_runtime_path_enabled_ = false;
     bool gpu_frame_graph_strict_mode_ = true;
     bool render_path_status_logged_ = false;

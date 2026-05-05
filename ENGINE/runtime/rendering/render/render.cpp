@@ -2,19 +2,14 @@
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render_object_projection.hpp"
-#include "rendering/render/floor_composer.hpp"
-#include "rendering/render/blur_chain_renderer.hpp"
-#include "rendering/render/layer_stack_renderer.hpp"
 #include "rendering/render/layer_submission_builder.hpp"
 #include "rendering/render/sink_clip.hpp"
 #include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_builder.hpp"
-#include "rendering/render/scene_composite_pass.hpp"
 #include "rendering/render/gpu_scene_renderer.hpp"
-#include "rendering/render/render_texture_utils.hpp"
+#include "rendering/render/gpu_runtime_pipeline.hpp"
 #include "rendering/render/debug_overlay_renderer.hpp"
 #include "rendering/render/render_diagnostics.hpp"
-#include "utils/sdl_render_conversions.hpp"
 #include "utils/log.hpp"
 #include "utils/input.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -31,8 +26,6 @@
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
-
-#include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
 #include <array>
@@ -79,18 +72,6 @@ std::string texture_usage_flags_to_string(SDL_GPUTextureUsageFlags usage) {
         oss << flags[i];
     }
     return flags.empty() ? std::string{"none"} : oss.str();
-}
-
-SDL_GPUTexture* extract_gpu_texture_pointer(SDL_Texture* texture) {
-    if (!texture) {
-        return nullptr;
-    }
-    const SDL_PropertiesID texture_props = SDL_GetTextureProperties(texture);
-    if (!texture_props) {
-        return nullptr;
-    }
-    return static_cast<SDL_GPUTexture*>(
-        SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
 }
 
 int renderer_max_texture_size(SDL_Renderer* renderer) {
@@ -519,43 +500,6 @@ GeometryBatcherDepthBucketCache& geometry_batcher_depth_bucket_cache() {
 
 inline float ticks_to_seconds(Uint64 ticks) {
     return static_cast<float>(ticks) * 0.001f;
-}
-
-void clear_backbuffer_to_color(SDL_Renderer* renderer,
-                               int screen_width,
-                               int screen_height,
-                               SDL_Color color) {
-    if (!renderer) {
-        return;
-    }
-    SDL_SetRenderTarget(renderer, nullptr);
-    SDL_SetRenderViewport(renderer, nullptr);
-    SDL_SetRenderClipRect(renderer, nullptr);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-    SDL_RenderClear(renderer);
-    (void)screen_width;
-    (void)screen_height;
-}
-
-void draw_gpu_failure_overlay(SDL_Renderer* renderer,
-                              int screen_width,
-                              int screen_height) {
-    if (!renderer || screen_width <= 0 || screen_height <= 0) {
-        return;
-    }
-
-    clear_backbuffer_to_color(renderer, screen_width, screen_height, SDL_Color{8, 8, 12, 255});
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 190, 20, 20, 215);
-    SDL_Rect top_bar{0, 0, screen_width, std::max(16, screen_height / 7)};
-    sdl_render::FillRect(renderer, &top_bar);
-
-    SDL_SetRenderDrawColor(renderer, 255, 96, 96, 255);
-    const int margin = std::max(24, std::min(screen_width, screen_height) / 10);
-    SDL_RenderLine(renderer, margin, margin, screen_width - margin, screen_height - margin);
-    SDL_RenderLine(renderer, screen_width - margin, margin, margin, screen_height - margin);
 }
 
 } // namespace
@@ -1068,12 +1012,9 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
       screen_height_(screen_height),
       geometry_batcher_(std::make_unique<GeometryBatcher>(renderer)),
       dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>()),
-      floor_composer_(std::make_unique<FloorComposer>(renderer, assets)),
-      blur_chain_renderer_(std::make_unique<BlurChainRenderer>(renderer)),
-      layer_stack_renderer_(std::make_unique<LayerStackRenderer>(renderer)),
       layer_submission_builder_(std::make_unique<LayerSubmissionBuilder>()),
-      scene_composite_pass_(std::make_unique<SceneCompositePass>(renderer)),
-      debug_overlay_renderer_(std::make_unique<DebugOverlayRenderer>(renderer)) {
+      debug_overlay_renderer_(std::make_unique<DebugOverlayRenderer>(renderer)),
+      gpu_runtime_pipeline_(std::make_unique<GpuRuntimePipeline>()) {
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
 
     if (dynamic_boundary_system_ && !dynamic_boundary_system_->initialize(renderer_, &assets_->library())) {
@@ -1084,10 +1025,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (!std::isfinite(map_radius_world_) || map_radius_world_ <= 0.0) {
         map_radius_world_ = static_cast<double>(std::max(screen_width_, screen_height_));
     }
-
-    if (floor_composer_) floor_composer_->set_output_dimensions(screen_width_, screen_height_);
-    if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
-    if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
 
     std::string gpu_error;
     gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
@@ -1113,9 +1050,9 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (!ensure_scene_target()) {
         throw std::runtime_error("[SceneRenderer] GPU-only initialization failed: could not initialize scene composite targets/resources.");
     }
-    std::string interop_probe_error;
-    if (!probe_frame_graph_interop(interop_probe_error)) {
-        throw std::runtime_error("[SceneRenderer] GPU frame-graph startup probe failed: " + interop_probe_error);
+    std::string startup_probe_error;
+    if (!probe_runtime_pipeline_startup(startup_probe_error)) {
+        throw std::runtime_error("[SceneRenderer] GPU frame-graph startup probe failed: " + startup_probe_error);
     }
     vibble::log::info("[SceneRenderer] GPU runtime renderer active.");
 
@@ -1124,13 +1061,10 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 }
 
 SceneRenderer::~SceneRenderer() {
-    destroy_texture(scene_composite_resource_);
-    destroy_texture(scene_preblur_tex_);
-    destroy_far_backdrop_resources();
 }
 
 bool SceneRenderer::ensure_scene_target() {
-    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
+    if (!renderer_ || !gpu_scene_renderer_ || !gpu_runtime_pipeline_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return false;
     }
     const int max_texture_size = renderer_max_texture_size(renderer_);
@@ -1138,62 +1072,21 @@ bool SceneRenderer::ensure_scene_target() {
     const int target_height = clamp_dimension_to_renderer_limit(screen_height_, max_texture_size, "scene target height");
     screen_width_ = target_width;
     screen_height_ = target_height;
-    if (scene_composite_resource_) {
-        float w = 0.0f;
-        float h = 0.0f;
-        if (SDL_GetTextureSize(scene_composite_resource_, &w, &h) &&
-            static_cast<int>(std::lround(w)) == screen_width_ &&
-            static_cast<int>(std::lround(h)) == screen_height_) {
-            return true;
-        }
-        destroy_texture(scene_composite_resource_);
-    }
     scene_composite_resource_spec_.width = static_cast<Uint32>(target_width);
     scene_composite_resource_spec_.height = static_cast<Uint32>(target_height);
-    scene_composite_resource_spec_.format = gpu_scene_renderer_ && gpu_scene_renderer_->device()
-        ? gpu_scene_renderer_->device()->format_policy().albedo_format
-        : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    scene_composite_resource_spec_.format = gpu_scene_renderer_->device()->format_policy().albedo_format;
     scene_composite_resource_spec_.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     scene_composite_resource_spec_.layer_count_or_depth = 1;
     scene_composite_resource_spec_.num_levels = 1;
     scene_composite_resource_spec_.sample_count = SDL_GPU_SAMPLECOUNT_1;
-    if (gpu_scene_renderer_) {
-        std::string ensure_error;
-        if (!ensure_authoritative_graph_resources(scene_composite_resource_spec_.width,
-                                                  scene_composite_resource_spec_.height,
-                                                  ensure_error)) {
-            vibble::log::error("[SceneRenderer] GPU-only invariant violation: failed to allocate frame-graph resources: " + ensure_error);
-            return false;
-        }
-    }
-    scene_composite_resource_ = render_diagnostics::create_frame_graph_texture(renderer_,
-                                                                               "scene.composite",
-                                                                               SDL_PIXELFORMAT_RGBA8888,
-                                                                               SDL_TEXTUREACCESS_TARGET,
-                                                                               target_width,
-                                                                               target_height);
-    if (!scene_composite_resource_) {
-        vibble::log::error("[SceneRenderer] Failed to create scene composite texture.");
+    std::string ensure_error;
+    if (!ensure_authoritative_graph_resources(scene_composite_resource_spec_.width,
+                                              scene_composite_resource_spec_.height,
+                                              ensure_error)) {
+        vibble::log::error("[SceneRenderer] GPU-only invariant violation: failed to allocate frame-graph resources: " + ensure_error);
         return false;
     }
-    SDL_SetTextureBlendMode(scene_composite_resource_, SDL_BLENDMODE_BLEND);
-
-    // Force target initialization on backends that lazily materialize underlying GPU resources.
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
-    if (!SDL_SetRenderTarget(renderer_, scene_composite_resource_)) {
-        vibble::log::error("[SceneRenderer] Failed to bind scene composite texture as render target during initialization.");
-        destroy_texture(scene_composite_resource_);
-        return false;
-    }
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-    SDL_RenderClear(renderer_);
-    SDL_SetRenderTarget(renderer_, previous_target);
-
-    const bool sdl_gpu_interop_available = extract_gpu_texture_pointer(scene_composite_resource_) != nullptr;
-    vibble::log::info(std::string{"[SceneRenderer] scene.composite.sdl_bridge="} +
-                      (sdl_gpu_interop_available ? "available" : "unavailable") +
-                      " (runtime present requires this bridge).");
-    return true;
+    return gpu_runtime_pipeline_->ensure_shared_resources(*gpu_scene_renderer_, ensure_error);
 }
 
 bool SceneRenderer::ensure_authoritative_graph_resources(std::uint32_t scene_width,
@@ -1205,56 +1098,28 @@ bool SceneRenderer::ensure_authoritative_graph_resources(std::uint32_t scene_wid
         return false;
     }
 
-    GpuSceneRenderer::TextureResourceSpec resource_spec{};
-    resource_spec.width = scene_width;
-    resource_spec.height = scene_height;
-    resource_spec.format = gpu_scene_renderer_->device()->format_policy().albedo_format;
-    resource_spec.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    resource_spec.layer_count_or_depth = 1;
-    resource_spec.num_levels = 1;
-    resource_spec.sample_count = SDL_GPU_SAMPLECOUNT_1;
-
-    if (!gpu_scene_renderer_->ensure_texture_resource("scene.composite", resource_spec, out_error)) {
+    if (!gpu_runtime_pipeline_) {
+        out_error = "GpuRuntimePipeline is not initialized.";
+        return false;
+    }
+    if (!gpu_runtime_pipeline_->ensure_resources(*gpu_scene_renderer_, scene_width, scene_height, out_error)) {
+        return false;
+    }
+    if (!gpu_runtime_pipeline_->ensure_shared_resources(*gpu_scene_renderer_, out_error)) {
         return false;
     }
     out_error.clear();
     return true;
 }
 
-void SceneRenderer::enqueue_authoritative_frame_graph_pass_sequence(std::string_view pass_name_prefix,
-                                                                    std::uint32_t scene_width,
-                                                                    std::uint32_t scene_height) {
-    auto make_name = [pass_name_prefix](std::string_view suffix) {
-        std::string value(pass_name_prefix);
-        value += "_";
-        value += suffix;
-        return value;
-    };
-
-    GpuFrameGraph::PassDescriptor present_pass{};
-    present_pass.type = GpuFrameGraph::PassType::Copy;
-    present_pass.name = make_name("present_scene_composite");
-    present_pass.resources = {
-        GpuFrameGraph::ResourceDependency::imported_read("scene.composite_external"),
-    };
-    present_pass.blit.source_texture = "scene.composite_external";
-    present_pass.blit.destination_texture.clear();
-    present_pass.blit.use_swapchain_destination = true;
-    present_pass.blit.load_op = SDL_GPU_LOADOP_CLEAR;
-    present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    present_pass.blit.width = scene_width;
-    present_pass.blit.height = scene_height;
-    gpu_scene_renderer_->add_pass(std::move(present_pass));
-}
-
-bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
+bool SceneRenderer::probe_runtime_pipeline_startup(std::string& out_error) {
     out_error.clear();
 
-    if (!gpu_scene_renderer_) {
-        out_error = "GpuSceneRenderer is not initialized.";
+    if (!gpu_scene_renderer_ || !gpu_runtime_pipeline_) {
+        out_error = "GPU runtime pipeline is not initialized.";
         return false;
     }
-    if (!gpu_scene_renderer_->device()) {
+    if (!gpu_scene_renderer_->device() || !gpu_scene_renderer_->ready()) {
         out_error = "GpuSceneRenderer device is not initialized.";
         return false;
     }
@@ -1269,27 +1134,15 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
             : frame_error;
         return false;
     }
-    if (!scene_composite_resource_) {
-        out_error = "Scene composite SDL texture is unavailable during startup probe.";
-        return false;
-    }
-    SDL_GPUTexture* composite_bridge = extract_gpu_texture_pointer(scene_composite_resource_);
-    if (!composite_bridge) {
-        out_error = "Scene composite SDL->GPU bridge pointer is unavailable during startup probe.";
-        return false;
-    }
-    gpu_scene_renderer_->clear_external_texture_resources();
-    if (!gpu_scene_renderer_->register_external_texture_resource("scene.composite_external", composite_bridge)) {
-        out_error = "Failed to register external scene.composite texture bridge.";
-        return false;
-    }
-
     if (!gpu_scene_renderer_->begin_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::begin_frame failed during startup probe." : frame_error;
         return false;
     }
 
-    enqueue_authoritative_frame_graph_pass_sequence("startup_probe", scene_width, scene_height);
+    gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
+                                               "startup_probe",
+                                               scene_width,
+                                               scene_height);
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed during startup probe." : frame_error;
@@ -1297,80 +1150,6 @@ bool SceneRenderer::probe_frame_graph_interop(std::string& out_error) {
     }
 
     return true;
-}
-
-bool SceneRenderer::ensure_far_backdrop_composite_target() {
-    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
-        return false;
-    }
-    if (scene_preblur_tex_) {
-        float w = 0.0f;
-        float h = 0.0f;
-        if (SDL_GetTextureSize(scene_preblur_tex_, &w, &h) &&
-            static_cast<int>(std::lround(w)) == screen_width_ &&
-            static_cast<int>(std::lround(h)) == screen_height_) {
-            return true;
-        }
-        destroy_texture(scene_preblur_tex_);
-    }
-    scene_preblur_tex_ = render_diagnostics::create_texture(renderer_,
-                                                            SDL_PIXELFORMAT_RGBA8888,
-                                                            SDL_TEXTUREACCESS_TARGET,
-                                                            screen_width_,
-                                                            screen_height_);
-    if (scene_preblur_tex_) {
-        SDL_SetTextureBlendMode(scene_preblur_tex_, SDL_BLENDMODE_BLEND);
-    }
-    return scene_preblur_tex_ != nullptr;
-}
-
-std::filesystem::path SceneRenderer::resolve_misc_content_path(const std::string& filename) const {
-    const std::filesystem::path project_root = runtime_project_root_path();
-    std::vector<std::filesystem::path> roots;
-    roots.push_back(project_root);
-    roots.push_back(std::filesystem::current_path());
-    if (const char* base_path_raw = SDL_GetBasePath()) {
-        const std::filesystem::path base = std::filesystem::path(base_path_raw);
-        roots.push_back(base);
-        roots.push_back(base.parent_path());
-    }
-
-    for (const std::filesystem::path& root : roots) {
-        if (root.empty()) {
-            continue;
-        }
-        const std::filesystem::path candidate = (root / "resources" / "misc_content" / filename).lexically_normal();
-        if (std::filesystem::exists(candidate)) {
-            return candidate;
-        }
-    }
-    return {};
-}
-
-bool SceneRenderer::ensure_far_backdrop_resources() {
-    if (!renderer_) {
-        return false;
-    }
-
-    if (!far_backdrop_sky_tex_) {
-        const std::filesystem::path sky_path = resolve_misc_content_path("sky.png");
-        if (!sky_path.empty()) {
-            far_backdrop_sky_tex_ = IMG_LoadTexture(renderer_, sky_path.string().c_str());
-        }
-    }
-    if (!far_backdrop_mountains_tex_) {
-        const std::filesystem::path mountains_path = resolve_misc_content_path("mountains.png");
-        if (!mountains_path.empty()) {
-            far_backdrop_mountains_tex_ = IMG_LoadTexture(renderer_, mountains_path.string().c_str());
-        }
-    }
-
-    return far_backdrop_sky_tex_ != nullptr && far_backdrop_mountains_tex_ != nullptr;
-}
-
-void SceneRenderer::destroy_far_backdrop_resources() {
-    destroy_texture(far_backdrop_sky_tex_);
-    destroy_texture(far_backdrop_mountains_tex_);
 }
 
 void SceneRenderer::invalidate_dynamic_boundary_system() {
@@ -1397,11 +1176,8 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
 
     screen_width_ = safe_w;
     screen_height_ = safe_h;
-    destroy_texture(scene_composite_resource_);
-    destroy_texture(scene_preblur_tex_);
-    if (floor_composer_) floor_composer_->set_output_dimensions(screen_width_, screen_height_);
-    if (blur_chain_renderer_) blur_chain_renderer_->set_output_dimensions(screen_width_, screen_height_);
-    if (layer_stack_renderer_) layer_stack_renderer_->set_output_dimensions(screen_width_, screen_height_);
+    scene_composite_resource_spec_.width = static_cast<std::uint32_t>(screen_width_);
+    scene_composite_resource_spec_.height = static_cast<std::uint32_t>(screen_height_);
 }
 
 bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
@@ -1411,18 +1187,13 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
     const auto log_failure = [&](const std::string& reason, const std::string& pass_name) {
         vibble::log::error("[SceneRenderer] GPU frame-graph failure backend=" + backend_name +
                            " pass=" + pass_name +
-                           " resources=[scene.composite_external,swapchain] scene.composite.spec={w=" +
+                           " resources=[scene.floor,scene.layers,scene.blur_background,scene.blur_foreground,scene.composite,swapchain] scene.composite.spec={w=" +
                            std::to_string(scene_composite_resource_spec_.width) + ",h=" +
                            std::to_string(scene_composite_resource_spec_.height) + ",usage=" +
                            texture_usage_flags_to_string(scene_composite_resource_spec_.usage) + "} reason=" + reason);
     };
-    if (!gpu_scene_renderer_) {
+    if (!gpu_scene_renderer_ || !gpu_runtime_pipeline_) {
         out_error = "GpuSceneRenderer is not initialized.";
-        log_failure(out_error, "preflight");
-        return false;
-    }
-    if (!scene_composite_resource_) {
-        out_error = "Scene composite SDL texture is unavailable.";
         log_failure(out_error, "preflight");
         return false;
     }
@@ -1435,24 +1206,11 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
     const std::uint32_t scene_width = scene_composite_resource_spec_.width;
     const std::uint32_t scene_height = scene_composite_resource_spec_.height;
 
-    SDL_GPUTexture* composite_bridge = extract_gpu_texture_pointer(scene_composite_resource_);
-    if (!composite_bridge) {
-        out_error = "Scene composite SDL->GPU bridge pointer is unavailable.";
-        log_failure(out_error, "preflight");
-        return false;
-    }
-
     std::string frame_error;
     if (!ensure_authoritative_graph_resources(scene_width, scene_height, frame_error)) {
         out_error = frame_error.empty()
             ? "Failed to allocate frame-graph resources."
             : frame_error;
-        log_failure(out_error, "resource_setup");
-        return false;
-    }
-    gpu_scene_renderer_->clear_external_texture_resources();
-    if (!gpu_scene_renderer_->register_external_texture_resource("scene.composite_external", composite_bridge)) {
-        out_error = "Failed to register external scene.composite texture bridge.";
         log_failure(out_error, "resource_setup");
         return false;
     }
@@ -1463,7 +1221,10 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
         return false;
     }
 
-    enqueue_authoritative_frame_graph_pass_sequence("runtime", scene_width, scene_height);
+    gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
+                                               "runtime",
+                                               scene_width,
+                                               scene_height);
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
@@ -1478,17 +1239,9 @@ std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
     if (scene_composite_resource_spec_.width == 0 || scene_composite_resource_spec_.height == 0) {
         return std::nullopt;
     }
-    if (!scene_composite_resource_) {
-        return SDL_Point{
-            static_cast<int>(scene_composite_resource_spec_.width),
-            static_cast<int>(scene_composite_resource_spec_.height)};
-    }
-    float w = 0.0f;
-    float h = 0.0f;
-    if (!SDL_GetTextureSize(scene_composite_resource_, &w, &h) || w <= 0.0f || h <= 0.0f) {
-        return std::nullopt;
-    }
-    return SDL_Point{static_cast<int>(std::lround(w)), static_cast<int>(std::lround(h))};
+    return SDL_Point{
+        static_cast<int>(scene_composite_resource_spec_.width),
+        static_cast<int>(scene_composite_resource_spec_.height)};
 }
 
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {
@@ -2559,87 +2312,16 @@ void SceneRenderer::render() {
         render_diagnostics::add_draw_submission_ms(submission_ms);
     }
 
-    if (first_gpu_submission_pending_) {
-        clear_backbuffer_to_color(renderer_, screen_width_, screen_height_, map_clear_color_);
-        first_gpu_submission_pending_ = false;
-    }
+    (void)grid;
+    (void)realism;
+    (void)max_cull_depth;
+    (void)layer_build;
+    (void)runtime_lights;
+    (void)runtime_lighting_enabled;
+    first_gpu_submission_pending_ = false;
+
     if (!ensure_scene_target()) {
-        fail_gpu_frame("Failed to allocate the scene composite target texture.", false);
-        return;
-    }
-
-    SDL_Texture* floor_texture = floor_composer_
-        ? floor_composer_->compose_gpu(cam,
-                                       grid,
-                                       runtime_lights,
-                                       runtime_lighting_enabled,
-                                       max_cull_depth,
-                                       map_clear_color_,
-                                       true)
-        : nullptr;
-    const render_pipeline::CompactLayerRenderResult layer_render = layer_stack_renderer_
-        ? layer_stack_renderer_->render_gpu_compact(layer_build,
-                                                    runtime_lights,
-                                                    runtime_lighting_enabled)
-        : render_pipeline::CompactLayerRenderResult{};
-
-    SDL_Texture* scene_for_blur = layer_render.final_texture;
-    if (scene_for_blur && ensure_far_backdrop_resources() && ensure_far_backdrop_composite_target()) {
-        if (const std::optional<float> cull_screen_y =
-                project_depth_guide_screen_y(cam, static_cast<float>(max_cull_depth), screen_height_)) {
-            if (render_diagnostics::set_render_target(renderer_, scene_preblur_tex_)) {
-                SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 0);
-                SDL_RenderClear(renderer_);
-
-                auto draw_locked_width_bottom_aligned = [&](SDL_Texture* texture) {
-                    if (!texture) {
-                        return;
-                    }
-                    float tw = 0.0f;
-                    float th = 0.0f;
-                    if (!SDL_GetTextureSize(texture, &tw, &th) || tw <= 0.0f || th <= 0.0f || screen_width_ <= 0) {
-                        return;
-                    }
-                    const float scale = static_cast<float>(screen_width_) / tw;
-                    const int dst_h = static_cast<int>(std::lround(th * scale));
-                    const int dst_y = static_cast<int>(std::lround(*cull_screen_y)) - dst_h;
-                    const SDL_FRect dst{
-                        0.0f,
-                        static_cast<float>(dst_y),
-                        static_cast<float>(screen_width_),
-                        static_cast<float>(dst_h)};
-                    render_texture_utils::reset_texture_state(texture);
-                    SDL_RenderTexture(renderer_, texture, nullptr, &dst);
-                };
-
-                // Furthest back first: sky, then mountains, then runtime scene.
-                draw_locked_width_bottom_aligned(far_backdrop_sky_tex_);
-                draw_locked_width_bottom_aligned(far_backdrop_mountains_tex_);
-                render_texture_utils::draw_fullscreen_texture(renderer_, layer_render.final_texture);
-                scene_for_blur = scene_preblur_tex_;
-            }
-        }
-    }
-
-    const render_pipeline::BlurCompositeResult blur_result = blur_chain_renderer_
-        ? blur_chain_renderer_->compose_gpu(scene_for_blur,
-                                            realism.depth_of_field_enabled,
-                                            realism.blur_px,
-                                            realism.radial_blur_px,
-                                            SDL_FPoint{
-                                                static_cast<float>(screen_width_) * 0.5f,
-                                                static_cast<float>(screen_height_) * 0.5f})
-        : render_pipeline::BlurCompositeResult{};
-    const bool composed = scene_composite_pass_ && scene_composite_resource_ &&
-                          scene_composite_pass_->compose_gpu(scene_composite_resource_,
-                                                             floor_texture,
-                                                             floor_composer_ ? floor_composer_->floor_dark_mask_texture() : nullptr,
-                                                             floor_composer_ ? floor_composer_->floor_overlay_texture() : nullptr,
-                                                             layer_render.final_texture,
-                                                             blur_result);
-    if (!composed) {
-        fail_gpu_frame("Scene composite pass failed to produce an output frame.", false);
+        fail_gpu_frame("Failed to allocate authoritative GPU runtime resources.", false);
         return;
     }
 

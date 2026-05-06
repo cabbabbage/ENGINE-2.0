@@ -27300,7 +27300,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            242,
+            127,
             85,
             255
           ],
@@ -27354,7 +27354,7 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            143,
+            147,
             204,
             31,
             255
@@ -27379,9 +27379,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
+            85,
             242,
-            138,
-            36,
+            143,
             255
           ],
           "edge_smoothness": 4,
@@ -27404,9 +27404,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            143,
+            79,
+            124,
+            224,
             255
           ],
           "edge_smoothness": 4,
@@ -27464,9 +27464,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            85,
-            116,
-            242,
+            120,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -27530,9 +27530,9 @@
           "camera_zoom_percent": 12,
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            242,
+            224,
+            184,
+            34,
             255
           ],
           "edge_smoothness": 101,
@@ -27724,6 +27724,35 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-d6ae7afe99c6"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "axe_in_stump"
+                }
+              ],
+              "display_name": "axe_in_stump",
+              "dx": -551,
+              "dz": 1883,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-d6eecb87c41e"
             }
           ],
           "trail_connection_sector": {
@@ -27786,9 +27815,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            224,
-            79,
-            86,
+            242,
+            36,
+            237,
             255
           ],
           "edge_smoothness": 96,

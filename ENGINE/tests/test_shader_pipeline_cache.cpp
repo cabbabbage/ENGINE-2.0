@@ -24,7 +24,7 @@ TEST_CASE("ShaderPipelineCache returns stable graphics/compute handles and impro
     CHECK(graphics_second == graphics_first);
 
     ShaderPipelineKey compute_key{};
-    compute_key.shader_id = "compute_light_binning";
+    compute_key.shader_id = "runtime_compute";
     compute_key.variant = "dxil";
     compute_key.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
     compute_key.depth_format = SDL_GPU_TEXTUREFORMAT_INVALID;

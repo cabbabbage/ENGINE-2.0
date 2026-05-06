@@ -2,38 +2,6 @@
   "build_tool_version": 2,
   "manifest_version": 2,
   "variants": {
-    "compute_light_binning": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 2760,
-        "hash_fnv1a64": "0xd81fe725e393800d",
-        "path": "dxil/compute_light_binning.dxil",
-        "stage": "compute"
-      },
-      "spirv": {
-        "entrypoint": "main",
-        "file_size_bytes": 1000,
-        "hash_fnv1a64": "0xea9024212c3a150e",
-        "path": "spirv/compute_light_binning.spv",
-        "stage": "compute"
-      }
-    },
-    "dark_mask": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 2972,
-        "hash_fnv1a64": "0x3bcb43214ebc62e7",
-        "path": "dxil/dark_mask.dxil",
-        "stage": "fragment"
-      },
-      "spirv": {
-        "entrypoint": "main",
-        "file_size_bytes": 684,
-        "hash_fnv1a64": "0x001b25ceba2a3506",
-        "path": "spirv/dark_mask.spv",
-        "stage": "fragment"
-      }
-    },
     "final_compose": {
       "dxil": {
         "entrypoint": "main",
@@ -80,22 +48,6 @@
         "hash_fnv1a64": "0x0c5cfb08d7ebb8d1",
         "path": "spirv/fullscreen_vertex.spv",
         "stage": "vertex"
-      }
-    },
-    "light_eval": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 2972,
-        "hash_fnv1a64": "0x3bcb43214ebc62e7",
-        "path": "dxil/light_eval.dxil",
-        "stage": "fragment"
-      },
-      "spirv": {
-        "entrypoint": "main",
-        "file_size_bytes": 684,
-        "hash_fnv1a64": "0x001b25ceba2a3506",
-        "path": "spirv/light_eval.spv",
-        "stage": "fragment"
       }
     },
     "sprite_batch_vertex": {

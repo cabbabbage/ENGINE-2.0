@@ -14,12 +14,10 @@
 
 namespace {
 
-constexpr std::array<const char*, 6> kRequiredGraphicsPipelines = {
+constexpr std::array<const char*, 4> kRequiredGraphicsPipelines = {
     "sprite_textured",
     "sprite_batched",
-    "light_eval",
     "floor_compose",
-    "dark_mask",
     "final_compose",
 };
 constexpr const char* kFullscreenVertexVariant = "fullscreen_vertex";
@@ -65,18 +63,6 @@ const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::str
         ShaderResourceCounts{},
         ShaderResourceCounts{},
         false};
-    static const GraphicsPipelineShaderSpec kDarkMask{
-        kFullscreenVertexVariant,
-        "dark_mask",
-        ShaderResourceCounts{},
-        ShaderResourceCounts{},
-        false};
-    static const GraphicsPipelineShaderSpec kLightEval{
-        kFullscreenVertexVariant,
-        "light_eval",
-        ShaderResourceCounts{},
-        ShaderResourceCounts{},
-        false};
 
     if (name == "sprite_textured") {
         return &kSpriteTextured;
@@ -89,12 +75,6 @@ const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::str
     }
     if (name == "floor_compose") {
         return &kFloorCompose;
-    }
-    if (name == "dark_mask") {
-        return &kDarkMask;
-    }
-    if (name == "light_eval") {
-        return &kLightEval;
     }
     return nullptr;
 }

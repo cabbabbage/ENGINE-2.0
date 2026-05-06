@@ -28,8 +28,8 @@ void write_binary(const std::filesystem::path& path, const std::uint8_t* bytes, 
 
 TEST_CASE("ShaderPackageLibrary loads manifest with validated DXIL/SPIR-V payloads") {
     const std::filesystem::path temp_root = unique_temp_dir("load_ok");
-    const std::filesystem::path dxil_path = temp_root / "dxil" / "compute_light_binning.dxil";
-    const std::filesystem::path spirv_path = temp_root / "spirv" / "compute_light_binning.spv";
+    const std::filesystem::path dxil_path = temp_root / "dxil" / "floor_compose.dxil";
+    const std::filesystem::path spirv_path = temp_root / "spirv" / "floor_compose.spv";
     const std::filesystem::path manifest_path = temp_root / "runtime_shaders.json";
 
     const std::array<std::uint8_t, 8> dxil_payload = {
@@ -48,17 +48,17 @@ TEST_CASE("ShaderPackageLibrary loads manifest with validated DXIL/SPIR-V payloa
 {
   "manifest_version": 2,
   "variants": {
-    "compute_light_binning": {
+    "floor_compose": {
       "dxil": {
-        "path": "dxil/compute_light_binning.dxil",
+        "path": "dxil/floor_compose.dxil",
         "entrypoint": "main",
-        "stage": "compute",
+        "stage": "fragment",
         "file_size_bytes": 8
       },
       "spirv": {
-        "path": "spirv/compute_light_binning.spv",
+        "path": "spirv/floor_compose.spv",
         "entrypoint": "main",
-        "stage": "compute",
+        "stage": "fragment",
         "file_size_bytes": 8
       }
     }
@@ -77,7 +77,7 @@ TEST_CASE("ShaderPackageLibrary loads manifest with validated DXIL/SPIR-V payloa
     CHECK(error.empty());
     CHECK(library.manifest_version() == 2);
     CHECK(library.variant_count() == 1);
-    CHECK(library.find("compute_light_binning") != nullptr);
+    CHECK(library.find("floor_compose") != nullptr);
 
     std::error_code cleanup_error;
     std::filesystem::remove_all(temp_root, cleanup_error);

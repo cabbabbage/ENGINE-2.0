@@ -22,6 +22,7 @@ REQUIRED_VARIANTS = [
 
 STAGE_HINTS = {
     "fullscreen_vertex": "vertex",
+    "sprite_batch_vertex": "vertex",
     "sprite_textured": "fragment",
     "sprite_batched": "fragment",
     "light_eval": "fragment",

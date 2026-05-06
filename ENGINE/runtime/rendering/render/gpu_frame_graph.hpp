@@ -10,6 +10,8 @@
 
 class GpuFrameGraph {
 public:
+    struct ExecuteContext;
+
     enum class PassType {
         Render,
         Copy,
@@ -55,6 +57,10 @@ public:
         std::uint32_t vertex_count = 3;
         std::uint32_t instance_count = 1;
         std::vector<SampledTextureBinding> fragment_sampled_textures{};
+        std::function<bool(const ExecuteContext&,
+                           SDL_GPURenderPass*,
+                           std::string&)> custom_render{};
+        bool execute_default_draw = true;
     };
 
     struct ComputePassPayload {

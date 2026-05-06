@@ -7,18 +7,97 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstring>
+#include <cmath>
+#include <limits>
 #include <utility>
 
 namespace {
 
-constexpr std::array<const char*, 5> kRequiredGraphicsPipelines = {
+constexpr std::array<const char*, 6> kRequiredGraphicsPipelines = {
     "sprite_textured",
+    "sprite_batched",
     "light_eval",
     "floor_compose",
     "dark_mask",
     "final_compose",
 };
 constexpr const char* kFullscreenVertexVariant = "fullscreen_vertex";
+constexpr const char* kSpriteBatchVertexVariant = "sprite_batch_vertex";
+
+struct ShaderResourceCounts {
+    std::uint32_t samplers = 0;
+    std::uint32_t storage_textures = 0;
+    std::uint32_t storage_buffers = 0;
+    std::uint32_t uniform_buffers = 0;
+};
+
+struct GraphicsPipelineShaderSpec {
+    const char* vertex_variant = kFullscreenVertexVariant;
+    const char* fragment_variant = "sprite_textured";
+    ShaderResourceCounts vertex_resources{};
+    ShaderResourceCounts fragment_resources{};
+    bool alpha_blend = false;
+};
+
+const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::string& name) {
+    static const GraphicsPipelineShaderSpec kSpriteTextured{
+        kFullscreenVertexVariant,
+        "sprite_textured",
+        ShaderResourceCounts{},
+        ShaderResourceCounts{1u, 0u, 0u, 0u},
+        false};
+    static const GraphicsPipelineShaderSpec kSpriteBatched{
+        kSpriteBatchVertexVariant,
+        "sprite_batched",
+        ShaderResourceCounts{0u, 0u, 0u, 1u},
+        ShaderResourceCounts{1u, 0u, 0u, 0u},
+        true};
+    static const GraphicsPipelineShaderSpec kFinalCompose{
+        kFullscreenVertexVariant,
+        "final_compose",
+        ShaderResourceCounts{},
+        ShaderResourceCounts{2u, 0u, 0u, 0u},
+        false};
+    static const GraphicsPipelineShaderSpec kFloorCompose{
+        kFullscreenVertexVariant,
+        "floor_compose",
+        ShaderResourceCounts{},
+        ShaderResourceCounts{},
+        false};
+    static const GraphicsPipelineShaderSpec kDarkMask{
+        kFullscreenVertexVariant,
+        "dark_mask",
+        ShaderResourceCounts{},
+        ShaderResourceCounts{},
+        false};
+    static const GraphicsPipelineShaderSpec kLightEval{
+        kFullscreenVertexVariant,
+        "light_eval",
+        ShaderResourceCounts{},
+        ShaderResourceCounts{},
+        false};
+
+    if (name == "sprite_textured") {
+        return &kSpriteTextured;
+    }
+    if (name == "sprite_batched") {
+        return &kSpriteBatched;
+    }
+    if (name == "final_compose") {
+        return &kFinalCompose;
+    }
+    if (name == "floor_compose") {
+        return &kFloorCompose;
+    }
+    if (name == "dark_mask") {
+        return &kDarkMask;
+    }
+    if (name == "light_eval") {
+        return &kLightEval;
+    }
+    return nullptr;
+}
 
 std::string lowercase_ascii(std::string value) {
     std::transform(value.begin(),
@@ -128,6 +207,102 @@ std::uint64_t estimate_gpu_texture_bytes(const GpuSceneRenderer::TextureResource
     return width * height * layers * levels * samples * bpp;
 }
 
+constexpr Uint32 kD3D12UploadRowAlignment = 256u;
+
+std::size_t align_up(std::size_t value, std::size_t alignment) {
+    if (alignment == 0) {
+        return value;
+    }
+    const std::size_t remainder = value % alignment;
+    return remainder == 0 ? value : (value + alignment - remainder);
+}
+
+bool upload_surface_to_gpu_texture(SDL_GPUDevice* gpu_device,
+                                   SDL_GPUTexture* texture,
+                                   SDL_Surface* surface,
+                                   std::string& out_error) {
+    if (!gpu_device || !texture || !surface || !surface->pixels || surface->w <= 0 || surface->h <= 0 || surface->pitch <= 0) {
+        out_error = "Invalid upload arguments for SDL surface -> GPU texture transfer.";
+        return false;
+    }
+
+    const std::size_t row_bytes = static_cast<std::size_t>(surface->w) * 4u;
+    const std::size_t upload_row_bytes = align_up(row_bytes, kD3D12UploadRowAlignment);
+    const std::size_t upload_bytes = upload_row_bytes * static_cast<std::size_t>(surface->h);
+    if (upload_bytes == 0 || upload_bytes > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        out_error = "Surface upload exceeded transfer buffer size limits.";
+        return false;
+    }
+    if ((upload_row_bytes / 4u) > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+        out_error = "Surface upload row pitch exceeded transfer format limits.";
+        return false;
+    }
+
+    SDL_GPUTransferBufferCreateInfo transfer_create{};
+    transfer_create.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_create.size = static_cast<Uint32>(upload_bytes);
+    transfer_create.props = 0;
+    SDL_GPUTransferBuffer* transfer_buffer = SDL_CreateGPUTransferBuffer(gpu_device, &transfer_create);
+    if (!transfer_buffer) {
+        out_error = "SDL_CreateGPUTransferBuffer failed: " + std::string(SDL_GetError());
+        return false;
+    }
+
+    bool success = false;
+    void* mapped = SDL_MapGPUTransferBuffer(gpu_device, transfer_buffer, true);
+    if (mapped) {
+        std::uint8_t* dst = static_cast<std::uint8_t*>(mapped);
+        const std::uint8_t* src = static_cast<const std::uint8_t*>(surface->pixels);
+        for (int row = 0; row < surface->h; ++row) {
+            std::memcpy(dst + static_cast<std::size_t>(row) * upload_row_bytes,
+                        src + static_cast<std::size_t>(row) * static_cast<std::size_t>(surface->pitch),
+                        row_bytes);
+        }
+        SDL_UnmapGPUTransferBuffer(gpu_device, transfer_buffer);
+
+        SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(gpu_device);
+        if (command_buffer) {
+            SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
+            if (copy_pass) {
+                SDL_GPUTextureTransferInfo source{};
+                source.transfer_buffer = transfer_buffer;
+                source.offset = 0;
+                source.pixels_per_row = static_cast<Uint32>(upload_row_bytes / 4u);
+                source.rows_per_layer = static_cast<Uint32>(surface->h);
+
+                SDL_GPUTextureRegion destination{};
+                destination.texture = texture;
+                destination.mip_level = 0;
+                destination.layer = 0;
+                destination.x = 0;
+                destination.y = 0;
+                destination.z = 0;
+                destination.w = static_cast<Uint32>(surface->w);
+                destination.h = static_cast<Uint32>(surface->h);
+                destination.d = 1;
+
+                SDL_UploadToGPUTexture(copy_pass, &source, &destination, false);
+                SDL_EndGPUCopyPass(copy_pass);
+                success = SDL_SubmitGPUCommandBuffer(command_buffer);
+                if (!success) {
+                    out_error = "SDL_SubmitGPUCommandBuffer failed for texture upload: " + std::string(SDL_GetError());
+                    SDL_CancelGPUCommandBuffer(command_buffer);
+                }
+            } else {
+                SDL_CancelGPUCommandBuffer(command_buffer);
+                out_error = "SDL_BeginGPUCopyPass failed for texture upload: " + std::string(SDL_GetError());
+            }
+        } else {
+            out_error = "SDL_AcquireGPUCommandBuffer failed for texture upload: " + std::string(SDL_GetError());
+        }
+    } else {
+        out_error = "SDL_MapGPUTransferBuffer failed for texture upload: " + std::string(SDL_GetError());
+    }
+
+    SDL_ReleaseGPUTransferBuffer(gpu_device, transfer_buffer);
+    return success;
+}
+
 } // namespace
 
 GpuSceneRenderer::GpuSceneRenderer(std::unique_ptr<GpuRenderDevice> device)
@@ -173,6 +348,10 @@ const ShaderPackageLibrary::ShaderBinaryDescriptor* GpuSceneRenderer::select_bac
 
 SDL_GPUShader* GpuSceneRenderer::create_shader(const ShaderPackageLibrary::ShaderBinaryDescriptor& descriptor,
                                                SDL_GPUShaderStage stage,
+                                               std::uint32_t num_samplers,
+                                               std::uint32_t num_storage_textures,
+                                               std::uint32_t num_storage_buffers,
+                                               std::uint32_t num_uniform_buffers,
                                                std::string& out_error) const {
     if (!device_ || !device_->gpu_device()) {
         out_error = "GPU device unavailable while creating shader";
@@ -193,10 +372,10 @@ SDL_GPUShader* GpuSceneRenderer::create_shader(const ShaderPackageLibrary::Shade
     create_info.entrypoint = descriptor.entrypoint.empty() ? "main" : descriptor.entrypoint.c_str();
     create_info.format = backend_shader_format_;
     create_info.stage = stage;
-    create_info.num_samplers = 0;
-    create_info.num_storage_textures = 0;
-    create_info.num_storage_buffers = 0;
-    create_info.num_uniform_buffers = 0;
+    create_info.num_samplers = num_samplers;
+    create_info.num_storage_textures = num_storage_textures;
+    create_info.num_storage_buffers = num_storage_buffers;
+    create_info.num_uniform_buffers = num_uniform_buffers;
     create_info.props = 0;
 
     SDL_GPUShader* shader = SDL_CreateGPUShader(device_->gpu_device(), &create_info);
@@ -217,14 +396,20 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::create_graphics_pipeline(const std::s
         return nullptr;
     }
 
-    const ShaderPackageLibrary::ShaderVariantPath* fragment_variant = shader_packages_.find(pipeline_name);
-    if (!fragment_variant) {
-        out_error = "Missing fragment shader variant: " + pipeline_name;
+    const GraphicsPipelineShaderSpec* pipeline_spec = graphics_pipeline_spec_for_name(pipeline_name);
+    if (!pipeline_spec) {
+        out_error = "Missing graphics pipeline shader spec for pipeline: " + pipeline_name;
         return nullptr;
     }
-    const ShaderPackageLibrary::ShaderVariantPath* vertex_variant = shader_packages_.find(kFullscreenVertexVariant);
+
+    const ShaderPackageLibrary::ShaderVariantPath* fragment_variant = shader_packages_.find(pipeline_spec->fragment_variant);
+    if (!fragment_variant) {
+        out_error = "Missing fragment shader variant: " + std::string(pipeline_spec->fragment_variant);
+        return nullptr;
+    }
+    const ShaderPackageLibrary::ShaderVariantPath* vertex_variant = shader_packages_.find(pipeline_spec->vertex_variant);
     if (!vertex_variant) {
-        out_error = std::string("Missing shared vertex shader variant: ") + kFullscreenVertexVariant;
+        out_error = "Missing vertex shader variant: " + std::string(pipeline_spec->vertex_variant);
         return nullptr;
     }
 
@@ -245,12 +430,24 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::create_graphics_pipeline(const std::s
     }
 
     std::string shader_error;
-    SDL_GPUShader* vertex_shader = create_shader(*vertex, SDL_GPU_SHADERSTAGE_VERTEX, shader_error);
+    SDL_GPUShader* vertex_shader = create_shader(*vertex,
+                                                 SDL_GPU_SHADERSTAGE_VERTEX,
+                                                 pipeline_spec->vertex_resources.samplers,
+                                                 pipeline_spec->vertex_resources.storage_textures,
+                                                 pipeline_spec->vertex_resources.storage_buffers,
+                                                 pipeline_spec->vertex_resources.uniform_buffers,
+                                                 shader_error);
     if (!vertex_shader) {
         out_error = shader_error;
         return nullptr;
     }
-    SDL_GPUShader* fragment_shader = create_shader(*fragment, SDL_GPU_SHADERSTAGE_FRAGMENT, shader_error);
+    SDL_GPUShader* fragment_shader = create_shader(*fragment,
+                                                   SDL_GPU_SHADERSTAGE_FRAGMENT,
+                                                   pipeline_spec->fragment_resources.samplers,
+                                                   pipeline_spec->fragment_resources.storage_textures,
+                                                   pipeline_spec->fragment_resources.storage_buffers,
+                                                   pipeline_spec->fragment_resources.uniform_buffers,
+                                                   shader_error);
     if (!fragment_shader) {
         SDL_ReleaseGPUShader(device_->gpu_device(), vertex_shader);
         out_error = shader_error;
@@ -258,18 +455,26 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::create_graphics_pipeline(const std::s
     }
 
     SDL_GPUColorTargetBlendState blend_state{};
-    blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+    blend_state.src_color_blendfactor = pipeline_spec->alpha_blend
+        ? SDL_GPU_BLENDFACTOR_SRC_ALPHA
+        : SDL_GPU_BLENDFACTOR_ONE;
+    blend_state.dst_color_blendfactor = pipeline_spec->alpha_blend
+        ? SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA
+        : SDL_GPU_BLENDFACTOR_ZERO;
     blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-    blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
+    blend_state.src_alpha_blendfactor = pipeline_spec->alpha_blend
+        ? SDL_GPU_BLENDFACTOR_ONE
+        : SDL_GPU_BLENDFACTOR_ONE;
+    blend_state.dst_alpha_blendfactor = pipeline_spec->alpha_blend
+        ? SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA
+        : SDL_GPU_BLENDFACTOR_ZERO;
     blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
     blend_state.color_write_mask =
         SDL_GPU_COLORCOMPONENT_R |
         SDL_GPU_COLORCOMPONENT_G |
         SDL_GPU_COLORCOMPONENT_B |
         SDL_GPU_COLORCOMPONENT_A;
-    blend_state.enable_blend = false;
+    blend_state.enable_blend = pipeline_spec->alpha_blend;
     blend_state.enable_color_write_mask = true;
 
     SDL_GPUColorTargetDescription color_target{};
@@ -371,18 +576,26 @@ bool GpuSceneRenderer::warmup_required_pipelines(std::string& out_error) {
         return false;
     }
 
-    const ShaderPackageLibrary::ShaderVariantPath* fullscreen_vs = shader_packages_.find(kFullscreenVertexVariant);
-    if (!fullscreen_vs) {
-        out_error = std::string("Missing required vertex variant: ") + kFullscreenVertexVariant;
-        return false;
-    }
-    const ShaderPackageLibrary::ShaderBinaryDescriptor* fullscreen_desc = select_backend_binary(*fullscreen_vs);
-    if (!fullscreen_desc) {
-        out_error = std::string("Missing backend binary for required vertex variant: ") + kFullscreenVertexVariant;
-        return false;
-    }
-    if (!stage_matches(fullscreen_desc->stage, "vertex")) {
-        out_error = "Required vertex variant has invalid stage metadata: " + fullscreen_desc->stage;
+    const auto ensure_vertex_variant = [this, &out_error](const char* variant_name) -> bool {
+        const ShaderPackageLibrary::ShaderVariantPath* vertex_variant = shader_packages_.find(variant_name);
+        if (!vertex_variant) {
+            out_error = std::string("Missing required vertex variant: ") + variant_name;
+            return false;
+        }
+        const ShaderPackageLibrary::ShaderBinaryDescriptor* vertex_desc = select_backend_binary(*vertex_variant);
+        if (!vertex_desc) {
+            out_error = std::string("Missing backend binary for required vertex variant: ") + variant_name;
+            return false;
+        }
+        if (!stage_matches(vertex_desc->stage, "vertex")) {
+            out_error = "Required vertex variant has invalid stage metadata: " + vertex_desc->stage;
+            return false;
+        }
+        return true;
+    };
+
+    if (!ensure_vertex_variant(kFullscreenVertexVariant) ||
+        !ensure_vertex_variant(kSpriteBatchVertexVariant)) {
         return false;
     }
 
@@ -697,6 +910,145 @@ SDL_GPUTexture* GpuSceneRenderer::find_texture_resource(const std::string& logic
     return (external_it != external_texture_resources_.end()) ? external_it->second : nullptr;
 }
 
+SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Texture* texture, std::string& out_error) {
+    out_error.clear();
+    if (!texture) {
+        out_error = "Cannot resolve GPU texture from null SDL texture.";
+        return nullptr;
+    }
+    if (!device_ || !device_->gpu_device()) {
+        out_error = "GPU device unavailable while resolving SDL texture.";
+        return nullptr;
+    }
+
+    if (const SDL_PropertiesID texture_props = SDL_GetTextureProperties(texture)) {
+        SDL_GPUTexture* bridged = static_cast<SDL_GPUTexture*>(
+            SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
+        if (bridged) {
+            return bridged;
+        }
+    }
+
+    const auto cached_it = imported_sdl_texture_resources_.find(texture);
+    if (cached_it != imported_sdl_texture_resources_.end() && cached_it->second.gpu_texture) {
+        return cached_it->second.gpu_texture;
+    }
+
+    SDL_Renderer* renderer = device_->renderer();
+    if (!renderer) {
+        out_error = "SDL renderer unavailable while importing texture for GPU sampling.";
+        return nullptr;
+    }
+
+    float src_wf = 0.0f;
+    float src_hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &src_wf, &src_hf)) {
+        out_error = "SDL_GetTextureSize failed for import texture: " + std::string(SDL_GetError());
+        return nullptr;
+    }
+    const int src_w = std::max(1, static_cast<int>(std::lround(src_wf)));
+    const int src_h = std::max(1, static_cast<int>(std::lround(src_hf)));
+
+    SDL_Texture* readback_target = SDL_CreateTexture(renderer,
+                                                     SDL_PIXELFORMAT_RGBA8888,
+                                                     SDL_TEXTUREACCESS_TARGET,
+                                                     src_w,
+                                                     src_h);
+    if (!readback_target) {
+        out_error = "SDL_CreateTexture(readback target) failed: " + std::string(SDL_GetError());
+        return nullptr;
+    }
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    SDL_Surface* readback_surface = nullptr;
+    bool rendered_to_target = false;
+    if (SDL_SetRenderTarget(renderer, readback_target)) {
+        if (SDL_SetRenderDrawColor(renderer, 0u, 0u, 0u, 0u) &&
+            SDL_RenderClear(renderer)) {
+            const SDL_FRect destination{
+                0.0f,
+                0.0f,
+                static_cast<float>(src_w),
+                static_cast<float>(src_h),
+            };
+            if (SDL_RenderTexture(renderer, texture, nullptr, &destination)) {
+                rendered_to_target = true;
+                readback_surface = SDL_RenderReadPixels(renderer, nullptr);
+            }
+        }
+    }
+    (void)SDL_SetRenderTarget(renderer, previous_target);
+    SDL_DestroyTexture(readback_target);
+
+    if (!rendered_to_target || !readback_surface) {
+        out_error = "Failed to read back SDL texture pixels for GPU import: " + std::string(SDL_GetError());
+        if (readback_surface) {
+            SDL_DestroySurface(readback_surface);
+        }
+        return nullptr;
+    }
+
+    SDL_Surface* rgba_surface = readback_surface;
+    bool owns_rgba_surface = false;
+    if (readback_surface->format != SDL_PIXELFORMAT_RGBA8888) {
+        rgba_surface = SDL_ConvertSurface(readback_surface, SDL_PIXELFORMAT_RGBA8888);
+        owns_rgba_surface = (rgba_surface != nullptr);
+        if (!rgba_surface) {
+            out_error = "SDL_ConvertSurface RGBA8888 failed during SDL texture import: " + std::string(SDL_GetError());
+            SDL_DestroySurface(readback_surface);
+            return nullptr;
+        }
+    }
+
+    SDL_GPUTextureCreateInfo create_info{};
+    create_info.type = SDL_GPU_TEXTURETYPE_2D;
+    create_info.format = device_->format_policy().albedo_format;
+    create_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    create_info.width = static_cast<Uint32>(std::max(1, rgba_surface->w));
+    create_info.height = static_cast<Uint32>(std::max(1, rgba_surface->h));
+    create_info.layer_count_or_depth = 1;
+    create_info.num_levels = 1;
+    create_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    create_info.props = 0;
+
+    SDL_GPUTexture* gpu_texture = SDL_CreateGPUTexture(device_->gpu_device(), &create_info);
+    if (!gpu_texture) {
+        out_error = "SDL_CreateGPUTexture failed while importing SDL texture: " + std::string(SDL_GetError());
+        if (owns_rgba_surface) {
+            SDL_DestroySurface(rgba_surface);
+        }
+        SDL_DestroySurface(readback_surface);
+        return nullptr;
+    }
+
+    std::string upload_error;
+    const bool upload_ok = upload_surface_to_gpu_texture(device_->gpu_device(),
+                                                         gpu_texture,
+                                                         rgba_surface,
+                                                         upload_error);
+    if (owns_rgba_surface) {
+        SDL_DestroySurface(rgba_surface);
+    }
+    SDL_DestroySurface(readback_surface);
+
+    if (!upload_ok) {
+        SDL_ReleaseGPUTexture(device_->gpu_device(), gpu_texture);
+        out_error = upload_error.empty()
+            ? "Failed to upload imported SDL texture to GPU texture."
+            : upload_error;
+        return nullptr;
+    }
+
+    ImportedSdlTextureResource imported{};
+    imported.source_texture = texture;
+    imported.gpu_texture = gpu_texture;
+    imported.width = create_info.width;
+    imported.height = create_info.height;
+    imported_sdl_texture_resources_[texture] = imported;
+    render_diagnostics::add_texture_create_count();
+    return gpu_texture;
+}
+
 bool GpuSceneRenderer::ensure_buffer_resource(const std::string& logical_name,
                                               const BufferResourceSpec& spec,
                                               std::string& out_error) {
@@ -815,6 +1167,7 @@ void GpuSceneRenderer::release_runtime_resources() {
     if (!device_ || !device_->gpu_device()) {
         texture_resources_.clear();
         external_texture_resources_.clear();
+        imported_sdl_texture_resources_.clear();
         buffer_resources_.clear();
         sampler_resources_.clear();
         return;
@@ -827,6 +1180,13 @@ void GpuSceneRenderer::release_runtime_resources() {
         }
     }
     external_texture_resources_.clear();
+    for (auto& entry : imported_sdl_texture_resources_) {
+        if (entry.second.gpu_texture) {
+            SDL_ReleaseGPUTexture(device_->gpu_device(), entry.second.gpu_texture);
+            entry.second.gpu_texture = nullptr;
+            render_diagnostics::add_texture_destroy_count();
+        }
+    }
     for (auto& entry : buffer_resources_) {
         if (entry.second.buffer) {
             SDL_ReleaseGPUBuffer(device_->gpu_device(), entry.second.buffer);
@@ -841,6 +1201,7 @@ void GpuSceneRenderer::release_runtime_resources() {
         }
     }
     texture_resources_.clear();
+    imported_sdl_texture_resources_.clear();
     buffer_resources_.clear();
     sampler_resources_.clear();
 }

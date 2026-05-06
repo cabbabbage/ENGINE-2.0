@@ -39,6 +39,10 @@ struct RenderFrameStats {
     std::uint32_t sdl_renderer_draw_call_count = 0;
     std::uint32_t present_call_count = 0;
     std::uint32_t gpu_failed_frame_count = 0;
+    std::uint32_t gpu_scene_floor_draw_count = 0;
+    std::uint32_t gpu_scene_layer_draw_count = 0;
+    bool gpu_scene_composite_source_ready = false;
+    bool gpu_scene_final_swapchain_pass_reached = false;
 };
 
 namespace render_diagnostics {
@@ -75,6 +79,10 @@ void set_gpu_pipeline_cache_stats(std::uint64_t hits,
                                   double hit_rate);
 void note_present_call(std::uint32_t count = 1);
 void note_gpu_frame_skipped_due_to_failure(std::uint32_t count = 1);
+void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
+                                std::uint32_t layer_draw_count,
+                                bool composite_source_ready,
+                                bool final_swapchain_pass_reached);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

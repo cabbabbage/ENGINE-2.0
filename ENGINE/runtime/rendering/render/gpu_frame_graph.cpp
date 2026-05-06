@@ -19,6 +19,16 @@ bool has_read_dependency_for_resource(const GpuFrameGraph::PassDescriptor& pass,
     return false;
 }
 
+bool has_write_dependency_for_resource(const GpuFrameGraph::PassDescriptor& pass,
+                                       const std::string& resource_name) {
+    for (const GpuFrameGraph::ResourceDependency& dependency : pass.resources) {
+        if (dependency.name == resource_name && dependency.write) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 void GpuFrameGraph::reset() {
@@ -75,6 +85,8 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
     std::string first_swapchain_pass_name{};
     std::string first_swapchain_load_op{"none"};
     std::string first_swapchain_store_op{"none"};
+    std::size_t swapchain_render_pass_count = 0;
+    std::size_t last_swapchain_render_pass_index = 0;
 
     const auto load_op_name = [](SDL_GPULoadOp op) -> const char* {
         switch (op) {
@@ -119,12 +131,24 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
                 const std::string message = "[GpuFrameGraph] Final swapchain pass '" + pass.name + "' has no sampled scene source.";
                 if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
             }
+            if (pass.render.use_swapchain_target && pass.render.load_op != SDL_GPU_LOADOP_CLEAR) {
+                const std::string message = "[GpuFrameGraph] Swapchain pass '" + pass.name + "' must use load_op=CLEAR.";
+                if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
+            }
+            if (pass.render.use_swapchain_target && pass.render.store_op != SDL_GPU_STOREOP_STORE) {
+                const std::string message = "[GpuFrameGraph] Swapchain pass '" + pass.name + "' must use store_op=STORE.";
+                if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
+            }
             for (const auto& sampled : pass.render.fragment_sampled_textures) {
                 if (is_written_in_pass(pass, sampled.texture)) {
                     const std::string message = "[GpuFrameGraph] Pass '" + pass.name + "' reads and writes texture '" + sampled.texture + "' in the same pass.";
                     if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
                 }
             }
+        }
+        if (pass.type == PassType::Copy && pass.blit.use_swapchain_destination) {
+            const std::string message = "[GpuFrameGraph] Swapchain copy/blit passes are not allowed. Use an explicit final render pass to the swapchain.";
+            if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
         }
     }
 
@@ -170,6 +194,10 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
         }
 
         if (pass.type == PassType::Render) {
+            if (pass.render.use_swapchain_target) {
+                ++swapchain_render_pass_count;
+                last_swapchain_render_pass_index = static_cast<std::size_t>(&pass - passes_.data());
+            }
             for (const RenderPassPayload::SampledTextureBinding& sampled :
                  pass.render.fragment_sampled_textures) {
                 if (sampled.texture.empty()) {
@@ -192,6 +220,15 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
                     const std::string message = "[GpuFrameGraph] Pass '" + pass.name +
                                                 "' samples texture '" + sampled.texture +
                                                 "' without declaring it as a read dependency.";
+                    if (!fail_or_warn_missing(message, true, true, stats)) {
+                        last_execution_stats_ = stats;
+                        return stats;
+                    }
+                }
+                if (!has_write_dependency_for_resource(pass, "scene.swapchain") &&
+                    pass.render.use_swapchain_target) {
+                    const std::string message = "[GpuFrameGraph] Swapchain pass '" + pass.name +
+                                                "' must declare a write dependency on 'scene.swapchain'.";
                     if (!fail_or_warn_missing(message, true, true, stats)) {
                         last_execution_stats_ = stats;
                         return stats;
@@ -314,14 +351,30 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
                                             fragment_sampler_bindings.data(),
                                             static_cast<Uint32>(fragment_sampler_bindings.size()));
             }
-            SDL_DrawGPUPrimitives(render_pass,
-                                  std::max<Uint32>(1u, static_cast<Uint32>(pass.render.vertex_count)),
-                                  std::max<Uint32>(1u, static_cast<Uint32>(pass.render.instance_count)),
-                                  0u,
-                                  0u);
+            if (pass.render.custom_render) {
+                std::string custom_error;
+                if (!pass.render.custom_render(context, render_pass, custom_error)) {
+                    SDL_EndGPURenderPass(render_pass);
+                    stats.success = false;
+                    stats.error_message = custom_error.empty()
+                        ? ("[GpuFrameGraph] Custom render callback failed for pass '" + pass.name + "'.")
+                        : ("[GpuFrameGraph] Custom render callback failed for pass '" + pass.name + "': " + custom_error);
+                    vibble::log::error(stats.error_message);
+                    last_execution_stats_ = stats;
+                    return stats;
+                }
+            }
+
+            if (pass.render.execute_default_draw) {
+                SDL_DrawGPUPrimitives(render_pass,
+                                      std::max<Uint32>(1u, static_cast<Uint32>(pass.render.vertex_count)),
+                                      std::max<Uint32>(1u, static_cast<Uint32>(pass.render.instance_count)),
+                                      0u,
+                                      0u);
+                render_diagnostics::add_draw_call_count();
+                ++stats.draw_call_count;
+            }
             SDL_EndGPURenderPass(render_pass);
-            render_diagnostics::add_draw_call_count();
-            ++stats.draw_call_count;
             continue;
         }
 
@@ -449,6 +502,22 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             SDL_BlitGPUTexture(context.command_buffer, &blit_info);
             continue;
         }
+    }
+
+    if (swapchain_render_pass_count != 1) {
+        stats.success = false;
+        stats.error_message = "[GpuFrameGraph] Expected exactly one final swapchain render pass, found " +
+                              std::to_string(swapchain_render_pass_count) + ".";
+        vibble::log::error(stats.error_message);
+        last_execution_stats_ = stats;
+        return stats;
+    }
+    if (last_swapchain_render_pass_index != (passes_.empty() ? 0u : (passes_.size() - 1u))) {
+        stats.success = false;
+        stats.error_message = "[GpuFrameGraph] Final swapchain render pass must be the last pass in the frame graph.";
+        vibble::log::error(stats.error_message);
+        last_execution_stats_ = stats;
+        return stats;
     }
 
     if (swapchain_touched && (!swapchain_cleared || !swapchain_fully_written)) {

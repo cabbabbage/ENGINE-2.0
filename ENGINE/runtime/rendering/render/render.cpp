@@ -1,12 +1,18 @@
 #include "rendering/render/render.hpp"
 
 #include "rendering/render/gpu_runtime_pipeline.hpp"
+#include "rendering/render/render_object.hpp"
+#include "rendering/render/render_object_builder.hpp"
+#include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/render_diagnostics.hpp"
+#include "core/AssetsManager.hpp"
 #include "utils/log.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -70,11 +76,57 @@ int clamp_dimension_to_renderer_limit(int value, int renderer_limit, const char*
     return renderer_limit;
 }
 
+float to_clip_x(float screen_x, float target_width) {
+    if (!std::isfinite(screen_x) || !std::isfinite(target_width) || target_width <= 0.0f) {
+        return 0.0f;
+    }
+    return (screen_x / target_width) * 2.0f - 1.0f;
+}
+
+float to_clip_y(float screen_y, float target_height) {
+    if (!std::isfinite(screen_y) || !std::isfinite(target_height) || target_height <= 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f - (screen_y / target_height) * 2.0f;
+}
+
+void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& projected,
+                                 float u0,
+                                 float v0,
+                                 float u1,
+                                 float v1,
+                                 float target_width,
+                                 float target_height,
+                                 GpuSpriteDrawPacket& out_packet) {
+    const auto make_vertex = [target_width, target_height](const SDL_FPoint& point, float u, float v) {
+        GpuSpriteVertex vertex{};
+        vertex.clip_x = to_clip_x(point.x, target_width);
+        vertex.clip_y = to_clip_y(point.y, target_height);
+        vertex.uv_x = u;
+        vertex.uv_y = v;
+        return vertex;
+    };
+
+    out_packet.vertices[0] = make_vertex(projected.screen_tl, u0, v0);
+    out_packet.vertices[1] = make_vertex(projected.screen_tr, u1, v0);
+    out_packet.vertices[2] = make_vertex(projected.screen_br, u1, v1);
+    out_packet.vertices[3] = make_vertex(projected.screen_tl, u0, v0);
+    out_packet.vertices[4] = make_vertex(projected.screen_br, u1, v1);
+    out_packet.vertices[5] = make_vertex(projected.screen_bl, u0, v1);
+}
+
 } // namespace
 
 namespace render_internal {
 
 std::filesystem::path runtime_gpu_shader_manifest_path() {
+    if (SDL_Environment* env = SDL_GetEnvironment()) {
+        if (const char* override_manifest_path =
+                SDL_GetEnvironmentVariable(env, "VIBBLE_GPU_SHADER_MANIFEST");
+            override_manifest_path && *override_manifest_path) {
+            return std::filesystem::path(override_manifest_path);
+        }
+    }
     if (const char* override_manifest_path = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
         override_manifest_path && *override_manifest_path) {
         return std::filesystem::path(override_manifest_path);
@@ -209,10 +261,23 @@ bool SceneRenderer::probe_runtime_pipeline_startup(std::string& out_error) {
         return false;
     }
 
-    gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
-                                               "startup_probe",
-                                               scene_width,
-                                               scene_height);
+    GpuSceneFrameData startup_frame_data{};
+    startup_frame_data.floor_draw_count = 0;
+    startup_frame_data.layer_sprite_draw_count = 0;
+    startup_frame_data.has_valid_composite_source = false;
+    startup_frame_data.debug_overlay_draw_count = 0;
+    if (!gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
+                                                    startup_frame_data,
+                                                    "startup_probe",
+                                                    scene_width,
+                                                    scene_height,
+                                                    frame_error)) {
+        out_error = frame_error.empty()
+            ? "Failed to enqueue startup GPU runtime frame graph."
+            : frame_error;
+        gpu_scene_renderer_->abort_frame();
+        return false;
+    }
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed during startup probe." : frame_error;
@@ -247,7 +312,7 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
     const auto log_failure = [&](const std::string& reason, const std::string& pass_name) {
         vibble::log::error("[SceneRenderer] GPU frame-graph failure backend=" + backend_name +
                            " pass=" + pass_name +
-                           " resources=[scene.floor,scene.layers,scene.blur_background,scene.blur_foreground,scene.composite,swapchain] scene.composite.spec={w=" +
+                           " resources=[scene.floor,scene.layers,scene.composite,swapchain] scene.composite.spec={w=" +
                            std::to_string(scene_composite_resource_spec_.width) + ",h=" +
                            std::to_string(scene_composite_resource_spec_.height) + ",usage=" +
                            texture_usage_flags_to_string(scene_composite_resource_spec_.usage) + "} reason=" + reason);
@@ -274,20 +339,139 @@ bool SceneRenderer::execute_gpu_frame_graph(std::string& out_error) {
         return false;
     }
 
+    GpuSceneFrameData frame_data{};
+    if (!build_gpu_scene_frame_data(frame_data, out_error)) {
+        log_failure(out_error, "scene_packet_build");
+        return false;
+    }
+    render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count,
+                                                   frame_data.layer_sprite_draw_count,
+                                                   frame_data.has_valid_composite_source,
+                                                   true);
+
     if (!gpu_scene_renderer_->begin_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::begin_frame failed." : frame_error;
         log_failure(out_error, "begin_frame");
         return false;
     }
 
-    gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
-                                               "runtime",
-                                               scene_width,
-                                               scene_height);
+    if (!gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
+                                                    frame_data,
+                                                    "runtime",
+                                                    scene_width,
+                                                    scene_height,
+                                                    frame_error)) {
+        out_error = frame_error.empty()
+            ? "Failed to enqueue runtime GPU frame graph."
+            : frame_error;
+        gpu_scene_renderer_->abort_frame();
+        log_failure(out_error, "enqueue_frame_graph");
+        return false;
+    }
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
         log_failure(out_error, "runtime_present_scene_composite");
+        return false;
+    }
+
+    return true;
+}
+
+bool SceneRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std::string& out_error) const {
+    out_data = GpuSceneFrameData{};
+    out_error.clear();
+    if (!assets_) {
+        out_error = "Assets context unavailable for GPU scene frame packet build.";
+        return false;
+    }
+
+    const std::vector<Asset*>& visible_assets = assets_->is_dev_mode()
+        ? assets_->getFilteredActiveAssets()
+        : assets_->getActive();
+    const WarpedScreenGrid& camera = assets_->getView();
+
+    const float target_width = static_cast<float>(std::max<std::uint32_t>(1u, scene_composite_resource_spec_.width));
+    const float target_height = static_cast<float>(std::max<std::uint32_t>(1u, scene_composite_resource_spec_.height));
+
+    std::size_t visible_count = 0;
+    std::size_t drawable_count = 0;
+
+    out_data.floor_draws.reserve(visible_assets.size());
+    out_data.layer_draws.reserve(visible_assets.size());
+
+    for (Asset* asset : visible_assets) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+        ++visible_count;
+
+        RenderObject object{};
+        if (!render_build::build_direct_asset_render_object(asset, object) || !object.texture) {
+            continue;
+        }
+
+        const Asset::PerspectiveSample perspective = asset->runtime_perspective_sample();
+        const float perspective_scale = perspective.scale;
+        const float world_z = static_cast<float>(asset->world_z()) + object.world_z_offset;
+
+        render_projection::ProjectedSpriteFrame projected{};
+        if (!render_projection::build_render_object_projected_frame(camera,
+                                                                    object,
+                                                                    perspective_scale,
+                                                                    world_z,
+                                                                    projected) ||
+            !projected.valid) {
+            continue;
+        }
+
+        float u0 = 0.0f;
+        float v0 = 0.0f;
+        float u1 = 1.0f;
+        float v1 = 1.0f;
+        if (object.has_src_rect && object.atlas_w > 0 && object.atlas_h > 0) {
+            const float atlas_w = static_cast<float>(object.atlas_w);
+            const float atlas_h = static_cast<float>(object.atlas_h);
+            u0 = static_cast<float>(object.src_rect.x) / atlas_w;
+            v0 = static_cast<float>(object.src_rect.y) / atlas_h;
+            u1 = static_cast<float>(object.src_rect.x + object.src_rect.w) / atlas_w;
+            v1 = static_cast<float>(object.src_rect.y + object.src_rect.h) / atlas_h;
+        }
+        if ((object.flip & SDL_FLIP_HORIZONTAL) != 0) {
+            std::swap(u0, u1);
+        }
+        if ((object.flip & SDL_FLIP_VERTICAL) != 0) {
+            std::swap(v0, v1);
+        }
+
+        GpuSpriteDrawPacket packet{};
+        packet.source_texture = object.texture;
+        packet.modulate = SDL_FColor{
+            static_cast<float>(object.color_mod.r) / 255.0f,
+            static_cast<float>(object.color_mod.g) / 255.0f,
+            static_cast<float>(object.color_mod.b) / 255.0f,
+            static_cast<float>(object.color_mod.a) / 255.0f,
+        };
+        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, target_width, target_height, packet);
+
+        if (asset->isFloorBoxesEnabled()) {
+            out_data.floor_draws.push_back(packet);
+        } else {
+            out_data.layer_draws.push_back(packet);
+        }
+        ++drawable_count;
+    }
+
+    out_data.floor_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+        out_data.floor_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    out_data.layer_sprite_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+        out_data.layer_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    out_data.debug_overlay_draw_count = 0;
+    out_data.has_valid_composite_source = (out_data.floor_draw_count + out_data.layer_sprite_draw_count) > 0;
+
+    if (visible_count > 0 && drawable_count == 0) {
+        out_error = "GPU scene packet invalid: visible assets exist but zero drawable sprite packets were built.";
+        vibble::log::error("[SceneRenderer] " + out_error);
         return false;
     }
 

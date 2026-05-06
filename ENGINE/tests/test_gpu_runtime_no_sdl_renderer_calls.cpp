@@ -108,6 +108,8 @@ TEST_CASE("GPU runtime frame executes with zero SDL_Renderer target/draw calls")
     offscreen_spec.num_levels = 1;
     offscreen_spec.sample_count = format_policy.sample_count;
     REQUIRE(gpu_renderer->ensure_texture_resource("scene_output", offscreen_spec, error));
+    GpuSceneRenderer::SamplerResourceSpec offscreen_sampler_spec{};
+    REQUIRE(gpu_renderer->ensure_sampler_resource("linear_clamp", offscreen_sampler_spec, error));
 
     render_diagnostics::begin_frame();
     if (!gpu_renderer->begin_frame(&error)) {
@@ -137,14 +139,17 @@ TEST_CASE("GPU runtime frame executes with zero SDL_Renderer target/draw calls")
     pass_two.name = "present_render";
     pass_two.resources = {
         GpuFrameGraph::ResourceDependency{"scene.output", false},
-        GpuFrameGraph::ResourceDependency{"scene.present", true}
+        GpuFrameGraph::ResourceDependency{"scene.swapchain", true}
     };
-    pass_two.render.pipeline_id = "final_compose";
+    pass_two.render.pipeline_id = "sprite_textured";
     pass_two.render.render_state_key = 0x1006u;
     pass_two.render.use_swapchain_target = true;
     pass_two.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     pass_two.render.load_op = SDL_GPU_LOADOP_CLEAR;
     pass_two.render.store_op = SDL_GPU_STOREOP_STORE;
+    pass_two.render.fragment_sampled_textures = {
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.output", "linear_clamp"},
+    };
     pass_two.render.vertex_count = 3;
     pass_two.render.instance_count = 1;
     gpu_renderer->add_pass(std::move(pass_two));
@@ -197,8 +202,6 @@ TEST_CASE("GPU authoritative frame-graph runtime smoke executes full topology an
     spec.sample_count = SDL_GPU_SAMPLECOUNT_1;
     REQUIRE(gpu_renderer->ensure_texture_resource("scene.floor", spec, error));
     REQUIRE(gpu_renderer->ensure_texture_resource("scene.layers", spec, error));
-    REQUIRE(gpu_renderer->ensure_texture_resource("scene.blur_background", spec, error));
-    REQUIRE(gpu_renderer->ensure_texture_resource("scene.blur_foreground", spec, error));
     REQUIRE(gpu_renderer->ensure_texture_resource("scene.composite", spec, error));
 
     GpuSceneRenderer::SamplerResourceSpec sampler_spec{};
@@ -228,42 +231,12 @@ TEST_CASE("GPU authoritative frame-graph runtime smoke executes full topology an
     layers_pass.render.color_target = "scene.layers";
     gpu_renderer->add_pass(std::move(layers_pass));
 
-    GpuFrameGraph::PassDescriptor blur_bg_pass{};
-    blur_bg_pass.type = GpuFrameGraph::PassType::Render;
-    blur_bg_pass.name = "runtime_render_blur_background";
-    blur_bg_pass.resources = {
-        GpuFrameGraph::ResourceDependency::read("scene.layers"),
-        GpuFrameGraph::ResourceDependency::write_resource("scene.blur_background"),
-    };
-    blur_bg_pass.render.pipeline_id = "dark_mask";
-    blur_bg_pass.render.color_target = "scene.blur_background";
-    blur_bg_pass.render.fragment_sampled_textures = {
-        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
-    };
-    gpu_renderer->add_pass(std::move(blur_bg_pass));
-
-    GpuFrameGraph::PassDescriptor blur_fg_pass{};
-    blur_fg_pass.type = GpuFrameGraph::PassType::Render;
-    blur_fg_pass.name = "runtime_render_blur_foreground";
-    blur_fg_pass.resources = {
-        GpuFrameGraph::ResourceDependency::read("scene.layers"),
-        GpuFrameGraph::ResourceDependency::write_resource("scene.blur_foreground"),
-    };
-    blur_fg_pass.render.pipeline_id = "light_eval";
-    blur_fg_pass.render.color_target = "scene.blur_foreground";
-    blur_fg_pass.render.fragment_sampled_textures = {
-        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
-    };
-    gpu_renderer->add_pass(std::move(blur_fg_pass));
-
     GpuFrameGraph::PassDescriptor composite_pass{};
     composite_pass.type = GpuFrameGraph::PassType::Render;
     composite_pass.name = "runtime_render_scene_composite";
     composite_pass.resources = {
         GpuFrameGraph::ResourceDependency::read("scene.floor"),
         GpuFrameGraph::ResourceDependency::read("scene.layers"),
-        GpuFrameGraph::ResourceDependency::read("scene.blur_background"),
-        GpuFrameGraph::ResourceDependency::read("scene.blur_foreground"),
         GpuFrameGraph::ResourceDependency::write_resource("scene.composite"),
     };
     composite_pass.render.pipeline_id = "final_compose";
@@ -271,31 +244,31 @@ TEST_CASE("GPU authoritative frame-graph runtime smoke executes full topology an
     composite_pass.render.fragment_sampled_textures = {
         GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.floor", "linear_clamp"},
         GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
-        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.blur_background", "linear_clamp"},
-        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.blur_foreground", "linear_clamp"},
     };
     gpu_renderer->add_pass(std::move(composite_pass));
 
     GpuFrameGraph::PassDescriptor present_pass{};
-    present_pass.type = GpuFrameGraph::PassType::Copy;
+    present_pass.type = GpuFrameGraph::PassType::Render;
     present_pass.name = "runtime_present_scene_composite";
     present_pass.resources = {
         GpuFrameGraph::ResourceDependency::read("scene.composite"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.swapchain"),
     };
-    present_pass.blit.source_texture = "scene.composite";
-    present_pass.blit.use_swapchain_destination = true;
-    present_pass.blit.load_op = SDL_GPU_LOADOP_CLEAR;
-    present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    present_pass.blit.width = 128;
-    present_pass.blit.height = 128;
+    present_pass.render.pipeline_id = "sprite_textured";
+    present_pass.render.use_swapchain_target = true;
+    present_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    present_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    present_pass.render.fragment_sampled_textures = {
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.composite", "linear_clamp"},
+    };
     gpu_renderer->add_pass(std::move(present_pass));
 
     REQUIRE(gpu_renderer->end_frame(&error));
     render_diagnostics::end_frame();
 
     const RenderFrameStats stats = render_diagnostics::current_frame_stats();
-    CHECK(stats.render_pass_count == 5);
-    CHECK(stats.copy_pass_count == 1);
+    CHECK(stats.render_pass_count == 4);
+    CHECK(stats.copy_pass_count == 0);
     CHECK(stats.sdl_renderer_target_call_count == 0);
     CHECK(stats.sdl_renderer_draw_call_count == 0);
 

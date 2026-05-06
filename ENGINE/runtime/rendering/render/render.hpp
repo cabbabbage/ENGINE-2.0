@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 
 #include "rendering/render/gpu_scene_renderer.hpp"
+#include "rendering/render/gpu_runtime_pipeline.hpp"
 
 class Assets;
 class GpuRuntimePipeline;
@@ -64,6 +65,7 @@ private:
                                               std::string& out_error);
     bool probe_runtime_pipeline_startup(std::string& out_error);
     bool execute_gpu_frame_graph(std::string& out_error);
+    bool build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std::string& out_error) const;
 
     SDL_Renderer* renderer_ = nullptr;
     Assets* assets_ = nullptr;

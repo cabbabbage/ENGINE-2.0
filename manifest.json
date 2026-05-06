@@ -27110,7 +27110,7 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 529.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "far_light_cap": 32.0,
@@ -27299,9 +27299,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
             242,
-            135,
+            124,
+            36,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27354,9 +27354,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            111,
-            204,
-            31,
+            237,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27379,9 +27379,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            85,
-            183,
-            242,
+            204,
+            31,
+            56,
             255
           ],
           "edge_smoothness": 4,
@@ -27404,9 +27404,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            31,
-            123,
-            204,
+            36,
+            58,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27464,9 +27464,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            115,
-            31,
-            204,
+            36,
+            242,
+            40,
             255
           ],
           "edge_smoothness": 70,
@@ -27530,9 +27530,9 @@
           "camera_zoom_percent": 12,
           "curvyness": 2,
           "display_color": [
+            174,
+            85,
             242,
-            36,
-            217,
             255
           ],
           "edge_smoothness": 101,
@@ -27816,9 +27816,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            170,
-            242,
             85,
+            197,
+            242,
             255
           ],
           "edge_smoothness": 96,

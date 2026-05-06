@@ -23,6 +23,7 @@ public:
                                                    std::string& out_error);
 
     SDL_GPUDevice* gpu_device() const { return gpu_device_; }
+    SDL_Renderer* renderer() const { return renderer_; }
     const RuntimeGpuFormatPolicy& format_policy() const { return format_policy_; }
     const std::string& backend_name() const { return backend_name_; }
     const std::string& present_mode() const { return present_mode_; }

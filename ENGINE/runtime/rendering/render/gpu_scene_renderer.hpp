@@ -72,6 +72,7 @@ public:
     bool register_external_texture_resource(const std::string& logical_name, SDL_GPUTexture* texture);
     void clear_external_texture_resources();
     SDL_GPUTexture* find_texture_resource(const std::string& logical_name) const;
+    SDL_GPUTexture* resolve_gpu_texture_for_sdl_texture(SDL_Texture* texture, std::string& out_error);
     bool ensure_buffer_resource(const std::string& logical_name,
                                 const BufferResourceSpec& spec,
                                 std::string& out_error);
@@ -99,6 +100,13 @@ private:
         SamplerResourceSpec spec{};
     };
 
+    struct ImportedSdlTextureResource {
+        SDL_Texture* source_texture = nullptr;
+        SDL_GPUTexture* gpu_texture = nullptr;
+        Uint32 width = 0;
+        Uint32 height = 0;
+    };
+
     explicit GpuSceneRenderer(std::unique_ptr<GpuRenderDevice> device);
     ShaderPipelineKey make_pipeline_key(const std::string& shader_name,
                                         std::uint32_t render_state_key = 0) const;
@@ -111,6 +119,10 @@ private:
                                                     std::string& out_error) const;
     SDL_GPUShader* create_shader(const ShaderPackageLibrary::ShaderBinaryDescriptor& descriptor,
                                  SDL_GPUShaderStage stage,
+                                 std::uint32_t num_samplers,
+                                 std::uint32_t num_storage_textures,
+                                 std::uint32_t num_storage_buffers,
+                                 std::uint32_t num_uniform_buffers,
                                  std::string& out_error) const;
     SDL_GPUGraphicsPipeline* get_graphics_pipeline(const std::string& pipeline_name,
                                                    std::uint32_t render_state_key);
@@ -125,6 +137,7 @@ private:
     SDL_GPUShaderFormat backend_shader_format_ = SDL_GPU_SHADERFORMAT_INVALID;
     std::unordered_map<std::string, RuntimeTextureResource> texture_resources_{};
     std::unordered_map<std::string, SDL_GPUTexture*> external_texture_resources_{};
+    std::unordered_map<SDL_Texture*, ImportedSdlTextureResource> imported_sdl_texture_resources_{};
     std::unordered_map<std::string, RuntimeBufferResource> buffer_resources_{};
     std::unordered_map<std::string, RuntimeSamplerResource> sampler_resources_{};
     std::uint64_t last_pipeline_hit_total_ = 0;

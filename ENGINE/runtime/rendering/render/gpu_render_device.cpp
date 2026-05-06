@@ -133,6 +133,10 @@ bool GpuRenderDevice::initialize(bool prefer_depth32, std::string& out_error) {
             }
         }
         present_mode_ = present_mode_name(selected_mode);
+        swapchain_format_ = SDL_GetGPUSwapchainTextureFormat(gpu_device_, window_);
+        if (swapchain_format_ == SDL_GPU_TEXTUREFORMAT_INVALID) {
+            vibble::log::warn("[GpuRenderDevice] Failed to query swapchain texture format.");
+        }
 
         vibble::log::info("[GpuRenderDevice] Present mode probe: mailbox=" +
                           std::string(supports_mailbox ? "1" : "0") +
@@ -141,6 +145,7 @@ bool GpuRenderDevice::initialize(bool prefer_depth32, std::string& out_error) {
                           " selected=" + present_mode_);
     } else {
         present_mode_ = "vsync";
+        swapchain_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
         vibble::log::warn("[GpuRenderDevice] Renderer window handle unavailable; present mode probe skipped.");
     }
 
@@ -150,6 +155,7 @@ bool GpuRenderDevice::initialize(bool prefer_depth32, std::string& out_error) {
 
     vibble::log::info("[GpuRenderDevice] SDL_GPU ready. backend=" + backend_name_ +
                       " present=" + present_mode_ +
+                      " swapchain=" + std::to_string(static_cast<int>(swapchain_format_)) +
                       " albedo=" + std::to_string(static_cast<int>(format_policy_.albedo_format)) +
                       " light=" + std::to_string(static_cast<int>(format_policy_.light_accumulation_format)) +
                       " mask=" + std::to_string(static_cast<int>(format_policy_.mask_format)) +

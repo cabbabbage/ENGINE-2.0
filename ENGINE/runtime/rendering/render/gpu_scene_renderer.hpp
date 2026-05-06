@@ -114,6 +114,7 @@ private:
         const ShaderPackageLibrary::ShaderVariantPath& variant) const;
     bool warmup_required_pipelines(std::string& out_error);
     SDL_GPUGraphicsPipeline* create_graphics_pipeline(const std::string& pipeline_name,
+                                                      SDL_GPUTextureFormat color_target_format,
                                                       std::string& out_error) const;
     SDL_GPUComputePipeline* create_compute_pipeline(const std::string& pipeline_name,
                                                     std::string& out_error) const;

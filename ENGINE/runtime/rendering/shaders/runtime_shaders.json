@@ -37,15 +37,15 @@
     "final_compose": {
       "dxil": {
         "entrypoint": "main",
-        "file_size_bytes": 4060,
-        "hash_fnv1a64": "0xeb0d529dad308776",
+        "file_size_bytes": 4116,
+        "hash_fnv1a64": "0x34f950c395185dd5",
         "path": "dxil/final_compose.dxil",
         "stage": "fragment"
       },
       "spirv": {
         "entrypoint": "main",
-        "file_size_bytes": 1044,
-        "hash_fnv1a64": "0xe0098efb33553c0e",
+        "file_size_bytes": 1424,
+        "hash_fnv1a64": "0x9c15d03affc50fcf",
         "path": "spirv/final_compose.spv",
         "stage": "fragment"
       }

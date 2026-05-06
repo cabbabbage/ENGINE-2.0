@@ -21,6 +21,8 @@ struct GpuSpriteDrawPacket {
     SDL_Texture* source_texture = nullptr;
     std::array<GpuSpriteVertex, 6> vertices{};
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
+    float sort_key = 0.0f;
+    std::uintptr_t stable_sort_id = 0u;
 };
 
 struct GpuSceneFrameData {

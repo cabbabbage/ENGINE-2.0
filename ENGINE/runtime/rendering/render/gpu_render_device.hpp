@@ -27,6 +27,7 @@ public:
     const RuntimeGpuFormatPolicy& format_policy() const { return format_policy_; }
     const std::string& backend_name() const { return backend_name_; }
     const std::string& present_mode() const { return present_mode_; }
+    SDL_GPUTextureFormat swapchain_format() const { return swapchain_format_; }
     const FrameState& frame_state() const { return frame_state_; }
 
     SDL_GPUCommandBuffer* begin_command_buffer() const;
@@ -46,5 +47,6 @@ private:
     RuntimeGpuFormatPolicy format_policy_{};
     std::string backend_name_ = "unknown";
     std::string present_mode_ = "vsync";
+    SDL_GPUTextureFormat swapchain_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     FrameState frame_state_{};
 };

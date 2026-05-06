@@ -226,14 +226,24 @@ bool upload_surface_to_gpu_texture(SDL_GPUDevice* gpu_device,
         return false;
     }
 
-    const std::size_t row_bytes = static_cast<std::size_t>(surface->w) * 4u;
+    const SDL_PixelFormatDetails* format_details = SDL_GetPixelFormatDetails(surface->format);
+    const std::size_t bytes_per_pixel =
+        (format_details && format_details->bytes_per_pixel > 0)
+            ? static_cast<std::size_t>(format_details->bytes_per_pixel)
+            : 0u;
+    if (bytes_per_pixel == 0) {
+        out_error = "Unsupported surface pixel format for GPU upload.";
+        return false;
+    }
+
+    const std::size_t row_bytes = static_cast<std::size_t>(surface->w) * bytes_per_pixel;
     const std::size_t upload_row_bytes = align_up(row_bytes, kD3D12UploadRowAlignment);
     const std::size_t upload_bytes = upload_row_bytes * static_cast<std::size_t>(surface->h);
     if (upload_bytes == 0 || upload_bytes > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
         out_error = "Surface upload exceeded transfer buffer size limits.";
         return false;
     }
-    if ((upload_row_bytes / 4u) > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
+    if ((upload_row_bytes / bytes_per_pixel) > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
         out_error = "Surface upload row pitch exceeded transfer format limits.";
         return false;
     }
@@ -267,7 +277,7 @@ bool upload_surface_to_gpu_texture(SDL_GPUDevice* gpu_device,
                 SDL_GPUTextureTransferInfo source{};
                 source.transfer_buffer = transfer_buffer;
                 source.offset = 0;
-                source.pixels_per_row = static_cast<Uint32>(upload_row_bytes / 4u);
+                source.pixels_per_row = static_cast<Uint32>(upload_row_bytes / bytes_per_pixel);
                 source.rows_per_layer = static_cast<Uint32>(surface->h);
 
                 SDL_GPUTextureRegion destination{};
@@ -329,8 +339,17 @@ ShaderPipelineKey GpuSceneRenderer::make_pipeline_key(const std::string& shader_
     key.shader_id = shader_name;
     key.variant = backend_shader_variant_;
     key.color_format = device_ ? device_->format_policy().albedo_format : SDL_GPU_TEXTUREFORMAT_INVALID;
+    // Runtime frame graph uses a dedicated present state key for the swapchain pass.
+    // Ensure that pipeline targets the real swapchain format when available.
+    if (device_ &&
+        shader_name == "sprite_textured" &&
+        render_state_key == 0x1006u &&
+        device_->swapchain_format() != SDL_GPU_TEXTUREFORMAT_INVALID) {
+        key.color_format = device_->swapchain_format();
+    }
     key.depth_format = device_ ? device_->format_policy().depth_format : SDL_GPU_TEXTUREFORMAT_INVALID;
-    key.sample_count = device_ ? device_->format_policy().sample_count : SDL_GPU_SAMPLECOUNT_1;
+    // Runtime scene resources are single-sample; keep pipeline sample count aligned.
+    key.sample_count = SDL_GPU_SAMPLECOUNT_1;
     key.render_state_key = render_state_key;
     return key;
 }
@@ -390,6 +409,7 @@ SDL_GPUShader* GpuSceneRenderer::create_shader(const ShaderPackageLibrary::Shade
 }
 
 SDL_GPUGraphicsPipeline* GpuSceneRenderer::create_graphics_pipeline(const std::string& pipeline_name,
+                                                                    SDL_GPUTextureFormat color_target_format,
                                                                     std::string& out_error) const {
     if (!device_ || !device_->gpu_device()) {
         out_error = "GPU device unavailable while creating graphics pipeline";
@@ -478,7 +498,9 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::create_graphics_pipeline(const std::s
     blend_state.enable_color_write_mask = true;
 
     SDL_GPUColorTargetDescription color_target{};
-    color_target.format = device_->format_policy().albedo_format;
+    color_target.format = (color_target_format != SDL_GPU_TEXTUREFORMAT_INVALID)
+        ? color_target_format
+        : device_->format_policy().albedo_format;
     color_target.blend_state = blend_state;
 
     SDL_GPUGraphicsPipelineCreateInfo create_info{};
@@ -490,7 +512,7 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::create_graphics_pipeline(const std::s
     create_info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
     create_info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
     create_info.rasterizer_state.enable_depth_clip = true;
-    create_info.multisample_state.sample_count = device_->format_policy().sample_count;
+    create_info.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
     create_info.multisample_state.sample_mask = 0;
     create_info.multisample_state.enable_mask = false;
     create_info.multisample_state.enable_alpha_to_coverage = false;
@@ -621,7 +643,7 @@ bool GpuSceneRenderer::warmup_required_pipelines(std::string& out_error) {
         const ShaderPipelineKey key = make_pipeline_key(pipeline_name, graphics_state_key_from_index(i));
         SDL_GPUGraphicsPipeline* pipeline = pipeline_cache_.get_or_create_graphics_pipeline(
             key,
-            [&]() { return create_graphics_pipeline(pipeline_name, pipeline_error); });
+            [&]() { return create_graphics_pipeline(pipeline_name, key.color_format, pipeline_error); });
         if (!pipeline) {
             out_error = "Failed to warmup graphics pipeline '" + pipeline_name + "': " + pipeline_error;
             return false;
@@ -683,7 +705,7 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::get_graphics_pipeline(const std::stri
     const ShaderPipelineKey key = make_pipeline_key(pipeline_name, render_state_key);
     SDL_GPUGraphicsPipeline* pipeline = pipeline_cache_.get_or_create_graphics_pipeline(
         key,
-        [&]() { return create_graphics_pipeline(pipeline_name, pipeline_error); });
+        [&]() { return create_graphics_pipeline(pipeline_name, key.color_format, pipeline_error); });
     if (!pipeline && !pipeline_error.empty()) {
         vibble::log::error("[GpuSceneRenderer] Graphics pipeline resolve failed for '" +
                            pipeline_name + "': " + pipeline_error);
@@ -723,6 +745,16 @@ bool GpuSceneRenderer::begin_frame(std::string* out_error) {
             *out_error = "GPU device is unavailable";
         }
         return false;
+    }
+    if (!imported_sdl_texture_resources_.empty()) {
+        for (auto& entry : imported_sdl_texture_resources_) {
+            if (entry.second.gpu_texture) {
+                SDL_ReleaseGPUTexture(device_->gpu_device(), entry.second.gpu_texture);
+                entry.second.gpu_texture = nullptr;
+                render_diagnostics::add_texture_destroy_count();
+            }
+        }
+        imported_sdl_texture_resources_.clear();
     }
     frame_graph_.reset();
     render_diagnostics::set_renderer_runtime_info("gpu",
@@ -962,6 +994,18 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
     SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
     SDL_Surface* readback_surface = nullptr;
     bool rendered_to_target = false;
+    Uint8 source_r = 255u;
+    Uint8 source_g = 255u;
+    Uint8 source_b = 255u;
+    Uint8 source_a = 255u;
+    SDL_BlendMode source_blend = SDL_BLENDMODE_BLEND;
+    const bool had_color_mod = SDL_GetTextureColorMod(texture, &source_r, &source_g, &source_b);
+    const bool had_alpha_mod = SDL_GetTextureAlphaMod(texture, &source_a);
+    const bool had_blend_mode = SDL_GetTextureBlendMode(texture, &source_blend);
+    (void)SDL_SetTextureColorMod(texture, 255u, 255u, 255u);
+    (void)SDL_SetTextureAlphaMod(texture, 255u);
+    (void)SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
+    (void)SDL_SetTextureBlendMode(readback_target, SDL_BLENDMODE_NONE);
     if (SDL_SetRenderTarget(renderer, readback_target)) {
         if (SDL_SetRenderDrawColor(renderer, 0u, 0u, 0u, 0u) &&
             SDL_RenderClear(renderer)) {
@@ -977,6 +1021,15 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
             }
         }
     }
+    if (had_color_mod) {
+        (void)SDL_SetTextureColorMod(texture, source_r, source_g, source_b);
+    }
+    if (had_alpha_mod) {
+        (void)SDL_SetTextureAlphaMod(texture, source_a);
+    }
+    if (had_blend_mode) {
+        (void)SDL_SetTextureBlendMode(texture, source_blend);
+    }
     (void)SDL_SetRenderTarget(renderer, previous_target);
     SDL_DestroyTexture(readback_target);
 
@@ -988,24 +1041,35 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
         return nullptr;
     }
 
-    SDL_Surface* rgba_surface = readback_surface;
-    bool owns_rgba_surface = false;
-    if (readback_surface->format != SDL_PIXELFORMAT_RGBA8888) {
-        rgba_surface = SDL_ConvertSurface(readback_surface, SDL_PIXELFORMAT_RGBA8888);
-        owns_rgba_surface = (rgba_surface != nullptr);
-        if (!rgba_surface) {
+    SDL_Surface* upload_surface = readback_surface;
+    bool owns_upload_surface = false;
+    SDL_GPUTextureFormat upload_format =
+        SDL_GetGPUTextureFormatFromPixelFormat(readback_surface->format);
+    if (upload_format == SDL_GPU_TEXTUREFORMAT_INVALID) {
+        upload_surface = SDL_ConvertSurface(readback_surface, SDL_PIXELFORMAT_RGBA8888);
+        owns_upload_surface = (upload_surface != nullptr);
+        if (!upload_surface) {
             out_error = "SDL_ConvertSurface RGBA8888 failed during SDL texture import: " + std::string(SDL_GetError());
             SDL_DestroySurface(readback_surface);
             return nullptr;
         }
+        upload_format = SDL_GetGPUTextureFormatFromPixelFormat(upload_surface->format);
+    }
+    if (upload_format == SDL_GPU_TEXTUREFORMAT_INVALID) {
+        out_error = "Unable to map readback surface format to a GPU texture format.";
+        if (owns_upload_surface) {
+            SDL_DestroySurface(upload_surface);
+        }
+        SDL_DestroySurface(readback_surface);
+        return nullptr;
     }
 
     SDL_GPUTextureCreateInfo create_info{};
     create_info.type = SDL_GPU_TEXTURETYPE_2D;
-    create_info.format = device_->format_policy().albedo_format;
+    create_info.format = upload_format;
     create_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    create_info.width = static_cast<Uint32>(std::max(1, rgba_surface->w));
-    create_info.height = static_cast<Uint32>(std::max(1, rgba_surface->h));
+    create_info.width = static_cast<Uint32>(std::max(1, upload_surface->w));
+    create_info.height = static_cast<Uint32>(std::max(1, upload_surface->h));
     create_info.layer_count_or_depth = 1;
     create_info.num_levels = 1;
     create_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
@@ -1014,8 +1078,8 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
     SDL_GPUTexture* gpu_texture = SDL_CreateGPUTexture(device_->gpu_device(), &create_info);
     if (!gpu_texture) {
         out_error = "SDL_CreateGPUTexture failed while importing SDL texture: " + std::string(SDL_GetError());
-        if (owns_rgba_surface) {
-            SDL_DestroySurface(rgba_surface);
+        if (owns_upload_surface) {
+            SDL_DestroySurface(upload_surface);
         }
         SDL_DestroySurface(readback_surface);
         return nullptr;
@@ -1024,10 +1088,10 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
     std::string upload_error;
     const bool upload_ok = upload_surface_to_gpu_texture(device_->gpu_device(),
                                                          gpu_texture,
-                                                         rgba_surface,
+                                                         upload_surface,
                                                          upload_error);
-    if (owns_rgba_surface) {
-        SDL_DestroySurface(rgba_surface);
+    if (owns_upload_surface) {
+        SDL_DestroySurface(upload_surface);
     }
     SDL_DestroySurface(readback_surface);
 

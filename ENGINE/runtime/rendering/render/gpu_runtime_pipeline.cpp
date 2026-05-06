@@ -184,7 +184,8 @@ bool GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     layers_pass.render.color_target = "scene.layers";
     layers_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
     layers_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    layers_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    // Layer target must start transparent so composition can alpha-over floor.
+    layers_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
     layers_pass.render.execute_default_draw = false;
     layers_pass.render.custom_render =
         make_sprite_draw_callback(std::move(layer_draws), layers_pass.name);

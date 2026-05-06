@@ -9,5 +9,7 @@ layout(set = 2, binding = 1) uniform sampler2D u_layers;
 void main() {
     vec4 floor_color = texture(u_floor, v_uv);
     vec4 layer_color = texture(u_layers, v_uv);
-    out_color = mix(floor_color, layer_color, layer_color.a);
+    float layer_alpha = clamp(layer_color.a, 0.0, 1.0);
+    vec3 composed_rgb = layer_color.rgb + floor_color.rgb * (1.0 - layer_alpha);
+    out_color = vec4(composed_rgb, 1.0);
 }

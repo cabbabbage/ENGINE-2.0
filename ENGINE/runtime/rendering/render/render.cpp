@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <limits>
@@ -452,6 +453,8 @@ bool SceneRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std:
             static_cast<float>(object.color_mod.b) / 255.0f,
             static_cast<float>(object.color_mod.a) / 255.0f,
         };
+        packet.sort_key = std::max(projected.screen_bl.y, projected.screen_br.y);
+        packet.stable_sort_id = reinterpret_cast<std::uintptr_t>(asset);
         fill_sprite_packet_vertices(projected, u0, v0, u1, v1, target_width, target_height, packet);
 
         if (asset->isFloorBoxesEnabled()) {
@@ -461,6 +464,16 @@ bool SceneRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std:
         }
         ++drawable_count;
     }
+
+    const auto draw_sort_predicate = [](const GpuSpriteDrawPacket& lhs,
+                                        const GpuSpriteDrawPacket& rhs) {
+        if (lhs.sort_key == rhs.sort_key) {
+            return lhs.stable_sort_id < rhs.stable_sort_id;
+        }
+        return lhs.sort_key < rhs.sort_key;
+    };
+    std::stable_sort(out_data.floor_draws.begin(), out_data.floor_draws.end(), draw_sort_predicate);
+    std::stable_sort(out_data.layer_draws.begin(), out_data.layer_draws.end(), draw_sort_predicate);
 
     out_data.floor_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         out_data.floor_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));

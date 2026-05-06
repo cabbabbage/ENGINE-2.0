@@ -91,6 +91,43 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
         default: return "UNKNOWN";
         }
     };
+
+    const auto is_written_in_pass = [](const PassDescriptor& pass, const std::string& name) {
+        for (const ResourceDependency& dep : pass.resources) {
+            if (dep.write && dep.name == name) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    for (const PassDescriptor& pass : passes_) {
+        if (pass.name.empty()) {
+            const std::string message = "[GpuFrameGraph] Pass has an empty name.";
+            if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
+        }
+        if (pass.type == PassType::Render) {
+            if (!pass.render.use_swapchain_target && pass.render.color_target.empty()) {
+                const std::string message = "[GpuFrameGraph] Render pass '" + pass.name + "' has no color target.";
+                if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
+            }
+            if (pass.render.use_swapchain_target && context.swapchain_texture == nullptr && !options.dry_run) {
+                const std::string message = "[GpuFrameGraph] Render pass '" + pass.name + "' targets swapchain but swapchain texture is null.";
+                if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
+            }
+            if (pass.render.use_swapchain_target && pass.render.fragment_sampled_textures.empty()) {
+                const std::string message = "[GpuFrameGraph] Final swapchain pass '" + pass.name + "' has no sampled scene source.";
+                if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
+            }
+            for (const auto& sampled : pass.render.fragment_sampled_textures) {
+                if (is_written_in_pass(pass, sampled.texture)) {
+                    const std::string message = "[GpuFrameGraph] Pass '" + pass.name + "' reads and writes texture '" + sampled.texture + "' in the same pass.";
+                    if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
+                }
+            }
+        }
+    }
+
     for (const PassDescriptor& pass : passes_) {
         switch (pass.type) {
         case PassType::Render:
@@ -415,11 +452,15 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
     }
 
     if (swapchain_touched && (!swapchain_cleared || !swapchain_fully_written)) {
-        vibble::log::error("[GpuFrameGraph] Final presented target may be invalid for this frame. first_swapchain_pass='" +
-                           first_swapchain_pass_name + "' load_op=" + first_swapchain_load_op +
-                           " store_op=" + first_swapchain_store_op +
-                           " cleared=" + (swapchain_cleared ? std::string("true") : std::string("false")) +
-                           " fully_written=" + (swapchain_fully_written ? std::string("true") : std::string("false")) + ".");
+        stats.success = false;
+        stats.error_message = "[GpuFrameGraph] Final presented target may be invalid for this frame. first_swapchain_pass='" +
+                              first_swapchain_pass_name + "' load_op=" + first_swapchain_load_op +
+                              " store_op=" + first_swapchain_store_op +
+                              " cleared=" + (swapchain_cleared ? std::string("true") : std::string("false")) +
+                              " fully_written=" + (swapchain_fully_written ? std::string("true") : std::string("false")) + ".";
+        vibble::log::error(stats.error_message);
+        last_execution_stats_ = stats;
+        return stats;
     }
 
     stats.success = true;

@@ -127,17 +127,19 @@ void GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     renderer.add_pass(std::move(compose_pass));
 
     GpuFrameGraph::PassDescriptor present_pass{};
-    present_pass.type = GpuFrameGraph::PassType::Copy;
+    present_pass.type = GpuFrameGraph::PassType::Render;
     present_pass.name = make_name("present_scene_composite");
     present_pass.resources = {
         GpuFrameGraph::ResourceDependency::read("scene.composite"),
     };
-    present_pass.blit.source_texture = "scene.composite";
-    present_pass.blit.use_swapchain_destination = true;
-    present_pass.blit.load_op = SDL_GPU_LOADOP_CLEAR;
-    present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    present_pass.blit.width = width;
-    present_pass.blit.height = height;
+    present_pass.render.pipeline_id = "final_compose";
+    present_pass.render.render_state_key = 0x1006u;
+    present_pass.render.use_swapchain_target = true;
+    present_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    present_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    present_pass.render.fragment_sampled_textures = {
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.composite", "linear_clamp"},
+    };
     renderer.add_pass(std::move(present_pass));
 }
 

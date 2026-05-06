@@ -64,6 +64,9 @@ void GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     floor_pass.render.pipeline_id = "floor_compose";
     floor_pass.render.render_state_key = 0x1001u;
     floor_pass.render.color_target = "scene.floor";
+    floor_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    floor_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    floor_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     renderer.add_pass(std::move(floor_pass));
 
     GpuFrameGraph::PassDescriptor layers_pass{};
@@ -73,6 +76,9 @@ void GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     layers_pass.render.pipeline_id = "sprite_textured";
     layers_pass.render.render_state_key = 0x1002u;
     layers_pass.render.color_target = "scene.layers";
+    layers_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    layers_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    layers_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     renderer.add_pass(std::move(layers_pass));
 
     GpuFrameGraph::PassDescriptor blur_bg_pass{};
@@ -85,6 +91,9 @@ void GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     blur_bg_pass.render.pipeline_id = "dark_mask";
     blur_bg_pass.render.render_state_key = 0x1003u;
     blur_bg_pass.render.color_target = "scene.blur_background";
+    blur_bg_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    blur_bg_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    blur_bg_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     blur_bg_pass.render.fragment_sampled_textures = {
         GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
     };
@@ -100,6 +109,9 @@ void GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     blur_fg_pass.render.pipeline_id = "light_eval";
     blur_fg_pass.render.render_state_key = 0x1004u;
     blur_fg_pass.render.color_target = "scene.blur_foreground";
+    blur_fg_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    blur_fg_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    blur_fg_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     blur_fg_pass.render.fragment_sampled_textures = {
         GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
     };
@@ -118,6 +130,9 @@ void GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     compose_pass.render.pipeline_id = "final_compose";
     compose_pass.render.render_state_key = 0x1005u;
     compose_pass.render.color_target = "scene.composite";
+    compose_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    compose_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    compose_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     compose_pass.render.fragment_sampled_textures = {
         GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.floor", "linear_clamp"},
         GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
@@ -127,17 +142,19 @@ void GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
     renderer.add_pass(std::move(compose_pass));
 
     GpuFrameGraph::PassDescriptor present_pass{};
-    present_pass.type = GpuFrameGraph::PassType::Copy;
+    present_pass.type = GpuFrameGraph::PassType::Render;
     present_pass.name = make_name("present_scene_composite");
     present_pass.resources = {
         GpuFrameGraph::ResourceDependency::read("scene.composite"),
     };
-    present_pass.blit.source_texture = "scene.composite";
-    present_pass.blit.use_swapchain_destination = true;
-    present_pass.blit.load_op = SDL_GPU_LOADOP_CLEAR;
-    present_pass.blit.filter = SDL_GPU_FILTER_LINEAR;
-    present_pass.blit.width = width;
-    present_pass.blit.height = height;
+    present_pass.render.pipeline_id = "sprite_textured";
+    present_pass.render.render_state_key = 0x1006u;
+    present_pass.render.use_swapchain_target = true;
+    present_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    present_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    present_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    present_pass.render.fragment_sampled_textures = {
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.composite", "linear_clamp"},
+    };
     renderer.add_pass(std::move(present_pass));
 }
-

@@ -26,20 +26,16 @@ struct GpuSpriteDrawPacket {
     SDL_Texture* source_texture = nullptr;
     std::array<GpuSpriteVertex, 6> vertices{};
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
+    std::uint8_t sort_group = 0;
     float sort_key = 0.0f;
     std::uintptr_t stable_sort_id = 0u;
 };
 
 struct GpuSceneFrameData {
-    std::vector<GpuSpriteDrawPacket> map_floor_draws{};
-    std::vector<GpuSpriteDrawPacket> floor_sprite_draws{};
-    std::vector<GpuSpriteDrawPacket> layer_draws{};
-    std::uint32_t map_floor_draw_count = 0;
-    std::uint32_t floor_sprite_draw_count = 0;
-    std::uint32_t floor_draw_count = 0;
-    std::uint32_t layer_sprite_draw_count = 0;
+    std::vector<GpuSpriteDrawPacket> scene_draws{};
+    std::uint32_t scene_sprite_draw_count = 0;
     std::uint32_t debug_overlay_draw_count = 0;
-    bool has_valid_composite_source = false;
+    bool has_floor_tiles = false;
 };
 
 class GpuSceneRenderer {

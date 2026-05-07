@@ -109,18 +109,27 @@ struct SpriteBatchVertexUniformData {
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
 };
 
+constexpr SDL_FColor kMissingFloorDataClearColor{0.85f, 0.12f, 0.78f, 1.0f};
+
+std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
+    constexpr std::uintptr_t kSpritePacketSortOffset =
+        std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
+    return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
+}
+
 } // namespace
 
 namespace runtime_gpu_renderer_detail {
 
-bool build_map_floor_tile_draw_packets(const WarpedScreenGrid& camera,
-                                       const std::vector<world::Chunk*>& chunks,
-                                       std::uint32_t target_width,
-                                       std::uint32_t target_height,
-                                       std::vector<GpuSpriteDrawPacket>& out_packets) {
+bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
+                                   const std::vector<world::Chunk*>& chunks,
+                                   std::uint32_t target_width,
+                                   std::uint32_t target_height,
+                                   std::vector<GpuSpriteDrawPacket>& out_packets) {
     out_packets.clear();
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+    std::uintptr_t tile_sequence = 0u;
 
     for (const world::Chunk* chunk : chunks) {
         if (!chunk) {
@@ -151,13 +160,7 @@ bool build_map_floor_tile_draw_packets(const WarpedScreenGrid& camera,
             packet.source_texture = tile.texture;
             packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
             packet.sort_key = std::max(screen_br.y, screen_bl.y);
-            const std::uintptr_t texture_id = reinterpret_cast<std::uintptr_t>(tile.texture);
-            const std::uintptr_t coord_hash =
-                (static_cast<std::uintptr_t>(static_cast<std::uint32_t>(tile.world_rect.x)) << 1u) ^
-                (static_cast<std::uintptr_t>(static_cast<std::uint32_t>(tile.world_rect.y)) << 17u) ^
-                (static_cast<std::uintptr_t>(static_cast<std::uint32_t>(tile.world_rect.w)) << 33u) ^
-                (static_cast<std::uintptr_t>(static_cast<std::uint32_t>(tile.world_rect.h)) << 49u);
-            packet.stable_sort_id = texture_id ^ coord_hash;
+            packet.stable_sort_id = floor_sort_id(false, tile_sequence++);
             fill_quad_packet_vertices(screen_tl,
                                       screen_tr,
                                       screen_br,
@@ -180,18 +183,8 @@ bool build_map_floor_tile_draw_packets(const WarpedScreenGrid& camera,
         }
         return lhs.sort_key < rhs.sort_key;
     };
-    std::stable_sort(out_packets.begin(), out_packets.end(), draw_sort_predicate);
+    std::sort(out_packets.begin(), out_packets.end(), draw_sort_predicate);
     return true;
-}
-
-void append_classified_sprite_draw_packet(bool floor_tagged,
-                                          const GpuSpriteDrawPacket& packet,
-                                          GpuSceneFrameData& in_out_frame_data) {
-    if (floor_tagged) {
-        in_out_frame_data.floor_sprite_draws.push_back(packet);
-        return;
-    }
-    in_out_frame_data.layer_draws.push_back(packet);
 }
 
 } // namespace runtime_gpu_renderer_detail
@@ -334,46 +327,28 @@ std::vector<world::Chunk*> RuntimeGpuRenderer::runtime_floor_chunks() const {
     return assets_->world_grid().all_chunks();
 }
 
-bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
-                                                    std::uint32_t target_height,
-                                                    GpuSceneFrameData& out_data,
-                                                    std::string& out_error) const {
-    out_data = GpuSceneFrameData{};
+bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+    const WarpedScreenGrid& camera,
+    const std::vector<Asset*>& visible_assets,
+    std::uint32_t target_width,
+    std::uint32_t target_height,
+    std::vector<GpuSpriteDrawPacket>& out_floor_draws,
+    std::vector<GpuSpriteDrawPacket>& out_layer_draws,
+    std::string& out_error) {
+    out_layer_draws.clear();
+    out_floor_draws.reserve(out_floor_draws.size() + visible_assets.size());
+    out_layer_draws.reserve(visible_assets.size());
     out_error.clear();
-    if (!assets_) {
-        out_error = "Assets context unavailable for GPU scene frame packet build.";
-        return false;
-    }
-
-    const std::vector<Asset*>& visible_assets = assets_->is_dev_mode()
-        ? assets_->getFilteredActiveAssets()
-        : assets_->getActive();
-    const WarpedScreenGrid& camera = assets_->getView();
 
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
-
-    std::size_t visible_count = 0;
-    std::size_t drawable_count = 0;
-
-    if (!runtime_gpu_renderer_detail::build_map_floor_tile_draw_packets(
-            camera,
-            runtime_floor_chunks(),
-            target_width,
-            target_height,
-            out_data.map_floor_draws)) {
-        out_error = "Failed to build map-floor tile packets.";
-        return false;
-    }
-
-    out_data.floor_sprite_draws.reserve(visible_assets.size());
-    out_data.layer_draws.reserve(visible_assets.size());
+    std::uintptr_t floor_sequence = 0u;
+    std::uintptr_t layer_sequence = 0u;
 
     for (Asset* asset : visible_assets) {
         if (!asset || asset->dead || !asset->info) {
             continue;
         }
-        ++visible_count;
 
         RenderObject object{};
         if (!render_build::build_direct_asset_render_object(asset, object) || !object.texture) {
@@ -422,14 +397,18 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
             static_cast<float>(object.color_mod.a) / 255.0f,
         };
         packet.sort_key = std::max(projected.screen_bl.y, projected.screen_br.y);
-        packet.stable_sort_id = reinterpret_cast<std::uintptr_t>(asset);
         fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet);
 
+        if (asset->isFloorBoxesEnabled()) {
+            packet.stable_sort_id = floor_sort_id(true, floor_sequence++);
+            runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
+                true, packet, out_floor_draws, out_layer_draws);
+            continue;
+        }
+
+        packet.stable_sort_id = floor_sort_id(false, layer_sequence++);
         runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
-            asset->isFloorBoxesEnabled(),
-            packet,
-            out_data);
-        ++drawable_count;
+            false, packet, out_floor_draws, out_layer_draws);
     }
 
     const auto draw_sort_predicate = [](const GpuSpriteDrawPacket& lhs,
@@ -439,26 +418,69 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
         }
         return lhs.sort_key < rhs.sort_key;
     };
-    std::stable_sort(out_data.floor_sprite_draws.begin(), out_data.floor_sprite_draws.end(), draw_sort_predicate);
-    std::stable_sort(out_data.layer_draws.begin(), out_data.layer_draws.end(), draw_sort_predicate);
+    std::sort(out_floor_draws.begin(), out_floor_draws.end(), draw_sort_predicate);
+    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), draw_sort_predicate);
+    return true;
+}
 
-    out_data.map_floor_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
-        out_data.map_floor_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
-    out_data.floor_sprite_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
-        out_data.floor_sprite_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+void runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(bool floor_tagged,
+                                                                       const GpuSpriteDrawPacket& packet,
+                                                                       std::vector<GpuSpriteDrawPacket>& out_floor_draws,
+                                                                       std::vector<GpuSpriteDrawPacket>& out_layer_draws) {
+    if (floor_tagged) {
+        out_floor_draws.push_back(packet);
+        return;
+    }
+    out_layer_draws.push_back(packet);
+}
+
+bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
+                                                    std::uint32_t target_height,
+                                                    GpuSceneFrameData& out_data,
+                                                    std::string& out_error) const {
+    out_data = GpuSceneFrameData{};
+    out_error.clear();
+    if (!assets_) {
+        out_error = "Assets context unavailable for GPU scene frame packet build.";
+        return false;
+    }
+
+    const std::vector<Asset*>& visible_assets = assets_->is_dev_mode()
+        ? assets_->getFilteredActiveAssets()
+        : assets_->getActive();
+    const WarpedScreenGrid& camera = assets_->getView();
+
+    if (!runtime_gpu_renderer_detail::build_floor_tile_draw_packets(
+            camera,
+            runtime_floor_chunks(),
+            target_width,
+            target_height,
+            out_data.floor_draws)) {
+        out_error = "Failed to build map-floor tile packets.";
+        return false;
+    }
+
+    if (!runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+            camera,
+            visible_assets,
+            target_width,
+            target_height,
+            out_data.floor_draws,
+            out_data.layer_draws,
+            out_error)) {
+        return false;
+    }
+
     out_data.floor_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
-        out_data.map_floor_draws.size() + out_data.floor_sprite_draws.size(),
-        static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+        out_data.floor_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.layer_sprite_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         out_data.layer_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.debug_overlay_draw_count = 0;
     out_data.has_valid_composite_source =
         (out_data.floor_draw_count + out_data.layer_sprite_draw_count) > 0;
 
-    if (visible_count > 0 && drawable_count == 0 && out_data.map_floor_draw_count == 0) {
-        out_error = "GPU scene packet invalid: visible assets exist but zero drawable sprite packets were built.";
-        vibble::log::error("[RuntimeGpuRenderer] " + out_error);
-        return false;
+    if (out_data.floor_draw_count == 0) {
+        vibble::log::warn("[RuntimeGpuRenderer] No floor draw packets were built; rendering diagnostic clear color.");
     }
 
     return true;
@@ -607,7 +629,6 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     }
 
     frame_context_.stats.floor_draw_count = frame_data.floor_draw_count;
-    frame_context_.stats.floor_sprite_draw_count = frame_data.floor_sprite_draw_count;
     frame_context_.stats.layer_sprite_draw_count = frame_data.layer_sprite_draw_count;
     frame_context_.stats.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
 
@@ -629,8 +650,8 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     target_info.texture = frame_context_.swapchain_texture;
     target_info.mip_level = 0;
     target_info.layer_or_depth_plane = 0;
-    target_info.clear_color = frame_data.map_floor_draw_count == 0
-        ? SDL_FColor{0.08f, 0.02f, 0.12f, 1.0f}
+    target_info.clear_color = frame_data.floor_draw_count == 0
+        ? kMissingFloorDataClearColor
         : SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     target_info.load_op = SDL_GPU_LOADOP_CLEAR;
     target_info.store_op = SDL_GPU_STOREOP_STORE;
@@ -651,12 +672,7 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     render_diagnostics::add_render_pass();
 
     bool render_ok = true;
-    if (!render_draw_packet_batch(render_pass, frame_data.map_floor_draws, "floor", out_error)) {
-        render_ok = false;
-    } else if (!render_draw_packet_batch(render_pass,
-                                         frame_data.floor_sprite_draws,
-                                         "floor-bound sprites",
-                                         out_error)) {
+    if (!render_draw_packet_batch(render_pass, frame_data.floor_draws, "floor", out_error)) {
         render_ok = false;
     } else if (!render_draw_packet_batch(render_pass,
                                          frame_data.layer_draws,

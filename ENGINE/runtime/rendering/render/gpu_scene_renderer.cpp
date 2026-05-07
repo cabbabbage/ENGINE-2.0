@@ -206,57 +206,77 @@ struct SpriteBatchVertexUniformData {
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
 };
 
+constexpr SDL_FColor kMissingFloorDataClearColor{0.85f, 0.12f, 0.78f, 1.0f};
+
+bool render_resolved_sprite_draw_batch(const GpuFrameGraph::ExecuteContext& context,
+                                       SDL_GPURenderPass* render_pass,
+                                       const std::vector<ResolvedGpuSpriteDraw>& draws,
+                                       std::string_view pass_name,
+                                       std::string& out_error) {
+    out_error.clear();
+    if (draws.empty()) {
+        return true;
+    }
+    if (!render_pass) {
+        out_error = "Render pass handle was null.";
+        return false;
+    }
+    if (!context.command_buffer) {
+        out_error = "Command buffer was null.";
+        return false;
+    }
+    if (!context.resolve_sampler) {
+        out_error = "Sampler resolver unavailable.";
+        return false;
+    }
+
+    SDL_GPUSampler* linear_sampler = context.resolve_sampler("linear_clamp");
+    if (!linear_sampler) {
+        out_error = "Sampler 'linear_clamp' not available.";
+        return false;
+    }
+
+    for (const ResolvedGpuSpriteDraw& draw : draws) {
+        SDL_GPUTextureSamplerBinding sampler_binding{};
+        sampler_binding.texture = draw.source_texture;
+        sampler_binding.sampler = linear_sampler;
+        SDL_BindGPUFragmentSamplers(render_pass, 0u, &sampler_binding, 1u);
+
+        SpriteBatchVertexUniformData uniform_data{};
+        for (std::size_t i = 0; i < draw.vertices.size(); ++i) {
+            const GpuSpriteVertex& vertex = draw.vertices[i];
+            uniform_data.vertex_uv[i] = SDL_FColor{vertex.clip_x, vertex.clip_y, vertex.uv_x, vertex.uv_y};
+        }
+        uniform_data.modulate = draw.modulate;
+        SDL_PushGPUVertexUniformData(context.command_buffer,
+                                     0u,
+                                     &uniform_data,
+                                     static_cast<Uint32>(sizeof(uniform_data)));
+
+        SDL_DrawGPUPrimitives(render_pass, 6u, 1u, 0u, 0u);
+        render_diagnostics::add_draw_call_count();
+    }
+
+    (void)pass_name;
+    return true;
+}
+
 std::function<bool(const GpuFrameGraph::ExecuteContext&, SDL_GPURenderPass*, std::string&)>
-make_sprite_draw_callback(std::vector<ResolvedGpuSpriteDraw> draws, std::string pass_name) {
-    return [draws = std::move(draws), pass_name = std::move(pass_name)](
+make_scene_draw_callback(std::vector<ResolvedGpuSpriteDraw> floor_draws,
+                         std::vector<ResolvedGpuSpriteDraw> world_draws,
+                         std::string pass_name) {
+    return [floor_draws = std::move(floor_draws),
+            world_draws = std::move(world_draws),
+            pass_name = std::move(pass_name)](
                const GpuFrameGraph::ExecuteContext& context,
                SDL_GPURenderPass* render_pass,
                std::string& out_error) -> bool {
-        out_error.clear();
-        if (draws.empty()) {
-            return true;
-        }
-        if (!render_pass) {
-            out_error = "Render pass handle was null.";
+        if (!render_resolved_sprite_draw_batch(context, render_pass, floor_draws, pass_name + ".floor", out_error)) {
             return false;
         }
-        if (!context.command_buffer) {
-            out_error = "Command buffer was null.";
+        if (!render_resolved_sprite_draw_batch(context, render_pass, world_draws, pass_name + ".world", out_error)) {
             return false;
         }
-        if (!context.resolve_sampler) {
-            out_error = "Sampler resolver unavailable.";
-            return false;
-        }
-
-        SDL_GPUSampler* linear_sampler = context.resolve_sampler("linear_clamp");
-        if (!linear_sampler) {
-            out_error = "Sampler 'linear_clamp' not available.";
-            return false;
-        }
-
-        for (const ResolvedGpuSpriteDraw& draw : draws) {
-            SDL_GPUTextureSamplerBinding sampler_binding{};
-            sampler_binding.texture = draw.source_texture;
-            sampler_binding.sampler = linear_sampler;
-            SDL_BindGPUFragmentSamplers(render_pass, 0u, &sampler_binding, 1u);
-
-            SpriteBatchVertexUniformData uniform_data{};
-            for (std::size_t i = 0; i < draw.vertices.size(); ++i) {
-                const GpuSpriteVertex& vertex = draw.vertices[i];
-                uniform_data.vertex_uv[i] = SDL_FColor{vertex.clip_x, vertex.clip_y, vertex.uv_x, vertex.uv_y};
-            }
-            uniform_data.modulate = draw.modulate;
-            SDL_PushGPUVertexUniformData(context.command_buffer,
-                                         0u,
-                                         &uniform_data,
-                                         static_cast<Uint32>(sizeof(uniform_data)));
-
-            SDL_DrawGPUPrimitives(render_pass, 6u, 1u, 0u, 0u);
-            render_diagnostics::add_draw_call_count();
-        }
-
-        (void)pass_name;
         return true;
     };
 }
@@ -658,11 +678,9 @@ bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::st
         return false;
     }
 
-    std::vector<ResolvedGpuSpriteDraw> floor_tile_draws{};
-    std::vector<ResolvedGpuSpriteDraw> floor_sprite_draws{};
+    std::vector<ResolvedGpuSpriteDraw> floor_draws{};
     std::vector<ResolvedGpuSpriteDraw> world_sprite_draws{};
-    if (!resolve_sprite_draws(*this, frame_data.map_floor_draws, "scene.floor_tiles", floor_tile_draws, out_error) ||
-        !resolve_sprite_draws(*this, frame_data.floor_sprite_draws, "scene.floor_sprites", floor_sprite_draws, out_error) ||
+    if (!resolve_sprite_draws(*this, frame_data.floor_draws, "scene.floor", floor_draws, out_error) ||
         !resolve_sprite_draws(*this, frame_data.layer_draws, "scene.world_sprites", world_sprite_draws, out_error)) {
         return false;
     }
@@ -676,19 +694,13 @@ bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::st
     scene_pass.render.use_swapchain_target = true;
     scene_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
     scene_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    scene_pass.render.clear_color = frame_data.map_floor_draw_count == 0
-        ? SDL_FColor{0.08f, 0.02f, 0.12f, 1.0f}
+    scene_pass.render.clear_color = frame_data.floor_draw_count == 0
+        ? kMissingFloorDataClearColor
         : SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
     scene_pass.render.execute_default_draw = false;
 
-    std::vector<ResolvedGpuSpriteDraw> unified_draws{};
-    unified_draws.reserve(floor_tile_draws.size() +
-                          floor_sprite_draws.size() +
-                          world_sprite_draws.size());
-    unified_draws.insert(unified_draws.end(), floor_tile_draws.begin(), floor_tile_draws.end());
-    unified_draws.insert(unified_draws.end(), floor_sprite_draws.begin(), floor_sprite_draws.end());
-    unified_draws.insert(unified_draws.end(), world_sprite_draws.begin(), world_sprite_draws.end());
-    scene_pass.render.custom_render = make_sprite_draw_callback(std::move(unified_draws), scene_pass.name);
+    scene_pass.render.custom_render =
+        make_scene_draw_callback(std::move(floor_draws), std::move(world_sprite_draws), scene_pass.name);
 
     std::string frame_error;
     if (!begin_frame(&frame_error)) {

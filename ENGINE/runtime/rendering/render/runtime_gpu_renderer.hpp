@@ -10,6 +10,7 @@
 #include "rendering/render/gpu_scene_renderer.hpp"
 
 class Assets;
+class Asset;
 class WarpedScreenGrid;
 namespace world {
 struct Chunk;
@@ -17,14 +18,18 @@ struct Chunk;
 
 namespace runtime_gpu_renderer_detail {
 
-bool build_map_floor_tile_draw_packets(const WarpedScreenGrid& camera,
-                                       const std::vector<world::Chunk*>& chunks,
-                                       std::uint32_t target_width,
-                                       std::uint32_t target_height,
-                                       std::vector<GpuSpriteDrawPacket>& out_packets);
-void append_classified_sprite_draw_packet(bool floor_tagged,
-                                          const GpuSpriteDrawPacket& packet,
-                                          GpuSceneFrameData& in_out_frame_data);
+bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
+                                   const std::vector<world::Chunk*>& chunks,
+                                   std::uint32_t target_width,
+                                   std::uint32_t target_height,
+                                   std::vector<GpuSpriteDrawPacket>& out_packets);
+bool build_scene_sprite_draw_packets(const WarpedScreenGrid& camera,
+                                     const std::vector<Asset*>& visible_assets,
+                                     std::uint32_t target_width,
+                                     std::uint32_t target_height,
+                                     std::vector<GpuSpriteDrawPacket>& out_packets,
+                                     std::string& out_error);
+void sort_scene_sprite_draw_packets(std::vector<GpuSpriteDrawPacket>& packets);
 
 } // namespace runtime_gpu_renderer_detail
 
@@ -53,9 +58,7 @@ public:
 private:
     struct FrameStats {
         std::uint32_t render_pass_count = 0;
-        std::uint32_t floor_draw_count = 0;
-        std::uint32_t floor_sprite_draw_count = 0;
-        std::uint32_t layer_sprite_draw_count = 0;
+        std::uint32_t scene_sprite_draw_count = 0;
         std::uint32_t debug_overlay_draw_count = 0;
         std::uint32_t draw_call_count = 0;
     };

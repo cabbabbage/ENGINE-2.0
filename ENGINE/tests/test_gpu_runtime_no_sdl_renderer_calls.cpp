@@ -221,7 +221,7 @@ TEST_CASE("GPU runtime scene submit executes and presents") {
     SDL_DestroyWindow(window);
 }
 
-TEST_CASE("GPU runtime map floor packet helper emits packets for chunk tiles") {
+TEST_CASE("GPU runtime floor tile packet helper emits packets for chunk tiles") {
     ScopedSdlVideo sdl_video{};
     REQUIRE(sdl_video.initialized());
 
@@ -252,7 +252,7 @@ TEST_CASE("GPU runtime map floor packet helper emits packets for chunk tiles") {
     WarpedScreenGrid grid(128, 128, make_starting_area());
     std::vector<world::Chunk*> chunks{&chunk};
     std::vector<GpuSpriteDrawPacket> packets{};
-    REQUIRE(runtime_gpu_renderer_detail::build_map_floor_tile_draw_packets(
+    REQUIRE(runtime_gpu_renderer_detail::build_floor_tile_draw_packets(
         grid,
         chunks,
         128u,
@@ -265,17 +265,74 @@ TEST_CASE("GPU runtime map floor packet helper emits packets for chunk tiles") {
     SDL_DestroyWindow(window);
 }
 
-TEST_CASE("GPU runtime floor-tagged packet classification routes to floor and layer packets") {
-    GpuSceneFrameData frame_data{};
+TEST_CASE("GPU runtime classified packet helper routes to floor and layer packets") {
+    std::vector<GpuSpriteDrawPacket> floor_draws{};
+    std::vector<GpuSpriteDrawPacket> layer_draws{};
     GpuSpriteDrawPacket packet{};
 
-    runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(true, packet, frame_data);
-    CHECK(frame_data.floor_sprite_draws.size() == 1);
-    CHECK(frame_data.layer_draws.empty());
+    runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(true,
+                                                                      packet,
+                                                                      floor_draws,
+                                                                      layer_draws);
+    CHECK(floor_draws.size() == 1);
+    CHECK(layer_draws.empty());
 
-    runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(false, packet, frame_data);
-    CHECK(frame_data.floor_sprite_draws.size() == 1);
-    CHECK(frame_data.layer_draws.size() == 1);
+    runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(false,
+                                                                      packet,
+                                                                      floor_draws,
+                                                                      layer_draws);
+    CHECK(floor_draws.size() == 1);
+    CHECK(layer_draws.size() == 1);
+}
+
+TEST_CASE("GPU runtime floor packet helper preserves deterministic generation order") {
+    ScopedSdlVideo sdl_video{};
+    REQUIRE(sdl_video.initialized());
+
+    SDL_Window* window = SDL_CreateWindow("gpu_runtime_floor_packet_order", 128, 128, SDL_WINDOW_HIDDEN);
+    REQUIRE(window != nullptr);
+    SDL_Renderer* renderer = create_gpu_renderer(window);
+    if (!renderer || !renderer_has_gpu_device(renderer)) {
+        if (renderer) {
+            SDL_DestroyRenderer(renderer);
+        }
+        SDL_DestroyWindow(window);
+        return;
+    }
+
+    SDL_Texture* tile_texture = SDL_CreateTexture(renderer,
+                                                  SDL_PIXELFORMAT_RGBA8888,
+                                                  SDL_TEXTUREACCESS_STATIC,
+                                                  8,
+                                                  8);
+    REQUIRE(tile_texture != nullptr);
+
+    world::Chunk chunk{};
+    GridTile first_tile{};
+    first_tile.world_rect = SDL_Rect{32, 0, 32, 32};
+    first_tile.texture = tile_texture;
+    chunk.tiles.push_back(first_tile);
+    GridTile second_tile{};
+    second_tile.world_rect = SDL_Rect{0, 0, 32, 32};
+    second_tile.texture = tile_texture;
+    chunk.tiles.push_back(second_tile);
+
+    WarpedScreenGrid grid(128, 128, make_starting_area());
+    std::vector<world::Chunk*> chunks{&chunk};
+    std::vector<GpuSpriteDrawPacket> packets{};
+    REQUIRE(runtime_gpu_renderer_detail::build_floor_tile_draw_packets(
+        grid,
+        chunks,
+        128u,
+        128u,
+        packets));
+    REQUIRE(packets.size() == 2);
+    CHECK(packets[0].stable_sort_id == 0u);
+    CHECK(packets[1].stable_sort_id == 1u);
+
+    chunk.releaseTileTextures();
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
 }
 
 TEST_CASE("GPU runtime composite path remains valid when one source pass is empty") {

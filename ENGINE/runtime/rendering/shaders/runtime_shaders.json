@@ -69,15 +69,15 @@
     "sprite_textured": {
       "dxil": {
         "entrypoint": "main",
-        "file_size_bytes": 3824,
-        "hash_fnv1a64": "0x05583de26470aa35",
+        "file_size_bytes": 4020,
+        "hash_fnv1a64": "0x0373c4118f3988f0",
         "path": "dxil/sprite_textured.dxil",
         "stage": "fragment"
       },
       "spirv": {
         "entrypoint": "main",
-        "file_size_bytes": 632,
-        "hash_fnv1a64": "0xd2d25aac8098b438",
+        "file_size_bytes": 736,
+        "hash_fnv1a64": "0xe40cedf40fd828f2",
         "path": "spirv/sprite_textured.spv",
         "stage": "fragment"
       }

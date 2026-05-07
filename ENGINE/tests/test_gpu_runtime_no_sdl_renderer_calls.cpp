@@ -313,6 +313,7 @@ TEST_CASE("GPU runtime frame executes staged floor/layer/composite path without 
     SDL_DestroyRenderer(software_renderer);
     SDL_DestroyWindow(software_window);
 
+    gpu_renderer.reset();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
 }
@@ -333,7 +334,7 @@ TEST_CASE("GPU runtime floor tile packet helper emits packets for chunk tiles") 
     }
 
     SDL_Texture* tile_texture = SDL_CreateTexture(renderer,
-                                                  SDL_PIXELFORMAT_RGBA8888,
+                                                  SDL_PIXELFORMAT_RGBA32,
                                                   SDL_TEXTUREACCESS_STATIC,
                                                   8,
                                                   8);
@@ -441,7 +442,7 @@ TEST_CASE("GPU runtime floor packet helper emits packets for chunk tiles") {
     }
 
     SDL_Texture* tile_texture = SDL_CreateTexture(renderer,
-                                                  SDL_PIXELFORMAT_RGBA8888,
+                                                  SDL_PIXELFORMAT_RGBA32,
                                                   SDL_TEXTUREACCESS_STATIC,
                                                   8,
                                                   8);
@@ -522,6 +523,7 @@ TEST_CASE("GPU runtime render targets recreate on resize and prune inactive laye
     CHECK(gpu_renderer->find_texture_resource("runtime.scene.layer.0") != nullptr);
     render_diagnostics::end_frame();
 
+    gpu_renderer.reset();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
 }
@@ -539,7 +541,7 @@ TEST_CASE("CacheManager unregisters prepared GPU uploads before texture destruct
         return;
     }
 
-    SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA32);
     REQUIRE(surface != nullptr);
     SDL_FillSurfaceRect(surface, nullptr, 0xFF806040u);
 
@@ -586,7 +588,7 @@ TEST_CASE("GPU runtime texture resolve uploads prepared loading-step textures wi
         return;
     }
 
-    SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA32);
     REQUIRE(surface != nullptr);
     SDL_FillSurfaceRect(surface, nullptr, 0xFF4020FFu);
     SDL_Texture* prepared_texture = CacheManager::surface_to_texture(software_renderer, surface);
@@ -637,7 +639,7 @@ TEST_CASE("GPU runtime resolves animation cloner derived frame textures from pre
         return;
     }
 
-    SDL_Surface* surface = SDL_CreateSurface(4, 2, SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface* surface = SDL_CreateSurface(4, 2, SDL_PIXELFORMAT_RGBA32);
     REQUIRE(surface != nullptr);
     SDL_FillSurfaceRect(surface, nullptr, 0xFF2040FFu);
     SDL_Texture* source_texture = CacheManager::surface_to_texture(loading_renderer, surface);
@@ -662,7 +664,7 @@ TEST_CASE("GPU runtime resolves animation cloner derived frame textures from pre
     Animation cloned_animation;
     REQUIRE(AnimationCloner::Clone(source_animation, cloned_animation, options, loading_renderer, info));
     REQUIRE(cloned_animation.cached_frame_count() == 1);
-    REQUIRE(cloned_animation.cached_frames()[0].textures.size() == 1);
+    REQUIRE_FALSE(cloned_animation.cached_frames()[0].textures.empty());
     SDL_Texture* cloned_texture = cloned_animation.cached_frames()[0].textures[0];
     REQUIRE(cloned_texture != nullptr);
     REQUIRE(cloned_texture != source_texture);
@@ -712,7 +714,7 @@ TEST_CASE("GPU runtime texture resolve rejects non-bridged textures without read
     }
 
     SDL_Texture* software_texture = SDL_CreateTexture(software_renderer,
-                                                      SDL_PIXELFORMAT_RGBA8888,
+                                                      SDL_PIXELFORMAT_RGBA32,
                                                       SDL_TEXTUREACCESS_STATIC,
                                                       4,
                                                       4);

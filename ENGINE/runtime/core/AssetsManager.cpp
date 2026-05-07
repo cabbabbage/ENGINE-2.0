@@ -3404,6 +3404,14 @@ SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
         SDL_SetTextureScaleMode(runtime_ui_overlay_texture_, SDL_SCALEMODE_NEAREST);
     }
 
+    SDL_Texture* previous_target = SDL_GetRenderTarget(active_renderer);
+    if (!SDL_SetRenderTarget(active_renderer, runtime_ui_overlay_texture_)) {
+        vibble::log::warn("[Assets] Failed to validate GPU UI overlay target: " + std::string(SDL_GetError()));
+        SDL_SetRenderTarget(active_renderer, previous_target);
+        return nullptr;
+    }
+    SDL_SetRenderTarget(active_renderer, previous_target);
+
     render_overlays(active_renderer, runtime_ui_overlay_texture_);
     if (!SDL_FlushRenderer(active_renderer)) {
         vibble::log::warn("[Assets] SDL_FlushRenderer failed after UI overlay target render: " +
@@ -3420,7 +3428,13 @@ void Assets::render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target
 
     if (renderer) {
         previous_target = SDL_GetRenderTarget(renderer);
-        SDL_SetRenderTarget(renderer, rendering_to_overlay_target ? overlay_target : nullptr);
+        if (!SDL_SetRenderTarget(renderer, rendering_to_overlay_target ? overlay_target : nullptr)) {
+            vibble::log::warn("[Assets] Failed to bind overlay render target: " + std::string(SDL_GetError()));
+            if (rendering_to_overlay_target) {
+                SDL_SetRenderTarget(renderer, previous_target);
+            }
+            return;
+        }
         SDL_SetRenderViewport(renderer, nullptr);
         SDL_SetRenderClipRect(renderer, nullptr);
         if (rendering_to_overlay_target) {

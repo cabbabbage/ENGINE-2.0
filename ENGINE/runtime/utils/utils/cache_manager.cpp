@@ -257,6 +257,8 @@ bool upload_surface_via_transfer_buffer(SDL_Renderer* renderer,
                 uploaded = SDL_SubmitGPUCommandBuffer(command_buffer);
                 if (!uploaded) {
                     SDL_CancelGPUCommandBuffer(command_buffer);
+                } else {
+                    SDL_WaitForGPUIdle(gpu_device);
                 }
             } else {
                 SDL_CancelGPUCommandBuffer(command_buffer);
@@ -337,6 +339,8 @@ bool upload_prepared_pixels_to_gpu_texture(SDL_GPUDevice* gpu_device,
                 uploaded = SDL_SubmitGPUCommandBuffer(command_buffer);
                 if (!uploaded) {
                     SDL_CancelGPUCommandBuffer(command_buffer);
+                } else {
+                    SDL_WaitForGPUIdle(gpu_device);
                 }
             } else {
                 SDL_CancelGPUCommandBuffer(command_buffer);

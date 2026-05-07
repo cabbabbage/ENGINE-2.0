@@ -128,7 +128,8 @@ public:
                                 std::string& out_error);
     SDL_GPUBuffer* find_buffer_resource(const std::string& logical_name) const;
     SDL_GPUGraphicsPipeline* resolve_graphics_pipeline(const std::string& pipeline_name,
-                                                       std::uint32_t render_state_key);
+                                                       std::uint32_t render_state_key,
+                                                       SDL_GPUTextureFormat color_target_format = SDL_GPU_TEXTUREFORMAT_INVALID);
     bool ensure_sampler_resource(const std::string& logical_name,
                                  const SamplerResourceSpec& spec,
                                  std::string& out_error);
@@ -166,7 +167,8 @@ private:
 
     explicit GpuSceneRenderer(std::unique_ptr<GpuRenderDevice> device);
     ShaderPipelineKey make_pipeline_key(const std::string& shader_name,
-                                        std::uint32_t render_state_key = 0) const;
+                                        std::uint32_t render_state_key = 0,
+                                        SDL_GPUTextureFormat color_target_format = SDL_GPU_TEXTUREFORMAT_INVALID) const;
     const ShaderPackageLibrary::ShaderBinaryDescriptor* select_backend_binary(
         const ShaderPackageLibrary::ShaderVariantPath& variant) const;
     bool warmup_required_pipelines(std::string& out_error);
@@ -183,7 +185,8 @@ private:
                                  std::uint32_t num_uniform_buffers,
                                  std::string& out_error) const;
     SDL_GPUGraphicsPipeline* get_graphics_pipeline(const std::string& pipeline_name,
-                                                   std::uint32_t render_state_key);
+                                                   std::uint32_t render_state_key,
+                                                   SDL_GPUTextureFormat color_target_format = SDL_GPU_TEXTUREFORMAT_INVALID);
     SDL_GPUComputePipeline* get_compute_pipeline(const std::string& pipeline_name,
                                                  std::uint32_t render_state_key);
 

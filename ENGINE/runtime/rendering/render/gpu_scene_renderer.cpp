@@ -8,6 +8,7 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -289,6 +290,7 @@ bool render_sprite_draw_batch(GpuSceneRenderer& renderer,
                               const std::vector<GpuSpriteDrawPacket>& draws,
                               const char* pipeline_name,
                               std::uint32_t render_state_key,
+                              SDL_GPUTextureFormat color_target_format,
                               std::string_view pass_name,
                               std::string& out_error) {
     out_error.clear();
@@ -304,7 +306,8 @@ bool render_sprite_draw_batch(GpuSceneRenderer& renderer,
         return false;
     }
 
-    SDL_GPUGraphicsPipeline* pipeline = renderer.resolve_graphics_pipeline(pipeline_name, render_state_key);
+    SDL_GPUGraphicsPipeline* pipeline =
+        renderer.resolve_graphics_pipeline(pipeline_name, render_state_key, color_target_format);
     if (!pipeline) {
         out_error = "Failed to resolve graphics pipeline '" +
                     std::string(pipeline_name ? pipeline_name : "<null>") + "'.";
@@ -430,6 +433,10 @@ std::string runtime_layer_target_name(int depth_layer) {
     return "runtime.scene.layer." + std::to_string(depth_layer);
 }
 
+std::string runtime_processed_layer_target_name(int depth_layer) {
+    return "runtime.scene.processed_layer." + std::to_string(depth_layer);
+}
+
 std::string runtime_blur_target_a_name() {
     return "runtime.scene.blur.a";
 }
@@ -445,6 +452,7 @@ SDL_FColor blur_modulate(float direction_x, float direction_y, float blur_streng
 struct RenderTargetPassContext {
     SDL_GPUCommandBuffer* command_buffer = nullptr;
     SDL_GPUTexture* target_texture = nullptr;
+    bool cycle_target = true;
 };
 
 bool begin_target_render_pass(const RenderTargetPassContext& context,
@@ -468,7 +476,7 @@ bool begin_target_render_pass(const RenderTargetPassContext& context,
     target_info.resolve_texture = nullptr;
     target_info.resolve_mip_level = 0;
     target_info.resolve_layer = 0;
-    target_info.cycle = target_info.load_op != SDL_GPU_LOADOP_LOAD;
+    target_info.cycle = context.cycle_target && target_info.load_op != SDL_GPU_LOADOP_LOAD;
     target_info.cycle_resolve_texture = false;
 
     out_render_pass = SDL_BeginGPURenderPass(context.command_buffer, &target_info, 1, nullptr);
@@ -483,7 +491,9 @@ bool render_packet_batch_to_target(GpuSceneRenderer& renderer,
                                    std::uint32_t render_state_key,
                                    const SDL_FColor& clear_color,
                                    std::string_view pass_name,
-                                   std::string& out_error) {
+                                   std::string& out_error,
+                                   bool cycle_target = true,
+                                   SDL_GPUTextureFormat color_target_format = SDL_GPU_TEXTUREFORMAT_INVALID) {
     out_error.clear();
     if (!command_buffer) {
         out_error = "Command buffer was null.";
@@ -495,7 +505,9 @@ bool render_packet_batch_to_target(GpuSceneRenderer& renderer,
     }
 
     SDL_GPURenderPass* render_pass = nullptr;
-    if (!begin_target_render_pass(RenderTargetPassContext{command_buffer, target_texture}, clear_color, render_pass)) {
+    if (!begin_target_render_pass(RenderTargetPassContext{command_buffer, target_texture, cycle_target},
+                                  clear_color,
+                                  render_pass)) {
         out_error = "SDL_BeginGPURenderPass failed for pass '" + std::string(pass_name) +
                     "': " + SDL_GetError();
         return false;
@@ -503,7 +515,14 @@ bool render_packet_batch_to_target(GpuSceneRenderer& renderer,
     render_diagnostics::add_render_pass();
 
     const bool rendered =
-        render_sprite_draw_batch(renderer, render_pass, packets, pipeline_name, render_state_key, pass_name, out_error);
+        render_sprite_draw_batch(renderer,
+                                 render_pass,
+                                 packets,
+                                 pipeline_name,
+                                 render_state_key,
+                                 color_target_format,
+                                 pass_name,
+                                 out_error);
     SDL_EndGPURenderPass(render_pass);
     return rendered;
 }
@@ -519,6 +538,7 @@ struct ActiveDepthLayerRuntimeState {
 bool render_depth_layer_blur_chain(GpuSceneRenderer& renderer,
                                    SDL_GPUCommandBuffer* command_buffer,
                                    SDL_GPUTexture* source_texture,
+                                   SDL_GPUTexture* resolve_texture,
                                    SDL_GPUTexture* blur_target_a,
                                    SDL_GPUTexture* blur_target_b,
                                    std::uint32_t target_width,
@@ -530,7 +550,7 @@ bool render_depth_layer_blur_chain(GpuSceneRenderer& renderer,
     if (blur_strength_px <= 0.0f) {
         return true;
     }
-    if (!source_texture || !blur_target_a || !blur_target_b) {
+    if (!source_texture || !resolve_texture || !blur_target_a || !blur_target_b) {
         out_error = "Blur target resources were unavailable for depth layer " + std::to_string(depth_layer) + ".";
         return false;
     }
@@ -577,7 +597,7 @@ bool render_depth_layer_blur_chain(GpuSceneRenderer& renderer,
                                                        target_height));
     if (!render_packet_batch_to_target(renderer,
                                        command_buffer,
-                                       source_texture,
+                                       resolve_texture,
                                        copy_packets,
                                        "sprite_textured",
                                        0x2200u,
@@ -650,11 +670,14 @@ std::unique_ptr<GpuSceneRenderer> GpuSceneRenderer::Create(SDL_Renderer* rendere
 }
 
 ShaderPipelineKey GpuSceneRenderer::make_pipeline_key(const std::string& shader_name,
-                                                      std::uint32_t render_state_key) const {
+                                                       std::uint32_t render_state_key,
+                                                       SDL_GPUTextureFormat color_target_format) const {
     ShaderPipelineKey key{};
     key.shader_id = shader_name;
     key.variant = backend_shader_variant_;
-    key.color_format = device_ ? device_->format_policy().albedo_format : SDL_GPU_TEXTUREFORMAT_INVALID;
+    key.color_format = color_target_format != SDL_GPU_TEXTUREFORMAT_INVALID
+        ? color_target_format
+        : (device_ ? device_->format_policy().albedo_format : SDL_GPU_TEXTUREFORMAT_INVALID);
     // Runtime frame graph uses a dedicated present state key for the swapchain pass.
     // Ensure that pipeline targets the real swapchain format when available.
     if (device_ &&
@@ -1060,7 +1083,14 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
     render_diagnostics::set_packets_per_depth_layer(join_packets_per_layer_summary(frame_data.depth_layers));
     render_diagnostics::set_blur_strength_per_layer(join_blur_strength_summary(frame_data.depth_layers));
     render_diagnostics::set_clear_executed(true);
+    const bool debug_passes = std::getenv("VIBBLE_GPU_RENDER_DEBUG") != nullptr;
+    const auto debug_log = [debug_passes](const std::string& message) {
+        if (debug_passes) {
+            vibble::log::info("[GpuSceneRenderer] " + message);
+        }
+    };
 
+    debug_log("ensure floor target");
     if (!ensure_texture_resource(runtime_floor_target_name(), layer_spec, out_error)) {
         return false;
     }
@@ -1074,6 +1104,8 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
     active_layers.reserve(frame_data.depth_layers.size());
     std::unordered_set<std::string> retained_layer_targets{};
     retained_layer_targets.reserve(frame_data.depth_layers.size());
+    std::unordered_set<std::string> retained_processed_layer_targets{};
+    retained_processed_layer_targets.reserve(frame_data.depth_layers.size());
 
     bool blur_chain_required = false;
     for (const GpuDepthLayerDrawPackets& depth_layer : frame_data.depth_layers) {
@@ -1102,6 +1134,7 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
     const std::string blur_target_a_name = runtime_blur_target_a_name();
     const std::string blur_target_b_name = runtime_blur_target_b_name();
     if (blur_chain_required) {
+        debug_log("ensure blur targets");
         if (!ensure_texture_resource(blur_target_a_name, layer_spec, out_error)) {
             return false;
         }
@@ -1113,6 +1146,7 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
         (void)release_texture_resource(blur_target_b_name);
     }
 
+    debug_log("render floor pass");
     if (!render_packet_batch_to_target(*this,
                                        frame_state.command_buffer,
                                        floor_target,
@@ -1124,12 +1158,14 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
                                        out_error)) {
         return false;
     }
+    debug_log("floor pass complete");
 
     std::uint32_t blur_pass_count = 0;
     for (std::size_t i = 0; i < active_layers.size(); ++i) {
         const GpuDepthLayerDrawPackets& source_layer = frame_data.depth_layers[i];
         ActiveDepthLayerRuntimeState& state = active_layers[i];
 
+        debug_log("render layer pass " + std::to_string(state.depth_layer));
         if (!render_packet_batch_to_target(*this,
                                            frame_state.command_buffer,
                                            state.layer_target,
@@ -1141,13 +1177,27 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
                                            out_error)) {
             return false;
         }
+        debug_log("layer pass complete " + std::to_string(state.depth_layer));
 
         if (state.blur_strength_px > 0.0f && state.depth_layer != 0) {
             SDL_GPUTexture* blur_a = find_texture_resource(blur_target_a_name);
             SDL_GPUTexture* blur_b = find_texture_resource(blur_target_b_name);
+            const std::string processed_target_name = runtime_processed_layer_target_name(state.depth_layer);
+            retained_processed_layer_targets.insert(processed_target_name);
+            if (!ensure_texture_resource(processed_target_name, layer_spec, out_error)) {
+                return false;
+            }
+            SDL_GPUTexture* processed_target = find_texture_resource(processed_target_name);
+            if (!processed_target) {
+                out_error = "Processed depth-layer target was unavailable for layer " +
+                            std::to_string(state.depth_layer) + ".";
+                return false;
+            }
+            debug_log("render blur chain " + std::to_string(state.depth_layer));
             if (!render_depth_layer_blur_chain(*this,
                                                frame_state.command_buffer,
                                                state.layer_target,
+                                               processed_target,
                                                blur_a,
                                                blur_b,
                                                target_width,
@@ -1157,6 +1207,8 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
                                                out_error)) {
                 return false;
             }
+            state.processed_texture = processed_target;
+            debug_log("blur chain complete " + std::to_string(state.depth_layer));
             state.blur_strength_px = std::max(0.0f, state.blur_strength_px);
             blur_pass_count += 3;
         }
@@ -1164,6 +1216,7 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
 
     render_diagnostics::set_blur_pass_count(blur_pass_count);
     release_texture_resources_with_prefix("runtime.scene.layer.", retained_layer_targets);
+    release_texture_resources_with_prefix("runtime.scene.processed_layer.", retained_processed_layer_targets);
 
     const bool has_ui_overlay = frame_data.ui_overlay_gpu_texture != nullptr;
     std::vector<GpuSpriteDrawPacket> composite_packets{};
@@ -1185,6 +1238,7 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
 
     render_diagnostics::set_composite_layers_submitted(join_composite_summary(active_layers, has_ui_overlay));
 
+    debug_log("render present pass");
     if (!render_packet_batch_to_target(*this,
                                        frame_state.command_buffer,
                                        frame_state.swapchain_texture,
@@ -1193,9 +1247,12 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
                                        0x2100u,
                                        clear_color,
                                        "runtime_scene.present",
-                                       out_error)) {
+                                       out_error,
+                                       false,
+                                       device_->swapchain_format())) {
         return false;
     }
+    debug_log("present pass complete");
 
     return true;
 }
@@ -1229,10 +1286,16 @@ bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::st
         return false;
     }
 
+    if (std::getenv("VIBBLE_GPU_RENDER_DEBUG")) {
+        vibble::log::info("[GpuSceneRenderer] submitting frame");
+    }
     if (!device_->end_frame(true, frame_error)) {
         render_diagnostics::set_submit_result(false);
         out_error = "Failed to submit GPU frame: " + frame_error;
         return false;
+    }
+    if (std::getenv("VIBBLE_GPU_RENDER_DEBUG")) {
+        vibble::log::info("[GpuSceneRenderer] submit complete");
     }
     render_diagnostics::set_submit_result(true);
 
@@ -1253,9 +1316,10 @@ bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::st
 }
 
 SDL_GPUGraphicsPipeline* GpuSceneRenderer::get_graphics_pipeline(const std::string& pipeline_name,
-                                                                 std::uint32_t render_state_key) {
+                                                                 std::uint32_t render_state_key,
+                                                                 SDL_GPUTextureFormat color_target_format) {
     std::string pipeline_error;
-    const ShaderPipelineKey key = make_pipeline_key(pipeline_name, render_state_key);
+    const ShaderPipelineKey key = make_pipeline_key(pipeline_name, render_state_key, color_target_format);
     SDL_GPUGraphicsPipeline* pipeline = pipeline_cache_.get_or_create_graphics_pipeline(
         key,
         [&]() { return create_graphics_pipeline(pipeline_name, key.color_format, pipeline_error); });
@@ -1267,8 +1331,9 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::get_graphics_pipeline(const std::stri
 }
 
 SDL_GPUGraphicsPipeline* GpuSceneRenderer::resolve_graphics_pipeline(const std::string& pipeline_name,
-                                                                     std::uint32_t render_state_key) {
-    return get_graphics_pipeline(pipeline_name, render_state_key);
+                                                                     std::uint32_t render_state_key,
+                                                                     SDL_GPUTextureFormat color_target_format) {
+    return get_graphics_pipeline(pipeline_name, render_state_key, color_target_format);
 }
 
 SDL_GPUComputePipeline* GpuSceneRenderer::get_compute_pipeline(const std::string& pipeline_name,
@@ -1336,6 +1401,7 @@ bool GpuSceneRenderer::end_frame(std::string* out_error) {
     GpuFrameGraph::ExecuteContext execute_context{};
     execute_context.command_buffer = frame_state.command_buffer;
     execute_context.swapchain_texture = frame_state.swapchain_texture;
+    execute_context.swapchain_format = device_ ? device_->swapchain_format() : SDL_GPU_TEXTUREFORMAT_INVALID;
     execute_context.swapchain_width = frame_state.swapchain_width;
     execute_context.swapchain_height = frame_state.swapchain_height;
     execute_context.resolve_texture = [this](const std::string& name) {
@@ -1347,8 +1413,9 @@ bool GpuSceneRenderer::end_frame(std::string* out_error) {
     execute_context.resolve_buffer = [this](const std::string& name) {
         return find_buffer_resource(name);
     };
-    execute_context.resolve_graphics_pipeline = [this](const std::string& name, std::uint32_t state_key) {
-        return get_graphics_pipeline(name, state_key);
+    execute_context.resolve_graphics_pipeline =
+        [this](const std::string& name, std::uint32_t state_key, SDL_GPUTextureFormat color_target_format) {
+            return get_graphics_pipeline(name, state_key, color_target_format);
     };
     execute_context.resolve_compute_pipeline = [this](const std::string& name, std::uint32_t state_key) {
         return get_compute_pipeline(name, state_key);
@@ -1763,6 +1830,7 @@ void GpuSceneRenderer::release_runtime_resources() {
         sampler_resources_.clear();
         return;
     }
+    SDL_WaitForGPUIdle(device_->gpu_device());
     for (auto& entry : texture_resources_) {
         if (entry.second.texture) {
             SDL_ReleaseGPUTexture(device_->gpu_device(), entry.second.texture);

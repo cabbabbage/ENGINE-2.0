@@ -33,7 +33,7 @@ std::uint64_t estimate_texture_bytes(SDL_Texture* texture) {
         return 0;
     }
 
-    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA8888;
+    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA32;
     if (SDL_PropertiesID props = SDL_GetTextureProperties(texture)) {
         format = static_cast<SDL_PixelFormat>(
             SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, static_cast<Sint64>(format)));

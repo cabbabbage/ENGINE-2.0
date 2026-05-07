@@ -66,7 +66,7 @@ SDL_Texture* clone_texture(SDL_Texture* src,
         return nullptr;
     }
 
-    SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
+    SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA32;
     int tex_w = width_hint;
     int tex_h = height_hint;
 

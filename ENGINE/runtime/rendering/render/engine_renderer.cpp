@@ -384,7 +384,7 @@ SDL_Renderer* create_renderer_with_properties(SDL_PropertiesID props, const char
 
 bool probe_render_target_support(SDL_Renderer* renderer) {
     SDL_Texture* probe = SDL_CreateTexture(renderer,
-                                           SDL_PIXELFORMAT_RGBA8888,
+                                           SDL_PIXELFORMAT_RGBA32,
                                            SDL_TEXTUREACCESS_TARGET,
                                            4, 4);
     if (!probe) {
@@ -396,7 +396,7 @@ bool probe_render_target_support(SDL_Renderer* renderer) {
 
 bool probe_texture_scale_mode(SDL_Renderer* renderer) {
     SDL_Texture* probe = SDL_CreateTexture(renderer,
-                                           SDL_PIXELFORMAT_RGBA8888,
+                                           SDL_PIXELFORMAT_RGBA32,
                                            SDL_TEXTUREACCESS_STATIC,
                                            2, 2);
     if (!probe) {

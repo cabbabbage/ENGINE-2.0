@@ -291,7 +291,7 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     auto clone_texture = [&](SDL_Texture* src, int width_hint, int height_hint, SDL_FlipMode flip_flags, int* out_w = nullptr, int* out_h = nullptr) -> SDL_Texture* {
         if (!src) return nullptr;
 
-        SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
+        SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA32;
         int access = 0;
         int tex_w = width_hint;
         int tex_h = height_hint;

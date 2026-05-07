@@ -94,11 +94,14 @@ public:
     struct ExecuteContext {
         SDL_GPUCommandBuffer* command_buffer = nullptr;
         SDL_GPUTexture* swapchain_texture = nullptr;
+        SDL_GPUTextureFormat swapchain_format = SDL_GPU_TEXTUREFORMAT_INVALID;
         std::uint32_t swapchain_width = 0;
         std::uint32_t swapchain_height = 0;
         std::function<SDL_GPUTexture*(const std::string&)> resolve_texture{};
         std::function<SDL_GPUSampler*(const std::string&)> resolve_sampler{};
-        std::function<SDL_GPUGraphicsPipeline*(const std::string&, std::uint32_t)> resolve_graphics_pipeline{};
+        std::function<SDL_GPUGraphicsPipeline*(const std::string&,
+                                               std::uint32_t,
+                                               SDL_GPUTextureFormat)> resolve_graphics_pipeline{};
         std::function<SDL_GPUComputePipeline*(const std::string&, std::uint32_t)> resolve_compute_pipeline{};
         std::function<SDL_GPUBuffer*(const std::string&)> resolve_buffer{};
     };

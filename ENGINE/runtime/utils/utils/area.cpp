@@ -310,7 +310,7 @@ void Area::create_area_texture(SDL_Renderer* renderer) {
 	auto [minx, miny, maxx, maxy] = get_bounds();
 	int w = maxx - minx + 1;
 	int h = maxy - miny + 1;
-	SDL_Texture* target = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA8888), SDL_TEXTUREACCESS_TARGET, w, h);
+	SDL_Texture* target = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA32), SDL_TEXTUREACCESS_TARGET, w, h);
 	if (!target) return;
 	SDL_Texture* prev_target = SDL_GetRenderTarget(renderer);
 	SDL_SetRenderTarget(renderer, target);

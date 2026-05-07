@@ -377,22 +377,56 @@ bool bundle_contains_required_folder_animations(const CacheManager::BundleData& 
     return true;
 }
 
+bool is_transparent_placeholder_layer(const CacheManager::BundleFrameLayer& layer) {
+    return layer.width == 1 &&
+           layer.height == 1 &&
+           layer.pitch == 4 &&
+           layer.pixels.size() == 4 &&
+           std::all_of(layer.pixels.begin(), layer.pixels.end(), [](std::uint8_t byte) {
+               return byte == 0;
+           });
+}
+
+bool bundle_contains_transparent_placeholder_for_required_folder_animations(
+    const CacheManager::BundleData& bundle,
+    const FolderAnimationCacheState& cache_state) {
+    for (const auto& animation_name : cache_state.required_folder_animations) {
+        const CacheManager::BundleAnimation* animation = find_bundle_animation(bundle, animation_name);
+        if (!animation) {
+            continue;
+        }
+        for (const auto& frame : animation->frames) {
+            for (const auto& variant : frame.variants) {
+                if (!variant.use_atlas && is_transparent_placeholder_layer(variant.base)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 struct BundleValidationResult {
     bool variant_layout_ok = true;
     bool required_animations_ok = true;
+    bool placeholder_policy_ok = true;
 
     bool ready() const {
         return variant_layout_ok &&
-               required_animations_ok;
+               required_animations_ok &&
+               placeholder_policy_ok;
     }
 };
 
 BundleValidationResult validate_loaded_bundle(const CacheManager::BundleData& bundle,
                                               const fs::path& /*bundle_path*/,
-                                              const FolderAnimationCacheState& cache_state) {
+                                              const FolderAnimationCacheState& cache_state,
+                                              bool allow_placeholder_fallback) {
     BundleValidationResult result{};
     result.variant_layout_ok = bundle_variant_layout_is_valid(bundle);
     result.required_animations_ok = bundle_contains_required_folder_animations(bundle, cache_state);
+    result.placeholder_policy_ok = allow_placeholder_fallback ||
+        !bundle_contains_transparent_placeholder_for_required_folder_animations(bundle, cache_state);
     return result;
 }
 
@@ -403,6 +437,9 @@ std::string describe_bundle_validation_failure(const BundleValidationResult& val
     }
     if (!validation.variant_layout_ok) {
         reasons.emplace_back("missing full-resolution or inconsistent variant metadata");
+    }
+    if (!validation.placeholder_policy_ok) {
+        reasons.emplace_back("transparent placeholder frame present without explicit fallback policy");
     }
 
     if (reasons.empty()) {
@@ -443,7 +480,7 @@ bool PrimaryAssetCache::load_cached_only(AssetInfo& info,
     }
 
     const BundleValidationResult validation =
-        validate_loaded_bundle(bundle, bundle_path, cache_state);
+        validate_loaded_bundle(bundle, bundle_path, cache_state, false);
     if (!validation.ready()) {
         vibble::log::info("[PrimaryAssetCache] Cached-only bundle rejected for " + info.name +
                           " (" + describe_bundle_validation_failure(validation) + ").");
@@ -464,7 +501,8 @@ bool PrimaryAssetCache::load_cached_only(AssetInfo& info,
 bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
                                            CacheManager::BundleData* out_bundle,
                                            const std::unordered_set<std::string>* animation_filter,
-                                           WarmupOutcome* out_outcome) {
+                                           WarmupOutcome* out_outcome,
+                                           bool allow_placeholder_fallback) {
     const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
     const bool has_animation_filter = animation_filter && !animation_filter->empty();
     const FolderAnimationCacheState cache_state =
@@ -477,7 +515,7 @@ bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
     const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
     BundleValidationResult validation{};
     const bool bundle_ready = bundle_loaded
-        ? (validation = validate_loaded_bundle(bundle, bundle_path, cache_state), validation.ready())
+        ? (validation = validate_loaded_bundle(bundle, bundle_path, cache_state, allow_placeholder_fallback), validation.ready())
         : false;
     if (bundle_ready) {
         if (out_outcome) {
@@ -498,7 +536,7 @@ bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
     }
 
     CacheManager::BundleData rebuilt;
-    if (!build_bundle_from_sources(info, rebuilt, animation_filter)) {
+    if (!build_bundle_from_sources(info, rebuilt, animation_filter, allow_placeholder_fallback)) {
         vibble::log::warn("[PrimaryAssetCache] Failed to build bundle cache from source for " + info.name + ".");
         return false;
     }
@@ -675,7 +713,8 @@ bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& ani
 
 bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                                                   CacheManager::BundleData& out_data,
-                                                  const std::unordered_set<std::string>* animation_filter) {
+                                                  const std::unordered_set<std::string>* animation_filter,
+                                                  bool allow_placeholder_fallback) {
     out_data = CacheManager::BundleData{};
     out_data.version = 1;
     out_data.metadata_snapshot = info.info_json_;
@@ -708,9 +747,14 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
             const int cached_frame_count = count_sequential_png(cache_normal_100);
             const int frame_count = std::max(source_frame_count, cached_frame_count);
             if (frame_count <= 0) {
-                vibble::log::warn("[PrimaryAssetCache] No source frames found for " + info.name +
-                                  "::" + bundle_anim.name + " in '" + folder.generic_string() +
-                                  "'; injecting a transparent placeholder frame.");
+                if (!allow_placeholder_fallback) {
+                    vibble::log::warn("[PrimaryAssetCache] No source frames found for " + info.name +
+                                      "::" + bundle_anim.name + " in '" + folder.generic_string() +
+                                      "'; transparent placeholder fallback is disabled, so cache build fails.");
+                    return false;
+                }
+                vibble::log::warn("[PrimaryAssetCache] Intentional fallback policy enabled for " + info.name +
+                                  "::" + bundle_anim.name + "; injecting a transparent placeholder frame.");
                 bundle_anim.frames.push_back(make_placeholder_frame(bundle_anim.variant_steps));
                 out_data.animations.push_back(std::move(bundle_anim));
                 continue;
@@ -729,8 +773,14 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                     folder / frame_name,
                 });
                 if (base_layer.empty()) {
-                    if (!warned_missing_base_frame) {
+                    if (!allow_placeholder_fallback) {
                         vibble::log::warn("[PrimaryAssetCache] Missing base frame data for " + info.name +
+                                          "::" + bundle_anim.name +
+                                          "; transparent frame fallback is disabled, so cache build fails.");
+                        return false;
+                    }
+                    if (!warned_missing_base_frame) {
+                        vibble::log::warn("[PrimaryAssetCache] Intentional fallback policy enabled for " + info.name +
                                           "::" + bundle_anim.name +
                                           "; injecting transparent fallback for unavailable frame(s).");
                         warned_missing_base_frame = true;
@@ -885,8 +935,9 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
 bool PrimaryAssetCache::load_or_build(AssetInfo& info,
                                       std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                                       CacheManager::BundleData& raw_bundle,
-                                      const std::unordered_set<std::string>* animation_filter) {
-    if (!ensure_cache_ready(info, &raw_bundle, animation_filter)) {
+                                      const std::unordered_set<std::string>* animation_filter,
+                                      bool allow_placeholder_fallback) {
+    if (!ensure_cache_ready(info, &raw_bundle, animation_filter, nullptr, allow_placeholder_fallback)) {
         return false;
     }
 

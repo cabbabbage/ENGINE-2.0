@@ -34,7 +34,8 @@ public:
     bool ensure_cache_ready(class AssetInfo& info,
                             CacheManager::BundleData* out_bundle = nullptr,
                             const std::unordered_set<std::string>* animation_filter = nullptr,
-                            WarmupOutcome* out_outcome = nullptr);
+                            WarmupOutcome* out_outcome = nullptr,
+                            bool allow_placeholder_fallback = false);
     bool load_cached_only(class AssetInfo& info,
                           std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                           CacheManager::BundleData& raw_bundle,
@@ -42,7 +43,8 @@ public:
     bool load_or_build(class AssetInfo& info,
                        std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                        CacheManager::BundleData& raw_bundle,
-                       const std::unordered_set<std::string>* animation_filter = nullptr);
+                       const std::unordered_set<std::string>* animation_filter = nullptr,
+                       bool allow_placeholder_fallback = false);
 
     BatchRepairResult detect_missing_cache_files(
         const std::vector<class AssetInfo*>& infos,
@@ -62,7 +64,8 @@ private:
         bool dry_run) const;
     bool build_bundle_from_sources(const AssetInfo& info,
                                    CacheManager::BundleData& out_data,
-                                   const std::unordered_set<std::string>* animation_filter = nullptr);
+                                   const std::unordered_set<std::string>* animation_filter = nullptr,
+                                   bool allow_placeholder_fallback = false);
     bool populate_runtime_frames(const AssetInfo& info,
                                  const CacheManager::BundleData& bundle,
                                  std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,

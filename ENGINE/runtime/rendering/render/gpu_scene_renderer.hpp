@@ -24,6 +24,9 @@ struct GpuSpriteVertex {
 
 struct GpuSpriteDrawPacket {
     SDL_Texture* source_texture = nullptr;
+    SDL_GPUTexture* source_gpu_texture = nullptr;
+    std::string source_asset_name{};
+    std::string source_texture_id{};
     std::array<GpuSpriteVertex, 6> vertices{};
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
     std::uint8_t sort_group = 0;
@@ -100,6 +103,7 @@ public:
     void clear_external_texture_resources();
     SDL_GPUTexture* find_texture_resource(const std::string& logical_name) const;
     SDL_GPUTexture* resolve_gpu_texture_for_sdl_texture(SDL_Texture* texture, std::string& out_error);
+    SDL_GPUTexture* find_gpu_texture_for_sdl_texture(SDL_Texture* texture) const;
     bool ensure_buffer_resource(const std::string& logical_name,
                                 const BufferResourceSpec& spec,
                                 std::string& out_error);

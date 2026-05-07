@@ -35,10 +35,12 @@ struct GpuSpriteDrawPacket {
 };
 
 struct GpuSceneFrameData {
-    std::vector<GpuSpriteDrawPacket> scene_draws{};
-    std::uint32_t scene_sprite_draw_count = 0;
+    std::vector<GpuSpriteDrawPacket> floor_draws{};
+    std::vector<GpuSpriteDrawPacket> layer_draws{};
+    std::uint32_t floor_draw_count = 0;
+    std::uint32_t layer_sprite_draw_count = 0;
     std::uint32_t debug_overlay_draw_count = 0;
-    bool has_floor_tiles = false;
+    bool has_valid_composite_source = false;
 };
 
 class GpuSceneRenderer {

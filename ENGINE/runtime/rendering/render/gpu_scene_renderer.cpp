@@ -13,11 +13,9 @@
 
 namespace {
 
-constexpr std::array<const char*, 4> kRequiredGraphicsPipelines = {
+constexpr std::array<const char*, 2> kRequiredGraphicsPipelines = {
     "sprite_textured",
     "sprite_batched",
-    "floor_compose",
-    "final_compose",
 };
 constexpr const char* kFullscreenVertexVariant = "fullscreen_vertex";
 constexpr const char* kSpriteBatchVertexVariant = "sprite_batch_vertex";
@@ -50,30 +48,11 @@ const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::str
         ShaderResourceCounts{0u, 0u, 0u, 1u},
         ShaderResourceCounts{1u, 0u, 0u, 0u},
         true};
-    static const GraphicsPipelineShaderSpec kFinalCompose{
-        kFullscreenVertexVariant,
-        "final_compose",
-        ShaderResourceCounts{},
-        ShaderResourceCounts{2u, 0u, 0u, 0u},
-        false};
-    static const GraphicsPipelineShaderSpec kFloorCompose{
-        kFullscreenVertexVariant,
-        "floor_compose",
-        ShaderResourceCounts{},
-        ShaderResourceCounts{},
-        false};
-
     if (name == "sprite_textured") {
         return &kSpriteTextured;
     }
     if (name == "sprite_batched") {
         return &kSpriteBatched;
-    }
-    if (name == "final_compose") {
-        return &kFinalCompose;
-    }
-    if (name == "floor_compose") {
-        return &kFloorCompose;
     }
     return nullptr;
 }

@@ -2,7 +2,6 @@
 
 #include <SDL3/SDL.h>
 
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -44,7 +43,6 @@ public:
     RuntimeGpuRenderer& operator=(const RuntimeGpuRenderer&) = delete;
 
     void set_output_dimensions(int screen_width, int screen_height);
-    std::optional<SDL_Point> scene_target_size() const;
 
     bool render_frame(std::string& out_error);
 
@@ -60,10 +58,6 @@ private:
 
     bool initialize(std::string& out_error);
     bool ensure_scene_target(std::string& out_error);
-    bool ensure_authoritative_graph_resources(std::uint32_t scene_width,
-                                              std::uint32_t scene_height,
-                                              std::string& out_error);
-    bool probe_runtime_pipeline_startup(std::string& out_error);
     bool execute_gpu_frame_graph(std::string& out_error);
     bool build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std::string& out_error) const;
     std::vector<world::Chunk*> runtime_floor_chunks() const;
@@ -73,7 +67,6 @@ private:
     int screen_width_ = 1;
     int screen_height_ = 1;
 
-    GpuSceneRenderer::TextureResourceSpec scene_composite_resource_spec_{};
 
     std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
     std::unique_ptr<GpuRuntimePipeline> gpu_runtime_pipeline_;

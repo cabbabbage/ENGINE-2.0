@@ -116,17 +116,9 @@ bool GpuRuntimePipeline::ensure_resources(GpuSceneRenderer& renderer,
                                           std::uint32_t width,
                                           std::uint32_t height,
                                           std::string& out_error) const {
-    if (width == 0 || height == 0) {
-        out_error = "GPU runtime pipeline received invalid frame dimensions.";
-        return false;
-    }
-
-    const GpuSceneRenderer::TextureResourceSpec spec =
-        make_scene_texture_spec(renderer, width, height);
-
-    return renderer.ensure_texture_resource("scene.floor", spec, out_error) &&
-           renderer.ensure_texture_resource("scene.layers", spec, out_error) &&
-           renderer.ensure_texture_resource("scene.composite", spec, out_error);
+    (void)renderer; (void)width; (void)height;
+    out_error.clear();
+    return true;
 }
 
 bool GpuRuntimePipeline::ensure_shared_resources(GpuSceneRenderer& renderer,
@@ -151,123 +143,36 @@ bool GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
         return value;
     };
 
-    std::vector<ResolvedGpuSpriteDraw> map_floor_draws{};
+    std::vector<ResolvedGpuSpriteDraw> floor_tile_draws{};
     std::vector<ResolvedGpuSpriteDraw> floor_sprite_draws{};
-    std::vector<ResolvedGpuSpriteDraw> layer_draws{};
-    if (!resolve_sprite_draws(renderer,
-                              frame_data.map_floor_draws,
-                              "scene.floor_map_tiles",
-                              map_floor_draws,
-                              out_error)) {
-        return false;
-    }
-    if (!resolve_sprite_draws(renderer,
-                              frame_data.floor_sprite_draws,
-                              "scene.floor_sprites",
-                              floor_sprite_draws,
-                              out_error)) {
-        return false;
-    }
-    if (!resolve_sprite_draws(renderer, frame_data.layer_draws, "scene.layers", layer_draws, out_error)) {
+    std::vector<ResolvedGpuSpriteDraw> world_sprite_draws{};
+    if (!resolve_sprite_draws(renderer, frame_data.map_floor_draws, "scene.floor_tiles", floor_tile_draws, out_error) ||
+        !resolve_sprite_draws(renderer, frame_data.floor_sprite_draws, "scene.floor_sprites", floor_sprite_draws, out_error) ||
+        !resolve_sprite_draws(renderer, frame_data.layer_draws, "scene.world_sprites", world_sprite_draws, out_error)) {
         return false;
     }
 
-    GpuFrameGraph::PassDescriptor floor_base_pass{};
-    floor_base_pass.type = GpuFrameGraph::PassType::Render;
-    floor_base_pass.name = make_name("render_floor_base");
-    floor_base_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
-    floor_base_pass.render.pipeline_id = "floor_compose";
-    floor_base_pass.render.render_state_key = 0x2000u;
-    floor_base_pass.render.color_target = "scene.floor";
-    floor_base_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-    floor_base_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    floor_base_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
-    floor_base_pass.render.execute_default_draw = true;
-    renderer.add_pass(std::move(floor_base_pass));
+    GpuFrameGraph::PassDescriptor main_pass{};
+    main_pass.type = GpuFrameGraph::PassType::Render;
+    main_pass.name = make_name("render_main_scene");
+    main_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.swapchain")};
+    main_pass.render.pipeline_id = "sprite_batched";
+    main_pass.render.render_state_key = 0x2100u;
+    main_pass.render.use_swapchain_target = true;
+    main_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    main_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    main_pass.render.clear_color = frame_data.map_floor_draw_count == 0
+        ? SDL_FColor{0.08f, 0.02f, 0.12f, 1.0f}
+        : SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    main_pass.render.execute_default_draw = false;
 
-    GpuFrameGraph::PassDescriptor floor_tiles_pass{};
-    floor_tiles_pass.type = GpuFrameGraph::PassType::Render;
-    floor_tiles_pass.name = make_name("render_floor_tiles");
-    floor_tiles_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
-    floor_tiles_pass.render.pipeline_id = "sprite_batched";
-    floor_tiles_pass.render.render_state_key = 0x2001u;
-    floor_tiles_pass.render.color_target = "scene.floor";
-    floor_tiles_pass.render.load_op = SDL_GPU_LOADOP_LOAD;
-    floor_tiles_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    floor_tiles_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-    floor_tiles_pass.render.execute_default_draw = false;
-    floor_tiles_pass.render.custom_render =
-        make_sprite_draw_callback(std::move(map_floor_draws), floor_tiles_pass.name);
-    renderer.add_pass(std::move(floor_tiles_pass));
-
-    GpuFrameGraph::PassDescriptor floor_sprites_pass{};
-    floor_sprites_pass.type = GpuFrameGraph::PassType::Render;
-    floor_sprites_pass.name = make_name("render_floor_sprites");
-    floor_sprites_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
-    floor_sprites_pass.render.pipeline_id = "sprite_batched";
-    floor_sprites_pass.render.render_state_key = 0x2002u;
-    floor_sprites_pass.render.color_target = "scene.floor";
-    floor_sprites_pass.render.load_op = SDL_GPU_LOADOP_LOAD;
-    floor_sprites_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    floor_sprites_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-    floor_sprites_pass.render.execute_default_draw = false;
-    floor_sprites_pass.render.custom_render =
-        make_sprite_draw_callback(std::move(floor_sprite_draws), floor_sprites_pass.name);
-    renderer.add_pass(std::move(floor_sprites_pass));
-
-    GpuFrameGraph::PassDescriptor layers_pass{};
-    layers_pass.type = GpuFrameGraph::PassType::Render;
-    layers_pass.name = make_name("render_layers");
-    layers_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.layers")};
-    layers_pass.render.pipeline_id = "sprite_batched";
-    layers_pass.render.render_state_key = 0x2003u;
-    layers_pass.render.color_target = "scene.layers";
-    layers_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-    layers_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    // Layer target must start transparent so composition can alpha-over floor.
-    layers_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
-    layers_pass.render.execute_default_draw = false;
-    layers_pass.render.custom_render =
-        make_sprite_draw_callback(std::move(layer_draws), layers_pass.name);
-    renderer.add_pass(std::move(layers_pass));
-
-    GpuFrameGraph::PassDescriptor compose_pass{};
-    compose_pass.type = GpuFrameGraph::PassType::Render;
-    compose_pass.name = make_name("render_scene_composite");
-    compose_pass.resources = {
-        GpuFrameGraph::ResourceDependency::read("scene.floor"),
-        GpuFrameGraph::ResourceDependency::read("scene.layers"),
-        GpuFrameGraph::ResourceDependency::write_resource("scene.composite"),
-    };
-    compose_pass.render.pipeline_id = "final_compose";
-    compose_pass.render.render_state_key = 0x2004u;
-    compose_pass.render.color_target = "scene.composite";
-    compose_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-    compose_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    compose_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
-    compose_pass.render.fragment_sampled_textures = {
-        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.floor", "linear_clamp"},
-        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
-    };
-    renderer.add_pass(std::move(compose_pass));
-
-    GpuFrameGraph::PassDescriptor present_pass{};
-    present_pass.type = GpuFrameGraph::PassType::Render;
-    present_pass.name = make_name("present_scene_composite");
-    present_pass.resources = {
-        GpuFrameGraph::ResourceDependency::read("scene.composite"),
-        GpuFrameGraph::ResourceDependency::write_resource("scene.swapchain"),
-    };
-    present_pass.render.pipeline_id = "sprite_textured";
-    present_pass.render.render_state_key = 0x2005u;
-    present_pass.render.use_swapchain_target = true;
-    present_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-    present_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
-    present_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    present_pass.render.fragment_sampled_textures = {
-        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.composite", "linear_clamp"},
-    };
-    renderer.add_pass(std::move(present_pass));
+    std::vector<ResolvedGpuSpriteDraw> unified;
+    unified.reserve(floor_tile_draws.size()+floor_sprite_draws.size()+world_sprite_draws.size());
+    unified.insert(unified.end(), floor_tile_draws.begin(), floor_tile_draws.end());
+    unified.insert(unified.end(), floor_sprite_draws.begin(), floor_sprite_draws.end());
+    unified.insert(unified.end(), world_sprite_draws.begin(), world_sprite_draws.end());
+    main_pass.render.custom_render = make_sprite_draw_callback(std::move(unified), main_pass.name);
+    renderer.add_pass(std::move(main_pass));
 
     return true;
 }

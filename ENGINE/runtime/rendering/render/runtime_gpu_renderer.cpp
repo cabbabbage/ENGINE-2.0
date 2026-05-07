@@ -18,40 +18,6 @@
 
 namespace {
 
-std::string texture_usage_flags_to_string(SDL_GPUTextureUsageFlags usage) {
-    std::vector<std::string> flags;
-    if ((usage & SDL_GPU_TEXTUREUSAGE_SAMPLER) != 0) {
-        flags.emplace_back("sampler");
-    }
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) != 0) {
-        flags.emplace_back("color_target");
-    }
-    if ((usage & SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET) != 0) {
-        flags.emplace_back("depth_stencil");
-    }
-    if ((usage & SDL_GPU_TEXTUREUSAGE_GRAPHICS_STORAGE_READ) != 0) {
-        flags.emplace_back("graphics_storage_read");
-    }
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ) != 0) {
-        flags.emplace_back("compute_storage_read");
-    }
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE) != 0) {
-        flags.emplace_back("compute_storage_write");
-    }
-    if ((usage & SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_SIMULTANEOUS_READ_WRITE) != 0) {
-        flags.emplace_back("compute_storage_rw");
-    }
-
-    std::string result;
-    for (std::size_t i = 0; i < flags.size(); ++i) {
-        if (i > 0) {
-            result += "|";
-        }
-        result += flags[i];
-    }
-    return result.empty() ? std::string{"none"} : result;
-}
-
 int renderer_max_texture_size(SDL_Renderer* renderer) {
     if (!renderer) {
         return 0;
@@ -274,27 +240,14 @@ bool RuntimeGpuRenderer::initialize(std::string& out_error) {
         return false;
     }
 
-    if (!probe_runtime_pipeline_startup(out_error)) {
-        return false;
-    }
-
     return true;
 }
 
 void RuntimeGpuRenderer::set_output_dimensions(int screen_width, int screen_height) {
     screen_width_ = std::max(1, screen_width);
     screen_height_ = std::max(1, screen_height);
-    scene_composite_resource_spec_.width = static_cast<std::uint32_t>(screen_width_);
-    scene_composite_resource_spec_.height = static_cast<std::uint32_t>(screen_height_);
 }
 
-std::optional<SDL_Point> RuntimeGpuRenderer::scene_target_size() const {
-    if (scene_composite_resource_spec_.width == 0 || scene_composite_resource_spec_.height == 0) {
-        return std::nullopt;
-    }
-    return SDL_Point{static_cast<int>(scene_composite_resource_spec_.width),
-                     static_cast<int>(scene_composite_resource_spec_.height)};
-}
 
 const std::string& RuntimeGpuRenderer::present_mode() const {
     static const std::string kUnknown = "unknown";
@@ -310,28 +263,6 @@ const std::string& RuntimeGpuRenderer::backend_name() const {
         : kUnknown;
 }
 
-bool RuntimeGpuRenderer::ensure_authoritative_graph_resources(std::uint32_t scene_width,
-                                                              std::uint32_t scene_height,
-                                                              std::string& out_error) {
-    out_error.clear();
-    if (!gpu_scene_renderer_ || !gpu_scene_renderer_->device()) {
-        out_error = "GpuSceneRenderer is not initialized.";
-        return false;
-    }
-    if (!gpu_runtime_pipeline_) {
-        out_error = "GpuRuntimePipeline is not initialized.";
-        return false;
-    }
-    if (!gpu_runtime_pipeline_->ensure_resources(*gpu_scene_renderer_, scene_width, scene_height, out_error)) {
-        return false;
-    }
-    if (!gpu_runtime_pipeline_->ensure_shared_resources(*gpu_scene_renderer_, out_error)) {
-        return false;
-    }
-    out_error.clear();
-    return true;
-}
-
 bool RuntimeGpuRenderer::ensure_scene_target(std::string& out_error) {
     out_error.clear();
     if (!renderer_ || !gpu_scene_renderer_ || !gpu_runtime_pipeline_ || screen_width_ <= 0 || screen_height_ <= 0) {
@@ -340,80 +271,9 @@ bool RuntimeGpuRenderer::ensure_scene_target(std::string& out_error) {
     }
 
     const int max_texture_size = renderer_max_texture_size(renderer_);
-    screen_width_ = clamp_dimension_to_renderer_limit(screen_width_, max_texture_size, "scene target width");
-    screen_height_ = clamp_dimension_to_renderer_limit(screen_height_, max_texture_size, "scene target height");
-
-    scene_composite_resource_spec_.width = static_cast<Uint32>(screen_width_);
-    scene_composite_resource_spec_.height = static_cast<Uint32>(screen_height_);
-    scene_composite_resource_spec_.format = gpu_scene_renderer_->device()->format_policy().albedo_format;
-    scene_composite_resource_spec_.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    scene_composite_resource_spec_.layer_count_or_depth = 1;
-    scene_composite_resource_spec_.num_levels = 1;
-    scene_composite_resource_spec_.sample_count = SDL_GPU_SAMPLECOUNT_1;
-
-    if (!ensure_authoritative_graph_resources(scene_composite_resource_spec_.width,
-                                              scene_composite_resource_spec_.height,
-                                              out_error)) {
-        return false;
-    }
+    screen_width_ = clamp_dimension_to_renderer_limit(screen_width_, max_texture_size, "scene width");
+    screen_height_ = clamp_dimension_to_renderer_limit(screen_height_, max_texture_size, "scene height");
     return gpu_runtime_pipeline_->ensure_shared_resources(*gpu_scene_renderer_, out_error);
-}
-
-bool RuntimeGpuRenderer::probe_runtime_pipeline_startup(std::string& out_error) {
-    out_error.clear();
-
-    if (!gpu_scene_renderer_ || !gpu_runtime_pipeline_) {
-        out_error = "GPU runtime pipeline is not initialized.";
-        return false;
-    }
-    if (!gpu_scene_renderer_->device() || !gpu_scene_renderer_->ready()) {
-        out_error = "GpuSceneRenderer device is not initialized.";
-        return false;
-    }
-
-    const std::uint32_t scene_width = static_cast<std::uint32_t>(std::max(1, screen_width_));
-    const std::uint32_t scene_height = static_cast<std::uint32_t>(std::max(1, screen_height_));
-
-    std::string frame_error;
-    if (!ensure_authoritative_graph_resources(scene_width, scene_height, frame_error)) {
-        out_error = frame_error.empty()
-            ? "Failed to allocate frame-graph resources during startup probe."
-            : frame_error;
-        return false;
-    }
-
-    GpuSceneFrameData startup_frame_data{};
-    startup_frame_data.map_floor_draw_count = 0;
-    startup_frame_data.floor_sprite_draw_count = 0;
-    startup_frame_data.floor_draw_count = 0;
-    startup_frame_data.layer_sprite_draw_count = 0;
-    startup_frame_data.has_valid_composite_source = false;
-    startup_frame_data.debug_overlay_draw_count = 0;
-
-    gpu_scene_renderer_->reset_frame_graph();
-    if (!gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
-                                                    startup_frame_data,
-                                                    "startup_probe",
-                                                    scene_width,
-                                                    scene_height,
-                                                    frame_error)) {
-        out_error = frame_error.empty()
-            ? "Failed to enqueue startup GPU runtime frame graph."
-            : frame_error;
-        return false;
-    }
-
-    if (!gpu_scene_renderer_->begin_frame(&frame_error, false)) {
-        out_error = frame_error.empty() ? "GpuSceneRenderer::begin_frame failed during startup probe." : frame_error;
-        return false;
-    }
-
-    if (!gpu_scene_renderer_->end_frame(&frame_error)) {
-        out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed during startup probe." : frame_error;
-        return false;
-    }
-
-    return true;
 }
 
 std::vector<world::Chunk*> RuntimeGpuRenderer::runtime_floor_chunks() const {
@@ -440,8 +300,8 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data,
         : assets_->getActive();
     const WarpedScreenGrid& camera = assets_->getView();
 
-    const float target_width = static_cast<float>(std::max<std::uint32_t>(1u, scene_composite_resource_spec_.width));
-    const float target_height = static_cast<float>(std::max<std::uint32_t>(1u, scene_composite_resource_spec_.height));
+    const float target_width = static_cast<float>(std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(screen_width_)));
+    const float target_height = static_cast<float>(std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(screen_height_)));
 
     std::size_t visible_count = 0;
     std::size_t drawable_count = 0;
@@ -562,10 +422,7 @@ bool RuntimeGpuRenderer::execute_gpu_frame_graph(std::string& out_error) {
     const auto log_failure = [&](const std::string& reason, const std::string& pass_name) {
         vibble::log::error("[RuntimeGpuRenderer] GPU frame-graph failure backend=" + backend_name +
                            " pass=" + pass_name +
-                           " resources=[scene.floor,scene.layers,scene.composite,swapchain] scene.composite.spec={w=" +
-                           std::to_string(scene_composite_resource_spec_.width) + ",h=" +
-                           std::to_string(scene_composite_resource_spec_.height) + ",usage=" +
-                           texture_usage_flags_to_string(scene_composite_resource_spec_.usage) + "} reason=" + reason);
+                           " reason=" + reason);
     };
 
     if (!gpu_scene_renderer_ || !gpu_runtime_pipeline_) {
@@ -573,31 +430,17 @@ bool RuntimeGpuRenderer::execute_gpu_frame_graph(std::string& out_error) {
         log_failure(out_error, "preflight");
         return false;
     }
-    if (scene_composite_resource_spec_.width == 0 || scene_composite_resource_spec_.height == 0) {
-        out_error = "scene.composite resource spec has invalid dimensions.";
-        log_failure(out_error, "preflight");
-        return false;
-    }
-
-    const std::uint32_t scene_width = scene_composite_resource_spec_.width;
-    const std::uint32_t scene_height = scene_composite_resource_spec_.height;
+    const std::uint32_t scene_width = static_cast<std::uint32_t>(std::max(1, screen_width_));
+    const std::uint32_t scene_height = static_cast<std::uint32_t>(std::max(1, screen_height_));
 
     std::string frame_error;
-    if (!ensure_authoritative_graph_resources(scene_width, scene_height, frame_error)) {
-        out_error = frame_error.empty() ? "Failed to allocate frame-graph resources." : frame_error;
-        log_failure(out_error, "resource_setup");
-        return false;
-    }
 
     GpuSceneFrameData frame_data{};
     if (!build_gpu_scene_frame_data(frame_data, out_error)) {
         log_failure(out_error, "scene_packet_build");
         return false;
     }
-    render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count,
-                                                   frame_data.layer_sprite_draw_count,
-                                                   frame_data.has_valid_composite_source,
-                                                   false);
+    render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count, frame_data.layer_sprite_draw_count, frame_data.has_valid_composite_source, false);
 
     gpu_scene_renderer_->reset_frame_graph();
     if (!gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
@@ -621,7 +464,7 @@ bool RuntimeGpuRenderer::execute_gpu_frame_graph(std::string& out_error) {
 
     if (!gpu_scene_renderer_->end_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
-        log_failure(out_error, "runtime_present_scene_composite");
+        log_failure(out_error, "runtime_present_main_scene");
         return false;
     }
 

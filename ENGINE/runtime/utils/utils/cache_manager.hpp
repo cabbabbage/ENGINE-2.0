@@ -77,6 +77,7 @@ namespace CacheManager {
                                     const TextureUploadOptions& options = TextureUploadOptions{});
 
     const PreparedGpuTextureUpload* prepared_gpu_upload_for_texture(SDL_Texture* texture);
+    void unregister_prepared_gpu_upload(SDL_Texture* texture);
 
     SDL_Texture* create_texture_from_prepared_upload(SDL_Renderer* renderer,
                                                      const PreparedGpuTextureUpload& prepared,

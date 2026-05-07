@@ -386,6 +386,36 @@ TEST_CASE("GPU runtime composite path remains valid when one source pass is empt
     SDL_DestroyWindow(window);
 }
 
+
+TEST_CASE("CacheManager unregisters prepared GPU uploads before texture destruction") {
+    ScopedSdlVideo sdl_video{};
+    REQUIRE(sdl_video.initialized());
+
+    SDL_Window* window = SDL_CreateWindow("cache_manager_unregister_prepared_upload_window", 16, 16, SDL_WINDOW_HIDDEN);
+    REQUIRE(window != nullptr);
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, SDL_SOFTWARE_RENDERER);
+    if (!renderer) {
+        SDL_DestroyWindow(window);
+        return;
+    }
+
+    SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA8888);
+    REQUIRE(surface != nullptr);
+    SDL_FillSurfaceRect(surface, nullptr, 0xFF806040u);
+
+    SDL_Texture* texture = CacheManager::surface_to_texture(renderer, surface);
+    SDL_DestroySurface(surface);
+    REQUIRE(texture != nullptr);
+    REQUIRE(CacheManager::prepared_gpu_upload_for_texture(texture) != nullptr);
+
+    CacheManager::unregister_prepared_gpu_upload(texture);
+    SDL_DestroyTexture(texture);
+    CHECK(CacheManager::prepared_gpu_upload_for_texture(texture) == nullptr);
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+}
+
 TEST_CASE("GPU runtime texture resolve uploads prepared loading-step textures without SDL bridge") {
     ScopedSdlVideo sdl_video{};
     REQUIRE(sdl_video.initialized());
@@ -428,6 +458,7 @@ TEST_CASE("GPU runtime texture resolve uploads prepared loading-step textures wi
     CHECK(error.empty());
     CHECK(gpu_renderer->find_gpu_texture_for_sdl_texture(prepared_texture) == resolved);
 
+    CacheManager::unregister_prepared_gpu_upload(prepared_texture);
     SDL_DestroyTexture(prepared_texture);
     gpu_renderer.reset();
     SDL_DestroyRenderer(software_renderer);

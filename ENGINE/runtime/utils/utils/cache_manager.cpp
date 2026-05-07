@@ -408,6 +408,13 @@ const PreparedGpuTextureUpload* prepared_gpu_upload_for_texture(SDL_Texture* tex
     return it != prepared_upload_registry().end() ? &it->second : nullptr;
 }
 
+void unregister_prepared_gpu_upload(SDL_Texture* texture) {
+    if (!texture) {
+        return;
+    }
+    prepared_upload_registry().erase(texture);
+}
+
 SDL_Texture* create_texture_from_prepared_upload(SDL_Renderer* renderer,
                                                  const PreparedGpuTextureUpload& prepared,
                                                  bool flip_horizontal,

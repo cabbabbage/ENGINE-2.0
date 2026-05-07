@@ -2,38 +2,6 @@
   "build_tool_version": 2,
   "manifest_version": 2,
   "variants": {
-    "final_compose": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 4116,
-        "hash_fnv1a64": "0x34f950c395185dd5",
-        "path": "dxil/final_compose.dxil",
-        "stage": "fragment"
-      },
-      "spirv": {
-        "entrypoint": "main",
-        "file_size_bytes": 1424,
-        "hash_fnv1a64": "0x9c15d03affc50fcf",
-        "path": "spirv/final_compose.spv",
-        "stage": "fragment"
-      }
-    },
-    "floor_compose": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 2972,
-        "hash_fnv1a64": "0x3bcb43214ebc62e7",
-        "path": "dxil/floor_compose.dxil",
-        "stage": "fragment"
-      },
-      "spirv": {
-        "entrypoint": "main",
-        "file_size_bytes": 684,
-        "hash_fnv1a64": "0x001b25ceba2a3506",
-        "path": "spirv/floor_compose.spv",
-        "stage": "fragment"
-      }
-    },
     "fullscreen_vertex": {
       "dxil": {
         "entrypoint": "main",

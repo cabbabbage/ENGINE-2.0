@@ -18,8 +18,6 @@ REQUIRED_SHADER_VARIANTS = (
     "fullscreen_vertex",
     "sprite_textured",
     "sprite_batched",
-    "floor_compose",
-    "final_compose",
 )
 
 

@@ -6,7 +6,7 @@ TEST_CASE("ShaderPipelineCache returns stable graphics/compute handles and impro
     ShaderPipelineCache cache;
 
     ShaderPipelineKey graphics_key{};
-    graphics_key.shader_id = "final_compose";
+    graphics_key.shader_id = "sprite_batched";
     graphics_key.variant = "dxil";
     graphics_key.color_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     graphics_key.depth_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;

@@ -244,7 +244,7 @@ TEST_CASE("GPU authoritative frame-graph runtime smoke executes full topology an
     render_diagnostics::end_frame();
 
     const RenderFrameStats stats = render_diagnostics::current_frame_stats();
-    CHECK(stats.render_pass_count == 6);
+    CHECK(stats.render_pass_count == 1);
     CHECK(stats.copy_pass_count == 0);
     CHECK(stats.sdl_renderer_target_call_count == 0);
     CHECK(stats.sdl_renderer_draw_call_count == 0);

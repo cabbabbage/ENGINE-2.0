@@ -1,5 +1,7 @@
 #include "animation_cloner.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/cache_manager.hpp"
+#include "utils/log.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +20,17 @@ void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
 #endif
 }
 
+bool renderer_has_gpu_runtime_bridge(SDL_Renderer* renderer) {
+    if (!renderer) {
+        return false;
+    }
+    SDL_PropertiesID props = SDL_GetRendererProperties(renderer);
+    if (!props) {
+        return false;
+    }
+    return SDL_GetPointerProperty(props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr) != nullptr;
+}
+
 SDL_Texture* clone_texture(SDL_Texture* src,
                            int width_hint,
                            int height_hint,
@@ -30,15 +43,36 @@ SDL_Texture* clone_texture(SDL_Texture* src,
         return nullptr;
     }
 
+    const bool flip_horizontal = (static_cast<int>(flip_flags) & static_cast<int>(SDL_FLIP_HORIZONTAL)) != 0;
+    const bool flip_vertical = (static_cast<int>(flip_flags) & static_cast<int>(SDL_FLIP_VERTICAL)) != 0;
+    if (const CacheManager::PreparedGpuTextureUpload* prepared = CacheManager::prepared_gpu_upload_for_texture(src)) {
+        SDL_Texture* dst = CacheManager::create_texture_from_prepared_upload(renderer,
+                                                                              *prepared,
+                                                                              flip_horizontal,
+                                                                              flip_vertical);
+        if (!dst) {
+            vibble::log::error("[AnimationCloner] Failed to clone prepared GPU texture upload payload.");
+            return nullptr;
+        }
+        SDL_SetTextureBlendMode(dst, SDL_BLENDMODE_BLEND);
+        apply_scale_mode(dst, info);
+        if (out_w) *out_w = prepared->width;
+        if (out_h) *out_h = prepared->height;
+        return dst;
+    }
+
+    if (renderer_has_gpu_runtime_bridge(renderer)) {
+        vibble::log::error("[AnimationCloner] Source texture has no prepared GPU upload payload; refusing render-target clone on GPU runtime renderer.");
+        return nullptr;
+    }
+
     SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
-    int access = 0;
     int tex_w = width_hint;
     int tex_h = height_hint;
 
     const bool need_dims = tex_w <= 0 || tex_h <= 0;
     if (SDL_PropertiesID props = SDL_GetTextureProperties(src)) {
         fmt    = static_cast<SDL_PixelFormat>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, fmt));
-        access = static_cast<int>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_ACCESS_NUMBER, access));
     }
     if (need_dims) {
         float fw = 0.0f;
@@ -195,14 +229,20 @@ bool AnimationCloner::Clone(const Animation& source,
             SDL_Texture* src_tex = (v < src_cache.textures.size()) ? src_cache.textures[v] : nullptr;
             int base_tex_w = (v < src_cache.widths.size()) ? src_cache.widths[v] : 0;
             int base_tex_h = (v < src_cache.heights.size()) ? src_cache.heights[v] : 0;
-            dst_cache.textures[v] = clone_texture(src_tex,
-                                                  base_tex_w,
-                                                  base_tex_h,
-                                                  flip_flags,
-                                                  renderer,
-                                                  info,
-                                                  &base_tex_w,
-                                                  &base_tex_h);
+            SDL_Texture* cloned_tex = clone_texture(src_tex,
+                                                    base_tex_w,
+                                                    base_tex_h,
+                                                    flip_flags,
+                                                    renderer,
+                                                    info,
+                                                    &base_tex_w,
+                                                    &base_tex_h);
+            if (src_tex && !cloned_tex) {
+                dest.clear_texture_cache();
+                vibble::log::error("[AnimationCloner] Failed to clone animation frame texture during loading.");
+                return false;
+            }
+            dst_cache.textures[v] = cloned_tex;
             dst_cache.widths[v]   = base_tex_w;
             dst_cache.heights[v]  = base_tex_h;
 

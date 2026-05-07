@@ -7,6 +7,9 @@
 #include <string>
 #include <utility>
 
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_cloner.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/gpu_scene_renderer.hpp"
 #include "rendering/render/render_diagnostics.hpp"
@@ -429,6 +432,81 @@ TEST_CASE("GPU runtime texture resolve uploads prepared loading-step textures wi
     gpu_renderer.reset();
     SDL_DestroyRenderer(software_renderer);
     SDL_DestroyWindow(software_window);
+    SDL_DestroyRenderer(gpu_renderer_backend);
+    SDL_DestroyWindow(gpu_window);
+}
+
+TEST_CASE("GPU runtime resolves animation cloner derived frame textures from prepared payloads") {
+    ScopedSdlVideo sdl_video{};
+    REQUIRE(sdl_video.initialized());
+
+    SDL_Window* gpu_window = SDL_CreateWindow("gpu_runtime_resolve_cloned_animation_gpu_window", 64, 64, SDL_WINDOW_HIDDEN);
+    REQUIRE(gpu_window != nullptr);
+    SDL_Renderer* gpu_renderer_backend = create_gpu_renderer(gpu_window);
+    if (!gpu_renderer_backend || !renderer_has_gpu_device(gpu_renderer_backend)) {
+        if (gpu_renderer_backend) {
+            SDL_DestroyRenderer(gpu_renderer_backend);
+        }
+        SDL_DestroyWindow(gpu_window);
+        return;
+    }
+
+    std::string error;
+    std::unique_ptr<GpuSceneRenderer> gpu_renderer = GpuSceneRenderer::Create(gpu_renderer_backend, false, error);
+    REQUIRE(gpu_renderer != nullptr);
+
+    SDL_Window* loading_window = SDL_CreateWindow("gpu_runtime_resolve_cloned_animation_loading_window", 64, 64, SDL_WINDOW_HIDDEN);
+    REQUIRE(loading_window != nullptr);
+    SDL_Renderer* loading_renderer = SDL_CreateRenderer(loading_window, SDL_SOFTWARE_RENDERER);
+    if (!loading_renderer) {
+        gpu_renderer.reset();
+        SDL_DestroyRenderer(gpu_renderer_backend);
+        SDL_DestroyWindow(gpu_window);
+        SDL_DestroyWindow(loading_window);
+        return;
+    }
+
+    SDL_Surface* surface = SDL_CreateSurface(4, 2, SDL_PIXELFORMAT_RGBA8888);
+    REQUIRE(surface != nullptr);
+    SDL_FillSurfaceRect(surface, nullptr, 0xFF2040FFu);
+    SDL_Texture* source_texture = CacheManager::surface_to_texture(loading_renderer, surface);
+    SDL_DestroySurface(surface);
+    REQUIRE(source_texture != nullptr);
+    REQUIRE(CacheManager::prepared_gpu_upload_for_texture(source_texture) != nullptr);
+
+    Animation::FrameCache source_cache;
+    source_cache.resize(1);
+    source_cache.textures[0] = source_texture;
+    source_cache.widths[0] = 4;
+    source_cache.heights[0] = 2;
+    source_cache.source_rects[0] = SDL_Rect{0, 0, 4, 2};
+
+    Animation source_animation;
+    source_animation.adopt_prebuilt_frames(std::vector<Animation::FrameCache>{std::move(source_cache)}, {1.0f});
+
+    AssetInfo info("gpu_runtime_cloned_animation_asset");
+    AnimationCloner::Options options{};
+    options.flip_horizontal = true;
+
+    Animation cloned_animation;
+    REQUIRE(AnimationCloner::Clone(source_animation, cloned_animation, options, loading_renderer, info));
+    REQUIRE(cloned_animation.cached_frame_count() == 1);
+    REQUIRE(cloned_animation.cached_frames()[0].textures.size() == 1);
+    SDL_Texture* cloned_texture = cloned_animation.cached_frames()[0].textures[0];
+    REQUIRE(cloned_texture != nullptr);
+    REQUIRE(cloned_texture != source_texture);
+    REQUIRE(CacheManager::prepared_gpu_upload_for_texture(cloned_texture) != nullptr);
+
+    SDL_GPUTexture* resolved = gpu_renderer->resolve_gpu_texture_for_sdl_texture(cloned_texture, error);
+    CHECK(resolved != nullptr);
+    CHECK(error.empty());
+    CHECK(gpu_renderer->find_gpu_texture_for_sdl_texture(cloned_texture) == resolved);
+
+    cloned_animation.clear_texture_cache();
+    source_animation.clear_texture_cache();
+    gpu_renderer.reset();
+    SDL_DestroyRenderer(loading_renderer);
+    SDL_DestroyWindow(loading_window);
     SDL_DestroyRenderer(gpu_renderer_backend);
     SDL_DestroyWindow(gpu_window);
 }

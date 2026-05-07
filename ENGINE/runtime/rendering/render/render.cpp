@@ -93,10 +93,21 @@ void SceneRenderer::render() {
     render_diagnostics::set_texture_memory_usage(render_diagnostics::tracked_texture_bytes(), false);
 
     auto fail_gpu_frame = [&](const std::string& error_message) {
-        render_diagnostics::note_gpu_frame_skipped_due_to_failure();
         render_diagnostics::set_renderer_runtime_info("gpu", "failed", "fatal");
+        render_diagnostics::set_submit_result(false);
         render_diagnostics::end_frame();
-        vibble::log::error("[SceneRenderer] GPU runtime frame failed: " + error_message);
+        const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+        vibble::log::error("[SceneRenderer] GPU runtime frame failed: reason='" + error_message +
+                           "' command_buffer_acquired=" + (stats.command_buffer_acquired ? std::string("true") : "false") +
+                           " swapchain_acquired=" + (stats.swapchain_acquired ? std::string("true") : "false") +
+                           " swapchain_dimensions=" + std::to_string(stats.swapchain_width) + "x" +
+                           std::to_string(stats.swapchain_height) +
+                           " floor_packet_count=" + std::to_string(stats.floor_packet_count) +
+                           " sprite_packet_count=" + std::to_string(stats.sprite_packet_count) +
+                           " draw_call_count=" + std::to_string(stats.draw_call_count) +
+                           " skipped_textures=" + std::to_string(stats.skipped_texture_count) +
+                           " failed_texture_names='" + stats.failed_texture_names + "'" +
+                           " submit_succeeded=" + (stats.submit_succeeded ? std::string("true") : "false"));
         throw std::runtime_error("[SceneRenderer] Fatal GPU runtime failure: " + error_message);
     };
 

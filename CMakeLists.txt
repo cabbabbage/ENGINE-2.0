@@ -346,6 +346,7 @@ add_executable(engine_tests
     ENGINE/tests/test_save_orchestrator.cpp
     ENGINE/tests/test_save_manager_reentrancy.cpp
     ENGINE/tests/test_image_cache_generator.cpp
+    ENGINE/tests/test_asset_animation_preload_failure.cpp
 )
 
 target_include_directories(engine_tests

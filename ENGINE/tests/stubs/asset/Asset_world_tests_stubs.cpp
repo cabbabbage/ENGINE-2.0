@@ -42,6 +42,9 @@ std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& ass
 }
 
 bool AssetInfo::has_tag(const std::string&) const { return false; }
+AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer*, bool, bool, bool) {
+    return AnimationLoadResult{};
+}
 void AssetInfo::loadAnimations(SDL_Renderer*, bool, bool) {}
 bool AssetInfo::commit_manifest() { return false; }
 nlohmann::json AssetInfo::manifest_payload() const { return nlohmann::json::object(); }

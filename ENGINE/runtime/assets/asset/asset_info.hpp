@@ -205,6 +205,19 @@ class AssetInfo {
     std::map<std::string, Mapping> mappings;
 
 	public:
+    struct AnimationLoadResult {
+        bool attempted = false;
+        bool cache_ready = false;
+        bool used_placeholder_fallback = false;
+        std::vector<std::string> missing_runtime_frame_animations;
+
+        bool ok() const { return missing_runtime_frame_animations.empty(); }
+    };
+
+    AnimationLoadResult loadAnimationsDetailed(SDL_Renderer* renderer,
+                                               bool include_all_animations = true,
+                                               bool assume_cache_ready = false,
+                                               bool allow_placeholder_fallback = false);
     void loadAnimations(SDL_Renderer* renderer,
                         bool include_all_animations = true,
                         bool assume_cache_ready = false);

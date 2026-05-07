@@ -12,6 +12,7 @@
 #include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/runtime_gpu_renderer.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "utils/cache_manager.hpp"
 
 namespace {
 
@@ -380,6 +381,56 @@ TEST_CASE("GPU runtime composite path remains valid when one source pass is empt
     CHECK(run_frame(layer_only, "runtime_layer_only"));
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+}
+
+TEST_CASE("GPU runtime texture resolve uploads prepared loading-step textures without SDL bridge") {
+    ScopedSdlVideo sdl_video{};
+    REQUIRE(sdl_video.initialized());
+
+    SDL_Window* gpu_window = SDL_CreateWindow("gpu_runtime_resolve_prepared_gpu_window", 64, 64, SDL_WINDOW_HIDDEN);
+    REQUIRE(gpu_window != nullptr);
+    SDL_Renderer* gpu_renderer_backend = create_gpu_renderer(gpu_window);
+    if (!gpu_renderer_backend || !renderer_has_gpu_device(gpu_renderer_backend)) {
+        if (gpu_renderer_backend) {
+            SDL_DestroyRenderer(gpu_renderer_backend);
+        }
+        SDL_DestroyWindow(gpu_window);
+        return;
+    }
+
+    std::string error;
+    std::unique_ptr<GpuSceneRenderer> gpu_renderer = GpuSceneRenderer::Create(gpu_renderer_backend, false, error);
+    REQUIRE(gpu_renderer != nullptr);
+
+    SDL_Window* software_window = SDL_CreateWindow("gpu_runtime_resolve_prepared_software_window", 64, 64, SDL_WINDOW_HIDDEN);
+    REQUIRE(software_window != nullptr);
+    SDL_Renderer* software_renderer = SDL_CreateRenderer(software_window, SDL_SOFTWARE_RENDERER);
+    if (!software_renderer) {
+        gpu_renderer.reset();
+        SDL_DestroyRenderer(gpu_renderer_backend);
+        SDL_DestroyWindow(gpu_window);
+        SDL_DestroyWindow(software_window);
+        return;
+    }
+
+    SDL_Surface* surface = SDL_CreateSurface(4, 4, SDL_PIXELFORMAT_RGBA8888);
+    REQUIRE(surface != nullptr);
+    SDL_FillSurfaceRect(surface, nullptr, 0xFF4020FFu);
+    SDL_Texture* prepared_texture = CacheManager::surface_to_texture(software_renderer, surface);
+    SDL_DestroySurface(surface);
+    REQUIRE(prepared_texture != nullptr);
+
+    SDL_GPUTexture* resolved = gpu_renderer->resolve_gpu_texture_for_sdl_texture(prepared_texture, error);
+    CHECK(resolved != nullptr);
+    CHECK(error.empty());
+    CHECK(gpu_renderer->find_gpu_texture_for_sdl_texture(prepared_texture) == resolved);
+
+    SDL_DestroyTexture(prepared_texture);
+    gpu_renderer.reset();
+    SDL_DestroyRenderer(software_renderer);
+    SDL_DestroyWindow(software_window);
+    SDL_DestroyRenderer(gpu_renderer_backend);
+    SDL_DestroyWindow(gpu_window);
 }
 
 TEST_CASE("GPU runtime texture resolve rejects non-bridged textures without readback fallback") {

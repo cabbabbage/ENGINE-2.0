@@ -1,6 +1,7 @@
 #include "rendering/render/gpu_scene_renderer.hpp"
 
 #include "rendering/render/render_diagnostics.hpp"
+#include "utils/cache_manager.hpp"
 #include "utils/log.hpp"
 
 #include <algorithm>
@@ -978,15 +979,44 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
 
     SDL_GPUTexture* bridged_gpu_texture = static_cast<SDL_GPUTexture*>(
         SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
+    bool owns_imported_gpu_texture = false;
     if (!bridged_gpu_texture) {
-        out_error = "SDL texture does not expose SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER; readback fallback is disabled.";
-        return nullptr;
+        const CacheManager::PreparedGpuTextureUpload* prepared =
+            CacheManager::prepared_gpu_upload_for_texture(texture);
+        if (!prepared) {
+            out_error = "SDL texture does not expose SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER and has no prepared GPU upload payload; readback fallback is disabled.";
+            return nullptr;
+        }
+
+        const auto cached_it = imported_sdl_texture_resources_.find(texture);
+        if (cached_it != imported_sdl_texture_resources_.end() &&
+            cached_it->second.gpu_texture &&
+            cached_it->second.owns_gpu_texture &&
+            cached_it->second.width == static_cast<Uint32>(std::max(1, prepared->width)) &&
+            cached_it->second.height == static_cast<Uint32>(std::max(1, prepared->height))) {
+            return cached_it->second.gpu_texture;
+        }
+
+        std::string upload_error;
+        bridged_gpu_texture = CacheManager::upload_prepared_texture_to_gpu(device_->gpu_device(),
+                                                                           *prepared,
+                                                                           upload_error);
+        if (!bridged_gpu_texture) {
+            out_error = "Prepared GPU texture upload failed: " + upload_error;
+            return nullptr;
+        }
+        owns_imported_gpu_texture = true;
+        vibble::log::info("[GpuSceneRenderer] Created backend GPU texture from prepared asset payload "
+                          "for SDL texture without renderer bridge.");
     }
 
     float src_wf = 0.0f;
     float src_hf = 0.0f;
     if (!SDL_GetTextureSize(texture, &src_wf, &src_hf)) {
         out_error = "SDL_GetTextureSize failed for texture bridge resolve: " + std::string(SDL_GetError());
+        if (owns_imported_gpu_texture && bridged_gpu_texture) {
+            SDL_ReleaseGPUTexture(device_->gpu_device(), bridged_gpu_texture);
+        }
         return nullptr;
     }
     const Uint32 src_w = static_cast<Uint32>(std::max(1, static_cast<int>(std::lround(src_wf))));
@@ -1002,15 +1032,24 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
             cached.height == src_h) {
             return cached.gpu_texture;
         }
+        if (cached.gpu_texture && cached.owns_gpu_texture &&
+            cached.gpu_texture != bridged_gpu_texture) {
+            SDL_ReleaseGPUTexture(device_->gpu_device(), cached.gpu_texture);
+            render_diagnostics::add_texture_destroy_count();
+        }
     }
 
     ImportedSdlTextureResource imported{};
     imported.source_texture = texture;
     imported.gpu_texture = bridged_gpu_texture;
+    imported.owns_gpu_texture = owns_imported_gpu_texture;
     imported.revision = revision;
     imported.width = src_w;
     imported.height = src_h;
     imported_sdl_texture_resources_[texture] = imported;
+    if (owns_imported_gpu_texture) {
+        render_diagnostics::add_texture_create_count();
+    }
     return bridged_gpu_texture;
 }
 
@@ -1145,6 +1184,13 @@ void GpuSceneRenderer::release_runtime_resources() {
         }
     }
     external_texture_resources_.clear();
+    for (auto& entry : imported_sdl_texture_resources_) {
+        if (entry.second.gpu_texture && entry.second.owns_gpu_texture) {
+            SDL_ReleaseGPUTexture(device_->gpu_device(), entry.second.gpu_texture);
+            entry.second.gpu_texture = nullptr;
+            render_diagnostics::add_texture_destroy_count();
+        }
+    }
     imported_sdl_texture_resources_.clear();
     for (auto& entry : buffer_resources_) {
         if (entry.second.buffer) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_gpu.h>
 #include <SDL3_image/SDL_image.h>
 
 #include <string>
@@ -22,6 +23,17 @@ namespace CacheManager {
     struct TextureUploadOptions {
         TextureSemantic semantic = TextureSemantic::Color;
         bool enable_mipmaps = true;
+    };
+
+    struct PreparedGpuTextureUpload {
+        int width = 0;
+        int height = 0;
+        int pitch = 0;
+        std::uint32_t format = SDL_PIXELFORMAT_RGBA8888;
+        TextureUploadOptions options{};
+        std::vector<std::uint8_t> pixels{};
+
+        bool valid() const { return width > 0 && height > 0 && pitch > 0 && !pixels.empty(); }
     };
 
     struct BundleFrameLayer {
@@ -63,6 +75,12 @@ namespace CacheManager {
     SDL_Texture* surface_to_texture(SDL_Renderer* renderer,
                                     SDL_Surface* surface,
                                     const TextureUploadOptions& options = TextureUploadOptions{});
+
+    const PreparedGpuTextureUpload* prepared_gpu_upload_for_texture(SDL_Texture* texture);
+
+    SDL_GPUTexture* upload_prepared_texture_to_gpu(SDL_GPUDevice* gpu_device,
+                                                   const PreparedGpuTextureUpload& prepared,
+                                                   std::string& out_error);
 
     bool save_bundle(const std::string& bundle_path, const BundleData& data);
     bool load_bundle(const std::string& bundle_path, BundleData& out_data);

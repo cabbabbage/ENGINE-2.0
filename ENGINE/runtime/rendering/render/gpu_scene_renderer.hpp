@@ -138,6 +138,7 @@ private:
     struct ImportedSdlTextureResource {
         SDL_Texture* source_texture = nullptr;
         SDL_GPUTexture* gpu_texture = nullptr;
+        bool owns_gpu_texture = false;
         std::uintptr_t revision = 0;
         Uint32 width = 0;
         Uint32 height = 0;

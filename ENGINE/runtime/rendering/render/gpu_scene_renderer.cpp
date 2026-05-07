@@ -290,8 +290,7 @@ ShaderPipelineKey GpuSceneRenderer::make_pipeline_key(const std::string& shader_
     // Runtime frame graph uses a dedicated present state key for the swapchain pass.
     // Ensure that pipeline targets the real swapchain format when available.
     if (device_ &&
-        shader_name == "sprite_textured" &&
-        (render_state_key == 0x1006u || render_state_key == 0x2005u) &&
+        (render_state_key == 0x1006u || render_state_key == 0x2005u || render_state_key == 0x2100u) &&
         device_->swapchain_format() != SDL_GPU_TEXTUREFORMAT_INVALID) {
         key.color_format = device_->swapchain_format();
     }
@@ -717,6 +716,11 @@ SDL_GPUGraphicsPipeline* GpuSceneRenderer::get_graphics_pipeline(const std::stri
                            pipeline_name + "': " + pipeline_error);
     }
     return pipeline;
+}
+
+SDL_GPUGraphicsPipeline* GpuSceneRenderer::resolve_graphics_pipeline(const std::string& pipeline_name,
+                                                                     std::uint32_t render_state_key) {
+    return get_graphics_pipeline(pipeline_name, render_state_key);
 }
 
 SDL_GPUComputePipeline* GpuSceneRenderer::get_compute_pipeline(const std::string& pipeline_name,

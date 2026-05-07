@@ -81,6 +81,7 @@ public:
     ~GpuSceneRenderer();
 
     bool ready() const { return device_ != nullptr; }
+    GpuRenderDevice* device() { return device_.get(); }
     const GpuRenderDevice* device() const { return device_.get(); }
     ShaderPipelineCache& pipeline_cache() { return pipeline_cache_; }
     const ShaderPipelineCache& pipeline_cache() const { return pipeline_cache_; }
@@ -107,6 +108,8 @@ public:
                                 const BufferResourceSpec& spec,
                                 std::string& out_error);
     SDL_GPUBuffer* find_buffer_resource(const std::string& logical_name) const;
+    SDL_GPUGraphicsPipeline* resolve_graphics_pipeline(const std::string& pipeline_name,
+                                                       std::uint32_t render_state_key);
     bool ensure_sampler_resource(const std::string& logical_name,
                                  const SamplerResourceSpec& spec,
                                  std::string& out_error);

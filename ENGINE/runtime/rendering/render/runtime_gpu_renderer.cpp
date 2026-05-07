@@ -104,6 +104,11 @@ void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& 
                               out_packet);
 }
 
+struct SpriteBatchVertexUniformData {
+    SDL_FColor vertex_uv[6]{};
+    SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
+};
+
 } // namespace
 
 namespace runtime_gpu_renderer_detail {
@@ -191,6 +196,36 @@ void append_classified_sprite_draw_packet(bool floor_tagged,
 
 } // namespace runtime_gpu_renderer_detail
 
+void RuntimeGpuRenderer::RenderTargetLifecycleManager::set_requested_size(int screen_width,
+                                                                          int screen_height) {
+    requested_width = std::max(1, screen_width);
+    requested_height = std::max(1, screen_height);
+    active_width = requested_width;
+    active_height = requested_height;
+}
+
+bool RuntimeGpuRenderer::RenderTargetLifecycleManager::synchronize_to_swapchain(Uint32 swapchain_width,
+                                                                               Uint32 swapchain_height,
+                                                                               std::string& out_error) {
+    out_error.clear();
+    if (swapchain_width == 0 || swapchain_height == 0) {
+        out_error = "Swapchain dimensions are invalid.";
+        return false;
+    }
+    active_width = static_cast<int>(swapchain_width);
+    active_height = static_cast<int>(swapchain_height);
+    return true;
+}
+
+std::optional<SDL_Point> RuntimeGpuRenderer::RenderTargetLifecycleManager::current_size() const {
+    const int width = active_width > 0 ? active_width : requested_width;
+    const int height = active_height > 0 ? active_height : requested_height;
+    if (width <= 0 || height <= 0) {
+        return std::nullopt;
+    }
+    return SDL_Point{width, height};
+}
+
 RuntimeGpuRenderer::RuntimeGpuRenderer(SDL_Renderer* renderer,
                                        Assets* assets,
                                        int screen_width,
@@ -198,7 +233,9 @@ RuntimeGpuRenderer::RuntimeGpuRenderer(SDL_Renderer* renderer,
     : renderer_(renderer),
       assets_(assets),
       screen_width_(std::max(1, screen_width)),
-      screen_height_(std::max(1, screen_height)) {}
+      screen_height_(std::max(1, screen_height)) {
+    render_target_manager_.set_requested_size(screen_width_, screen_height_);
+}
 
 RuntimeGpuRenderer::~RuntimeGpuRenderer() = default;
 
@@ -218,8 +255,8 @@ std::unique_ptr<RuntimeGpuRenderer> RuntimeGpuRenderer::Create(SDL_Renderer* ren
 bool RuntimeGpuRenderer::initialize(std::string& out_error) {
     out_error.clear();
     std::string gpu_error;
-    gpu_scene_renderer_ = GpuSceneRenderer::Create(renderer_, false, gpu_error);
-    if (!gpu_scene_renderer_) {
+    backend_owner_.scene_renderer = GpuSceneRenderer::Create(renderer_, false, gpu_error);
+    if (!backend_owner_.ready()) {
         out_error = "[RuntimeGpuRenderer] GPU runtime renderer initialization failed: " + gpu_error;
         return false;
     }
@@ -229,7 +266,7 @@ bool RuntimeGpuRenderer::initialize(std::string& out_error) {
         out_error = "[RuntimeGpuRenderer] GPU runtime manifest missing: " + shader_manifest_path.string();
         return false;
     }
-    if (!gpu_scene_renderer_->load_shader_packages(shader_manifest_path.string(), gpu_error)) {
+    if (!backend_owner_.get()->load_shader_packages(shader_manifest_path.string(), gpu_error)) {
         out_error = "[RuntimeGpuRenderer] GPU shader package load failed: " + gpu_error +
                     " manifest=" + shader_manifest_path.string();
         return false;
@@ -245,32 +282,35 @@ bool RuntimeGpuRenderer::initialize(std::string& out_error) {
 void RuntimeGpuRenderer::set_output_dimensions(int screen_width, int screen_height) {
     screen_width_ = std::max(1, screen_width);
     screen_height_ = std::max(1, screen_height);
+    if (renderer_) {
+        const int max_texture_size = renderer_max_texture_size(renderer_);
+        screen_width_ = clamp_dimension_to_renderer_limit(screen_width_, max_texture_size, "scene width");
+        screen_height_ = clamp_dimension_to_renderer_limit(screen_height_, max_texture_size, "scene height");
+    }
+    render_target_manager_.set_requested_size(screen_width_, screen_height_);
 }
 
 std::optional<SDL_Point> RuntimeGpuRenderer::scene_target_size() const {
-    if (!gpu_scene_renderer_) {
-        return std::nullopt;
-    }
-    return SDL_Point{std::max(1, screen_width_), std::max(1, screen_height_)};
+    return render_target_manager_.current_size();
 }
 
 const std::string& RuntimeGpuRenderer::present_mode() const {
     static const std::string kUnknown = "unknown";
-    return (gpu_scene_renderer_ && gpu_scene_renderer_->device())
-        ? gpu_scene_renderer_->device()->present_mode()
+    return (backend_owner_.ready() && backend_owner_.get()->device())
+        ? backend_owner_.get()->device()->present_mode()
         : kUnknown;
 }
 
 const std::string& RuntimeGpuRenderer::backend_name() const {
     static const std::string kUnknown = "unknown";
-    return (gpu_scene_renderer_ && gpu_scene_renderer_->device())
-        ? gpu_scene_renderer_->device()->backend_name()
+    return (backend_owner_.ready() && backend_owner_.get()->device())
+        ? backend_owner_.get()->device()->backend_name()
         : kUnknown;
 }
 
 bool RuntimeGpuRenderer::ensure_scene_target(std::string& out_error) {
     out_error.clear();
-    if (!renderer_ || !gpu_scene_renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
+    if (!renderer_ || !backend_owner_.ready() || screen_width_ <= 0 || screen_height_ <= 0) {
         out_error = "RuntimeGpuRenderer not ready for scene target initialization.";
         return false;
     }
@@ -278,8 +318,9 @@ bool RuntimeGpuRenderer::ensure_scene_target(std::string& out_error) {
     const int max_texture_size = renderer_max_texture_size(renderer_);
     screen_width_ = clamp_dimension_to_renderer_limit(screen_width_, max_texture_size, "scene width");
     screen_height_ = clamp_dimension_to_renderer_limit(screen_height_, max_texture_size, "scene height");
+    render_target_manager_.set_requested_size(screen_width_, screen_height_);
     GpuSceneRenderer::SamplerResourceSpec sampler_spec{};
-    return gpu_scene_renderer_->ensure_sampler_resource("linear_clamp", sampler_spec, out_error);
+    return backend_owner_.get()->ensure_sampler_resource("linear_clamp", sampler_spec, out_error);
 }
 
 std::vector<world::Chunk*> RuntimeGpuRenderer::runtime_floor_chunks() const {
@@ -293,7 +334,10 @@ std::vector<world::Chunk*> RuntimeGpuRenderer::runtime_floor_chunks() const {
     return assets_->world_grid().all_chunks();
 }
 
-bool RuntimeGpuRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std::string& out_error) const {
+bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
+                                                    std::uint32_t target_height,
+                                                    GpuSceneFrameData& out_data,
+                                                    std::string& out_error) const {
     out_data = GpuSceneFrameData{};
     out_error.clear();
     if (!assets_) {
@@ -306,8 +350,8 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data,
         : assets_->getActive();
     const WarpedScreenGrid& camera = assets_->getView();
 
-    const float target_width = static_cast<float>(std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(screen_width_)));
-    const float target_height = static_cast<float>(std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(screen_height_)));
+    const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
+    const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
 
     std::size_t visible_count = 0;
     std::size_t drawable_count = 0;
@@ -315,8 +359,8 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data,
     if (!runtime_gpu_renderer_detail::build_map_floor_tile_draw_packets(
             camera,
             runtime_floor_chunks(),
-            static_cast<std::uint32_t>(target_width),
-            static_cast<std::uint32_t>(target_height),
+            target_width,
+            target_height,
             out_data.map_floor_draws)) {
         out_error = "Failed to build map-floor tile packets.";
         return false;
@@ -379,7 +423,7 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data,
         };
         packet.sort_key = std::max(projected.screen_bl.y, projected.screen_br.y);
         packet.stable_sort_id = reinterpret_cast<std::uintptr_t>(asset);
-        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, target_width, target_height, packet);
+        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet);
 
         runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
             asset->isFloorBoxesEnabled(),
@@ -420,23 +464,233 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data,
     return true;
 }
 
+bool RuntimeGpuRenderer::render_draw_packet_batch(SDL_GPURenderPass* render_pass,
+                                                  const std::vector<GpuSpriteDrawPacket>& packets,
+                                                  const char* pass_label,
+                                                  std::string& out_error) {
+    out_error.clear();
+    if (packets.empty()) {
+        return true;
+    }
+    if (!render_pass) {
+        out_error = "Render pass handle was null.";
+        return false;
+    }
+    if (!backend_owner_.ready() || !backend_owner_.get()->device()) {
+        out_error = "GPU backend owner is unavailable while drawing " +
+                    std::string(pass_label ? pass_label : "packets");
+        return false;
+    }
+    if (frame_context_.command_buffer == nullptr) {
+        out_error = "Command buffer was null while drawing " +
+                    std::string(pass_label ? pass_label : "packets");
+        return false;
+    }
+
+    SDL_GPUGraphicsPipeline* pipeline =
+        backend_owner_.get()->resolve_graphics_pipeline("sprite_batched", 0x2100u);
+    if (!pipeline) {
+        out_error = "Failed to resolve graphics pipeline 'sprite_batched' for " +
+                    std::string(pass_label ? pass_label : "packets");
+        return false;
+    }
+
+    SDL_GPUSampler* linear_sampler = backend_owner_.get()->find_sampler_resource("linear_clamp");
+    if (!linear_sampler) {
+        out_error = "Sampler 'linear_clamp' not available while drawing " +
+                    std::string(pass_label ? pass_label : "packets");
+        return false;
+    }
+
+    SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
+
+    for (const GpuSpriteDrawPacket& draw : packets) {
+        std::string texture_error;
+        SDL_GPUTexture* gpu_texture =
+            backend_owner_.get()->resolve_gpu_texture_for_sdl_texture(draw.source_texture, texture_error);
+        if (!gpu_texture) {
+            out_error = "Failed to resolve draw texture for pass '" +
+                        std::string(pass_label ? pass_label : "packets") + "': " +
+                        (texture_error.empty() ? "unknown SDL->GPU texture import failure." : texture_error);
+            return false;
+        }
+
+        SDL_GPUTextureSamplerBinding sampler_binding{};
+        sampler_binding.texture = gpu_texture;
+        sampler_binding.sampler = linear_sampler;
+        SDL_BindGPUFragmentSamplers(render_pass, 0u, &sampler_binding, 1u);
+
+        SpriteBatchVertexUniformData uniform_data{};
+        for (std::size_t i = 0; i < draw.vertices.size(); ++i) {
+            const GpuSpriteVertex& vertex = draw.vertices[i];
+            uniform_data.vertex_uv[i] = SDL_FColor{vertex.clip_x, vertex.clip_y, vertex.uv_x, vertex.uv_y};
+        }
+        uniform_data.modulate = draw.modulate;
+        SDL_PushGPUVertexUniformData(frame_context_.command_buffer,
+                                     0u,
+                                     &uniform_data,
+                                     static_cast<Uint32>(sizeof(uniform_data)));
+
+        SDL_DrawGPUPrimitives(render_pass, 6u, 1u, 0u, 0u);
+        render_diagnostics::add_draw_call_count();
+        ++frame_context_.stats.draw_call_count;
+    }
+
+    return true;
+}
+
 bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     out_error.clear();
+    frame_context_ = FrameContext{};
 
-    if (!ensure_scene_target(out_error)) {
+    if (!backend_owner_.ready() || !backend_owner_.get()->device()) {
+        out_error = "GPU backend owner is unavailable.";
         return false;
     }
+
+    GpuRenderDevice* device = backend_owner_.get()->device();
+    if (!device) {
+        out_error = "GPU render device is unavailable.";
+        return false;
+    }
+
+    const std::uint64_t pipeline_hits_before = backend_owner_.get()->pipeline_cache().total_hits();
+    const std::uint64_t pipeline_misses_before = backend_owner_.get()->pipeline_cache().total_misses();
+
+    std::string frame_error;
+    if (!device->begin_frame(frame_error)) {
+        out_error = "Failed to acquire GPU frame: " + frame_error;
+        return false;
+    }
+
+    const GpuRenderDevice::FrameState& frame_state = device->frame_state();
+    frame_context_.command_buffer = frame_state.command_buffer;
+    frame_context_.swapchain_texture = frame_state.swapchain_texture;
+    frame_context_.swapchain_width = frame_state.swapchain_width;
+    frame_context_.swapchain_height = frame_state.swapchain_height;
+
+    if (frame_context_.command_buffer == nullptr) {
+        out_error = "Failed to acquire GPU command buffer.";
+        (void)device->end_frame(false, frame_error);
+        return false;
+    }
+    if (frame_context_.swapchain_texture == nullptr) {
+        out_error = "Failed to acquire GPU swapchain texture.";
+        (void)device->end_frame(false, frame_error);
+        return false;
+    }
+    if (!render_target_manager_.synchronize_to_swapchain(frame_context_.swapchain_width,
+                                                         frame_context_.swapchain_height,
+                                                         out_error)) {
+        (void)device->end_frame(false, frame_error);
+        return false;
+    }
+
+    const std::optional<SDL_Point> effective_target = render_target_manager_.current_size();
+    if (!effective_target.has_value() || effective_target->x <= 0 || effective_target->y <= 0) {
+        out_error = "Invalid render target dimensions.";
+        (void)device->end_frame(false, frame_error);
+        return false;
+    }
+
+    screen_width_ = effective_target->x;
+    screen_height_ = effective_target->y;
+    render_target_manager_.set_requested_size(screen_width_, screen_height_);
+
     GpuSceneFrameData frame_data{};
-    if (!build_gpu_scene_frame_data(frame_data, out_error)) {
+    if (!build_gpu_scene_frame_data(static_cast<std::uint32_t>(effective_target->x),
+                                    static_cast<std::uint32_t>(effective_target->y),
+                                    frame_data,
+                                    out_error)) {
+        (void)device->end_frame(false, frame_error);
         return false;
     }
 
+    frame_context_.stats.floor_draw_count = frame_data.floor_draw_count;
+    frame_context_.stats.floor_sprite_draw_count = frame_data.floor_sprite_draw_count;
+    frame_context_.stats.layer_sprite_draw_count = frame_data.layer_sprite_draw_count;
+    frame_context_.stats.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
+
+    render_diagnostics::set_renderer_runtime_info("gpu", backend_name(), present_mode());
+    std::uint64_t texture_memory_bytes = 0;
+    const bool texture_memory_known = device->query_texture_memory_usage(texture_memory_bytes);
+    render_diagnostics::set_texture_memory_usage(texture_memory_bytes, texture_memory_known);
     render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count,
                                                    frame_data.layer_sprite_draw_count,
                                                    frame_data.has_valid_composite_source);
 
-    if (!gpu_scene_renderer_ || !gpu_scene_renderer_->render_frame(frame_data, out_error)) {
+    GpuSceneRenderer::SamplerResourceSpec sampler_spec{};
+    if (!backend_owner_.get()->ensure_sampler_resource("linear_clamp", sampler_spec, out_error)) {
+        (void)device->end_frame(false, frame_error);
         return false;
     }
+
+    SDL_GPUColorTargetInfo target_info{};
+    target_info.texture = frame_context_.swapchain_texture;
+    target_info.mip_level = 0;
+    target_info.layer_or_depth_plane = 0;
+    target_info.clear_color = frame_data.map_floor_draw_count == 0
+        ? SDL_FColor{0.08f, 0.02f, 0.12f, 1.0f}
+        : SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    target_info.load_op = SDL_GPU_LOADOP_CLEAR;
+    target_info.store_op = SDL_GPU_STOREOP_STORE;
+    target_info.resolve_texture = nullptr;
+    target_info.resolve_mip_level = 0;
+    target_info.resolve_layer = 0;
+    target_info.cycle = false;
+    target_info.cycle_resolve_texture = false;
+
+    SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(frame_context_.command_buffer, &target_info, 1, nullptr);
+    if (!render_pass) {
+        out_error = "SDL_BeginGPURenderPass failed: " + std::string(SDL_GetError());
+        (void)device->end_frame(false, frame_error);
+        return false;
+    }
+
+    frame_context_.stats.render_pass_count = 1;
+    render_diagnostics::add_render_pass();
+
+    bool render_ok = true;
+    if (!render_draw_packet_batch(render_pass, frame_data.map_floor_draws, "floor", out_error)) {
+        render_ok = false;
+    } else if (!render_draw_packet_batch(render_pass,
+                                         frame_data.floor_sprite_draws,
+                                         "floor-bound sprites",
+                                         out_error)) {
+        render_ok = false;
+    } else if (!render_draw_packet_batch(render_pass,
+                                         frame_data.layer_draws,
+                                         "world sprites",
+                                         out_error)) {
+        render_ok = false;
+    } else {
+        frame_context_.stats.debug_overlay_draw_count = 0;
+    }
+
+    SDL_EndGPURenderPass(render_pass);
+
+    if (!render_ok) {
+        (void)device->end_frame(false, frame_error);
+        return false;
+    }
+
+    if (!device->end_frame(true, frame_error)) {
+        out_error = "Failed to submit GPU frame: " + frame_error;
+        return false;
+    }
+
+    const std::uint64_t pipeline_hits_after = backend_owner_.get()->pipeline_cache().total_hits();
+    const std::uint64_t pipeline_misses_after = backend_owner_.get()->pipeline_cache().total_misses();
+    const std::uint64_t frame_hits = (pipeline_hits_after >= pipeline_hits_before)
+        ? (pipeline_hits_after - pipeline_hits_before)
+        : pipeline_hits_after;
+    const std::uint64_t frame_misses = (pipeline_misses_after >= pipeline_misses_before)
+        ? (pipeline_misses_after - pipeline_misses_before)
+        : pipeline_misses_after;
+    const double frame_hit_rate = (frame_hits + frame_misses) == 0
+        ? 1.0
+        : static_cast<double>(frame_hits) / static_cast<double>(frame_hits + frame_misses);
+    render_diagnostics::set_gpu_pipeline_cache_stats(frame_hits, frame_misses, frame_hit_rate);
+
     return true;
 }

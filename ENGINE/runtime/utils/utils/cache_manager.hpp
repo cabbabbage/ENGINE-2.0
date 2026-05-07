@@ -78,6 +78,11 @@ namespace CacheManager {
 
     const PreparedGpuTextureUpload* prepared_gpu_upload_for_texture(SDL_Texture* texture);
 
+    SDL_Texture* create_texture_from_prepared_upload(SDL_Renderer* renderer,
+                                                     const PreparedGpuTextureUpload& prepared,
+                                                     bool flip_horizontal = false,
+                                                     bool flip_vertical = false);
+
     SDL_GPUTexture* upload_prepared_texture_to_gpu(SDL_GPUDevice* gpu_device,
                                                    const PreparedGpuTextureUpload& prepared,
                                                    std::string& out_error);

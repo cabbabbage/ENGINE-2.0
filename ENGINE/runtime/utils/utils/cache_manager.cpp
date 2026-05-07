@@ -408,6 +408,63 @@ const PreparedGpuTextureUpload* prepared_gpu_upload_for_texture(SDL_Texture* tex
     return it != prepared_upload_registry().end() ? &it->second : nullptr;
 }
 
+SDL_Texture* create_texture_from_prepared_upload(SDL_Renderer* renderer,
+                                                 const PreparedGpuTextureUpload& prepared,
+                                                 bool flip_horizontal,
+                                                 bool flip_vertical) {
+    if (!renderer || !prepared.valid() || prepared.width <= 0 || prepared.height <= 0 || prepared.pitch <= 0) {
+        return nullptr;
+    }
+
+    const std::size_t row_bytes = static_cast<std::size_t>(prepared.width) * 4u;
+    const std::size_t src_pitch = static_cast<std::size_t>(prepared.pitch);
+    const std::size_t required_src_bytes = src_pitch * static_cast<std::size_t>(prepared.height);
+    if (row_bytes == 0 || src_pitch < row_bytes || prepared.pixels.size() < required_src_bytes) {
+        return nullptr;
+    }
+
+    PreparedGpuTextureUpload transformed{};
+    transformed.width = prepared.width;
+    transformed.height = prepared.height;
+    transformed.pitch = static_cast<int>(row_bytes);
+    transformed.format = SDL_PIXELFORMAT_RGBA8888;
+    transformed.options = prepared.options;
+    transformed.pixels.resize(row_bytes * static_cast<std::size_t>(transformed.height));
+
+    for (int y = 0; y < transformed.height; ++y) {
+        const int src_y = flip_vertical ? (transformed.height - 1 - y) : y;
+        const auto* src_row = prepared.pixels.data() + static_cast<std::size_t>(src_y) * src_pitch;
+        auto* dst_row = transformed.pixels.data() + static_cast<std::size_t>(y) * row_bytes;
+        if (!flip_horizontal) {
+            std::memcpy(dst_row, src_row, row_bytes);
+            continue;
+        }
+        for (int x = 0; x < transformed.width; ++x) {
+            const int src_x = transformed.width - 1 - x;
+            std::memcpy(dst_row + static_cast<std::size_t>(x) * 4u,
+                        src_row + static_cast<std::size_t>(src_x) * 4u,
+                        4u);
+        }
+    }
+
+    SDL_Texture* texture = SDL_CreateTexture(renderer,
+                                             SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_STATIC,
+                                             transformed.width,
+                                             transformed.height);
+    if (!texture) {
+        return nullptr;
+    }
+
+    if (!SDL_UpdateTexture(texture, nullptr, transformed.pixels.data(), transformed.pitch)) {
+        SDL_DestroyTexture(texture);
+        return nullptr;
+    }
+
+    prepared_upload_registry()[texture] = std::move(transformed);
+    return texture;
+}
+
 SDL_GPUTexture* upload_prepared_texture_to_gpu(SDL_GPUDevice* gpu_device,
                                                const PreparedGpuTextureUpload& prepared,
                                                std::string& out_error) {

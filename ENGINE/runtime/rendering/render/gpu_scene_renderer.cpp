@@ -960,6 +960,17 @@ SDL_GPUTexture* GpuSceneRenderer::find_texture_resource(const std::string& logic
     return (external_it != external_texture_resources_.end()) ? external_it->second : nullptr;
 }
 
+SDL_GPUTexture* GpuSceneRenderer::find_gpu_texture_for_sdl_texture(SDL_Texture* texture) const {
+    if (!texture) {
+        return nullptr;
+    }
+    const auto it = imported_sdl_texture_resources_.find(texture);
+    if (it == imported_sdl_texture_resources_.end()) {
+        return nullptr;
+    }
+    return it->second.gpu_texture;
+}
+
 SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Texture* texture, std::string& out_error) {
     out_error.clear();
     if (!texture) {

@@ -158,6 +158,8 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
 
             GpuSpriteDrawPacket packet{};
             packet.source_texture = tile.texture;
+            packet.source_asset_name = "<floor-tile>";
+            packet.source_texture_id = "tile_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(tile.texture));
             packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
             packet.sort_key = std::max(screen_br.y, screen_bl.y);
             packet.stable_sort_id = floor_sort_id(false, tile_sequence++);
@@ -390,6 +392,8 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
 
         GpuSpriteDrawPacket packet{};
         packet.source_texture = object.texture;
+        packet.source_asset_name = asset->info ? asset->info->name : "<unknown-asset>";
+        packet.source_texture_id = "sdl_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(object.texture));
         packet.modulate = SDL_FColor{
             static_cast<float>(object.color_mod.r) / 255.0f,
             static_cast<float>(object.color_mod.g) / 255.0f,
@@ -471,6 +475,26 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
         return false;
     }
 
+    for (std::vector<GpuSpriteDrawPacket>* draws : {&out_data.floor_draws, &out_data.layer_draws}) {
+        for (GpuSpriteDrawPacket& draw : *draws) {
+            if (!draw.source_texture) {
+                out_error = "FATAL missing source SDL texture; asset='" + draw.source_asset_name +
+                            "' texture='" + draw.source_texture_id +
+                            "' renderer='RuntimeGpuRenderer' frame_pass='build_gpu_scene_frame_data'";
+                return false;
+            }
+            std::string texture_error;
+            draw.source_gpu_texture = backend_owner_.get()->resolve_gpu_texture_for_sdl_texture(draw.source_texture, texture_error);
+            if (!draw.source_gpu_texture) {
+                out_error = "FATAL missing GPU-backed texture; asset='" + draw.source_asset_name +
+                            "' texture='" + draw.source_texture_id +
+                            "' renderer='RuntimeGpuRenderer' frame_pass='build_gpu_scene_frame_data' detail='" +
+                            texture_error + "'";
+                return false;
+            }
+        }
+    }
+
     out_data.floor_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         out_data.floor_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.layer_sprite_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
@@ -527,13 +551,14 @@ bool RuntimeGpuRenderer::render_draw_packet_batch(SDL_GPURenderPass* render_pass
     SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
     for (const GpuSpriteDrawPacket& draw : packets) {
-        std::string texture_error;
-        SDL_GPUTexture* gpu_texture =
-            backend_owner_.get()->resolve_gpu_texture_for_sdl_texture(draw.source_texture, texture_error);
+        SDL_GPUTexture* gpu_texture = draw.source_gpu_texture
+            ? draw.source_gpu_texture
+            : backend_owner_.get()->find_gpu_texture_for_sdl_texture(draw.source_texture);
         if (!gpu_texture) {
-            out_error = "Failed to resolve draw texture for pass '" +
-                        std::string(pass_label ? pass_label : "packets") + "': " +
-                        (texture_error.empty() ? "unknown SDL->GPU texture import failure." : texture_error);
+            out_error = "FATAL missing GPU-backed texture; asset='" + draw.source_asset_name +
+                        "' texture='" + draw.source_texture_id +
+                        "' renderer='RuntimeGpuRenderer' frame_pass='" +
+                        std::string(pass_label ? pass_label : "packets") + "'";
             return false;
         }
 

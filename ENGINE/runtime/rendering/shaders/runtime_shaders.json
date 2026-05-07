@@ -34,22 +34,6 @@
         "stage": "vertex"
       }
     },
-    "sprite_batched": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 4020,
-        "hash_fnv1a64": "0x565586027220c6f3",
-        "path": "dxil/sprite_batched.dxil",
-        "stage": "fragment"
-      },
-      "spirv": {
-        "entrypoint": "main",
-        "file_size_bytes": 740,
-        "hash_fnv1a64": "0xc09f96ddc46345f6",
-        "path": "spirv/sprite_batched.spv",
-        "stage": "fragment"
-      }
-    },
     "sprite_textured": {
       "dxil": {
         "entrypoint": "main",

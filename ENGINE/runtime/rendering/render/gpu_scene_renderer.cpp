@@ -15,11 +15,9 @@
 
 namespace {
 
-constexpr std::array<const char*, 2> kRequiredGraphicsPipelines = {
+constexpr std::array<const char*, 1> kRequiredGraphicsPipelines = {
     "sprite_textured",
-    "sprite_batched",
 };
-constexpr const char* kFullscreenVertexVariant = "fullscreen_vertex";
 constexpr const char* kSpriteBatchVertexVariant = "sprite_batch_vertex";
 
 struct ShaderResourceCounts {
@@ -30,7 +28,7 @@ struct ShaderResourceCounts {
 };
 
 struct GraphicsPipelineShaderSpec {
-    const char* vertex_variant = kFullscreenVertexVariant;
+    const char* vertex_variant = kSpriteBatchVertexVariant;
     const char* fragment_variant = "sprite_textured";
     ShaderResourceCounts vertex_resources{};
     ShaderResourceCounts fragment_resources{};
@@ -39,22 +37,13 @@ struct GraphicsPipelineShaderSpec {
 
 const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::string& name) {
     static const GraphicsPipelineShaderSpec kSpriteTextured{
-        kFullscreenVertexVariant,
-        "sprite_textured",
-        ShaderResourceCounts{},
-        ShaderResourceCounts{1u, 0u, 0u, 0u},
-        false};
-    static const GraphicsPipelineShaderSpec kSpriteBatched{
         kSpriteBatchVertexVariant,
-        "sprite_batched",
+        "sprite_textured",
         ShaderResourceCounts{0u, 0u, 0u, 1u},
         ShaderResourceCounts{1u, 0u, 0u, 0u},
         true};
     if (name == "sprite_textured") {
         return &kSpriteTextured;
-    }
-    if (name == "sprite_batched") {
-        return &kSpriteBatched;
     }
     return nullptr;
 }
@@ -583,8 +572,7 @@ bool GpuSceneRenderer::warmup_required_pipelines(std::string& out_error) {
         return true;
     };
 
-    if (!ensure_vertex_variant(kFullscreenVertexVariant) ||
-        !ensure_vertex_variant(kSpriteBatchVertexVariant)) {
+    if (!ensure_vertex_variant(kSpriteBatchVertexVariant)) {
         return false;
     }
 
@@ -689,7 +677,7 @@ bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::st
     scene_pass.type = GpuFrameGraph::PassType::Render;
     scene_pass.name = "runtime_scene_present";
     scene_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.swapchain")};
-    scene_pass.render.pipeline_id = "sprite_batched";
+    scene_pass.render.pipeline_id = "sprite_textured";
     scene_pass.render.render_state_key = 0x2100u;
     scene_pass.render.use_swapchain_target = true;
     scene_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;

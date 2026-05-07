@@ -130,19 +130,41 @@ TEST_CASE("GpuFrameGraph non-strict validation warns and continues") {
     CHECK(stats.dependency_error_count == 0);
 }
 
-TEST_CASE("GpuFrameGraph strict validation accepts identical startup and runtime authoritative topology") {
+    TEST_CASE("GpuFrameGraph strict validation accepts identical startup and runtime authoritative topology") {
     const auto execute_authoritative_sequence = [](const std::string& prefix) {
         GpuFrameGraph graph;
 
-        GpuFrameGraph::PassDescriptor floor_pass{};
-        floor_pass.type = GpuFrameGraph::PassType::Render;
-        floor_pass.name = prefix + "_render_floor";
-        floor_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
-        floor_pass.render.pipeline_id = "floor_compose";
-        floor_pass.render.color_target = "scene.floor";
-        floor_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-        floor_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-        graph.add_pass(std::move(floor_pass));
+        GpuFrameGraph::PassDescriptor floor_base_pass{};
+        floor_base_pass.type = GpuFrameGraph::PassType::Render;
+        floor_base_pass.name = prefix + "_render_floor_base";
+        floor_base_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
+        floor_base_pass.render.pipeline_id = "floor_compose";
+        floor_base_pass.render.color_target = "scene.floor";
+        floor_base_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+        floor_base_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+        graph.add_pass(std::move(floor_base_pass));
+
+        GpuFrameGraph::PassDescriptor floor_tiles_pass{};
+        floor_tiles_pass.type = GpuFrameGraph::PassType::Render;
+        floor_tiles_pass.name = prefix + "_render_floor_tiles";
+        floor_tiles_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
+        floor_tiles_pass.render.pipeline_id = "sprite_batched";
+        floor_tiles_pass.render.color_target = "scene.floor";
+        floor_tiles_pass.render.load_op = SDL_GPU_LOADOP_LOAD;
+        floor_tiles_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+        floor_tiles_pass.render.execute_default_draw = false;
+        graph.add_pass(std::move(floor_tiles_pass));
+
+        GpuFrameGraph::PassDescriptor floor_sprites_pass{};
+        floor_sprites_pass.type = GpuFrameGraph::PassType::Render;
+        floor_sprites_pass.name = prefix + "_render_floor_sprites";
+        floor_sprites_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
+        floor_sprites_pass.render.pipeline_id = "sprite_batched";
+        floor_sprites_pass.render.color_target = "scene.floor";
+        floor_sprites_pass.render.load_op = SDL_GPU_LOADOP_LOAD;
+        floor_sprites_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+        floor_sprites_pass.render.execute_default_draw = false;
+        graph.add_pass(std::move(floor_sprites_pass));
 
         GpuFrameGraph::PassDescriptor layers_pass{};
         layers_pass.type = GpuFrameGraph::PassType::Render;
@@ -152,6 +174,7 @@ TEST_CASE("GpuFrameGraph strict validation accepts identical startup and runtime
         layers_pass.render.color_target = "scene.layers";
         layers_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
         layers_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+        layers_pass.render.execute_default_draw = false;
         graph.add_pass(std::move(layers_pass));
 
         GpuFrameGraph::PassDescriptor composite_pass{};
@@ -418,4 +441,40 @@ TEST_CASE("GpuFrameGraph sampled texture contract rejects empty sampler names") 
     CHECK_FALSE(stats.success);
     CHECK(stats.dependency_error_count == 1);
     CHECK(stats.error_message.find("empty sampler name") != std::string::npos);
+}
+
+TEST_CASE("GpuFrameGraph requires exactly one final swapchain render pass") {
+    GpuFrameGraph graph;
+
+    graph.add_pass(make_render_write_pass("write_scene_floor", "scene.floor", "floor_compose"));
+    graph.add_pass(make_render_write_pass("write_scene_layers", "scene.layers", "sprite_batched"));
+
+    GpuFrameGraph::PassDescriptor compose_pass{};
+    compose_pass.type = GpuFrameGraph::PassType::Render;
+    compose_pass.name = "compose_scene";
+    compose_pass.resources = {
+        GpuFrameGraph::ResourceDependency::read("scene.floor"),
+        GpuFrameGraph::ResourceDependency::read("scene.layers"),
+        GpuFrameGraph::ResourceDependency::write_resource("scene.composite"),
+    };
+    compose_pass.render.pipeline_id = "final_compose";
+    compose_pass.render.color_target = "scene.composite";
+    compose_pass.render.fragment_sampled_textures = {
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.floor", "linear_clamp"},
+        GpuFrameGraph::RenderPassPayload::SampledTextureBinding{"scene.layers", "linear_clamp"},
+    };
+    graph.add_pass(std::move(compose_pass));
+
+    graph.add_pass(make_final_swapchain_pass("present_scene_once", "scene.composite"));
+    graph.add_pass(make_final_swapchain_pass("present_scene_twice", "scene.composite"));
+
+    GpuFrameGraph::ExecuteContext context{};
+    GpuFrameGraph::ExecuteOptions options{};
+    options.strict_resource_validation = true;
+    options.fail_on_validation_error = true;
+    options.dry_run = true;
+
+    const GpuFrameGraph::ExecutionStats stats = graph.execute(context, options);
+    CHECK_FALSE(stats.success);
+    CHECK(stats.error_message.find("Expected exactly one final swapchain render pass") != std::string::npos);
 }

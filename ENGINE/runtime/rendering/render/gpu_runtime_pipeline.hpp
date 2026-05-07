@@ -26,8 +26,11 @@ struct GpuSpriteDrawPacket {
 };
 
 struct GpuSceneFrameData {
-    std::vector<GpuSpriteDrawPacket> floor_draws{};
+    std::vector<GpuSpriteDrawPacket> map_floor_draws{};
+    std::vector<GpuSpriteDrawPacket> floor_sprite_draws{};
     std::vector<GpuSpriteDrawPacket> layer_draws{};
+    std::uint32_t map_floor_draw_count = 0;
+    std::uint32_t floor_sprite_draw_count = 0;
     std::uint32_t floor_draw_count = 0;
     std::uint32_t layer_sprite_draw_count = 0;
     std::uint32_t debug_overlay_draw_count = 0;

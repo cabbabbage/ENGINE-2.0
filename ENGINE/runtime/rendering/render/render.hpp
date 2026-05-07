@@ -9,11 +9,9 @@
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
-#include "rendering/render/gpu_scene_renderer.hpp"
-#include "rendering/render/gpu_runtime_pipeline.hpp"
+#include "rendering/render/runtime_gpu_renderer.hpp"
 
 class Assets;
-class GpuRuntimePipeline;
 
 namespace render_internal {
 std::filesystem::path runtime_gpu_shader_manifest_path();
@@ -59,23 +57,12 @@ public:
     bool gpu_runtime_path_enabled() const { return gpu_runtime_path_enabled_; }
 
 private:
-    bool ensure_scene_target();
-    bool ensure_authoritative_graph_resources(std::uint32_t scene_width,
-                                              std::uint32_t scene_height,
-                                              std::string& out_error);
-    bool probe_runtime_pipeline_startup(std::string& out_error);
-    bool execute_gpu_frame_graph(std::string& out_error);
-    bool build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std::string& out_error) const;
-
     SDL_Renderer* renderer_ = nullptr;
     Assets* assets_ = nullptr;
     int screen_width_ = 1;
     int screen_height_ = 1;
 
-    GpuSceneRenderer::TextureResourceSpec scene_composite_resource_spec_{};
-
-    std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
-    std::unique_ptr<GpuRuntimePipeline> gpu_runtime_pipeline_;
+    std::unique_ptr<RuntimeGpuRenderer> runtime_gpu_renderer_;
 
     bool gpu_runtime_path_enabled_ = false;
     bool render_path_status_logged_ = false;

@@ -151,36 +151,76 @@ bool GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
         return value;
     };
 
-    std::vector<ResolvedGpuSpriteDraw> floor_draws{};
+    std::vector<ResolvedGpuSpriteDraw> map_floor_draws{};
+    std::vector<ResolvedGpuSpriteDraw> floor_sprite_draws{};
     std::vector<ResolvedGpuSpriteDraw> layer_draws{};
-    if (!resolve_sprite_draws(renderer, frame_data.floor_draws, "scene.floor", floor_draws, out_error)) {
+    if (!resolve_sprite_draws(renderer,
+                              frame_data.map_floor_draws,
+                              "scene.floor_map_tiles",
+                              map_floor_draws,
+                              out_error)) {
+        return false;
+    }
+    if (!resolve_sprite_draws(renderer,
+                              frame_data.floor_sprite_draws,
+                              "scene.floor_sprites",
+                              floor_sprite_draws,
+                              out_error)) {
         return false;
     }
     if (!resolve_sprite_draws(renderer, frame_data.layer_draws, "scene.layers", layer_draws, out_error)) {
         return false;
     }
 
-    GpuFrameGraph::PassDescriptor floor_pass{};
-    floor_pass.type = GpuFrameGraph::PassType::Render;
-    floor_pass.name = make_name("render_floor");
-    floor_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
-    floor_pass.render.pipeline_id = "sprite_batched";
-    floor_pass.render.render_state_key = 0x2001u;
-    floor_pass.render.color_target = "scene.floor";
-    floor_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-    floor_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    floor_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
-    floor_pass.render.execute_default_draw = false;
-    floor_pass.render.custom_render =
-        make_sprite_draw_callback(std::move(floor_draws), floor_pass.name);
-    renderer.add_pass(std::move(floor_pass));
+    GpuFrameGraph::PassDescriptor floor_base_pass{};
+    floor_base_pass.type = GpuFrameGraph::PassType::Render;
+    floor_base_pass.name = make_name("render_floor_base");
+    floor_base_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
+    floor_base_pass.render.pipeline_id = "floor_compose";
+    floor_base_pass.render.render_state_key = 0x2000u;
+    floor_base_pass.render.color_target = "scene.floor";
+    floor_base_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
+    floor_base_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    floor_base_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
+    floor_base_pass.render.execute_default_draw = true;
+    renderer.add_pass(std::move(floor_base_pass));
+
+    GpuFrameGraph::PassDescriptor floor_tiles_pass{};
+    floor_tiles_pass.type = GpuFrameGraph::PassType::Render;
+    floor_tiles_pass.name = make_name("render_floor_tiles");
+    floor_tiles_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
+    floor_tiles_pass.render.pipeline_id = "sprite_batched";
+    floor_tiles_pass.render.render_state_key = 0x2001u;
+    floor_tiles_pass.render.color_target = "scene.floor";
+    floor_tiles_pass.render.load_op = SDL_GPU_LOADOP_LOAD;
+    floor_tiles_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    floor_tiles_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
+    floor_tiles_pass.render.execute_default_draw = false;
+    floor_tiles_pass.render.custom_render =
+        make_sprite_draw_callback(std::move(map_floor_draws), floor_tiles_pass.name);
+    renderer.add_pass(std::move(floor_tiles_pass));
+
+    GpuFrameGraph::PassDescriptor floor_sprites_pass{};
+    floor_sprites_pass.type = GpuFrameGraph::PassType::Render;
+    floor_sprites_pass.name = make_name("render_floor_sprites");
+    floor_sprites_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.floor")};
+    floor_sprites_pass.render.pipeline_id = "sprite_batched";
+    floor_sprites_pass.render.render_state_key = 0x2002u;
+    floor_sprites_pass.render.color_target = "scene.floor";
+    floor_sprites_pass.render.load_op = SDL_GPU_LOADOP_LOAD;
+    floor_sprites_pass.render.store_op = SDL_GPU_STOREOP_STORE;
+    floor_sprites_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
+    floor_sprites_pass.render.execute_default_draw = false;
+    floor_sprites_pass.render.custom_render =
+        make_sprite_draw_callback(std::move(floor_sprite_draws), floor_sprites_pass.name);
+    renderer.add_pass(std::move(floor_sprites_pass));
 
     GpuFrameGraph::PassDescriptor layers_pass{};
     layers_pass.type = GpuFrameGraph::PassType::Render;
     layers_pass.name = make_name("render_layers");
     layers_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.layers")};
     layers_pass.render.pipeline_id = "sprite_batched";
-    layers_pass.render.render_state_key = 0x2002u;
+    layers_pass.render.render_state_key = 0x2003u;
     layers_pass.render.color_target = "scene.layers";
     layers_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
     layers_pass.render.store_op = SDL_GPU_STOREOP_STORE;
@@ -200,7 +240,7 @@ bool GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
         GpuFrameGraph::ResourceDependency::write_resource("scene.composite"),
     };
     compose_pass.render.pipeline_id = "final_compose";
-    compose_pass.render.render_state_key = 0x1005u;
+    compose_pass.render.render_state_key = 0x2004u;
     compose_pass.render.color_target = "scene.composite";
     compose_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
     compose_pass.render.store_op = SDL_GPU_STOREOP_STORE;
@@ -219,7 +259,7 @@ bool GpuRuntimePipeline::enqueue_frame_graph(GpuSceneRenderer& renderer,
         GpuFrameGraph::ResourceDependency::write_resource("scene.swapchain"),
     };
     present_pass.render.pipeline_id = "sprite_textured";
-    present_pass.render.render_state_key = 0x1006u;
+    present_pass.render.render_state_key = 0x2005u;
     present_pass.render.use_swapchain_target = true;
     present_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
     present_pass.render.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};

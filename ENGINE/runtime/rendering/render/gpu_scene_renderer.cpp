@@ -7,7 +7,6 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
-#include <cstring>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -187,112 +186,6 @@ std::uint64_t estimate_gpu_texture_bytes(const GpuSceneRenderer::TextureResource
     return width * height * layers * levels * samples * bpp;
 }
 
-constexpr Uint32 kD3D12UploadRowAlignment = 256u;
-
-std::size_t align_up(std::size_t value, std::size_t alignment) {
-    if (alignment == 0) {
-        return value;
-    }
-    const std::size_t remainder = value % alignment;
-    return remainder == 0 ? value : (value + alignment - remainder);
-}
-
-bool upload_surface_to_gpu_texture(SDL_GPUDevice* gpu_device,
-                                   SDL_GPUTexture* texture,
-                                   SDL_Surface* surface,
-                                   std::string& out_error) {
-    if (!gpu_device || !texture || !surface || !surface->pixels || surface->w <= 0 || surface->h <= 0 || surface->pitch <= 0) {
-        out_error = "Invalid upload arguments for SDL surface -> GPU texture transfer.";
-        return false;
-    }
-
-    const SDL_PixelFormatDetails* format_details = SDL_GetPixelFormatDetails(surface->format);
-    const std::size_t bytes_per_pixel =
-        (format_details && format_details->bytes_per_pixel > 0)
-            ? static_cast<std::size_t>(format_details->bytes_per_pixel)
-            : 0u;
-    if (bytes_per_pixel == 0) {
-        out_error = "Unsupported surface pixel format for GPU upload.";
-        return false;
-    }
-
-    const std::size_t row_bytes = static_cast<std::size_t>(surface->w) * bytes_per_pixel;
-    const std::size_t upload_row_bytes = align_up(row_bytes, kD3D12UploadRowAlignment);
-    const std::size_t upload_bytes = upload_row_bytes * static_cast<std::size_t>(surface->h);
-    if (upload_bytes == 0 || upload_bytes > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
-        out_error = "Surface upload exceeded transfer buffer size limits.";
-        return false;
-    }
-    if ((upload_row_bytes / bytes_per_pixel) > static_cast<std::size_t>(std::numeric_limits<Uint32>::max())) {
-        out_error = "Surface upload row pitch exceeded transfer format limits.";
-        return false;
-    }
-
-    SDL_GPUTransferBufferCreateInfo transfer_create{};
-    transfer_create.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_create.size = static_cast<Uint32>(upload_bytes);
-    transfer_create.props = 0;
-    SDL_GPUTransferBuffer* transfer_buffer = SDL_CreateGPUTransferBuffer(gpu_device, &transfer_create);
-    if (!transfer_buffer) {
-        out_error = "SDL_CreateGPUTransferBuffer failed: " + std::string(SDL_GetError());
-        return false;
-    }
-
-    bool success = false;
-    void* mapped = SDL_MapGPUTransferBuffer(gpu_device, transfer_buffer, true);
-    if (mapped) {
-        std::uint8_t* dst = static_cast<std::uint8_t*>(mapped);
-        const std::uint8_t* src = static_cast<const std::uint8_t*>(surface->pixels);
-        for (int row = 0; row < surface->h; ++row) {
-            std::memcpy(dst + static_cast<std::size_t>(row) * upload_row_bytes,
-                        src + static_cast<std::size_t>(row) * static_cast<std::size_t>(surface->pitch),
-                        row_bytes);
-        }
-        SDL_UnmapGPUTransferBuffer(gpu_device, transfer_buffer);
-
-        SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(gpu_device);
-        if (command_buffer) {
-            SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
-            if (copy_pass) {
-                SDL_GPUTextureTransferInfo source{};
-                source.transfer_buffer = transfer_buffer;
-                source.offset = 0;
-                source.pixels_per_row = static_cast<Uint32>(upload_row_bytes / bytes_per_pixel);
-                source.rows_per_layer = static_cast<Uint32>(surface->h);
-
-                SDL_GPUTextureRegion destination{};
-                destination.texture = texture;
-                destination.mip_level = 0;
-                destination.layer = 0;
-                destination.x = 0;
-                destination.y = 0;
-                destination.z = 0;
-                destination.w = static_cast<Uint32>(surface->w);
-                destination.h = static_cast<Uint32>(surface->h);
-                destination.d = 1;
-
-                SDL_UploadToGPUTexture(copy_pass, &source, &destination, false);
-                SDL_EndGPUCopyPass(copy_pass);
-                success = SDL_SubmitGPUCommandBuffer(command_buffer);
-                if (!success) {
-                    out_error = "SDL_SubmitGPUCommandBuffer failed for texture upload: " + std::string(SDL_GetError());
-                    SDL_CancelGPUCommandBuffer(command_buffer);
-                }
-            } else {
-                SDL_CancelGPUCommandBuffer(command_buffer);
-                out_error = "SDL_BeginGPUCopyPass failed for texture upload: " + std::string(SDL_GetError());
-            }
-        } else {
-            out_error = "SDL_AcquireGPUCommandBuffer failed for texture upload: " + std::string(SDL_GetError());
-        }
-    } else {
-        out_error = "SDL_MapGPUTransferBuffer failed for texture upload: " + std::string(SDL_GetError());
-    }
-
-    SDL_ReleaseGPUTransferBuffer(gpu_device, transfer_buffer);
-    return success;
-}
-
 } // namespace
 
 GpuSceneRenderer::GpuSceneRenderer(std::unique_ptr<GpuRenderDevice> device)
@@ -323,7 +216,7 @@ ShaderPipelineKey GpuSceneRenderer::make_pipeline_key(const std::string& shader_
     // Ensure that pipeline targets the real swapchain format when available.
     if (device_ &&
         shader_name == "sprite_textured" &&
-        render_state_key == 0x1006u &&
+        (render_state_key == 0x1006u || render_state_key == 0x2005u) &&
         device_->swapchain_format() != SDL_GPU_TEXTUREFORMAT_INVALID) {
         key.color_format = device_->swapchain_format();
     }
@@ -711,7 +604,14 @@ void GpuSceneRenderer::add_pass(GpuFrameGraph::PassDescriptor pass) {
     frame_graph_.add_pass(std::move(pass));
 }
 
-bool GpuSceneRenderer::begin_frame(std::string* out_error) {
+void GpuSceneRenderer::reset_frame_graph() {
+    frame_graph_.reset();
+}
+
+bool GpuSceneRenderer::begin_frame(std::string* out_error, bool reset_frame_graph_before_begin) {
+    if (reset_frame_graph_before_begin) {
+        frame_graph_.reset();
+    }
     std::string frame_error;
     if (device_ && !device_->begin_frame(frame_error)) {
         vibble::log::error("[GpuSceneRenderer] begin_frame failed: " + frame_error);
@@ -726,17 +626,6 @@ bool GpuSceneRenderer::begin_frame(std::string* out_error) {
         }
         return false;
     }
-    if (!imported_sdl_texture_resources_.empty()) {
-        for (auto& entry : imported_sdl_texture_resources_) {
-            if (entry.second.gpu_texture) {
-                SDL_ReleaseGPUTexture(device_->gpu_device(), entry.second.gpu_texture);
-                entry.second.gpu_texture = nullptr;
-                render_diagnostics::add_texture_destroy_count();
-            }
-        }
-        imported_sdl_texture_resources_.clear();
-    }
-    frame_graph_.reset();
     render_diagnostics::set_renderer_runtime_info("gpu",
                                                   device_ ? device_->backend_name() : "unknown",
                                                   device_ ? device_->present_mode() : "unknown");
@@ -933,164 +822,48 @@ SDL_GPUTexture* GpuSceneRenderer::resolve_gpu_texture_for_sdl_texture(SDL_Textur
         return nullptr;
     }
 
-    if (const SDL_PropertiesID texture_props = SDL_GetTextureProperties(texture)) {
-        SDL_GPUTexture* bridged = static_cast<SDL_GPUTexture*>(
-            SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
-        if (bridged) {
-            return bridged;
-        }
+    const SDL_PropertiesID texture_props = SDL_GetTextureProperties(texture);
+    if (!texture_props) {
+        out_error = "SDL texture properties unavailable while resolving GPU texture bridge.";
+        return nullptr;
     }
 
-    const auto cached_it = imported_sdl_texture_resources_.find(texture);
-    if (cached_it != imported_sdl_texture_resources_.end() && cached_it->second.gpu_texture) {
-        return cached_it->second.gpu_texture;
-    }
-
-    SDL_Renderer* renderer = device_->renderer();
-    if (!renderer) {
-        out_error = "SDL renderer unavailable while importing texture for GPU sampling.";
+    SDL_GPUTexture* bridged_gpu_texture = static_cast<SDL_GPUTexture*>(
+        SDL_GetPointerProperty(texture_props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr));
+    if (!bridged_gpu_texture) {
+        out_error = "SDL texture does not expose SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER; readback fallback is disabled.";
         return nullptr;
     }
 
     float src_wf = 0.0f;
     float src_hf = 0.0f;
     if (!SDL_GetTextureSize(texture, &src_wf, &src_hf)) {
-        out_error = "SDL_GetTextureSize failed for import texture: " + std::string(SDL_GetError());
+        out_error = "SDL_GetTextureSize failed for texture bridge resolve: " + std::string(SDL_GetError());
         return nullptr;
     }
-    const int src_w = std::max(1, static_cast<int>(std::lround(src_wf)));
-    const int src_h = std::max(1, static_cast<int>(std::lround(src_hf)));
+    const Uint32 src_w = static_cast<Uint32>(std::max(1, static_cast<int>(std::lround(src_wf))));
+    const Uint32 src_h = static_cast<Uint32>(std::max(1, static_cast<int>(std::lround(src_hf))));
+    const std::uintptr_t revision = reinterpret_cast<std::uintptr_t>(bridged_gpu_texture);
 
-    SDL_Texture* readback_target = SDL_CreateTexture(renderer,
-                                                     SDL_PIXELFORMAT_RGBA8888,
-                                                     SDL_TEXTUREACCESS_TARGET,
-                                                     src_w,
-                                                     src_h);
-    if (!readback_target) {
-        out_error = "SDL_CreateTexture(readback target) failed: " + std::string(SDL_GetError());
-        return nullptr;
-    }
-
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
-    SDL_Surface* readback_surface = nullptr;
-    bool rendered_to_target = false;
-    Uint8 source_r = 255u;
-    Uint8 source_g = 255u;
-    Uint8 source_b = 255u;
-    Uint8 source_a = 255u;
-    SDL_BlendMode source_blend = SDL_BLENDMODE_BLEND;
-    const bool had_color_mod = SDL_GetTextureColorMod(texture, &source_r, &source_g, &source_b);
-    const bool had_alpha_mod = SDL_GetTextureAlphaMod(texture, &source_a);
-    const bool had_blend_mode = SDL_GetTextureBlendMode(texture, &source_blend);
-    (void)SDL_SetTextureColorMod(texture, 255u, 255u, 255u);
-    (void)SDL_SetTextureAlphaMod(texture, 255u);
-    (void)SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
-    (void)SDL_SetTextureBlendMode(readback_target, SDL_BLENDMODE_NONE);
-    if (SDL_SetRenderTarget(renderer, readback_target)) {
-        if (SDL_SetRenderDrawColor(renderer, 0u, 0u, 0u, 0u) &&
-            SDL_RenderClear(renderer)) {
-            const SDL_FRect destination{
-                0.0f,
-                0.0f,
-                static_cast<float>(src_w),
-                static_cast<float>(src_h),
-            };
-            if (SDL_RenderTexture(renderer, texture, nullptr, &destination)) {
-                rendered_to_target = true;
-                readback_surface = SDL_RenderReadPixels(renderer, nullptr);
-            }
+    const auto cached_it = imported_sdl_texture_resources_.find(texture);
+    if (cached_it != imported_sdl_texture_resources_.end()) {
+        const ImportedSdlTextureResource& cached = cached_it->second;
+        if (cached.gpu_texture == bridged_gpu_texture &&
+            cached.revision == revision &&
+            cached.width == src_w &&
+            cached.height == src_h) {
+            return cached.gpu_texture;
         }
-    }
-    if (had_color_mod) {
-        (void)SDL_SetTextureColorMod(texture, source_r, source_g, source_b);
-    }
-    if (had_alpha_mod) {
-        (void)SDL_SetTextureAlphaMod(texture, source_a);
-    }
-    if (had_blend_mode) {
-        (void)SDL_SetTextureBlendMode(texture, source_blend);
-    }
-    (void)SDL_SetRenderTarget(renderer, previous_target);
-    SDL_DestroyTexture(readback_target);
-
-    if (!rendered_to_target || !readback_surface) {
-        out_error = "Failed to read back SDL texture pixels for GPU import: " + std::string(SDL_GetError());
-        if (readback_surface) {
-            SDL_DestroySurface(readback_surface);
-        }
-        return nullptr;
-    }
-
-    SDL_Surface* upload_surface = readback_surface;
-    bool owns_upload_surface = false;
-    SDL_GPUTextureFormat upload_format =
-        SDL_GetGPUTextureFormatFromPixelFormat(readback_surface->format);
-    if (upload_format == SDL_GPU_TEXTUREFORMAT_INVALID) {
-        upload_surface = SDL_ConvertSurface(readback_surface, SDL_PIXELFORMAT_RGBA8888);
-        owns_upload_surface = (upload_surface != nullptr);
-        if (!upload_surface) {
-            out_error = "SDL_ConvertSurface RGBA8888 failed during SDL texture import: " + std::string(SDL_GetError());
-            SDL_DestroySurface(readback_surface);
-            return nullptr;
-        }
-        upload_format = SDL_GetGPUTextureFormatFromPixelFormat(upload_surface->format);
-    }
-    if (upload_format == SDL_GPU_TEXTUREFORMAT_INVALID) {
-        out_error = "Unable to map readback surface format to a GPU texture format.";
-        if (owns_upload_surface) {
-            SDL_DestroySurface(upload_surface);
-        }
-        SDL_DestroySurface(readback_surface);
-        return nullptr;
-    }
-
-    SDL_GPUTextureCreateInfo create_info{};
-    create_info.type = SDL_GPU_TEXTURETYPE_2D;
-    create_info.format = upload_format;
-    create_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    create_info.width = static_cast<Uint32>(std::max(1, upload_surface->w));
-    create_info.height = static_cast<Uint32>(std::max(1, upload_surface->h));
-    create_info.layer_count_or_depth = 1;
-    create_info.num_levels = 1;
-    create_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
-    create_info.props = 0;
-
-    SDL_GPUTexture* gpu_texture = SDL_CreateGPUTexture(device_->gpu_device(), &create_info);
-    if (!gpu_texture) {
-        out_error = "SDL_CreateGPUTexture failed while importing SDL texture: " + std::string(SDL_GetError());
-        if (owns_upload_surface) {
-            SDL_DestroySurface(upload_surface);
-        }
-        SDL_DestroySurface(readback_surface);
-        return nullptr;
-    }
-
-    std::string upload_error;
-    const bool upload_ok = upload_surface_to_gpu_texture(device_->gpu_device(),
-                                                         gpu_texture,
-                                                         upload_surface,
-                                                         upload_error);
-    if (owns_upload_surface) {
-        SDL_DestroySurface(upload_surface);
-    }
-    SDL_DestroySurface(readback_surface);
-
-    if (!upload_ok) {
-        SDL_ReleaseGPUTexture(device_->gpu_device(), gpu_texture);
-        out_error = upload_error.empty()
-            ? "Failed to upload imported SDL texture to GPU texture."
-            : upload_error;
-        return nullptr;
     }
 
     ImportedSdlTextureResource imported{};
     imported.source_texture = texture;
-    imported.gpu_texture = gpu_texture;
-    imported.width = create_info.width;
-    imported.height = create_info.height;
+    imported.gpu_texture = bridged_gpu_texture;
+    imported.revision = revision;
+    imported.width = src_w;
+    imported.height = src_h;
     imported_sdl_texture_resources_[texture] = imported;
-    render_diagnostics::add_texture_create_count();
-    return gpu_texture;
+    return bridged_gpu_texture;
 }
 
 bool GpuSceneRenderer::ensure_buffer_resource(const std::string& logical_name,
@@ -1224,13 +997,7 @@ void GpuSceneRenderer::release_runtime_resources() {
         }
     }
     external_texture_resources_.clear();
-    for (auto& entry : imported_sdl_texture_resources_) {
-        if (entry.second.gpu_texture) {
-            SDL_ReleaseGPUTexture(device_->gpu_device(), entry.second.gpu_texture);
-            entry.second.gpu_texture = nullptr;
-            render_diagnostics::add_texture_destroy_count();
-        }
-    }
+    imported_sdl_texture_resources_.clear();
     for (auto& entry : buffer_resources_) {
         if (entry.second.buffer) {
             SDL_ReleaseGPUBuffer(device_->gpu_device(), entry.second.buffer);

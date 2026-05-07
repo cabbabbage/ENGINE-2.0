@@ -60,9 +60,10 @@ public:
     bool load_shader_packages(const std::string& manifest_path, std::string& out_error);
     bool has_shader_variant(const std::string& shader_name) const;
     const std::string& backend_shader_variant() const { return backend_shader_variant_; }
+    void reset_frame_graph();
     void add_pass(GpuFrameGraph::PassDescriptor pass);
 
-    bool begin_frame(std::string* out_error = nullptr);
+    bool begin_frame(std::string* out_error = nullptr, bool reset_frame_graph = true);
     bool end_frame(std::string* out_error = nullptr);
     void abort_frame();
 
@@ -103,6 +104,7 @@ private:
     struct ImportedSdlTextureResource {
         SDL_Texture* source_texture = nullptr;
         SDL_GPUTexture* gpu_texture = nullptr;
+        std::uintptr_t revision = 0;
         Uint32 width = 0;
         Uint32 height = 0;
     };

@@ -37,7 +37,7 @@ SDL_GPUPresentMode select_present_mode(bool supports_mailbox,
     const char* requested = std::getenv("VIBBLE_GPU_PRESENT_MODE");
     std::string mode = requested ? to_lower_copy(requested) : std::string();
     if (mode.empty() || mode == "auto") {
-        return supports_mailbox ? SDL_GPU_PRESENTMODE_MAILBOX : SDL_GPU_PRESENTMODE_VSYNC;
+        return SDL_GPU_PRESENTMODE_VSYNC;
     }
     if (mode == "mailbox") {
         return supports_mailbox ? SDL_GPU_PRESENTMODE_MAILBOX : SDL_GPU_PRESENTMODE_VSYNC;
@@ -46,7 +46,7 @@ SDL_GPUPresentMode select_present_mode(bool supports_mailbox,
         if (supports_immediate) {
             return SDL_GPU_PRESENTMODE_IMMEDIATE;
         }
-        return supports_mailbox ? SDL_GPU_PRESENTMODE_MAILBOX : SDL_GPU_PRESENTMODE_VSYNC;
+        return SDL_GPU_PRESENTMODE_VSYNC;
     }
     return SDL_GPU_PRESENTMODE_VSYNC;
 }

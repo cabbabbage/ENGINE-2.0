@@ -281,7 +281,7 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             target_info.resolve_texture = nullptr;
             target_info.resolve_mip_level = 0;
             target_info.resolve_layer = 0;
-            target_info.cycle = false;
+            target_info.cycle = target_info.load_op != SDL_GPU_LOADOP_LOAD;
             target_info.cycle_resolve_texture = false;
 
             render_pass = SDL_BeginGPURenderPass(context.command_buffer, &target_info, 1, nullptr);
@@ -494,7 +494,7 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
             blit_info.clear_color = SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f};
             blit_info.flip_mode = SDL_FLIP_NONE;
             blit_info.filter = pass.blit.filter;
-            blit_info.cycle = false;
+            blit_info.cycle = blit_info.load_op != SDL_GPU_LOADOP_LOAD;
             SDL_BlitGPUTexture(context.command_buffer, &blit_info);
             continue;
         }

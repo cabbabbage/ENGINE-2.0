@@ -18,6 +18,22 @@
         "stage": "vertex"
       }
     },
+    "layer_blur": {
+      "dxil": {
+        "entrypoint": "main",
+        "file_size_bytes": 5052,
+        "hash_fnv1a64": "0xf9229257c0e9e783",
+        "path": "dxil/layer_blur.dxil",
+        "stage": "fragment"
+      },
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 2964,
+        "hash_fnv1a64": "0xb289d29e2edd0579",
+        "path": "spirv/layer_blur.spv",
+        "stage": "fragment"
+      }
+    },
     "sprite_batch_vertex": {
       "dxil": {
         "entrypoint": "main",

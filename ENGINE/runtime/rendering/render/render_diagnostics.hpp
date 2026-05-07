@@ -46,11 +46,18 @@ struct RenderFrameStats {
     bool swapchain_acquired = false;
     std::uint32_t swapchain_width = 0;
     std::uint32_t swapchain_height = 0;
+    std::uint32_t floor_target_width = 0;
+    std::uint32_t floor_target_height = 0;
     bool clear_executed = false;
     std::uint32_t floor_packet_count = 0;
     std::uint32_t sprite_packet_count = 0;
+    std::uint32_t active_depth_layer_count = 0;
+    std::uint32_t blur_pass_count = 0;
     std::uint32_t skipped_texture_count = 0;
     std::string failed_texture_names;
+    std::string packets_per_depth_layer;
+    std::string blur_strength_per_layer;
+    std::string composite_layers_submitted;
     bool submit_succeeded = false;
 };
 
@@ -94,8 +101,14 @@ void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
 void set_command_buffer_acquired(bool acquired);
 void set_swapchain_acquired(bool acquired);
 void set_swapchain_dimensions(std::uint32_t width, std::uint32_t height);
+void set_floor_target_dimensions(std::uint32_t width, std::uint32_t height);
 void set_clear_executed(bool executed);
 void set_packet_counts(std::uint32_t floor_packets, std::uint32_t sprite_packets);
+void set_active_depth_layer_count(std::uint32_t count);
+void set_blur_pass_count(std::uint32_t count);
+void set_packets_per_depth_layer(const std::string& summary);
+void set_blur_strength_per_layer(const std::string& summary);
+void set_composite_layers_submitted(const std::string& summary);
 void add_skipped_texture_count(std::uint32_t count = 1);
 void set_failed_texture_names(const std::string& names);
 void set_submit_result(bool succeeded);

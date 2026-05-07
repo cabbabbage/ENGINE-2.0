@@ -15,8 +15,9 @@ namespace CacheManager {
 
 namespace {
 
-constexpr std::uint32_t kBundleVersion = 1;
+constexpr std::uint32_t kBundleVersion = 2;
 constexpr std::uint64_t kBundleMagic = 0x424e444c454e4745ull; // "ENGENDLB" little endian folded
+constexpr SDL_PixelFormat kGpuUploadPixelFormat = SDL_PIXELFORMAT_RGBA32;
 
 #pragma pack(push, 1)
 struct BundleHeader {
@@ -91,6 +92,50 @@ std::unordered_map<SDL_Texture*, CacheManager::PreparedGpuTextureUpload>& prepar
     return registry;
 }
 
+CacheManager::PreparedGpuTextureUpload normalize_prepared_upload(
+    const CacheManager::PreparedGpuTextureUpload& prepared) {
+    if (!prepared.valid()) {
+        return {};
+    }
+    if (prepared.format == kGpuUploadPixelFormat && prepared.pitch == prepared.width * 4) {
+        return prepared;
+    }
+
+    SDL_Surface* source = SDL_CreateSurfaceFrom(prepared.width,
+                                                prepared.height,
+                                                static_cast<SDL_PixelFormat>(prepared.format),
+                                                const_cast<std::uint8_t*>(prepared.pixels.data()),
+                                                prepared.pitch);
+    if (!source) {
+        return {};
+    }
+    SDL_Surface* converted = SDL_ConvertSurface(source, kGpuUploadPixelFormat);
+    SDL_DestroySurface(source);
+    if (!converted || !converted->pixels || converted->pitch <= 0) {
+        if (converted) {
+            SDL_DestroySurface(converted);
+        }
+        return {};
+    }
+
+    CacheManager::PreparedGpuTextureUpload normalized{};
+    normalized.width = converted->w;
+    normalized.height = converted->h;
+    normalized.pitch = normalized.width * 4;
+    normalized.format = kGpuUploadPixelFormat;
+    normalized.options = prepared.options;
+    const std::size_t row_bytes = static_cast<std::size_t>(normalized.pitch);
+    normalized.pixels.resize(row_bytes * static_cast<std::size_t>(normalized.height));
+    const auto* src = static_cast<const std::uint8_t*>(converted->pixels);
+    for (int row = 0; row < normalized.height; ++row) {
+        std::memcpy(normalized.pixels.data() + static_cast<std::size_t>(row) * row_bytes,
+                    src + static_cast<std::size_t>(row) * static_cast<std::size_t>(converted->pitch),
+                    row_bytes);
+    }
+    SDL_DestroySurface(converted);
+    return normalized;
+}
+
 void remember_prepared_upload(SDL_Texture* texture,
                               const SDL_Surface* rgba_surface,
                               const CacheManager::TextureUploadOptions& options) {
@@ -103,7 +148,7 @@ void remember_prepared_upload(SDL_Texture* texture,
     prepared.width = rgba_surface->w;
     prepared.height = rgba_surface->h;
     prepared.pitch = rgba_surface->w * 4;
-    prepared.format = SDL_PIXELFORMAT_RGBA8888;
+    prepared.format = kGpuUploadPixelFormat;
     prepared.options = options;
     const std::size_t row_bytes = static_cast<std::size_t>(prepared.pitch);
     prepared.pixels.resize(row_bytes * static_cast<std::size_t>(prepared.height));
@@ -328,7 +373,7 @@ BundleFrameLayer read_layer(const nlohmann::json& node,
     layer.width = node.value("width", 0);
     layer.height = node.value("height", 0);
     layer.pitch = node.value("pitch", 0);
-    layer.format = node.value("format", SDL_PIXELFORMAT_RGBA8888);
+    layer.format = node.value("format", static_cast<std::uint32_t>(kGpuUploadPixelFormat));
     layer.pixels.assign(payload.begin() + static_cast<std::ptrdiff_t>(offset),
                         payload.begin() + static_cast<std::ptrdiff_t>(offset + size));
     return layer;
@@ -356,8 +401,8 @@ SDL_Texture* surface_to_texture(SDL_Renderer* renderer,
     }
     SDL_Surface* rgba_surface = surface;
     bool owns_rgba_surface = false;
-    if (surface->format != SDL_PIXELFORMAT_RGBA8888) {
-        rgba_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+    if (surface->format != kGpuUploadPixelFormat) {
+        rgba_surface = SDL_ConvertSurface(surface, kGpuUploadPixelFormat);
         if (!rgba_surface) {
             return SDL_CreateTextureFromSurface(renderer, surface);
         }
@@ -365,7 +410,7 @@ SDL_Texture* surface_to_texture(SDL_Renderer* renderer,
     }
 
     SDL_Texture* texture = SDL_CreateTexture(renderer,
-                                             SDL_PIXELFORMAT_RGBA8888,
+                                             kGpuUploadPixelFormat,
                                              SDL_TEXTUREACCESS_STATIC,
                                              rgba_surface->w,
                                              rgba_surface->h);
@@ -423,24 +468,29 @@ SDL_Texture* create_texture_from_prepared_upload(SDL_Renderer* renderer,
         return nullptr;
     }
 
-    const std::size_t row_bytes = static_cast<std::size_t>(prepared.width) * 4u;
-    const std::size_t src_pitch = static_cast<std::size_t>(prepared.pitch);
-    const std::size_t required_src_bytes = src_pitch * static_cast<std::size_t>(prepared.height);
-    if (row_bytes == 0 || src_pitch < row_bytes || prepared.pixels.size() < required_src_bytes) {
+    const PreparedGpuTextureUpload normalized = normalize_prepared_upload(prepared);
+    if (!normalized.valid()) {
+        return nullptr;
+    }
+
+    const std::size_t row_bytes = static_cast<std::size_t>(normalized.width) * 4u;
+    const std::size_t src_pitch = static_cast<std::size_t>(normalized.pitch);
+    const std::size_t required_src_bytes = src_pitch * static_cast<std::size_t>(normalized.height);
+    if (row_bytes == 0 || src_pitch < row_bytes || normalized.pixels.size() < required_src_bytes) {
         return nullptr;
     }
 
     PreparedGpuTextureUpload transformed{};
-    transformed.width = prepared.width;
-    transformed.height = prepared.height;
+    transformed.width = normalized.width;
+    transformed.height = normalized.height;
     transformed.pitch = static_cast<int>(row_bytes);
-    transformed.format = SDL_PIXELFORMAT_RGBA8888;
-    transformed.options = prepared.options;
+    transformed.format = kGpuUploadPixelFormat;
+    transformed.options = normalized.options;
     transformed.pixels.resize(row_bytes * static_cast<std::size_t>(transformed.height));
 
     for (int y = 0; y < transformed.height; ++y) {
         const int src_y = flip_vertical ? (transformed.height - 1 - y) : y;
-        const auto* src_row = prepared.pixels.data() + static_cast<std::size_t>(src_y) * src_pitch;
+        const auto* src_row = normalized.pixels.data() + static_cast<std::size_t>(src_y) * src_pitch;
         auto* dst_row = transformed.pixels.data() + static_cast<std::size_t>(y) * row_bytes;
         if (!flip_horizontal) {
             std::memcpy(dst_row, src_row, row_bytes);
@@ -455,7 +505,7 @@ SDL_Texture* create_texture_from_prepared_upload(SDL_Renderer* renderer,
     }
 
     SDL_Texture* texture = SDL_CreateTexture(renderer,
-                                             SDL_PIXELFORMAT_RGBA8888,
+                                             kGpuUploadPixelFormat,
                                              SDL_TEXTUREACCESS_STATIC,
                                              transformed.width,
                                              transformed.height);
@@ -485,14 +535,20 @@ SDL_GPUTexture* upload_prepared_texture_to_gpu(SDL_GPUDevice* gpu_device,
         return nullptr;
     }
 
-    log_texture_policy_once(gpu_device, prepared.options);
+    const PreparedGpuTextureUpload normalized = normalize_prepared_upload(prepared);
+    if (!normalized.valid()) {
+        out_error = "Prepared texture upload payload could not be normalized to RGBA32.";
+        return nullptr;
+    }
+
+    log_texture_policy_once(gpu_device, normalized.options);
 
     SDL_GPUTextureCreateInfo create_info{};
     create_info.type = SDL_GPU_TEXTURETYPE_2D;
     create_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     create_info.usage = static_cast<SDL_GPUTextureUsageFlags>(SDL_GPU_TEXTUREUSAGE_SAMPLER);
-    create_info.width = static_cast<Uint32>(prepared.width);
-    create_info.height = static_cast<Uint32>(prepared.height);
+    create_info.width = static_cast<Uint32>(normalized.width);
+    create_info.height = static_cast<Uint32>(normalized.height);
     create_info.layer_count_or_depth = 1;
     create_info.num_levels = 1;
     create_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
@@ -504,7 +560,7 @@ SDL_GPUTexture* upload_prepared_texture_to_gpu(SDL_GPUDevice* gpu_device,
         return nullptr;
     }
 
-    if (!upload_prepared_pixels_to_gpu_texture(gpu_device, gpu_texture, prepared, false)) {
+    if (!upload_prepared_pixels_to_gpu_texture(gpu_device, gpu_texture, normalized, false)) {
         out_error = "SDL_UploadToGPUTexture failed for prepared texture: " + std::string(SDL_GetError());
         SDL_ReleaseGPUTexture(gpu_device, gpu_texture);
         return nullptr;

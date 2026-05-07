@@ -13,10 +13,10 @@ SDL_Surface* duplicate_surface(SDL_Surface* surface) {
     if (!surface) {
         return nullptr;
     }
-    SDL_Surface* copy = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface* copy = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
     if (!copy) {
         SDL_Surface* fallback =
-            SDL_CreateSurface(surface->w, surface->h, SDL_PIXELFORMAT_RGBA8888);
+            SDL_CreateSurface(surface->w, surface->h, SDL_PIXELFORMAT_RGBA32);
         if (!fallback) {
             return nullptr;
         }

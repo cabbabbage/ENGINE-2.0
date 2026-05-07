@@ -11,13 +11,17 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <optional>
+#include <sstream>
 #include <string_view>
 #include <utility>
+#include <unordered_set>
 
 namespace {
 
-constexpr std::array<const char*, 1> kRequiredGraphicsPipelines = {
+constexpr std::array<const char*, 2> kRequiredGraphicsPipelines = {
     "sprite_textured",
+    "layer_blur",
 };
 constexpr const char* kSpriteBatchVertexVariant = "sprite_batch_vertex";
 
@@ -43,8 +47,17 @@ const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::str
         ShaderResourceCounts{0u, 0u, 0u, 1u},
         ShaderResourceCounts{1u, 0u, 0u, 0u},
         true};
+    static const GraphicsPipelineShaderSpec kLayerBlur{
+        kSpriteBatchVertexVariant,
+        "layer_blur",
+        ShaderResourceCounts{0u, 0u, 0u, 1u},
+        ShaderResourceCounts{1u, 0u, 0u, 0u},
+        true};
     if (name == "sprite_textured") {
         return &kSpriteTextured;
+    }
+    if (name == "layer_blur") {
+        return &kLayerBlur;
     }
     return nullptr;
 }
@@ -163,6 +176,8 @@ struct ResolvedGpuSpriteDraw {
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
 };
 
+std::string describe_draw_packet_source(const GpuSpriteDrawPacket& draw);
+
 bool resolve_sprite_draws(GpuSceneRenderer& renderer,
                           const std::vector<GpuSpriteDrawPacket>& source_draws,
                           std::string_view pass_name,
@@ -195,8 +210,6 @@ struct SpriteBatchVertexUniformData {
     SDL_FColor vertex_uv[6]{};
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
 };
-
-constexpr SDL_FColor kMissingFloorDataClearColor{0.85f, 0.12f, 0.78f, 1.0f};
 
 bool render_resolved_sprite_draw_batch(const GpuFrameGraph::ExecuteContext& context,
                                        SDL_GPURenderPass* render_pass,
@@ -269,6 +282,351 @@ make_scene_draw_callback(std::vector<ResolvedGpuSpriteDraw> floor_draws,
         }
         return true;
     };
+}
+
+bool render_sprite_draw_batch(GpuSceneRenderer& renderer,
+                              SDL_GPURenderPass* render_pass,
+                              const std::vector<GpuSpriteDrawPacket>& draws,
+                              const char* pipeline_name,
+                              std::uint32_t render_state_key,
+                              std::string_view pass_name,
+                              std::string& out_error) {
+    out_error.clear();
+    if (draws.empty()) {
+        return true;
+    }
+    if (!render_pass) {
+        out_error = "Render pass handle was null.";
+        return false;
+    }
+    if (!renderer.device() || !renderer.device()->gpu_device()) {
+        out_error = "GPU device unavailable.";
+        return false;
+    }
+
+    SDL_GPUGraphicsPipeline* pipeline = renderer.resolve_graphics_pipeline(pipeline_name, render_state_key);
+    if (!pipeline) {
+        out_error = "Failed to resolve graphics pipeline '" +
+                    std::string(pipeline_name ? pipeline_name : "<null>") + "'.";
+        return false;
+    }
+
+    SDL_GPUSampler* linear_sampler = renderer.find_sampler_resource("linear_clamp");
+    if (!linear_sampler) {
+        out_error = "Sampler 'linear_clamp' not available.";
+        return false;
+    }
+
+    SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
+    for (const GpuSpriteDrawPacket& draw : draws) {
+        SDL_GPUTexture* gpu_texture = draw.source_gpu_texture
+            ? draw.source_gpu_texture
+            : renderer.find_gpu_texture_for_sdl_texture(draw.source_texture);
+        if (!gpu_texture) {
+            out_error = "FATAL missing GPU-backed texture; " + describe_draw_packet_source(draw) +
+                        " renderer='GpuSceneRenderer' frame_pass='" + std::string(pass_name) + "'";
+            render_diagnostics::add_skipped_texture_count();
+            render_diagnostics::set_failed_texture_names(describe_draw_packet_source(draw));
+            return false;
+        }
+
+        SDL_GPUTextureSamplerBinding sampler_binding{};
+        sampler_binding.texture = gpu_texture;
+        sampler_binding.sampler = linear_sampler;
+        SDL_BindGPUFragmentSamplers(render_pass, 0u, &sampler_binding, 1u);
+
+        SpriteBatchVertexUniformData uniform_data{};
+        for (std::size_t i = 0; i < draw.vertices.size(); ++i) {
+            const GpuSpriteVertex& vertex = draw.vertices[i];
+            uniform_data.vertex_uv[i] = SDL_FColor{vertex.clip_x, vertex.clip_y, vertex.uv_x, vertex.uv_y};
+        }
+        uniform_data.modulate = draw.modulate;
+        SDL_PushGPUVertexUniformData(renderer.device()->frame_state().command_buffer,
+                                     0u,
+                                     &uniform_data,
+                                     static_cast<Uint32>(sizeof(uniform_data)));
+
+        SDL_DrawGPUPrimitives(render_pass, 6u, 1u, 0u, 0u);
+        render_diagnostics::add_draw_call_count();
+    }
+
+    return true;
+}
+
+float to_clip_x(float screen_x, float target_width) {
+    if (!std::isfinite(screen_x) || !std::isfinite(target_width) || target_width <= 0.0f) {
+        return 0.0f;
+    }
+    return (screen_x / target_width) * 2.0f - 1.0f;
+}
+
+float to_clip_y(float screen_y, float target_height) {
+    if (!std::isfinite(screen_y) || !std::isfinite(target_height) || target_height <= 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f - (screen_y / target_height) * 2.0f;
+}
+
+void fill_fullscreen_packet_vertices(std::uint32_t target_width,
+                                     std::uint32_t target_height,
+                                     GpuSpriteDrawPacket& out_packet) {
+    const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
+    const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+
+    const SDL_FPoint tl{0.0f, 0.0f};
+    const SDL_FPoint tr{output_w, 0.0f};
+    const SDL_FPoint br{output_w, output_h};
+    const SDL_FPoint bl{0.0f, output_h};
+
+    auto make_vertex = [output_w, output_h](const SDL_FPoint& point, float u, float v) {
+        GpuSpriteVertex vertex{};
+        vertex.clip_x = to_clip_x(point.x, output_w);
+        vertex.clip_y = to_clip_y(point.y, output_h);
+        vertex.uv_x = u;
+        vertex.uv_y = v;
+        return vertex;
+    };
+
+    out_packet.vertices[0] = make_vertex(tl, 0.0f, 0.0f);
+    out_packet.vertices[1] = make_vertex(tr, 1.0f, 0.0f);
+    out_packet.vertices[2] = make_vertex(br, 1.0f, 1.0f);
+    out_packet.vertices[3] = make_vertex(tl, 0.0f, 0.0f);
+    out_packet.vertices[4] = make_vertex(br, 1.0f, 1.0f);
+    out_packet.vertices[5] = make_vertex(bl, 0.0f, 1.0f);
+}
+
+GpuSpriteDrawPacket make_fullscreen_draw_packet(SDL_GPUTexture* texture,
+                                                std::uint32_t target_width,
+                                                std::uint32_t target_height,
+                                                const SDL_FColor& modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f}) {
+    GpuSpriteDrawPacket packet{};
+    packet.source_texture = nullptr;
+    packet.source_gpu_texture = texture;
+    packet.modulate = modulate;
+    packet.is_floor_packet = false;
+    packet.depth_layer = 0;
+    fill_fullscreen_packet_vertices(target_width, target_height, packet);
+    return packet;
+}
+
+std::string describe_draw_packet_source(const GpuSpriteDrawPacket& draw) {
+    return "asset='" + draw.source_asset_name +
+           "' animation='" + (draw.source_animation_name.empty()
+               ? std::string{"<none>"}
+               : draw.source_animation_name) +
+           "' frame=" + std::to_string(draw.source_frame_index) +
+           " variant=" + std::to_string(draw.source_variant_index) +
+           " texture_id='" + draw.source_texture_id +
+           "' floor=" + std::string(draw.is_floor_packet ? "true" : "false") +
+           " depth_layer=" + std::to_string(draw.depth_layer) +
+           " stable_sort_id=" + std::to_string(static_cast<std::uint64_t>(draw.stable_sort_id));
+}
+
+std::string runtime_floor_target_name() {
+    return "runtime.scene.floor";
+}
+
+std::string runtime_layer_target_name(int depth_layer) {
+    return "runtime.scene.layer." + std::to_string(depth_layer);
+}
+
+std::string runtime_blur_target_a_name() {
+    return "runtime.scene.blur.a";
+}
+
+std::string runtime_blur_target_b_name() {
+    return "runtime.scene.blur.b";
+}
+
+SDL_FColor blur_modulate(float direction_x, float direction_y, float blur_strength_px) {
+    return SDL_FColor{direction_x, direction_y, blur_strength_px, 1.0f};
+}
+
+struct RenderTargetPassContext {
+    SDL_GPUCommandBuffer* command_buffer = nullptr;
+    SDL_GPUTexture* target_texture = nullptr;
+};
+
+bool begin_target_render_pass(const RenderTargetPassContext& context,
+                              const SDL_FColor& clear_color,
+                              SDL_GPURenderPass*& out_render_pass) {
+    out_render_pass = nullptr;
+    if (!context.command_buffer) {
+        return false;
+    }
+    if (!context.target_texture) {
+        return false;
+    }
+
+    SDL_GPUColorTargetInfo target_info{};
+    target_info.texture = context.target_texture;
+    target_info.mip_level = 0;
+    target_info.layer_or_depth_plane = 0;
+    target_info.clear_color = clear_color;
+    target_info.load_op = SDL_GPU_LOADOP_CLEAR;
+    target_info.store_op = SDL_GPU_STOREOP_STORE;
+    target_info.resolve_texture = nullptr;
+    target_info.resolve_mip_level = 0;
+    target_info.resolve_layer = 0;
+    target_info.cycle = target_info.load_op != SDL_GPU_LOADOP_LOAD;
+    target_info.cycle_resolve_texture = false;
+
+    out_render_pass = SDL_BeginGPURenderPass(context.command_buffer, &target_info, 1, nullptr);
+    return out_render_pass != nullptr;
+}
+
+bool render_packet_batch_to_target(GpuSceneRenderer& renderer,
+                                   SDL_GPUCommandBuffer* command_buffer,
+                                   SDL_GPUTexture* target_texture,
+                                   const std::vector<GpuSpriteDrawPacket>& packets,
+                                   const char* pipeline_name,
+                                   std::uint32_t render_state_key,
+                                   const SDL_FColor& clear_color,
+                                   std::string_view pass_name,
+                                   std::string& out_error) {
+    out_error.clear();
+    if (!command_buffer) {
+        out_error = "Command buffer was null.";
+        return false;
+    }
+    if (!target_texture) {
+        out_error = "Target texture was null.";
+        return false;
+    }
+
+    SDL_GPURenderPass* render_pass = nullptr;
+    if (!begin_target_render_pass(RenderTargetPassContext{command_buffer, target_texture}, clear_color, render_pass)) {
+        out_error = "SDL_BeginGPURenderPass failed for pass '" + std::string(pass_name) +
+                    "': " + SDL_GetError();
+        return false;
+    }
+    render_diagnostics::add_render_pass();
+
+    const bool rendered =
+        render_sprite_draw_batch(renderer, render_pass, packets, pipeline_name, render_state_key, pass_name, out_error);
+    SDL_EndGPURenderPass(render_pass);
+    return rendered;
+}
+
+struct ActiveDepthLayerRuntimeState {
+    int depth_layer = 0;
+    float blur_strength_px = 0.0f;
+    SDL_GPUTexture* layer_target = nullptr;
+    SDL_GPUTexture* processed_texture = nullptr;
+    std::size_t packet_count = 0;
+};
+
+bool render_depth_layer_blur_chain(GpuSceneRenderer& renderer,
+                                   SDL_GPUCommandBuffer* command_buffer,
+                                   SDL_GPUTexture* source_texture,
+                                   SDL_GPUTexture* blur_target_a,
+                                   SDL_GPUTexture* blur_target_b,
+                                   std::uint32_t target_width,
+                                   std::uint32_t target_height,
+                                   float blur_strength_px,
+                                   int depth_layer,
+                                   std::string& out_error) {
+    out_error.clear();
+    if (blur_strength_px <= 0.0f) {
+        return true;
+    }
+    if (!source_texture || !blur_target_a || !blur_target_b) {
+        out_error = "Blur target resources were unavailable for depth layer " + std::to_string(depth_layer) + ".";
+        return false;
+    }
+
+    std::vector<GpuSpriteDrawPacket> horizontal_packets{};
+    horizontal_packets.push_back(make_fullscreen_draw_packet(
+        source_texture,
+        target_width,
+        target_height,
+        blur_modulate(1.0f, 0.0f, blur_strength_px)));
+    if (!render_packet_batch_to_target(renderer,
+                                       command_buffer,
+                                       blur_target_a,
+                                       horizontal_packets,
+                                       "layer_blur",
+                                       0x2201u,
+                                       SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f},
+                                       "runtime_scene.blur.horizontal",
+                                       out_error)) {
+        return false;
+    }
+
+    std::vector<GpuSpriteDrawPacket> vertical_packets{};
+    vertical_packets.push_back(make_fullscreen_draw_packet(
+        blur_target_a,
+        target_width,
+        target_height,
+        blur_modulate(0.0f, 1.0f, blur_strength_px)));
+    if (!render_packet_batch_to_target(renderer,
+                                       command_buffer,
+                                       blur_target_b,
+                                       vertical_packets,
+                                       "layer_blur",
+                                       0x2201u,
+                                       SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f},
+                                       "runtime_scene.blur.vertical",
+                                       out_error)) {
+        return false;
+    }
+
+    std::vector<GpuSpriteDrawPacket> copy_packets{};
+    copy_packets.push_back(make_fullscreen_draw_packet(blur_target_b,
+                                                       target_width,
+                                                       target_height));
+    if (!render_packet_batch_to_target(renderer,
+                                       command_buffer,
+                                       source_texture,
+                                       copy_packets,
+                                       "sprite_textured",
+                                       0x2200u,
+                                       SDL_FColor{0.0f, 0.0f, 0.0f, 0.0f},
+                                       "runtime_scene.blur.resolve",
+                                       out_error)) {
+        return false;
+    }
+
+    return true;
+}
+
+std::string join_packets_per_layer_summary(const std::vector<GpuDepthLayerDrawPackets>& depth_layers) {
+    std::ostringstream stream;
+    bool first = true;
+    for (const GpuDepthLayerDrawPackets& layer : depth_layers) {
+        if (!first) {
+            stream << ", ";
+        }
+        first = false;
+        stream << layer.depth_layer << '=' << layer.packets.size();
+    }
+    return stream.str();
+}
+
+std::string join_blur_strength_summary(const std::vector<GpuDepthLayerDrawPackets>& depth_layers) {
+    std::ostringstream stream;
+    bool first = true;
+    for (const GpuDepthLayerDrawPackets& layer : depth_layers) {
+        if (!first) {
+            stream << ", ";
+        }
+        first = false;
+        stream << layer.depth_layer << '=' << layer.blur_strength_px;
+    }
+    return stream.str();
+}
+
+std::string join_composite_summary(const std::vector<ActiveDepthLayerRuntimeState>& depth_layers,
+                                   bool includes_ui_overlay) {
+    std::ostringstream stream;
+    stream << "floor";
+    for (const ActiveDepthLayerRuntimeState& layer : depth_layers) {
+        stream << " -> " << layer.depth_layer;
+    }
+    if (includes_ui_overlay) {
+        stream << " -> ui";
+    }
+    return stream.str();
 }
 
 } // namespace
@@ -655,10 +1013,26 @@ bool GpuSceneRenderer::has_shader_variant(const std::string& shader_name) const 
     return shader_packages_.find(shader_name) != nullptr;
 }
 
-bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::string& out_error) {
+bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, std::string& out_error) {
     out_error.clear();
     if (!device_ || !device_->gpu_device()) {
         out_error = "GPU device unavailable while rendering scene frame";
+        return false;
+    }
+
+    const GpuRenderDevice::FrameState& frame_state = device_->frame_state();
+    if (!frame_state.command_buffer) {
+        out_error = "GPU command buffer unavailable while rendering scene frame";
+        return false;
+    }
+    if (!frame_state.swapchain_texture || frame_state.swapchain_width == 0 || frame_state.swapchain_height == 0) {
+        out_error = "GPU swapchain texture unavailable while rendering scene frame";
+        return false;
+    }
+
+    const RuntimeGpuFormatPolicy& format_policy = device_->format_policy();
+    if (format_policy.albedo_format == SDL_GPU_TEXTUREFORMAT_INVALID) {
+        out_error = "GPU albedo format is invalid";
         return false;
     }
 
@@ -667,40 +1041,213 @@ bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::st
         return false;
     }
 
-    std::vector<ResolvedGpuSpriteDraw> floor_draws{};
-    std::vector<ResolvedGpuSpriteDraw> world_sprite_draws{};
-    if (!resolve_sprite_draws(*this, frame_data.floor_draws, "scene.floor", floor_draws, out_error) ||
-        !resolve_sprite_draws(*this, frame_data.layer_draws, "scene.world_sprites", world_sprite_draws, out_error)) {
+    const std::uint32_t target_width = frame_state.swapchain_width;
+    const std::uint32_t target_height = frame_state.swapchain_height;
+    const SDL_FColor clear_color{0.0f, 0.0f, 0.0f, 0.0f};
+    const GpuSceneRenderer::TextureResourceSpec layer_spec{
+        target_width,
+        target_height,
+        format_policy.albedo_format,
+        static_cast<SDL_GPUTextureUsageFlags>(SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER),
+        1u,
+        1u,
+        SDL_GPU_SAMPLECOUNT_1,
+    };
+
+    render_diagnostics::set_floor_target_dimensions(target_width, target_height);
+    render_diagnostics::set_packet_counts(frame_data.floor_draw_count, frame_data.layer_sprite_draw_count);
+    render_diagnostics::set_active_depth_layer_count(frame_data.active_depth_layer_count);
+    render_diagnostics::set_packets_per_depth_layer(join_packets_per_layer_summary(frame_data.depth_layers));
+    render_diagnostics::set_blur_strength_per_layer(join_blur_strength_summary(frame_data.depth_layers));
+    render_diagnostics::set_clear_executed(true);
+
+    if (!ensure_texture_resource(runtime_floor_target_name(), layer_spec, out_error)) {
+        return false;
+    }
+    SDL_GPUTexture* floor_target = find_texture_resource(runtime_floor_target_name());
+    if (!floor_target) {
+        out_error = "Floor render target was unavailable.";
         return false;
     }
 
-    GpuFrameGraph::PassDescriptor scene_pass{};
-    scene_pass.type = GpuFrameGraph::PassType::Render;
-    scene_pass.name = "runtime_scene_present";
-    scene_pass.resources = {GpuFrameGraph::ResourceDependency::write_resource("scene.swapchain")};
-    scene_pass.render.pipeline_id = "sprite_textured";
-    scene_pass.render.render_state_key = 0x2100u;
-    scene_pass.render.use_swapchain_target = true;
-    scene_pass.render.load_op = SDL_GPU_LOADOP_CLEAR;
-    scene_pass.render.store_op = SDL_GPU_STOREOP_STORE;
-    scene_pass.render.clear_color = frame_data.floor_draw_count == 0
-        ? kMissingFloorDataClearColor
-        : SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
-    scene_pass.render.execute_default_draw = false;
+    std::vector<ActiveDepthLayerRuntimeState> active_layers{};
+    active_layers.reserve(frame_data.depth_layers.size());
+    std::unordered_set<std::string> retained_layer_targets{};
+    retained_layer_targets.reserve(frame_data.depth_layers.size());
 
-    scene_pass.render.custom_render =
-        make_scene_draw_callback(std::move(floor_draws), std::move(world_sprite_draws), scene_pass.name);
+    bool blur_chain_required = false;
+    for (const GpuDepthLayerDrawPackets& depth_layer : frame_data.depth_layers) {
+        const std::string target_name = runtime_layer_target_name(depth_layer.depth_layer);
+        retained_layer_targets.insert(target_name);
+        if (!ensure_texture_resource(target_name, layer_spec, out_error)) {
+            return false;
+        }
+        SDL_GPUTexture* layer_target = find_texture_resource(target_name);
+        if (!layer_target) {
+            out_error = "Depth-layer render target was unavailable for layer " +
+                        std::to_string(depth_layer.depth_layer) + ".";
+            return false;
+        }
+
+        ActiveDepthLayerRuntimeState state{};
+        state.depth_layer = depth_layer.depth_layer;
+        state.blur_strength_px = depth_layer.blur_strength_px;
+        state.layer_target = layer_target;
+        state.processed_texture = layer_target;
+        state.packet_count = depth_layer.packets.size();
+        active_layers.push_back(state);
+        blur_chain_required = blur_chain_required || (depth_layer.blur_strength_px > 0.0f);
+    }
+
+    const std::string blur_target_a_name = runtime_blur_target_a_name();
+    const std::string blur_target_b_name = runtime_blur_target_b_name();
+    if (blur_chain_required) {
+        if (!ensure_texture_resource(blur_target_a_name, layer_spec, out_error)) {
+            return false;
+        }
+        if (!ensure_texture_resource(blur_target_b_name, layer_spec, out_error)) {
+            return false;
+        }
+    } else {
+        (void)release_texture_resource(blur_target_a_name);
+        (void)release_texture_resource(blur_target_b_name);
+    }
+
+    if (!render_packet_batch_to_target(*this,
+                                       frame_state.command_buffer,
+                                       floor_target,
+                                       frame_data.floor_draws,
+                                       "sprite_textured",
+                                       0x2200u,
+                                       clear_color,
+                                       "runtime_scene.floor",
+                                       out_error)) {
+        return false;
+    }
+
+    std::uint32_t blur_pass_count = 0;
+    for (std::size_t i = 0; i < active_layers.size(); ++i) {
+        const GpuDepthLayerDrawPackets& source_layer = frame_data.depth_layers[i];
+        ActiveDepthLayerRuntimeState& state = active_layers[i];
+
+        if (!render_packet_batch_to_target(*this,
+                                           frame_state.command_buffer,
+                                           state.layer_target,
+                                           source_layer.packets,
+                                           "sprite_textured",
+                                           0x2200u,
+                                           clear_color,
+                                           "runtime_scene.layer." + std::to_string(state.depth_layer),
+                                           out_error)) {
+            return false;
+        }
+
+        if (state.blur_strength_px > 0.0f && state.depth_layer != 0) {
+            SDL_GPUTexture* blur_a = find_texture_resource(blur_target_a_name);
+            SDL_GPUTexture* blur_b = find_texture_resource(blur_target_b_name);
+            if (!render_depth_layer_blur_chain(*this,
+                                               frame_state.command_buffer,
+                                               state.layer_target,
+                                               blur_a,
+                                               blur_b,
+                                               target_width,
+                                               target_height,
+                                               state.blur_strength_px,
+                                               state.depth_layer,
+                                               out_error)) {
+                return false;
+            }
+            state.blur_strength_px = std::max(0.0f, state.blur_strength_px);
+            blur_pass_count += 3;
+        }
+    }
+
+    render_diagnostics::set_blur_pass_count(blur_pass_count);
+    release_texture_resources_with_prefix("runtime.scene.layer.", retained_layer_targets);
+
+    const bool has_ui_overlay = frame_data.ui_overlay_gpu_texture != nullptr;
+    std::vector<GpuSpriteDrawPacket> composite_packets{};
+    composite_packets.reserve(active_layers.size() + (has_ui_overlay ? 2u : 1u));
+    composite_packets.push_back(make_fullscreen_draw_packet(floor_target, target_width, target_height));
+    for (const ActiveDepthLayerRuntimeState& state : active_layers) {
+        if (!state.processed_texture) {
+            out_error = "Processed depth-layer texture was unavailable for layer " +
+                        std::to_string(state.depth_layer) + ".";
+            return false;
+        }
+        composite_packets.push_back(make_fullscreen_draw_packet(state.processed_texture, target_width, target_height));
+    }
+    if (has_ui_overlay) {
+        composite_packets.push_back(make_fullscreen_draw_packet(frame_data.ui_overlay_gpu_texture,
+                                                                target_width,
+                                                                target_height));
+    }
+
+    render_diagnostics::set_composite_layers_submitted(join_composite_summary(active_layers, has_ui_overlay));
+
+    if (!render_packet_batch_to_target(*this,
+                                       frame_state.command_buffer,
+                                       frame_state.swapchain_texture,
+                                       composite_packets,
+                                       "sprite_textured",
+                                       0x2100u,
+                                       clear_color,
+                                       "runtime_scene.present",
+                                       out_error)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool GpuSceneRenderer::render_frame(const GpuSceneFrameData& frame_data, std::string& out_error) {
+    out_error.clear();
+    if (!device_ || !device_->gpu_device()) {
+        out_error = "GPU device unavailable while rendering scene frame";
+        return false;
+    }
+
+    const std::uint64_t pipeline_hits_before = pipeline_cache_.total_hits();
+    const std::uint64_t pipeline_misses_before = pipeline_cache_.total_misses();
 
     std::string frame_error;
     if (!begin_frame(&frame_error)) {
         out_error = frame_error.empty() ? "GpuSceneRenderer::begin_frame failed." : frame_error;
         return false;
     }
-    add_pass(std::move(scene_pass));
-    if (!end_frame(&frame_error)) {
-        out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
+
+    const GpuRenderDevice::FrameState& frame_state = device_->frame_state();
+    render_diagnostics::set_command_buffer_acquired(frame_state.command_buffer != nullptr);
+    render_diagnostics::set_swapchain_acquired(frame_state.swapchain_texture != nullptr);
+    render_diagnostics::set_swapchain_dimensions(frame_state.swapchain_width, frame_state.swapchain_height);
+
+    if (!render_active_frame(frame_data, out_error)) {
+        if (!device_->end_frame(false, frame_error) && !frame_error.empty()) {
+            vibble::log::warn("[GpuSceneRenderer] Failed to cancel GPU frame cleanly: " + frame_error);
+        }
+        render_diagnostics::set_submit_result(false);
         return false;
     }
+
+    if (!device_->end_frame(true, frame_error)) {
+        render_diagnostics::set_submit_result(false);
+        out_error = "Failed to submit GPU frame: " + frame_error;
+        return false;
+    }
+    render_diagnostics::set_submit_result(true);
+
+    const std::uint64_t pipeline_hits_after = pipeline_cache_.total_hits();
+    const std::uint64_t pipeline_misses_after = pipeline_cache_.total_misses();
+    const std::uint64_t frame_hits = (pipeline_hits_after >= pipeline_hits_before)
+        ? (pipeline_hits_after - pipeline_hits_before)
+        : pipeline_hits_after;
+    const std::uint64_t frame_misses = (pipeline_misses_after >= pipeline_misses_before)
+        ? (pipeline_misses_after - pipeline_misses_before)
+        : pipeline_misses_after;
+    const double frame_hit_rate = (frame_hits + frame_misses) == 0
+        ? 1.0
+        : static_cast<double>(frame_hits) / static_cast<double>(frame_hits + frame_misses);
+    render_diagnostics::set_gpu_pipeline_cache_stats(frame_hits, frame_misses, frame_hit_rate);
 
     return true;
 }
@@ -938,6 +1485,46 @@ bool GpuSceneRenderer::register_external_texture_resource(const std::string& log
 
 void GpuSceneRenderer::clear_external_texture_resources() {
     external_texture_resources_.clear();
+}
+
+bool GpuSceneRenderer::release_texture_resource(const std::string& logical_name) {
+    if (!device_ || !device_->gpu_device() || logical_name.empty()) {
+        return false;
+    }
+    const auto it = texture_resources_.find(logical_name);
+    if (it == texture_resources_.end()) {
+        return false;
+    }
+    if (it->second.texture) {
+        SDL_ReleaseGPUTexture(device_->gpu_device(), it->second.texture);
+        it->second.texture = nullptr;
+        render_diagnostics::add_texture_destroy_count();
+    }
+    texture_resources_.erase(it);
+    return true;
+}
+
+void GpuSceneRenderer::release_texture_resources_with_prefix(
+    const std::string& prefix,
+    const std::unordered_set<std::string>& retained_logical_names) {
+    if (!device_ || !device_->gpu_device() || prefix.empty()) {
+        return;
+    }
+
+    for (auto it = texture_resources_.begin(); it != texture_resources_.end();) {
+        const bool matches_prefix = it->first.rfind(prefix, 0) == 0;
+        const bool retained = retained_logical_names.find(it->first) != retained_logical_names.end();
+        if (matches_prefix && !retained) {
+            if (it->second.texture) {
+                SDL_ReleaseGPUTexture(device_->gpu_device(), it->second.texture);
+                it->second.texture = nullptr;
+                render_diagnostics::add_texture_destroy_count();
+            }
+            it = texture_resources_.erase(it);
+            continue;
+        }
+        ++it;
+    }
 }
 
 SDL_GPUTexture* GpuSceneRenderer::find_texture_resource(const std::string& logical_name) const {

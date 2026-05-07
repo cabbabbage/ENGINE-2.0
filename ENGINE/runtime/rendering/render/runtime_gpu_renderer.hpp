@@ -30,6 +30,7 @@ bool build_floor_sprite_draw_packets(const WarpedScreenGrid& camera,
                                      std::vector<GpuSpriteDrawPacket>& out_floor_draws,
                                      std::vector<GpuSpriteDrawPacket>& out_layer_draws,
                                      std::string& out_error);
+int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset);
 void append_classified_sprite_draw_packet(bool floor_tagged,
                                           const GpuSpriteDrawPacket& packet,
                                           std::vector<GpuSpriteDrawPacket>& out_floor_draws,
@@ -52,7 +53,7 @@ public:
 
     void set_output_dimensions(int screen_width, int screen_height);
 
-    bool render_frame(std::string& out_error);
+    bool render_frame(std::string& out_error, SDL_Texture* ui_overlay_texture = nullptr);
     std::optional<SDL_Point> scene_target_size() const;
 
     bool ready() const { return backend_owner_.ready(); }

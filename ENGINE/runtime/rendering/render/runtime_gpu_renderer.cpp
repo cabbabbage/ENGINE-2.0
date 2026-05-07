@@ -5,6 +5,8 @@
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/render_diagnostics.hpp"
+#include "rendering/render/layer_depth_bins.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/render_object.hpp"
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
@@ -15,6 +17,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <optional>
+#include <sstream>
+#include <unordered_map>
 
 namespace {
 
@@ -109,12 +114,45 @@ struct SpriteBatchVertexUniformData {
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
 };
 
-constexpr SDL_FColor kMissingFloorDataClearColor{0.85f, 0.12f, 0.78f, 1.0f};
-
 std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     constexpr std::uintptr_t kSpritePacketSortOffset =
         std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
+}
+
+int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
+    const auto& settings = camera.get_settings();
+    const double focus_world_z = camera.current_focus_plane_world_z();
+    const double asset_world_z =
+        static_cast<double>(asset.world_z()) +
+        static_cast<double>(asset.world_z_offset());
+    const double signed_distance = asset_world_z - focus_world_z;
+    const double distance = std::fabs(signed_distance);
+    if (!std::isfinite(distance) || distance <= 1.0e-4) {
+        return 0;
+    }
+
+    const double interval = std::max(1.0, static_cast<double>(settings.layer_depth_interval));
+    const double curve = std::max(0.0, static_cast<double>(settings.layer_depth_curve));
+    const double effective_max_depth = std::max(interval, static_cast<double>(settings.max_cull_depth));
+    const std::vector<double> edges =
+        render_depth::build_background_depth_edges(effective_max_depth, interval, curve);
+
+    std::size_t bin_index = 0;
+    for (std::size_t i = 1; i < edges.size(); ++i) {
+        if (distance <= edges[i]) {
+            bin_index = i - 1;
+            break;
+        }
+        bin_index = i - 1;
+    }
+
+    const std::uint32_t max_layer = static_cast<std::uint32_t>(render_depth::kMaxLayersPerSide);
+    const std::uint32_t clamped_layer = static_cast<std::uint32_t>(
+        std::min<std::size_t>(bin_index + 1u, static_cast<std::size_t>(max_layer)));
+    const int signed_layer = (signed_distance >= 0.0) ? static_cast<int>(clamped_layer)
+                                                      : -static_cast<int>(clamped_layer);
+    return signed_layer;
 }
 
 std::string describe_asset_sprite_source(const Asset* asset,
@@ -157,6 +195,10 @@ std::string describe_draw_packet_source(const GpuSpriteDrawPacket& draw) {
 } // namespace
 
 namespace runtime_gpu_renderer_detail {
+
+int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
+    return ::classify_depth_layer_for_asset(camera, asset);
+}
 
 bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
                                    const std::vector<world::Chunk*>& chunks,
@@ -203,6 +245,8 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
             packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
             packet.sort_key = std::max(screen_br.y, screen_bl.y);
             packet.stable_sort_id = floor_sort_id(false, tile_sequence++);
+            packet.is_floor_packet = true;
+            packet.depth_layer = 0;
             fill_quad_packet_vertices(screen_tl,
                                       screen_tr,
                                       screen_br,
@@ -368,9 +412,10 @@ bool RuntimeGpuRenderer::validate_preloaded_sprite_textures(std::string& out_err
 
         std::string texture_error;
         if (!backend_owner_.get()->resolve_gpu_texture_for_sdl_texture(cache_record.texture, texture_error)) {
+            const std::string texture_id =
+                "sdl_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(cache_record.texture));
             record_failure(describe_asset_sprite_source(asset,
-                                                       "sdl_texture_ptr=" +
-                                                           std::to_string(reinterpret_cast<std::uintptr_t>(cache_record.texture)),
+                                                       texture_id.c_str(),
                                                        cache_record.frame_identity,
                                                        cache_record.variant_identity) +
                            " detail='" + (texture_error.empty()
@@ -518,12 +563,16 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
 
         if (asset->isFloorBoxesEnabled()) {
             packet.stable_sort_id = floor_sort_id(true, floor_sequence++);
+            packet.is_floor_packet = true;
+            packet.depth_layer = 0;
             runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
                 true, packet, out_floor_draws, out_layer_draws);
             continue;
         }
 
         packet.stable_sort_id = floor_sort_id(false, layer_sequence++);
+        packet.is_floor_packet = false;
+        packet.depth_layer = runtime_gpu_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
         runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
             false, packet, out_floor_draws, out_layer_draws);
     }
@@ -610,12 +659,75 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
         out_data.floor_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.layer_sprite_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         out_data.layer_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> depth_layer_packets{};
+    depth_layer_packets.reserve(out_data.layer_draws.size());
+    for (const GpuSpriteDrawPacket& packet : out_data.layer_draws) {
+        depth_layer_packets[packet.depth_layer].push_back(packet);
+    }
+    std::vector<int> depth_layer_ids{};
+    depth_layer_ids.reserve(depth_layer_packets.size());
+    for (const auto& entry : depth_layer_packets) {
+        depth_layer_ids.push_back(entry.first);
+    }
+    std::sort(depth_layer_ids.begin(), depth_layer_ids.end(), [](int lhs, int rhs) {
+        return lhs > rhs;
+    });
+
+    out_data.depth_layers.clear();
+    out_data.depth_layers.reserve(depth_layer_ids.size());
+    int max_layer_distance = 0;
+    for (int layer_id : depth_layer_ids) {
+        max_layer_distance = std::max(max_layer_distance, std::abs(layer_id));
+    }
+    for (int layer_id : depth_layer_ids) {
+        GpuDepthLayerDrawPackets layer{};
+        layer.depth_layer = layer_id;
+        layer.packets = std::move(depth_layer_packets[layer_id]);
+        const auto draw_sort_predicate = [](const GpuSpriteDrawPacket& lhs,
+                                            const GpuSpriteDrawPacket& rhs) {
+            if (lhs.sort_key == rhs.sort_key) {
+                return lhs.stable_sort_id < rhs.stable_sort_id;
+            }
+            return lhs.sort_key < rhs.sort_key;
+        };
+        std::stable_sort(layer.packets.begin(), layer.packets.end(), draw_sort_predicate);
+        const float blur_distance = max_layer_distance > 0
+            ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)
+            : 0.0f;
+        const float blur_strength = std::clamp(
+            static_cast<float>(assets_->getView().get_settings().blur_px) * blur_distance,
+            0.0f,
+            static_cast<float>(assets_->getView().get_settings().blur_px));
+        layer.blur_strength_px = blur_strength;
+        out_data.depth_layers.push_back(std::move(layer));
+    }
+    out_data.active_depth_layer_count = static_cast<std::uint32_t>(
+        std::min<std::size_t>(out_data.depth_layers.size(),
+                              static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.debug_overlay_draw_count = 0;
-    out_data.has_valid_composite_source =
-        (out_data.floor_draw_count + out_data.layer_sprite_draw_count) > 0;
+    out_data.has_valid_composite_source = true;
+
+    render_diagnostics::set_packet_counts(out_data.floor_draw_count, out_data.layer_sprite_draw_count);
+    render_diagnostics::set_active_depth_layer_count(out_data.active_depth_layer_count);
+    {
+        std::ostringstream packets_summary;
+        std::ostringstream blur_summary;
+        bool first = true;
+        for (const GpuDepthLayerDrawPackets& layer : out_data.depth_layers) {
+            if (!first) {
+                packets_summary << ", ";
+                blur_summary << ", ";
+            }
+            first = false;
+            packets_summary << layer.depth_layer << '=' << layer.packets.size();
+            blur_summary << layer.depth_layer << '=' << layer.blur_strength_px;
+        }
+        render_diagnostics::set_packets_per_depth_layer(packets_summary.str());
+        render_diagnostics::set_blur_strength_per_layer(blur_summary.str());
+    }
 
     if (out_data.floor_draw_count == 0) {
-        vibble::log::warn("[RuntimeGpuRenderer] No floor draw packets were built; rendering diagnostic clear color.");
+        vibble::log::warn("[RuntimeGpuRenderer] No floor draw packets were built; floor target will clear transparently.");
     }
 
     return true;
@@ -698,7 +810,7 @@ bool RuntimeGpuRenderer::render_draw_packet_batch(SDL_GPURenderPass* render_pass
     return true;
 }
 
-bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
+bool RuntimeGpuRenderer::render_frame(std::string& out_error, SDL_Texture* ui_overlay_texture) {
     out_error.clear();
     frame_context_ = FrameContext{};
 
@@ -767,62 +879,28 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
         (void)device->end_frame(false, frame_error);
         return false;
     }
+    if (ui_overlay_texture) {
+        frame_data.ui_overlay_texture = ui_overlay_texture;
+        frame_data.ui_overlay_gpu_texture =
+            backend_owner_.get()->resolve_gpu_texture_for_sdl_texture(ui_overlay_texture, out_error);
+        if (!frame_data.ui_overlay_gpu_texture) {
+            out_error = "[RuntimeGpuRenderer] Failed to resolve UI overlay texture for GPU composite: " +
+                        (out_error.empty() ? std::string(SDL_GetError()) : out_error);
+            (void)device->end_frame(false, frame_error);
+            render_diagnostics::set_submit_result(false);
+            return false;
+        }
+    }
 
     frame_context_.stats.floor_draw_count = frame_data.floor_draw_count;
     frame_context_.stats.layer_sprite_draw_count = frame_data.layer_sprite_draw_count;
     frame_context_.stats.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
 
     render_diagnostics::set_renderer_runtime_info("gpu", backend_name(), present_mode());
-    render_diagnostics::set_packet_counts(frame_data.floor_draw_count,
-                                          frame_data.layer_sprite_draw_count);
 
-    GpuSceneRenderer::SamplerResourceSpec sampler_spec{};
-    if (!backend_owner_.get()->ensure_sampler_resource("linear_clamp", sampler_spec, out_error)) {
+    if (!backend_owner_.get()->render_active_frame(frame_data, out_error)) {
         (void)device->end_frame(false, frame_error);
-        return false;
-    }
-
-    SDL_GPUColorTargetInfo target_info{};
-    target_info.texture = frame_context_.swapchain_texture;
-    target_info.mip_level = 0;
-    target_info.layer_or_depth_plane = 0;
-    target_info.clear_color = frame_data.floor_draw_count == 0
-        ? kMissingFloorDataClearColor
-        : SDL_FColor{0.0f, 0.0f, 0.0f, 1.0f};
-    target_info.load_op = SDL_GPU_LOADOP_CLEAR;
-    target_info.store_op = SDL_GPU_STOREOP_STORE;
-    target_info.resolve_texture = nullptr;
-    target_info.resolve_mip_level = 0;
-    target_info.resolve_layer = 0;
-    target_info.cycle = false;
-    target_info.cycle_resolve_texture = false;
-
-    SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(frame_context_.command_buffer, &target_info, 1, nullptr);
-    if (!render_pass) {
-        out_error = "SDL_BeginGPURenderPass failed: " + std::string(SDL_GetError());
-        (void)device->end_frame(false, frame_error);
-        return false;
-    }
-
-    frame_context_.stats.render_pass_count = 1;
-    render_diagnostics::set_clear_executed(true);
-
-    bool render_ok = true;
-    if (!render_draw_packet_batch(render_pass, frame_data.floor_draws, "floor", out_error)) {
-        render_ok = false;
-    } else if (!render_draw_packet_batch(render_pass,
-                                         frame_data.layer_draws,
-                                         "world sprites",
-                                         out_error)) {
-        render_ok = false;
-    } else {
-        frame_context_.stats.debug_overlay_draw_count = 0;
-    }
-
-    SDL_EndGPURenderPass(render_pass);
-
-    if (!render_ok) {
-        (void)device->end_frame(false, frame_error);
+        render_diagnostics::set_submit_result(false);
         return false;
     }
 
@@ -844,9 +922,7 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     const double frame_hit_rate = (frame_hits + frame_misses) == 0
         ? 1.0
         : static_cast<double>(frame_hits) / static_cast<double>(frame_hits + frame_misses);
-    (void)frame_hits;
-    (void)frame_misses;
-    (void)frame_hit_rate;
+    render_diagnostics::set_gpu_pipeline_cache_stats(frame_hits, frame_misses, frame_hit_rate);
 
     const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
     vibble::log::info("[RuntimeGpuRenderer] render_summary backend=" + backend_name() +
@@ -854,10 +930,19 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
                      " command_buffer_acquired=" + std::string(stats.command_buffer_acquired ? "true" : "false") +
                      " swapchain_acquired=" + std::string(stats.swapchain_acquired ? "true" : "false") +
                      " swapchain_dimensions=" + std::to_string(stats.swapchain_width) + "x" +
-                     std::to_string(stats.swapchain_height) +
+                      std::to_string(stats.swapchain_height) +
+                     " floor_target=" + std::to_string(stats.floor_target_width) + "x" +
+                     std::to_string(stats.floor_target_height) +
+                     " floor_packets=" + std::to_string(stats.floor_packet_count) +
+                     " normal_packets=" + std::to_string(stats.sprite_packet_count) +
+                     " depth_layers=" + std::to_string(stats.active_depth_layer_count) +
+                     " blur_passes=" + std::to_string(stats.blur_pass_count) +
                      " clear_executed=" + std::string(stats.clear_executed ? "true" : "false") +
                      " floor_packet_count=" + std::to_string(stats.floor_packet_count) +
                      " sprite_packet_count=" + std::to_string(stats.sprite_packet_count) +
+                     " packets_per_depth_layer='" + stats.packets_per_depth_layer + "'" +
+                     " blur_strength_per_layer='" + stats.blur_strength_per_layer + "'" +
+                     " composite_layers='" + stats.composite_layers_submitted + "'" +
                      " draw_call_count=" + std::to_string(stats.draw_call_count) +
                      " skipped_textures=" + std::to_string(stats.skipped_texture_count) +
                      " failed_texture_names='" + stats.failed_texture_names + "'" +

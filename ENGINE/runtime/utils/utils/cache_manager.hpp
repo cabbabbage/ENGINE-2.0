@@ -29,7 +29,7 @@ namespace CacheManager {
         int width = 0;
         int height = 0;
         int pitch = 0;
-        std::uint32_t format = SDL_PIXELFORMAT_RGBA8888;
+        std::uint32_t format = SDL_PIXELFORMAT_RGBA32;
         TextureUploadOptions options{};
         std::vector<std::uint8_t> pixels{};
 
@@ -39,7 +39,7 @@ namespace CacheManager {
     struct BundleFrameLayer {
         int width = 0;
         int height = 0;
-        std::uint32_t format = SDL_PIXELFORMAT_RGBA8888;
+        std::uint32_t format = SDL_PIXELFORMAT_RGBA32;
         int pitch = 0;
         std::vector<std::uint8_t> pixels;
         bool empty() const { return width <= 0 || height <= 0 || pixels.empty(); }
@@ -64,7 +64,7 @@ namespace CacheManager {
     };
 
     struct BundleData {
-        std::uint32_t version = 1;
+        std::uint32_t version = 2;
         std::uint64_t content_hash = 0;
         nlohmann::json metadata_snapshot;
         std::vector<BundleAnimation> animations;

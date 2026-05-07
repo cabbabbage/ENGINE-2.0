@@ -158,7 +158,7 @@ public:
     std::size_t last_runtime_convergence_children_updated() const { return last_runtime_convergence_stats_.children_updated; }
     bool last_runtime_convergence_converged() const { return last_runtime_convergence_stats_.converged; }
 
-    void render_overlays(SDL_Renderer* renderer);
+    void render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target = nullptr);
     SDL_Renderer* renderer() const;
     void toggle_asset_library();
     void open_asset_library();
@@ -531,6 +531,8 @@ private:
     void sync_dev_controls_for_frame(const Input& input);
     void refresh_filtered_active_assets_if_needed();
     void render_runtime_frame();
+    SDL_Texture* prepare_runtime_ui_overlay_texture();
+    void destroy_runtime_ui_overlay_texture();
     void finalize_dev_frame_state();
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
@@ -582,5 +584,8 @@ private:
     std::unordered_set<const Asset*> focus_filter_closure_;
     bool focus_filter_closure_dirty_ = true;
     std::uint64_t focus_filter_version_ = 0;
+    SDL_Texture* runtime_ui_overlay_texture_ = nullptr;
+    int runtime_ui_overlay_width_ = 0;
+    int runtime_ui_overlay_height_ = 0;
     runtime::context::GameRuntimeContext game_context_{};
 };

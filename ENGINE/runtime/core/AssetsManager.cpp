@@ -971,6 +971,7 @@ void Assets::sync_camera_settings_to_map_info_json() {
 
 Assets::~Assets() {
     run_exit_save_sequence("assets_shutdown");
+    destroy_runtime_ui_overlay_texture();
 
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
@@ -2092,25 +2093,34 @@ void Assets::refresh_filtered_active_assets_if_needed() {
 }
 
 void Assets::render_runtime_frame() {
-    if (!suppress_render_ && scene) {
-        bool should_render = true;
-        if (startup_runtime_safety_active(frame_id_)) {
-            const std::uint32_t skip_frames = startup_skip_render_frames();
-            if (frame_id_ <= skip_frames) {
+    bool should_render = !suppress_render_ && scene != nullptr;
+    if (should_render && startup_runtime_safety_active(frame_id_)) {
+        const std::uint32_t skip_frames = startup_skip_render_frames();
+        if (frame_id_ <= skip_frames) {
+            should_render = false;
+        } else {
+            const std::uint32_t every_n = startup_render_every_n_frames();
+            if (every_n > 1 && (frame_id_ % every_n) != 0) {
                 should_render = false;
-            } else {
-                const std::uint32_t every_n = startup_render_every_n_frames();
-                if (every_n > 1 && (frame_id_ % every_n) != 0) {
-                    should_render = false;
-                }
             }
-        }
-        if (should_render) {
-            scene->render();
         }
     }
 
-    render_overlays(renderer());
+    const bool gpu_runtime_available = scene && scene->gpu_runtime_path_enabled();
+    const bool gpu_runtime_scene = should_render && gpu_runtime_available;
+    if (should_render) {
+        if (gpu_runtime_scene) {
+            SDL_Texture* ui_overlay = prepare_runtime_ui_overlay_texture();
+            scene->render(ui_overlay);
+            return;
+        }
+
+        scene->render();
+    }
+
+    if (!gpu_runtime_available) {
+        render_overlays(renderer());
+    }
 }
 
 void Assets::finalize_dev_frame_state() {
@@ -3357,13 +3367,70 @@ std::size_t Assets::delete_assets_for_spawn_groups(const std::vector<std::string
     return count;
 }
 
-void Assets::render_overlays(SDL_Renderer* renderer) {
+void Assets::destroy_runtime_ui_overlay_texture() {
+    if (!runtime_ui_overlay_texture_) {
+        return;
+    }
+    SDL_DestroyTexture(runtime_ui_overlay_texture_);
+    runtime_ui_overlay_texture_ = nullptr;
+    runtime_ui_overlay_width_ = 0;
+    runtime_ui_overlay_height_ = 0;
+}
+
+SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
+    SDL_Renderer* active_renderer = renderer();
+    if (!active_renderer || screen_width <= 0 || screen_height <= 0) {
+        return nullptr;
+    }
+
+    if (runtime_ui_overlay_texture_ &&
+        (runtime_ui_overlay_width_ != screen_width || runtime_ui_overlay_height_ != screen_height)) {
+        destroy_runtime_ui_overlay_texture();
+    }
+
+    if (!runtime_ui_overlay_texture_) {
+        runtime_ui_overlay_texture_ = SDL_CreateTexture(active_renderer,
+                                                        SDL_PIXELFORMAT_RGBA32,
+                                                        SDL_TEXTUREACCESS_TARGET,
+                                                        screen_width,
+                                                        screen_height);
+        if (!runtime_ui_overlay_texture_) {
+            vibble::log::warn("[Assets] Failed to create GPU UI overlay target: " + std::string(SDL_GetError()));
+            return nullptr;
+        }
+        runtime_ui_overlay_width_ = screen_width;
+        runtime_ui_overlay_height_ = screen_height;
+        SDL_SetTextureBlendMode(runtime_ui_overlay_texture_, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(runtime_ui_overlay_texture_, SDL_SCALEMODE_NEAREST);
+    }
+
+    render_overlays(active_renderer, runtime_ui_overlay_texture_);
+    if (!SDL_FlushRenderer(active_renderer)) {
+        vibble::log::warn("[Assets] SDL_FlushRenderer failed after UI overlay target render: " +
+                          std::string(SDL_GetError()));
+        return nullptr;
+    }
+    return runtime_ui_overlay_texture_;
+}
+
+void Assets::render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target) {
     const Uint32 now = SDL_GetTicks();
+    const bool rendering_to_overlay_target = renderer && overlay_target;
+    SDL_Texture* previous_target = nullptr;
 
     if (renderer) {
-        SDL_SetRenderTarget(renderer, nullptr);
+        previous_target = SDL_GetRenderTarget(renderer);
+        SDL_SetRenderTarget(renderer, rendering_to_overlay_target ? overlay_target : nullptr);
         SDL_SetRenderViewport(renderer, nullptr);
         SDL_SetRenderClipRect(renderer, nullptr);
+        if (rendering_to_overlay_target) {
+            SDL_BlendMode previous_blend_mode = SDL_BLENDMODE_NONE;
+            SDL_GetRenderDrawBlendMode(renderer, &previous_blend_mode);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            SDL_SetRenderDrawBlendMode(renderer, previous_blend_mode);
+        }
     }
 
     if (renderer && dev_controls_ && dev_controls_->is_enabled()) {
@@ -3424,17 +3491,29 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
     }
 
     if (screenshot_capture_pending_) {
-        std::string screenshot_relative_path;
-        if (capture_screenshot_to_root(renderer, screenshot_relative_path)) {
-            latest_screenshot_relative_path_ = std::move(screenshot_relative_path);
-            screenshot_create_task_start_ticks_ = now;
-            popup_manager_.show_toast("Screenshot saved", 2200);
-        } else {
+        if (rendering_to_overlay_target) {
             latest_screenshot_relative_path_.clear();
             screenshot_create_task_start_ticks_ = 0;
-            popup_manager_.show_toast("Screenshot failed", 2200);
+            popup_manager_.show_toast("Screenshot unavailable during GPU composite", 2200);
+        } else {
+            std::string screenshot_relative_path;
+            if (capture_screenshot_to_root(renderer, screenshot_relative_path)) {
+                latest_screenshot_relative_path_ = std::move(screenshot_relative_path);
+                screenshot_create_task_start_ticks_ = now;
+                popup_manager_.show_toast("Screenshot saved", 2200);
+            } else {
+                latest_screenshot_relative_path_.clear();
+                screenshot_create_task_start_ticks_ = 0;
+                popup_manager_.show_toast("Screenshot failed", 2200);
+            }
         }
         screenshot_capture_pending_ = false;
+    }
+
+    if (rendering_to_overlay_target) {
+        SDL_SetRenderTarget(renderer, previous_target);
+        SDL_SetRenderViewport(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 

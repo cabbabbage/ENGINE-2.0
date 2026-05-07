@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -35,14 +36,26 @@ struct GpuSpriteDrawPacket {
     std::uint8_t sort_group = 0;
     float sort_key = 0.0f;
     std::uintptr_t stable_sort_id = 0u;
+    bool is_floor_packet = false;
+    int depth_layer = 0;
+};
+
+struct GpuDepthLayerDrawPackets {
+    int depth_layer = 0;
+    float blur_strength_px = 0.0f;
+    std::vector<GpuSpriteDrawPacket> packets{};
 };
 
 struct GpuSceneFrameData {
     std::vector<GpuSpriteDrawPacket> floor_draws{};
     std::vector<GpuSpriteDrawPacket> layer_draws{};
+    std::vector<GpuDepthLayerDrawPackets> depth_layers{};
     std::uint32_t floor_draw_count = 0;
     std::uint32_t layer_sprite_draw_count = 0;
+    std::uint32_t active_depth_layer_count = 0;
     std::uint32_t debug_overlay_draw_count = 0;
+    SDL_Texture* ui_overlay_texture = nullptr;
+    SDL_GPUTexture* ui_overlay_gpu_texture = nullptr;
     bool has_valid_composite_source = false;
 };
 
@@ -94,6 +107,7 @@ public:
     bool has_shader_variant(const std::string& shader_name) const;
     const std::string& backend_shader_variant() const { return backend_shader_variant_; }
     bool render_frame(const GpuSceneFrameData& frame_data, std::string& out_error);
+    bool render_active_frame(const GpuSceneFrameData& frame_data, std::string& out_error);
     void reset_frame_graph();
     void add_pass(GpuFrameGraph::PassDescriptor pass);
 
@@ -119,6 +133,9 @@ public:
                                  const SamplerResourceSpec& spec,
                                  std::string& out_error);
     SDL_GPUSampler* find_sampler_resource(const std::string& logical_name) const;
+    bool release_texture_resource(const std::string& logical_name);
+    void release_texture_resources_with_prefix(const std::string& prefix,
+                                               const std::unordered_set<std::string>& retained_logical_names);
     void release_runtime_resources();
 
 private:

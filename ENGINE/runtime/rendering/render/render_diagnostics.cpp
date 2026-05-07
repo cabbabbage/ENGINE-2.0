@@ -125,11 +125,18 @@ void begin_frame() {
     g_frame_stats.swapchain_acquired = false;
     g_frame_stats.swapchain_width = 0;
     g_frame_stats.swapchain_height = 0;
+    g_frame_stats.floor_target_width = 0;
+    g_frame_stats.floor_target_height = 0;
     g_frame_stats.clear_executed = false;
     g_frame_stats.floor_packet_count = 0;
     g_frame_stats.sprite_packet_count = 0;
+    g_frame_stats.active_depth_layer_count = 0;
+    g_frame_stats.blur_pass_count = 0;
     g_frame_stats.skipped_texture_count = 0;
     g_frame_stats.failed_texture_names.clear();
+    g_frame_stats.packets_per_depth_layer.clear();
+    g_frame_stats.blur_strength_per_layer.clear();
+    g_frame_stats.composite_layers_submitted.clear();
     g_frame_stats.submit_succeeded = false;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
@@ -258,11 +265,20 @@ void set_swapchain_dimensions(std::uint32_t width, std::uint32_t height) {
     g_frame_stats.swapchain_width = width;
     g_frame_stats.swapchain_height = height;
 }
+void set_floor_target_dimensions(std::uint32_t width, std::uint32_t height) {
+    g_frame_stats.floor_target_width = width;
+    g_frame_stats.floor_target_height = height;
+}
 void set_clear_executed(bool executed) { g_frame_stats.clear_executed = executed; }
 void set_packet_counts(std::uint32_t floor_packets, std::uint32_t sprite_packets) {
     g_frame_stats.floor_packet_count = floor_packets;
     g_frame_stats.sprite_packet_count = sprite_packets;
 }
+void set_active_depth_layer_count(std::uint32_t count) { g_frame_stats.active_depth_layer_count = count; }
+void set_blur_pass_count(std::uint32_t count) { g_frame_stats.blur_pass_count = count; }
+void set_packets_per_depth_layer(const std::string& summary) { g_frame_stats.packets_per_depth_layer = summary; }
+void set_blur_strength_per_layer(const std::string& summary) { g_frame_stats.blur_strength_per_layer = summary; }
+void set_composite_layers_submitted(const std::string& summary) { g_frame_stats.composite_layers_submitted = summary; }
 void add_skipped_texture_count(std::uint32_t count) { g_frame_stats.skipped_texture_count += count; }
 void set_failed_texture_names(const std::string& names) { g_frame_stats.failed_texture_names = names; }
 void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }

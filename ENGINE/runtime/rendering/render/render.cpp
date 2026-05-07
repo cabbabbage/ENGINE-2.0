@@ -84,7 +84,7 @@ std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
     return runtime_gpu_renderer_->scene_target_size();
 }
 
-void SceneRenderer::render() {
+void SceneRenderer::render(SDL_Texture* ui_overlay_texture) {
     if (!renderer_ || !assets_ || !runtime_gpu_renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
@@ -112,7 +112,7 @@ void SceneRenderer::render() {
     };
 
     std::string frame_error;
-    if (!runtime_gpu_renderer_->render_frame(frame_error)) {
+    if (!runtime_gpu_renderer_->render_frame(frame_error, ui_overlay_texture)) {
         fail_gpu_frame(frame_error.empty() ? "Unknown GPU frame failure." : frame_error);
         return;
     }

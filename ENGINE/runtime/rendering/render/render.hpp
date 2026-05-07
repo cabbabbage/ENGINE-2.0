@@ -48,7 +48,7 @@ public:
         return true;
     }
 
-    void render();
+    void render(SDL_Texture* ui_overlay_texture = nullptr);
     SDL_Renderer* get_renderer() const;
     void set_output_dimensions(int screen_width, int screen_height);
     int output_width() const { return screen_width_; }

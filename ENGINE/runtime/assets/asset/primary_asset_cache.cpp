@@ -27,6 +27,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
+constexpr SDL_PixelFormat kRuntimeRgbaPixelFormat = SDL_PIXELFORMAT_RGBA32;
+
 class GeneratorLogBridge final : public imgcache::ILogger {
 public:
     void info(const std::string& msg) override {
@@ -137,7 +139,7 @@ int count_sequential_png(const fs::path& folder) {
 SDL_Surface* load_rgba_surface(const fs::path& path) {
     SDL_Surface* loaded = CacheManager::load_surface(path.generic_string());
     if (!loaded) return nullptr;
-    SDL_Surface* converted = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface* converted = SDL_ConvertSurface(loaded, kRuntimeRgbaPixelFormat);
     SDL_DestroySurface(loaded);
     return converted;
 }
@@ -148,8 +150,8 @@ CacheManager::BundleFrameLayer make_layer(SDL_Surface* surface) {
         return layer;
     }
     SDL_Surface* rgba = surface;
-    if (surface->format != SDL_PIXELFORMAT_RGBA8888) {
-        rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+    if (surface->format != kRuntimeRgbaPixelFormat) {
+        rgba = SDL_ConvertSurface(surface, kRuntimeRgbaPixelFormat);
         SDL_DestroySurface(surface);
     }
     if (!rgba) {
@@ -158,7 +160,7 @@ CacheManager::BundleFrameLayer make_layer(SDL_Surface* surface) {
     layer.width = rgba->w;
     layer.height = rgba->h;
     layer.pitch = rgba->pitch;
-    layer.format = rgba ? rgba->format : SDL_PIXELFORMAT_RGBA8888;
+    layer.format = rgba ? rgba->format : static_cast<std::uint32_t>(kRuntimeRgbaPixelFormat);
     const std::size_t byte_count = static_cast<std::size_t>(layer.pitch) * static_cast<std::size_t>(layer.height);
     layer.pixels.resize(byte_count);
     std::memcpy(layer.pixels.data(), rgba->pixels, byte_count);
@@ -172,7 +174,7 @@ CacheManager::BundleFrameLayer make_transparent_layer(int width, int height) {
     CacheManager::BundleFrameLayer layer;
     layer.width = std::max(1, width);
     layer.height = std::max(1, height);
-    layer.format = SDL_PIXELFORMAT_RGBA8888;
+    layer.format = kRuntimeRgbaPixelFormat;
     layer.pitch = layer.width * 4;
     const std::size_t byte_count =
         static_cast<std::size_t>(layer.pitch) * static_cast<std::size_t>(layer.height);
@@ -242,6 +244,20 @@ bool bundle_variant_layout_is_valid(const CacheManager::BundleData& bundle) {
         for (const auto& frame : animation.frames) {
             if (frame.variants.size() != expected_variant_count) {
                 return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool bundle_layer_formats_are_valid(const CacheManager::BundleData& bundle) {
+    for (const auto& animation : bundle.animations) {
+        for (const auto& frame : animation.frames) {
+            for (const auto& variant : frame.variants) {
+                if (!variant.base.empty() &&
+                    variant.base.format != static_cast<std::uint32_t>(kRuntimeRgbaPixelFormat)) {
+                    return false;
+                }
             }
         }
     }
@@ -410,11 +426,13 @@ struct BundleValidationResult {
     bool variant_layout_ok = true;
     bool required_animations_ok = true;
     bool placeholder_policy_ok = true;
+    bool pixel_format_ok = true;
 
     bool ready() const {
         return variant_layout_ok &&
                required_animations_ok &&
-               placeholder_policy_ok;
+               placeholder_policy_ok &&
+               pixel_format_ok;
     }
 };
 
@@ -427,6 +445,7 @@ BundleValidationResult validate_loaded_bundle(const CacheManager::BundleData& bu
     result.required_animations_ok = bundle_contains_required_folder_animations(bundle, cache_state);
     result.placeholder_policy_ok = allow_placeholder_fallback ||
         !bundle_contains_transparent_placeholder_for_required_folder_animations(bundle, cache_state);
+    result.pixel_format_ok = bundle_layer_formats_are_valid(bundle);
     return result;
 }
 
@@ -440,6 +459,9 @@ std::string describe_bundle_validation_failure(const BundleValidationResult& val
     }
     if (!validation.placeholder_policy_ok) {
         reasons.emplace_back("transparent placeholder frame present without explicit fallback policy");
+    }
+    if (!validation.pixel_format_ok) {
+        reasons.emplace_back("cached layers use legacy non-RGBA32 pixel format");
     }
 
     if (reasons.empty()) {
@@ -675,7 +697,7 @@ bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& ani
             continue;
         }
 
-        SDL_Surface* atlas = SDL_CreateSurface(used_w, atlas_h, SDL_PIXELFORMAT_RGBA8888);
+        SDL_Surface* atlas = SDL_CreateSurface(used_w, atlas_h, kRuntimeRgbaPixelFormat);
         if (!atlas) {
             continue;
         }
@@ -716,7 +738,7 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                                                   const std::unordered_set<std::string>* animation_filter,
                                                   bool allow_placeholder_fallback) {
     out_data = CacheManager::BundleData{};
-    out_data.version = 1;
+    out_data.version = 2;
     out_data.metadata_snapshot = info.info_json_;
 
     std::vector<float> variant_steps = normalized_variant_steps(info);

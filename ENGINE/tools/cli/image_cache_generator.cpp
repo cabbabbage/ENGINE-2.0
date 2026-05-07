@@ -451,8 +451,12 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     }
 
                     const std::optional<AlphaBounds> scaled_bounds = FindAlphaBounds(scaled.value());
-                    const int shared_w = scale_dimension(shared_crop_size->width, step);
-                    const int shared_h = scale_dimension(shared_crop_size->height, step);
+                    int shared_w = scale_dimension(shared_crop_size->width, step);
+                    int shared_h = scale_dimension(shared_crop_size->height, step);
+                    if (scaled_bounds.has_value()) {
+                        shared_w = std::max(shared_w, scaled_bounds->width());
+                        shared_h = std::max(shared_h, scaled_bounds->height());
+                    }
 
                     std::optional<ImageRGBA> cropped = CropToSharedCanvas(scaled.value(),
                                                                           scaled_bounds,

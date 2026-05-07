@@ -65,5 +65,4 @@ private:
     std::unique_ptr<RuntimeGpuRenderer> runtime_gpu_renderer_;
 
     bool gpu_runtime_path_enabled_ = false;
-    bool render_path_status_logged_ = false;
 };

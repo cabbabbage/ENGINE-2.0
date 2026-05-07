@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "rendering/render/gpu_runtime_pipeline.hpp"
 #include "rendering/render/gpu_scene_renderer.hpp"
 
 class Assets;
@@ -45,6 +44,7 @@ public:
     void set_output_dimensions(int screen_width, int screen_height);
 
     bool render_frame(std::string& out_error);
+    std::optional<SDL_Point> scene_target_size() const;
 
     bool ready() const { return gpu_scene_renderer_ != nullptr; }
     const std::string& present_mode() const;
@@ -58,7 +58,6 @@ private:
 
     bool initialize(std::string& out_error);
     bool ensure_scene_target(std::string& out_error);
-    bool execute_gpu_frame_graph(std::string& out_error);
     bool build_gpu_scene_frame_data(GpuSceneFrameData& out_data, std::string& out_error) const;
     std::vector<world::Chunk*> runtime_floor_chunks() const;
 
@@ -69,5 +68,4 @@ private:
 
 
     std::unique_ptr<GpuSceneRenderer> gpu_scene_renderer_;
-    std::unique_ptr<GpuRuntimePipeline> gpu_runtime_pipeline_;
 };

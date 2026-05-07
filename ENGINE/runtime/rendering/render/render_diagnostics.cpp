@@ -121,7 +121,6 @@ void begin_frame() {
     g_frame_stats.gpu_scene_floor_draw_count = 0;
     g_frame_stats.gpu_scene_layer_draw_count = 0;
     g_frame_stats.gpu_scene_composite_source_ready = false;
-    g_frame_stats.gpu_scene_final_swapchain_pass_reached = false;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -238,12 +237,10 @@ void note_gpu_frame_skipped_due_to_failure(std::uint32_t count) {
 
 void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
                                 std::uint32_t layer_draw_count,
-                                bool composite_source_ready,
-                                bool final_swapchain_pass_reached) {
+                                bool composite_source_ready) {
     g_frame_stats.gpu_scene_floor_draw_count = floor_draw_count;
     g_frame_stats.gpu_scene_layer_draw_count = layer_draw_count;
     g_frame_stats.gpu_scene_composite_source_ready = composite_source_ready;
-    g_frame_stats.gpu_scene_final_swapchain_pass_reached = final_swapchain_pass_reached;
 }
 
 void note_texture_created(SDL_Texture* texture) {

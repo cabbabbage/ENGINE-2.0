@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <array>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -13,6 +14,33 @@
 #include "rendering/render/gpu_render_device.hpp"
 #include "rendering/render/shader_package_library.hpp"
 #include "rendering/render/shader_pipeline_cache.hpp"
+
+struct GpuSpriteVertex {
+    float clip_x = 0.0f;
+    float clip_y = 0.0f;
+    float uv_x = 0.0f;
+    float uv_y = 0.0f;
+};
+
+struct GpuSpriteDrawPacket {
+    SDL_Texture* source_texture = nullptr;
+    std::array<GpuSpriteVertex, 6> vertices{};
+    SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
+    float sort_key = 0.0f;
+    std::uintptr_t stable_sort_id = 0u;
+};
+
+struct GpuSceneFrameData {
+    std::vector<GpuSpriteDrawPacket> map_floor_draws{};
+    std::vector<GpuSpriteDrawPacket> floor_sprite_draws{};
+    std::vector<GpuSpriteDrawPacket> layer_draws{};
+    std::uint32_t map_floor_draw_count = 0;
+    std::uint32_t floor_sprite_draw_count = 0;
+    std::uint32_t floor_draw_count = 0;
+    std::uint32_t layer_sprite_draw_count = 0;
+    std::uint32_t debug_overlay_draw_count = 0;
+    bool has_valid_composite_source = false;
+};
 
 class GpuSceneRenderer {
 public:
@@ -60,6 +88,7 @@ public:
     bool load_shader_packages(const std::string& manifest_path, std::string& out_error);
     bool has_shader_variant(const std::string& shader_name) const;
     const std::string& backend_shader_variant() const { return backend_shader_variant_; }
+    bool render_frame(const GpuSceneFrameData& frame_data, std::string& out_error);
     void reset_frame_graph();
     void add_pass(GpuFrameGraph::PassDescriptor pass);
 

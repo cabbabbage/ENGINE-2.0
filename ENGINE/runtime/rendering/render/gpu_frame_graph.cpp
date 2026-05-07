@@ -127,10 +127,6 @@ GpuFrameGraph::ExecutionStats GpuFrameGraph::execute(const ExecuteContext& conte
                 const std::string message = "[GpuFrameGraph] Render pass '" + pass.name + "' targets swapchain but swapchain texture is null.";
                 if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
             }
-            if (pass.render.use_swapchain_target && pass.render.fragment_sampled_textures.empty()) {
-                const std::string message = "[GpuFrameGraph] Final swapchain pass '" + pass.name + "' has no sampled scene source.";
-                if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }
-            }
             if (pass.render.use_swapchain_target && pass.render.load_op != SDL_GPU_LOADOP_CLEAR) {
                 const std::string message = "[GpuFrameGraph] Swapchain pass '" + pass.name + "' must use load_op=CLEAR.";
                 if (!fail_or_warn_missing(message, true, true, stats)) { last_execution_stats_ = stats; return stats; }

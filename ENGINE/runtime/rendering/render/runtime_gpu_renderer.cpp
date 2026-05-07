@@ -198,8 +198,7 @@ RuntimeGpuRenderer::RuntimeGpuRenderer(SDL_Renderer* renderer,
     : renderer_(renderer),
       assets_(assets),
       screen_width_(std::max(1, screen_width)),
-      screen_height_(std::max(1, screen_height)),
-      gpu_runtime_pipeline_(std::make_unique<GpuRuntimePipeline>()) {}
+      screen_height_(std::max(1, screen_height)) {}
 
 RuntimeGpuRenderer::~RuntimeGpuRenderer() = default;
 
@@ -248,6 +247,12 @@ void RuntimeGpuRenderer::set_output_dimensions(int screen_width, int screen_heig
     screen_height_ = std::max(1, screen_height);
 }
 
+std::optional<SDL_Point> RuntimeGpuRenderer::scene_target_size() const {
+    if (!gpu_scene_renderer_) {
+        return std::nullopt;
+    }
+    return SDL_Point{std::max(1, screen_width_), std::max(1, screen_height_)};
+}
 
 const std::string& RuntimeGpuRenderer::present_mode() const {
     static const std::string kUnknown = "unknown";
@@ -265,7 +270,7 @@ const std::string& RuntimeGpuRenderer::backend_name() const {
 
 bool RuntimeGpuRenderer::ensure_scene_target(std::string& out_error) {
     out_error.clear();
-    if (!renderer_ || !gpu_scene_renderer_ || !gpu_runtime_pipeline_ || screen_width_ <= 0 || screen_height_ <= 0) {
+    if (!renderer_ || !gpu_scene_renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         out_error = "RuntimeGpuRenderer not ready for scene target initialization.";
         return false;
     }
@@ -273,7 +278,8 @@ bool RuntimeGpuRenderer::ensure_scene_target(std::string& out_error) {
     const int max_texture_size = renderer_max_texture_size(renderer_);
     screen_width_ = clamp_dimension_to_renderer_limit(screen_width_, max_texture_size, "scene width");
     screen_height_ = clamp_dimension_to_renderer_limit(screen_height_, max_texture_size, "scene height");
-    return gpu_runtime_pipeline_->ensure_shared_resources(*gpu_scene_renderer_, out_error);
+    GpuSceneRenderer::SamplerResourceSpec sampler_spec{};
+    return gpu_scene_renderer_->ensure_sampler_resource("linear_clamp", sampler_spec, out_error);
 }
 
 std::vector<world::Chunk*> RuntimeGpuRenderer::runtime_floor_chunks() const {
@@ -414,74 +420,22 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(GpuSceneFrameData& out_data,
     return true;
 }
 
-bool RuntimeGpuRenderer::execute_gpu_frame_graph(std::string& out_error) {
-    out_error.clear();
-
-    const char* renderer_name = renderer_ ? SDL_GetRendererName(renderer_) : nullptr;
-    const auto backend_name = renderer_name ? std::string{renderer_name} : std::string{"unknown"};
-    const auto log_failure = [&](const std::string& reason, const std::string& pass_name) {
-        vibble::log::error("[RuntimeGpuRenderer] GPU frame-graph failure backend=" + backend_name +
-                           " pass=" + pass_name +
-                           " reason=" + reason);
-    };
-
-    if (!gpu_scene_renderer_ || !gpu_runtime_pipeline_) {
-        out_error = "GpuSceneRenderer is not initialized.";
-        log_failure(out_error, "preflight");
-        return false;
-    }
-    const std::uint32_t scene_width = static_cast<std::uint32_t>(std::max(1, screen_width_));
-    const std::uint32_t scene_height = static_cast<std::uint32_t>(std::max(1, screen_height_));
-
-    std::string frame_error;
-
-    GpuSceneFrameData frame_data{};
-    if (!build_gpu_scene_frame_data(frame_data, out_error)) {
-        log_failure(out_error, "scene_packet_build");
-        return false;
-    }
-    render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count, frame_data.layer_sprite_draw_count, frame_data.has_valid_composite_source, false);
-
-    gpu_scene_renderer_->reset_frame_graph();
-    if (!gpu_runtime_pipeline_->enqueue_frame_graph(*gpu_scene_renderer_,
-                                                    frame_data,
-                                                    "runtime",
-                                                    scene_width,
-                                                    scene_height,
-                                                    frame_error)) {
-        out_error = frame_error.empty()
-            ? "Failed to enqueue runtime GPU frame graph."
-            : frame_error;
-        log_failure(out_error, "enqueue_frame_graph");
-        return false;
-    }
-
-    if (!gpu_scene_renderer_->begin_frame(&frame_error, false)) {
-        out_error = frame_error.empty() ? "GpuSceneRenderer::begin_frame failed." : frame_error;
-        log_failure(out_error, "begin_frame");
-        return false;
-    }
-
-    if (!gpu_scene_renderer_->end_frame(&frame_error)) {
-        out_error = frame_error.empty() ? "GpuSceneRenderer::end_frame failed." : frame_error;
-        log_failure(out_error, "runtime_present_main_scene");
-        return false;
-    }
-
-    render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count,
-                                                   frame_data.layer_sprite_draw_count,
-                                                   frame_data.has_valid_composite_source,
-                                                   true);
-    return true;
-}
-
 bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     out_error.clear();
 
     if (!ensure_scene_target(out_error)) {
         return false;
     }
-    if (!execute_gpu_frame_graph(out_error)) {
+    GpuSceneFrameData frame_data{};
+    if (!build_gpu_scene_frame_data(frame_data, out_error)) {
+        return false;
+    }
+
+    render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count,
+                                                   frame_data.layer_sprite_draw_count,
+                                                   frame_data.has_valid_composite_source);
+
+    if (!gpu_scene_renderer_ || !gpu_scene_renderer_->render_frame(frame_data, out_error)) {
         return false;
     }
     return true;

@@ -105,16 +105,5 @@ void SceneRenderer::render() {
         fail_gpu_frame(frame_error.empty() ? "Unknown GPU frame failure." : frame_error);
         return;
     }
-
-    constexpr const char* kCanonicalRuntimePath = "scene_composite_present_graph";
-    if (!render_path_status_logged_) {
-        vibble::log::info(std::string{"[SceneRenderer] runtime_path="} + kCanonicalRuntimePath);
-        render_path_status_logged_ = true;
-    }
-
-    render_diagnostics::set_renderer_runtime_info("gpu",
-                                                  kCanonicalRuntimePath,
-                                                  runtime_gpu_renderer_->present_mode());
     render_diagnostics::end_frame();
 }
-

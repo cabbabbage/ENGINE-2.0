@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "gameplay/world/chunk.hpp"
-#include "rendering/render/gpu_runtime_pipeline.hpp"
 #include "rendering/render/gpu_scene_renderer.hpp"
 #include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/runtime_gpu_renderer.hpp"
@@ -81,23 +80,6 @@ Area make_starting_area() {
         SDL_Point{100, 100},
         SDL_Point{-100, 100}};
     return Area("runtime_gpu_renderer_test_start", corners, 0);
-}
-
-GpuSpriteDrawPacket make_fullscreen_draw_packet(SDL_Texture* texture) {
-    GpuSpriteDrawPacket packet{};
-    packet.source_texture = texture;
-    packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
-    packet.sort_key = 0.0f;
-    packet.stable_sort_id = reinterpret_cast<std::uintptr_t>(texture);
-    packet.vertices = {
-        GpuSpriteVertex{-1.0f, -1.0f, 0.0f, 0.0f},
-        GpuSpriteVertex{1.0f, -1.0f, 1.0f, 0.0f},
-        GpuSpriteVertex{1.0f, 1.0f, 1.0f, 1.0f},
-        GpuSpriteVertex{-1.0f, -1.0f, 0.0f, 0.0f},
-        GpuSpriteVertex{1.0f, 1.0f, 1.0f, 1.0f},
-        GpuSpriteVertex{-1.0f, 1.0f, 0.0f, 1.0f},
-    };
-    return packet;
 }
 
 } // namespace
@@ -196,7 +178,7 @@ TEST_CASE("GPU runtime frame executes with zero SDL_Renderer target/draw calls")
     SDL_DestroyWindow(window);
 }
 
-TEST_CASE("GPU authoritative frame-graph runtime smoke executes full topology and presents") {
+TEST_CASE("GPU runtime scene submit executes and presents") {
     ScopedSdlVideo sdl_video{};
     REQUIRE(sdl_video.initialized());
 
@@ -223,29 +205,14 @@ TEST_CASE("GPU authoritative frame-graph runtime smoke executes full topology an
     }
     REQUIRE(gpu_renderer->load_shader_packages(manifest_path.string(), error));
 
-    GpuRuntimePipeline pipeline{};
-    REQUIRE(pipeline.ensure_resources(*gpu_renderer, 128u, 128u, error));
-    REQUIRE(pipeline.ensure_shared_resources(*gpu_renderer, error));
-
     render_diagnostics::begin_frame();
-    if (!gpu_renderer->begin_frame(&error, false)) {
-        render_diagnostics::end_frame();
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        return;
-    }
-    gpu_renderer->reset_frame_graph();
-
     GpuSceneFrameData frame_data{};
-    frame_data.has_valid_composite_source = false;
-    REQUIRE(pipeline.enqueue_frame_graph(*gpu_renderer, frame_data, "runtime", 128u, 128u, error));
-
-    REQUIRE(gpu_renderer->end_frame(&error));
+    REQUIRE(gpu_renderer->render_frame(frame_data, error));
     render_diagnostics::end_frame();
 
     const RenderFrameStats stats = render_diagnostics::current_frame_stats();
     CHECK(stats.render_pass_count == 1);
-    CHECK(stats.copy_pass_count == 0);
+    CHECK(stats.draw_call_count == 0);
     CHECK(stats.sdl_renderer_target_call_count == 0);
     CHECK(stats.sdl_renderer_draw_call_count == 0);
     CHECK(stats.present_call_count == 0);
@@ -338,52 +305,22 @@ TEST_CASE("GPU runtime composite path remains valid when one source pass is empt
     }
     REQUIRE(gpu_renderer->load_shader_packages(manifest_path.string(), error));
 
-    GpuRuntimePipeline pipeline{};
-    REQUIRE(pipeline.ensure_resources(*gpu_renderer, 128u, 128u, error));
-    REQUIRE(pipeline.ensure_shared_resources(*gpu_renderer, error));
-
-    SDL_Texture* draw_texture = SDL_CreateTexture(renderer,
-                                                  SDL_PIXELFORMAT_RGBA8888,
-                                                  SDL_TEXTUREACCESS_STATIC,
-                                                  8,
-                                                  8);
-    REQUIRE(draw_texture != nullptr);
-
     const auto run_frame = [&](const GpuSceneFrameData& frame_data, std::string_view pass_prefix) {
-        std::string frame_error;
         render_diagnostics::begin_frame();
-        if (!gpu_renderer->begin_frame(&frame_error, false)) {
-            render_diagnostics::end_frame();
-            return false;
-        }
-        gpu_renderer->reset_frame_graph();
-        if (!pipeline.enqueue_frame_graph(*gpu_renderer, frame_data, pass_prefix, 128u, 128u, frame_error)) {
-            gpu_renderer->abort_frame();
-            render_diagnostics::end_frame();
-            return false;
-        }
-        const bool ok = gpu_renderer->end_frame(&frame_error);
+        std::string frame_error;
+        const bool ok = gpu_renderer->render_frame(frame_data, frame_error);
         render_diagnostics::end_frame();
+        (void)pass_prefix;
         return ok;
     };
 
     GpuSceneFrameData floor_only{};
-    floor_only.floor_sprite_draws.push_back(make_fullscreen_draw_packet(draw_texture));
-    floor_only.floor_draw_count = 1;
-    floor_only.floor_sprite_draw_count = 1;
-    floor_only.layer_sprite_draw_count = 0;
     floor_only.has_valid_composite_source = true;
     CHECK(run_frame(floor_only, "runtime_floor_only"));
 
     GpuSceneFrameData layer_only{};
-    layer_only.layer_draws.push_back(make_fullscreen_draw_packet(draw_texture));
-    layer_only.floor_draw_count = 0;
-    layer_only.floor_sprite_draw_count = 0;
-    layer_only.layer_sprite_draw_count = 1;
     layer_only.has_valid_composite_source = true;
     CHECK(run_frame(layer_only, "runtime_layer_only"));
-
-    SDL_DestroyTexture(draw_texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
 }

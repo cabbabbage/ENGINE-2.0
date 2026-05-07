@@ -42,6 +42,16 @@ struct RenderFrameStats {
     std::uint32_t gpu_scene_floor_draw_count = 0;
     std::uint32_t gpu_scene_layer_draw_count = 0;
     bool gpu_scene_composite_source_ready = false;
+    bool command_buffer_acquired = false;
+    bool swapchain_acquired = false;
+    std::uint32_t swapchain_width = 0;
+    std::uint32_t swapchain_height = 0;
+    bool clear_executed = false;
+    std::uint32_t floor_packet_count = 0;
+    std::uint32_t sprite_packet_count = 0;
+    std::uint32_t skipped_texture_count = 0;
+    std::string failed_texture_names;
+    bool submit_succeeded = false;
 };
 
 namespace render_diagnostics {
@@ -81,6 +91,14 @@ void note_gpu_frame_skipped_due_to_failure(std::uint32_t count = 1);
 void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
                                 std::uint32_t layer_draw_count,
                                 bool composite_source_ready);
+void set_command_buffer_acquired(bool acquired);
+void set_swapchain_acquired(bool acquired);
+void set_swapchain_dimensions(std::uint32_t width, std::uint32_t height);
+void set_clear_executed(bool executed);
+void set_packet_counts(std::uint32_t floor_packets, std::uint32_t sprite_packets);
+void add_skipped_texture_count(std::uint32_t count = 1);
+void set_failed_texture_names(const std::string& names);
+void set_submit_result(bool succeeded);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

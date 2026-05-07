@@ -121,6 +121,16 @@ void begin_frame() {
     g_frame_stats.gpu_scene_floor_draw_count = 0;
     g_frame_stats.gpu_scene_layer_draw_count = 0;
     g_frame_stats.gpu_scene_composite_source_ready = false;
+    g_frame_stats.command_buffer_acquired = false;
+    g_frame_stats.swapchain_acquired = false;
+    g_frame_stats.swapchain_width = 0;
+    g_frame_stats.swapchain_height = 0;
+    g_frame_stats.clear_executed = false;
+    g_frame_stats.floor_packet_count = 0;
+    g_frame_stats.sprite_packet_count = 0;
+    g_frame_stats.skipped_texture_count = 0;
+    g_frame_stats.failed_texture_names.clear();
+    g_frame_stats.submit_succeeded = false;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -242,6 +252,20 @@ void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
     g_frame_stats.gpu_scene_layer_draw_count = layer_draw_count;
     g_frame_stats.gpu_scene_composite_source_ready = composite_source_ready;
 }
+void set_command_buffer_acquired(bool acquired) { g_frame_stats.command_buffer_acquired = acquired; }
+void set_swapchain_acquired(bool acquired) { g_frame_stats.swapchain_acquired = acquired; }
+void set_swapchain_dimensions(std::uint32_t width, std::uint32_t height) {
+    g_frame_stats.swapchain_width = width;
+    g_frame_stats.swapchain_height = height;
+}
+void set_clear_executed(bool executed) { g_frame_stats.clear_executed = executed; }
+void set_packet_counts(std::uint32_t floor_packets, std::uint32_t sprite_packets) {
+    g_frame_stats.floor_packet_count = floor_packets;
+    g_frame_stats.sprite_packet_count = sprite_packets;
+}
+void add_skipped_texture_count(std::uint32_t count) { g_frame_stats.skipped_texture_count += count; }
+void set_failed_texture_names(const std::string& names) { g_frame_stats.failed_texture_names = names; }
+void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }
 
 void note_texture_created(SDL_Texture* texture) {
     if (!texture) {

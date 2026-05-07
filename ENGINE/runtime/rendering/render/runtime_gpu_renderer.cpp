@@ -559,6 +559,8 @@ bool RuntimeGpuRenderer::render_draw_packet_batch(SDL_GPURenderPass* render_pass
                         "' texture='" + draw.source_texture_id +
                         "' renderer='RuntimeGpuRenderer' frame_pass='" +
                         std::string(pass_label ? pass_label : "packets") + "'";
+            render_diagnostics::add_skipped_texture_count();
+            render_diagnostics::set_failed_texture_names(draw.source_asset_name);
             return false;
         }
 
@@ -615,6 +617,9 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     frame_context_.swapchain_texture = frame_state.swapchain_texture;
     frame_context_.swapchain_width = frame_state.swapchain_width;
     frame_context_.swapchain_height = frame_state.swapchain_height;
+    render_diagnostics::set_command_buffer_acquired(frame_context_.command_buffer != nullptr);
+    render_diagnostics::set_swapchain_acquired(frame_context_.swapchain_texture != nullptr);
+    render_diagnostics::set_swapchain_dimensions(frame_context_.swapchain_width, frame_context_.swapchain_height);
 
     if (frame_context_.command_buffer == nullptr) {
         out_error = "Failed to acquire GPU command buffer.";
@@ -658,12 +663,8 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     frame_context_.stats.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
 
     render_diagnostics::set_renderer_runtime_info("gpu", backend_name(), present_mode());
-    std::uint64_t texture_memory_bytes = 0;
-    const bool texture_memory_known = device->query_texture_memory_usage(texture_memory_bytes);
-    render_diagnostics::set_texture_memory_usage(texture_memory_bytes, texture_memory_known);
-    render_diagnostics::set_gpu_scene_packet_stats(frame_data.floor_draw_count,
-                                                   frame_data.layer_sprite_draw_count,
-                                                   frame_data.has_valid_composite_source);
+    render_diagnostics::set_packet_counts(frame_data.floor_draw_count,
+                                          frame_data.layer_sprite_draw_count);
 
     GpuSceneRenderer::SamplerResourceSpec sampler_spec{};
     if (!backend_owner_.get()->ensure_sampler_resource("linear_clamp", sampler_spec, out_error)) {
@@ -694,7 +695,7 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     }
 
     frame_context_.stats.render_pass_count = 1;
-    render_diagnostics::add_render_pass();
+    render_diagnostics::set_clear_executed(true);
 
     bool render_ok = true;
     if (!render_draw_packet_batch(render_pass, frame_data.floor_draws, "floor", out_error)) {
@@ -716,9 +717,11 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     }
 
     if (!device->end_frame(true, frame_error)) {
+        render_diagnostics::set_submit_result(false);
         out_error = "Failed to submit GPU frame: " + frame_error;
         return false;
     }
+    render_diagnostics::set_submit_result(true);
 
     const std::uint64_t pipeline_hits_after = backend_owner_.get()->pipeline_cache().total_hits();
     const std::uint64_t pipeline_misses_after = backend_owner_.get()->pipeline_cache().total_misses();
@@ -731,7 +734,24 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error) {
     const double frame_hit_rate = (frame_hits + frame_misses) == 0
         ? 1.0
         : static_cast<double>(frame_hits) / static_cast<double>(frame_hits + frame_misses);
-    render_diagnostics::set_gpu_pipeline_cache_stats(frame_hits, frame_misses, frame_hit_rate);
+    (void)frame_hits;
+    (void)frame_misses;
+    (void)frame_hit_rate;
+
+    const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+    vibble::log::info("[RuntimeGpuRenderer] render_summary backend=" + backend_name() +
+                     " present_mode=" + present_mode() +
+                     " command_buffer_acquired=" + std::string(stats.command_buffer_acquired ? "true" : "false") +
+                     " swapchain_acquired=" + std::string(stats.swapchain_acquired ? "true" : "false") +
+                     " swapchain_dimensions=" + std::to_string(stats.swapchain_width) + "x" +
+                     std::to_string(stats.swapchain_height) +
+                     " clear_executed=" + std::string(stats.clear_executed ? "true" : "false") +
+                     " floor_packet_count=" + std::to_string(stats.floor_packet_count) +
+                     " sprite_packet_count=" + std::to_string(stats.sprite_packet_count) +
+                     " draw_call_count=" + std::to_string(stats.draw_call_count) +
+                     " skipped_textures=" + std::to_string(stats.skipped_texture_count) +
+                     " failed_texture_names='" + stats.failed_texture_names + "'" +
+                     " submit_succeeded=" + std::string(stats.submit_succeeded ? "true" : "false"));
 
     return true;
 }

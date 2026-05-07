@@ -534,9 +534,9 @@ bool RuntimeGpuRenderer::render_draw_packet_batch(SDL_GPURenderPass* render_pass
     }
 
     SDL_GPUGraphicsPipeline* pipeline =
-        backend_owner_.get()->resolve_graphics_pipeline("sprite_batched", 0x2100u);
+        backend_owner_.get()->resolve_graphics_pipeline("sprite_textured", 0x2100u);
     if (!pipeline) {
-        out_error = "Failed to resolve graphics pipeline 'sprite_batched' for " +
+        out_error = "Failed to resolve graphics pipeline 'sprite_textured' for " +
                     std::string(pass_label ? pass_label : "packets");
         return false;
     }

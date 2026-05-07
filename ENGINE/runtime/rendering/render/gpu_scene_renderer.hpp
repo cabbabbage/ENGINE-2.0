@@ -26,7 +26,10 @@ struct GpuSpriteDrawPacket {
     SDL_Texture* source_texture = nullptr;
     SDL_GPUTexture* source_gpu_texture = nullptr;
     std::string source_asset_name{};
+    std::string source_animation_name{};
     std::string source_texture_id{};
+    int source_frame_index = -1;
+    int source_variant_index = -1;
     std::array<GpuSpriteVertex, 6> vertices{};
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
     std::uint8_t sort_group = 0;

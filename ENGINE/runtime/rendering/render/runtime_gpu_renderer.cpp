@@ -117,6 +117,43 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
 }
 
+std::string describe_asset_sprite_source(const Asset* asset,
+                                         const char* texture_id = nullptr,
+                                         int frame_index = -1,
+                                         int variant_index = -1) {
+    const std::string asset_name = (asset && asset->info && !asset->info->name.empty())
+        ? asset->info->name
+        : std::string{"<unknown-asset>"};
+    const std::string animation_name = (asset && !asset->current_animation.empty())
+        ? asset->current_animation
+        : std::string{"<none>"};
+    const int resolved_frame_index = (frame_index >= 0)
+        ? frame_index
+        : ((asset && asset->current_frame) ? asset->current_frame->frame_index : -1);
+    const int resolved_variant_index = (variant_index >= 0)
+        ? variant_index
+        : (asset ? asset->current_variant_index : -1);
+
+    std::string description = "asset='" + asset_name +
+                              "' animation='" + animation_name +
+                              "' frame=" + std::to_string(resolved_frame_index) +
+                              " variant=" + std::to_string(resolved_variant_index);
+    if (texture_id && *texture_id) {
+        description += " texture='" + std::string(texture_id) + "'";
+    }
+    return description;
+}
+
+std::string describe_draw_packet_source(const GpuSpriteDrawPacket& draw) {
+    return "asset='" + draw.source_asset_name +
+           "' animation='" + (draw.source_animation_name.empty()
+               ? std::string{"<none>"}
+               : draw.source_animation_name) +
+           "' frame=" + std::to_string(draw.source_frame_index) +
+           " variant=" + std::to_string(draw.source_variant_index) +
+           " texture='" + draw.source_texture_id + "'";
+}
+
 } // namespace
 
 namespace runtime_gpu_renderer_detail {
@@ -159,7 +196,10 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
             GpuSpriteDrawPacket packet{};
             packet.source_texture = tile.texture;
             packet.source_asset_name = "<floor-tile>";
+            packet.source_animation_name = "<floor-tile>";
             packet.source_texture_id = "tile_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(tile.texture));
+            packet.source_frame_index = -1;
+            packet.source_variant_index = -1;
             packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
             packet.sort_key = std::max(screen_br.y, screen_bl.y);
             packet.stable_sort_id = floor_sort_id(false, tile_sequence++);
@@ -271,6 +311,10 @@ bool RuntimeGpuRenderer::initialize(std::string& out_error) {
         return false;
     }
 
+    if (!validate_preloaded_sprite_textures(out_error)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -287,6 +331,72 @@ void RuntimeGpuRenderer::set_output_dimensions(int screen_width, int screen_heig
 
 std::optional<SDL_Point> RuntimeGpuRenderer::scene_target_size() const {
     return render_target_manager_.current_size();
+}
+
+bool RuntimeGpuRenderer::validate_preloaded_sprite_textures(std::string& out_error) const {
+    out_error.clear();
+    if (!assets_) {
+        out_error = "[RuntimeGpuRenderer] GPU preload validation failed: assets context unavailable.";
+        return false;
+    }
+    if (!backend_owner_.ready() || !backend_owner_.get()) {
+        out_error = "[RuntimeGpuRenderer] GPU preload validation failed: backend renderer unavailable.";
+        return false;
+    }
+
+    std::vector<std::string> failures;
+    failures.reserve(8);
+    constexpr std::size_t kMaxLoggedFailures = 8;
+
+    const auto record_failure = [&](std::string failure) {
+        if (failures.size() < kMaxLoggedFailures) {
+            failures.push_back(std::move(failure));
+        }
+    };
+
+    for (Asset* asset : assets_->all) {
+        if (!asset || !asset->info || asset->dead) {
+            continue;
+        }
+
+        render_build::DirectAssetRenderCacheRecord cache_record{};
+        if (!render_build::refresh_direct_asset_render_cache(asset, cache_record)) {
+            record_failure(describe_asset_sprite_source(asset) +
+                           " detail='sprite texture was not resolved during preload validation.'");
+            continue;
+        }
+
+        std::string texture_error;
+        if (!backend_owner_.get()->resolve_gpu_texture_for_sdl_texture(cache_record.texture, texture_error)) {
+            record_failure(describe_asset_sprite_source(asset,
+                                                       "sdl_texture_ptr=" +
+                                                           std::to_string(reinterpret_cast<std::uintptr_t>(cache_record.texture)),
+                                                       cache_record.frame_identity,
+                                                       cache_record.variant_identity) +
+                           " detail='" + (texture_error.empty()
+                                              ? "unknown SDL->GPU texture import failure."
+                                              : texture_error) + "'");
+        }
+    }
+
+    if (failures.empty()) {
+        return true;
+    }
+
+    std::string message = "[RuntimeGpuRenderer] GPU preload validation failed: ";
+    for (std::size_t i = 0; i < failures.size(); ++i) {
+        if (i > 0) {
+            message += " | ";
+        }
+        message += failures[i];
+    }
+    if (failures.size() == kMaxLoggedFailures) {
+        message += " | additional failures omitted";
+    }
+
+    vibble::log::error(message);
+    out_error = message;
+    return false;
 }
 
 const std::string& RuntimeGpuRenderer::present_mode() const {
@@ -393,7 +503,10 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
         GpuSpriteDrawPacket packet{};
         packet.source_texture = object.texture;
         packet.source_asset_name = asset->info ? asset->info->name : "<unknown-asset>";
+        packet.source_animation_name = asset ? asset->current_animation : std::string{};
         packet.source_texture_id = "sdl_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(object.texture));
+        packet.source_frame_index = asset && asset->current_frame ? asset->current_frame->frame_index : -1;
+        packet.source_variant_index = asset ? asset->current_variant_index : -1;
         packet.modulate = SDL_FColor{
             static_cast<float>(object.color_mod.r) / 255.0f,
             static_cast<float>(object.color_mod.g) / 255.0f,
@@ -478,17 +591,15 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
     for (std::vector<GpuSpriteDrawPacket>* draws : {&out_data.floor_draws, &out_data.layer_draws}) {
         for (GpuSpriteDrawPacket& draw : *draws) {
             if (!draw.source_texture) {
-                out_error = "FATAL missing source SDL texture; asset='" + draw.source_asset_name +
-                            "' texture='" + draw.source_texture_id +
-                            "' renderer='RuntimeGpuRenderer' frame_pass='build_gpu_scene_frame_data'";
+                out_error = "FATAL missing source SDL texture; " + describe_draw_packet_source(draw) +
+                            " renderer='RuntimeGpuRenderer' frame_pass='build_gpu_scene_frame_data'";
                 return false;
             }
             std::string texture_error;
             draw.source_gpu_texture = backend_owner_.get()->resolve_gpu_texture_for_sdl_texture(draw.source_texture, texture_error);
             if (!draw.source_gpu_texture) {
-                out_error = "FATAL missing GPU-backed texture; asset='" + draw.source_asset_name +
-                            "' texture='" + draw.source_texture_id +
-                            "' renderer='RuntimeGpuRenderer' frame_pass='build_gpu_scene_frame_data' detail='" +
+                out_error = "FATAL missing GPU-backed texture; " + describe_draw_packet_source(draw) +
+                            " renderer='RuntimeGpuRenderer' frame_pass='build_gpu_scene_frame_data' detail='" +
                             texture_error + "'";
                 return false;
             }
@@ -555,12 +666,11 @@ bool RuntimeGpuRenderer::render_draw_packet_batch(SDL_GPURenderPass* render_pass
             ? draw.source_gpu_texture
             : backend_owner_.get()->find_gpu_texture_for_sdl_texture(draw.source_texture);
         if (!gpu_texture) {
-            out_error = "FATAL missing GPU-backed texture; asset='" + draw.source_asset_name +
-                        "' texture='" + draw.source_texture_id +
-                        "' renderer='RuntimeGpuRenderer' frame_pass='" +
+            out_error = "FATAL missing GPU-backed texture; " + describe_draw_packet_source(draw) +
+                        " renderer='RuntimeGpuRenderer' frame_pass='" +
                         std::string(pass_label ? pass_label : "packets") + "'";
             render_diagnostics::add_skipped_texture_count();
-            render_diagnostics::set_failed_texture_names(draw.source_asset_name);
+            render_diagnostics::set_failed_texture_names(describe_draw_packet_source(draw));
             return false;
         }
 

@@ -103,6 +103,7 @@ private:
 
     bool initialize(std::string& out_error);
     bool ensure_scene_target(std::string& out_error);
+    bool validate_preloaded_sprite_textures(std::string& out_error) const;
     bool build_gpu_scene_frame_data(std::uint32_t target_width,
                                     std::uint32_t target_height,
                                     GpuSceneFrameData& out_data,

@@ -864,7 +864,6 @@ void Assets::force_camera_view_refresh() {
                                          current_projection_version);
     pending_initial_rebuild_ = false;
     active_assets_dirty_.store(false, std::memory_order_release);
-    last_active_rebuild_frame_id_ = frame_id_;
     needs_filtered_active_refresh_ = true;
 }
 
@@ -2951,7 +2950,6 @@ bool Assets::maybe_rebuild_world_grid() {
         pending_initial_rebuild_ = false;
         initialize_active_assets(current_center);
         active_assets_dirty_.store(false, std::memory_order_release);
-        last_active_rebuild_frame_id_ = frame_id_;
     }
 
     camera_view_dirty_ = camera_dirty;

@@ -11,6 +11,7 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_library.hpp"
+#include "core/AssetsManager.hpp"
 #include "core/find_current_room.hpp"
 #include "core/manifest/map_data.hpp"
 #include "core/manifest/manifest_loader.hpp"
@@ -20,6 +21,7 @@
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "utils/input.hpp"
 
 namespace {
 
@@ -53,6 +55,37 @@ std::unique_ptr<Asset> make_world_grid_test_asset(int world_x, int world_z, int 
                                    std::string{},
                                    std::string{},
                                    grid_resolution);
+}
+
+std::unique_ptr<Asset> make_runtime_visible_test_asset(const std::string& name,
+                                                       int world_x,
+                                                       int world_z,
+                                                       int grid_resolution = 0) {
+    auto info = std::make_shared<AssetInfo>(name);
+    info->original_canvas_width = 64;
+    info->original_canvas_height = 64;
+
+    Animation::FrameCache frame_cache{};
+    frame_cache.resize(1);
+    frame_cache.widths[0] = info->original_canvas_width;
+    frame_cache.heights[0] = info->original_canvas_height;
+    frame_cache.source_rects[0] = SDL_Rect{0, 0, info->original_canvas_width, info->original_canvas_height};
+
+    Animation animation{};
+    animation.adopt_prebuilt_frames({frame_cache}, {1.0f});
+    info->animations["default"] = std::move(animation);
+    info->start_animation = "default";
+
+    Area spawn_area("runtime_visible_test_area", 0);
+    auto asset = std::make_unique<Asset>(info,
+                                         spawn_area,
+                                         SDL_Point{world_x, world_z},
+                                         0,
+                                         std::string{},
+                                         std::string{},
+                                         grid_resolution);
+    asset->finalize_setup();
+    return asset;
 }
 
 Area make_warped_screen_test_view(const std::string& name, SDL_Point center, int w = 3200, int h = 2400) {
@@ -180,6 +213,43 @@ TEST_CASE("GridPoint projection round-trips via camera params") {
     CHECK(round_trip->world_x() == original.world_x());
     CHECK(round_trip->world_y() == original.world_y());
     CHECK(round_trip->world_z() == original.world_z());
+}
+
+TEST_CASE("Assets active rebuild repopulates visible assets after active dirty reset") {
+    AssetLibrary library(false);
+    world::WorldGrid grid;
+    Asset* visible_asset = grid.create_asset_at_point(
+        make_runtime_visible_test_asset("active_rebuild_visible_asset", 0, 80),
+        0,
+        0);
+    REQUIRE(visible_asset != nullptr);
+
+    auto world_context = std::make_shared<RuntimeWorldContext>();
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  1280,
+                  720,
+                  0,
+                  0,
+                  0,
+                  nullptr,
+                  "active_rebuild_test",
+                  nlohmann::json::object(),
+                  std::string{},
+                  std::move(grid));
+
+    Input input;
+    assets.update(input);
+    const auto& initially_active = assets.getActive();
+    REQUIRE(std::find(initially_active.begin(), initially_active.end(), visible_asset) != initially_active.end());
+
+    assets.mark_active_assets_dirty();
+    assets.update(input);
+
+    const auto& rebuilt_active = assets.getActive();
+    CHECK(std::find(rebuilt_active.begin(), rebuilt_active.end(), visible_asset) != rebuilt_active.end());
+    CHECK_FALSE(rebuilt_active.empty());
 }
 
 TEST_CASE("WorldGrid projection cache invalidates on topology updates") {

@@ -8,8 +8,10 @@
 #include <numeric>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/render_diagnostics.hpp"
@@ -329,6 +331,22 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const WarpedScreenGrid& camera = assets_->getView();
     const std::size_t traversal_count = camera.visible_traversal_entries().size();
 
+    std::vector<Asset*> render_assets = visible_assets;
+    if (assets_->boundary_assets_visible() && assets_->is_dev_mode() && assets_->focus_filter_active()) {
+        std::unordered_set<Asset*> selected_assets(render_assets.begin(), render_assets.end());
+        for (Asset* asset : active_assets) {
+            if (!asset || !asset->info) {
+                continue;
+            }
+            if (asset_types::canonicalize(asset->info->type) != std::string(asset_types::boundary)) {
+                continue;
+            }
+            if (selected_assets.insert(asset).second) {
+                render_assets.push_back(asset);
+            }
+        }
+    }
+
     out_data.target_width = target_width;
     out_data.target_height = target_height;
     out_data.active_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
@@ -336,7 +354,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     out_data.filtered_active_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         filtered_active_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.selected_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
-        visible_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+        render_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.visible_traversal_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         traversal_count, static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.dev_mode = assets_->is_dev_mode();
@@ -363,7 +381,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     if (!runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
             camera,
-            visible_assets,
+            render_assets,
             target_width,
             target_height,
             out_data.floor_draws,

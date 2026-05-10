@@ -27110,7 +27110,7 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 529.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "far_light_cap": 32.0,
@@ -27299,9 +27299,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            135,
-            204,
-            31,
+            224,
+            34,
+            34,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27379,9 +27379,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            224,
-            143,
-            34,
+            242,
+            85,
+            137,
             255
           ],
           "edge_smoothness": 4,
@@ -27404,9 +27404,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            40,
+            204,
+            138,
+            51,
             255
           ],
           "edge_smoothness": 4,
@@ -27464,8 +27464,8 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            139,
-            31,
+            130,
+            51,
             204,
             255
           ],
@@ -27530,9 +27530,9 @@
           "camera_zoom_percent": 11,
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            242,
+            31,
+            204,
+            172,
             255
           ],
           "edge_smoothness": 101,
@@ -27816,9 +27816,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            168,
+            31,
+            204,
+            61,
             255
           ],
           "edge_smoothness": 96,

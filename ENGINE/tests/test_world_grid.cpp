@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/AssetsManager.hpp"
@@ -616,6 +617,21 @@ TEST_CASE("WarpedScreenGrid includes large sprite when center is off-screen but 
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.rebuild_grid(grid, 0.016f, 1);
     CHECK(traversal_contains_asset(camera_grid, large_asset));
+}
+
+TEST_CASE("WarpedScreenGrid frustum padding keeps boundary assets in the visible query window") {
+    world::WorldGrid grid;
+    Asset* boundary_asset = grid.create_asset_at_point(make_world_grid_test_asset(-2400, 80));
+    REQUIRE(boundary_asset != nullptr);
+    boundary_asset->info->type = asset_types::boundary;
+    boundary_asset->info->original_canvas_width = 32;
+    boundary_asset->info->original_canvas_height = 32;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    camera_grid.set_frustum_padding_world(1000.0f);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+
+    CHECK(traversal_contains_asset(camera_grid, boundary_asset));
 }
 
 TEST_CASE("WarpedScreenGrid includes tiled asset when owner center is off-screen but tile coverage overlaps") {

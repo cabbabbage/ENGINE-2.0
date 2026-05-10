@@ -18,6 +18,7 @@
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/depth_cue_settings.hpp"
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
 #include "core/tile_builder.hpp"
@@ -869,6 +870,7 @@ void Assets::force_camera_view_refresh() {
 
 void Assets::apply_camera_runtime_settings() {
     render_pipeline::ScalingLogic::SetQualityCap(1.0f);
+    finalize_max_asset_dimensions(max_asset_width_world_, max_asset_height_world_);
 }
 
 void Assets::log_camera_fog_state(const char* label) const {
@@ -2380,7 +2382,13 @@ void Assets::finalize_max_asset_dimensions(float max_width, float max_height) {
     max_asset_width_world_  = max_width;
     max_asset_height_world_ = max_height;
 
-    const float frustum_padding = std::max(max_asset_width_world_, max_asset_height_world_);
+    float frustum_padding = std::max(max_asset_width_world_, max_asset_height_world_);
+    if (dev_mode) {
+        const float dev_cull_margin = devmode::camera_prefs::load_extra_cull_margin(0.0f);
+        if (std::isfinite(dev_cull_margin) && dev_cull_margin > 0.0f) {
+            frustum_padding = std::max(frustum_padding, dev_cull_margin);
+        }
+    }
     camera_.set_frustum_padding_world(frustum_padding);
 }
 

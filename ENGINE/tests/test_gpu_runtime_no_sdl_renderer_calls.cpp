@@ -301,7 +301,7 @@ TEST_CASE("GPU runtime frame executes staged floor/layer/composite path without 
     CHECK(stats.active_depth_layer_count == 2u);
     CHECK(stats.clear_executed);
     CHECK(stats.blur_pass_count == 3u);
-    CHECK(stats.render_pass_count == 7u);
+    CHECK(stats.render_pass_count == 8u);
     CHECK(stats.submit_succeeded);
     CHECK(stats.packets_per_depth_layer == "1=1, 0=1");
     CHECK(stats.blur_strength_per_layer == "1=12, 0=0");
@@ -310,6 +310,75 @@ TEST_CASE("GPU runtime frame executes staged floor/layer/composite path without 
     destroy_prepared_texture(floor_texture);
     destroy_prepared_texture(focus_texture);
     destroy_prepared_texture(blurred_texture);
+    SDL_DestroyRenderer(software_renderer);
+    SDL_DestroyWindow(software_window);
+
+    gpu_renderer.reset();
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+}
+
+TEST_CASE("GPU runtime floor-only frame uses opaque composite path") {
+    ScopedSdlVideo sdl_video{};
+    REQUIRE(sdl_video.initialized());
+
+    SDL_Window* window = SDL_CreateWindow("gpu_runtime_floor_only_renderer", 128, 128, SDL_WINDOW_HIDDEN);
+    REQUIRE(window != nullptr);
+    SDL_Renderer* renderer = create_gpu_renderer(window);
+    if (!renderer || !renderer_has_gpu_device(renderer)) {
+        if (renderer) {
+            SDL_DestroyRenderer(renderer);
+        }
+        SDL_DestroyWindow(window);
+        return;
+    }
+
+    std::string error;
+    SDL_Window* software_window = SDL_CreateWindow("gpu_runtime_floor_only_renderer_software", 64, 64, SDL_WINDOW_HIDDEN);
+    REQUIRE(software_window != nullptr);
+    SDL_Renderer* software_renderer = SDL_CreateRenderer(software_window, SDL_SOFTWARE_RENDERER);
+    if (!software_renderer) {
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_DestroyWindow(software_window);
+        return;
+    }
+
+    std::unique_ptr<GpuSceneRenderer> gpu_renderer = GpuSceneRenderer::Create(renderer, false, error);
+    REQUIRE(gpu_renderer != nullptr);
+
+    const std::filesystem::path manifest_path = find_shader_manifest_path();
+    if (manifest_path.empty()) {
+        SDL_DestroyRenderer(software_renderer);
+        SDL_DestroyWindow(software_window);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        return;
+    }
+    REQUIRE(gpu_renderer->load_shader_packages(manifest_path.string(), error));
+
+    SDL_Texture* floor_texture = make_prepared_texture(software_renderer, 0xFF804020u, 4, 4);
+    REQUIRE(floor_texture != nullptr);
+
+    GpuSceneFrameData frame_data{};
+    frame_data.floor_draws = {make_fullscreen_packet(floor_texture, true, 0, 0u)};
+    frame_data.floor_draw_count = 1u;
+    frame_data.has_valid_composite_source = true;
+    REQUIRE(resolve_frame_data_textures(*gpu_renderer, frame_data, error));
+
+    render_diagnostics::begin_frame();
+    REQUIRE_MESSAGE(gpu_renderer->render_frame(frame_data, error), error);
+    render_diagnostics::end_frame();
+
+    const RenderFrameStats stats = render_diagnostics::current_frame_stats();
+    CHECK(stats.floor_packet_count == 1u);
+    CHECK(stats.sprite_packet_count == 0u);
+    CHECK(stats.active_depth_layer_count == 0u);
+    CHECK(stats.render_pass_count == 3u);
+    CHECK(stats.submit_succeeded);
+    CHECK(stats.composite_layers_submitted == "floor");
+
+    destroy_prepared_texture(floor_texture);
     SDL_DestroyRenderer(software_renderer);
     SDL_DestroyWindow(software_window);
 
@@ -424,6 +493,54 @@ TEST_CASE("GPU runtime depth layers and floor packets stay deterministic") {
     CHECK(layer_draws.size() == 1);
     CHECK_FALSE(layer_draws[0].is_floor_packet);
     CHECK(layer_draws[0].depth_layer == 4);
+}
+
+TEST_CASE("GPU runtime dev empty filtered list falls back to active assets") {
+    Asset* active_asset = reinterpret_cast<Asset*>(static_cast<std::uintptr_t>(0x1u));
+    Asset* filtered_asset = reinterpret_cast<Asset*>(static_cast<std::uintptr_t>(0x2u));
+    std::vector<Asset*> active_assets{active_asset};
+    std::vector<Asset*> filtered_assets{};
+    bool used_fallback = false;
+
+    const std::vector<Asset*>& selected_empty_filter =
+        runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(true,
+                                                                         true,
+                                                                         active_assets,
+                                                                         filtered_assets,
+                                                                         used_fallback);
+    CHECK(&selected_empty_filter == &active_assets);
+    CHECK(used_fallback);
+
+    filtered_assets.push_back(filtered_asset);
+    used_fallback = false;
+    const std::vector<Asset*>& selected_filtered =
+        runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(true,
+                                                                         true,
+                                                                         active_assets,
+                                                                         filtered_assets,
+                                                                         used_fallback);
+    CHECK(&selected_filtered == &filtered_assets);
+    CHECK_FALSE(used_fallback);
+
+    used_fallback = true;
+    const std::vector<Asset*>& selected_stale_filter =
+        runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(true,
+                                                                         false,
+                                                                         active_assets,
+                                                                         filtered_assets,
+                                                                         used_fallback);
+    CHECK(&selected_stale_filter == &active_assets);
+    CHECK_FALSE(used_fallback);
+
+    used_fallback = true;
+    const std::vector<Asset*>& selected_runtime =
+        runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(false,
+                                                                         false,
+                                                                         active_assets,
+                                                                         filtered_assets,
+                                                                         used_fallback);
+    CHECK(&selected_runtime == &active_assets);
+    CHECK_FALSE(used_fallback);
 }
 
 TEST_CASE("GPU runtime floor packet helper emits packets for chunk tiles") {

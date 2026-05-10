@@ -600,6 +600,29 @@ void runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(bool floo
     out_layer_draws.push_back(packet);
 }
 
+const std::vector<Asset*>& runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(
+    bool dev_mode,
+    bool focus_filter_active,
+    const std::vector<Asset*>& active_assets,
+    const std::vector<Asset*>& filtered_active_assets,
+    bool& out_used_active_fallback) {
+    out_used_active_fallback = false;
+    if (!dev_mode) {
+        return active_assets;
+    }
+    if (!focus_filter_active) {
+        return active_assets;
+    }
+    if (!filtered_active_assets.empty()) {
+        return filtered_active_assets;
+    }
+    if (!active_assets.empty()) {
+        out_used_active_fallback = true;
+        return active_assets;
+    }
+    return filtered_active_assets;
+}
+
 bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
                                                     std::uint32_t target_height,
                                                     GpuSceneFrameData& out_data,
@@ -611,10 +634,40 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
         return false;
     }
 
-    const std::vector<Asset*>& visible_assets = assets_->is_dev_mode()
-        ? assets_->getFilteredActiveAssets()
-        : assets_->getActive();
+    const std::vector<Asset*>& active_assets = assets_->getActive();
+    const std::vector<Asset*>& filtered_active_assets = assets_->getFilteredActiveAssets();
+    bool used_active_fallback = false;
+    const std::vector<Asset*>& visible_assets =
+        runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(
+            assets_->is_dev_mode(),
+            assets_->focus_filter_active(),
+            active_assets,
+            filtered_active_assets,
+            used_active_fallback);
     const WarpedScreenGrid& camera = assets_->getView();
+    const std::size_t traversal_count = camera.visible_traversal_entries().size();
+
+    out_data.target_width = target_width;
+    out_data.target_height = target_height;
+    out_data.active_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+        active_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    out_data.filtered_active_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+        filtered_active_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    out_data.selected_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+        visible_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    out_data.visible_traversal_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+        traversal_count, static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    out_data.dev_mode = assets_->is_dev_mode();
+    out_data.focus_filter_active = assets_->focus_filter_active();
+    out_data.used_active_asset_fallback = used_active_fallback;
+
+    if (used_active_fallback) {
+        vibble::log::warn("[RuntimeGpuRenderer] Dev filtered render list was empty; using active assets for this GPU frame. "
+                          "active_count=" + std::to_string(active_assets.size()) +
+                          " filtered_count=" + std::to_string(filtered_active_assets.size()) +
+                          " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false") +
+                          " traversal_count=" + std::to_string(traversal_count));
+    }
 
     if (!runtime_gpu_renderer_detail::build_floor_tile_draw_packets(
             camera,
@@ -728,6 +781,18 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
 
     if (out_data.floor_draw_count == 0) {
         vibble::log::warn("[RuntimeGpuRenderer] No floor draw packets were built; floor target will clear transparently.");
+    }
+    out_data.suspected_incomplete_scene =
+        out_data.layer_sprite_draw_count == 0 &&
+        out_data.active_asset_count > 0 &&
+        (out_data.selected_asset_count > 0 || out_data.visible_traversal_count > 0);
+    if (out_data.suspected_incomplete_scene) {
+        vibble::log::warn("[RuntimeGpuRenderer] GPU frame has floor packets but no layer packets. "
+                          "active_count=" + std::to_string(active_assets.size()) +
+                          " filtered_count=" + std::to_string(filtered_active_assets.size()) +
+                          " selected_count=" + std::to_string(visible_assets.size()) +
+                          " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false") +
+                          " traversal_count=" + std::to_string(traversal_count));
     }
 
     return true;
@@ -870,6 +935,14 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error, SDL_Texture* ui_ov
     screen_width_ = effective_target->x;
     screen_height_ = effective_target->y;
     render_target_manager_.set_requested_size(screen_width_, screen_height_);
+    if (last_complete_scene_frame_data_.has_value() &&
+        (last_complete_scene_width_ != static_cast<std::uint32_t>(screen_width_) ||
+         last_complete_scene_height_ != static_cast<std::uint32_t>(screen_height_))) {
+        last_complete_scene_frame_data_.reset();
+        last_complete_scene_width_ = 0;
+        last_complete_scene_height_ = 0;
+        consecutive_held_incomplete_scene_frames_ = 0;
+    }
 
     GpuSceneFrameData frame_data{};
     if (!build_gpu_scene_frame_data(static_cast<std::uint32_t>(effective_target->x),
@@ -892,13 +965,47 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error, SDL_Texture* ui_ov
         }
     }
 
-    frame_context_.stats.floor_draw_count = frame_data.floor_draw_count;
-    frame_context_.stats.layer_sprite_draw_count = frame_data.layer_sprite_draw_count;
-    frame_context_.stats.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
+    const bool hold_incomplete_scene_frame =
+        frame_data.suspected_incomplete_scene &&
+        last_complete_scene_frame_data_.has_value() &&
+        last_complete_scene_width_ == frame_data.target_width &&
+        last_complete_scene_height_ == frame_data.target_height;
+
+    GpuSceneFrameData held_frame_data{};
+    const GpuSceneFrameData* frame_to_render = &frame_data;
+    if (hold_incomplete_scene_frame) {
+        held_frame_data = *last_complete_scene_frame_data_;
+        held_frame_data.ui_overlay_texture = frame_data.ui_overlay_texture;
+        held_frame_data.ui_overlay_gpu_texture = frame_data.ui_overlay_gpu_texture;
+        held_frame_data.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
+        frame_to_render = &held_frame_data;
+
+        ++consecutive_held_incomplete_scene_frames_;
+        if (consecutive_held_incomplete_scene_frames_ == 1 ||
+            (consecutive_held_incomplete_scene_frames_ % 60u) == 0u) {
+            vibble::log::warn("[RuntimeGpuRenderer] Holding last complete GPU scene instead of presenting an incomplete floor-only frame. "
+                              "held_frames=" + std::to_string(consecutive_held_incomplete_scene_frames_) +
+                              " current_floor_packets=" + std::to_string(frame_data.floor_draw_count) +
+                              " current_normal_packets=" + std::to_string(frame_data.layer_sprite_draw_count) +
+                              " cached_floor_packets=" + std::to_string(held_frame_data.floor_draw_count) +
+                              " cached_normal_packets=" + std::to_string(held_frame_data.layer_sprite_draw_count) +
+                              " active_count=" + std::to_string(frame_data.active_asset_count) +
+                              " filtered_count=" + std::to_string(frame_data.filtered_active_asset_count) +
+                              " selected_count=" + std::to_string(frame_data.selected_asset_count) +
+                              " traversal_count=" + std::to_string(frame_data.visible_traversal_count) +
+                              " focus_filter_active=" + std::string(frame_data.focus_filter_active ? "true" : "false"));
+        }
+    } else {
+        consecutive_held_incomplete_scene_frames_ = 0;
+    }
+
+    frame_context_.stats.floor_draw_count = frame_to_render->floor_draw_count;
+    frame_context_.stats.layer_sprite_draw_count = frame_to_render->layer_sprite_draw_count;
+    frame_context_.stats.debug_overlay_draw_count = frame_to_render->debug_overlay_draw_count;
 
     render_diagnostics::set_renderer_runtime_info("gpu", backend_name(), present_mode());
 
-    if (!backend_owner_.get()->render_active_frame(frame_data, out_error)) {
+    if (!backend_owner_.get()->render_active_frame(*frame_to_render, out_error)) {
         (void)device->end_frame(false, frame_error);
         render_diagnostics::set_submit_result(false);
         return false;
@@ -910,6 +1017,12 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error, SDL_Texture* ui_ov
         return false;
     }
     render_diagnostics::set_submit_result(true);
+
+    if (!hold_incomplete_scene_frame && frame_data.layer_sprite_draw_count > 0) {
+        last_complete_scene_frame_data_ = frame_data;
+        last_complete_scene_width_ = frame_data.target_width;
+        last_complete_scene_height_ = frame_data.target_height;
+    }
 
     const std::uint64_t pipeline_hits_after = backend_owner_.get()->pipeline_cache().total_hits();
     const std::uint64_t pipeline_misses_after = backend_owner_.get()->pipeline_cache().total_misses();

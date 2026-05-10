@@ -20,8 +20,9 @@
 
 namespace {
 
-constexpr std::array<const char*, 2> kRequiredGraphicsPipelines = {
+constexpr std::array<const char*, 3> kRequiredGraphicsPipelines = {
     "sprite_textured",
+    "sprite_textured_opaque",
     "layer_blur",
 };
 constexpr const char* kSpriteBatchVertexVariant = "sprite_batch_vertex";
@@ -48,6 +49,12 @@ const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::str
         ShaderResourceCounts{0u, 0u, 0u, 1u},
         ShaderResourceCounts{1u, 0u, 0u, 0u},
         true};
+    static const GraphicsPipelineShaderSpec kSpriteTexturedOpaque{
+        kSpriteBatchVertexVariant,
+        "sprite_textured",
+        ShaderResourceCounts{0u, 0u, 0u, 1u},
+        ShaderResourceCounts{1u, 0u, 0u, 0u},
+        false};
     static const GraphicsPipelineShaderSpec kLayerBlur{
         kSpriteBatchVertexVariant,
         "layer_blur",
@@ -56,6 +63,9 @@ const GraphicsPipelineShaderSpec* graphics_pipeline_spec_for_name(const std::str
         true};
     if (name == "sprite_textured") {
         return &kSpriteTextured;
+    }
+    if (name == "sprite_textured_opaque") {
+        return &kSpriteTexturedOpaque;
     }
     if (name == "layer_blur") {
         return &kLayerBlur;
@@ -429,6 +439,10 @@ std::string runtime_floor_target_name() {
     return "runtime.scene.floor";
 }
 
+std::string runtime_composite_target_name() {
+    return "runtime.scene.composite";
+}
+
 std::string runtime_layer_target_name(int depth_layer) {
     return "runtime.scene.layer." + std::to_string(depth_layer);
 }
@@ -525,6 +539,62 @@ bool render_packet_batch_to_target(GpuSceneRenderer& renderer,
                                  out_error);
     SDL_EndGPURenderPass(render_pass);
     return rendered;
+}
+
+bool render_composite_batches_to_target(GpuSceneRenderer& renderer,
+                                        SDL_GPUCommandBuffer* command_buffer,
+                                        SDL_GPUTexture* target_texture,
+                                        const std::vector<GpuSpriteDrawPacket>& opaque_base_packets,
+                                        const std::vector<GpuSpriteDrawPacket>& blended_overlay_packets,
+                                        const SDL_FColor& clear_color,
+                                        std::string_view pass_name,
+                                        std::string& out_error,
+                                        SDL_GPUTextureFormat color_target_format = SDL_GPU_TEXTUREFORMAT_INVALID) {
+    out_error.clear();
+    if (!command_buffer) {
+        out_error = "Command buffer was null.";
+        return false;
+    }
+    if (!target_texture) {
+        out_error = "Target texture was null.";
+        return false;
+    }
+
+    SDL_GPURenderPass* render_pass = nullptr;
+    if (!begin_target_render_pass(RenderTargetPassContext{command_buffer, target_texture, true},
+                                  clear_color,
+                                  render_pass)) {
+        out_error = "SDL_BeginGPURenderPass failed for pass '" + std::string(pass_name) +
+                    "': " + SDL_GetError();
+        return false;
+    }
+    render_diagnostics::add_render_pass();
+
+    if (!render_sprite_draw_batch(renderer,
+                                  render_pass,
+                                  opaque_base_packets,
+                                  "sprite_textured_opaque",
+                                  0x2103u,
+                                  color_target_format,
+                                  std::string(pass_name) + ".opaque_base",
+                                  out_error)) {
+        SDL_EndGPURenderPass(render_pass);
+        return false;
+    }
+    if (!render_sprite_draw_batch(renderer,
+                                  render_pass,
+                                  blended_overlay_packets,
+                                  "sprite_textured",
+                                  0x2104u,
+                                  color_target_format,
+                                  std::string(pass_name) + ".overlays",
+                                  out_error)) {
+        SDL_EndGPURenderPass(render_pass);
+        return false;
+    }
+
+    SDL_EndGPURenderPass(render_pass);
+    return true;
 }
 
 struct ActiveDepthLayerRuntimeState {
@@ -961,19 +1031,26 @@ bool GpuSceneRenderer::warmup_required_pipelines(std::string& out_error) {
     std::string pipeline_error;
     for (std::size_t i = 0; i < kRequiredGraphicsPipelines.size(); ++i) {
         const std::string pipeline_name = kRequiredGraphicsPipelines[i];
-        const ShaderPackageLibrary::ShaderVariantPath* variant = shader_packages_.find(pipeline_name);
+        const GraphicsPipelineShaderSpec* pipeline_spec = graphics_pipeline_spec_for_name(pipeline_name);
+        if (!pipeline_spec) {
+            out_error = "Missing required graphics pipeline spec: " + pipeline_name;
+            return false;
+        }
+        const ShaderPackageLibrary::ShaderVariantPath* variant =
+            shader_packages_.find(pipeline_spec->fragment_variant);
         if (!variant) {
-            out_error = "Missing required graphics variant: " + pipeline_name;
+            out_error = "Missing required graphics variant: " + std::string(pipeline_spec->fragment_variant);
             return false;
         }
         const ShaderPackageLibrary::ShaderBinaryDescriptor* descriptor = select_backend_binary(*variant);
         if (!descriptor) {
-            out_error = "Missing backend binary for required graphics variant: " + pipeline_name;
+            out_error = "Missing backend binary for required graphics variant: " +
+                        std::string(pipeline_spec->fragment_variant);
             return false;
         }
         if (!stage_matches(descriptor->stage, "fragment")) {
             out_error = "Required graphics variant has invalid stage metadata: " +
-                        pipeline_name + " stage=" + descriptor->stage;
+                        std::string(pipeline_spec->fragment_variant) + " stage=" + descriptor->stage;
             return false;
         }
 
@@ -1007,10 +1084,17 @@ bool GpuSceneRenderer::load_shader_packages(const std::string& manifest_path, st
     }
 
     for (const char* required : kRequiredGraphicsPipelines) {
-        const ShaderPackageLibrary::ShaderVariantPath* variant = shader_packages_.find(required);
+        const GraphicsPipelineShaderSpec* pipeline_spec = graphics_pipeline_spec_for_name(required);
+        if (!pipeline_spec) {
+            out_error = std::string("Missing required graphics pipeline spec: ") + required;
+            vibble::log::error("[GpuSceneRenderer] " + out_error);
+            return false;
+        }
+        const ShaderPackageLibrary::ShaderVariantPath* variant =
+            shader_packages_.find(pipeline_spec->fragment_variant);
         if (!variant || !select_backend_binary(*variant)) {
             out_error = std::string("Missing ") + backend_shader_variant_ +
-                        " binary for required variant: " + required;
+                        " binary for required variant: " + pipeline_spec->fragment_variant;
             vibble::log::error("[GpuSceneRenderer] " + out_error);
             return false;
         }
@@ -1067,6 +1151,7 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
     const std::uint32_t target_width = frame_state.swapchain_width;
     const std::uint32_t target_height = frame_state.swapchain_height;
     const SDL_FColor clear_color{0.0f, 0.0f, 0.0f, 0.0f};
+    const SDL_FColor opaque_clear_color{0.0f, 0.0f, 0.0f, 1.0f};
     const GpuSceneRenderer::TextureResourceSpec layer_spec{
         target_width,
         target_height,
@@ -1097,6 +1182,14 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
     SDL_GPUTexture* floor_target = find_texture_resource(runtime_floor_target_name());
     if (!floor_target) {
         out_error = "Floor render target was unavailable.";
+        return false;
+    }
+    if (!ensure_texture_resource(runtime_composite_target_name(), layer_spec, out_error)) {
+        return false;
+    }
+    SDL_GPUTexture* composite_target = find_texture_resource(runtime_composite_target_name());
+    if (!composite_target) {
+        out_error = "Composite render target was unavailable.";
         return false;
     }
 
@@ -1151,9 +1244,9 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
                                        frame_state.command_buffer,
                                        floor_target,
                                        frame_data.floor_draws,
-                                       "sprite_textured",
-                                       0x2200u,
-                                       clear_color,
+                                       "sprite_textured_opaque",
+                                       0x2203u,
+                                       opaque_clear_color,
                                        "runtime_scene.floor",
                                        out_error)) {
         return false;
@@ -1219,33 +1312,52 @@ bool GpuSceneRenderer::render_active_frame(const GpuSceneFrameData& frame_data, 
     release_texture_resources_with_prefix("runtime.scene.processed_layer.", retained_processed_layer_targets);
 
     const bool has_ui_overlay = frame_data.ui_overlay_gpu_texture != nullptr;
-    std::vector<GpuSpriteDrawPacket> composite_packets{};
-    composite_packets.reserve(active_layers.size() + (has_ui_overlay ? 2u : 1u));
-    composite_packets.push_back(make_fullscreen_draw_packet(floor_target, target_width, target_height));
+    std::vector<GpuSpriteDrawPacket> composite_base_packets{};
+    composite_base_packets.push_back(make_fullscreen_draw_packet(floor_target, target_width, target_height));
+    std::vector<GpuSpriteDrawPacket> composite_overlay_packets{};
+    composite_overlay_packets.reserve(active_layers.size() + (has_ui_overlay ? 1u : 0u));
     for (const ActiveDepthLayerRuntimeState& state : active_layers) {
         if (!state.processed_texture) {
             out_error = "Processed depth-layer texture was unavailable for layer " +
                         std::to_string(state.depth_layer) + ".";
             return false;
         }
-        composite_packets.push_back(make_fullscreen_draw_packet(state.processed_texture, target_width, target_height));
+        composite_overlay_packets.push_back(make_fullscreen_draw_packet(state.processed_texture, target_width, target_height));
     }
     if (has_ui_overlay) {
-        composite_packets.push_back(make_fullscreen_draw_packet(frame_data.ui_overlay_gpu_texture,
-                                                                target_width,
-                                                                target_height));
+        composite_overlay_packets.push_back(make_fullscreen_draw_packet(frame_data.ui_overlay_gpu_texture,
+                                                                        target_width,
+                                                                        target_height));
     }
 
     render_diagnostics::set_composite_layers_submitted(join_composite_summary(active_layers, has_ui_overlay));
+
+    debug_log("render composite pass");
+    if (!render_composite_batches_to_target(*this,
+                                            frame_state.command_buffer,
+                                            composite_target,
+                                            composite_base_packets,
+                                            composite_overlay_packets,
+                                            opaque_clear_color,
+                                            "runtime_scene.composite",
+                                            out_error)) {
+        return false;
+    }
+    debug_log("composite pass complete");
+
+    std::vector<GpuSpriteDrawPacket> present_packets{};
+    present_packets.push_back(make_fullscreen_draw_packet(composite_target,
+                                                          target_width,
+                                                          target_height));
 
     debug_log("render present pass");
     if (!render_packet_batch_to_target(*this,
                                        frame_state.command_buffer,
                                        frame_state.swapchain_texture,
-                                       composite_packets,
-                                       "sprite_textured",
-                                       0x2100u,
-                                       clear_color,
+                                       present_packets,
+                                       "sprite_textured_opaque",
+                                       0x2102u,
+                                       opaque_clear_color,
                                        "runtime_scene.present",
                                        out_error,
                                        false,

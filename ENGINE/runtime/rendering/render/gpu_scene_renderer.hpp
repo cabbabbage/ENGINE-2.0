@@ -50,12 +50,22 @@ struct GpuSceneFrameData {
     std::vector<GpuSpriteDrawPacket> floor_draws{};
     std::vector<GpuSpriteDrawPacket> layer_draws{};
     std::vector<GpuDepthLayerDrawPackets> depth_layers{};
+    std::uint32_t target_width = 0;
+    std::uint32_t target_height = 0;
     std::uint32_t floor_draw_count = 0;
     std::uint32_t layer_sprite_draw_count = 0;
     std::uint32_t active_depth_layer_count = 0;
     std::uint32_t debug_overlay_draw_count = 0;
+    std::uint32_t active_asset_count = 0;
+    std::uint32_t filtered_active_asset_count = 0;
+    std::uint32_t selected_asset_count = 0;
+    std::uint32_t visible_traversal_count = 0;
     SDL_Texture* ui_overlay_texture = nullptr;
     SDL_GPUTexture* ui_overlay_gpu_texture = nullptr;
+    bool dev_mode = false;
+    bool focus_filter_active = false;
+    bool used_active_asset_fallback = false;
+    bool suspected_incomplete_scene = false;
     bool has_valid_composite_source = false;
 };
 

@@ -35,6 +35,11 @@ void append_classified_sprite_draw_packet(bool floor_tagged,
                                           const GpuSpriteDrawPacket& packet,
                                           std::vector<GpuSpriteDrawPacket>& out_floor_draws,
                                           std::vector<GpuSpriteDrawPacket>& out_layer_draws);
+const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
+                                                               bool focus_filter_active,
+                                                               const std::vector<Asset*>& active_assets,
+                                                               const std::vector<Asset*>& filtered_active_assets,
+                                                               bool& out_used_active_fallback);
 
 } // namespace runtime_gpu_renderer_detail
 
@@ -122,4 +127,8 @@ private:
     GpuBackendOwner backend_owner_{};
     FrameContext frame_context_{};
     RenderTargetLifecycleManager render_target_manager_{};
+    std::optional<GpuSceneFrameData> last_complete_scene_frame_data_{};
+    std::uint32_t last_complete_scene_width_ = 0;
+    std::uint32_t last_complete_scene_height_ = 0;
+    std::uint32_t consecutive_held_incomplete_scene_frames_ = 0;
 };

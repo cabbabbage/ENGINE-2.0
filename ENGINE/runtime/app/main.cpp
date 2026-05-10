@@ -1037,7 +1037,7 @@ int main(int argc, char* argv[]) {
         std::unique_ptr<EngineRenderer> engine_renderer = EngineRenderer::Create(window, true);
         if (!engine_renderer) {
                 const std::string gpu_error = SDL_GetError();
-                vibble::log::error(std::string("[Main] Failed to initialize required GPU renderer: ") +
+                vibble::log::error(std::string("[Main] Failed to initialize required OpenGL renderer: ") +
                                    (gpu_error.empty() ? "unknown error" : gpu_error));
                 show_gpu_required_dialog_and_wait(window, gpu_error);
                 SDL_DestroyWindow(window);
@@ -1057,8 +1057,8 @@ int main(int argc, char* argv[]) {
         }
 
         if (!engine_renderer->runtime_gpu_supported()) {
-                vibble::log::error("[Main] Renderer initialization did not produce a GPU backend.");
-                show_gpu_required_dialog_and_wait(window, "No compatible GPU backend was available.");
+                vibble::log::error("[Main] Renderer initialization did not produce a hardware-backed renderer.");
+                show_gpu_required_dialog_and_wait(window, "No compatible OpenGL renderer was available.");
                 engine_renderer.reset();
                 SDL_DestroyWindow(window);
                 TTF_Quit();
@@ -1067,12 +1067,15 @@ int main(int argc, char* argv[]) {
         }
 
         switch (engine_renderer->quality_tier()) {
+        case RenderQualityTier::OpenGL:
+                vibble::log::info("[Main] Render quality tier: OpenGL (full effects).");
+                break;
         case RenderQualityTier::GPU:
-                vibble::log::info("[Main] Render quality tier: GPU (full effects).");
+                vibble::log::info("[Main] Render quality tier: legacy GPU.");
                 break;
         default:
-                vibble::log::error("[Main] Non-GPU render quality tier detected; exiting because GPU is required.");
-                show_gpu_required_dialog_and_wait(window, "This build only supports GPU rendering.");
+                vibble::log::error("[Main] Non-OpenGL render quality tier detected; exiting because OpenGL is required.");
+                show_gpu_required_dialog_and_wait(window, "This build only supports OpenGL rendering.");
                 engine_renderer.reset();
                 SDL_DestroyWindow(window);
                 TTF_Quit();

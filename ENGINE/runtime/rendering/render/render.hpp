@@ -9,7 +9,7 @@
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
-#include "rendering/render/runtime_gpu_renderer.hpp"
+#include "rendering/render/opengl_runtime_renderer.hpp"
 
 class Assets;
 
@@ -62,7 +62,7 @@ private:
     int screen_width_ = 1;
     int screen_height_ = 1;
 
-    std::unique_ptr<RuntimeGpuRenderer> runtime_gpu_renderer_;
+    std::unique_ptr<OpenGLRuntimeRenderer> runtime_gpu_renderer_;
 
     bool gpu_runtime_path_enabled_ = false;
 };

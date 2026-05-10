@@ -6,6 +6,17 @@
 #include "utils/log.hpp"
 
 namespace {
+void assign_default_policy(RuntimeGpuFormatPolicy& out_policy, bool prefer_depth32) {
+    out_policy.albedo_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
+    out_policy.light_accumulation_format = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+    out_policy.mask_format = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+    out_policy.depth_format = prefer_depth32
+        ? SDL_GPU_TEXTUREFORMAT_D32_FLOAT
+        : SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+    out_policy.depth_uses_d32 = out_policy.depth_format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+    out_policy.sample_count = SDL_GPU_SAMPLECOUNT_1;
+}
+
 bool supports_format(SDL_GPUDevice* device,
                      SDL_GPUTextureFormat format,
                      SDL_GPUTextureUsageFlags usage = SDL_GPU_TEXTUREUSAGE_SAMPLER) {
@@ -55,8 +66,11 @@ bool GpuFormatPolicyResolver::Resolve(SDL_GPUDevice* device,
                                       RuntimeGpuFormatPolicy& out_policy,
                                       std::string& out_error) {
     if (!device) {
-        out_error = "SDL_GPUDevice is null";
-        return false;
+        assign_default_policy(out_policy, prefer_depth32);
+        vibble::log::info("[GpuFormatPolicy] Using default renderer-compatible format policy "
+                          "(no SDL_GPUDevice available).");
+        out_error.clear();
+        return true;
     }
 
     const SDL_GPUTextureFormat albedo =

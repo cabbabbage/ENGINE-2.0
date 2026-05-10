@@ -27299,9 +27299,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            150,
-            242,
-            85,
+            135,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101.0,
@@ -27354,7 +27354,7 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            52,
+            32,
             31,
             204,
             255
@@ -27379,9 +27379,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            242,
-            36,
-            36,
+            224,
+            143,
+            34,
             255
           ],
           "edge_smoothness": 4,
@@ -27404,9 +27404,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            242,
-            233,
             36,
+            242,
+            40,
             255
           ],
           "edge_smoothness": 4,
@@ -27464,9 +27464,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            36,
-            242,
+            139,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -27523,16 +27523,16 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -698,
-          "camera_center_dz": 3300,
-          "camera_height_px": 2245,
-          "camera_tilt_deg": 42.69997024536133,
-          "camera_zoom_percent": 12,
+          "camera_center_dx": -1503,
+          "camera_center_dz": 1460,
+          "camera_height_px": 514,
+          "camera_tilt_deg": 41.84824752807617,
+          "camera_zoom_percent": 11,
           "curvyness": 2,
           "display_color": [
             85,
             242,
-            176,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27816,9 +27816,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            98,
-            85,
             242,
+            85,
+            168,
             255
           ],
           "edge_smoothness": 96,

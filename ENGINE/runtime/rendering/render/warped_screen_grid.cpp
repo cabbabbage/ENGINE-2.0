@@ -1,6 +1,7 @@
 #include "warped_screen_grid.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "utils/area.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "core/find_current_room.hpp"
@@ -728,6 +729,8 @@ void WarpedScreenGrid::set_frustum_padding_world(float padding) {
 void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     settings_ = settings;
     settings_.min_visible_screen_ratio = std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
+    settings_.boundary_min_visible_screen_ratio =
+        std::clamp(settings_.boundary_min_visible_screen_ratio, 0.0f, 0.5f);
     if (!std::isfinite(settings_.base_height_px) || settings_.base_height_px <= 0.0f) {
         settings_.base_height_px = 720.0f;
     }
@@ -1489,6 +1492,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     };
     RealismSettings updated = settings_;
     read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
+    read_float("boundary_min_visible_screen_ratio", updated.boundary_min_visible_screen_ratio, 0.0f, 0.5f);
     read_bool("min_visible_uses_light_radius", updated.min_visible_uses_light_radius);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
@@ -1609,6 +1613,7 @@ set_realism_settings(updated);
 nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     nlohmann::json result = nlohmann::json::object();
     result["min_visible_screen_ratio"] = settings_.min_visible_screen_ratio;
+    result["boundary_min_visible_screen_ratio"] = settings_.boundary_min_visible_screen_ratio;
     result["min_visible_uses_light_radius"] = settings_.min_visible_uses_light_radius;
     result["base_height_px"] = settings_.base_height_px;
     result["max_cull_depth"] = settings_.max_cull_depth;
@@ -1816,8 +1821,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         return;
     }
     const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
-    const float min_visible_px =
-        static_cast<float>(screen_height_) * std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
     last_min_world_z_ = std::numeric_limits<int>::max();
     last_max_world_z_ = std::numeric_limits<int>::min();
     last_depth_culled_ = 0;
@@ -2115,6 +2118,14 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 visibility_reason_flags_[owned.get()] = visibility.reason_flags;
             }
             if (visibility.visible) {
+                const bool is_boundary_asset =
+                    owned->info &&
+                    asset_types::canonicalize(owned->info->type) == std::string(asset_types::boundary);
+                const float min_visible_ratio = is_boundary_asset
+                    ? settings_.boundary_min_visible_screen_ratio
+                    : settings_.min_visible_screen_ratio;
+                const float min_visible_px =
+                    static_cast<float>(screen_height_) * std::clamp(min_visible_ratio, 0.0f, 0.5f);
                 if (owned.get() != tracked_player_asset_ && min_visible_px > 0.0f) {
                     const bool preserve_runtime_lights =
                         (visibility.reason_flags & kVisibilityReasonLight) != 0;

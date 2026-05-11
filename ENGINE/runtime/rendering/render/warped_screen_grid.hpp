@@ -72,6 +72,7 @@ public:
     struct RealismSettings {
 
         float min_visible_screen_ratio     = 0.003f;
+        float boundary_min_visible_screen_ratio = 0.015f;
         bool min_visible_uses_light_radius = true;
         float base_height_px               = 1000.0f;
         float max_cull_depth               = 8000.0f;

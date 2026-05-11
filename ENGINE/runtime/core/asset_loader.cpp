@@ -154,10 +154,10 @@ manifest_store_(manifest_store)
         vibble::log::info(std::string("[AssetLoader] Asset library ready in ") + std::to_string(library_ms) + "ms");
         vibble::log::info(std::string("[AssetLoader] Rooms built in ") + std::to_string(rooms_ms) + "ms");
         vibble::log::info(std::string("[AssetLoader] Initialization completed in ") + std::to_string(total_ms) + "ms");
-        auto distant_boundary = collectDistantAssets(150, 3000);
-        for (auto* asset : distant_boundary) {
-                asset->set_hidden(true);
-        }
+        const auto distant_boundary = collectDistantAssets(150, 3000);
+        vibble::log::info(std::string("[AssetLoader] Boundary startup filtering moved to runtime visibility culling. ")
+                          + "distance_candidates=" + std::to_string(distant_boundary.size()) +
+                          " hidden_applied=0");
 }
 
 std::vector<Asset*> AssetLoader::collectDistantAssets(int lock_threshold, int remove_threshold) {
@@ -349,6 +349,8 @@ std::vector<std::unique_ptr<Asset>> AssetLoader::extract_all_assets() {
         std::vector<std::unique_ptr<Asset>> out;
         const std::vector<Room*>& rooms = getRooms();
         out.reserve(rooms.size() * 4);
+        std::size_t hidden_skipped_total = 0;
+        std::size_t hidden_skipped_boundary = 0;
         for (Room* room : rooms) {
                 if (!room) continue;
                 auto& assets = room->assets;
@@ -360,12 +362,22 @@ std::vector<std::unique_ptr<Asset>> AssetLoader::extract_all_assets() {
                                 continue;
                         }
                         if (asset->is_hidden()) {
+                                ++hidden_skipped_total;
+                                if (asset->info &&
+                                    asset_types::canonicalize(asset->info->type) == std::string(asset_types::boundary)) {
+                                        ++hidden_skipped_boundary;
+                                }
                                 ++it;
                                 continue;
                         }
                         out.push_back(std::move(aup));
                         it = assets.erase(it);
                 }
+        }
+        if (hidden_skipped_total > 0) {
+                vibble::log::info(std::string("[AssetLoader] extract_all_assets skipped hidden entries. total=") +
+                                  std::to_string(hidden_skipped_total) +
+                                  " boundary=" + std::to_string(hidden_skipped_boundary));
         }
         return out;
 }
@@ -378,9 +390,20 @@ void AssetLoader::createAssets(world::WorldGrid& grid) {
         vibble::log::debug(std::string("[AssetLoader] createAssets: requested grid_resolution=") + std::to_string(requested));
 
         auto extracted_assets = extract_all_assets();
+        std::size_t extracted_boundary_assets = 0;
+        for (const auto& asset_up : extracted_assets) {
+                if (!asset_up || !asset_up->info) {
+                        continue;
+                }
+                if (asset_types::canonicalize(asset_up->info->type) == std::string(asset_types::boundary)) {
+                        ++extracted_boundary_assets;
+                }
+        }
         std::vector<Asset*> registered_assets;
         registered_assets.reserve(extracted_assets.size());
         vibble::log::info(std::string("[AssetLoader] Extracted ") + std::to_string(extracted_assets.size()) + " visible assets from rooms");
+        vibble::log::info(std::string("[AssetLoader] Boundary startup visibility summary: extracted=") +
+                          std::to_string(extracted_boundary_assets));
 
         for (auto& asset_up : extracted_assets) {
                 if (!asset_up) continue;
@@ -390,6 +413,18 @@ void AssetLoader::createAssets(world::WorldGrid& grid) {
                         //vibble::log::info(std::string("[AssetLoader] Registered asset: ") + (asset->info ? asset->info->name : std::string{"<null>"}));
                 }
         }
+        std::size_t registered_boundary_assets = 0;
+        for (Asset* asset : registered_assets) {
+                if (!asset || !asset->info) {
+                        continue;
+                }
+                if (asset_types::canonicalize(asset->info->type) == std::string(asset_types::boundary)) {
+                        ++registered_boundary_assets;
+                }
+        }
+        vibble::log::info(std::string("[AssetLoader] Boundary startup visibility summary: registered=") +
+                          std::to_string(registered_boundary_assets) +
+                          " filtered=" + std::to_string(extracted_boundary_assets - std::min(extracted_boundary_assets, registered_boundary_assets)));
         vibble::log::debug(std::string("[AssetLoader] Registered assets: total=") + std::to_string(registered_assets.size()));
 
         {

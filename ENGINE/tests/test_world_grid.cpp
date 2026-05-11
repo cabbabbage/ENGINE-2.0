@@ -253,6 +253,59 @@ TEST_CASE("Assets active rebuild repopulates visible assets after active dirty r
     CHECK_FALSE(rebuilt_active.empty());
 }
 
+TEST_CASE("Assets visibility fail-open keeps previous active set for one frame only") {
+    AssetLibrary library(false);
+    world::WorldGrid grid;
+    Asset* visible_asset = grid.create_asset_at_point(
+        make_runtime_visible_test_asset("active_fail_open_visible_asset", 0, 80),
+        0,
+        0);
+    REQUIRE(visible_asset != nullptr);
+
+    auto world_context = std::make_shared<RuntimeWorldContext>();
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  1280,
+                  720,
+                  0,
+                  0,
+                  0,
+                  nullptr,
+                  "active_fail_open_test",
+                  nlohmann::json::object(),
+                  std::string{},
+                  std::move(grid));
+
+    Input input;
+    auto traversal_contains = [&](Asset* needle) {
+        const auto& traversal = assets.active_traversal();
+        return std::any_of(traversal.begin(),
+                           traversal.end(),
+                           [&](const Assets::ActiveTraversalEntry& entry) {
+                               return entry.asset == needle;
+                           });
+    };
+    assets.update(input);
+    const auto& initially_active = assets.getActive();
+    REQUIRE(std::find(initially_active.begin(), initially_active.end(), visible_asset) != initially_active.end());
+
+    std::unique_ptr<Asset> detached_visible_asset = assets.world_grid().extract_asset(visible_asset);
+    REQUIRE(detached_visible_asset != nullptr);
+    REQUIRE(detached_visible_asset.get() == visible_asset);
+
+    assets.force_camera_view_refresh();
+    CHECK_FALSE(traversal_contains(visible_asset));
+    const auto& fail_open_active = assets.getActive();
+    CHECK(std::find(fail_open_active.begin(), fail_open_active.end(), visible_asset) != fail_open_active.end());
+    const std::uint64_t fail_open_count_after_first_collapse = assets.visibility_fail_open_activation_count();
+    CHECK(fail_open_count_after_first_collapse >= 1);
+
+    assets.force_camera_view_refresh();
+    CHECK_FALSE(traversal_contains(visible_asset));
+    CHECK(assets.visibility_fail_open_activation_count() == fail_open_count_after_first_collapse);
+}
+
 TEST_CASE("WorldGrid projection cache invalidates on topology updates") {
     world::WorldGrid grid;
     world::GridPoint& point = world::GridPoint::from_world(24, 0, 48, 0, grid);
@@ -561,6 +614,31 @@ TEST_CASE("WarpedScreenGrid min on-screen threshold applies immediately after se
     CHECK_FALSE(traversal_contains_asset(camera_grid, tiny_asset));
 }
 
+TEST_CASE("WarpedScreenGrid uses boundary-specific min on-screen threshold") {
+    world::WorldGrid grid;
+    Asset* regular_tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    Asset* boundary_tiny_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
+    REQUIRE(regular_tiny_asset != nullptr);
+    REQUIRE(boundary_tiny_asset != nullptr);
+
+    regular_tiny_asset->info->type = "object";
+    regular_tiny_asset->info->original_canvas_width = 1;
+    regular_tiny_asset->info->original_canvas_height = 1;
+    boundary_tiny_asset->info->type = "boundary";
+    boundary_tiny_asset->info->original_canvas_width = 1;
+    boundary_tiny_asset->info->original_canvas_height = 1;
+
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.min_visible_screen_ratio = 0.0f;
+    settings.boundary_min_visible_screen_ratio = 0.05f;
+    camera_grid.set_realism_settings(settings);
+    camera_grid.rebuild_grid(grid, 0.016f, 1);
+
+    CHECK(traversal_contains_asset(camera_grid, regular_tiny_asset));
+    CHECK_FALSE(traversal_contains_asset(camera_grid, boundary_tiny_asset));
+}
+
 TEST_CASE("WarpedScreenGrid min on-screen culling exempts tracked player asset") {
     world::WorldGrid grid;
     Asset* player_asset = grid.create_asset_at_point(make_world_grid_test_asset(0, 80));
@@ -749,7 +827,7 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
     CHECK(after.light_distance_fade_start_ratio == doctest::Approx(before.light_distance_fade_start_ratio));
 }
 
-TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys handled by Assets") {
+TEST_CASE("WarpedScreenGrid apply_camera_settings consumes boundary min-visible ratio and ignores height bounds") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     const WarpedScreenGrid::RealismSettings before = camera_grid.get_settings();
 
@@ -761,6 +839,7 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys 
 
     const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
     CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
+    CHECK(after.boundary_min_visible_screen_ratio == doctest::Approx(0.25f));
     CHECK(after.base_height_px == doctest::Approx(before.base_height_px));
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
@@ -771,6 +850,7 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores map-level camera keys 
 TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer and DoF controls") {
     WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
     camera_grid.apply_camera_settings(nlohmann::json{
+        {"boundary_min_visible_screen_ratio", 0.2},
         {"max_cull_depth", 2500.0},
         {"dynamic_renderer_depth_efficiency_depth", 875.0},
         {"dynamic_renderer_depth_efficiency_min_density_ratio", 0.2},
@@ -799,6 +879,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"player_hard_leash_px", 320.0}
     });
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    CHECK(settings.boundary_min_visible_screen_ratio == doctest::Approx(0.2f));
     CHECK(settings.max_cull_depth == doctest::Approx(2500.0f));
     CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(875.0f));
     CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(0.2f));
@@ -827,6 +908,7 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(camera_grid.transition_settings().player_hard_leash_px == doctest::Approx(320.0f));
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
+    CHECK(serialized["boundary_min_visible_screen_ratio"] == doctest::Approx(0.2));
     CHECK(serialized["max_cull_depth"] == doctest::Approx(2500.0));
     CHECK(serialized["dynamic_renderer_depth_efficiency_depth"] == doctest::Approx(875.0));
     CHECK_FALSE(serialized.contains("dynamic_renderer_depth_efficiency_threshold"));

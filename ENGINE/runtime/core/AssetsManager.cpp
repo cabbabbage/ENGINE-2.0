@@ -869,6 +869,9 @@ void Assets::force_camera_view_refresh() {
 }
 
 void Assets::apply_camera_runtime_settings() {
+    WarpedScreenGrid::RealismSettings settings = camera_.realism_settings();
+    settings.boundary_min_visible_screen_ratio = boundary_min_visible_screen_ratio_;
+    camera_.set_realism_settings(settings);
     render_pipeline::ScalingLogic::SetQualityCap(1.0f);
     finalize_max_asset_dimensions(max_asset_width_world_, max_asset_height_world_);
 }
@@ -894,6 +897,7 @@ void Assets::log_camera_fog_state(const char* label) const {
         " room_zoom_percent=" + std::to_string(room ? room->camera_zoom_percent : 0) +
         " base_height_px=" + std::to_string(settings.base_height_px) +
         " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
+        " boundary_min_visible_screen_ratio=" + std::to_string(settings.boundary_min_visible_screen_ratio) +
         //" extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
         " view_height_world=" + std::to_string(camera_.view_height_world()) +
         " camera_height=" + std::to_string(camera_height) +
@@ -4033,6 +4037,7 @@ void Assets::rebuild_active_from_screen_grid() {
     active_assets.clear();
 
     const auto& visible_traversal = camera_.visible_traversal_entries();
+    const bool traversal_empty = visible_traversal.empty();
     active_assets.reserve(visible_traversal.size());
     std::unordered_set<Asset*> seen_assets;
     seen_assets.reserve(visible_traversal.size() * 2);
@@ -4057,6 +4062,46 @@ void Assets::rebuild_active_from_screen_grid() {
 
         active_assets.push_back(asset);
         mark_anchor_basis_dirty(asset);
+    }
+
+    bool fail_open_applied = false;
+    if (traversal_empty && active_assets.empty() && !previous_active.empty()) {
+        vibble::log::warn("[Assets] Empty visibility traversal detected. frame=" +
+                          std::to_string(current_frame_id) +
+                          " previous_active=" + std::to_string(previous_active.size()) +
+                          " fail_open_eligible=" + (visibility_fail_open_used_last_rebuild_ ? std::string("false") : std::string("true")) +
+                          " camera_state=" + std::to_string(camera_.camera_state_version()) +
+                          " depth_culled=" + std::to_string(camera_.last_depth_culled()) +
+                          " nodes=" + std::to_string(camera_.last_nodes_visited()) +
+                          " branches_skipped=" + std::to_string(camera_.last_branches_skipped()));
+    }
+    if (traversal_empty &&
+        active_assets.empty() &&
+        !previous_active.empty() &&
+        !visibility_fail_open_used_last_rebuild_) {
+        active_assets.reserve(previous_active.size());
+        for (Asset* asset : previous_active) {
+            if (!asset || asset->dead) {
+                continue;
+            }
+            asset->last_active_frame_id = current_frame_id;
+            asset->last_visible_frame_id = current_frame_id;
+            asset->active = true;
+            active_assets.push_back(asset);
+            mark_anchor_basis_dirty(asset);
+        }
+        if (!active_assets.empty()) {
+            ++visibility_fail_open_activation_count_;
+            if (visibility_fail_open_activation_count_ == 0) {
+                ++visibility_fail_open_activation_count_;
+            }
+            fail_open_applied = true;
+            vibble::log::warn("[Assets] Visibility fail-open reused previous active set for one frame. frame=" +
+                              std::to_string(current_frame_id) +
+                              " reused=" + std::to_string(active_assets.size()) +
+                              " activations=" + std::to_string(visibility_fail_open_activation_count_) +
+                              " camera_state=" + std::to_string(camera_.camera_state_version()));
+        }
     }
 
     // Deactivate assets no longer visible this frame.
@@ -4090,6 +4135,12 @@ void Assets::rebuild_active_from_screen_grid() {
             continue;
         }
         asset->update_scale_values();
+    }
+
+    if (!traversal_empty) {
+        visibility_fail_open_used_last_rebuild_ = false;
+    } else if (fail_open_applied) {
+        visibility_fail_open_used_last_rebuild_ = true;
     }
 
     last_active_rebuild_frame_id_ = current_frame_id;

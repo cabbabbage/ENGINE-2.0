@@ -157,6 +157,7 @@ public:
     std::size_t last_runtime_convergence_waves() const { return last_runtime_convergence_stats_.wave_count; }
     std::size_t last_runtime_convergence_children_updated() const { return last_runtime_convergence_stats_.children_updated; }
     bool last_runtime_convergence_converged() const { return last_runtime_convergence_stats_.converged; }
+    std::uint64_t visibility_fail_open_activation_count() const { return visibility_fail_open_activation_count_; }
 
     void render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target = nullptr);
     SDL_Renderer* renderer() const;
@@ -466,11 +467,13 @@ private:
     Asset* max_asset_width_holder_ = nullptr;
     Asset* max_asset_height_holder_ = nullptr;
     std::uint64_t active_assets_generation_ = 1;
+    std::uint64_t visibility_fail_open_activation_count_ = 0;
     std::uint32_t frame_id_ = 0;
     std::uint32_t non_player_update_visit_epoch_ = 0;
     std::size_t startup_non_player_update_cursor_ = 0;
     std::size_t startup_runtime_pass_cursor_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
+    bool visibility_fail_open_used_last_rebuild_ = false;
     std::uint32_t last_grid_rebuild_frame_ = 0;
     std::uint32_t last_runtime_convergence_warning_frame_id_ = std::numeric_limits<std::uint32_t>::max();
     std::uint32_t frame_rebuild_metrics_frame_ = 0;

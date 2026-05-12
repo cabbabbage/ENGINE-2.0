@@ -330,18 +330,25 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     const std::vector<Asset*>& active_assets = assets_->getActive();
     const std::vector<Asset*>& filtered_active_assets = assets_->getFilteredActiveAssets();
+    const std::vector<Asset*>& all_assets = assets_->all;
     bool used_active_fallback = false;
-    const std::vector<Asset*>& visible_assets =
+    const std::vector<Asset*>& selected_visible_assets =
         runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(
             assets_->is_dev_mode(),
             assets_->focus_filter_active(),
             active_assets,
             filtered_active_assets,
             used_active_fallback);
+    const std::vector<Asset*>* visible_assets = &selected_visible_assets;
+    bool used_all_assets_visibility_fallback = false;
+    if (visible_assets->empty() && !all_assets.empty()) {
+        visible_assets = &all_assets;
+        used_all_assets_visibility_fallback = true;
+    }
     const WarpedScreenGrid& camera = assets_->getView();
     const std::size_t traversal_count = camera.visible_traversal_entries().size();
 
-    std::vector<Asset*> render_assets = visible_assets;
+    std::vector<Asset*> render_assets = *visible_assets;
     if (assets_->boundary_assets_visible() && assets_->is_dev_mode() && assets_->focus_filter_active()) {
         std::unordered_set<Asset*> selected_assets(render_assets.begin(), render_assets.end());
         for (Asset* asset : active_assets) {
@@ -398,6 +405,32 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             out_data.layer_draws,
             out_error)) {
         return false;
+    }
+
+    // Emergency fallback for movement-time visibility/culling gaps: retry sprite packet build
+    // against all tracked assets before presenting a floor-only frame.
+    if (out_data.layer_draws.empty() && !all_assets.empty() && !used_all_assets_visibility_fallback) {
+        std::vector<GpuSpriteDrawPacket> fallback_floor_draws = out_data.floor_draws;
+        std::vector<GpuSpriteDrawPacket> fallback_layer_draws{};
+        std::string fallback_error;
+        if (!runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+                camera,
+                all_assets,
+                target_width,
+                target_height,
+                fallback_floor_draws,
+                fallback_layer_draws,
+                fallback_error)) {
+            out_error = fallback_error;
+            return false;
+        }
+        if (!fallback_layer_draws.empty()) {
+            out_data.floor_draws = std::move(fallback_floor_draws);
+            out_data.layer_draws = std::move(fallback_layer_draws);
+            out_data.selected_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+                all_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+            vibble::log::warn("[OpenGLRuntimeRenderer] Rebuilt sprite packets from all assets after primary visibility pass produced no layer packets.");
+        }
     }
 
     out_data.floor_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
@@ -489,7 +522,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         vibble::log::warn("[OpenGLRuntimeRenderer] Scene has floor packets but no layer packets. "
                           "active_count=" + std::to_string(active_assets.size()) +
                           " filtered_count=" + std::to_string(filtered_active_assets.size()) +
-                          " selected_count=" + std::to_string(visible_assets.size()) +
+                          " selected_count=" + std::to_string(render_assets.size()) +
                           " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false") +
                           " traversal_count=" + std::to_string(traversal_count));
     }
@@ -625,6 +658,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         last_complete_scene_height_ == frame_data.target_height;
     const bool hold_incomplete_scene_frame =
         frame_data.suspected_incomplete_scene && can_hold_previous_scene;
+    const bool hold_zero_sprite_scene_frame =
+        frame_data.layer_sprite_draw_count == 0 &&
+        can_hold_previous_scene &&
+        last_complete_scene_frame_data_.has_value() &&
+        last_complete_scene_frame_data_->layer_sprite_draw_count > 0;
     const bool hold_empty_scene_frame =
         frame_data.floor_draw_count == 0 &&
         frame_data.layer_sprite_draw_count == 0 &&
@@ -632,7 +670,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
 
     GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
-    if (hold_incomplete_scene_frame || hold_empty_scene_frame) {
+    if (hold_incomplete_scene_frame || hold_zero_sprite_scene_frame || hold_empty_scene_frame) {
         held_frame_data = *last_complete_scene_frame_data_;
         held_frame_data.ui_overlay_texture = frame_data.ui_overlay_texture;
         held_frame_data.ui_overlay_gpu_texture = frame_data.ui_overlay_gpu_texture;
@@ -644,7 +682,10 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
             (consecutive_held_incomplete_scene_frames_ % 60u) == 0u) {
             vibble::log::warn(
                 std::string("[OpenGLRuntimeRenderer] Holding last complete OpenGL scene instead of presenting ") +
-                (hold_empty_scene_frame ? "an empty scene frame. " : "an incomplete scene frame. ") +
+                (hold_empty_scene_frame
+                     ? "an empty scene frame. "
+                     : (hold_zero_sprite_scene_frame ? "a zero-sprite scene frame. "
+                                                     : "an incomplete scene frame. ")) +
                 "held_frames=" + std::to_string(consecutive_held_incomplete_scene_frames_) +
                 " current_floor_packets=" + std::to_string(frame_data.floor_draw_count) +
                 " current_normal_packets=" + std::to_string(frame_data.layer_sprite_draw_count) +
@@ -765,6 +806,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
     render_diagnostics::set_submit_result(true);
 
     if (!hold_incomplete_scene_frame &&
+        !hold_zero_sprite_scene_frame &&
         !hold_empty_scene_frame &&
         (frame_data.layer_sprite_draw_count > 0 || frame_data.floor_draw_count > 0)) {
         last_complete_scene_frame_data_ = frame_data;

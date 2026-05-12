@@ -646,14 +646,21 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
 
     const std::vector<Asset*>& active_assets = assets_->getActive();
     const std::vector<Asset*>& filtered_active_assets = assets_->getFilteredActiveAssets();
+    const std::vector<Asset*>& all_assets = assets_->all;
     bool used_active_fallback = false;
-    const std::vector<Asset*>& visible_assets =
+    const std::vector<Asset*>& selected_visible_assets =
         runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(
             assets_->is_dev_mode(),
             assets_->focus_filter_active(),
             active_assets,
             filtered_active_assets,
             used_active_fallback);
+    const std::vector<Asset*>* visible_assets = &selected_visible_assets;
+    bool used_all_assets_visibility_fallback = false;
+    if (visible_assets->empty() && !all_assets.empty()) {
+        visible_assets = &all_assets;
+        used_all_assets_visibility_fallback = true;
+    }
     const WarpedScreenGrid& camera = assets_->getView();
     const std::size_t traversal_count = camera.visible_traversal_entries().size();
 
@@ -664,7 +671,7 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
     out_data.filtered_active_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         filtered_active_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.selected_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
-        visible_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+        visible_assets->size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.visible_traversal_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         traversal_count, static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.dev_mode = assets_->is_dev_mode();
@@ -691,13 +698,39 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
 
     if (!runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
             camera,
-            visible_assets,
+            *visible_assets,
             target_width,
             target_height,
             out_data.floor_draws,
             out_data.layer_draws,
             out_error)) {
         return false;
+    }
+
+    // Emergency fallback for movement-time visibility/culling gaps: retry sprite packet build
+    // against all tracked assets before presenting a floor-only frame.
+    if (out_data.layer_draws.empty() && !all_assets.empty() && !used_all_assets_visibility_fallback) {
+        std::vector<GpuSpriteDrawPacket> fallback_floor_draws = out_data.floor_draws;
+        std::vector<GpuSpriteDrawPacket> fallback_layer_draws{};
+        std::string fallback_error;
+        if (!runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+                camera,
+                all_assets,
+                target_width,
+                target_height,
+                fallback_floor_draws,
+                fallback_layer_draws,
+                fallback_error)) {
+            out_error = fallback_error;
+            return false;
+        }
+        if (!fallback_layer_draws.empty()) {
+            out_data.floor_draws = std::move(fallback_floor_draws);
+            out_data.layer_draws = std::move(fallback_layer_draws);
+            out_data.selected_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
+                all_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+            vibble::log::warn("[RuntimeGpuRenderer] Rebuilt sprite packets from all assets after primary visibility pass produced no layer packets.");
+        }
     }
 
     for (std::vector<GpuSpriteDrawPacket>* draws : {&out_data.floor_draws, &out_data.layer_draws}) {
@@ -800,7 +833,7 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
         vibble::log::warn("[RuntimeGpuRenderer] GPU frame has floor packets but no layer packets. "
                           "active_count=" + std::to_string(active_assets.size()) +
                           " filtered_count=" + std::to_string(filtered_active_assets.size()) +
-                          " selected_count=" + std::to_string(visible_assets.size()) +
+                          " selected_count=" + std::to_string(visible_assets->size()) +
                           " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false") +
                           " traversal_count=" + std::to_string(traversal_count));
     }
@@ -980,10 +1013,16 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error, SDL_Texture* ui_ov
         last_complete_scene_frame_data_.has_value() &&
         last_complete_scene_width_ == frame_data.target_width &&
         last_complete_scene_height_ == frame_data.target_height;
+    const bool hold_zero_sprite_scene_frame =
+        frame_data.layer_sprite_draw_count == 0 &&
+        last_complete_scene_frame_data_.has_value() &&
+        last_complete_scene_frame_data_->layer_sprite_draw_count > 0 &&
+        last_complete_scene_width_ == frame_data.target_width &&
+        last_complete_scene_height_ == frame_data.target_height;
 
     GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
-    if (hold_incomplete_scene_frame) {
+    if (hold_incomplete_scene_frame || hold_zero_sprite_scene_frame) {
         held_frame_data = *last_complete_scene_frame_data_;
         held_frame_data.ui_overlay_texture = frame_data.ui_overlay_texture;
         held_frame_data.ui_overlay_gpu_texture = frame_data.ui_overlay_gpu_texture;
@@ -994,6 +1033,8 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error, SDL_Texture* ui_ov
         if (consecutive_held_incomplete_scene_frames_ == 1 ||
             (consecutive_held_incomplete_scene_frames_ % 60u) == 0u) {
             vibble::log::warn("[RuntimeGpuRenderer] Holding last complete GPU scene instead of presenting an incomplete floor-only frame. "
+                              "hold_reason=" + std::string(hold_zero_sprite_scene_frame ? "zero_sprite" : "incomplete_scene") +
+                              " " +
                               "held_frames=" + std::to_string(consecutive_held_incomplete_scene_frames_) +
                               " current_floor_packets=" + std::to_string(frame_data.floor_draw_count) +
                               " current_normal_packets=" + std::to_string(frame_data.layer_sprite_draw_count) +
@@ -1028,7 +1069,7 @@ bool RuntimeGpuRenderer::render_frame(std::string& out_error, SDL_Texture* ui_ov
     }
     render_diagnostics::set_submit_result(true);
 
-    if (!hold_incomplete_scene_frame && frame_data.layer_sprite_draw_count > 0) {
+    if (!hold_incomplete_scene_frame && !hold_zero_sprite_scene_frame && frame_data.layer_sprite_draw_count > 0) {
         last_complete_scene_frame_data_ = frame_data;
         last_complete_scene_width_ = frame_data.target_width;
         last_complete_scene_height_ = frame_data.target_height;

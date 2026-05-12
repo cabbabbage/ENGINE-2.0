@@ -1127,6 +1127,12 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out.erase("max_radius");
 	out["is_boss"] = assets_json.value("is_boss", false);
 	out["inherits_map_assets"] = assets_json.value("inherits_map_assets", false);
+        out["inherit_map_floor_color"] = assets_json.value("inherit_map_floor_color", true);
+        if (assets_json.contains("room_floor_color")) {
+                out["room_floor_color"] = assets_json["room_floor_color"];
+        } else {
+                out["room_floor_color"] = nlohmann::json::array({0, 0, 0});
+        }
         json spawn_groups = json::array();
         int cx = 0, cy = 0;
         if (room_area) {
@@ -1192,6 +1198,34 @@ SDL_Color Room::display_color() const {
                 return color;
         }
         return kFallback;
+}
+
+bool Room::inherit_map_floor_color() const {
+        if (!assets_json.is_object()) {
+                return true;
+        }
+        auto it = assets_json.find("inherit_map_floor_color");
+        if (it == assets_json.end() || !it->is_boolean()) {
+                return true;
+        }
+        return it->get<bool>();
+}
+
+SDL_Color Room::room_floor_color(SDL_Color fallback) const {
+        fallback.a = 255;
+        if (!assets_json.is_object()) {
+                return fallback;
+        }
+        auto it = assets_json.find("room_floor_color");
+        if (it == assets_json.end()) {
+                return fallback;
+        }
+        if (auto parsed = utils::color::color_from_json(*it)) {
+                SDL_Color color = *parsed;
+                color.a = 255;
+                return color;
+        }
+        return fallback;
 }
 
 void Room::rename(const std::string& new_name, nlohmann::json& map_info_json) {

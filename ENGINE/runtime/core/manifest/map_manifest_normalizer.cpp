@@ -278,9 +278,36 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
     };
     normalize_bool("is_boss", false);
     normalize_bool("inherits_map_assets", false);
+    normalize_bool("inherit_map_floor_color", true);
     if (entry.erase("is_spawn") > 0) {
         changed = true;
     }
+
+    auto normalize_rgb_color_array = [&](const char* key, int fallback_r, int fallback_g, int fallback_b) {
+        std::array<int, 3> channels{
+            fallback_r,
+            fallback_g,
+            fallback_b};
+        bool valid = false;
+        auto it = entry.find(key);
+        if (it != entry.end() && it->is_array() && (it->size() == 3 || it->size() == 4)) {
+            valid = true;
+            for (std::size_t i = 0; i < 3; ++i) {
+                int value = channels[i];
+                if (!json_to_int((*it)[i], value)) {
+                    valid = false;
+                    break;
+                }
+                channels[i] = std::clamp(value, 0, 255);
+            }
+        }
+        const nlohmann::json normalized = nlohmann::json::array({channels[0], channels[1], channels[2]});
+        if (!valid || !entry.contains(key) || entry[key] != normalized) {
+            entry[key] = normalized;
+            changed = true;
+        }
+    };
+    normalize_rgb_color_array("room_floor_color", 0, 0, 0);
 
     int edge_smoothness = 2;
     if (entry.contains("edge_smoothness")) {
@@ -376,6 +403,8 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["edge_smoothness"] = 2;
     entry["is_boss"] = false;
     entry["inherits_map_assets"] = false;
+    entry["inherit_map_floor_color"] = true;
+    entry["room_floor_color"] = nlohmann::json::array({0, 0, 0});
     entry["spawn_groups"] = nlohmann::json::array();
     entry["trail_connection_sector"] = nlohmann::json::object({
         {"direction_deg", kDefaultTrailSectorDirectionDeg},
@@ -885,6 +914,9 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"player_hard_leash_px", 360.0}
     });
     map_info["map_grid_settings"] = nlohmann::json::object({{"grid_resolution", 8}});
+    map_info["dev_map_settings"] = nlohmann::json::object({
+        {"default_floor_color", nlohmann::json::array({0, 0, 0})},
+    });
     map_info["audio"] = nlohmann::json::object({
         {"music", nlohmann::json::object({
             {"content_root", (std::filesystem::path("content") / map_name / "music").generic_string()},
@@ -941,6 +973,36 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     if (ensure_layer_zero_defaults(map_manifest, map_id)) {
         changed = true;
     }
+    auto normalize_map_default_floor_color = [&]() {
+        if (!map_manifest.contains("dev_map_settings") || !map_manifest["dev_map_settings"].is_object()) {
+            map_manifest["dev_map_settings"] = nlohmann::json::object();
+            changed = true;
+        }
+        nlohmann::json& dev = map_manifest["dev_map_settings"];
+        auto color_it = dev.find("default_floor_color");
+        if (color_it == dev.end()) {
+            color_it = dev.find("map_color");
+        }
+        std::array<int, 3> channels{0, 0, 0};
+        bool valid = false;
+        if (color_it != dev.end() && color_it->is_array() && (color_it->size() == 3 || color_it->size() == 4)) {
+            valid = true;
+            for (std::size_t i = 0; i < 3; ++i) {
+                int value = channels[i];
+                if (!json_to_int((*color_it)[i], value)) {
+                    valid = false;
+                    break;
+                }
+                channels[i] = std::clamp(value, 0, 255);
+            }
+        }
+        nlohmann::json normalized = nlohmann::json::array({channels[0], channels[1], channels[2]});
+        if (!valid || !dev.contains("default_floor_color") || dev["default_floor_color"] != normalized) {
+            dev["default_floor_color"] = normalized;
+            changed = true;
+        }
+    };
+    normalize_map_default_floor_color();
     if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
         changed = true;
     }

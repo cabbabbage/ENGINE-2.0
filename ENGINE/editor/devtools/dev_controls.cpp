@@ -38,6 +38,7 @@
 #include "devtools/room_editor.hpp"
 #include "devtools/map_mode_ui.hpp"
 #include "devtools/frame_editor_session.hpp"
+#include "devtools/dev_color_picker.hpp"
 #include "DockManager.hpp"
 #include "devtools/dev_footer_bar.hpp"
 #include "devtools/camera_ui.hpp"
@@ -199,7 +200,8 @@ constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
 constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
 constexpr const char* kDevMapSettingsKey = "dev_map_settings";
-constexpr const char* kMapColorKey = "map_color";
+constexpr const char* kMapColorKey = "default_floor_color";
+constexpr const char* kLegacyMapColorKey = "map_color";
 
 void persist_dev_bool(const char* key, bool value) {
     devmode::ui_settings::save_bool(key, value);
@@ -1549,24 +1551,12 @@ void DevControls::ensure_misc_options_widgets() {
         });
     }
 
-    static constexpr std::array<const char*, 4> kMapColorLabels{
-        "Map Color R",
-        "Map Color G",
-        "Map Color B",
-        "Map Color A",
-    };
-
-    for (std::size_t i = 0; i < misc_map_color_steppers_.size(); ++i) {
-        if (!misc_map_color_steppers_[i]) {
-            misc_map_color_steppers_[i] =
-                std::make_unique<DMNumericStepper>(kMapColorLabels[i], 0, 255, 0);
-            misc_map_color_steppers_[i]->set_on_change([this](int) {
-                if (misc_options_panel_suppress_callbacks_) {
-                    return;
-                }
-                apply_misc_map_color_change_from_ui();
-            });
-        }
+    if (!misc_map_color_button_) {
+        misc_map_color_button_ = std::make_unique<DMButton>("Pick Floor Color", &DMStyles::Button(), 0, DMButton::height());
+    }
+    if (!color_picker_) {
+        color_picker_ = std::make_unique<DevColorPicker>();
+        color_picker_->set_screen_size(screen_w_, screen_h_);
     }
 }
 
@@ -1607,12 +1597,16 @@ SDL_Color DevControls::read_map_color_or_default() const {
         return color;
     }
     auto color_it = dev_it->find(kMapColorKey);
-    if (color_it == dev_it->end() || !color_it->is_array() || color_it->size() != 4) {
+    if (color_it == dev_it->end()) {
+        color_it = dev_it->find(kLegacyMapColorKey);
+    }
+    if (color_it == dev_it->end() || !color_it->is_array() || (color_it->size() != 3 && color_it->size() != 4)) {
         return color;
     }
 
     std::array<int, 4> channels{0, 0, 0, 255};
-    for (std::size_t i = 0; i < channels.size(); ++i) {
+    const std::size_t count = std::min<std::size_t>(4, color_it->size());
+    for (std::size_t i = 0; i < count; ++i) {
         const nlohmann::json& value = (*color_it)[i];
         if (!value.is_number()) {
             return color;
@@ -1638,30 +1632,13 @@ void DevControls::write_map_color(SDL_Color color) {
         dev_settings = nlohmann::json::object();
     }
     const SDL_Color clamped = clamp_rgba(color);
+    const int alpha = 255;
     dev_settings[kMapColorKey] = nlohmann::json::array({
         static_cast<int>(clamped.r),
         static_cast<int>(clamped.g),
         static_cast<int>(clamped.b),
-        static_cast<int>(clamped.a),
+        alpha,
     });
-}
-
-void DevControls::apply_misc_map_color_change_from_ui() {
-    ensure_misc_options_widgets();
-    std::array<int, 4> channels{
-        misc_map_color_steppers_[0] ? misc_map_color_steppers_[0]->value() : 0,
-        misc_map_color_steppers_[1] ? misc_map_color_steppers_[1]->value() : 0,
-        misc_map_color_steppers_[2] ? misc_map_color_steppers_[2]->value() : 0,
-        misc_map_color_steppers_[3] ? misc_map_color_steppers_[3]->value() : 255,
-    };
-    misc_map_color_ = SDL_Color{
-        clamp_u8_channel(channels[0]),
-        clamp_u8_channel(channels[1]),
-        clamp_u8_channel(channels[2]),
-        clamp_u8_channel(channels[3]),
-    };
-    write_map_color(misc_map_color_);
-    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
 }
 
 void DevControls::sync_misc_options_from_map_info() {
@@ -1669,19 +1646,11 @@ void DevControls::sync_misc_options_from_map_info() {
     if (!map_info_json_) {
         grid_resolution_r_ = 8;
         misc_map_color_ = SDL_Color{0, 0, 0, 255};
+        misc_map_color_saved_ = misc_map_color_;
+        misc_map_color_dirty_ = false;
         misc_options_panel_suppress_callbacks_ = true;
         if (misc_tile_size_stepper_) {
             misc_tile_size_stepper_->set_value(grid_resolution_r_);
-        }
-        for (std::size_t i = 0; i < misc_map_color_steppers_.size(); ++i) {
-            if (!misc_map_color_steppers_[i]) {
-                continue;
-            }
-            const int value = (i == 0) ? misc_map_color_.r
-                : (i == 1) ? misc_map_color_.g
-                : (i == 2) ? misc_map_color_.b
-                           : misc_map_color_.a;
-            misc_map_color_steppers_[i]->set_value(value);
         }
         misc_options_panel_suppress_callbacks_ = false;
         return;
@@ -1699,21 +1668,12 @@ void DevControls::sync_misc_options_from_map_info() {
     }
 
     misc_map_color_ = read_map_color_or_default();
-    write_map_color(misc_map_color_);
+    misc_map_color_saved_ = misc_map_color_;
+    misc_map_color_dirty_ = false;
 
     misc_options_panel_suppress_callbacks_ = true;
     if (misc_tile_size_stepper_) {
         misc_tile_size_stepper_->set_value(tile_size);
-    }
-    for (std::size_t i = 0; i < misc_map_color_steppers_.size(); ++i) {
-        if (!misc_map_color_steppers_[i]) {
-            continue;
-        }
-        const int value = (i == 0) ? misc_map_color_.r
-            : (i == 1) ? misc_map_color_.g
-            : (i == 2) ? misc_map_color_.b
-                       : misc_map_color_.a;
-        misc_map_color_steppers_[i]->set_value(value);
     }
     misc_options_panel_suppress_callbacks_ = false;
 }
@@ -1731,9 +1691,9 @@ void DevControls::layout_misc_options_panel() {
     const int content_w = std::max(0, panel_w - padding * 2);
     const int label_h = DMStyles::Label().font_size;
     const int tile_h = misc_tile_size_stepper_ ? misc_tile_size_stepper_->preferred_height(content_w) : DMNumericStepper::height();
-    const int color_h = misc_map_color_steppers_[0] ? misc_map_color_steppers_[0]->preferred_height(content_w) : DMNumericStepper::height();
+    const int color_h = DMButton::height();
     const int preview_h = 26;
-    const int panel_h = padding + label_h + gap + tile_h + gap + (color_h * 4) + (gap * 3) + gap + preview_h + padding;
+    const int panel_h = padding + label_h + gap + tile_h + gap + label_h + gap + color_h + gap + preview_h + padding;
 
     int footer_top = screen_h_;
     if (map_mode_ui_) {
@@ -1754,12 +1714,9 @@ void DevControls::layout_misc_options_panel() {
         misc_tile_size_stepper_->set_rect(SDL_Rect{x + padding, cursor_y, content_w, tile_h});
         cursor_y += tile_h + gap;
     }
-    for (auto& stepper : misc_map_color_steppers_) {
-        if (!stepper) {
-            continue;
-        }
-        stepper->set_rect(SDL_Rect{x + padding, cursor_y, content_w, color_h});
-        cursor_y += color_h + gap;
+    cursor_y += label_h + gap;
+    if (misc_map_color_button_) {
+        misc_map_color_button_->set_rect(SDL_Rect{x + padding, cursor_y, content_w, color_h});
     }
 }
 
@@ -1773,10 +1730,24 @@ bool DevControls::handle_misc_options_panel_event(const SDL_Event& event) {
     if (misc_tile_size_stepper_ && misc_tile_size_stepper_->handle_event(event)) {
         used = true;
     }
-    for (auto& stepper : misc_map_color_steppers_) {
-        if (stepper && stepper->handle_event(event)) {
-            used = true;
+    if (misc_map_color_button_ && misc_map_color_button_->handle_event(event)) {
+        used = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && color_picker_) {
+            color_picker_->set_screen_size(screen_w_, screen_h_);
+            color_picker_->open(
+                misc_map_color_,
+                [this](SDL_Color chosen) {
+                    chosen.a = 255;
+                    misc_map_color_ = chosen;
+                    misc_map_color_dirty_ =
+                        (misc_map_color_.r != misc_map_color_saved_.r) ||
+                        (misc_map_color_.g != misc_map_color_saved_.g) ||
+                        (misc_map_color_.b != misc_map_color_saved_.b);
+                });
         }
+    }
+    if (color_picker_ && color_picker_->is_open()) {
+        used = color_picker_->handle_event(event) || used;
     }
 
     if (!used && is_pointer_event(event)) {
@@ -1817,10 +1788,13 @@ void DevControls::render_misc_options_panel(SDL_Renderer* renderer) {
     if (misc_tile_size_stepper_) {
         misc_tile_size_stepper_->render(renderer);
     }
-    for (const auto& stepper : misc_map_color_steppers_) {
-        if (stepper) {
-            stepper->render(renderer);
-        }
+    draw_simple_label(renderer,
+                      "Default Floor Color",
+                      misc_options_panel_rect_.x + DMSpacing::panel_padding(),
+                      (misc_tile_size_stepper_ ? misc_tile_size_stepper_->rect().y + misc_tile_size_stepper_->rect().h + DMSpacing::item_gap()
+                                               : misc_options_panel_rect_.y + 64));
+    if (misc_map_color_button_) {
+        misc_map_color_button_->render(renderer);
     }
 
     const int preview_w = std::max(0, misc_options_panel_rect_.w - DMSpacing::panel_padding() * 2);
@@ -1835,6 +1809,10 @@ void DevControls::render_misc_options_panel(SDL_Renderer* renderer) {
     sdl_render::FillRect(renderer, &preview_rect);
     SDL_SetRenderDrawColor(renderer, panel_border.r, panel_border.g, panel_border.b, panel_border.a);
     sdl_render::Rect(renderer, &preview_rect);
+
+    if (color_picker_ && color_picker_->is_open()) {
+        color_picker_->render(renderer);
+    }
 }
 
 void DevControls::open_misc_options_panel() {
@@ -1851,6 +1829,15 @@ void DevControls::open_misc_options_panel() {
 void DevControls::close_misc_options_panel() {
     if (!misc_options_panel_open_) {
         return;
+    }
+    if (misc_map_color_dirty_) {
+        write_map_color(misc_map_color_);
+        mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        misc_map_color_saved_ = misc_map_color_;
+        misc_map_color_dirty_ = false;
+    }
+    if (color_picker_ && color_picker_->is_open()) {
+        color_picker_->close(false);
     }
     misc_options_panel_open_ = false;
     misc_options_panel_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -1893,6 +1880,7 @@ void DevControls::set_screen_dimensions(int width, int height) {
     if (room_editor_) room_editor_->set_screen_dimensions(width, height);
     if (map_editor_) map_editor_->set_screen_dimensions(width, height);
     if (map_mode_ui_) map_mode_ui_->set_screen_dimensions(width, height);
+    if (color_picker_) color_picker_->set_screen_size(width, height);
 
     SDL_Rect bounds{0, 0, screen_w_, screen_h_};
     if (camera_panel_) camera_panel_->set_work_area(bounds);

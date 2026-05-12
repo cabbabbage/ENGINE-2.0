@@ -105,6 +105,8 @@ private:
                             std::uint32_t target_height,
                             std::string& out_error);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
+    SDL_Color resolve_runtime_floor_clear_color() const;
+    SDL_Color update_smoothed_floor_clear_color(SDL_Color target);
 
     static SDL_Texture* create_render_target(SDL_Renderer* renderer,
                                              int width,
@@ -139,4 +141,8 @@ private:
     SDL_Texture* floor_marker_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
+    SDL_Color smoothed_floor_clear_color_{0, 0, 0, 255};
+    bool smoothed_floor_color_valid_ = false;
+    SDL_Point last_floor_color_player_xz_{0, 0};
+    bool last_floor_color_player_xz_valid_ = false;
 };

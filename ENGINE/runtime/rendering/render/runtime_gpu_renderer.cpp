@@ -166,6 +166,10 @@ void emit_floor_box_render_pass_mismatch_diagnostic(const Asset* asset,
                       asset_name + "': " + hint + ".");
 }
 std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
+    // Invariant: stable_sort_id is globally monotonic within each packet bucket and
+    // must be derived only from per-bucket encounter order. Sprite floor packets are
+    // offset into the upper half of the integer range so map-floor tiles and
+    // floor-intended sprites cannot collide on the stable tie-breaker.
     constexpr std::uintptr_t kSpritePacketSortOffset =
         std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
@@ -179,6 +183,10 @@ bool draw_packets_share_sort_key(float lhs, float rhs) {
 
 bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
                                 const GpuSpriteDrawPacket& rhs) {
+    // Invariant: ordering keys are compared in this exact sequence everywhere:
+    //   1) sort_key (with epsilon grouping), 2) depth_metric, 3) stable_sort_id.
+    // Any packet assembly path (primary/fallback) must produce identical keys for
+    // identical visible assets to preserve deterministic ordering semantics.
     if (!draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
         return lhs.sort_key < rhs.sort_key;
     }
@@ -187,6 +195,68 @@ bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
     }
     return lhs.stable_sort_id < rhs.stable_sort_id;
 }
+
+#ifndef NDEBUG
+struct DebugPacketOrderingKey {
+    std::string texture_id;
+    int frame_index = -1;
+    int variant_index = -1;
+    bool is_floor_packet = false;
+    float sort_key = 0.0f;
+    float depth_metric = 0.0f;
+    std::uintptr_t stable_sort_id = 0u;
+};
+
+std::vector<DebugPacketOrderingKey> collect_debug_ordering_keys(const std::vector<GpuSpriteDrawPacket>& packets) {
+    std::vector<DebugPacketOrderingKey> keys{};
+    keys.reserve(packets.size());
+    for (const GpuSpriteDrawPacket& packet : packets) {
+        DebugPacketOrderingKey key{};
+        key.texture_id = packet.source_texture_id;
+        key.frame_index = packet.source_frame_index;
+        key.variant_index = packet.source_variant_index;
+        key.is_floor_packet = packet.is_floor_packet;
+        key.sort_key = packet.sort_key;
+        key.depth_metric = packet.depth_metric;
+        key.stable_sort_id = packet.stable_sort_id;
+        keys.push_back(std::move(key));
+    }
+    return keys;
+}
+
+bool debug_ordering_keys_match(const std::vector<DebugPacketOrderingKey>& lhs,
+                               const std::vector<DebugPacketOrderingKey>& rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < lhs.size(); ++i) {
+        const DebugPacketOrderingKey& a = lhs[i];
+        const DebugPacketOrderingKey& b = rhs[i];
+        if (a.texture_id != b.texture_id ||
+            a.frame_index != b.frame_index ||
+            a.variant_index != b.variant_index ||
+            a.is_floor_packet != b.is_floor_packet ||
+            !draw_packets_share_sort_key(a.sort_key, b.sort_key) ||
+            !draw_packets_share_sort_key(a.depth_metric, b.depth_metric) ||
+            a.stable_sort_id != b.stable_sort_id) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool debug_same_asset_sequence(const std::vector<Asset*>& lhs, const std::vector<Asset*>& rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < lhs.size(); ++i) {
+        if (lhs[i] != rhs[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
 
 bool debug_draw_sort_enabled() {
     const char* value = std::getenv("ENGINE_DEBUG_DRAW_SORT");
@@ -664,20 +734,15 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
         const SpriteRenderPassIntent render_pass_intent = resolve_sprite_render_pass_intent(asset);
         emit_floor_box_render_pass_mismatch_diagnostic(asset, render_pass_intent, floor_boxes_enabled);
 
-        if (render_pass_intent == SpriteRenderPassIntent::Floor) {
-            packet.stable_sort_id = floor_sort_id(true, floor_sequence++);
-            packet.is_floor_packet = true;
-            packet.depth_layer = 0;
-            runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
-                true, packet, out_floor_draws, out_layer_draws);
-            continue;
-        }
-
-        packet.stable_sort_id = floor_sort_id(false, layer_sequence++);
-        packet.is_floor_packet = false;
-        packet.depth_layer = runtime_gpu_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
+        const bool floor_tagged = (render_pass_intent == SpriteRenderPassIntent::Floor);
+        const std::uintptr_t sequence = floor_tagged ? floor_sequence++ : layer_sequence++;
+        packet.stable_sort_id = floor_sort_id(floor_tagged, sequence);
+        packet.is_floor_packet = floor_tagged;
+        packet.depth_layer = floor_tagged
+            ? 0
+            : runtime_gpu_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
         runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
-            false, packet, out_floor_draws, out_layer_draws);
+            floor_tagged, packet, out_floor_draws, out_layer_draws);
     }
 
     std::sort(out_floor_draws.begin(), out_floor_draws.end(), draw_packet_sort_predicate);
@@ -812,6 +877,23 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
             out_error = fallback_error;
             return false;
         }
+#ifndef NDEBUG
+        if (debug_same_asset_sequence(*visible_assets, all_assets)) {
+            const std::vector<DebugPacketOrderingKey> primary_floor_keys =
+                collect_debug_ordering_keys(out_data.floor_draws);
+            const std::vector<DebugPacketOrderingKey> fallback_floor_keys =
+                collect_debug_ordering_keys(fallback_floor_draws);
+            const std::vector<DebugPacketOrderingKey> primary_layer_keys =
+                collect_debug_ordering_keys(out_data.layer_draws);
+            const std::vector<DebugPacketOrderingKey> fallback_layer_keys =
+                collect_debug_ordering_keys(fallback_layer_draws);
+            const bool floor_keys_match = debug_ordering_keys_match(primary_floor_keys, fallback_floor_keys);
+            const bool layer_keys_match = debug_ordering_keys_match(primary_layer_keys, fallback_layer_keys);
+            if (!floor_keys_match || !layer_keys_match) {
+                vibble::log::warn("[RuntimeGpuRenderer][debug] Primary/fallback packet ordering key mismatch for identical visible asset sets.");
+            }
+        }
+#endif
         if (!fallback_layer_draws.empty()) {
             out_data.floor_draws = std::move(fallback_floor_draws);
             out_data.layer_draws = std::move(fallback_layer_draws);

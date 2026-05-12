@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdlib>
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -19,6 +18,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/layer_depth_bins.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/opengl_runtime_renderer.hpp"
@@ -105,9 +105,21 @@ std::string join_ints(const std::vector<int>& values) {
     return oss.str();
 }
 
-bool debug_draw_sort_enabled() {
-    const char* value = std::getenv("ENGINE_DEBUG_DRAW_SORT");
-    return value && value[0] != '\0' && value[0] != '0';
+double compute_asset_camera_depth_key(const WarpedScreenGrid& camera, const Asset& asset) {
+    const auto projection = camera.projection_params();
+    const double focus_world_z = camera.current_focus_plane_world_z();
+    const double effective_world_z =
+        static_cast<double>(asset.world_z()) +
+        static_cast<double>(asset.world_z_offset()) +
+        static_cast<double>(asset.render_anchor_offset_z());
+    const double bias = asset.render_depth_bias();
+    const double depth_from_anchor = render_depth::depth_from_anchor(
+        focus_world_z,
+        effective_world_z,
+        bias);
+    const double depth_axis_sign = static_cast<double>(render_depth::normalize_depth_axis_sign(
+        static_cast<float>(projection.forward_z)));
+    return depth_from_anchor * depth_axis_sign;
 }
 
 float to_clip_x(float screen_x, float target_width) {
@@ -219,25 +231,6 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
 }
 
-void log_draw_sort_sample(const std::string& context, const std::vector<GpuSpriteDrawPacket>& packets) {
-    if (!debug_draw_sort_enabled() || packets.empty()) {
-        return;
-    }
-    const std::size_t sample_count = std::min<std::size_t>(packets.size(), 5u);
-    std::ostringstream stream;
-    stream << "[OpenGLRuntimeRenderer] sort sample context='" << context << "' ";
-    for (std::size_t i = 0; i < sample_count; ++i) {
-        const GpuSpriteDrawPacket& packet = packets[i];
-        if (i != 0u) {
-            stream << " | ";
-        }
-        stream << "(" << packet.sort_key << ", "
-               << packet.depth_metric << ", "
-               << static_cast<std::uint64_t>(packet.stable_sort_id) << ")";
-    }
-    vibble::log::debug(stream.str());
-}
-
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
                             std::uint32_t target_width,
                             std::uint32_t target_height,
@@ -262,18 +255,25 @@ void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
 
 } // namespace
 
-bool opengl_runtime_renderer_detail::draw_packets_share_sort_key(float lhs, float rhs) {
-    constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
-    return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
+bool opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor(const GpuSpriteDrawPacket& lhs,
+                                                                      const GpuSpriteDrawPacket& rhs) {
+    if (lhs.projected_foot_y_key != rhs.projected_foot_y_key) {
+        return lhs.projected_foot_y_key < rhs.projected_foot_y_key;
+    }
+    if (lhs.camera_depth_key != rhs.camera_depth_key) {
+        return lhs.camera_depth_key < rhs.camera_depth_key;
+    }
+    return lhs.stable_sort_id < rhs.stable_sort_id;
 }
 
-bool opengl_runtime_renderer_detail::draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
-                                                             const GpuSpriteDrawPacket& rhs) {
-    if (!opengl_runtime_renderer_detail::draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
-        return lhs.sort_key < rhs.sort_key;
+bool opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy(const GpuSpriteDrawPacket& lhs,
+                                                                   const GpuSpriteDrawPacket& rhs) {
+    // Strict far-to-near ordering in XY pass.
+    if (lhs.camera_depth_key != rhs.camera_depth_key) {
+        return lhs.camera_depth_key > rhs.camera_depth_key;
     }
-    if (lhs.depth_metric != rhs.depth_metric) {
-        return lhs.depth_metric < rhs.depth_metric;
+    if (lhs.projected_foot_y_key != rhs.projected_foot_y_key) {
+        return lhs.projected_foot_y_key < rhs.projected_foot_y_key;
     }
     return lhs.stable_sort_id < rhs.stable_sort_id;
 }
@@ -291,12 +291,7 @@ bool info_is_xy_sprite_pass_eligible(bool tillable) {
 
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
     const auto& settings = camera.get_settings();
-    const double focus_world_z = camera.current_focus_plane_world_z();
-    const double asset_world_z =
-        static_cast<double>(asset.world_z()) +
-        static_cast<double>(asset.world_z_offset()) +
-        static_cast<double>(asset.render_anchor_offset_z());
-    const double signed_distance = asset_world_z - focus_world_z;
+    const double signed_distance = compute_asset_camera_depth_key(camera, asset);
     const double distance = std::fabs(signed_distance);
     if (!std::isfinite(distance) || distance <= 1.0e-4) {
         return 0;
@@ -368,8 +363,8 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
             packet.source_frame_index = -1;
             packet.source_variant_index = -1;
             packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
-            packet.sort_key = std::max(screen_br.y, screen_bl.y);
-            packet.depth_metric = 0.5f * (top_z + bottom_z);
+            packet.projected_foot_y_key = std::max(screen_br.y, screen_bl.y);
+            packet.camera_depth_key = 0.5f * (top_z + bottom_z);
             packet.stable_sort_id = floor_sort_id(false, tile_sequence++);
             packet.is_floor_packet = true;
             packet.depth_layer = 0;
@@ -388,8 +383,7 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
         }
     }
 
-    std::sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
-    log_draw_sort_sample("floor-tile", out_packets);
+    std::sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
     return true;
 }
 
@@ -446,8 +440,8 @@ bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
             static_cast<float>(marker.color.b) / 255.0f,
             static_cast<float>(marker.color.a) / 255.0f,
         };
-        packet.sort_key = std::max(screen_br.y, screen_bl.y);
-        packet.depth_metric = marker.floor_world_xz.y;
+        packet.projected_foot_y_key = std::max(screen_br.y, screen_bl.y);
+        packet.camera_depth_key = marker.floor_world_xz.y;
         packet.stable_sort_id = floor_sort_id(true, marker_sequence++);
         packet.is_floor_packet = true;
         packet.depth_layer = 0;
@@ -465,8 +459,7 @@ bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
         out_packets.push_back(packet);
     }
 
-    std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
-    log_draw_sort_sample("floor-marker", out_packets);
+    std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
     return true;
 }
 
@@ -505,6 +498,7 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         const Asset::PerspectiveSample perspective = asset->runtime_perspective_sample();
         const float perspective_scale = perspective.scale;
         const float world_z = static_cast<float>(asset->world_z()) + object.world_z_offset;
+        const double camera_depth_key = compute_asset_camera_depth_key(camera, *asset);
 
         render_projection::ProjectedSpriteFrame projected{};
         if (!render_projection::build_render_object_projected_frame(camera,
@@ -548,8 +542,8 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
             static_cast<float>(object.color_mod.b) / 255.0f,
             static_cast<float>(object.color_mod.a) / 255.0f,
         };
-        packet.sort_key = std::max(projected.screen_bl.y, projected.screen_br.y);
-        packet.depth_metric = world_z;
+        packet.projected_foot_y_key = std::max(projected.screen_bl.y, projected.screen_br.y);
+        packet.camera_depth_key = static_cast<float>(camera_depth_key);
         packet.stable_sort_id = xy_sequence++;
         packet.is_floor_packet = false;
         packet.depth_layer = opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
@@ -557,8 +551,7 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         out_xy_sprite_draws.push_back(packet);
     }
 
-    std::stable_sort(out_xy_sprite_draws.begin(), out_xy_sprite_draws.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
-    log_draw_sort_sample("xy-sprite", out_xy_sprite_draws);
+    std::stable_sort(out_xy_sprite_draws.begin(), out_xy_sprite_draws.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
     return true;
 }
 
@@ -913,7 +906,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                                     std::make_move_iterator(floor_marker_draws.end()));
         std::stable_sort(out_data.floor_draws.begin(),
                          out_data.floor_draws.end(),
-                         opengl_runtime_renderer_detail::draw_packet_sort_predicate);
+                         opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
     }
 
     if (!opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
@@ -979,8 +972,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         GpuDepthLayerDrawPackets layer{};
         layer.depth_layer = layer_id;
         layer.packets = std::move(depth_xy_sprite_packets[layer_id]);
-        std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
-        log_draw_sort_sample("depth-layer:" + std::to_string(layer_id), layer.packets);
+        std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
         const float blur_distance = max_layer_distance > 0
             ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)
             : 0.0f;
@@ -1021,21 +1013,10 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         render_diagnostics::set_blur_pass_count(0);
     }
 
-    if (out_data.floor_draw_count == 0) {
-        vibble::log::warn("[OpenGLRuntimeRenderer] No floor pass packets were built; floor pass will render background clear only.");
-    }
     out_data.suspected_incomplete_scene =
         out_data.xy_sprite_draw_count == 0 &&
         out_data.active_asset_count > 0 &&
         (out_data.selected_asset_count > 0 || out_data.visible_traversal_count > 0);
-    if (out_data.suspected_incomplete_scene) {
-        vibble::log::warn("[OpenGLRuntimeRenderer] Scene has floor pass packets but no XY sprite packets. "
-                          "active_count=" + std::to_string(active_assets.size()) +
-                          " filtered_count=" + std::to_string(filtered_active_assets.size()) +
-                          " selected_count=" + std::to_string(render_assets.size()) +
-                          " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false") +
-                          " traversal_count=" + std::to_string(traversal_count));
-    }
 
     return true;
 }
@@ -1210,35 +1191,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         frame_to_render = &held_frame_data;
 
         ++consecutive_held_incomplete_scene_frames_;
-        if (consecutive_held_incomplete_scene_frames_ == 1 ||
-            (consecutive_held_incomplete_scene_frames_ % 60u) == 0u) {
-            vibble::log::warn(
-                std::string("[OpenGLRuntimeRenderer] Holding last complete OpenGL scene instead of presenting ") +
-                (hold_empty_scene_frame
-                     ? "an empty scene frame. "
-                     : (hold_zero_sprite_scene_frame ? "a zero-sprite scene frame. "
-                                                     : "an incomplete scene frame. ")) +
-                "held_frames=" + std::to_string(consecutive_held_incomplete_scene_frames_) +
-                " current_floor_packets=" + std::to_string(frame_data.floor_draw_count) +
-                " current_xy_sprite_packets=" + std::to_string(frame_data.xy_sprite_draw_count) +
-                " cached_floor_packets=" + std::to_string(held_frame_data.floor_draw_count) +
-                " cached_xy_sprite_packets=" + std::to_string(held_frame_data.xy_sprite_draw_count) +
-                " active_count=" + std::to_string(frame_data.active_asset_count) +
-                " filtered_count=" + std::to_string(frame_data.filtered_active_asset_count) +
-                " selected_count=" + std::to_string(frame_data.selected_asset_count) +
-                " traversal_count=" + std::to_string(frame_data.visible_traversal_count) +
-                " focus_filter_active=" + std::string(frame_data.focus_filter_active ? "true" : "false"));
-        }
     } else {
         consecutive_held_incomplete_scene_frames_ = 0;
-        if (frame_data.suspected_incomplete_scene) {
-            vibble::log::warn("[OpenGLRuntimeRenderer] Rendering current frame despite incomplete-scene heuristic. "
-                              "floor_packets=" + std::to_string(frame_data.floor_draw_count) +
-                              " xy_sprite_packets=" + std::to_string(frame_data.xy_sprite_draw_count) +
-                              " active_assets=" + std::to_string(frame_data.active_asset_count) +
-                              " selected_assets=" + std::to_string(frame_data.selected_asset_count) +
-                              " traversal_count=" + std::to_string(frame_data.visible_traversal_count));
-        }
     }
 
     render_diagnostics::set_renderer_runtime_info("opengl", backend_name(), present_mode());
@@ -1479,3 +1433,4 @@ SDL_Color OpenGLRuntimeRenderer::update_smoothed_floor_clear_color(SDL_Color tar
     smoothed_floor_clear_color_.a = 255;
     return smoothed_floor_clear_color_;
 }
+

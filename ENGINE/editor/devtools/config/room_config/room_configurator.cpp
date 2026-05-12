@@ -11,6 +11,7 @@
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 #include "utils/display_color.hpp"
+#include "utils/ranged_color.hpp"
 #include "dev_color_picker.hpp"
 #include "widgets.hpp"
 #include "font_cache.hpp"

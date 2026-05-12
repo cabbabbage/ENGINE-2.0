@@ -24,6 +24,11 @@ struct GpuSpriteVertex {
 };
 
 struct GpuSpriteDrawPacket {
+    // Ordering contract:
+    // 1) Pass routing: floor packets render in floor_draws; non-floor packets render in layer_draws.
+    // 2) Depth grouping: layer_draws are partitioned by depth_layer and consumed highest->lowest layer id.
+    // 3) In-layer order: sort by (sort_key with epsilon grouping, depth_metric, stable_sort_id).
+    //    stable_sort_id is the deterministic tie-breaker across equal visual keys.
     SDL_Texture* source_texture = nullptr;
     SDL_GPUTexture* source_gpu_texture = nullptr;
     std::string source_asset_name{};

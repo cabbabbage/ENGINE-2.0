@@ -1,12 +1,17 @@
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/animation.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "core/AssetsManager.hpp"
+#include "core/runtime_world_context.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_payload_utils.hpp"
@@ -14,6 +19,7 @@
 #include "devtools/room_editor.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
+#include "gameplay/world/world_grid.hpp"
 #include "room_editor_payload_contract_test_helper.hpp"
 
 namespace {
@@ -47,6 +53,67 @@ AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_na
     return mapping;
 }
 
+std::unique_ptr<Asset> make_boundary_proxy_test_asset(const std::string& asset_name,
+                                                      const std::string& spawn_id,
+                                                      int world_x,
+                                                      int world_z) {
+    auto info = std::make_shared<AssetInfo>(asset_name);
+    info->type = "object";
+    info->original_canvas_width = 64;
+    info->original_canvas_height = 64;
+    Area spawn_area("boundary_proxy_test_area", 0);
+    return std::make_unique<Asset>(info,
+                                   spawn_area,
+                                   SDL_Point{world_x, world_z},
+                                   0,
+                                   spawn_id,
+                                   std::string{},
+                                   0);
+}
+
+struct BoundaryProxyFixture {
+    explicit BoundaryProxyFixture(const std::string& spawn_id)
+        : library(false),
+          world_context(std::make_shared<RuntimeWorldContext>()) {
+        nlohmann::json map_info = nlohmann::json::object({
+            {"map_boundary_data",
+             nlohmann::json::object({
+                 {"spawn_groups",
+                  nlohmann::json::array({
+                      nlohmann::json::object({
+                          {"spawn_id", spawn_id},
+                          {"display_name", "Boundary Spawn"}
+                      })
+                  })}
+             })}
+        });
+        boundary_asset = grid.create_asset_at_point(make_boundary_proxy_test_asset("boundary_proxy_asset",
+                                                                                    spawn_id,
+                                                                                    0,
+                                                                                    80));
+        REQUIRE(boundary_asset != nullptr);
+        boundary_asset->finalize_setup();
+        assets = std::make_unique<Assets>(library,
+                                          nullptr,
+                                          world_context,
+                                          1280,
+                                          720,
+                                          0,
+                                          0,
+                                          0,
+                                          nullptr,
+                                          "boundary_proxy_test",
+                                          map_info,
+                                          std::string{},
+                                          std::move(grid));
+    }
+
+    AssetLibrary library;
+    std::shared_ptr<RuntimeWorldContext> world_context;
+    world::WorldGrid grid;
+    Asset* boundary_asset = nullptr;
+    std::unique_ptr<Assets> assets;
+};
 void check_unchanged_key_bytes(const nlohmann::json& before,
                                const nlohmann::json& after,
                                const std::vector<std::string>& changed_keys) {
@@ -758,6 +825,18 @@ TEST_CASE("RoomEditor ownership classification keeps room and boundary domains i
           static_cast<int>(devmode::room_selection_filter::SpawnOwnership::MapBoundary));
     CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, "other_spawn") ==
           static_cast<int>(devmode::room_selection_filter::SpawnOwnership::Other));
+}
+
+TEST_CASE("RoomEditor boundary spawn groups are recognized even when assets are not typed boundary") {
+    constexpr const char* kBoundarySpawnId = "boundary_spawn";
+    BoundaryProxyFixture fixture(kBoundarySpawnId);
+    REQUIRE(fixture.boundary_asset != nullptr);
+
+    RoomEditor editor(fixture.assets.get(), 1280, 720);
+
+    CHECK(RoomEditorTestAccess::spawn_group_is_boundary(editor, kBoundarySpawnId));
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, kBoundarySpawnId) ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::MapBoundary));
 }
 
 TEST_CASE("RoomEditor spawn membership gating allows boundary ownership without room containment checks") {

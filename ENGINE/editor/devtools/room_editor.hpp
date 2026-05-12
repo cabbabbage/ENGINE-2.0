@@ -1435,6 +1435,7 @@ struct RoomEditorTestAccess {
     static int current_grid_resolution(const RoomEditor& editor);
     static void resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution);
     static void update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity);
+    static bool spawn_group_is_boundary(const RoomEditor& editor, const std::string& spawn_id);
     static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
     static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);
     static bool should_open_spawn_group_panel_for_click(RoomEditor& editor,
@@ -1488,6 +1489,15 @@ struct RoomEditorTestAccess {
                                              const std::vector<std::string>& room_spawn_ids,
                                              const std::vector<std::string>& map_boundary_spawn_ids);
     static int classify_spawn_group_ownership(const RoomEditor& editor, const std::string& spawn_id);
+    static std::optional<RoomEditor::DynamicBoundaryProxyHit> hit_test_dynamic_boundary_sprite(
+        RoomEditor& editor,
+        SDL_Point screen_point);
+    static std::optional<SDL_FRect> dynamic_boundary_proxy_rect(const RoomEditor& editor,
+                                                                const RoomEditor::DynamicBoundaryProxyKey& key);
+    static std::optional<SDL_FRect> dynamic_boundary_proxy_rect_for_asset(const RoomEditor& editor,
+                                                                          const Asset* asset);
+    static bool open_asset_info_for_dynamic_boundary(RoomEditor& editor,
+                                                      const RoomEditor::DynamicBoundaryProxyHit& hit);
     static bool spawn_membership_allows_room_selection(const RoomEditor& editor,
                                                        const std::string& spawn_id,
                                                        const std::string& owning_room_name);

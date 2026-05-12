@@ -2418,6 +2418,11 @@ bool RoomEditor::spawn_group_is_boundary(const std::string& spawn_id) const {
     if (spawn_id.empty() || !assets_) {
         return false;
     }
+
+    if (classify_spawn_group_ownership(spawn_id) == devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
+        return true;
+    }
+
     for (Asset* asset : assets_->all) {
         if (!asset || asset->dead) {
             continue;
@@ -25429,8 +25434,8 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     const double old_area_size = old_area_copy ? old_area_copy->get_size() : 0.0;
     const double new_area_size = old_area_size;
 
-    // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem.
-    // No need to spawn static boundary assets when room area shrinks.
+    // Boundary-domain assets stay bound to map boundary spawn data.
+    // The room-resize path should not respawn them as room-local assets.
     (void)old_area_copy;
     (void)new_area_size;
     (void)old_area_size;
@@ -25832,12 +25837,221 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
 }
 
 std::optional<RoomEditor::DynamicBoundaryProxyHit> RoomEditor::hit_test_dynamic_boundary_sprite(SDL_Point screen_point) const {
-    (void)screen_point;
-    return std::nullopt;
+    if (!assets_) {
+        return std::nullopt;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    auto build_proxy_key = [](const Asset* asset) {
+        DynamicBoundaryProxyKey key{};
+        if (!asset) {
+            return key;
+        }
+        key.spawn_id = asset->spawn_id;
+        key.asset_name = asset->info ? asset->info->name : std::string{};
+        key.boundary_type_index = -1;
+        key.candidate_index = -1;
+        key.world_x = asset->world_x();
+        key.world_z = asset->world_z();
+        return key;
+    };
+
+    auto compute_proxy_rect = [&](Asset* asset, SDL_FRect& out_rect, int& out_screen_y) -> bool {
+        if (!asset || asset->dead) {
+            return false;
+        }
+
+        SDL_Rect bounds{0, 0, 0, 0};
+        int screen_y = 0;
+        bool have_bounds = false;
+
+        auto cache_it = asset_bounds_cache_.find(asset);
+        if (cache_it != asset_bounds_cache_.end()) {
+            bounds = cache_it->second.bounds;
+            screen_y = cache_it->second.screen_y;
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            have_bounds = compute_asset_screen_bounds(cam, asset, bounds, screen_y);
+        }
+        if (!have_bounds) {
+            SDL_Point anchor_screen{0, 0};
+            if (!asset_anchor_screen_position(cam, asset, anchor_screen)) {
+                return false;
+            }
+            const int width = std::max(1, asset->width());
+            const int height = std::max(1, asset->height());
+            bounds = SDL_Rect{
+                anchor_screen.x - (width / 2),
+                anchor_screen.y - height,
+                width,
+                height
+            };
+            screen_y = anchor_screen.y;
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            return false;
+        }
+
+        out_rect = SDL_FRect{
+            static_cast<float>(bounds.x),
+            static_cast<float>(bounds.y),
+            static_cast<float>(bounds.w),
+            static_cast<float>(bounds.h)
+        };
+        out_screen_y = screen_y;
+        return true;
+    };
+
+    const std::vector<Asset*>* source_assets = &assets_->all;
+    if (source_assets->empty()) {
+        return std::nullopt;
+    }
+
+    DynamicBoundaryProxyHit best_hit{};
+    bool have_best = false;
+    int best_dist2 = std::numeric_limits<int>::max();
+    int best_screen_y = std::numeric_limits<int>::max();
+    int best_area = std::numeric_limits<int>::max();
+    int best_bottom = std::numeric_limits<int>::max();
+    int best_top = std::numeric_limits<int>::max();
+
+    for (Asset* asset : *source_assets) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+        if (classify_asset_ownership(asset) != devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
+            continue;
+        }
+
+        SDL_FRect rect{};
+        int screen_y = 0;
+        if (!compute_proxy_rect(asset, rect, screen_y)) {
+            continue;
+        }
+
+        const int left = static_cast<int>(std::floor(rect.x));
+        const int top = static_cast<int>(std::floor(rect.y));
+        const int right = static_cast<int>(std::ceil(rect.x + rect.w));
+        const int bottom = static_cast<int>(std::ceil(rect.y + rect.h));
+        if (right <= left || bottom <= top) {
+            continue;
+        }
+        if (screen_point.x < left || screen_point.x > right ||
+            screen_point.y < top || screen_point.y > bottom) {
+            continue;
+        }
+
+        const int closest_x = std::clamp(screen_point.x, left, right);
+        const int closest_y = std::clamp(screen_point.y, top, bottom);
+        const int dx = closest_x - screen_point.x;
+        const int dy = closest_y - screen_point.y;
+        const int dist2 = dx * dx + dy * dy;
+        const int area = (right - left) * (bottom - top);
+
+        const bool is_better =
+            !have_best ||
+            dist2 < best_dist2 ||
+            (dist2 == best_dist2 && bottom < best_bottom) ||
+            (dist2 == best_dist2 && bottom == best_bottom && top < best_top) ||
+            (dist2 == best_dist2 && bottom == best_bottom && top == best_top && screen_y < best_screen_y) ||
+            (dist2 == best_dist2 && bottom == best_bottom && top == best_top && screen_y == best_screen_y && area < best_area);
+        if (is_better) {
+            best_hit.key = build_proxy_key(asset);
+            best_hit.screen_rect = rect;
+            best_hit.world_z = asset->world_z();
+            have_best = true;
+            best_dist2 = dist2;
+            best_screen_y = screen_y;
+            best_area = area;
+            best_bottom = bottom;
+            best_top = top;
+        }
+    }
+
+    if (!have_best) {
+        return std::nullopt;
+    }
+
+    return best_hit;
 }
 
 std::optional<SDL_FRect> RoomEditor::dynamic_boundary_proxy_rect(const DynamicBoundaryProxyKey& key) const {
-    (void)key;
+    if (!assets_ || !key.valid()) {
+        return std::nullopt;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    auto matches_key = [&key](const Asset* asset) {
+        if (!asset || asset->dead) {
+            return false;
+        }
+        DynamicBoundaryProxyKey asset_key{};
+        asset_key.spawn_id = asset->spawn_id;
+        asset_key.asset_name = asset->info ? asset->info->name : std::string{};
+        asset_key.boundary_type_index = -1;
+        asset_key.candidate_index = -1;
+        asset_key.world_x = asset->world_x();
+        asset_key.world_z = asset->world_z();
+        return asset_key == key;
+    };
+    auto compute_proxy_rect = [&](Asset* asset, SDL_FRect& out_rect) -> bool {
+        if (!asset || asset->dead) {
+            return false;
+        }
+
+        SDL_Rect bounds{0, 0, 0, 0};
+        int screen_y = 0;
+        bool have_bounds = false;
+
+        auto cache_it = asset_bounds_cache_.find(asset);
+        if (cache_it != asset_bounds_cache_.end()) {
+            bounds = cache_it->second.bounds;
+            screen_y = cache_it->second.screen_y;
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            have_bounds = compute_asset_screen_bounds(cam, asset, bounds, screen_y);
+        }
+        if (!have_bounds) {
+            SDL_Point anchor_screen{0, 0};
+            if (!asset_anchor_screen_position(cam, asset, anchor_screen)) {
+                return false;
+            }
+            const int width = std::max(1, asset->width());
+            const int height = std::max(1, asset->height());
+            bounds = SDL_Rect{
+                anchor_screen.x - (width / 2),
+                anchor_screen.y - height,
+                width,
+                height
+            };
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            return false;
+        }
+
+        out_rect = SDL_FRect{
+            static_cast<float>(bounds.x),
+            static_cast<float>(bounds.y),
+            static_cast<float>(bounds.w),
+            static_cast<float>(bounds.h)
+        };
+        return true;
+    };
+
+    for (Asset* asset : assets_->all) {
+        if (!matches_key(asset)) {
+            continue;
+        }
+        SDL_FRect rect{};
+        if (compute_proxy_rect(asset, rect)) {
+            return rect;
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -25847,8 +26061,34 @@ void RoomEditor::clear_dynamic_boundary_proxy_selection() {
 }
 
 bool RoomEditor::open_asset_info_for_dynamic_boundary(const DynamicBoundaryProxyHit& hit) {
-    (void)hit;
-    return false;
+    if (!assets_ || !hit.key.valid()) {
+        return false;
+    }
+
+    Asset* target = nullptr;
+    for (Asset* asset : assets_->all) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+        DynamicBoundaryProxyKey asset_key{};
+        asset_key.spawn_id = asset->spawn_id;
+        asset_key.asset_name = asset->info->name;
+        asset_key.boundary_type_index = -1;
+        asset_key.candidate_index = -1;
+        asset_key.world_x = asset->world_x();
+        asset_key.world_z = asset->world_z();
+        if (asset_key == hit.key) {
+            target = asset;
+            break;
+        }
+    }
+
+    if (!target) {
+        return false;
+    }
+
+    open_asset_info_editor_for_asset(target, false);
+    return true;
 }
 
 void RoomEditor::render_dynamic_boundary_proxy_overlay(SDL_Renderer* renderer) const {
@@ -26320,6 +26560,10 @@ void RoomEditorTestAccess::update_grid_resolution_for_selection(RoomEditor& edit
     editor.update_grid_resolution_for_selection(reinterpret_cast<Asset*>(const_cast<void*>(primary_asset_identity)));
 }
 
+bool RoomEditorTestAccess::spawn_group_is_boundary(const RoomEditor& editor, const std::string& spawn_id) {
+    return editor.spawn_group_is_boundary(spawn_id);
+}
+
 std::uint32_t RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(const RoomEditor& editor) {
     return editor.test_snap_spawn_group_to_resolution_call_count_;
 }
@@ -26542,6 +26786,40 @@ void RoomEditorTestAccess::set_spawn_id_ownership_cache(
 
 int RoomEditorTestAccess::classify_spawn_group_ownership(const RoomEditor& editor, const std::string& spawn_id) {
     return static_cast<int>(editor.classify_spawn_group_ownership(spawn_id));
+}
+
+std::optional<RoomEditor::DynamicBoundaryProxyHit> RoomEditorTestAccess::hit_test_dynamic_boundary_sprite(
+    RoomEditor& editor,
+    SDL_Point screen_point) {
+    return editor.hit_test_dynamic_boundary_sprite(screen_point);
+}
+
+std::optional<SDL_FRect> RoomEditorTestAccess::dynamic_boundary_proxy_rect(
+    const RoomEditor& editor,
+    const RoomEditor::DynamicBoundaryProxyKey& key) {
+    return editor.dynamic_boundary_proxy_rect(key);
+}
+
+std::optional<SDL_FRect> RoomEditorTestAccess::dynamic_boundary_proxy_rect_for_asset(
+    const RoomEditor& editor,
+    const Asset* asset) {
+    if (!asset) {
+        return std::nullopt;
+    }
+    RoomEditor::DynamicBoundaryProxyKey key{};
+    key.spawn_id = asset->spawn_id;
+    key.asset_name = asset->info ? asset->info->name : std::string{};
+    key.boundary_type_index = -1;
+    key.candidate_index = -1;
+    key.world_x = asset->world_x();
+    key.world_z = asset->world_z();
+    return editor.dynamic_boundary_proxy_rect(key);
+}
+
+bool RoomEditorTestAccess::open_asset_info_for_dynamic_boundary(
+    RoomEditor& editor,
+    const RoomEditor::DynamicBoundaryProxyHit& hit) {
+    return editor.open_asset_info_for_dynamic_boundary(hit);
 }
 
 bool RoomEditorTestAccess::spawn_membership_allows_room_selection(

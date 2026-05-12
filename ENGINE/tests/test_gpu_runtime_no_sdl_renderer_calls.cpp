@@ -495,6 +495,75 @@ TEST_CASE("GPU runtime depth layers and floor packets stay deterministic") {
     CHECK(layer_draws[0].depth_layer == 4);
 }
 
+TEST_CASE("GPU runtime draw comparator uses depth metric when screen-bottom sort key ties") {
+    GpuSpriteDrawPacket nearer{};
+    nearer.sort_key = 42.0f;
+    nearer.depth_metric = 10.0f;
+    nearer.stable_sort_id = 2u;
+
+    GpuSpriteDrawPacket farther{};
+    farther.sort_key = 42.0f;
+    farther.depth_metric = 20.0f;
+    farther.stable_sort_id = 1u;
+
+    std::vector<GpuSpriteDrawPacket> layer_packets{farther, nearer};
+    std::stable_sort(layer_packets.begin(),
+                     layer_packets.end(),
+                     runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+
+    CHECK(layer_packets.size() == 2);
+    CHECK(layer_packets[0].depth_metric == doctest::Approx(10.0f));
+    CHECK(layer_packets[1].depth_metric == doctest::Approx(20.0f));
+}
+
+TEST_CASE("GPU runtime non-floor packet stays in layer pass even with floor boxes enabled") {
+    std::vector<GpuSpriteDrawPacket> floor_draws{};
+    std::vector<GpuSpriteDrawPacket> layer_draws{};
+
+    GpuSpriteDrawPacket packet{};
+    packet.is_floor_packet = false;
+    packet.depth_layer = -2;
+    runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(false,
+                                                                      packet,
+                                                                      floor_draws,
+                                                                      layer_draws);
+
+    CHECK(floor_draws.empty());
+    REQUIRE(layer_draws.size() == 1);
+    CHECK_FALSE(layer_draws[0].is_floor_packet);
+    CHECK(layer_draws[0].depth_layer == -2);
+}
+
+TEST_CASE("GPU runtime fallback visibility path keeps ordering contract equivalent to primary path") {
+    GpuSpriteDrawPacket a{};
+    a.sort_key = 10.0f;
+    a.depth_metric = 4.0f;
+    a.stable_sort_id = 3u;
+    a.depth_layer = 1;
+    GpuSpriteDrawPacket b{};
+    b.sort_key = 10.0f;
+    b.depth_metric = 2.0f;
+    b.stable_sort_id = 9u;
+    b.depth_layer = 1;
+    GpuSpriteDrawPacket c{};
+    c.sort_key = 8.0f;
+    c.depth_metric = 1.0f;
+    c.stable_sort_id = 1u;
+    c.depth_layer = 2;
+    std::vector<GpuSpriteDrawPacket> primary{a, b, c};
+    std::vector<GpuSpriteDrawPacket> fallback = primary;
+
+    std::stable_sort(primary.begin(), primary.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+    std::stable_sort(fallback.begin(), fallback.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+
+    REQUIRE(primary.size() == fallback.size());
+    for (std::size_t i = 0; i < primary.size(); ++i) {
+        CHECK(primary[i].sort_key == doctest::Approx(fallback[i].sort_key));
+        CHECK(primary[i].depth_metric == doctest::Approx(fallback[i].depth_metric));
+        CHECK(primary[i].stable_sort_id == fallback[i].stable_sort_id);
+    }
+}
+
 TEST_CASE("GPU runtime dev empty filtered list falls back to active assets") {
     Asset* active_asset = reinterpret_cast<Asset*>(static_cast<std::uintptr_t>(0x1u));
     Asset* filtered_asset = reinterpret_cast<Asset*>(static_cast<std::uintptr_t>(0x2u));

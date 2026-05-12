@@ -18,6 +18,17 @@ struct Chunk;
 
 namespace runtime_gpu_renderer_detail {
 
+// Draw ordering contract (must match RuntimeGpuRenderer and OpenGLRuntimeRenderer):
+// - Pass classification: packets resolve to floor pass only when explicit floor intent is
+//   present (manifest render-pass floor tags) and floor boxes are enabled, otherwise layer pass.
+// - Depth-layer grouping: only layer pass packets are grouped by packet.depth_layer and consumed
+//   from highest layer id to lowest layer id.
+// - In-layer ordering: packets are ordered by (sort_key with epsilon grouping, depth_metric,
+//   stable_sort_id), where stable_sort_id is the final deterministic tie-breaker.
+bool draw_packets_share_sort_key(float lhs, float rhs);
+bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
+                                const GpuSpriteDrawPacket& rhs);
+
 bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
                                    const std::vector<world::Chunk*>& chunks,
                                    std::uint32_t target_width,

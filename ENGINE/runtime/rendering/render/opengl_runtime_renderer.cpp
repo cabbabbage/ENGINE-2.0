@@ -18,6 +18,7 @@
 #include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
+#include "rendering/render/runtime_gpu_renderer.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
 
@@ -97,23 +98,6 @@ std::string join_ints(const std::vector<int>& values) {
         oss << values[i];
     }
     return oss.str();
-}
-
-constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
-
-bool draw_packets_share_sort_key(float lhs, float rhs) {
-    return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
-}
-
-bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
-                                const GpuSpriteDrawPacket& rhs) {
-    if (!draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
-        return lhs.sort_key < rhs.sort_key;
-    }
-    if (lhs.depth_metric != rhs.depth_metric) {
-        return lhs.depth_metric < rhs.depth_metric;
-    }
-    return lhs.stable_sort_id < rhs.stable_sort_id;
 }
 
 bool debug_draw_sort_enabled() {
@@ -363,6 +347,11 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                                                        std::uint32_t target_height,
                                                        GpuSceneFrameData& out_data,
                                                        std::string& out_error) const {
+    // Draw ordering contract (must match RuntimeGpuRenderer):
+    // - floor_draws: map-floor + floor-intended sprites only.
+    // - layer_draws: non-floor sprites only, then grouped into depth_layers by depth_layer.
+    // - depth_layers and per-layer packets are consumed in deterministic order using
+    //   runtime_gpu_renderer_detail::draw_packet_sort_predicate with descending layer ids.
     out_data = GpuSceneFrameData{};
     out_error.clear();
     if (!assets_) {
@@ -505,7 +494,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         GpuDepthLayerDrawPackets layer{};
         layer.depth_layer = layer_id;
         layer.packets = std::move(depth_layer_packets[layer_id]);
-        std::stable_sort(layer.packets.begin(), layer.packets.end(), draw_packet_sort_predicate);
+        std::stable_sort(layer.packets.begin(), layer.packets.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
         log_draw_sort_sample("depth-layer:" + std::to_string(layer_id), layer.packets);
         const float blur_distance = max_layer_distance > 0
             ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)

@@ -175,27 +175,6 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
 }
 
-constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
-
-bool draw_packets_share_sort_key(float lhs, float rhs) {
-    return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
-}
-
-bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
-                                const GpuSpriteDrawPacket& rhs) {
-    // Invariant: ordering keys are compared in this exact sequence everywhere:
-    //   1) sort_key (with epsilon grouping), 2) depth_metric, 3) stable_sort_id.
-    // Any packet assembly path (primary/fallback) must produce identical keys for
-    // identical visible assets to preserve deterministic ordering semantics.
-    if (!draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
-        return lhs.sort_key < rhs.sort_key;
-    }
-    if (lhs.depth_metric != rhs.depth_metric) {
-        return lhs.depth_metric < rhs.depth_metric;
-    }
-    return lhs.stable_sort_id < rhs.stable_sort_id;
-}
-
 #ifndef NDEBUG
 struct DebugPacketOrderingKey {
     std::string texture_id;
@@ -236,8 +215,8 @@ bool debug_ordering_keys_match(const std::vector<DebugPacketOrderingKey>& lhs,
             a.frame_index != b.frame_index ||
             a.variant_index != b.variant_index ||
             a.is_floor_packet != b.is_floor_packet ||
-            !draw_packets_share_sort_key(a.sort_key, b.sort_key) ||
-            !draw_packets_share_sort_key(a.depth_metric, b.depth_metric) ||
+            !runtime_gpu_renderer_detail::draw_packets_share_sort_key(a.sort_key, b.sort_key) ||
+            !runtime_gpu_renderer_detail::draw_packets_share_sort_key(a.depth_metric, b.depth_metric) ||
             a.stable_sort_id != b.stable_sort_id) {
             return false;
         }
@@ -357,6 +336,22 @@ std::string describe_draw_packet_source(const GpuSpriteDrawPacket& draw) {
 
 } // namespace
 
+bool runtime_gpu_renderer_detail::draw_packets_share_sort_key(float lhs, float rhs) {
+    constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
+    return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
+}
+
+bool runtime_gpu_renderer_detail::draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
+                                                             const GpuSpriteDrawPacket& rhs) {
+    if (!runtime_gpu_renderer_detail::draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
+        return lhs.sort_key < rhs.sort_key;
+    }
+    if (lhs.depth_metric != rhs.depth_metric) {
+        return lhs.depth_metric < rhs.depth_metric;
+    }
+    return lhs.stable_sort_id < rhs.stable_sort_id;
+}
+
 namespace runtime_gpu_renderer_detail {
 
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
@@ -426,7 +421,7 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
         }
     }
 
-    std::sort(out_packets.begin(), out_packets.end(), draw_packet_sort_predicate);
+    std::sort(out_packets.begin(), out_packets.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
     log_draw_sort_sample("floor-tile", out_packets);
     return true;
 }
@@ -745,8 +740,8 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
             floor_tagged, packet, out_floor_draws, out_layer_draws);
     }
 
-    std::sort(out_floor_draws.begin(), out_floor_draws.end(), draw_packet_sort_predicate);
-    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), draw_packet_sort_predicate);
+    std::sort(out_floor_draws.begin(), out_floor_draws.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
     log_draw_sort_sample("floor-sprite", out_floor_draws);
     log_draw_sort_sample("layer-sprite", out_layer_draws);
     return true;
@@ -790,6 +785,11 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
                                                     std::uint32_t target_height,
                                                     GpuSceneFrameData& out_data,
                                                     std::string& out_error) const {
+    // Draw ordering contract:
+    // - floor_draws: map-floor packets + explicit floor-intended sprite packets only.
+    // - layer_draws: all non-floor sprite packets, grouped later by depth_layer.
+    // - depth_layers: consume layer ids in descending order; each layer is sorted with
+    //   runtime_gpu_renderer_detail::draw_packet_sort_predicate.
     out_data = GpuSceneFrameData{};
     out_error.clear();
     if (!assets_) {
@@ -949,7 +949,7 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
         GpuDepthLayerDrawPackets layer{};
         layer.depth_layer = layer_id;
         layer.packets = std::move(depth_layer_packets[layer_id]);
-        std::stable_sort(layer.packets.begin(), layer.packets.end(), draw_packet_sort_predicate);
+        std::stable_sort(layer.packets.begin(), layer.packets.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
         log_draw_sort_sample("depth-layer:" + std::to_string(layer_id), layer.packets);
         const float blur_distance = max_layer_distance > 0
             ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)

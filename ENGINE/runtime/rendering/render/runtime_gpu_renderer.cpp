@@ -114,6 +114,56 @@ struct SpriteBatchVertexUniformData {
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
 };
 
+
+
+enum class SpriteRenderPassIntent {
+    Floor,
+    Layer,
+};
+
+bool tag_requests_floor_render_pass(const std::string& tag) {
+    return tag == "render_pass:floor" ||
+           tag == "render-pass:floor" ||
+           tag == "render_floor_pass" ||
+           tag == "floor_render_pass";
+}
+
+SpriteRenderPassIntent resolve_sprite_render_pass_intent(const Asset* asset) {
+    if (!asset || !asset->info) {
+        return SpriteRenderPassIntent::Layer;
+    }
+
+    const AssetInfo& info = *asset->info;
+    if (tag_requests_floor_render_pass(info.type)) {
+        return SpriteRenderPassIntent::Floor;
+    }
+    for (const std::string& tag : info.tags) {
+        if (tag_requests_floor_render_pass(tag)) {
+            return SpriteRenderPassIntent::Floor;
+        }
+    }
+    return SpriteRenderPassIntent::Layer;
+}
+
+void emit_floor_box_render_pass_mismatch_diagnostic(const Asset* asset,
+                                                    SpriteRenderPassIntent intent,
+                                                    bool floor_boxes_enabled) {
+    if (!asset || !asset->info) {
+        return;
+    }
+
+    const bool routes_to_floor_pass = (intent == SpriteRenderPassIntent::Floor);
+    if (floor_boxes_enabled == routes_to_floor_pass) {
+        return;
+    }
+
+    const std::string asset_name = asset->info->name.empty() ? std::string{"<unnamed-asset>"} : asset->info->name;
+    const std::string hint = floor_boxes_enabled
+        ? "floor boxes enabled but render-pass intent resolves to layer"
+        : "render-pass intent resolves to floor but floor boxes are disabled";
+    vibble::log::warn("[RuntimeGpuRenderer] Render/floor-box manifest mismatch for asset='" +
+                      asset_name + "': " + hint + ".");
+}
 std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     constexpr std::uintptr_t kSpritePacketSortOffset =
         std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
@@ -572,7 +622,11 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
         packet.sort_key = std::max(projected.screen_bl.y, projected.screen_br.y);
         fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet);
 
-        if (asset->isFloorBoxesEnabled()) {
+        const bool floor_boxes_enabled = asset->isFloorBoxesEnabled();
+        const SpriteRenderPassIntent render_pass_intent = resolve_sprite_render_pass_intent(asset);
+        emit_floor_box_render_pass_mismatch_diagnostic(asset, render_pass_intent, floor_boxes_enabled);
+
+        if (render_pass_intent == SpriteRenderPassIntent::Floor) {
             packet.stable_sort_id = floor_sort_id(true, floor_sequence++);
             packet.is_floor_packet = true;
             packet.depth_layer = 0;

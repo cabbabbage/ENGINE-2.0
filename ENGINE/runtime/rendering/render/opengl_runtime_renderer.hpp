@@ -21,7 +21,7 @@ struct Chunk;
 }
 
 
-namespace runtime_gpu_renderer_detail {
+namespace opengl_runtime_renderer_detail {
 
 // Draw ordering contract (must match OpenGLRuntimeRenderer):
 bool draw_packets_share_sort_key(float lhs, float rhs);
@@ -51,7 +51,7 @@ const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
                                                                const std::vector<Asset*>& filtered_active_assets,
                                                                bool& out_used_active_fallback);
 
-} // namespace runtime_gpu_renderer_detail
+} // namespace opengl_runtime_renderer_detail
 
 class OpenGLRuntimeRenderer {
 public:

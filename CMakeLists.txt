@@ -254,16 +254,16 @@ endif()
 # ------------------------------------------
 set(RUNTIME_SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/runtime/rendering/shaders")
 set(RUNTIME_SHADER_PACKAGE_DIR "${RUNTIME_SHADER_SOURCE_DIR}")
-add_custom_target(runtime_gpu_preflight
-    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/rendering/runtime_gpu_preflight.py"
+add_custom_target(opengl_runtime_preflight
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/rendering/opengl_runtime_preflight.py"
             --workspace "${CMAKE_SOURCE_DIR}"
-    COMMENT "Running SDL3 GPU runtime preflight checks"
+    COMMENT "Running OpenGL runtime preflight checks"
     VERBATIM)
-add_custom_target(runtime_gpu_preflight_strict
-    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/rendering/runtime_gpu_preflight.py"
+add_custom_target(opengl_runtime_preflight_strict
+    COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/rendering/opengl_runtime_preflight.py"
             --workspace "${CMAKE_SOURCE_DIR}"
             --strict-tools
-    COMMENT "Running strict SDL3 GPU runtime preflight checks (requires shader compilers)"
+    COMMENT "Running strict OpenGL runtime preflight checks (requires shader compilers)"
     VERBATIM)
 add_custom_target(runtime_shader_packages ALL
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/ENGINE/tools/shaders/build_runtime_shader_packages.py"
@@ -272,9 +272,9 @@ add_custom_target(runtime_shader_packages ALL
     BYPRODUCTS "${RUNTIME_SHADER_PACKAGE_DIR}/runtime_shaders.json"
     COMMENT "Packaging deterministic runtime shader bundles (DXIL/SPIR-V)"
     VERBATIM)
-add_dependencies(runtime_gpu_preflight runtime_shader_packages)
-add_dependencies(runtime_gpu_preflight_strict runtime_shader_packages)
-add_dependencies(engine runtime_gpu_preflight)
+add_dependencies(opengl_runtime_preflight runtime_shader_packages)
+add_dependencies(opengl_runtime_preflight_strict runtime_shader_packages)
+add_dependencies(engine opengl_runtime_preflight)
 
 set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
@@ -334,7 +334,7 @@ add_executable(engine_tests
     ENGINE/tests/test_screen_space_math.cpp
     ENGINE/tests/test_sink_clip.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
-    ENGINE/tests/test_gpu_runtime_manifest_selection.cpp
+    ENGINE/tests/test_opengl_runtime_manifest_selection.cpp
     ENGINE/tests/test_gpu_runtime_no_sdl_renderer_calls.cpp
     ENGINE/tests/test_shader_package_library.cpp
     ENGINE/tests/test_shader_pipeline_cache.cpp

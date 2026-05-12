@@ -41,7 +41,7 @@ public:
     const RenderCaps& caps() const { return caps_; }
     OpenGLQualityTier quality_tier() const { return quality_tier_; }
     const std::string& present_mode_name() const { return present_mode_name_; }
-    bool runtime_gpu_supported() const { return renderer_ && !caps_.is_software; }
+    bool opengl_runtime_supported() const { return renderer_ && !caps_.is_software; }
 
     // בקרת פריים
     void begin_frame(const SDL_Color& clear_color);

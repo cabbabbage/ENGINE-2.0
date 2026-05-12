@@ -1056,7 +1056,7 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
-        if (!engine_renderer->runtime_gpu_supported()) {
+        if (!engine_renderer->opengl_runtime_supported()) {
                 vibble::log::error("[Main] Renderer initialization did not produce a hardware-backed renderer.");
                 show_gpu_required_dialog_and_wait(window, "No compatible OpenGL renderer was available.");
                 engine_renderer.reset();

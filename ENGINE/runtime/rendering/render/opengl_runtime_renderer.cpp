@@ -148,14 +148,14 @@ void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
 
 } // namespace
 
-bool runtime_gpu_renderer_detail::draw_packets_share_sort_key(float lhs, float rhs) {
+bool opengl_runtime_renderer_detail::draw_packets_share_sort_key(float lhs, float rhs) {
     constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
     return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
 }
 
-bool runtime_gpu_renderer_detail::draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
+bool opengl_runtime_renderer_detail::draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
                                                              const GpuSpriteDrawPacket& rhs) {
-    if (!runtime_gpu_renderer_detail::draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
+    if (!opengl_runtime_renderer_detail::draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
         return lhs.sort_key < rhs.sort_key;
     }
     if (lhs.depth_metric != rhs.depth_metric) {
@@ -164,7 +164,7 @@ bool runtime_gpu_renderer_detail::draw_packet_sort_predicate(const GpuSpriteDraw
     return lhs.stable_sort_id < rhs.stable_sort_id;
 }
 
-namespace runtime_gpu_renderer_detail {
+namespace opengl_runtime_renderer_detail {
 
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
     return ::classify_depth_layer_for_asset(camera, asset);
@@ -233,14 +233,14 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
         }
     }
 
-    std::sort(out_packets.begin(), out_packets.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+    std::sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
     log_draw_sort_sample("floor-tile", out_packets);
     return true;
 }
 
-} // namespace runtime_gpu_renderer_detail
+} // namespace opengl_runtime_renderer_detail
 
-bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+bool opengl_runtime_renderer_detail::build_floor_sprite_draw_packets(
     const WarpedScreenGrid& camera,
     const std::vector<Asset*>& visible_assets,
     std::uint32_t target_width,
@@ -328,19 +328,19 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
         packet.is_floor_packet = floor_tagged;
         packet.depth_layer = floor_tagged
             ? 0
-            : runtime_gpu_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
-        runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
+            : opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
+        opengl_runtime_renderer_detail::append_classified_sprite_draw_packet(
             floor_tagged, packet, out_floor_draws, out_layer_draws);
     }
 
-    std::sort(out_floor_draws.begin(), out_floor_draws.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
-    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+    std::sort(out_floor_draws.begin(), out_floor_draws.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
+    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
     log_draw_sort_sample("floor-sprite", out_floor_draws);
     log_draw_sort_sample("layer-sprite", out_layer_draws);
     return true;
 }
 
-void runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(bool floor_tagged,
+void opengl_runtime_renderer_detail::append_classified_sprite_draw_packet(bool floor_tagged,
                                                                        const GpuSpriteDrawPacket& packet,
                                                                        std::vector<GpuSpriteDrawPacket>& out_floor_draws,
                                                                        std::vector<GpuSpriteDrawPacket>& out_layer_draws) {
@@ -351,7 +351,7 @@ void runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(bool floo
     out_layer_draws.push_back(packet);
 }
 
-const std::vector<Asset*>& runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(
+const std::vector<Asset*>& opengl_runtime_renderer_detail::select_visible_assets_for_gpu_frame(
     bool dev_mode,
     bool focus_filter_active,
     const std::vector<Asset*>& active_assets,
@@ -578,7 +578,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     // - floor_draws: map-floor + floor-intended sprites only.
     // - layer_draws: non-floor sprites only, then grouped into depth_layers by depth_layer.
     // - depth_layers and per-layer packets are consumed in deterministic order using
-    //   runtime_gpu_renderer_detail::draw_packet_sort_predicate with descending layer ids.
+    //   opengl_runtime_renderer_detail::draw_packet_sort_predicate with descending layer ids.
     out_data = GpuSceneFrameData{};
     out_error.clear();
     if (!assets_) {
@@ -591,7 +591,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const std::vector<Asset*>& all_assets = assets_->all;
     bool used_active_fallback = false;
     const std::vector<Asset*>& selected_visible_assets =
-        runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(
+        opengl_runtime_renderer_detail::select_visible_assets_for_gpu_frame(
             assets_->is_dev_mode(),
             assets_->focus_filter_active(),
             active_assets,
@@ -644,7 +644,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                           " traversal_count=" + std::to_string(traversal_count));
     }
 
-    if (!runtime_gpu_renderer_detail::build_floor_tile_draw_packets(
+    if (!opengl_runtime_renderer_detail::build_floor_tile_draw_packets(
             camera,
             runtime_floor_chunks(),
             target_width,
@@ -654,7 +654,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         return false;
     }
 
-    if (!runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+    if (!opengl_runtime_renderer_detail::build_floor_sprite_draw_packets(
             camera,
             render_assets,
             target_width,
@@ -671,7 +671,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         std::vector<GpuSpriteDrawPacket> fallback_floor_draws = out_data.floor_draws;
         std::vector<GpuSpriteDrawPacket> fallback_layer_draws{};
         std::string fallback_error;
-        if (!runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+        if (!opengl_runtime_renderer_detail::build_floor_sprite_draw_packets(
                 camera,
                 all_assets,
                 target_width,
@@ -721,7 +721,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         GpuDepthLayerDrawPackets layer{};
         layer.depth_layer = layer_id;
         layer.packets = std::move(depth_layer_packets[layer_id]);
-        std::stable_sort(layer.packets.begin(), layer.packets.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+        std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate);
         log_draw_sort_sample("depth-layer:" + std::to_string(layer_id), layer.packets);
         const float blur_distance = max_layer_distance > 0
             ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)

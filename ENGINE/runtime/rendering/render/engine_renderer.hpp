@@ -7,7 +7,6 @@
 
 #include <SDL3/SDL.h>
 
-#include "rendering/render/gpu_format_policy.hpp"
 
 enum class OpenGLRendererType {
     OpenGL
@@ -42,9 +41,6 @@ public:
     const RenderCaps& caps() const { return caps_; }
     OpenGLQualityTier quality_tier() const { return quality_tier_; }
     const std::string& present_mode_name() const { return present_mode_name_; }
-    const RuntimeGpuFormatPolicy* gpu_format_policy() const {
-        return has_gpu_format_policy_ ? &gpu_format_policy_ : nullptr;
-    }
     bool runtime_gpu_supported() const { return renderer_ && !caps_.is_software; }
 
     // בקרת פריים
@@ -80,7 +76,5 @@ private:
     RenderCaps caps_{};
     OpenGLQualityTier quality_tier_ = OpenGLQualityTier::OpenGLFull;
     std::string present_mode_name_ = "vsync";
-    RuntimeGpuFormatPolicy gpu_format_policy_{};
-    bool has_gpu_format_policy_ = false;
     std::uint64_t last_present_counter_ = 0;
 };

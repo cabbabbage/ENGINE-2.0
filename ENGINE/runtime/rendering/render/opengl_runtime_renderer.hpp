@@ -10,7 +10,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "rendering/render/gpu_scene_renderer.hpp"
+#include "rendering/render/opengl_scene_frame_data.hpp"
 
 class Assets;
 class Asset;

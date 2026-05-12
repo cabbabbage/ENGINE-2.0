@@ -17,6 +17,7 @@
 #include "utils/grid.hpp"
 #include "utils/string_utils.hpp"
 #include "utils/ranged_color.hpp"
+#include "rendering/render/camera_controller.hpp"
 using json = nlohmann::json;
 
 namespace {
@@ -539,8 +540,8 @@ Room::Room(Point origin,
 
     const int default_camera_height =
         std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_height_px", 1000.0))), 1, 2000);
-    const float default_camera_tilt =
-        std::clamp(static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 360.0f);
+    const float default_camera_tilt = camera_math::sanitize_pitch_degrees(
+        static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)));
 
     auto read_room_int = [&](const char* key, int fallback) {
         return static_cast<int>(std::lround(read_number(&assets_json, key, static_cast<double>(fallback))));
@@ -550,7 +551,8 @@ Room::Room(Point origin,
     };
 
     camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
-    camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 360.0f);
+    camera_tilt_deg = camera_math::sanitize_pitch_degrees(
+        read_room_float("camera_tilt_deg", default_camera_tilt));
     camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
     camera_center_dx = read_room_int("camera_center_dx", 0);
     camera_center_dz = read_room_int("camera_center_dz", 0);

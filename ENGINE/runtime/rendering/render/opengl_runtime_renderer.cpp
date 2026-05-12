@@ -112,14 +112,11 @@ double compute_asset_camera_depth_key(const WarpedScreenGrid& camera, const Asse
         static_cast<double>(asset.world_z()) +
         static_cast<double>(asset.world_z_offset()) +
         static_cast<double>(asset.render_anchor_offset_z());
-    const double bias = asset.render_depth_bias();
-    const double depth_from_anchor = render_depth::depth_from_anchor(
-        focus_world_z,
-        effective_world_z,
-        bias);
     const double depth_axis_sign = static_cast<double>(render_depth::normalize_depth_axis_sign(
         static_cast<float>(projection.forward_z)));
-    return depth_from_anchor * depth_axis_sign;
+    // Canonical far-distance scalar in camera-forward space. Higher = farther.
+    const double signed_depth_offset = (effective_world_z - focus_world_z) * depth_axis_sign;
+    return signed_depth_offset + asset.render_depth_bias();
 }
 
 float to_clip_x(float screen_x, float target_width) {

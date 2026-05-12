@@ -27304,25 +27304,25 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            125,
+            204,
+            31,
+            53,
             255
           ],
-          "edge_smoothness": 101.0,
-          "geometry": "Circle",
-          "inherit_map_floor_color": true,
+          "edge_smoothness": 2,
+          "geometry": "Square",
+          "inherit_map_floor_color": false,
           "inherits_map_assets": false,
           "is_boss": false,
-          "max_height": 3000,
-          "max_width": 3000,
-          "min_height": 3000,
-          "min_width": 3000,
-          "name": "Loot_Room",
+          "max_height": 40000,
+          "max_width": 40000,
+          "min_height": 500,
+          "min_width": 500,
+          "name": "",
           "room_floor_color": [
-            0,
-            0,
-            0
+            138,
+            78,
+            52
           ],
           "room_tags": [],
           "spawn_groups": [
@@ -27396,9 +27396,9 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            204,
+            139,
             31,
-            153,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27427,9 +27427,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            163,
-            36,
-            242,
+            31,
+            40,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27493,9 +27493,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            37,
             242,
-            36,
+            119,
+            85,
             255
           ],
           "edge_smoothness": 70,
@@ -27558,16 +27558,16 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -1417,
-          "camera_center_dz": 445,
-          "camera_height_px": 911,
-          "camera_tilt_deg": 20.848247528076172,
-          "camera_zoom_percent": 11,
+          "camera_center_dx": 8971,
+          "camera_center_dz": 5128,
+          "camera_height_px": 201,
+          "camera_tilt_deg": 30.158403396606445,
+          "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            172,
             242,
-            85,
+            36,
+            142,
             255
           ],
           "edge_smoothness": 101,
@@ -27858,8 +27858,8 @@
           "curvyness": 2,
           "display_color": [
             31,
-            32,
             204,
+            42,
             255
           ],
           "edge_smoothness": 96,

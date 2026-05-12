@@ -3,6 +3,7 @@
 #include "utils/display_color.hpp"
 #include "utils/log.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "rendering/render/camera_controller.hpp"
 
 #include <algorithm>
 #include <array>
@@ -2261,7 +2262,8 @@ bool attempt_trail_connection(Room* a,
         trail_room->add_connecting_room(b);
 
         trail_room->camera_height_px = std::clamp(config.value("camera_height_px", 1000), 1, 2000);
-        trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 360.0f);
+        trail_room->camera_tilt_deg =
+            camera_math::sanitize_pitch_degrees(config.value("camera_tilt_deg", 60.0f));
         trail_room->camera_zoom_percent = std::clamp(config.value("camera_zoom_percent", 0), 0, 100);
         trail_room->camera_center_dx = config.value("camera_center_dx", 0);
         trail_room->camera_center_dz = config.value("camera_center_dz", 0);

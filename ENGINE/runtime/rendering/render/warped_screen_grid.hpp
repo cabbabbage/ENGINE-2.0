@@ -66,7 +66,7 @@ public:
 
     static constexpr float kMinHeightAnchors = 0.5f;
     static constexpr float kMaxHeightAnchors = 20.0f;
-    static constexpr float kMinPitchDegrees = 0.0f;
+    static constexpr float kMinPitchDegrees = camera_math::kMinSupportedCameraTiltDeg;
     static constexpr float kMaxPitchDegrees = camera_math::kMaxSupportedCameraTiltDeg;
 
     struct RealismSettings {

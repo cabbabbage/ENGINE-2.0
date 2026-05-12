@@ -1357,19 +1357,6 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         last_complete_scene_height_ = frame_data.target_height;
     }
 
-    const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
-    vibble::log::info("[OpenGLRuntimeRenderer] render_summary renderer=" + backend_name() +
-                      " present_mode=" + present_mode() +
-                      " target=" + std::to_string(frame_to_render->target_width) + "x" +
-                      std::to_string(frame_to_render->target_height) +
-                      " floor_packets=" + std::to_string(stats.floor_packet_count) +
-                      " xy_sprite_packets=" + std::to_string(stats.xy_sprite_packet_count) +
-                      " depth_layers=" + std::to_string(stats.active_depth_layer_count) +
-                      " draw_call_count=" + std::to_string(stats.draw_call_count) +
-                      " submit_succeeded=" + (stats.submit_succeeded ? std::string("true") : std::string("false")) +
-                      " xy_depth_layer_summary='" + xy_depth_layer_summary.str() + "'" +
-                      " merge_order='floor_pass->xy_sprite_pass->ui_overlay'");
-
     render_diagnostics::end_frame();
     return true;
 }

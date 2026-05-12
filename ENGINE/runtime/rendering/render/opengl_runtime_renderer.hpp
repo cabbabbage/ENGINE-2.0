@@ -24,9 +24,10 @@ struct Chunk;
 namespace opengl_runtime_renderer_detail {
 
 // Draw ordering contract (must match OpenGLRuntimeRenderer):
-bool draw_packets_share_sort_key(float lhs, float rhs);
-bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
-                                const GpuSpriteDrawPacket& rhs);
+bool draw_packet_sort_predicate_floor(const GpuSpriteDrawPacket& lhs,
+                                      const GpuSpriteDrawPacket& rhs);
+bool draw_packet_sort_predicate_xy(const GpuSpriteDrawPacket& lhs,
+                                   const GpuSpriteDrawPacket& rhs);
 
 // Floor-pass compatibility tags are parsed for diagnostics only.
 // They do not change pass routing under strict floor (XZ) / XY sprite separation.

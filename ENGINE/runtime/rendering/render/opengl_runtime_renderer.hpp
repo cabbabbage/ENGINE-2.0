@@ -10,7 +10,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "rendering/render/runtime_gpu_renderer.hpp"
+#include "rendering/render/gpu_scene_renderer.hpp"
 
 class Assets;
 class Asset;
@@ -19,6 +19,39 @@ class WarpedScreenGrid;
 namespace world {
 struct Chunk;
 }
+
+
+namespace runtime_gpu_renderer_detail {
+
+// Draw ordering contract (must match OpenGLRuntimeRenderer):
+bool draw_packets_share_sort_key(float lhs, float rhs);
+bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
+                                const GpuSpriteDrawPacket& rhs);
+
+bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
+                                   const std::vector<world::Chunk*>& chunks,
+                                   std::uint32_t target_width,
+                                   std::uint32_t target_height,
+                                   std::vector<GpuSpriteDrawPacket>& out_packets);
+bool build_floor_sprite_draw_packets(const WarpedScreenGrid& camera,
+                                     const std::vector<Asset*>& visible_assets,
+                                     std::uint32_t target_width,
+                                     std::uint32_t target_height,
+                                     std::vector<GpuSpriteDrawPacket>& out_floor_draws,
+                                     std::vector<GpuSpriteDrawPacket>& out_layer_draws,
+                                     std::string& out_error);
+int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset);
+void append_classified_sprite_draw_packet(bool floor_tagged,
+                                          const GpuSpriteDrawPacket& packet,
+                                          std::vector<GpuSpriteDrawPacket>& out_floor_draws,
+                                          std::vector<GpuSpriteDrawPacket>& out_layer_draws);
+const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
+                                                               bool focus_filter_active,
+                                                               const std::vector<Asset*>& active_assets,
+                                                               const std::vector<Asset*>& filtered_active_assets,
+                                                               bool& out_used_active_fallback);
+
+} // namespace runtime_gpu_renderer_detail
 
 class OpenGLRuntimeRenderer {
 public:

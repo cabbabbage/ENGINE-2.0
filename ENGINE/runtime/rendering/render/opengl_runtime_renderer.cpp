@@ -18,7 +18,7 @@
 #include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
-#include "rendering/render/runtime_gpu_renderer.hpp"
+#include "rendering/render/opengl_runtime_renderer.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
 
@@ -147,6 +147,233 @@ void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
 }
 
 } // namespace
+
+bool runtime_gpu_renderer_detail::draw_packets_share_sort_key(float lhs, float rhs) {
+    constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
+    return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
+}
+
+bool runtime_gpu_renderer_detail::draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
+                                                             const GpuSpriteDrawPacket& rhs) {
+    if (!runtime_gpu_renderer_detail::draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
+        return lhs.sort_key < rhs.sort_key;
+    }
+    if (lhs.depth_metric != rhs.depth_metric) {
+        return lhs.depth_metric < rhs.depth_metric;
+    }
+    return lhs.stable_sort_id < rhs.stable_sort_id;
+}
+
+namespace runtime_gpu_renderer_detail {
+
+int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
+    return ::classify_depth_layer_for_asset(camera, asset);
+}
+
+bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
+                                   const std::vector<world::Chunk*>& chunks,
+                                   std::uint32_t target_width,
+                                   std::uint32_t target_height,
+                                   std::vector<GpuSpriteDrawPacket>& out_packets) {
+    out_packets.clear();
+    const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
+    const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+    std::uintptr_t tile_sequence = 0u;
+
+    for (const world::Chunk* chunk : chunks) {
+        if (!chunk) {
+            continue;
+        }
+        for (const GridTile& tile : chunk->tiles) {
+            if (!tile.texture || tile.world_rect.w <= 0 || tile.world_rect.h <= 0) {
+                continue;
+            }
+
+            const float left = static_cast<float>(tile.world_rect.x);
+            const float top_z = static_cast<float>(tile.world_rect.y);
+            const float right = static_cast<float>(tile.world_rect.x + tile.world_rect.w);
+            const float bottom_z = static_cast<float>(tile.world_rect.y + tile.world_rect.h);
+
+            SDL_FPoint screen_tl{};
+            SDL_FPoint screen_tr{};
+            SDL_FPoint screen_br{};
+            SDL_FPoint screen_bl{};
+            if (!camera.project_world_point(SDL_FPoint{left, 0.0f}, top_z, screen_tl) ||
+                !camera.project_world_point(SDL_FPoint{right, 0.0f}, top_z, screen_tr) ||
+                !camera.project_world_point(SDL_FPoint{right, 0.0f}, bottom_z, screen_br) ||
+                !camera.project_world_point(SDL_FPoint{left, 0.0f}, bottom_z, screen_bl)) {
+                continue;
+            }
+
+            GpuSpriteDrawPacket packet{};
+            packet.source_texture = tile.texture;
+            packet.source_asset_name = "<floor-tile>";
+            packet.source_animation_name = "<floor-tile>";
+            packet.source_texture_id = "tile_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(tile.texture));
+            packet.source_frame_index = -1;
+            packet.source_variant_index = -1;
+            packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+            packet.sort_key = std::max(screen_br.y, screen_bl.y);
+            packet.depth_metric = 0.5f * (top_z + bottom_z);
+            packet.stable_sort_id = floor_sort_id(false, tile_sequence++);
+            packet.is_floor_packet = true;
+            packet.depth_layer = 0;
+            fill_quad_packet_vertices(screen_tl,
+                                      screen_tr,
+                                      screen_br,
+                                      screen_bl,
+                                      0.0f,
+                                      0.0f,
+                                      1.0f,
+                                      1.0f,
+                                      output_w,
+                                      output_h,
+                                      packet);
+            out_packets.push_back(packet);
+        }
+    }
+
+    std::sort(out_packets.begin(), out_packets.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+    log_draw_sort_sample("floor-tile", out_packets);
+    return true;
+}
+
+} // namespace runtime_gpu_renderer_detail
+
+bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
+    const WarpedScreenGrid& camera,
+    const std::vector<Asset*>& visible_assets,
+    std::uint32_t target_width,
+    std::uint32_t target_height,
+    std::vector<GpuSpriteDrawPacket>& out_floor_draws,
+    std::vector<GpuSpriteDrawPacket>& out_layer_draws,
+    std::string& out_error) {
+    out_layer_draws.clear();
+    out_floor_draws.reserve(out_floor_draws.size() + visible_assets.size());
+    out_layer_draws.reserve(visible_assets.size());
+    out_error.clear();
+
+    const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
+    const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+    std::uintptr_t floor_sequence = 0u;
+    std::uintptr_t layer_sequence = 0u;
+
+    for (Asset* asset : visible_assets) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+
+        RenderObject object{};
+        if (!render_build::build_direct_asset_render_object(asset, object) || !object.texture) {
+            continue;
+        }
+
+        const Asset::PerspectiveSample perspective = asset->runtime_perspective_sample();
+        const float perspective_scale = perspective.scale;
+        const float world_z = static_cast<float>(asset->world_z()) + object.world_z_offset;
+
+        render_projection::ProjectedSpriteFrame projected{};
+        if (!render_projection::build_render_object_projected_frame(camera,
+                                                                    object,
+                                                                    perspective_scale,
+                                                                    world_z,
+                                                                    projected) ||
+            !projected.valid) {
+            continue;
+        }
+
+        float u0 = 0.0f;
+        float v0 = 0.0f;
+        float u1 = 1.0f;
+        float v1 = 1.0f;
+        if (object.has_src_rect && object.atlas_w > 0 && object.atlas_h > 0) {
+            const float atlas_w = static_cast<float>(object.atlas_w);
+            const float atlas_h = static_cast<float>(object.atlas_h);
+            u0 = static_cast<float>(object.src_rect.x) / atlas_w;
+            v0 = static_cast<float>(object.src_rect.y) / atlas_h;
+            u1 = static_cast<float>(object.src_rect.x + object.src_rect.w) / atlas_w;
+            v1 = static_cast<float>(object.src_rect.y + object.src_rect.h) / atlas_h;
+        }
+        if ((object.flip & SDL_FLIP_HORIZONTAL) != 0) {
+            std::swap(u0, u1);
+        }
+        if ((object.flip & SDL_FLIP_VERTICAL) != 0) {
+            std::swap(v0, v1);
+        }
+
+        GpuSpriteDrawPacket packet{};
+        packet.source_texture = object.texture;
+        packet.source_asset_name = asset->info ? asset->info->name : "<unknown-asset>";
+        packet.source_animation_name = asset ? asset->current_animation : std::string{};
+        packet.source_texture_id = "sdl_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(object.texture));
+        packet.source_frame_index = asset && asset->current_frame ? asset->current_frame->frame_index : -1;
+        packet.source_variant_index = asset ? asset->current_variant_index : -1;
+        packet.modulate = SDL_FColor{
+            static_cast<float>(object.color_mod.r) / 255.0f,
+            static_cast<float>(object.color_mod.g) / 255.0f,
+            static_cast<float>(object.color_mod.b) / 255.0f,
+            static_cast<float>(object.color_mod.a) / 255.0f,
+        };
+        packet.sort_key = std::max(projected.screen_bl.y, projected.screen_br.y);
+        packet.depth_metric = world_z;
+        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet);
+
+        const bool floor_boxes_enabled = asset->isFloorBoxesEnabled();
+        const SpriteRenderPassIntent render_pass_intent = resolve_sprite_render_pass_intent(asset);
+        emit_floor_box_render_pass_mismatch_diagnostic(asset, render_pass_intent, floor_boxes_enabled);
+
+        const bool floor_tagged = (render_pass_intent == SpriteRenderPassIntent::Floor);
+        const std::uintptr_t sequence = floor_tagged ? floor_sequence++ : layer_sequence++;
+        packet.stable_sort_id = floor_sort_id(floor_tagged, sequence);
+        packet.is_floor_packet = floor_tagged;
+        packet.depth_layer = floor_tagged
+            ? 0
+            : runtime_gpu_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
+        runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(
+            floor_tagged, packet, out_floor_draws, out_layer_draws);
+    }
+
+    std::sort(out_floor_draws.begin(), out_floor_draws.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), runtime_gpu_renderer_detail::draw_packet_sort_predicate);
+    log_draw_sort_sample("floor-sprite", out_floor_draws);
+    log_draw_sort_sample("layer-sprite", out_layer_draws);
+    return true;
+}
+
+void runtime_gpu_renderer_detail::append_classified_sprite_draw_packet(bool floor_tagged,
+                                                                       const GpuSpriteDrawPacket& packet,
+                                                                       std::vector<GpuSpriteDrawPacket>& out_floor_draws,
+                                                                       std::vector<GpuSpriteDrawPacket>& out_layer_draws) {
+    if (floor_tagged) {
+        out_floor_draws.push_back(packet);
+        return;
+    }
+    out_layer_draws.push_back(packet);
+}
+
+const std::vector<Asset*>& runtime_gpu_renderer_detail::select_visible_assets_for_gpu_frame(
+    bool dev_mode,
+    bool focus_filter_active,
+    const std::vector<Asset*>& active_assets,
+    const std::vector<Asset*>& filtered_active_assets,
+    bool& out_used_active_fallback) {
+    out_used_active_fallback = false;
+    if (!dev_mode) {
+        return active_assets;
+    }
+    if (!focus_filter_active) {
+        return active_assets;
+    }
+    if (!filtered_active_assets.empty()) {
+        return filtered_active_assets;
+    }
+    if (!active_assets.empty()) {
+        out_used_active_fallback = true;
+        return active_assets;
+    }
+    return filtered_active_assets;
+}
+
 
 void OpenGLRuntimeRenderer::RenderTargetLifecycleManager::set_requested_size(int screen_width,
                                                                              int screen_height) {
@@ -347,7 +574,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                                                        std::uint32_t target_height,
                                                        GpuSceneFrameData& out_data,
                                                        std::string& out_error) const {
-    // Draw ordering contract (must match RuntimeGpuRenderer):
+    // Draw ordering contract (must match OpenGLRuntimeRenderer):
     // - floor_draws: map-floor + floor-intended sprites only.
     // - layer_draws: non-floor sprites only, then grouped into depth_layers by depth_layer.
     // - depth_layers and per-layer packets are consumed in deterministic order using

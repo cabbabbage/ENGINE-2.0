@@ -302,7 +302,17 @@ std::vector<world::Chunk*> OpenGLRuntimeRenderer::runtime_floor_chunks() const {
     }
     const std::vector<world::Chunk*>& active_chunks = assets_->active_chunks();
     if (!active_chunks.empty()) {
-        return std::vector<world::Chunk*>(active_chunks.begin(), active_chunks.end());
+        bool active_has_tiles = false;
+        for (const world::Chunk* chunk : active_chunks) {
+            if (chunk && !chunk->tiles.empty()) {
+                active_has_tiles = true;
+                break;
+            }
+        }
+        if (active_has_tiles) {
+            return std::vector<world::Chunk*>(active_chunks.begin(), active_chunks.end());
+        }
+        vibble::log::warn("[OpenGLRuntimeRenderer] Active chunk set had no floor tiles; falling back to all world chunks.");
     }
     return assets_->world_grid().all_chunks();
 }
@@ -609,17 +619,54 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         frame_data.ui_overlay_texture = ui_overlay_texture;
     }
 
-    if (frame_data.suspected_incomplete_scene) {
-        vibble::log::warn("[OpenGLRuntimeRenderer] Rendering current frame despite incomplete-scene heuristic. "
-                          "floor_packets=" + std::to_string(frame_data.floor_draw_count) +
-                          " layer_packets=" + std::to_string(frame_data.layer_sprite_draw_count) +
-                          " active_assets=" + std::to_string(frame_data.active_asset_count) +
-                          " selected_assets=" + std::to_string(frame_data.selected_asset_count) +
-                          " traversal_count=" + std::to_string(frame_data.visible_traversal_count));
-    }
+    const bool can_hold_previous_scene =
+        last_complete_scene_frame_data_.has_value() &&
+        last_complete_scene_width_ == frame_data.target_width &&
+        last_complete_scene_height_ == frame_data.target_height;
+    const bool hold_incomplete_scene_frame =
+        frame_data.suspected_incomplete_scene && can_hold_previous_scene;
+    const bool hold_empty_scene_frame =
+        frame_data.floor_draw_count == 0 &&
+        frame_data.layer_sprite_draw_count == 0 &&
+        can_hold_previous_scene;
 
+    GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
-    consecutive_held_incomplete_scene_frames_ = 0;
+    if (hold_incomplete_scene_frame || hold_empty_scene_frame) {
+        held_frame_data = *last_complete_scene_frame_data_;
+        held_frame_data.ui_overlay_texture = frame_data.ui_overlay_texture;
+        held_frame_data.ui_overlay_gpu_texture = frame_data.ui_overlay_gpu_texture;
+        held_frame_data.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
+        frame_to_render = &held_frame_data;
+
+        ++consecutive_held_incomplete_scene_frames_;
+        if (consecutive_held_incomplete_scene_frames_ == 1 ||
+            (consecutive_held_incomplete_scene_frames_ % 60u) == 0u) {
+            vibble::log::warn(
+                std::string("[OpenGLRuntimeRenderer] Holding last complete OpenGL scene instead of presenting ") +
+                (hold_empty_scene_frame ? "an empty scene frame. " : "an incomplete scene frame. ") +
+                "held_frames=" + std::to_string(consecutive_held_incomplete_scene_frames_) +
+                " current_floor_packets=" + std::to_string(frame_data.floor_draw_count) +
+                " current_normal_packets=" + std::to_string(frame_data.layer_sprite_draw_count) +
+                " cached_floor_packets=" + std::to_string(held_frame_data.floor_draw_count) +
+                " cached_normal_packets=" + std::to_string(held_frame_data.layer_sprite_draw_count) +
+                " active_count=" + std::to_string(frame_data.active_asset_count) +
+                " filtered_count=" + std::to_string(frame_data.filtered_active_asset_count) +
+                " selected_count=" + std::to_string(frame_data.selected_asset_count) +
+                " traversal_count=" + std::to_string(frame_data.visible_traversal_count) +
+                " focus_filter_active=" + std::string(frame_data.focus_filter_active ? "true" : "false"));
+        }
+    } else {
+        consecutive_held_incomplete_scene_frames_ = 0;
+        if (frame_data.suspected_incomplete_scene) {
+            vibble::log::warn("[OpenGLRuntimeRenderer] Rendering current frame despite incomplete-scene heuristic. "
+                              "floor_packets=" + std::to_string(frame_data.floor_draw_count) +
+                              " layer_packets=" + std::to_string(frame_data.layer_sprite_draw_count) +
+                              " active_assets=" + std::to_string(frame_data.active_asset_count) +
+                              " selected_assets=" + std::to_string(frame_data.selected_asset_count) +
+                              " traversal_count=" + std::to_string(frame_data.visible_traversal_count));
+        }
+    }
 
     render_diagnostics::set_renderer_runtime_info("opengl", backend_name(), present_mode());
     render_diagnostics::set_floor_target_dimensions(frame_to_render->target_width, frame_to_render->target_height);
@@ -717,7 +764,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
 
     render_diagnostics::set_submit_result(true);
 
-    if (frame_data.layer_sprite_draw_count > 0) {
+    if (!hold_incomplete_scene_frame &&
+        !hold_empty_scene_frame &&
+        (frame_data.layer_sprite_draw_count > 0 || frame_data.floor_draw_count > 0)) {
         last_complete_scene_frame_data_ = frame_data;
         last_complete_scene_width_ = frame_data.target_width;
         last_complete_scene_height_ = frame_data.target_height;

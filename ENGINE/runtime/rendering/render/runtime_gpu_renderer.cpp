@@ -479,7 +479,17 @@ std::vector<world::Chunk*> RuntimeGpuRenderer::runtime_floor_chunks() const {
     }
     const std::vector<world::Chunk*>& active_chunks = assets_->active_chunks();
     if (!active_chunks.empty()) {
-        return std::vector<world::Chunk*>(active_chunks.begin(), active_chunks.end());
+        bool active_has_tiles = false;
+        for (const world::Chunk* chunk : active_chunks) {
+            if (chunk && !chunk->tiles.empty()) {
+                active_has_tiles = true;
+                break;
+            }
+        }
+        if (active_has_tiles) {
+            return std::vector<world::Chunk*>(active_chunks.begin(), active_chunks.end());
+        }
+        vibble::log::warn("[RuntimeGpuRenderer] Active chunk set had no floor tiles; falling back to all world chunks.");
     }
     return assets_->world_grid().all_chunks();
 }

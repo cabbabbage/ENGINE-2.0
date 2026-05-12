@@ -27,6 +27,25 @@ namespace {
         return std::isfinite(wrapped) ? wrapped : static_cast<double>(camera_math::kDefaultCameraTiltDeg);
     }
 
+    double shortest_angle_delta_degrees(double from_deg, double to_deg) {
+        const double from_wrapped = wrap_degrees_0_360(from_deg);
+        const double to_wrapped = wrap_degrees_0_360(to_deg);
+        double delta = to_wrapped - from_wrapped;
+        if (delta > 180.0) {
+            delta -= 360.0;
+        } else if (delta < -180.0) {
+            delta += 360.0;
+        }
+        return delta;
+    }
+
+    double lerp_angle_shortest_degrees(double from_deg, double to_deg, double t) {
+        const double clamped_t = std::clamp(t, 0.0, 1.0);
+        const double from_wrapped = wrap_degrees_0_360(from_deg);
+        const double delta = shortest_angle_delta_degrees(from_wrapped, to_deg);
+        return wrap_degrees_0_360(from_wrapped + delta * clamped_t);
+    }
+
     float safe_dt_seconds(float dt_seconds) {
         if (std::isfinite(dt_seconds) && dt_seconds > 0.0f) {
             return std::min(dt_seconds, 0.1f);
@@ -266,7 +285,7 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     const double t = std::clamp(blend_t, 0.0, 1.0);
     CameraParams blended{};
     blended.height_px = lerp(cur_params.height_px, neigh_params.height_px, t);
-    blended.tilt_deg = lerp(cur_params.tilt_deg, neigh_params.tilt_deg, t);
+    blended.tilt_deg = lerp_angle_shortest_degrees(cur_params.tilt_deg, neigh_params.tilt_deg, t);
     blended.zoom_percent = lerp(cur_params.zoom_percent, neigh_params.zoom_percent, t);
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 
@@ -296,7 +315,14 @@ void CameraController::tick(float dt_seconds) {
         return current + (target - current) * alpha;
     };
     smoothed_.height_px = smooth_scalar(smoothed_.height_px, target_.height_px);
-    smoothed_.tilt_deg = smooth_scalar(smoothed_.tilt_deg, target_.tilt_deg);
+    {
+        const double tilt_delta = shortest_angle_delta_degrees(smoothed_.tilt_deg, target_.tilt_deg);
+        if (std::fabs(tilt_delta) <= kParamSnapEpsilon) {
+            smoothed_.tilt_deg = target_.tilt_deg;
+        } else {
+            smoothed_.tilt_deg = wrap_degrees_0_360(smoothed_.tilt_deg + tilt_delta * alpha);
+        }
+    }
     smoothed_.zoom_percent = smooth_scalar(smoothed_.zoom_percent, target_.zoom_percent);
     smoothed_ = camera_math::sanitize_camera_params(smoothed_, fallback_height_px_);
 

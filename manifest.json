@@ -15444,8 +15444,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 934,
-                "texture_y": 759
+                "texture_x": 917,
+                "texture_y": 734
               },
               {
                 "depth_offset": -15.0,
@@ -15468,8 +15468,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 865,
-                "texture_y": 1059
+                "texture_x": 925,
+                "texture_y": 1115
               },
               {
                 "depth_offset": -15.0,
@@ -27273,12 +27273,12 @@
           ]
         },
         {
-          "bounding_extent": 1500.0,
+          "bounding_extent": 28284.2712474619,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 13558.0,
+          "ring_radius": 40342.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -27304,9 +27304,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            53,
+            54,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -27318,7 +27318,7 @@
           "max_width": 40000,
           "min_height": 500,
           "min_width": 500,
-          "name": "",
+          "name": "Loot_Room",
           "room_floor_color": [
             138,
             78,
@@ -27366,7 +27366,7 @@
           "curvyness": 2,
           "display_color": [
             85,
-            242,
+            149,
             242,
             255
           ],
@@ -27396,8 +27396,8 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            139,
-            31,
+            146,
+            71,
             204,
             255
           ],
@@ -27427,9 +27427,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            31,
-            40,
-            204,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27493,9 +27493,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            119,
-            85,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 70,
@@ -27566,8 +27566,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            36,
-            142,
+            102,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27857,9 +27857,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            42,
+            170,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 96,

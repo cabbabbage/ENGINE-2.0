@@ -270,7 +270,7 @@ add_custom_target(runtime_shader_packages ALL
             --input "${RUNTIME_SHADER_SOURCE_DIR}"
             --output "${RUNTIME_SHADER_PACKAGE_DIR}"
     BYPRODUCTS "${RUNTIME_SHADER_PACKAGE_DIR}/runtime_shaders.json"
-    COMMENT "Packaging deterministic runtime shader bundles (DXIL/SPIR-V)"
+    COMMENT "Packaging deterministic runtime shader bundles (SPIR-V)"
     VERBATIM)
 add_dependencies(opengl_runtime_preflight runtime_shader_packages)
 add_dependencies(opengl_runtime_preflight_strict runtime_shader_packages)

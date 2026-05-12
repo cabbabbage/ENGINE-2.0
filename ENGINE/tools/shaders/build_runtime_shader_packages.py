@@ -57,22 +57,6 @@ def normalize_entry(raw_entry: object, backend: str, default_stage: str) -> tupl
     raise SystemExit(f"shader backend entry must be string/object for {backend}")
 
 
-def find_dxc() -> str | None:
-    env_override = os.environ.get("VIBBLE_DXC", "").strip()
-    if env_override and Path(env_override).exists():
-        return env_override
-
-    from_path = shutil.which("dxc")
-    if from_path:
-        return from_path
-
-    windows_sdk_glob = r"C:\Program Files (x86)\Windows Kits\10\bin\*\x64\dxc.exe"
-    candidates = sorted(glob.glob(windows_sdk_glob))
-    if candidates:
-        return candidates[-1]
-    return None
-
-
 def find_glslc(src_root: Path) -> str | None:
     env_override = os.environ.get("VIBBLE_GLSLC", "").strip()
     if env_override and Path(env_override).exists():
@@ -134,35 +118,17 @@ def run_glslc(glslc: str, source: Path, output: Path, stage: str) -> None:
 
 
 def compile_or_copy_variant(
-    dxc_path: str | None,
     glslc_path: str | None,
     src_root: Path,
     dst_root: Path,
     variant_name: str,
-    dxil_rel: str,
     spirv_rel: str,
     stage: str,
     entrypoint: str,
     require_compile: bool,
-) -> tuple[bytes, bytes]:
-    dxil_out = dst_root / dxil_rel
+) -> bytes:
     spirv_out = dst_root / spirv_rel
-    dxil_out.parent.mkdir(parents=True, exist_ok=True)
     spirv_out.parent.mkdir(parents=True, exist_ok=True)
-
-    if dxc_path:
-        source_path = src_root / "src" / "hlsl" / f"{variant_name}.hlsl"
-        if not source_path.exists():
-            raise SystemExit(f"missing shader source file for {variant_name}: {source_path}")
-        profile = dxc_profile_for_stage(stage)
-        run_dxc(dxc_path, source_path, profile, entrypoint, dxil_out, spirv=False)
-    else:
-        if require_compile:
-            raise SystemExit("dxc was not found and --require-compile was set")
-        dxil_src = src_root / dxil_rel
-        if not dxil_src.exists():
-            raise SystemExit(f"missing prebuilt DXIL binary for {variant_name} and no dxc compiler available")
-        dxil_out.write_bytes(dxil_src.read_bytes())
 
     if glslc_path:
         glsl_stage_extension = glsl_extension_for_stage(stage)
@@ -178,11 +144,9 @@ def compile_or_copy_variant(
             raise SystemExit(f"missing prebuilt SPIR-V binary for {variant_name} and no glslc compiler available")
         spirv_out.write_bytes(spirv_src.read_bytes())
 
-    dxil_bytes = dxil_out.read_bytes()
     spirv_bytes = spirv_out.read_bytes()
-    ensure_magic(variant_name, "dxil", dxil_bytes)
     ensure_magic(variant_name, "spirv", spirv_bytes)
-    return dxil_bytes, spirv_bytes
+    return spirv_bytes
 
 
 def main() -> int:
@@ -207,12 +171,7 @@ def main() -> int:
         if name not in variants:
             raise SystemExit(f"missing required variant: {name}")
 
-    dxc_path = find_dxc()
     glslc_path = find_glslc(src)
-    if dxc_path:
-        print(f"using dxc compiler: {dxc_path}")
-    else:
-        print("dxc compiler not found; using prebuilt DXIL binaries from source tree")
     if glslc_path:
         print(f"using glslc compiler: {glslc_path}")
     else:
@@ -230,38 +189,22 @@ def main() -> int:
         if not isinstance(entry, dict):
             raise SystemExit(f"variant entry must be object: {name}")
         default_stage = STAGE_HINTS.get(name, "auto")
-        dxil_rel, dxil_entrypoint, dxil_stage = normalize_entry(entry.get("dxil", ""), "dxil", default_stage)
         spirv_rel, spirv_entrypoint, spirv_stage = normalize_entry(entry.get("spirv", ""), "spirv", default_stage)
-        if not dxil_rel or not spirv_rel:
-            raise SystemExit(f"variant {name} must provide both dxil and spirv")
-        if dxil_stage != spirv_stage:
-            raise SystemExit(f"variant {name} has stage mismatch between dxil ({dxil_stage}) and spirv ({spirv_stage})")
-        if dxil_entrypoint != spirv_entrypoint:
-            raise SystemExit(
-                f"variant {name} has entrypoint mismatch between dxil ({dxil_entrypoint}) and spirv ({spirv_entrypoint})"
-            )
+        if not spirv_rel:
+            raise SystemExit(f"variant {name} must provide spirv")
 
-        dxil_bytes, spirv_bytes = compile_or_copy_variant(
-            dxc_path=dxc_path,
+        spirv_bytes = compile_or_copy_variant(
             glslc_path=glslc_path,
             src_root=src,
             dst_root=dst,
             variant_name=name,
-            dxil_rel=dxil_rel,
             spirv_rel=spirv_rel,
-            stage=dxil_stage,
-            entrypoint=dxil_entrypoint,
+            stage=spirv_stage,
+            entrypoint=spirv_entrypoint,
             require_compile=args.require_compile,
         )
 
         packaged_manifest["variants"][name] = {
-            "dxil": {
-                "path": dxil_rel,
-                "entrypoint": dxil_entrypoint,
-                "stage": dxil_stage,
-                "hash_fnv1a64": f"0x{fnv1a64(dxil_bytes):016x}",
-                "file_size_bytes": len(dxil_bytes),
-            },
             "spirv": {
                 "path": spirv_rel,
                 "entrypoint": spirv_entrypoint,

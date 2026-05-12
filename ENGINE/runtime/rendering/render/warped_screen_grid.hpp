@@ -66,22 +66,30 @@ public:
 
     static constexpr float kMinHeightAnchors = 0.5f;
     static constexpr float kMaxHeightAnchors = 20.0f;
-    static constexpr float kMinPitchDegrees = 0.0f;
+    static constexpr float kMinPitchDegrees = camera_math::kMinSupportedCameraTiltDeg;
     static constexpr float kMaxPitchDegrees = camera_math::kMaxSupportedCameraTiltDeg;
 
     struct RealismSettings {
 
         float min_visible_screen_ratio     = 0.003f;
+        float boundary_min_visible_screen_ratio = 0.015f;
         bool min_visible_uses_light_radius = true;
         float base_height_px               = 1000.0f;
         float max_cull_depth               = 8000.0f;
         float light_max_cull_depth         = 32000.0f;
         float dynamic_renderer_depth_efficiency_depth = 2000.0f;
         float dynamic_renderer_depth_efficiency_min_density_ratio = 0.10f;
+        float near_light_depth_threshold = 250.0f;
+        float mid_light_depth_threshold  = 1200.0f;
+        float far_light_depth_threshold  = 4000.0f;
+        float near_light_cap = 12.0f;
+        float mid_light_cap  = 24.0f;
+        float far_light_cap  = 32.0f;
+        float shadow_quality_budget = 1.0f;
+        float global_ambient = 0.08f;
+        float global_exposure = 1.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
-        float front_layer_light_strength_multiplier = 1.0f;
-        float behind_layer_light_strength_multiplier = 1.0f;
         bool light_radius_overlap_culling_enabled = true;
         bool light_fade_smoothing_enabled = true;
         float light_fade_in_seconds = 0.16f;

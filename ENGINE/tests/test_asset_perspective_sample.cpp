@@ -181,7 +181,7 @@ TEST_CASE("Direct render object builder preserves source geometry and emits sink
     CHECK_FALSE(tilted_object.has_src_rect);
     CHECK(tilted_object.src_rect.h == 0);
     CHECK(tilted_object.screen_rect.h == 32);
-    CHECK(tilted_object.sink_clip_enabled);
+    CHECK_FALSE(tilted_object.sink_clip_enabled);
     CHECK(tilted_object.sink_height_offset_px == doctest::Approx(0.0f));
 
     RenderObject buried_object{};

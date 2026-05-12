@@ -19,7 +19,8 @@ struct CameraParams {
 namespace camera_math {
     inline constexpr float kDefaultCameraTiltDeg = 60.0f;
     // מנרמלים הטיות לטווח [0,360) כדי לאפשר סיבובים מלאים בלי הגבלת תחום.
-    inline constexpr float kMaxSupportedCameraTiltDeg = 360.0f;
+    inline constexpr float kMinSupportedCameraTiltDeg = 10.0f;
+    inline constexpr float kMaxSupportedCameraTiltDeg = 110.0f;
 
     CameraParams sanitize_camera_params(const CameraParams& raw, double fallback_height_px);
     float sanitize_pitch_degrees(float raw_value, bool* clamped = nullptr);

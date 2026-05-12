@@ -1,4 +1,5 @@
 #include "rendering/render/render_diagnostics.hpp"
+#include "utils/log.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -32,7 +33,7 @@ std::uint64_t estimate_texture_bytes(SDL_Texture* texture) {
         return 0;
     }
 
-    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA8888;
+    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA32;
     if (SDL_PropertiesID props = SDL_GetTextureProperties(texture)) {
         format = static_cast<SDL_PixelFormat>(
             SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, static_cast<Sint64>(format)));
@@ -117,6 +118,28 @@ void begin_frame() {
     g_frame_stats.sdl_renderer_draw_call_count = 0;
     g_frame_stats.present_call_count = 0;
     g_frame_stats.gpu_failed_frame_count = 0;
+    g_frame_stats.gpu_scene_floor_draw_count = 0;
+    g_frame_stats.gpu_scene_xy_sprite_draw_count = 0;
+    g_frame_stats.gpu_scene_composite_source_ready = false;
+    g_frame_stats.command_buffer_acquired = false;
+    g_frame_stats.swapchain_acquired = false;
+    g_frame_stats.swapchain_width = 0;
+    g_frame_stats.swapchain_height = 0;
+    g_frame_stats.floor_pass_target_width = 0;
+    g_frame_stats.floor_pass_target_height = 0;
+    g_frame_stats.xy_sprite_pass_target_width = 0;
+    g_frame_stats.xy_sprite_pass_target_height = 0;
+    g_frame_stats.clear_executed = false;
+    g_frame_stats.floor_packet_count = 0;
+    g_frame_stats.xy_sprite_packet_count = 0;
+    g_frame_stats.active_depth_layer_count = 0;
+    g_frame_stats.blur_pass_count = 0;
+    g_frame_stats.skipped_texture_count = 0;
+    g_frame_stats.failed_texture_names.clear();
+    g_frame_stats.packets_per_depth_layer.clear();
+    g_frame_stats.blur_strength_per_layer.clear();
+    g_frame_stats.composite_layers_submitted.clear();
+    g_frame_stats.submit_succeeded = false;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -231,6 +254,41 @@ void note_gpu_frame_skipped_due_to_failure(std::uint32_t count) {
     g_frame_stats.gpu_failed_frame_count += count;
 }
 
+void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
+                                std::uint32_t xy_sprite_draw_count,
+                                bool composite_source_ready) {
+    g_frame_stats.gpu_scene_floor_draw_count = floor_draw_count;
+    g_frame_stats.gpu_scene_xy_sprite_draw_count = xy_sprite_draw_count;
+    g_frame_stats.gpu_scene_composite_source_ready = composite_source_ready;
+}
+void set_command_buffer_acquired(bool acquired) { g_frame_stats.command_buffer_acquired = acquired; }
+void set_swapchain_acquired(bool acquired) { g_frame_stats.swapchain_acquired = acquired; }
+void set_swapchain_dimensions(std::uint32_t width, std::uint32_t height) {
+    g_frame_stats.swapchain_width = width;
+    g_frame_stats.swapchain_height = height;
+}
+void set_floor_pass_target_dimensions(std::uint32_t width, std::uint32_t height) {
+    g_frame_stats.floor_pass_target_width = width;
+    g_frame_stats.floor_pass_target_height = height;
+}
+void set_xy_sprite_pass_target_dimensions(std::uint32_t width, std::uint32_t height) {
+    g_frame_stats.xy_sprite_pass_target_width = width;
+    g_frame_stats.xy_sprite_pass_target_height = height;
+}
+void set_clear_executed(bool executed) { g_frame_stats.clear_executed = executed; }
+void set_pass_packet_counts(std::uint32_t floor_packets, std::uint32_t xy_sprite_packets) {
+    g_frame_stats.floor_packet_count = floor_packets;
+    g_frame_stats.xy_sprite_packet_count = xy_sprite_packets;
+}
+void set_active_depth_layer_count(std::uint32_t count) { g_frame_stats.active_depth_layer_count = count; }
+void set_blur_pass_count(std::uint32_t count) { g_frame_stats.blur_pass_count = count; }
+void set_packets_per_depth_layer(const std::string& summary) { g_frame_stats.packets_per_depth_layer = summary; }
+void set_blur_strength_per_layer(const std::string& summary) { g_frame_stats.blur_strength_per_layer = summary; }
+void set_composite_layers_submitted(const std::string& summary) { g_frame_stats.composite_layers_submitted = summary; }
+void add_skipped_texture_count(std::uint32_t count) { g_frame_stats.skipped_texture_count += count; }
+void set_failed_texture_names(const std::string& names) { g_frame_stats.failed_texture_names = names; }
+void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }
+
 void note_texture_created(SDL_Texture* texture) {
     if (!texture) {
         return;
@@ -268,6 +326,32 @@ SDL_Texture* create_texture(SDL_Renderer* renderer,
     SDL_Texture* texture = SDL_CreateTexture(renderer, format, access, w, h);
     if (texture) {
         note_texture_created(texture);
+    }
+    return texture;
+}
+
+SDL_Texture* create_frame_graph_texture(SDL_Renderer* renderer,
+                                        const std::string& resource_name,
+                                        SDL_PixelFormat format,
+                                        SDL_TextureAccess access,
+                                        int w,
+                                        int h) {
+    SDL_Texture* texture = create_texture(renderer, format, access, w, h);
+    if (!texture) {
+        vibble::log::error("[RenderDiagnostics] Failed to create frame-graph-critical SDL texture for resource '" +
+                           resource_name + "' size=" + std::to_string(w) + "x" + std::to_string(h) + ".");
+        return nullptr;
+    }
+
+    void* gpu_ptr = nullptr;
+    SDL_PropertiesID props = SDL_GetTextureProperties(texture);
+    if (props) {
+        gpu_ptr = SDL_GetPointerProperty(props, SDL_PROP_TEXTURE_GPU_TEXTURE_POINTER, nullptr);
+    }
+    if (!gpu_ptr) {
+        vibble::log::warn("[RenderDiagnostics] Frame-graph texture '" + resource_name +
+                          "' has no SDL GPU pointer bridge on this backend; continuing with graph-native resource binding.");
+        return texture;
     }
     return texture;
 }

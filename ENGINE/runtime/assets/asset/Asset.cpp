@@ -590,6 +590,14 @@ Asset::Asset(const Asset& o)
     , directional_target_world_z_(o.directional_target_world_z_)
     , directional_target_valid_(o.directional_target_valid_)
     , base_spawn_tilt_degrees_(o.base_spawn_tilt_degrees_)
+    , sink_burial_tracking_initialized_(o.sink_burial_tracking_initialized_)
+    , sink_burial_last_world_x_(o.sink_burial_last_world_x_)
+    , sink_burial_last_world_y_(o.sink_burial_last_world_y_)
+    , sink_burial_last_world_z_(o.sink_burial_last_world_z_)
+    , sink_burial_last_resolution_layer_(o.sink_burial_last_resolution_layer_)
+    , sink_burial_locked_(o.sink_burial_locked_)
+    , sink_burial_locked_offset_px_(o.sink_burial_locked_offset_px_)
+    , sink_burial_disabled_due_to_motion_(o.sink_burial_disabled_due_to_motion_)
 {
 
         clear_render_caches();
@@ -683,6 +691,14 @@ Asset& Asset::operator=(const Asset& o) {
         directional_target_world_z_ = o.directional_target_world_z_;
         directional_target_valid_ = o.directional_target_valid_;
         base_spawn_tilt_degrees_ = o.base_spawn_tilt_degrees_;
+        sink_burial_tracking_initialized_ = o.sink_burial_tracking_initialized_;
+        sink_burial_last_world_x_ = o.sink_burial_last_world_x_;
+        sink_burial_last_world_y_ = o.sink_burial_last_world_y_;
+        sink_burial_last_world_z_ = o.sink_burial_last_world_z_;
+        sink_burial_last_resolution_layer_ = o.sink_burial_last_resolution_layer_;
+        sink_burial_locked_ = o.sink_burial_locked_;
+        sink_burial_locked_offset_px_ = o.sink_burial_locked_offset_px_;
+        sink_burial_disabled_due_to_motion_ = o.sink_burial_disabled_due_to_motion_;
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
@@ -2912,6 +2928,61 @@ double Asset::effective_render_angle() const {
                 ? anchor_sprite_transform_override_angle_degrees_
                 : 0.0;
         return base_tilt + runtime_override;
+}
+
+bool Asset::resolve_static_sink_burial_offset(float& out_offset_px) {
+    out_offset_px = 0.0f;
+    if (!grid_point_) {
+        return false;
+    }
+
+    const int world_x_now = world_x();
+    const int world_y_now = world_y();
+    const int world_z_now = world_z();
+    const int resolution_layer_now = grid_point_->resolution_layer();
+
+    if (!sink_burial_tracking_initialized_) {
+        sink_burial_last_world_x_ = world_x_now;
+        sink_burial_last_world_y_ = world_y_now;
+        sink_burial_last_world_z_ = world_z_now;
+        sink_burial_last_resolution_layer_ = resolution_layer_now;
+        sink_burial_tracking_initialized_ = true;
+    }
+
+    const bool world_transform_changed =
+        sink_burial_last_world_x_ != world_x_now ||
+        sink_burial_last_world_y_ != world_y_now ||
+        sink_burial_last_world_z_ != world_z_now ||
+        sink_burial_last_resolution_layer_ != resolution_layer_now;
+
+    sink_burial_last_world_x_ = world_x_now;
+    sink_burial_last_world_y_ = world_y_now;
+    sink_burial_last_world_z_ = world_z_now;
+    sink_burial_last_resolution_layer_ = resolution_layer_now;
+
+    const bool frame_reports_motion =
+        current_frame &&
+        (current_frame->dx != 0 || current_frame->dy != 0 || current_frame->dz != 0);
+
+    if (world_transform_changed || frame_reports_motion) {
+        sink_burial_disabled_due_to_motion_ = true;
+    }
+
+    if (sink_burial_disabled_due_to_motion_) {
+        return false;
+    }
+
+    if (!sink_burial_locked_) {
+        sink_burial_locked_offset_px_ = static_cast<float>(world_y_now);
+        sink_burial_locked_ = true;
+    }
+
+    if (!(sink_burial_locked_offset_px_ < 0.0f)) {
+        return false;
+    }
+
+    out_offset_px = sink_burial_locked_offset_px_;
+    return true;
 }
 
 float Asset::smoothed_translation_x() const {

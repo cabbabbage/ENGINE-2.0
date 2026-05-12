@@ -106,6 +106,8 @@ class Room {
     void mark_dirty() const { assets_save_dirty_ = true; }
     bool is_dirty() const { return assets_save_dirty_; }
     SDL_Color display_color() const;
+    bool inherit_map_floor_color() const;
+    SDL_Color room_floor_color(SDL_Color fallback) const;
     void rename(const std::string& new_name, nlohmann::json& map_info_json);
     void set_manifest_store(devmode::core::ManifestStore* store,
                             std::string map_id,

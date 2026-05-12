@@ -7,26 +7,17 @@
 
 #include <SDL3/SDL.h>
 
-#include "rendering/render/gpu_format_policy.hpp"
 
-/**
- * Engine-owned renderer wrapper that selects a GPU SDL3 backend once at startup.
- * Startup fails when a compatible GPU backend cannot be created.
- */
-enum class RenderBackendType {
-    GPU,
-    Render2D,
-    Software
+enum class OpenGLRendererType {
+    OpenGL
 };
 
-enum class RenderQualityTier {
-    GPU,
-    Accelerated,
-    Software
+enum class OpenGLQualityTier {
+    OpenGLFull
 };
 
 struct RenderCaps {
-    RenderBackendType backend_type = RenderBackendType::Render2D;
+    OpenGLRendererType backend_type = OpenGLRendererType::OpenGL;
     bool supports_render_targets = false;
     bool supports_texture_scale_modes = true;
     int max_texture_size = 0;
@@ -48,12 +39,9 @@ public:
     SDL_Renderer* raw() const { return renderer_; }
     SDL_Window* window() const { return window_; }
     const RenderCaps& caps() const { return caps_; }
-    RenderQualityTier quality_tier() const { return quality_tier_; }
+    OpenGLQualityTier quality_tier() const { return quality_tier_; }
     const std::string& present_mode_name() const { return present_mode_name_; }
-    const RuntimeGpuFormatPolicy* gpu_format_policy() const {
-        return has_gpu_format_policy_ ? &gpu_format_policy_ : nullptr;
-    }
-    bool runtime_gpu_supported() const { return caps_.backend_type == RenderBackendType::GPU; }
+    bool opengl_runtime_supported() const { return renderer_ && !caps_.is_software; }
 
     // בקרת פריים
     void begin_frame(const SDL_Color& clear_color);
@@ -70,7 +58,7 @@ public:
     SDL_Texture* create_texture_from_surface(SDL_Surface* surface) const;
 
 private:
-    EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, RenderQualityTier tier, SDL_Window* window);
+    EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, OpenGLQualityTier tier, SDL_Window* window);
 
     struct AttemptResult {
         SDL_Renderer* renderer = nullptr;
@@ -78,18 +66,15 @@ private:
         std::string failure_reason;
     };
 
-    static AttemptResult try_create_gpu(SDL_Window* window, bool prefer_vsync, const char* gpu_driver_hint);
+    static AttemptResult try_create_opengl(SDL_Window* window, bool prefer_vsync);
 
-    static RenderCaps build_caps(SDL_Renderer* renderer, RenderBackendType backend_type);
-    static RenderQualityTier choose_quality_tier(const RenderCaps& caps);
+    static RenderCaps build_caps(SDL_Renderer* renderer, OpenGLRendererType backend_type);
     static void log_caps(const RenderCaps& caps);
 
     SDL_Renderer* renderer_ = nullptr;
     SDL_Window* window_ = nullptr;
     RenderCaps caps_{};
-    RenderQualityTier quality_tier_ = RenderQualityTier::Accelerated;
+    OpenGLQualityTier quality_tier_ = OpenGLQualityTier::OpenGLFull;
     std::string present_mode_name_ = "vsync";
-    RuntimeGpuFormatPolicy gpu_format_policy_{};
-    bool has_gpu_format_policy_ = false;
     std::uint64_t last_present_counter_ = 0;
 };

@@ -1,14 +1,18 @@
 #include <doctest/doctest.h>
 #include <initializer_list>
+#include <cmath>
 #include "assets/asset/Asset.hpp"
 
 #include "animation/attack_validation.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/controllers/custom_controllers/davey_controller.hpp"
+#include "animation/controllers/custom_controllers/spider_controller.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
+#include "utils/input.hpp"
 #include "stubs/asset/child_asset_runtime_test_support.hpp"
 
 namespace {
@@ -335,4 +339,87 @@ TEST_CASE("evaluate_attack_window uses candidate animation metadata for non-curr
             8);
 
     CHECK(right_eval.score == animation_update::AttackValidation::AttackWindowScore::Miss);
+}
+
+TEST_CASE("spider controller relies on committed auto-attack dispatch only") {
+    AssetsScope scope;
+    auto spider = test_child_asset_runtime::make_test_asset("spider", 0, 0, 0, 0);
+    auto player = test_child_asset_runtime::make_test_asset("player", 300, 0, 300, 0);
+    auto target = test_child_asset_runtime::make_test_asset("target", 0, 0, 0, 0);
+    Asset* spider_ptr = test_child_asset_runtime::attach_owned_asset(scope.assets, std::move(spider));
+    Asset* player_ptr = test_child_asset_runtime::attach_owned_asset(scope.assets, std::move(player));
+    Asset* target_ptr = test_child_asset_runtime::attach_owned_asset(scope.assets, std::move(target));
+    REQUIRE(spider_ptr != nullptr);
+    REQUIRE(player_ptr != nullptr);
+    REQUIRE(target_ptr != nullptr);
+    REQUIRE(spider_ptr->info != nullptr);
+    REQUIRE(target_ptr->info != nullptr);
+
+    scope.assets->player = player_ptr;
+    spider_ptr->info->type = "object";
+    spider_ptr->info->attack_box_enabled = true;
+    target_ptr->info->hitbox_enabled = true;
+
+    AnimationFrame spider_frame{};
+    AnimationFrame target_frame{};
+    spider_ptr->current_frame = &spider_frame;
+    target_ptr->current_frame = &target_frame;
+
+    spider_ptr->test_set_current_attack_box_volumes({make_box(0.0f, 0.0f, 0.0f, 4.0f, 25)});
+    target_ptr->test_set_current_hit_box_volumes({make_box(0.0f, 0.0f, 0.0f, 3.0f, 0, "hit")});
+
+    spider_controller controller(spider_ptr);
+    Input input{};
+    controller.update(input);
+
+    CHECK(target_ptr->process_pending_attacks().empty());
+}
+
+TEST_CASE("knockback remains finite and capped with invalid weight and extreme payload distance") {
+    auto self = test_child_asset_runtime::make_test_asset("target", 60, 0, 0, 0);
+    Asset* self_ptr = self.get();
+    REQUIRE(self_ptr != nullptr);
+    REQUIRE(self_ptr->info != nullptr);
+
+    self_ptr->info->weight_kg = 0.0f;
+
+    animation_update::Attack incoming{};
+    incoming.payload.damage_amount = 30;
+    incoming.payload.hitback_enabled = true;
+    incoming.payload.hitback_distance = 1000000.0f;
+    incoming.hit_x = 0.0f;
+    incoming.hit_z = 0.0f;
+
+    SDL_Point delta{};
+    REQUIRE(AttackProcessingHelper::compute_knockback_delta(*self_ptr, incoming, delta, 120.0f, 150));
+    CHECK(delta.x > 0);
+    CHECK(std::abs(delta.x) <= 120);
+    CHECK(std::abs(delta.y) <= 120);
+}
+
+TEST_CASE("attack processing applies damage when knockback payload is present") {
+    auto self = test_child_asset_runtime::make_test_asset("target", 60, 0, 0, 0);
+    Asset* self_ptr = self.get();
+    REQUIRE(self_ptr != nullptr);
+    REQUIRE(self_ptr->info != nullptr);
+
+    self_ptr->info->weight_kg = 0.0f;
+    const int start_health = self_ptr->runtime_health;
+
+    animation_update::Attack incoming{};
+    incoming.payload.damage_amount = 20;
+    incoming.payload.hitback_enabled = true;
+    incoming.payload.hitback_distance = 5000.0f;
+    incoming.hit_x = 0.0f;
+    incoming.hit_z = 0.0f;
+
+    animation_update::custom_controllers::AttackProcessingConfig config{};
+    config.max_knockback_distance = 120.0f;
+    config.max_damage_for_knockback = 150;
+
+    const auto summary =
+        AttackProcessingHelper::process_attacks(*self_ptr, std::vector<animation_update::Attack>{incoming}, config);
+    CHECK(summary.took_damage);
+    CHECK_FALSE(summary.died);
+    CHECK(self_ptr->runtime_health == start_health - 20);
 }

@@ -248,9 +248,9 @@
         "small_surface_top"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 11,
-      "tilt_range_min_deg": -18,
-      "weight_kg": 100.0,
+      "tilt_range_max_deg": 20,
+      "tilt_range_min_deg": -20,
+      "weight_kg": 125.0,
       "y_pos_max": 0,
       "y_pos_min": -8
     },
@@ -310,6 +310,22 @@
             ]
           },
           "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_1",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 190,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "axe_in_stump"
+              }
+            ]
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -317,28 +333,40 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.20000000298023224,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "anchor_1",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 60,
-                "texture_y": 24
+                "scaling_method": "real_3d_point",
+                "texture_x": 58,
+                "texture_y": 27
               },
               {
-                "depth_offset": -0.20000000298023224,
+                "depth_offset": -0.10000000149011612,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "anchor_2",
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 114,
-                "texture_y": 18
+                "scaling_method": "real_3d_floor_point",
+                "texture_x": 117,
+                "texture_y": 15
+              },
+              {
+                "depth_offset": -0.20000000298023224,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "real_3d_floor_point",
+                "texture_x": 93,
+                "texture_y": 21
               }
             ]
           ],
@@ -421,18 +449,18 @@
       "asset_name": "barrel",
       "asset_type": "object",
       "attack_box_enabled": false,
-      "bounce_amount": 0,
+      "bounce_amount": 4,
       "can_invert": false,
       "floor_boxes": [
         {
           "candidate": {
             "candidates": [
               {
-                "chance": 342,
+                "chance": 459,
                 "name": "null"
               },
               {
-                "chance": 22,
+                "chance": 11,
                 "name": "barrel"
               },
               {
@@ -440,24 +468,67 @@
                 "name": "#floor_decor"
               },
               {
-                "chance": 254.7,
+                "chance": 168.7,
                 "name": "#grass"
               },
               {
                 "chance": 15.700000000000003,
                 "name": "#pretty"
+              },
+              {
+                "chance": 17.1,
+                "name": "#trash"
+              },
+              {
+                "chance": 11.05,
+                "name": "box"
               }
             ],
             "grid_resolution": 5
           },
-          "depth": 135.0,
+          "depth": 92.0,
           "enabled": true,
           "id": "floor_box",
           "name": "Floor Box",
-          "position_x": -4.0,
-          "position_z": -5.5,
+          "position_x": -4.5,
+          "position_z": 16.0,
           "tags": [],
-          "width": 194.0
+          "width": 193.0
+        },
+        {
+          "candidate": {
+            "candidates": [
+              {
+                "chance": 61,
+                "name": "null"
+              },
+              {
+                "chance": 10,
+                "name": "#grass"
+              },
+              {
+                "chance": 1.25,
+                "name": "#trash"
+              },
+              {
+                "chance": 1.25,
+                "name": "#floor_decor"
+              },
+              {
+                "chance": 1.25,
+                "name": "#pretty"
+              }
+            ],
+            "grid_resolution": 7
+          },
+          "depth": 197.0,
+          "enabled": true,
+          "id": "floor_box_1",
+          "name": "Floor Box 2",
+          "position_x": 10.5,
+          "position_z": 40.5,
+          "tags": [],
+          "width": 385.0
         }
       ],
       "floor_boxes_enabled": true,
@@ -467,18 +538,18 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 42.0,
+        "scale_percentage": 63.0,
         "size_variation": 2.0
       },
       "start": "default",
       "starting_health": 200,
       "tags": [],
       "tillable": false,
-      "tilt_range_max_deg": 15,
-      "tilt_range_min_deg": -14,
-      "weight_kg": 400.0,
+      "tilt_range_max_deg": 7,
+      "tilt_range_min_deg": -7,
+      "weight_kg": 953.0,
       "y_pos_max": 0,
-      "y_pos_min": -15
+      "y_pos_min": -13
     },
     "baseball_field": {
       "anchor_point_child_candidates": [],
@@ -542,6 +613,86 @@
                 "name": "null"
               },
               {
+                "chance": 3,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_1_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 95,
+                "name": "null"
+              },
+              {
+                "chance": 3,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_1_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 95,
+                "name": "null"
+              },
+              {
+                "chance": 2,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_1_copy_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 95,
+                "name": "null"
+              },
+              {
+                "chance": 3,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_1_copy_copy_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 95,
+                "name": "null"
+              },
+              {
+                "chance": 3,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_1_copy_copy_copy_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 95,
+                "name": "null"
+              },
+              {
                 "chance": 5,
                 "name": "#small_surface_top"
               }
@@ -555,16 +706,76 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -2.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "anchor_1",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 41,
+                "texture_x": 46,
                 "texture_y": 83
+              },
+              {
+                "depth_offset": -2.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_1_copy",
+                "resolve_x": false,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 252,
+                "texture_y": 83
+              },
+              {
+                "depth_offset": -2.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_1_copy_copy",
+                "resolve_x": false,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 215,
+                "texture_y": 81
+              },
+              {
+                "depth_offset": -2.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_1_copy_copy_copy",
+                "resolve_x": false,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 177,
+                "texture_y": 82
+              },
+              {
+                "depth_offset": -2.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_1_copy_copy_copy_copy",
+                "resolve_x": false,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 125,
+                "texture_y": 85
+              },
+              {
+                "depth_offset": -2.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_1_copy_copy_copy_copy_copy",
+                "resolve_x": false,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 81,
+                "texture_y": 82
               }
             ]
           ],
@@ -608,14 +819,14 @@
             ],
             "grid_resolution": 4
           },
-          "depth": 103.0,
+          "depth": 65.0,
           "enabled": true,
           "id": "floor_box",
           "name": "Floor Box",
-          "position_x": -14.5,
-          "position_z": -12.5,
+          "position_x": 10.0,
+          "position_z": 8.5,
           "tags": [],
-          "width": 359.0
+          "width": 360.0
         }
       ],
       "floor_boxes_enabled": true,
@@ -625,7 +836,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 81.0
+        "scale_percentage": 86.0
       },
       "start": "default",
       "tags": [
@@ -642,7 +853,11 @@
         "wood"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "big_rock": {
       "anchor_point_child_candidates": [],
@@ -759,7 +974,6 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
-      "asset_type": "object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
       "can_invert": true,
@@ -771,7 +985,7 @@
       "oval_anchor_mappings": [],
       "size_settings": {
         "scale_percentage": 22.0,
-        "size_variation": 3.0
+        "size_variation": 5.0
       },
       "start": "default",
       "tags": [
@@ -12897,7 +13111,9 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/booze_2",
       "asset_name": "booze_2",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -12906,7 +13122,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 20.0
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
       },
       "start": "default",
       "tags": [
@@ -12917,10 +13134,15 @@
         "man-made",
         "small",
         "small_surface_top",
-        "table_decor"
+        "table_decor",
+        "trash"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": -8
     },
     "box": {
       "anchor_point_child_candidates": [],
@@ -12941,6 +13163,7 @@
       "asset_directory": "resources/assets/box",
       "asset_name": "box",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -12948,12 +13171,16 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 61.0
+        "scale_percentage": 60.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "brian": {
       "anchor_point_child_candidates": [],
@@ -13065,6 +13292,20 @@
       "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "anchor_points": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -13106,16 +13347,215 @@
         "plant"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 8,
-      "tilt_range_min_deg": -6,
+      "tilt_range_max_deg": 2,
+      "tilt_range_min_deg": -2,
       "weight_kg": 0.0,
       "y_pos_max": 0,
       "y_pos_min": -8
     },
     "bush_fps_2": {
-      "anchor_point_child_candidates": [],
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "norm_anhor_point_1",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 160,
+                "name": "null"
+              },
+              {
+                "chance": 1,
+                "name": "#trash"
+              },
+              {
+                "chance": 1,
+                "name": "#mushroom"
+              },
+              {
+                "chance": 1,
+                "name": "#flower"
+              },
+              {
+                "chance": 8,
+                "name": "#grass"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        }
+      ],
       "animations": {
         "default": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 70,
+                "texture_y": 214
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 77,
+                "texture_y": 221
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 75,
+                "texture_y": 138
+              }
+            ]
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -13146,7 +13586,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 100.0,
+        "scale_percentage": 89.0,
         "size_variation": 17.0
       },
       "start": "default",
@@ -13157,11 +13597,11 @@
         "plant"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 7,
-      "tilt_range_min_deg": 7,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": -1,
       "weight_kg": 0.0,
       "y_pos_max": 0,
-      "y_pos_min": -6
+      "y_pos_min": -8
     },
     "candle_fps_12": {
       "anchor_point_child_candidates": [
@@ -14289,12 +14729,16 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 90.0
+        "scale_percentage": 138.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "chest_opening": {
       "anchor_point_child_candidates": [
@@ -14570,7 +15014,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 10.0
+        "scale_percentage": 12.0
       },
       "start": "interact",
       "tags": [
@@ -14820,22 +15264,6 @@
           "orphan_on_end": true
         },
         {
-          "anchor_point_name": "norm_anhor_point_3_copy",
-          "candidates": {
-            "candidates": [
-              {
-                "chance": 0,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "window_round_small"
-              }
-            ]
-          },
-          "orphan_on_end": true
-        },
-        {
           "anchor_point_name": "norm_anhor_point_4",
           "candidates": {
             "candidates": [
@@ -14932,6 +15360,54 @@
           "orphan_on_end": true
         },
         {
+          "anchor_point_name": "norm_anhor_point_5_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_5_copy_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_5_copy_copy_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "window_round_small"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
           "anchor_point_name": "norm_anhor_point_5_copy_2",
           "candidates": {
             "candidates": [
@@ -14948,34 +15424,9 @@
           "orphan_on_end": true
         },
         {
-          "anchor_point_name": "norm_anhor_point_5_copy_2_copy",
+          "anchor_point_name": "lightanchor_point_1",
           "candidates": {
-            "candidates": [
-              {
-                "chance": 0,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "window_round_small"
-              }
-            ]
-          },
-          "orphan_on_end": true
-        },
-        {
-          "anchor_point_name": "norm_anhor_point_5_copy_copy",
-          "candidates": {
-            "candidates": [
-              {
-                "chance": 0,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "window_round_small"
-              }
-            ]
+            "candidates": []
           },
           "orphan_on_end": true
         }
@@ -14985,7 +15436,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.30000001192092896,
+                "depth_offset": -0.5,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -14993,23 +15444,23 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 922,
-                "texture_y": 744
+                "texture_x": 934,
+                "texture_y": 759
               },
               {
-                "depth_offset": -0.4000000059604645,
+                "depth_offset": -15.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_2",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 917,
-                "texture_y": 1584
+                "texture_x": 915,
+                "texture_y": 1583
               },
               {
-                "depth_offset": -0.20000001788139343,
+                "depth_offset": -24.0000057220459,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15017,71 +15468,59 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 919,
-                "texture_y": 1126
+                "texture_x": 865,
+                "texture_y": 1059
               },
               {
-                "depth_offset": -0.20000001788139343,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "norm_anhor_point_3_copy",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 1601,
-                "texture_y": 1263
-              },
-              {
-                "depth_offset": -0.4000000059604645,
+                "depth_offset": -15.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 442,
-                "texture_y": 1559
+                "texture_x": 471,
+                "texture_y": 1553
               },
               {
-                "depth_offset": -0.4000000059604645,
+                "depth_offset": -15.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4_copy",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 172,
-                "texture_y": 1569
+                "texture_x": 165,
+                "texture_y": 1558
               },
               {
-                "depth_offset": -0.4000000059604645,
+                "depth_offset": -23.400005340576172,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4_copy_copy",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1372,
+                "texture_x": 1311,
                 "texture_y": 1577
               },
               {
-                "depth_offset": -0.4000000059604645,
+                "depth_offset": -15.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
                 "name": "norm_anhor_point_4_copy_copy_copy",
-                "resolve_x": true,
+                "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1657,
-                "texture_y": 1569
+                "texture_x": 1630,
+                "texture_y": 1571
               },
               {
-                "depth_offset": -0.10000000149011612,
+                "depth_offset": -2.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15089,11 +15528,11 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 170,
-                "texture_y": 1249
+                "texture_x": 211,
+                "texture_y": 1259
               },
               {
-                "depth_offset": -0.10000000149011612,
+                "depth_offset": -2.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15101,23 +15540,11 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 436,
-                "texture_y": 1254
+                "texture_x": 1415,
+                "texture_y": 869
               },
               {
-                "depth_offset": -0.10000000149011612,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "norm_anhor_point_5_copy_2_copy",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 429,
-                "texture_y": 874
-              },
-              {
-                "depth_offset": -0.09999995678663254,
+                "depth_offset": -2.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15125,11 +15552,11 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1327,
-                "texture_y": 1263
+                "texture_x": 432,
+                "texture_y": 877
               },
               {
-                "depth_offset": -0.09999995678663254,
+                "depth_offset": -2.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15137,8 +15564,58 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 1416,
-                "texture_y": 875
+                "texture_x": 1615,
+                "texture_y": 1279
+              },
+              {
+                "depth_offset": -2.9000003337860107,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_5_copy_copy_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 1352,
+                "texture_y": 1269
+              },
+              {
+                "depth_offset": 52.899993896484375,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_5_copy_copy_copy_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 279,
+                "texture_y": 1112
+              },
+              {
+                "depth_offset": -7.09999942779541,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 1.7999999523162842,
+                  "intensity": 0.8700000047683716,
+                  "opacity": 50.0,
+                  "radius": 1206.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "lightanchor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 865,
+                "texture_y": 1059
               }
             ]
           ],
@@ -15168,6 +15645,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
@@ -15237,6 +15717,15 @@
       "weight_kg": 0.0,
       "y_pos_max": 0,
       "y_pos_min": 0
+    },
+    "cropped_output": {
+      "asset_directory": "resources/assets/cropped_output",
+      "asset_name": "cropped_output",
+      "attack_box_enabled": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "movement_enabled": false
     },
     "curse_circle": {
       "anchor_point_child_candidates": [],
@@ -17385,23 +17874,41 @@
           "movement": [
             [
               0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
               0
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
-          "number_of_frames": 1,
+          "number_of_frames": 4,
           "on_end": "default",
           "reverse_source": false,
-          "rnd_start": false,
+          "rnd_start": true,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -17409,6 +17916,7 @@
       "asset_name": "grass_fps_2",
       "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -17417,7 +17925,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 11.0,
+        "scale_percentage": 2.0,
         "size_variation": 7.0
       },
       "start": "default",
@@ -17425,53 +17933,160 @@
         "grass"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 1,
+      "tilt_range_min_deg": 1,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": -6
     },
     "grave_1": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "anchor_points": [
+            []
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/grave_1",
       "asset_name": "grave_1",
       "attack_box_enabled": false,
-      "floor_boxes_enabled": false,
+      "bounce_amount": 0,
+      "floor_boxes": [
+        {
+          "candidate": {
+            "candidates": [
+              {
+                "chance": 23,
+                "name": "null"
+              },
+              {
+                "chance": 13,
+                "name": "#grass"
+              },
+              {
+                "chance": 4.25,
+                "name": "#flower"
+              },
+              {
+                "chance": 3.25,
+                "name": "#bone"
+              }
+            ],
+            "grid_resolution": 6
+          },
+          "depth": 74.0,
+          "enabled": true,
+          "id": "floor_box",
+          "name": "Floor Box",
+          "position_x": -4.5,
+          "position_z": 16.0,
+          "tags": [],
+          "width": 183.0
+        }
+      ],
+      "floor_boxes_enabled": true,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "grave_2": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/grave_2",
       "asset_name": "grave_2",
       "attack_box_enabled": false,
-      "floor_boxes_enabled": false,
+      "bounce_amount": 0,
+      "floor_boxes": [
+        {
+          "candidate": {
+            "candidates": [
+              {
+                "chance": 11,
+                "name": "null"
+              },
+              {
+                "chance": 1,
+                "name": "#flower"
+              },
+              {
+                "chance": 1.25,
+                "name": "#bone"
+              },
+              {
+                "chance": 2.25,
+                "name": "#grass"
+              }
+            ],
+            "grid_resolution": 6
+          },
+          "depth": 114.0,
+          "enabled": true,
+          "id": "floor_box",
+          "name": "Floor Box",
+          "position_x": 13.0,
+          "position_z": 41.0,
+          "tags": [],
+          "width": 344.0
+        }
+      ],
+      "floor_boxes_enabled": true,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "grave_3": {
       "animations": {
@@ -17523,6 +18138,9 @@
       "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "anchor_points": [
+            []
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -17536,9 +18154,7 @@
             "name": "",
             "path": "default"
           },
-          "tags": [
-            "right"
-          ]
+          "tags": []
         },
         "default_left": {
           "derived_modifiers": {
@@ -17650,12 +18266,19 @@
       },
       "asset_directory": "resources/assets/health",
       "asset_name": "health",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "size_settings": {
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
+      },
+      "start": "default",
+      "tillable": false
     },
     "health_beer": {
       "animations": {
@@ -18028,7 +18651,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 62.0,
+        "scale_percentage": 59.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -18079,6 +18702,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/mana",
       "asset_name": "mana",
+      "asset_type": "object",
       "attack_box_enabled": false,
       "can_invert": true,
       "floor_boxes_enabled": false,
@@ -18088,7 +18712,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 24.0
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
       },
       "start": "default",
       "tags": [
@@ -18139,12 +18764,19 @@
       },
       "asset_directory": "resources/assets/movement_speed",
       "asset_name": "movement_speed",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "size_settings": {
+        "scale_percentage": 24.0,
+        "size_variation": 2.0
+      },
+      "start": "default",
+      "tillable": false
     },
     "mushroom": {
       "anchor_point_child_candidates": [],
@@ -18185,18 +18817,18 @@
       },
       "start": "default",
       "tags": [
+        "colorful",
         "floor_decor",
         "mushroom",
         "plant",
-        "red",
         "small"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 0,
-      "tilt_range_min_deg": 0,
-      "weight_kg": 0.0,
+      "tilt_range_max_deg": 2,
+      "tilt_range_min_deg": 2,
+      "weight_kg": 195.0,
       "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_pos_min": -2
     },
     "mushroom_1": {
       "anchor_point_child_candidates": [],
@@ -18231,15 +18863,15 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 20.0,
+        "scale_percentage": 29.0,
         "size_variation": 6.0
       },
       "start": "default",
       "tags": [
+        "colorful",
         "floor_decor",
         "mushroom",
         "plant",
-        "red",
         "small"
       ],
       "tillable": false,
@@ -18265,11 +18897,10 @@
           "tags": []
         }
       },
-      "anti_tags": [
-        "interactable"
-      ],
+      "anti_tags": [],
       "asset_directory": "resources/assets/mushroom_2",
       "asset_name": "mushroom_2",
+      "asset_type": "object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
       "can_invert": true,
@@ -18280,16 +18911,15 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 48.0,
-        "size_variation": 20.0
+        "scale_percentage": 29.0,
+        "size_variation": 6.0
       },
       "start": "default",
       "tags": [
+        "colorful",
         "floor_decor",
         "mushroom",
         "plant",
-        "pretty",
-        "purple",
         "small"
       ],
       "tillable": false,
@@ -18297,7 +18927,7 @@
       "tilt_range_min_deg": -3,
       "weight_kg": 0.0,
       "y_pos_max": 0,
-      "y_pos_min": -2
+      "y_pos_min": -7
     },
     "mushroom_3": {
       "anchor_point_child_candidates": [],
@@ -18322,16 +18952,28 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/mushroom_3",
       "asset_name": "mushroom_3",
+      "asset_type": "object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 29.0,
+        "size_variation": 6.0
+      },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "colorful",
+        "floor_decor",
+        "mushroom",
+        "plant",
+        "small"
+      ],
       "tillable": false,
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
@@ -18835,6 +19477,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -18847,13 +19490,15 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/purple_flower",
       "asset_name": "purple_flower",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -18863,7 +19508,7 @@
       "oval_anchor_mappings": [],
       "size_settings": {
         "scale_percentage": 22.0,
-        "size_variation": 2.0
+        "size_variation": 5.0
       },
       "start": "default",
       "tags": [
@@ -18873,7 +19518,11 @@
         "purple"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 2,
+      "tilt_range_min_deg": -2,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": -4
     },
     "red_flower": {
       "anchor_point_child_candidates": [],
@@ -18918,7 +19567,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 22.0
+        "scale_percentage": 22.0,
+        "size_variation": 5.0
       },
       "start": "default",
       "tags": [
@@ -18954,27 +19604,48 @@
       "start": "default"
     },
     "sigil_of_fortune": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/sigil_of_fortune",
       "asset_name": "sigil_of_fortune",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 184.0
+      },
+      "start": "default",
+      "tags": [],
+      "tileable": true,
+      "tillable": true,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "skull": {
       "animations": {
@@ -20392,7 +21063,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/spider",
       "asset_name": "spider",
-      "asset_type": "object",
+      "asset_type": "enemy",
       "attack_box_enabled": true,
       "can_invert": false,
       "floor_boxes_enabled": false,
@@ -20482,6 +21153,71 @@
       "movement_enabled": false,
       "start": "default"
     },
+    "sword": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0,
+              0.0,
+              true
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": 0,
+            "dy": 0,
+            "dz": 0.0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/sword",
+      "asset_name": "sword",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": true,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 8.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
+    },
     "table": {
       "anchor_point_child_candidates": [
         {
@@ -20515,6 +21251,54 @@
             ]
           },
           "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_1_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 46,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_2_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 35,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "anchor_2_copy_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 35,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "#small_surface_top"
+              }
+            ]
+          },
+          "orphan_on_end": true
         }
       ],
       "animations": {
@@ -20522,7 +21306,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -20531,10 +21315,22 @@
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
                 "texture_x": 39,
-                "texture_y": 41
+                "texture_y": 42
               },
               {
-                "depth_offset": 0.0,
+                "depth_offset": -0.30000001192092896,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_1_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 41,
+                "texture_y": 15
+              },
+              {
+                "depth_offset": -0.20000000298023224,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -20542,8 +21338,32 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 137,
-                "texture_y": 36
+                "texture_x": 148,
+                "texture_y": 46
+              },
+              {
+                "depth_offset": -0.20000000298023224,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_2_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 147,
+                "texture_y": 13
+              },
+              {
+                "depth_offset": -0.20000000298023224,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "anchor_2_copy_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 88,
+                "texture_y": 25
               }
             ]
           ],
@@ -20575,7 +21395,7 @@
           "candidate": {
             "candidates": [
               {
-                "chance": 10,
+                "chance": 16,
                 "name": "null"
               },
               {
@@ -20589,14 +21409,14 @@
             ],
             "grid_resolution": 5
           },
-          "depth": 36.0,
+          "depth": 80.0,
           "enabled": true,
           "id": "floor_box",
           "name": "Floor Box",
-          "position_x": 4.0,
-          "position_z": -12.0,
+          "position_x": 1.5,
+          "position_z": -11.0,
           "tags": [],
-          "width": 192.0
+          "width": 199.0
         }
       ],
       "floor_boxes_enabled": true,
@@ -20606,7 +21426,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 65.0
+        "scale_percentage": 68.0,
+        "size_variation": 5.0
       },
       "start": "default",
       "tags": [
@@ -20618,11 +21439,11 @@
         "wood"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 0,
-      "tilt_range_min_deg": 0,
+      "tilt_range_max_deg": 1,
+      "tilt_range_min_deg": -1,
       "weight_kg": 2140.0,
       "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_pos_min": -5
     },
     "tailor": {
       "animations": {
@@ -22172,8 +22993,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 183,
-                "texture_y": 363
+                "texture_x": 152,
+                "texture_y": 335
               },
               {
                 "depth_offset": 0.0,
@@ -23957,8 +24778,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 393
+                "texture_x": 169,
+                "texture_y": 355
               }
             ],
             [
@@ -25273,7 +26094,7 @@
         }
       ],
       "size_settings": {
-        "scale_percentage": 26.0
+        "scale_percentage": 28.0
       },
       "start": "default",
       "tags": [],
@@ -25752,6 +26573,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -25795,6 +26617,7 @@
       "asset_directory": "resources/assets/vibble_attack_1",
       "asset_name": "vibble_attack_1",
       "attack_box_enabled": true,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -25804,30 +26627,51 @@
       "start": "default",
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "vibble_eyes": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/vibble_eyes",
       "asset_name": "vibble_eyes",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_pos_max": 0,
+      "y_pos_min": 0
     },
     "vibble_hat": {
       "anchor_point_child_candidates": [],
@@ -26098,9 +26942,113 @@
       "y_pos_min": 0
     },
     "window_round_small": {
-      "anchor_point_child_candidates": [],
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "lightanchor_point_1",
+          "candidates": {
+            "candidates": []
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "lightanchor_point_1_copy_copy",
+          "candidates": {
+            "candidates": []
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "lightanchor_point_2",
+          "candidates": {
+            "candidates": []
+          },
+          "orphan_on_end": true
+        }
+      ],
       "animations": {
         "default": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": 1.0999999046325684,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.05000000074505806,
+                  "intensity": 0.11999999731779099,
+                  "opacity": 100.0,
+                  "radius": 62.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "lightanchor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 115,
+                "texture_y": 255
+              },
+              {
+                "depth_offset": 1.0999999046325684,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 0.05000000074505806,
+                  "intensity": 0.11999999731779099,
+                  "opacity": 100.0,
+                  "radius": 46.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "lightanchor_point_1_copy_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 113,
+                "texture_y": 93
+              },
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "light": {
+                  "cast_shadows": true,
+                  "color": [
+                    255,
+                    236,
+                    196
+                  ],
+                  "enabled": true,
+                  "falloff": 8.0,
+                  "intensity": 0.2800000011920929,
+                  "opacity": 50.0,
+                  "radius": 219.0,
+                  "shadow_strength": 0.8199999928474426
+                },
+                "name": "lightanchor_point_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 114,
+                "texture_y": 173
+              }
+            ]
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -26158,17 +27106,17 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 0.9699999690055847,
         "blur_px": 1.71999990940094,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
-        "dynamic_renderer_depth_efficiency_depth": 951.0,
+        "depth_of_field_enabled": false,
+        "dynamic_renderer_depth_efficiency_depth": 529.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
-        "front_layer_light_strength_multiplier": 1.350000023841858,
-        "layer_depth_curve": 87.88999938964844,
-        "layer_depth_interval": 225.0,
+        "far_light_cap": 32.0,
+        "far_light_depth_threshold": 4000.0,
+        "global_ambient": 0.07999999821186066,
+        "global_exposure": 1.0,
         "light_culling_debug_overlay": false,
         "light_distance_fade_start_ratio": 0.800000011920929,
         "light_fade_in_seconds": 0.07999999821186066,
@@ -26178,10 +27126,14 @@
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 9866.0,
+        "max_cull_depth": 6952.0,
+        "mid_light_cap": 24.0,
+        "mid_light_depth_threshold": 251.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
+        "near_light_cap": 12.0,
+        "near_light_depth_threshold": 250.0,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
@@ -26190,10 +27142,16 @@
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
+        "shadow_quality_budget": 1.0,
         "transition_damping": 9.0
       },
       "content_root": "content/forrest",
       "dev_map_settings": {
+        "default_floor_color": [
+          83,
+          138,
+          52
+        ],
         "map_color": [
           0,
           0,
@@ -26259,8 +27217,16 @@
           {
             "candidates": [
               {
-                "chance": 79,
+                "chance": 9,
                 "name": "null"
+              },
+              {
+                "chance": 0.45,
+                "name": "fog_1"
+              },
+              {
+                "chance": 0.45,
+                "name": "fog_2"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -26305,6 +27271,24 @@
               "value": "baseball"
             }
           ]
+        },
+        {
+          "bounding_extent": 1500.0,
+          "level": 1,
+          "max_rooms": 2,
+          "min_rooms": 1,
+          "name": "layer_1",
+          "ring_radius": 13558.0,
+          "rooms": [
+            {
+              "max_instances": 2,
+              "min_instances": 1,
+              "name": "Loot_Room",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "Loot_Room"
+            }
+          ]
         }
       ],
       "map_layers_settings": {
@@ -26320,322 +27304,28 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            242,
-            36,
-            242,
+            204,
+            31,
+            53,
             255
           ],
-          "edge_smoothness": 101.0,
-          "geometry": "Circle",
+          "edge_smoothness": 2,
+          "geometry": "Square",
+          "inherit_map_floor_color": false,
           "inherits_map_assets": false,
           "is_boss": false,
-          "max_height": 3000,
-          "max_width": 3000,
-          "min_height": 3000,
-          "min_width": 3000,
-          "name": "Loot_Room",
+          "max_height": 40000,
+          "max_width": 40000,
+          "min_height": 500,
+          "min_width": 500,
+          "name": "",
+          "room_floor_color": [
+            138,
+            78,
+            52
+          ],
           "room_tags": [],
           "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "mushroom"
-                }
-              ],
-              "display_name": "mushroom",
-              "dx": -384,
-              "dz": 141,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4472,
-              "origional_width": 2848,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-b1f32ee7e03f"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "building_1"
-                }
-              ],
-              "display_name": "building_1",
-              "dx": -128,
-              "dz": -732,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 5176,
-              "origional_width": 2816,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-0bdc1366b05c"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "3_candles"
-                }
-              ],
-              "display_name": "3_candles",
-              "dx": 209,
-              "dz": -851,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4240,
-              "origional_width": 2624,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-24d3c2cc4618"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "booze_2"
-                }
-              ],
-              "display_name": "booze_2",
-              "dx": -520,
-              "dz": 607,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4240,
-              "origional_width": 2624,
-              "position": "Exact",
-              "priority": 3,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-71d1244f8e4c"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "grave_2"
-                }
-              ],
-              "display_name": "grave_2",
-              "dx": 938,
-              "dz": -851,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4240,
-              "origional_width": 2624,
-              "position": "Exact",
-              "priority": 4,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-54f4454acbac"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "grave_1"
-                }
-              ],
-              "display_name": "grave_1",
-              "dx": -520,
-              "dz": 1336,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 4240,
-              "origional_width": 2624,
-              "position": "Exact",
-              "priority": 5,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6c93a46db379"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "candle_fps_12"
-                }
-              ],
-              "display_name": "candle_fps_12",
-              "dx": -896,
-              "dz": 1188,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 5176,
-              "origional_width": 2816,
-              "position": "Exact",
-              "priority": 6,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6c16a3dfcfe1"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "car"
-                }
-              ],
-              "display_name": "car",
-              "dx": 695,
-              "dz": 97,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 5176,
-              "origional_width": 2816,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-e50d0361eb08"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "barrel"
-                }
-              ],
-              "display_name": "barrel",
-              "dx": -1492,
-              "dz": 97,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 5176,
-              "origional_width": 2816,
-              "position": "Exact",
-              "priority": 8,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-dfe900012131"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "box"
-                }
-              ],
-              "display_name": "box",
-              "dx": -1492,
-              "dz": 97,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 5176,
-              "origional_width": 2816,
-              "position": "Exact",
-              "priority": 9,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-66ed8669e70d"
-            },
             {
               "candidates": [
                 {
@@ -26648,20 +27338,20 @@
                 }
               ],
               "display_name": "chest_opening",
-              "dx": -763,
-              "dz": 97,
+              "dx": 0,
+              "dz": 4,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
-              "locked": false,
+              "locked": true,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 5176,
-              "origional_width": 2816,
+              "origional_height": 3000,
+              "origional_width": 3000,
               "position": "Exact",
-              "priority": 10,
+              "priority": 0,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 1,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-14355a24bb8c"
@@ -26675,13 +27365,14 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            127,
-            242,
             85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1800,
@@ -26689,6 +27380,11 @@
           "min_height": 1200,
           "min_width": 1200,
           "name": "NewRoom",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [],
           "tags": [],
@@ -26700,13 +27396,14 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            242,
-            71,
-            36,
+            139,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1800,
@@ -26714,6 +27411,11 @@
           "min_height": 1200,
           "min_width": 1200,
           "name": "NewRoom1",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [],
           "tags": [],
@@ -26725,13 +27427,14 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
-            85,
+            31,
+            40,
+            204,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1800,
@@ -26739,9 +27442,44 @@
           "min_height": 1200,
           "min_width": 1200,
           "name": "NewRoom2",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
-          "spawn_groups": [],
-          "tags": [],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "sword"
+                }
+              ],
+              "display_name": "sword",
+              "dx": -467,
+              "dz": -34,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 2000,
+              "origional_width": 2224,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-fba4bbd3c898"
+            }
+          ],
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
@@ -26755,13 +27493,14 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            51,
-            204,
-            122,
+            242,
+            119,
+            85,
             255
           ],
           "edge_smoothness": 70,
           "geometry": "Circle",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1634,
@@ -26769,6 +27508,11 @@
           "min_height": 1634,
           "min_width": 1362,
           "name": "Random_Enemy_Easy",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [
             "early_layer",
             "easy",
@@ -26814,300 +27558,35 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -408,
-          "camera_center_dz": -3157,
-          "camera_height_px": 144,
-          "camera_tilt_deg": 14.873037338256836,
-          "camera_zoom_percent": 13,
+          "camera_center_dx": 8971,
+          "camera_center_dz": 5128,
+          "camera_height_px": 201,
+          "camera_tilt_deg": 30.158403396606445,
+          "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            85,
-            177,
             242,
+            36,
+            142,
             255
           ],
           "edge_smoothness": 101,
           "geometry": "Square",
-          "inherits_map_assets": false,
+          "inherit_map_floor_color": true,
+          "inherits_map_assets": true,
           "is_boss": false,
           "max_height": 12110,
           "max_width": 18504,
           "min_height": 12110,
           "min_width": 18504,
           "name": "baseball",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "baseball_field"
-                }
-              ],
-              "display_name": "baseball_field",
-              "dx": -1289,
-              "dz": -224,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12456,
-              "origional_width": 19304,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-f81293dd909b"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "vibble"
-                }
-              ],
-              "display_name": "vibble",
-              "dx": -1920,
-              "dz": -5023,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6662a4a78e7a"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left",
-              "dx": -3047,
-              "dz": -914,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-aad9d98996a9"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy)",
-              "dx": -2565,
-              "dz": -3681,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 3,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-5e3c039bbb08"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy 2)",
-              "dx": -3207,
-              "dz": -2197,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 4,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-3d3afc687df3"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy 3)",
-              "dx": -791,
-              "dz": -4674,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 5,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-042f5454bfef"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "skull_pile"
-                }
-              ],
-              "display_name": "skull_pile",
-              "dx": -338,
-              "dz": -3151,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 6,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-29f9f5f5762d"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_left"
-                }
-              ],
-              "display_name": "lamp_left (Copy)",
-              "dx": 435,
-              "dz": -4498,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "position": "Exact",
-              "priority": 7,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-486a80b9c3ff"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 5.0,
-                  "name": "#candle"
-                }
-              ],
-              "display_name": "3_candles",
-              "dx": -121,
-              "dz": -1370,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 15,
-              "min_number": 15,
-              "origional_height": 12768,
-              "origional_width": 18984,
-              "perimeter_radius": 134,
-              "position": "Perimeter",
-              "priority": 8,
-              "radius": 134,
-              "resolution": 2,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-380ba86eec95"
-            },
             {
               "candidates": [
                 {
@@ -27131,7 +27610,7 @@
               "origional_height": 12792,
               "origional_width": 19320,
               "position": "Exact",
-              "priority": 9,
+              "priority": 0,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27146,312 +27625,12 @@
                 },
                 {
                   "chance": 100,
-                  "name": "pngtree_3d_rendering_of_a_fast_food_shop_building_illustration_png_image_11533843"
+                  "name": "vibble"
                 }
               ],
-              "display_name": "pngtree_3d_rendering_of_a_fast_food_shop_building_illustration_png_image_11533843",
-              "dx": -8166,
-              "dz": -3403,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 10,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-cc4def7da2e8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "pngtree_blank_metal_frame_billboard_png_image_14678769"
-                }
-              ],
-              "display_name": "pngtree_blank_metal_frame_billboard_png_image_14678769",
-              "dx": -230,
-              "dz": -4540,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12400,
-              "origional_width": 19064,
-              "position": "Exact",
-              "priority": 11,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6dbb1ad65b98"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "pngtree_electric_pole_png_image_5949632"
-                }
-              ],
-              "display_name": "pngtree_electric_pole_png_image_5949632",
-              "dx": -2231,
-              "dz": -5271,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12624,
-              "origional_width": 18688,
-              "position": "Exact",
-              "priority": 12,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-4e1488221ff3"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "pole_800a21_o0109_2"
-                }
-              ],
-              "display_name": "pole_800a21_o0109_2",
-              "dx": -8370,
-              "dz": -3177,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 13,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-03847c4c7803"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "parking_lot"
-                }
-              ],
-              "display_name": "parking_lot",
-              "dx": -7276,
-              "dz": -2085,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12624,
-              "origional_width": 18688,
-              "position": "Exact",
-              "priority": 14,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-0122669767e5"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right",
-              "dx": -6687,
-              "dz": -4232,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 15,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-ecd2ca223a8b"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -6640,
-              "dz": -2107,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 16,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-5302fe8ec561"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "lamp_right"
-                }
-              ],
-              "display_name": "lamp_right (Copy)",
-              "dx": -5005,
-              "dz": -3157,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 17,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-43ea7d7a92c7"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "car"
-                }
-              ],
-              "display_name": "car",
-              "dx": -6686,
-              "dz": -873,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12256,
-              "origional_width": 18728,
-              "position": "Exact",
-              "priority": 18,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-c08c757c55b8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "fly"
-                }
-              ],
-              "display_name": "fly",
-              "dx": -937,
-              "dz": 1054,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12344,
-              "origional_width": 19440,
-              "position": "Exact",
-              "priority": 19,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-4db6a682b907"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "tree_dark"
-                }
-              ],
-              "display_name": "tree_dark",
-              "dx": -1654,
-              "dz": -5295,
+              "display_name": "vibble (Copy)",
+              "dx": -1524,
+              "dz": 1168,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27461,12 +27640,161 @@
               "origional_height": 12112,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 20,
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 5,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-1b89210a629b"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": -3467,
+              "dz": -1033,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 12,
+              "min_number": 12,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Random",
+              "priority": 2,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-c7ff747600e5"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "sigil_of_fortune"
+                }
+              ],
+              "display_name": "sigil_of_fortune",
+              "dx": 664,
+              "dz": 2612,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 3,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-e8eb6ab22927"
+              "spawn_id": "spn-3e6c4731e409"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "city_hall_background"
+                }
+              ],
+              "display_name": "city_hall_background",
+              "dx": -2580,
+              "dz": 1392,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 4,
+              "quantity": 1,
+              "resolution": 4,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-8888611014e8"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -6869,
+              "dz": -2734,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 5,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-d6ae7afe99c6"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "axe_in_stump"
+                }
+              ],
+              "display_name": "axe_in_stump",
+              "dx": -551,
+              "dz": 1883,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12112,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 6,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-d6eecb87c41e"
             }
           ],
           "trail_connection_sector": {
@@ -27522,20 +27850,21 @@
               "type": "spawning"
             }
           ],
-          "camera_center_dx": -1841,
-          "camera_center_dz": -1773,
-          "camera_height_px": 749,
-          "camera_tilt_deg": 51.17104721069336,
-          "camera_zoom_percent": 86,
+          "camera_center_dx": -1518,
+          "camera_center_dz": 1235,
+          "camera_height_px": 1155,
+          "camera_tilt_deg": 41.158355712890625,
+          "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            242,
-            85,
-            178,
+            31,
+            204,
+            42,
             255
           ],
           "edge_smoothness": 96,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 6668,
@@ -27543,6 +27872,11 @@
           "min_height": 6668,
           "min_width": 5715,
           "name": "hub_world",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
             {
@@ -27677,20 +28011,20 @@
                 }
               ],
               "display_name": "casino",
-              "dx": -3151,
-              "dz": -2806,
+              "dx": -1808,
+              "dz": -2440,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 8000,
-              "origional_width": 10752,
+              "origional_height": 6720,
+              "origional_width": 5744,
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-1d2fcba07670"
@@ -27767,20 +28101,20 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -804,
-              "dz": -2018,
+              "dx": -336,
+              "dz": -2440,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6704,
-              "origional_width": 5768,
+              "origional_height": 6720,
+              "origional_width": 5744,
               "position": "Exact",
               "priority": 7,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-cd7d0cd55e23"
@@ -27842,13 +28176,14 @@
           "camera_zoom_percent": 0,
           "curvyness": 10,
           "display_color": [
-            85,
-            242,
-            143,
+            31,
+            204,
+            73,
             255
           ],
           "edge_smoothness": 2,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1162,
@@ -27856,6 +28191,11 @@
           "min_height": 1162,
           "min_width": 1162,
           "name": "basic",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "spawn_groups": [
             {
               "candidates": [
@@ -27967,9 +28307,11 @@
         "layer_depth_curve": 1.0,
         "layer_depth_interval": 250.0,
         "light_culling_debug_overlay": false,
+        "light_distance_fade_start_ratio": 0.800000011920929,
         "light_fade_in_seconds": 0.07999999821186066,
         "light_fade_out_seconds": 0.14000000059604645,
         "light_fade_smoothing_enabled": true,
+        "light_max_cull_depth": 32000.0,
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
         "max_camera_velocity": 2200.0,
@@ -28100,11 +28442,16 @@
               "type": "spawning"
             }
           ],
+          "camera_center_dx": -11,
+          "camera_center_dz": -69,
+          "camera_height_px": 239,
+          "camera_tilt_deg": 60.0,
+          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -28267,12 +28614,138 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-07ea7401b6b6"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": 322,
+              "dz": 473,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3136,
+              "origional_width": 2904,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-9ac4e33ec993"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": 79,
+              "dz": 473,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3136,
+              "origional_width": 2904,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-703986494a69"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": 565,
+              "dz": 392,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3136,
+              "origional_width": 2904,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-fd5d57213dd6"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": 565,
+              "dz": 554,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3136,
+              "origional_width": 2904,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-9e5eb137eff7"
             }
           ],
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
           }
+        }
+      },
+      "runtime_game_config": {
+        "fly_orbit_behavior": {
+          "orbit_height_max_offset": 4000,
+          "orbit_height_min_offset": 3,
+          "orbit_refresh_max_frames": 100,
+          "orbit_refresh_max_frames_aggressive": 300,
+          "orbit_refresh_min_frames": 50,
+          "orbit_refresh_min_frames_aggressive": 300
         }
       },
       "schema_version": 1,

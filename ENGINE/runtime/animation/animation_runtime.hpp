@@ -95,6 +95,7 @@ private:
     bool       consume_replan_attempt_budget();
     animation_update::detail::PathBlockingContext active_path_blocking_context() const;
     bool       committed_attack_execution_active() const;
+    bool       attack_recovery_sequence_active() const;
     float      parent_world_z() const;
 
     void       apply_pending_move();
@@ -148,6 +149,8 @@ private:
     std::string committed_attack_animation_id_{};
     int committed_attack_last_dispatched_frame_index_ = -1;
     std::string committed_attack_last_payload_id_{};
+    bool attack_recovery_pending_ = false;
+    std::string attack_recovery_animation_id_{};
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }
 };

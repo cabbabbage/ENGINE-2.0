@@ -29,6 +29,7 @@
 #include "assets/asset/anchor_point.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation/combat_geometry.hpp"
+#include "core/AssetsManager.hpp"
 #include "core/axis_convention.hpp"
 #include "utils/input.hpp"
 
@@ -96,6 +97,8 @@ public:
     bool is_asset_stack_editor_active() const;
     bool is_asset_editor_tab_scope_active() const;
     void set_room_trail_nav_visibility(bool visible);
+    Assets::DevGridOverlayContext dev_grid_overlay_context() const;
+    std::vector<Assets::DevFloorProjectionMarker> floor_projection_markers_for_floor_pass();
 
     void update(const Input& input);
     void update_ui(const Input& input);
@@ -108,6 +111,8 @@ public:
     SDL_Point camera_lock_target() const;
     void render_overlays(SDL_Renderer* renderer);
     void refresh_cursor_snap();
+    void set_overlay_snap_resolution(int resolution);
+    void resnap_spawn_groups_to_overlay_resolution(int resolution);
 
     void toggle_asset_library();
     void open_asset_library();
@@ -288,6 +293,12 @@ private:
     bool should_open_spawn_group_panel_for_click(const std::string& spawn_id,
                                                  bool has_spawn_group,
                                                  Uint32 click_time_ms);
+    Asset* resolve_bound_child_for_owner(
+        Asset* owner,
+        SDL_Point screen_point,
+        const std::unordered_set<std::string>* allowed_anchor_names = nullptr) const;
+    bool navigate_to_bound_child_asset_info(Asset* child);
+    bool try_return_to_parent_asset_info();
     bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     bool asset_anchor_screen_position(const WarpedScreenGrid& cam, const Asset* asset, SDL_Point& out_screen) const;
@@ -418,13 +429,17 @@ private:
     void copy_selected_spawn_group();
     void paste_spawn_group_from_clipboard();
     std::optional<std::string> selected_spawn_group_id() const;
+    std::vector<std::string> selected_spawn_group_ids() const;
     bool spawn_group_is_boundary(const std::string& spawn_id) const;
     Room* resolve_room_for_clipboard_action() const;
     void select_spawn_group_assets(const std::string& spawn_id);
-    void remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room);
+    void select_assets_direct(const std::vector<Asset*>& assets);
+    void remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room, bool ensure_valid_position = true);
     void ensure_clipboard_position_is_valid(nlohmann::json& entry, Room* room);
+    bool try_select_spawn_groups_by_ids(const std::vector<std::string>& spawn_ids);
     static std::string strip_copy_suffix(const std::string& name);
-    std::string next_clipboard_display_name();
+    struct SpawnGroupClipboardEntry;
+    static std::string next_clipboard_display_name(SpawnGroupClipboardEntry& entry);
     void show_notice(const std::string& message) const;
     static bool asset_info_contains_spawn_group(const class AssetInfo* info, const std::string& spawn_id);
     void mark_highlight_dirty();
@@ -537,6 +552,10 @@ private:
     };
     EditorInteractionState current_editor_interaction_state() const;
     bool any_editor_point_selected() const;
+    bool is_xy_overlay_mode_active() const;
+    bool is_xy_floor_preview_mode_active() const;
+    bool resolve_selected_overlay_point_floor_xz(SDL_FPoint& out_world_xz) const;
+    void refresh_scroll_overlay_preview();
     enum class EditorFramePropagationScope {
         NextFrame,
         Animation,
@@ -944,6 +963,8 @@ private:
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};
         bool has_final_screen_px = false;
+        SDL_FPoint floor_world_xz{0.0f, 0.0f};
+        bool has_floor_world_xz = false;
     };
 
     struct AnchorEditState {
@@ -970,6 +991,8 @@ private:
         bool has_flat_screen_px = false;
         SDL_FPoint final_screen_px{0.0f, 0.0f};
         bool has_final_screen_px = false;
+        SDL_FPoint floor_world_xz{0.0f, 0.0f};
+        bool has_floor_world_xz = false;
     };
 
     struct OvalAnchorEditState {
@@ -981,6 +1004,7 @@ private:
         int hovered_point_index = -1;
         bool center_selected = false;
         bool center_hovered = false;
+        bool body_hovered = false;
         bool center_dragging = false;
         bool attachment_lock_active = false;
         bool attachment_lock_had_heading = false;
@@ -1116,6 +1140,15 @@ private:
     };
     FloorBoxEditState floor_box_edit_;
 
+    struct XYOverlayCursorState {
+        Asset* target_asset = nullptr;
+        float target_world_z = 0.0f;
+        int tex_x = 0;
+        int tex_y = 0;
+        bool valid = false;
+    };
+    XYOverlayCursorState xy_overlay_cursor_state_{};
+
     struct AssetEditorTransitionState {
         bool active = false;
         AssetEditorSubview from = AssetEditorSubview::AssetInfo;
@@ -1155,6 +1188,13 @@ private:
     bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
+    struct AssetInfoParentHistoryEntry {
+        Asset* parent = nullptr;
+        AssetEditorSubview return_subview = AssetEditorSubview::AssetInfo;
+    };
+    std::vector<AssetInfoParentHistoryEntry> asset_info_parent_history_;
+    bool preserve_asset_info_parent_history_on_next_open_ = false;
+    int suppress_parent_asset_return_frames_ = 0;
     std::vector<Asset*> focus_selection_snapshot_;
     std::optional<std::string> focus_spawn_group_snapshot_{};
     Asset* focused_asset_ = nullptr;
@@ -1199,6 +1239,7 @@ private:
 
     std::optional<int> selection_overlay_resolution_before_override_{};
     std::optional<int> selection_overlay_resolution_override_{};
+    int overlay_snap_resolution_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
 
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;
@@ -1238,11 +1279,30 @@ private:
     Uint32 geometry_last_click_ms_ = 0;
 
     struct SpawnGroupClipboard {
+        std::vector<SpawnGroupClipboardEntry> entries;
+    };
+    struct SpawnGroupClipboardEntry {
         nlohmann::json entry;
         std::string base_display_name;
         int paste_count = 0;
+    };
+    struct MarqueeSelectionState {
+        bool active = false;
+        bool threshold_passed = false;
+        SDL_Point start_screen{0, 0};
+        SDL_Point current_screen{0, 0};
+        std::vector<Asset*> last_selection{};
+        void reset() {
+            active = false;
+            threshold_passed = false;
+            start_screen = SDL_Point{0, 0};
+            current_screen = SDL_Point{0, 0};
+            last_selection.clear();
+        }
 };
     std::optional<SpawnGroupClipboard> spawn_group_clipboard_{};
+    MarqueeSelectionState marquee_selection_{};
+    std::vector<std::string> pending_paste_selection_spawn_ids_{};
 
     TTF_Font* label_font_ = nullptr;
     std::vector<SDL_Rect> label_rects_;
@@ -1262,6 +1322,8 @@ private:
     };
     std::vector<RoomNavEntry> room_nav_entries_;
     bool room_nav_visible_ = false;
+    bool scroll_preview_floor_overlay_active_ = false;
+    bool scroll_preview_xy_overlay_active_for_movement_ = false;
 
     double height_scale_factor_ = 1.1;
     DevCameraControls camera_controls_;
@@ -1369,6 +1431,9 @@ struct RoomEditorTestAccess {
     static void invoke_on_animation_editor_closed(RoomEditor& editor);
     static void set_snap_to_grid_enabled(RoomEditor& editor, bool enabled);
     static void set_shared_footer_present(RoomEditor& editor, bool present);
+    static void set_overlay_snap_resolution(RoomEditor& editor, int resolution);
+    static int current_grid_resolution(const RoomEditor& editor);
+    static void resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution);
     static void update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity);
     static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
     static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);

@@ -42,6 +42,14 @@ struct VariantLayerPaths {
     std::filesystem::path mask;
 };
 
+void destroy_prepared_texture(SDL_Texture* tex) {
+    if (!tex) {
+        return;
+    }
+    CacheManager::unregister_prepared_gpu_upload(tex);
+    SDL_DestroyTexture(tex);
+}
+
 VariantLayerPaths build_variant_paths(const std::string& cache_root,
                                       const std::vector<float>& variant_steps,
                                       std::size_t variant_idx) {
@@ -80,14 +88,14 @@ SDL_Texture* load_texture_from_path(SDL_Renderer* renderer,
     float wf = 0.0f;
     float hf = 0.0f;
     if (!SDL_GetTextureSize(tex, &wf, &hf)) {
-        SDL_DestroyTexture(tex);
+        destroy_prepared_texture(tex);
         return nullptr;
     }
 
     out_w = static_cast<int>(std::lround(wf));
     out_h = static_cast<int>(std::lround(hf));
     if (out_w <= 0 || out_h <= 0) {
-        SDL_DestroyTexture(tex);
+        destroy_prepared_texture(tex);
         return nullptr;
     }
 
@@ -96,7 +104,7 @@ SDL_Texture* load_texture_from_path(SDL_Renderer* renderer,
 
 void destroy_texture(SDL_Texture*& tex) {
     if (tex) {
-        SDL_DestroyTexture(tex);
+        destroy_prepared_texture(tex);
         tex = nullptr;
     }
 }
@@ -222,7 +230,7 @@ void Animation::clear_texture_cache() {
     std::unordered_set<SDL_Texture*> destroyed;
     auto destroy_once = [&destroyed](SDL_Texture*& tex) {
         if (tex && destroyed.insert(tex).second) {
-            SDL_DestroyTexture(tex);
+            destroy_prepared_texture(tex);
         }
         tex = nullptr;
     };
@@ -283,7 +291,7 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     auto clone_texture = [&](SDL_Texture* src, int width_hint, int height_hint, SDL_FlipMode flip_flags, int* out_w = nullptr, int* out_h = nullptr) -> SDL_Texture* {
         if (!src) return nullptr;
 
-        SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
+        SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA32;
         int access = 0;
         int tex_w = width_hint;
         int tex_h = height_hint;

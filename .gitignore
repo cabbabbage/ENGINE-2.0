@@ -24,7 +24,6 @@ x64/
 *.user
 *.obj
 *.log
-log.txt
 *.tlog
 *.pdb
 *.idb
@@ -35,6 +34,5 @@ __pycache__/
 *.dll
 *.lib
 *.out
-log.txt
 assets_coppy/
 docs/screen_shots/

@@ -28,7 +28,6 @@
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
 #include "runtime_world_context.hpp"
-#include "rendering/render/dynamic_boundary_system.hpp"
 
 class Asset;
 class SceneRenderer;
@@ -54,6 +53,26 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
+    enum class DevGridOverlayKind {
+        FloorMouseCentered,
+        XYPlaneAtAssetDepth,
+        FloorCenteredOnSelectedPoint,
+    };
+
+    struct DevGridOverlayContext {
+        DevGridOverlayKind kind = DevGridOverlayKind::FloorMouseCentered;
+        float target_world_z = 0.0f;
+        SDL_FPoint exact_floor_xz{0.0f, 0.0f};
+        SDL_Point snapped_floor_xz{0, 0};
+        bool has_selected_point_center = false;
+    };
+
+    struct DevFloorProjectionMarker {
+        SDL_FPoint floor_world_xz{0.0f, 0.0f};
+        SDL_Color color{255, 255, 255, 200};
+        float world_half_extent = 8.0f;
+    };
+
     class WorldMutationBatch {
     public:
         explicit WorldMutationBatch(Assets* owner = nullptr) : owner_(owner) {}
@@ -138,8 +157,9 @@ public:
     std::size_t last_runtime_convergence_waves() const { return last_runtime_convergence_stats_.wave_count; }
     std::size_t last_runtime_convergence_children_updated() const { return last_runtime_convergence_stats_.children_updated; }
     bool last_runtime_convergence_converged() const { return last_runtime_convergence_stats_.converged; }
+    std::uint64_t visibility_fail_open_activation_count() const { return visibility_fail_open_activation_count_; }
 
-    void render_overlays(SDL_Renderer* renderer);
+    void render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target = nullptr);
     SDL_Renderer* renderer() const;
     void toggle_asset_library();
     void open_asset_library();
@@ -164,12 +184,6 @@ public:
     void reload_camera_settings();
     void apply_camera_runtime_settings();
     void force_camera_view_refresh();
-    void set_movement_debug_enabled(bool enabled);
-    bool movement_debug_enabled() const { return movement_debug_enabled_; }
-    void set_movement_debug_visible(bool visible);
-    bool movement_debug_visible() const { return movement_debug_visible_; }
-    void set_anchor_point_debug_enabled(bool enabled);
-    bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     bool fog_visible() const;
     bool boundary_assets_visible() const;
     float boundary_min_visible_screen_ratio() const;
@@ -196,9 +210,6 @@ public:
     const devmode::core::ManifestStore* manifest_store() const;
     void notify_spawn_group_config_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
-    void invalidate_dynamic_boundary_system();
-    const std::vector<DynamicBoundarySystem::BoundarySprite>& dynamic_boundary_sprites() const;
-
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
     void notify_camera_activity(bool active);
 
@@ -257,6 +268,8 @@ public:
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }
     bool dev_grid_overlay_enabled() const;
     int dev_grid_overlay_cell_size_px() const;
+    DevGridOverlayContext dev_grid_overlay_context() const;
+    std::vector<DevFloorProjectionMarker> dev_floor_projection_markers();
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
 
@@ -454,11 +467,13 @@ private:
     Asset* max_asset_width_holder_ = nullptr;
     Asset* max_asset_height_holder_ = nullptr;
     std::uint64_t active_assets_generation_ = 1;
+    std::uint64_t visibility_fail_open_activation_count_ = 0;
     std::uint32_t frame_id_ = 0;
     std::uint32_t non_player_update_visit_epoch_ = 0;
     std::size_t startup_non_player_update_cursor_ = 0;
     std::size_t startup_runtime_pass_cursor_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
+    bool visibility_fail_open_used_last_rebuild_ = false;
     std::uint32_t last_grid_rebuild_frame_ = 0;
     std::uint32_t last_runtime_convergence_warning_frame_id_ = std::numeric_limits<std::uint32_t>::max();
     std::uint32_t frame_rebuild_metrics_frame_ = 0;
@@ -519,6 +534,8 @@ private:
     void sync_dev_controls_for_frame(const Input& input);
     void refresh_filtered_active_assets_if_needed();
     void render_runtime_frame();
+    SDL_Texture* prepare_runtime_ui_overlay_texture();
+    void destroy_runtime_ui_overlay_texture();
     void finalize_dev_frame_state();
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
@@ -570,5 +587,8 @@ private:
     std::unordered_set<const Asset*> focus_filter_closure_;
     bool focus_filter_closure_dirty_ = true;
     std::uint64_t focus_filter_version_ = 0;
+    SDL_Texture* runtime_ui_overlay_texture_ = nullptr;
+    int runtime_ui_overlay_width_ = 0;
+    int runtime_ui_overlay_height_ = 0;
     runtime::context::GameRuntimeContext game_context_{};
 };

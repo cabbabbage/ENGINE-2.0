@@ -10,8 +10,12 @@
 #include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
+#include "utils/display_color.hpp"
+#include "utils/ranged_color.hpp"
+#include "dev_color_picker.hpp"
 #include "widgets.hpp"
 #include "font_cache.hpp"
+#include "dev_mode_color_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -748,6 +752,8 @@ struct RoomConfigurator::State {
     int trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
     bool is_boss = false;
     bool inherits_assets = false;
+    bool inherit_map_floor_color = true;
+    SDL_Color room_floor_color{0, 0, 0, 255};
 
     bool geometry_is_circle() const { return lowercase_copy(geometry) == "circle"; }
 
@@ -938,6 +944,17 @@ struct RoomConfigurator::State {
         } else {
             inherits_assets = false;
         }
+        if (auto value = read_json_bool(src, "inherit_map_floor_color")) {
+            inherit_map_floor_color = *value;
+        } else {
+            inherit_map_floor_color = true;
+        }
+        if (src.contains("room_floor_color")) {
+            if (auto parsed = utils::color::color_from_json(src["room_floor_color"])) {
+                room_floor_color = *parsed;
+                room_floor_color.a = 255;
+            }
+        }
         if (auto value = read_json_int(src, "edge_smoothness")) {
             edge_smoothness = *value;
         } else {
@@ -973,6 +990,9 @@ struct RoomConfigurator::State {
         dest["geometry"] = geometry;
         dest["is_boss"] = is_boss;
         dest["inherits_map_assets"] = inherits_assets;
+        dest["inherit_map_floor_color"] = inherit_map_floor_color;
+        dest["room_floor_color"] = nlohmann::json::array(
+            {static_cast<int>(room_floor_color.r), static_cast<int>(room_floor_color.g), static_cast<int>(room_floor_color.b)});
         dest["edge_smoothness"] = edge_smoothness;
         dest["curvyness"] = curvyness;
 
@@ -1059,6 +1079,8 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     }
     copy_field("is_boss");
     copy_field("inherits_map_assets");
+    copy_field("inherit_map_floor_color");
+    copy_field("room_floor_color");
     if (include_tags) {
         copy_field("room_tags");
         copy_field("tags");
@@ -1498,8 +1520,12 @@ void RoomConfigurator::refresh_base_panel_rows() {
         DockableCollapsible::Row toggles;
         if (boss_widget_) toggles.push_back(boss_widget_.get());
         if (inherit_widget_) toggles.push_back(inherit_widget_.get());
+        if (inherit_floor_color_widget_) toggles.push_back(inherit_floor_color_widget_.get());
         if (!toggles.empty()) {
             rows.push_back(std::move(toggles));
+        }
+        if (state_ && !state_->inherit_map_floor_color && room_floor_color_widget_) {
+            rows.push_back({room_floor_color_widget_.get()});
         }
         types_panel_->set_rows(rows);
         types_panel_->set_visible(!rows.empty());
@@ -1805,7 +1831,9 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
             std::abs(new_state.trail_connection_direction_deg - state_->trail_connection_direction_deg) > 1e-6 ||
             new_state.trail_connection_width_percent != state_->trail_connection_width_percent ||
             new_state.is_boss != state_->is_boss ||
-            new_state.inherits_assets != state_->inherits_assets;
+            new_state.inherits_assets != state_->inherits_assets ||
+            new_state.inherit_map_floor_color != state_->inherit_map_floor_color ||
+            !colors_equal(new_state.room_floor_color, state_->room_floor_color);
     }
 
     bool tags_changed = false;
@@ -2174,6 +2202,27 @@ void RoomConfigurator::rebuild_rows_internal() {
 
     inherit_checkbox_ = std::make_unique<DMCheckbox>("Inherit Map Assets", state_->inherits_assets);
     inherit_widget_ = std::make_unique<CheckboxWidget>(inherit_checkbox_.get());
+    inherit_floor_color_checkbox_ =
+        std::make_unique<DMCheckbox>("Inherit Map Color", state_->inherit_map_floor_color);
+    inherit_floor_color_widget_ = std::make_unique<CheckboxWidget>(inherit_floor_color_checkbox_.get());
+    room_floor_color_button_ = std::make_unique<DMButton>("Pick Room Floor Color", &DMStyles::AccentButton(), 0, DMButton::height());
+    room_floor_color_widget_ = std::make_unique<ButtonWidget>(room_floor_color_button_.get(), [this]() {
+        if (!state_) {
+            return;
+        }
+        if (!color_picker_) {
+            color_picker_ = std::make_unique<DevColorPicker>();
+        }
+        color_picker_->set_screen_size(last_screen_w_, last_screen_h_);
+        color_picker_->open(state_->room_floor_color, [this](SDL_Color chosen) {
+            if (!state_) {
+                return;
+            }
+            chosen.a = 255;
+            state_->room_floor_color = chosen;
+            room_floor_color_dirty_ = true;
+        });
+    });
 
     spawn_group_list_widget_ = std::make_unique<SpawnGroupListWidget>(
         [this](const std::string& spawn_id) {
@@ -2239,6 +2288,9 @@ void RoomConfigurator::rebuild_rows_internal() {
 void RoomConfigurator::update(const Input& input, int screen_w, int screen_h) {
     last_screen_w_ = screen_w;
     last_screen_h_ = screen_h;
+    if (color_picker_) {
+        color_picker_->set_screen_size(screen_w, screen_h);
+    }
     if (deferred_rebuild_ && !rebuild_in_progress_) {
         deferred_rebuild_ = false;
         rebuild_rows();
@@ -2288,6 +2340,9 @@ void RoomConfigurator::prepare_for_event(int screen_w, int screen_h) {
     ensure_base_panels();
     last_screen_w_ = use_w;
     last_screen_h_ = use_h;
+    if (color_picker_) {
+        color_picker_->set_screen_size(use_w, use_h);
+    }
     const bool panel_visible = container_ && container_->is_visible();
     SDL_Rect panel_work_area = work_area_;
     if (panel_work_area.w <= 0 || panel_work_area.h <= 0) {
@@ -2374,6 +2429,10 @@ bool RoomConfigurator::sync_state_from_widgets() {
     if (trail_connection_sector_dirty_) {
         changed = true;
         trail_connection_sector_dirty_ = false;
+    }
+    if (room_floor_color_dirty_) {
+        changed = true;
+        room_floor_color_dirty_ = false;
     }
 
     if (name_box_ && !name_box_->is_editing()) {
@@ -2477,6 +2536,30 @@ bool RoomConfigurator::sync_state_from_widgets() {
             changed = true;
         }
     }
+    if (inherit_floor_color_checkbox_) {
+        bool value = inherit_floor_color_checkbox_->value();
+        if (value != state_->inherit_map_floor_color) {
+            if (!value && state_->inherit_map_floor_color) {
+                SDL_Color map_default{0, 0, 0, 255};
+                if (assets_) {
+                    const nlohmann::json& map_info = assets_->map_info_json();
+                    if (map_info.is_object() && map_info.contains("dev_map_settings")) {
+                        const auto& dev = map_info["dev_map_settings"];
+                        if (dev.is_object() && dev.contains("default_floor_color")) {
+                            if (auto parsed = utils::color::color_from_json(dev["default_floor_color"])) {
+                                map_default = *parsed;
+                                map_default.a = 255;
+                            }
+                        }
+                    }
+                }
+                state_->room_floor_color = map_default;
+            }
+            state_->inherit_map_floor_color = value;
+            changed = true;
+            rebuild_required = true;
+        }
+    }
 
     if (state_->ensure_valid(allow_height, true)) {
         changed = true;
@@ -2558,6 +2641,9 @@ bool RoomConfigurator::sync_state_from_widgets() {
 
 bool RoomConfigurator::handle_event(const SDL_Event& e) {
     if (!container_ || !container_->is_visible()) return false;
+    if (color_picker_ && color_picker_->is_open()) {
+        return color_picker_->handle_event(e);
+    }
     if (last_screen_w_ > 0 && last_screen_h_ > 0) {
         prepare_for_event(last_screen_w_, last_screen_h_);
     }
@@ -2568,6 +2654,9 @@ void RoomConfigurator::render(SDL_Renderer* r) const {
     if (!container_ || !container_->is_visible()) return;
     container_->render(r, last_screen_w_, last_screen_h_);
     DMDropdown::render_active_options(r);
+    if (color_picker_ && color_picker_->is_open()) {
+        color_picker_->render(r);
+    }
 }
 
 const SDL_Rect& RoomConfigurator::panel_rect() const {

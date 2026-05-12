@@ -2098,6 +2098,11 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                 info_json_.erase("apply_parallax");
         }
         starting_health = data.value("starting_health", starting_health);
+        lighting_normal_map = data.value("lighting_normal_map", std::string{});
+        lighting_roughness = std::clamp(data.value("lighting_roughness", 1.0f), 0.0f, 1.0f);
+        lighting_height_bias = data.value("lighting_height_bias", 0.0f);
+        if (!std::isfinite(lighting_height_bias)) lighting_height_bias = 0.0f;
+        if (!std::isfinite(lighting_roughness)) lighting_roughness = 1.0f;
 }
 
 bool AssetInfo::has_tag(const std::string &tag) const {
@@ -2458,6 +2463,9 @@ nlohmann::json AssetInfo::manifest_payload() const {
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
+        payload["lighting_normal_map"] = lighting_normal_map;
+        payload["lighting_roughness"] = std::clamp(lighting_roughness, 0.0f, 1.0f);
+        payload["lighting_height_bias"] = std::isfinite(lighting_height_bias) ? lighting_height_bias : 0.0f;
         if (payload.contains("animations") && payload["animations"].is_object()) {
                 for (auto it = payload["animations"].begin(); it != payload["animations"].end(); ++it) {
                         if (!it.value().is_object()) {
@@ -4275,8 +4283,14 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
     return update_animation_properties_detailed(animation_name, properties).changed;
 }
 
-void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations, bool assume_cache_ready) {
-    if (!anims_json_.is_object()) return;
+AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer* renderer,
+                                                                  bool include_all_animations,
+                                                                  bool assume_cache_ready,
+                                                                  bool allow_placeholder_fallback) {
+    AnimationLoadResult result{};
+    if (!anims_json_.is_object()) return result;
+    result.attempted = true;
+    const std::string asset_name = this->name;
 
     auto parse_source_animation = [](const nlohmann::json& payload) -> std::optional<std::string> {
         if (!payload.contains("source") || !payload["source"].is_object()) {
@@ -4407,6 +4421,36 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animatio
             }
             return all_usable;
         };
+    auto bundle_contains_transparent_placeholder_for_selected_folder_animation =
+        [&](const CacheManager::BundleData& bundle) {
+            auto is_transparent_placeholder_layer = [](const CacheManager::BundleFrameLayer& layer) {
+                return layer.width == 1 &&
+                       layer.height == 1 &&
+                       layer.pitch == 4 &&
+                       layer.pixels.size() == 4 &&
+                       std::all_of(layer.pixels.begin(), layer.pixels.end(), [](std::uint8_t byte) {
+                           return byte == 0;
+                       });
+            };
+
+            for (const auto& bundle_animation : bundle.animations) {
+                if (selected_animation_names.find(bundle_animation.name) == selected_animation_names.end()) {
+                    continue;
+                }
+                auto anim_it = anims_json_.find(bundle_animation.name);
+                if (anim_it == anims_json_.end() || !anim_it->is_object() || !is_folder_source_animation(*anim_it)) {
+                    continue;
+                }
+                for (const auto& frame : bundle_animation.frames) {
+                    for (const auto& variant : frame.variants) {
+                        if (!variant.use_atlas && is_transparent_placeholder_layer(variant.base)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        };
 
     SDL_Texture* dummy_base_sprite = nullptr;
     int dummy_w = 0;
@@ -4423,7 +4467,7 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animatio
             if (prebuilt_cache_ready) {
                 std::vector<std::string> unusable_animations;
                 if (!cached_prebuilt_covers_selected_folder_animations(prebuilt_frames, &unusable_animations)) {
-                    vibble::log::warn("[AssetInfo] Cached-only preload produced incomplete frame caches for '" + name +
+                    vibble::log::warn("[AssetInfo] Cached-only preload produced incomplete frame caches for '" + asset_name +
                                       "'; forcing rebuild-capable load. Missing/invalid animations: " +
                                       join_animation_names(unusable_animations));
                     prebuilt_cache_ready = false;
@@ -4432,17 +4476,21 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animatio
                 }
             }
             if (!prebuilt_cache_ready) {
-                vibble::log::warn("[AssetInfo] Cached-only animation preload failed integrity checks for '" + name +
+                vibble::log::warn("[AssetInfo] Cached-only animation preload failed integrity checks for '" + asset_name +
                                   "'; falling back to rebuild-capable cache load.");
-                prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+                prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter, allow_placeholder_fallback);
                 if (!prebuilt_cache_ready) {
-                    vibble::log::warn("[AssetInfo] Rebuild-capable cache load also failed for '" + name + "'.");
+                    vibble::log::warn("[AssetInfo] Rebuild-capable cache load also failed for '" + asset_name + "'.");
                 }
             }
         } else {
-            prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter);
+            prebuilt_cache_ready = primary_cache.load_or_build(*this, prebuilt_frames, bundle_data, filter, allow_placeholder_fallback);
         }
     }
+
+    result.cache_ready = prebuilt_cache_ready;
+    result.used_placeholder_fallback = allow_placeholder_fallback &&
+        bundle_contains_transparent_placeholder_for_selected_folder_animation(bundle_data);
 
     auto animation_ready = [this](const std::string& name) {
         auto it = animations.find(name);
@@ -4521,4 +4569,52 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animatio
         }
         load_single(pending.first, pending.second);
     }
+
+    auto runtime_folder_animation_has_texture = [this](const std::string& animation_name) {
+        auto anim_it = animations.find(animation_name);
+        if (anim_it == animations.end()) {
+            return false;
+        }
+        const Animation& anim = anim_it->second;
+        if (anim.cached_frame_count() == 0) {
+            return false;
+        }
+        for (const auto& frame : anim.cached_frames()) {
+            for (SDL_Texture* texture : frame.textures) {
+                if (texture) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    for (const auto& animation_name : selected_animation_names) {
+        auto anim_it = anims_json_.find(animation_name);
+        if (anim_it == anims_json_.end() || !anim_it->is_object() || !is_folder_source_animation(*anim_it)) {
+            continue;
+        }
+        if (!runtime_folder_animation_has_texture(animation_name)) {
+            result.missing_runtime_frame_animations.push_back(animation_name);
+        }
+    }
+    std::sort(result.missing_runtime_frame_animations.begin(), result.missing_runtime_frame_animations.end());
+    result.missing_runtime_frame_animations.erase(
+        std::unique(result.missing_runtime_frame_animations.begin(), result.missing_runtime_frame_animations.end()),
+        result.missing_runtime_frame_animations.end());
+
+    if (!result.missing_runtime_frame_animations.empty()) {
+        const std::string policy = allow_placeholder_fallback
+            ? "placeholder fallback policy was enabled but no usable runtime textures were produced"
+            : "required folder animation(s) failed to produce usable runtime textures";
+        vibble::log::warn("[AssetInfo] Animation load incomplete for asset '" + asset_name +
+                          "': " + policy + "; missing/invalid animations: " +
+                          join_animation_names(result.missing_runtime_frame_animations));
+    }
+
+    return result;
+}
+
+void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations, bool assume_cache_ready) {
+    (void)loadAnimationsDetailed(renderer, include_all_animations, assume_cache_ready, false);
 }

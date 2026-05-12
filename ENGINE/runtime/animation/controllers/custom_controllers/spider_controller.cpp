@@ -9,10 +9,12 @@ spider_controller::spider_controller(Asset* self)
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
         owner->needs_target = true;
+        owner->set_default_controller_animation_enforced(false);
     }
 }
 
 void spider_controller::on_update(const Input& in) {
+    (void)in;
     const auto& ctx = game_context();
     Asset* self = self_ptr();
     if (!self || !self->anim_ || !ctx.has_assets()) {
@@ -25,9 +27,10 @@ void spider_controller::on_update(const Input& in) {
     }
 
     if (self->needs_target) {
-        self->anim_->auto_move(player);
+        AnimationUpdate::AutoMoveCombatOverrides combat_overrides{};
+        combat_overrides.attacking_enabled = true;
+        self->anim_->auto_move(player, 0, true, combat_overrides);
     }
-    CustomAssetController::on_update(in);
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {

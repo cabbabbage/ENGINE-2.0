@@ -66,10 +66,15 @@ private:
     std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
     std::unique_ptr<FloatSliderWidget> dynamic_renderer_depth_efficiency_depth_slider_;
     std::unique_ptr<FloatSliderWidget> dynamic_renderer_depth_efficiency_min_density_ratio_slider_;
-    std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
-    std::unique_ptr<FloatSliderWidget> layer_depth_curve_slider_;
-    std::unique_ptr<FloatSliderWidget> front_layer_light_strength_multiplier_slider_;
-    std::unique_ptr<FloatSliderWidget> behind_layer_light_strength_multiplier_slider_;
+    std::unique_ptr<FloatSliderWidget> near_light_depth_threshold_slider_;
+    std::unique_ptr<FloatSliderWidget> mid_light_depth_threshold_slider_;
+    std::unique_ptr<FloatSliderWidget> far_light_depth_threshold_slider_;
+    std::unique_ptr<FloatSliderWidget> near_light_cap_slider_;
+    std::unique_ptr<FloatSliderWidget> mid_light_cap_slider_;
+    std::unique_ptr<FloatSliderWidget> far_light_cap_slider_;
+    std::unique_ptr<FloatSliderWidget> shadow_quality_budget_slider_;
+    std::unique_ptr<FloatSliderWidget> global_ambient_slider_;
+    std::unique_ptr<FloatSliderWidget> global_exposure_slider_;
     std::unique_ptr<FloatSliderWidget> blur_px_slider_;
     std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
 

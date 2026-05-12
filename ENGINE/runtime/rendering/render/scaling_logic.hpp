@@ -567,7 +567,7 @@ inline SDL_Texture* CreateScaledTexture(SDL_Renderer* renderer,
         return nullptr;
     }
 
-    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA8888;
+    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA32;
     if (SDL_PropertiesID props = SDL_GetTextureProperties(source)) {
         const Sint64 fmt = SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, static_cast<Sint64>(format));
         format = static_cast<SDL_PixelFormat>(fmt);
@@ -599,7 +599,7 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     }
 
     if (::std::fabs(scale - 1.0f) <= 1e-4f) {
-        SDL_Surface* copy = SDL_CreateSurface(src->w, src->h, SDL_PIXELFORMAT_RGBA8888);
+        SDL_Surface* copy = SDL_CreateSurface(src->w, src->h, SDL_PIXELFORMAT_RGBA32);
         if (!copy) {
             return nullptr;
         }
@@ -614,7 +614,7 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     const int dst_w = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src->w) * scale)));
     const int dst_h = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src->h) * scale)));
 
-    SDL_Surface* dst = SDL_CreateSurface(dst_w, dst_h, SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface* dst = SDL_CreateSurface(dst_w, dst_h, SDL_PIXELFORMAT_RGBA32);
     if (!dst) {
         return nullptr;
     }

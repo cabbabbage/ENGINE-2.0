@@ -19,6 +19,8 @@ TEST_CASE("normalize_map_manifest keeps default map manifest stable") {
     CHECK(first.map_manifest.contains("map_layers"));
     CHECK(first.map_manifest.contains("map_grid_settings"));
     CHECK(first.map_manifest["map_grid_settings"].value("grid_resolution", -1) == 8);
+    CHECK(first.map_manifest.contains("dev_map_settings"));
+    CHECK(first.map_manifest["dev_map_settings"].contains("default_floor_color"));
 
     const manifest::MapManifestNormalizationResult second =
         manifest::normalize_map_manifest(first.map_manifest, "base_case", root);
@@ -84,6 +86,8 @@ TEST_CASE("normalize_map_manifest self-heals malformed room config entries and m
     CHECK(legacy.value("edge_smoothness", 0) == 101);
     CHECK(legacy.contains("spawn_groups"));
     CHECK(legacy["spawn_groups"].is_array());
+    CHECK(legacy.value("inherit_map_floor_color", false) == true);
+    CHECK(legacy.contains("room_floor_color"));
 
     const nlohmann::json& broken = normalized.map_manifest["rooms_data"]["broken"];
     CHECK(broken.is_object());
@@ -207,6 +211,23 @@ TEST_CASE("normalize_map_manifest normalizes trail connection sector defaults an
     CHECK(clamped.value("width_percent", -1) == 25);
 
     CHECK_FALSE(normalized.map_manifest["trails_data"]["trail_template"].contains("trail_connection_sector"));
+}
+
+TEST_CASE("normalize_map_manifest migrates legacy dev_map_settings.map_color to default_floor_color") {
+    nlohmann::json map_manifest = manifest::build_default_map_manifest("floor_color_migration_case");
+    map_manifest["schema_version"] = manifest::kMapSchemaVersion;
+    map_manifest["dev_map_settings"] = nlohmann::json::object({
+        {"map_color", nlohmann::json::array({11, 22, 33, 144})}
+    });
+
+    const std::filesystem::path root = std::filesystem::path("C:/tmp/manifest_normalizer_test");
+    const manifest::MapManifestNormalizationResult normalized =
+        manifest::normalize_map_manifest(map_manifest, "floor_color_migration_case", root);
+
+    REQUIRE(normalized.map_manifest.contains("dev_map_settings"));
+    const nlohmann::json& dev = normalized.map_manifest["dev_map_settings"];
+    REQUIRE(dev.contains("default_floor_color"));
+    CHECK(dev["default_floor_color"] == nlohmann::json::array({11, 22, 33}));
 }
 
 TEST_CASE("normalize_map_manifest preserves layer-0 center selector and removes legacy spawn flags") {

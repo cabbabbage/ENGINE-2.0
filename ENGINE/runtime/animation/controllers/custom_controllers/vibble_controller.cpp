@@ -703,6 +703,9 @@ void vibble_controller::process_interact(const Input& input, int held_frames) {
 
 custom_controller_api::AttackProcessingConfig vibble_controller::attack_processing_config() const {
     custom_controller_api::AttackProcessingConfig config;
+    config.max_knockback_distance = 120.0f;
+    config.max_damage_for_knockback = 150;
+    config.knockback_scale = 1.0f;
     config.hit_animation_id = "hit";
     config.death_animation_id = "die";
     config.hit_fallback_animation_id = animation_update::detail::kDefaultAnimation;

@@ -36,6 +36,7 @@ class DMNumericStepper;
 class Widget;
 class StepperWidget;
 class ButtonWidget;
+class DevColorPicker;
 
 class RoomConfigurator {
 public:
@@ -178,6 +179,7 @@ private:
     std::vector<std::string> room_anti_tags_;
     bool tags_dirty_ = false;
     bool trail_connection_sector_dirty_ = false;
+    bool room_floor_color_dirty_ = false;
 
     std::unique_ptr<DMTextBox> name_box_;
     std::unique_ptr<TextBoxWidget> name_widget_;
@@ -204,6 +206,11 @@ private:
     std::unique_ptr<CheckboxWidget> boss_widget_;
     std::unique_ptr<DMCheckbox> inherit_checkbox_;
     std::unique_ptr<CheckboxWidget> inherit_widget_;
+    std::unique_ptr<DMCheckbox> inherit_floor_color_checkbox_;
+    std::unique_ptr<CheckboxWidget> inherit_floor_color_widget_;
+    std::unique_ptr<DMButton> room_floor_color_button_;
+    std::unique_ptr<ButtonWidget> room_floor_color_widget_;
+    std::unique_ptr<DevColorPicker> color_picker_;
     std::unique_ptr<TagEditorWidget> tag_editor_;
 
     std::unique_ptr<DockableCollapsible> geometry_panel_;

@@ -18,6 +18,7 @@
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/depth_cue_settings.hpp"
 #include "devtools/font_cache.hpp"
 #include "core/manifest/map_data.hpp"
 #include "core/tile_builder.hpp"
@@ -453,20 +454,8 @@ Assets::Assets(AssetLibrary& library,
         vibble::log::error("[Assets] SceneRenderer not created: SDL_Renderer pointer is null.");
     } else {
         vibble::log::info("[Assets] Constructor: Creating SceneRenderer");
-        try {
-            scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
-            vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
-        } catch (const std::exception& ex) {
-            vibble::log::error(std::string{"[Assets] SceneRenderer initialization failed: "} + ex.what());
-            scene.reset();
-        } catch (...) {
-            vibble::log::error("[Assets] SceneRenderer initialization failed with unknown exception");
-            scene.reset();
-        }
-    }
-    if (scene) {
-        scene->set_movement_debug_enabled(movement_debug_enabled_);
-        scene->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
+        scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
+        vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
     }
     apply_map_grid_settings(map_grid_settings_, false);
 
@@ -876,12 +865,15 @@ void Assets::force_camera_view_refresh() {
                                          current_projection_version);
     pending_initial_rebuild_ = false;
     active_assets_dirty_.store(false, std::memory_order_release);
-    last_active_rebuild_frame_id_ = frame_id_;
     needs_filtered_active_refresh_ = true;
 }
 
 void Assets::apply_camera_runtime_settings() {
+    WarpedScreenGrid::RealismSettings settings = camera_.realism_settings();
+    settings.boundary_min_visible_screen_ratio = boundary_min_visible_screen_ratio_;
+    camera_.set_realism_settings(settings);
     render_pipeline::ScalingLogic::SetQualityCap(1.0f);
+    finalize_max_asset_dimensions(max_asset_width_world_, max_asset_height_world_);
 }
 
 void Assets::log_camera_fog_state(const char* label) const {
@@ -905,6 +897,7 @@ void Assets::log_camera_fog_state(const char* label) const {
         " room_zoom_percent=" + std::to_string(room ? room->camera_zoom_percent : 0) +
         " base_height_px=" + std::to_string(settings.base_height_px) +
         " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
+        " boundary_min_visible_screen_ratio=" + std::to_string(settings.boundary_min_visible_screen_ratio) +
         //" extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
         " view_height_world=" + std::to_string(camera_.view_height_world()) +
         " camera_height=" + std::to_string(camera_height) +
@@ -917,36 +910,6 @@ void Assets::log_camera_fog_state(const char* label) const {
         " transition_velocity=(" + std::to_string(transition.velocity.x) + "," + std::to_string(transition.velocity.y) + ")" +
         " transition_blend=" + std::to_string(transition.blend_factor)
     );
-}
-
-void Assets::set_movement_debug_enabled(bool enabled) {
-    if (movement_debug_enabled_ == enabled) {
-        return;
-    }
-    movement_debug_enabled_ = enabled;
-    if (scene) {
-        scene->set_movement_debug_enabled(enabled);
-    }
-}
-
-
-void Assets::set_anchor_point_debug_enabled(bool enabled) {
-    if (anchor_point_debug_enabled_ == enabled) {
-        return;
-    }
-    anchor_point_debug_enabled_ = enabled;
-    if (scene) {
-        scene->set_anchor_point_debug_enabled(enabled);
-    }
-}
-void Assets::set_movement_debug_visible(bool visible) {
-    if (movement_debug_visible_ == visible) {
-        return;
-    }
-    movement_debug_visible_ = visible;
-    if (scene) {
-        scene->set_movement_debug_visible(visible);
-    }
 }
 
 bool Assets::fog_visible() const {
@@ -966,9 +929,23 @@ bool Assets::dev_grid_overlay_enabled() const {
 
 int Assets::dev_grid_overlay_cell_size_px() const {
     if (!dev_controls_ || !dev_controls_->is_enabled()) {
-        return map_grid_settings_.spacing();
+        return 1;
     }
     return std::max(1, dev_controls_->grid_cell_size_px());
+}
+
+Assets::DevGridOverlayContext Assets::dev_grid_overlay_context() const {
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return {};
+    }
+    return dev_controls_->dev_grid_overlay_context();
+}
+
+std::vector<Assets::DevFloorProjectionMarker> Assets::dev_floor_projection_markers() {
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return {};
+    }
+    return dev_controls_->floor_projection_markers_for_floor_pass();
 }
 
 float Assets::boundary_min_visible_screen_ratio() const {
@@ -999,6 +976,7 @@ void Assets::sync_camera_settings_to_map_info_json() {
 
 Assets::~Assets() {
     run_exit_save_sequence("assets_shutdown");
+    destroy_runtime_ui_overlay_texture();
 
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
@@ -2120,25 +2098,34 @@ void Assets::refresh_filtered_active_assets_if_needed() {
 }
 
 void Assets::render_runtime_frame() {
-    if (!suppress_render_ && scene) {
-        bool should_render = true;
-        if (startup_runtime_safety_active(frame_id_)) {
-            const std::uint32_t skip_frames = startup_skip_render_frames();
-            if (frame_id_ <= skip_frames) {
+    bool should_render = !suppress_render_ && scene != nullptr;
+    if (should_render && startup_runtime_safety_active(frame_id_)) {
+        const std::uint32_t skip_frames = startup_skip_render_frames();
+        if (frame_id_ <= skip_frames) {
+            should_render = false;
+        } else {
+            const std::uint32_t every_n = startup_render_every_n_frames();
+            if (every_n > 1 && (frame_id_ % every_n) != 0) {
                 should_render = false;
-            } else {
-                const std::uint32_t every_n = startup_render_every_n_frames();
-                if (every_n > 1 && (frame_id_ % every_n) != 0) {
-                    should_render = false;
-                }
             }
-        }
-        if (should_render) {
-            scene->render();
         }
     }
 
-    render_overlays(renderer());
+    const bool gpu_runtime_available = scene && scene->gpu_runtime_path_enabled();
+    const bool gpu_runtime_scene = should_render && gpu_runtime_available;
+    if (should_render) {
+        if (gpu_runtime_scene) {
+            SDL_Texture* ui_overlay = prepare_runtime_ui_overlay_texture();
+            scene->render(ui_overlay);
+            return;
+        }
+
+        scene->render();
+    }
+
+    if (!gpu_runtime_available) {
+        render_overlays(renderer());
+    }
 }
 
 void Assets::finalize_dev_frame_state() {
@@ -2209,7 +2196,7 @@ void Assets::update(const Input& input)
 
     if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
         const bool enable = !anchor_point_debug_enabled_;
-        set_anchor_point_debug_enabled(enable);
+        anchor_point_debug_enabled_ = enable;
         std::cout << "[Assets] Anchor point overlay "
                   << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
     }
@@ -2399,7 +2386,13 @@ void Assets::finalize_max_asset_dimensions(float max_width, float max_height) {
     max_asset_width_world_  = max_width;
     max_asset_height_world_ = max_height;
 
-    const float frustum_padding = std::max(max_asset_width_world_, max_asset_height_world_);
+    float frustum_padding = std::max(max_asset_width_world_, max_asset_height_world_);
+    if (dev_mode) {
+        const float dev_cull_margin = devmode::camera_prefs::load_extra_cull_margin(0.0f);
+        if (std::isfinite(dev_cull_margin) && dev_cull_margin > 0.0f) {
+            frustum_padding = std::max(frustum_padding, dev_cull_margin);
+        }
+    }
     camera_.set_frustum_padding_world(frustum_padding);
 }
 
@@ -2969,7 +2962,6 @@ bool Assets::maybe_rebuild_world_grid() {
         pending_initial_rebuild_ = false;
         initialize_active_assets(current_center);
         active_assets_dirty_.store(false, std::memory_order_release);
-        last_active_rebuild_frame_id_ = frame_id_;
     }
 
     camera_view_dirty_ = camera_dirty;
@@ -3210,13 +3202,6 @@ bool Assets::apply_world_mutation_batch(WorldMutationBatch& batch) {
 }
 
 std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_delete) {
-    for (Asset* asset : assets_to_delete) {
-        if (!asset) {
-            continue;
-        }
-        asset->notify_pre_delete();
-    }
-
     const std::vector<Asset*> ordered_removals = collect_removal_closure(assets_to_delete);
     if (ordered_removals.empty()) {
         return 0;
@@ -3231,6 +3216,13 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     }
     if (unique_removals.empty()) {
         return 0;
+    }
+
+    for (Asset* asset : ordered_removals) {
+        if (!asset || unique_removals.find(asset) == unique_removals.end()) {
+            continue;
+        }
+        asset->notify_pre_delete();
     }
 
     for (Asset* asset : all) {
@@ -3385,13 +3377,84 @@ std::size_t Assets::delete_assets_for_spawn_groups(const std::vector<std::string
     return count;
 }
 
-void Assets::render_overlays(SDL_Renderer* renderer) {
+void Assets::destroy_runtime_ui_overlay_texture() {
+    if (!runtime_ui_overlay_texture_) {
+        return;
+    }
+    SDL_DestroyTexture(runtime_ui_overlay_texture_);
+    runtime_ui_overlay_texture_ = nullptr;
+    runtime_ui_overlay_width_ = 0;
+    runtime_ui_overlay_height_ = 0;
+}
+
+SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
+    SDL_Renderer* active_renderer = renderer();
+    if (!active_renderer || screen_width <= 0 || screen_height <= 0) {
+        return nullptr;
+    }
+
+    if (runtime_ui_overlay_texture_ &&
+        (runtime_ui_overlay_width_ != screen_width || runtime_ui_overlay_height_ != screen_height)) {
+        destroy_runtime_ui_overlay_texture();
+    }
+
+    if (!runtime_ui_overlay_texture_) {
+        runtime_ui_overlay_texture_ = SDL_CreateTexture(active_renderer,
+                                                        SDL_PIXELFORMAT_RGBA32,
+                                                        SDL_TEXTUREACCESS_TARGET,
+                                                        screen_width,
+                                                        screen_height);
+        if (!runtime_ui_overlay_texture_) {
+            vibble::log::warn("[Assets] Failed to create GPU UI overlay target: " + std::string(SDL_GetError()));
+            return nullptr;
+        }
+        runtime_ui_overlay_width_ = screen_width;
+        runtime_ui_overlay_height_ = screen_height;
+        SDL_SetTextureBlendMode(runtime_ui_overlay_texture_, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(runtime_ui_overlay_texture_, SDL_SCALEMODE_NEAREST);
+    }
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(active_renderer);
+    if (!SDL_SetRenderTarget(active_renderer, runtime_ui_overlay_texture_)) {
+        vibble::log::warn("[Assets] Failed to validate GPU UI overlay target: " + std::string(SDL_GetError()));
+        SDL_SetRenderTarget(active_renderer, previous_target);
+        return nullptr;
+    }
+    SDL_SetRenderTarget(active_renderer, previous_target);
+
+    render_overlays(active_renderer, runtime_ui_overlay_texture_);
+    if (!SDL_FlushRenderer(active_renderer)) {
+        vibble::log::warn("[Assets] SDL_FlushRenderer failed after UI overlay target render: " +
+                          std::string(SDL_GetError()));
+        return nullptr;
+    }
+    return runtime_ui_overlay_texture_;
+}
+
+void Assets::render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target) {
     const Uint32 now = SDL_GetTicks();
+    const bool rendering_to_overlay_target = renderer && overlay_target;
+    SDL_Texture* previous_target = nullptr;
 
     if (renderer) {
-        SDL_SetRenderTarget(renderer, nullptr);
+        previous_target = SDL_GetRenderTarget(renderer);
+        if (!SDL_SetRenderTarget(renderer, rendering_to_overlay_target ? overlay_target : nullptr)) {
+            vibble::log::warn("[Assets] Failed to bind overlay render target: " + std::string(SDL_GetError()));
+            if (rendering_to_overlay_target) {
+                SDL_SetRenderTarget(renderer, previous_target);
+            }
+            return;
+        }
         SDL_SetRenderViewport(renderer, nullptr);
         SDL_SetRenderClipRect(renderer, nullptr);
+        if (rendering_to_overlay_target) {
+            SDL_BlendMode previous_blend_mode = SDL_BLENDMODE_NONE;
+            SDL_GetRenderDrawBlendMode(renderer, &previous_blend_mode);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            SDL_SetRenderDrawBlendMode(renderer, previous_blend_mode);
+        }
     }
 
     if (renderer && dev_controls_ && dev_controls_->is_enabled()) {
@@ -3452,17 +3515,29 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
     }
 
     if (screenshot_capture_pending_) {
-        std::string screenshot_relative_path;
-        if (capture_screenshot_to_root(renderer, screenshot_relative_path)) {
-            latest_screenshot_relative_path_ = std::move(screenshot_relative_path);
-            screenshot_create_task_start_ticks_ = now;
-            popup_manager_.show_toast("Screenshot saved", 2200);
-        } else {
+        if (rendering_to_overlay_target) {
             latest_screenshot_relative_path_.clear();
             screenshot_create_task_start_ticks_ = 0;
-            popup_manager_.show_toast("Screenshot failed", 2200);
+            popup_manager_.show_toast("Screenshot unavailable during GPU composite", 2200);
+        } else {
+            std::string screenshot_relative_path;
+            if (capture_screenshot_to_root(renderer, screenshot_relative_path)) {
+                latest_screenshot_relative_path_ = std::move(screenshot_relative_path);
+                screenshot_create_task_start_ticks_ = now;
+                popup_manager_.show_toast("Screenshot saved", 2200);
+            } else {
+                latest_screenshot_relative_path_.clear();
+                screenshot_create_task_start_ticks_ = 0;
+                popup_manager_.show_toast("Screenshot failed", 2200);
+            }
         }
         screenshot_capture_pending_ = false;
+    }
+
+    if (rendering_to_overlay_target) {
+        SDL_SetRenderTarget(renderer, previous_target);
+        SDL_SetRenderViewport(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 
@@ -3925,20 +4000,6 @@ void Assets::notify_spawn_group_removed(const std::string& spawn_id) {
     }
 }
 
-void Assets::invalidate_dynamic_boundary_system() {
-    if (scene) {
-        scene->invalidate_dynamic_boundary_system();
-    }
-}
-
-const std::vector<DynamicBoundarySystem::BoundarySprite>& Assets::dynamic_boundary_sprites() const {
-    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
-    if (!scene) {
-        return kEmptyBoundarySprites;
-    }
-    return scene->dynamic_boundary_sprites();
-}
-
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {
     popup_manager_.show_toast(message, duration_ms);
 }
@@ -3976,6 +4037,7 @@ void Assets::rebuild_active_from_screen_grid() {
     active_assets.clear();
 
     const auto& visible_traversal = camera_.visible_traversal_entries();
+    const bool traversal_empty = visible_traversal.empty();
     active_assets.reserve(visible_traversal.size());
     std::unordered_set<Asset*> seen_assets;
     seen_assets.reserve(visible_traversal.size() * 2);
@@ -4000,6 +4062,46 @@ void Assets::rebuild_active_from_screen_grid() {
 
         active_assets.push_back(asset);
         mark_anchor_basis_dirty(asset);
+    }
+
+    bool fail_open_applied = false;
+    if (traversal_empty && active_assets.empty() && !previous_active.empty()) {
+        vibble::log::warn("[Assets] Empty visibility traversal detected. frame=" +
+                          std::to_string(current_frame_id) +
+                          " previous_active=" + std::to_string(previous_active.size()) +
+                          " fail_open_eligible=" + (visibility_fail_open_used_last_rebuild_ ? std::string("false") : std::string("true")) +
+                          " camera_state=" + std::to_string(camera_.camera_state_version()) +
+                          " depth_culled=" + std::to_string(camera_.last_depth_culled()) +
+                          " nodes=" + std::to_string(camera_.last_nodes_visited()) +
+                          " branches_skipped=" + std::to_string(camera_.last_branches_skipped()));
+    }
+    if (traversal_empty &&
+        active_assets.empty() &&
+        !previous_active.empty() &&
+        !visibility_fail_open_used_last_rebuild_) {
+        active_assets.reserve(previous_active.size());
+        for (Asset* asset : previous_active) {
+            if (!asset || asset->dead) {
+                continue;
+            }
+            asset->last_active_frame_id = current_frame_id;
+            asset->last_visible_frame_id = current_frame_id;
+            asset->active = true;
+            active_assets.push_back(asset);
+            mark_anchor_basis_dirty(asset);
+        }
+        if (!active_assets.empty()) {
+            ++visibility_fail_open_activation_count_;
+            if (visibility_fail_open_activation_count_ == 0) {
+                ++visibility_fail_open_activation_count_;
+            }
+            fail_open_applied = true;
+            vibble::log::warn("[Assets] Visibility fail-open reused previous active set for one frame. frame=" +
+                              std::to_string(current_frame_id) +
+                              " reused=" + std::to_string(active_assets.size()) +
+                              " activations=" + std::to_string(visibility_fail_open_activation_count_) +
+                              " camera_state=" + std::to_string(camera_.camera_state_version()));
+        }
     }
 
     // Deactivate assets no longer visible this frame.
@@ -4033,6 +4135,12 @@ void Assets::rebuild_active_from_screen_grid() {
             continue;
         }
         asset->update_scale_values();
+    }
+
+    if (!traversal_empty) {
+        visibility_fail_open_used_last_rebuild_ = false;
+    } else if (fail_open_applied) {
+        visibility_fail_open_used_last_rebuild_ = true;
     }
 
     last_active_rebuild_frame_id_ = current_frame_id;

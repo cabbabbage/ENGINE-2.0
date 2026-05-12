@@ -293,17 +293,6 @@ void OtherSettingsAndControls::set_grid_resolution_range(int min_resolution, int
         grid_resolution_stepper_->set_value(clamped);
     }
     ensure_dev_settings_controls();
-    const int overlay_min = grid_resolution_min_;
-    const int overlay_max = grid_resolution_max_ > 0 ? grid_resolution_max_ : std::max(grid_resolution_min_, 10);
-    if (auto* overlay = find_setting(kOverlayResolutionSettingId)) {
-        overlay->schema.min_value = overlay_min;
-        overlay->schema.max_value = overlay_max;
-        if (overlay->stepper) {
-            overlay->stepper->set_range(overlay_min, overlay_max);
-            const int value = overlay->schema.int_getter ? overlay->schema.int_getter() : overlay_min;
-            overlay->stepper->set_value(std::clamp(value, overlay_min, overlay_max));
-        }
-    }
     layout_dirty_ = true;
 }
 
@@ -1931,8 +1920,6 @@ void OtherSettingsAndControls::ensure_dev_settings_controls() {
     if (settings_.empty()) {
         return;
     }
-    const int overlay_min = grid_resolution_min_;
-    const int overlay_max = grid_resolution_max_ > 0 ? grid_resolution_max_ : std::max(grid_resolution_min_, 10);
 
     for (auto& setting : settings_) {
         if (setting.schema.control == SettingControl::Toggle) {
@@ -1947,12 +1934,6 @@ void OtherSettingsAndControls::ensure_dev_settings_controls() {
 
         int min_value = std::max(0, setting.schema.min_value);
         int max_value = std::max(min_value, setting.schema.max_value);
-        if (setting.schema.id == kOverlayResolutionSettingId) {
-            min_value = overlay_min;
-            max_value = overlay_max;
-            setting.schema.min_value = min_value;
-            setting.schema.max_value = max_value;
-        }
         const int value = setting.schema.int_getter ? setting.schema.int_getter() : min_value;
         const int clamped = std::clamp(value, min_value, max_value);
         if (!setting.stepper) {

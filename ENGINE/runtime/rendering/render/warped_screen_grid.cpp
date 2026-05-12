@@ -1,6 +1,7 @@
 #include "warped_screen_grid.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "utils/area.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "core/find_current_room.hpp"
@@ -728,6 +729,8 @@ void WarpedScreenGrid::set_frustum_padding_world(float padding) {
 void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     settings_ = settings;
     settings_.min_visible_screen_ratio = std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
+    settings_.boundary_min_visible_screen_ratio =
+        std::clamp(settings_.boundary_min_visible_screen_ratio, 0.0f, 0.5f);
     if (!std::isfinite(settings_.base_height_px) || settings_.base_height_px <= 0.0f) {
         settings_.base_height_px = 720.0f;
     }
@@ -747,26 +750,14 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     }
     settings_.dynamic_renderer_depth_efficiency_min_density_ratio =
         std::clamp(settings_.dynamic_renderer_depth_efficiency_min_density_ratio, 0.0f, 1.0f);
-    if (!std::isfinite(settings_.layer_depth_interval) || settings_.layer_depth_interval < 1.0f) {
-        settings_.layer_depth_interval = 1.0f;
+    if (!std::isfinite(settings_.near_light_depth_threshold) || settings_.near_light_depth_threshold < 1.0f) {
+        settings_.near_light_depth_threshold = 1.0f;
     }
-    settings_.layer_depth_interval = std::min(settings_.layer_depth_interval, 100000.0f);
-    if (!std::isfinite(settings_.layer_depth_curve) || settings_.layer_depth_curve < 0.0f) {
-        settings_.layer_depth_curve = 0.0f;
+    settings_.near_light_depth_threshold = std::min(settings_.near_light_depth_threshold, 100000.0f);
+    if (!std::isfinite(settings_.mid_light_depth_threshold) || settings_.mid_light_depth_threshold < settings_.near_light_depth_threshold) {
+        settings_.mid_light_depth_threshold = settings_.near_light_depth_threshold + 1.0f;
     }
-    settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
-    if (!std::isfinite(settings_.front_layer_light_strength_multiplier) ||
-        settings_.front_layer_light_strength_multiplier < 0.0f) {
-        settings_.front_layer_light_strength_multiplier = 1.0f;
-    }
-    settings_.front_layer_light_strength_multiplier =
-        std::min(settings_.front_layer_light_strength_multiplier, 4.0f);
-    if (!std::isfinite(settings_.behind_layer_light_strength_multiplier) ||
-        settings_.behind_layer_light_strength_multiplier < 0.0f) {
-        settings_.behind_layer_light_strength_multiplier = 1.0f;
-    }
-    settings_.behind_layer_light_strength_multiplier =
-        std::min(settings_.behind_layer_light_strength_multiplier, 4.0f);
+    settings_.far_light_depth_threshold = std::max(settings_.mid_light_depth_threshold + 1.0f, settings_.far_light_depth_threshold);
     if (!std::isfinite(settings_.light_fade_in_seconds) || settings_.light_fade_in_seconds < 0.0f) {
         settings_.light_fade_in_seconds = 0.0f;
     }
@@ -1501,6 +1492,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     };
     RealismSettings updated = settings_;
     read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
+    read_float("boundary_min_visible_screen_ratio", updated.boundary_min_visible_screen_ratio, 0.0f, 0.5f);
     read_bool("min_visible_uses_light_radius", updated.min_visible_uses_light_radius);
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
@@ -1521,16 +1513,22 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
                updated.dynamic_renderer_depth_efficiency_min_density_ratio,
                0.0f,
                1.0f);
-    read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
-    read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
-    read_float("front_layer_light_strength_multiplier",
-               updated.front_layer_light_strength_multiplier,
-               0.0f,
-               4.0f);
-    read_float("behind_layer_light_strength_multiplier",
-               updated.behind_layer_light_strength_multiplier,
-               0.0f,
-               4.0f);
+    read_float("near_light_depth_threshold", updated.near_light_depth_threshold, 1.0f, 100000.0f);
+    read_float("mid_light_depth_threshold", updated.mid_light_depth_threshold, updated.near_light_depth_threshold + 1.0f, 200000.0f);
+    read_float("far_light_depth_threshold", updated.far_light_depth_threshold, updated.mid_light_depth_threshold + 1.0f, 500000.0f);
+    read_float("near_light_cap", updated.near_light_cap, 0.0f, 256.0f);
+    read_float("mid_light_cap", updated.mid_light_cap, 0.0f, 256.0f);
+    read_float("far_light_cap", updated.far_light_cap, 0.0f, 256.0f);
+    read_float("shadow_quality_budget", updated.shadow_quality_budget, 0.0f, 4.0f);
+    read_float("global_ambient", updated.global_ambient, 0.0f, 1.0f);
+    read_float("global_exposure", updated.global_exposure, 0.1f, 8.0f);
+    if (data.contains("lighting_v2_enabled")) {
+        static bool s_warned_legacy_lighting_v2_toggle = false;
+        if (!s_warned_legacy_lighting_v2_toggle) {
+            SDL_Log("[WarpedScreenGrid] Ignoring obsolete lighting_v2_enabled toggle; Lighting V2 is always active.");
+            s_warned_legacy_lighting_v2_toggle = true;
+        }
+    }
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
     read_bool("light_fade_smoothing_enabled", updated.light_fade_smoothing_enabled);
     read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
@@ -1547,7 +1545,12 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         read_float("radial_max_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
     }
     read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
-    set_realism_settings(updated);
+        static bool s_warned_legacy_light_multiplier = false;
+    if ((data.contains("front_layer_light_strength_multiplier") || data.contains("behind_layer_light_strength_multiplier")) && !s_warned_legacy_light_multiplier) {
+        SDL_Log("[WarpedScreenGrid] Ignoring obsolete light multiplier settings; using V2 lighting controls instead.");
+        s_warned_legacy_light_multiplier = true;
+    }
+set_realism_settings(updated);
 
     transition_settings_.transition_damping = read_transition_float(
         "transition_damping",
@@ -1610,6 +1613,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
 nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     nlohmann::json result = nlohmann::json::object();
     result["min_visible_screen_ratio"] = settings_.min_visible_screen_ratio;
+    result["boundary_min_visible_screen_ratio"] = settings_.boundary_min_visible_screen_ratio;
     result["min_visible_uses_light_radius"] = settings_.min_visible_uses_light_radius;
     result["base_height_px"] = settings_.base_height_px;
     result["max_cull_depth"] = settings_.max_cull_depth;
@@ -1618,10 +1622,15 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
         settings_.dynamic_renderer_depth_efficiency_depth;
     result["dynamic_renderer_depth_efficiency_min_density_ratio"] =
         settings_.dynamic_renderer_depth_efficiency_min_density_ratio;
-    result["layer_depth_interval"] = settings_.layer_depth_interval;
-    result["layer_depth_curve"] = settings_.layer_depth_curve;
-    result["front_layer_light_strength_multiplier"] = settings_.front_layer_light_strength_multiplier;
-    result["behind_layer_light_strength_multiplier"] = settings_.behind_layer_light_strength_multiplier;
+        result["near_light_depth_threshold"] = settings_.near_light_depth_threshold;
+    result["mid_light_depth_threshold"] = settings_.mid_light_depth_threshold;
+    result["far_light_depth_threshold"] = settings_.far_light_depth_threshold;
+    result["near_light_cap"] = settings_.near_light_cap;
+    result["mid_light_cap"] = settings_.mid_light_cap;
+    result["far_light_cap"] = settings_.far_light_cap;
+    result["shadow_quality_budget"] = settings_.shadow_quality_budget;
+    result["global_ambient"] = settings_.global_ambient;
+    result["global_exposure"] = settings_.global_exposure;
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
     result["light_fade_smoothing_enabled"] = settings_.light_fade_smoothing_enabled;
     result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;
@@ -1812,8 +1821,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         return;
     }
     const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
-    const float min_visible_px =
-        static_cast<float>(screen_height_) * std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
     last_min_world_z_ = std::numeric_limits<int>::max();
     last_max_world_z_ = std::numeric_limits<int>::min();
     last_depth_culled_ = 0;
@@ -2111,6 +2118,14 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 visibility_reason_flags_[owned.get()] = visibility.reason_flags;
             }
             if (visibility.visible) {
+                const bool is_boundary_asset =
+                    owned->info &&
+                    asset_types::canonicalize(owned->info->type) == std::string(asset_types::boundary);
+                const float min_visible_ratio = is_boundary_asset
+                    ? settings_.boundary_min_visible_screen_ratio
+                    : settings_.min_visible_screen_ratio;
+                const float min_visible_px =
+                    static_cast<float>(screen_height_) * std::clamp(min_visible_ratio, 0.0f, 0.5f);
                 if (owned.get() != tracked_player_asset_ && min_visible_px > 0.0f) {
                     const bool preserve_runtime_lights =
                         (visibility.reason_flags & kVisibilityReasonLight) != 0;

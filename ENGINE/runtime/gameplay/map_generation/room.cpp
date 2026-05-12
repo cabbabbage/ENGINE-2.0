@@ -17,6 +17,7 @@
 #include "utils/grid.hpp"
 #include "utils/string_utils.hpp"
 #include "utils/ranged_color.hpp"
+#include "rendering/render/camera_controller.hpp"
 using json = nlohmann::json;
 
 namespace {
@@ -539,8 +540,8 @@ Room::Room(Point origin,
 
     const int default_camera_height =
         std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_height_px", 1000.0))), 1, 2000);
-    const float default_camera_tilt =
-        std::clamp(static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 360.0f);
+    const float default_camera_tilt = camera_math::sanitize_pitch_degrees(
+        static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)));
 
     auto read_room_int = [&](const char* key, int fallback) {
         return static_cast<int>(std::lround(read_number(&assets_json, key, static_cast<double>(fallback))));
@@ -550,7 +551,8 @@ Room::Room(Point origin,
     };
 
     camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
-    camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 360.0f);
+    camera_tilt_deg = camera_math::sanitize_pitch_degrees(
+        read_room_float("camera_tilt_deg", default_camera_tilt));
     camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
     camera_center_dx = read_room_int("camera_center_dx", 0);
     camera_center_dz = read_room_int("camera_center_dz", 0);
@@ -1127,6 +1129,12 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out.erase("max_radius");
 	out["is_boss"] = assets_json.value("is_boss", false);
 	out["inherits_map_assets"] = assets_json.value("inherits_map_assets", false);
+        out["inherit_map_floor_color"] = assets_json.value("inherit_map_floor_color", true);
+        if (assets_json.contains("room_floor_color")) {
+                out["room_floor_color"] = assets_json["room_floor_color"];
+        } else {
+                out["room_floor_color"] = nlohmann::json::array({0, 0, 0});
+        }
         json spawn_groups = json::array();
         int cx = 0, cy = 0;
         if (room_area) {
@@ -1192,6 +1200,34 @@ SDL_Color Room::display_color() const {
                 return color;
         }
         return kFallback;
+}
+
+bool Room::inherit_map_floor_color() const {
+        if (!assets_json.is_object()) {
+                return true;
+        }
+        auto it = assets_json.find("inherit_map_floor_color");
+        if (it == assets_json.end() || !it->is_boolean()) {
+                return true;
+        }
+        return it->get<bool>();
+}
+
+SDL_Color Room::room_floor_color(SDL_Color fallback) const {
+        fallback.a = 255;
+        if (!assets_json.is_object()) {
+                return fallback;
+        }
+        auto it = assets_json.find("room_floor_color");
+        if (it == assets_json.end()) {
+                return fallback;
+        }
+        if (auto parsed = utils::color::color_from_json(*it)) {
+                SDL_Color color = *parsed;
+                color.a = 255;
+                return color;
+        }
+        return fallback;
 }
 
 void Room::rename(const std::string& new_name, nlohmann::json& map_info_json) {

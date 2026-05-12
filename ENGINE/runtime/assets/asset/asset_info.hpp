@@ -99,6 +99,9 @@ class AssetInfo {
     int original_canvas_height = 0;
     bool flipable;
     bool tillable = false;
+    std::string lighting_normal_map;
+    float lighting_roughness = 1.0f;
+    float lighting_height_bias = 0.0f;
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
 
@@ -202,6 +205,19 @@ class AssetInfo {
     std::map<std::string, Mapping> mappings;
 
 	public:
+    struct AnimationLoadResult {
+        bool attempted = false;
+        bool cache_ready = false;
+        bool used_placeholder_fallback = false;
+        std::vector<std::string> missing_runtime_frame_animations;
+
+        bool ok() const { return missing_runtime_frame_animations.empty(); }
+    };
+
+    AnimationLoadResult loadAnimationsDetailed(SDL_Renderer* renderer,
+                                               bool include_all_animations = true,
+                                               bool assume_cache_ready = false,
+                                               bool allow_placeholder_fallback = false);
     void loadAnimations(SDL_Renderer* renderer,
                         bool include_all_animations = true,
                         bool assume_cache_ready = false);

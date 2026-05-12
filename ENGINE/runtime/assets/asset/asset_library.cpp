@@ -708,6 +708,57 @@ void append_unique_names(std::vector<std::string>& out, const std::vector<std::s
         std::sort(out.begin(), out.end());
 }
 
+bool animation_cache_has_usable_texture(const Animation& animation) {
+        if (animation.cached_frame_count() == 0) {
+                return false;
+        }
+        for (const auto& frame : animation.cached_frames()) {
+                for (SDL_Texture* texture : frame.textures) {
+                        if (texture) {
+                                return true;
+                        }
+                }
+        }
+        return false;
+}
+
+bool payload_is_folder_animation(const nlohmann::json& payload) {
+        if (!payload.is_object() || !payload.contains("source") || !payload["source"].is_object()) {
+                return false;
+        }
+        try {
+                return payload["source"].value("kind", std::string{}) == "folder";
+        } catch (...) {
+                return false;
+        }
+}
+
+bool asset_runtime_animation_cache_is_usable(const AssetInfo& info,
+                                             std::vector<std::string>* missing_folder_animations = nullptr) {
+        if (info.animations.empty()) {
+                return false;
+        }
+
+        bool has_required_folder_animation = false;
+        bool all_required_folder_animations_ready = true;
+        for (const std::string& animation_name : info.animation_names()) {
+                if (!payload_is_folder_animation(info.animation_payload(animation_name))) {
+                        continue;
+                }
+                has_required_folder_animation = true;
+                auto runtime_it = info.animations.find(animation_name);
+                if (runtime_it == info.animations.end() ||
+                    !animation_cache_has_usable_texture(runtime_it->second)) {
+                        all_required_folder_animations_ready = false;
+                        if (missing_folder_animations) {
+                                missing_folder_animations->push_back(animation_name);
+                        }
+                }
+        }
+
+        return !has_required_folder_animation || all_required_folder_animations_ready;
+}
+
 WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                               std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& info_by_name,
                               std::unordered_set<std::string>& runtime_loaded_assets,
@@ -809,7 +860,7 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                                 continue;
                         }
                         stats.cache_reused.push_back(name);
-                        vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_reused '" + name + "'");
+                       // vibble::log::info(std::string("[AssetLibrary] ") + preload_label + " cache_reused '" + name + "'");
                 }
         }
 
@@ -834,15 +885,31 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                 if (!info) {
                         continue;
                 }
-                if (runtime_loaded_assets.find(info->name) != runtime_loaded_assets.end() || !info->animations.empty()) {
+                if (runtime_loaded_assets.find(info->name) != runtime_loaded_assets.end()) {
+                        continue;
+                }
+                std::vector<std::string> missing_cached_folder_animations;
+                if (asset_runtime_animation_cache_is_usable(*info, &missing_cached_folder_animations)) {
                         runtime_loaded_assets.insert(info->name);
                         continue;
                 }
+                if (!info->animations.empty() && !missing_cached_folder_animations.empty()) {
+                        vibble::log::warn(std::string("[AssetLibrary] ") + load_label + " retrying '" + info->name +
+                                          "' because selected folder animation(s) lack usable runtime frame textures. Missing/invalid animations: " +
+                                          summarize_names(missing_cached_folder_animations));
+                }
                 try {
                         const auto item_begin = std::chrono::steady_clock::now();
-                        info->loadAnimations(renderer, true, true);
+                        const auto load_result = info->loadAnimationsDetailed(renderer, true, true, false);
                         const auto item_end = std::chrono::steady_clock::now();
                         const auto item_ms = std::chrono::duration_cast<std::chrono::milliseconds>(item_end - item_begin).count();
+                        if (!load_result.ok()) {
+                                stats.load_failed.push_back(info->name);
+                                vibble::log::error(std::string("[AssetLibrary] ") + load_label + " failed for '" + info->name +
+                                                   "': selected folder animation(s) did not produce usable runtime frame textures. Missing/invalid animations: " +
+                                                   summarize_names(load_result.missing_runtime_frame_animations));
+                                continue;
+                        }
                         runtime_loaded_assets.insert(info->name);
                         stats.load_succeeded.push_back(info->name);
                         vibble::log::info(std::string("[AssetLibrary] ") + load_label + " loaded '" + info->name + "' in " +

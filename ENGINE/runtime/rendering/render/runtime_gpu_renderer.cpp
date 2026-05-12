@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <filesystem>
 #include <limits>
@@ -170,6 +171,47 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
 }
 
+constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
+
+bool draw_packets_share_sort_key(float lhs, float rhs) {
+    return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
+}
+
+bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
+                                const GpuSpriteDrawPacket& rhs) {
+    if (!draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
+        return lhs.sort_key < rhs.sort_key;
+    }
+    if (lhs.depth_metric != rhs.depth_metric) {
+        return lhs.depth_metric < rhs.depth_metric;
+    }
+    return lhs.stable_sort_id < rhs.stable_sort_id;
+}
+
+bool debug_draw_sort_enabled() {
+    const char* value = std::getenv("ENGINE_DEBUG_DRAW_SORT");
+    return value && value[0] != '\0' && value[0] != '0';
+}
+
+void log_draw_sort_sample(const std::string& context, const std::vector<GpuSpriteDrawPacket>& packets) {
+    if (!debug_draw_sort_enabled() || packets.empty()) {
+        return;
+    }
+    const std::size_t sample_count = std::min<std::size_t>(packets.size(), 5u);
+    std::ostringstream stream;
+    stream << "[RuntimeGpuRenderer] sort sample context='" << context << "' ";
+    for (std::size_t i = 0; i < sample_count; ++i) {
+        const GpuSpriteDrawPacket& packet = packets[i];
+        if (i != 0u) {
+            stream << " | ";
+        }
+        stream << "(" << packet.sort_key << ", "
+               << packet.depth_metric << ", "
+               << static_cast<std::uint64_t>(packet.stable_sort_id) << ")";
+    }
+    vibble::log::debug(stream.str());
+}
+
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
     const auto& settings = camera.get_settings();
     const double focus_world_z = camera.current_focus_plane_world_z();
@@ -295,6 +337,7 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
             packet.source_variant_index = -1;
             packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
             packet.sort_key = std::max(screen_br.y, screen_bl.y);
+            packet.depth_metric = 0.5f * (top_z + bottom_z);
             packet.stable_sort_id = floor_sort_id(false, tile_sequence++);
             packet.is_floor_packet = true;
             packet.depth_layer = 0;
@@ -313,14 +356,8 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
         }
     }
 
-    const auto draw_sort_predicate = [](const GpuSpriteDrawPacket& lhs,
-                                        const GpuSpriteDrawPacket& rhs) {
-        if (lhs.sort_key == rhs.sort_key) {
-            return lhs.stable_sort_id < rhs.stable_sort_id;
-        }
-        return lhs.sort_key < rhs.sort_key;
-    };
-    std::sort(out_packets.begin(), out_packets.end(), draw_sort_predicate);
+    std::sort(out_packets.begin(), out_packets.end(), draw_packet_sort_predicate);
+    log_draw_sort_sample("floor-tile", out_packets);
     return true;
 }
 
@@ -620,6 +657,7 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
             static_cast<float>(object.color_mod.a) / 255.0f,
         };
         packet.sort_key = std::max(projected.screen_bl.y, projected.screen_br.y);
+        packet.depth_metric = world_z;
         fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet);
 
         const bool floor_boxes_enabled = asset->isFloorBoxesEnabled();
@@ -642,15 +680,10 @@ bool runtime_gpu_renderer_detail::build_floor_sprite_draw_packets(
             false, packet, out_floor_draws, out_layer_draws);
     }
 
-    const auto draw_sort_predicate = [](const GpuSpriteDrawPacket& lhs,
-                                        const GpuSpriteDrawPacket& rhs) {
-        if (lhs.sort_key == rhs.sort_key) {
-            return lhs.stable_sort_id < rhs.stable_sort_id;
-        }
-        return lhs.sort_key < rhs.sort_key;
-    };
-    std::sort(out_floor_draws.begin(), out_floor_draws.end(), draw_sort_predicate);
-    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), draw_sort_predicate);
+    std::sort(out_floor_draws.begin(), out_floor_draws.end(), draw_packet_sort_predicate);
+    std::stable_sort(out_layer_draws.begin(), out_layer_draws.end(), draw_packet_sort_predicate);
+    log_draw_sort_sample("floor-sprite", out_floor_draws);
+    log_draw_sort_sample("layer-sprite", out_layer_draws);
     return true;
 }
 
@@ -834,14 +867,8 @@ bool RuntimeGpuRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
         GpuDepthLayerDrawPackets layer{};
         layer.depth_layer = layer_id;
         layer.packets = std::move(depth_layer_packets[layer_id]);
-        const auto draw_sort_predicate = [](const GpuSpriteDrawPacket& lhs,
-                                            const GpuSpriteDrawPacket& rhs) {
-            if (lhs.sort_key == rhs.sort_key) {
-                return lhs.stable_sort_id < rhs.stable_sort_id;
-            }
-            return lhs.sort_key < rhs.sort_key;
-        };
-        std::stable_sort(layer.packets.begin(), layer.packets.end(), draw_sort_predicate);
+        std::stable_sort(layer.packets.begin(), layer.packets.end(), draw_packet_sort_predicate);
+        log_draw_sort_sample("depth-layer:" + std::to_string(layer_id), layer.packets);
         const float blur_distance = max_layer_distance > 0
             ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)
             : 0.0f;

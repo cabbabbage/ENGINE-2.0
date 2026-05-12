@@ -3,13 +3,6 @@
   "manifest_version": 2,
   "variants": {
     "fullscreen_vertex": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 3416,
-        "hash_fnv1a64": "0x566ec18eb70d58db",
-        "path": "dxil/fullscreen_vertex.dxil",
-        "stage": "vertex"
-      },
       "spirv": {
         "entrypoint": "main",
         "file_size_bytes": 1436,
@@ -18,30 +11,7 @@
         "stage": "vertex"
       }
     },
-    "layer_blur": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 5052,
-        "hash_fnv1a64": "0xf9229257c0e9e783",
-        "path": "dxil/layer_blur.dxil",
-        "stage": "fragment"
-      },
-      "spirv": {
-        "entrypoint": "main",
-        "file_size_bytes": 2964,
-        "hash_fnv1a64": "0xb289d29e2edd0579",
-        "path": "spirv/layer_blur.spv",
-        "stage": "fragment"
-      }
-    },
     "sprite_batch_vertex": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 3764,
-        "hash_fnv1a64": "0x4a2e00ce5679ea12",
-        "path": "dxil/sprite_batch_vertex.dxil",
-        "stage": "vertex"
-      },
       "spirv": {
         "entrypoint": "main",
         "file_size_bytes": 1572,
@@ -51,13 +21,6 @@
       }
     },
     "sprite_batched": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 4020,
-        "hash_fnv1a64": "0x565586027220c6f3",
-        "path": "dxil/sprite_batched.dxil",
-        "stage": "fragment"
-      },
       "spirv": {
         "entrypoint": "main",
         "file_size_bytes": 740,
@@ -67,13 +30,6 @@
       }
     },
     "sprite_textured": {
-      "dxil": {
-        "entrypoint": "main",
-        "file_size_bytes": 4020,
-        "hash_fnv1a64": "0x0373c4118f3988f0",
-        "path": "dxil/sprite_textured.dxil",
-        "stage": "fragment"
-      },
       "spirv": {
         "entrypoint": "main",
         "file_size_bytes": 736,

@@ -26,22 +26,14 @@ void write_binary(const std::filesystem::path& path, const std::uint8_t* bytes, 
 
 } // namespace
 
-TEST_CASE("ShaderPackageLibrary loads manifest with validated DXIL/SPIR-V payloads") {
+TEST_CASE("ShaderPackageLibrary loads manifest with validated SPIR-V payloads") {
     const std::filesystem::path temp_root = unique_temp_dir("load_ok");
-    const std::filesystem::path dxil_path = temp_root / "dxil" / "floor_compose.dxil";
     const std::filesystem::path spirv_path = temp_root / "spirv" / "floor_compose.spv";
     const std::filesystem::path manifest_path = temp_root / "runtime_shaders.json";
 
-    const std::array<std::uint8_t, 8> dxil_payload = {
-        static_cast<std::uint8_t>('D'),
-        static_cast<std::uint8_t>('X'),
-        static_cast<std::uint8_t>('B'),
-        static_cast<std::uint8_t>('C'),
-        0, 0, 0, 0};
     const std::array<std::uint8_t, 8> spirv_payload = {
         0x03, 0x02, 0x23, 0x07, 0, 0, 0, 0};
 
-    write_binary(dxil_path, dxil_payload.data(), dxil_payload.size());
     write_binary(spirv_path, spirv_payload.data(), spirv_payload.size());
 
     const std::string manifest = R"json(
@@ -49,12 +41,6 @@ TEST_CASE("ShaderPackageLibrary loads manifest with validated DXIL/SPIR-V payloa
   "manifest_version": 2,
   "variants": {
     "floor_compose": {
-      "dxil": {
-        "path": "dxil/floor_compose.dxil",
-        "entrypoint": "main",
-        "stage": "fragment",
-        "file_size_bytes": 8
-      },
       "spirv": {
         "path": "spirv/floor_compose.spv",
         "entrypoint": "main",
@@ -86,15 +72,14 @@ TEST_CASE("ShaderPackageLibrary loads manifest with validated DXIL/SPIR-V payloa
 TEST_CASE("ShaderPackageLibrary fails loudly when a referenced payload is missing") {
     const std::filesystem::path temp_root = unique_temp_dir("load_missing");
     const std::filesystem::path manifest_path = temp_root / "runtime_shaders.json";
-    std::filesystem::create_directories(temp_root / "dxil");
 
     const std::string manifest = R"json(
 {
   "manifest_version": 2,
   "variants": {
     "sprite_textured": {
-      "dxil": {
-        "path": "dxil/sprite_textured.dxil",
+      "spirv": {
+        "path": "spirv/sprite_textured.spv",
         "entrypoint": "main",
         "stage": "fragment"
       }

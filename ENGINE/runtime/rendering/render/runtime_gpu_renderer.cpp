@@ -125,7 +125,8 @@ int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& 
     const double focus_world_z = camera.current_focus_plane_world_z();
     const double asset_world_z =
         static_cast<double>(asset.world_z()) +
-        static_cast<double>(asset.world_z_offset());
+        static_cast<double>(asset.world_z_offset()) +
+        static_cast<double>(asset.render_anchor_offset_z());
     const double signed_distance = asset_world_z - focus_world_z;
     const double distance = std::fabs(signed_distance);
     if (!std::isfinite(distance) || distance <= 1.0e-4) {

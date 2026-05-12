@@ -46,11 +46,34 @@ float normalize_hue(float hue_deg) {
     return h;
 }
 
+void draw_text(SDL_Renderer* renderer, const DMLabelStyle& style, const char* text, int x, int y) {
+    if (!renderer || !text || !*text) {
+        return;
+    }
+    TTF_Font* font = style.open_font();
+    if (!font) {
+        return;
+    }
+    SDL_Surface* surface = ttf_util::RenderTextBlended(font, text, style.color);
+    if (!surface) {
+        TTF_CloseFont(font);
+        return;
+    }
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (texture) {
+        SDL_Rect dst{x, y, surface->w, surface->h};
+        sdl_render::Texture(renderer, texture, nullptr, &dst);
+        SDL_DestroyTexture(texture);
+    }
+    SDL_DestroySurface(surface);
+    TTF_CloseFont(font);
+}
+
 } // namespace
 
 DevColorPicker::DevColorPicker()
     : apply_button_(std::make_unique<DMButton>("Apply", &DMStyles::PrimaryButton(), 96, DMButton::height())),
-      cancel_button_(std::make_unique<DMButton>("Cancel", &DMStyles::Button(), 96, DMButton::height())) {}
+      cancel_button_(std::make_unique<DMButton>("Cancel", &DMStyles::HeaderButton(), 96, DMButton::height())) {}
 
 DevColorPicker::~DevColorPicker() = default;
 
@@ -324,8 +347,7 @@ void DevColorPicker::render(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, 255);
     sdl_render::Rect(renderer, &panel_rect_);
 
-    const DMLabelStyle style = DMStyles::Label();
-    ttf_util::DrawText(renderer, style, "Floor Color Picker", panel_rect_.x + kPadding, panel_rect_.y + kPadding);
+    draw_text(renderer, DMStyles::Label(), "Floor Color Picker", panel_rect_.x + kPadding, panel_rect_.y + kPadding);
 
     render_hue_ring(renderer);
     render_sv_square(renderer);

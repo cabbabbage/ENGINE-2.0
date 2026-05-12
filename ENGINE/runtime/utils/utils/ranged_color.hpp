@@ -34,6 +34,18 @@ SDL_Color clamp_color(SDL_Color color);
 std::optional<SDL_Color> color_from_json(const nlohmann::json& value);
 nlohmann::json color_to_json(SDL_Color color);
 
-}
-}
+}  // namespace color
+
+using color::ChannelRange;
+using color::RangedColor;
+using color::clamp_channel_range;
+using color::clamp_ranged_color;
+using color::ranged_color_from_json;
+using color::ranged_color_to_json;
+using color::resolve_ranged_color;
+using color::clamp_color;
+using color::color_from_json;
+using color::color_to_json;
+
+}  // namespace utils
 

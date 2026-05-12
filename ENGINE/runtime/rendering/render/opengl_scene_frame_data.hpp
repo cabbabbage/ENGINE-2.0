@@ -26,8 +26,11 @@ struct GpuSpriteDrawPacket {
     std::array<GpuSpriteVertex, 6> vertices{};
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
     std::uint8_t sort_group = 0;
-    float sort_key = 0.0f;
-    float depth_metric = 0.0f;
+    // Canonical XY ordering fields:
+    // - camera_depth_key: larger means farther from camera (draw first).
+    // - projected_foot_y_key: geometric tie-break in screen space.
+    float camera_depth_key = 0.0f;
+    float projected_foot_y_key = 0.0f;
     std::uintptr_t stable_sort_id = 0u;
     bool is_floor_packet = false;
     int depth_layer = 0;

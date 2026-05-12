@@ -1552,7 +1552,7 @@ void DevControls::ensure_misc_options_widgets() {
     }
 
     if (!misc_map_color_button_) {
-        misc_map_color_button_ = std::make_unique<DMButton>("Pick Floor Color", &DMStyles::Button(), 0, DMButton::height());
+        misc_map_color_button_ = std::make_unique<DMButton>("Pick Floor Color", &DMStyles::AccentButton(), 0, DMButton::height());
     }
     if (!color_picker_) {
         color_picker_ = std::make_unique<DevColorPicker>();

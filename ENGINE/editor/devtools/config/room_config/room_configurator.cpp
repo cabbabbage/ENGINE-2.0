@@ -2204,7 +2204,7 @@ void RoomConfigurator::rebuild_rows_internal() {
     inherit_floor_color_checkbox_ =
         std::make_unique<DMCheckbox>("Inherit Map Color", state_->inherit_map_floor_color);
     inherit_floor_color_widget_ = std::make_unique<CheckboxWidget>(inherit_floor_color_checkbox_.get());
-    room_floor_color_button_ = std::make_unique<DMButton>("Pick Room Floor Color", &DMStyles::Button(), 0, DMButton::height());
+    room_floor_color_button_ = std::make_unique<DMButton>("Pick Room Floor Color", &DMStyles::AccentButton(), 0, DMButton::height());
     room_floor_color_widget_ = std::make_unique<ButtonWidget>(room_floor_color_button_.get(), [this]() {
         if (!state_) {
             return;

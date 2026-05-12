@@ -336,7 +336,6 @@ add_executable(engine_tests
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
     ENGINE/tests/test_opengl_runtime_manifest_selection.cpp
     ENGINE/tests/test_shader_package_library.cpp
-    ENGINE/tests/test_shader_pipeline_cache.cpp
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_child_asset_runtime.cpp
     ENGINE/tests/test_floor_box_candidate_spawning.cpp

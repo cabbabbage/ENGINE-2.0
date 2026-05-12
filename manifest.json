@@ -27110,7 +27110,7 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 529.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "far_light_cap": 32.0,
@@ -27147,6 +27147,11 @@
       },
       "content_root": "content/forrest",
       "dev_map_settings": {
+        "default_floor_color": [
+          83,
+          138,
+          52
+        ],
         "map_color": [
           0,
           0,
@@ -27299,13 +27304,14 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            111,
-            204,
-            31,
+            36,
+            242,
+            125,
             255
           ],
           "edge_smoothness": 101.0,
           "geometry": "Circle",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 3000,
@@ -27313,6 +27319,11 @@
           "min_height": 3000,
           "min_width": 3000,
           "name": "Loot_Room",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
             {
@@ -27354,13 +27365,14 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            137,
-            31,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1800,
@@ -27368,6 +27380,11 @@
           "min_height": 1200,
           "min_width": 1200,
           "name": "NewRoom",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [],
           "tags": [],
@@ -27379,13 +27396,14 @@
         "NewRoom1": {
           "curvyness": 2,
           "display_color": [
-            85,
-            229,
-            242,
+            204,
+            31,
+            153,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1800,
@@ -27393,6 +27411,11 @@
           "min_height": 1200,
           "min_width": 1200,
           "name": "NewRoom1",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [],
           "tags": [],
@@ -27404,13 +27427,14 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            242,
+            163,
             36,
-            142,
+            242,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1800,
@@ -27418,6 +27442,11 @@
           "min_height": 1200,
           "min_width": 1200,
           "name": "NewRoom2",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
             {
@@ -27465,12 +27494,13 @@
           "curvyness": 2,
           "display_color": [
             37,
-            36,
             242,
+            36,
             255
           ],
           "edge_smoothness": 70,
           "geometry": "Circle",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1634,
@@ -27478,6 +27508,11 @@
           "min_height": 1634,
           "min_width": 1362,
           "name": "Random_Enemy_Easy",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [
             "early_layer",
             "easy",
@@ -27530,13 +27565,14 @@
           "camera_zoom_percent": 11,
           "curvyness": 2,
           "display_color": [
-            36,
+            172,
             242,
-            46,
+            85,
             255
           ],
           "edge_smoothness": 101,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": true,
           "is_boss": false,
           "max_height": 12110,
@@ -27544,6 +27580,11 @@
           "min_height": 12110,
           "min_width": 18504,
           "name": "baseball",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
             {
@@ -27816,13 +27857,14 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            158,
-            242,
-            85,
+            31,
+            32,
+            204,
             255
           ],
           "edge_smoothness": 96,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 6668,
@@ -27830,6 +27872,11 @@
           "min_height": 6668,
           "min_width": 5715,
           "name": "hub_world",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
             {
@@ -28136,6 +28183,7 @@
           ],
           "edge_smoothness": 2,
           "geometry": "Square",
+          "inherit_map_floor_color": true,
           "inherits_map_assets": false,
           "is_boss": false,
           "max_height": 1162,
@@ -28143,6 +28191,11 @@
           "min_height": 1162,
           "min_width": 1162,
           "name": "basic",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "spawn_groups": [
             {
               "candidates": [

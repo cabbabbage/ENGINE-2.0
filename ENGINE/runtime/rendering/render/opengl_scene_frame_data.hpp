@@ -41,12 +41,12 @@ struct GpuDepthLayerDrawPackets {
 
 struct GpuSceneFrameData {
     std::vector<GpuSpriteDrawPacket> floor_draws{};
-    std::vector<GpuSpriteDrawPacket> layer_draws{};
+    std::vector<GpuSpriteDrawPacket> xy_sprite_draws{};
     std::vector<GpuDepthLayerDrawPackets> depth_layers{};
     std::uint32_t target_width = 0;
     std::uint32_t target_height = 0;
     std::uint32_t floor_draw_count = 0;
-    std::uint32_t layer_sprite_draw_count = 0;
+    std::uint32_t xy_sprite_draw_count = 0;
     std::uint32_t active_depth_layer_count = 0;
     std::uint32_t debug_overlay_draw_count = 0;
     std::uint32_t active_asset_count = 0;

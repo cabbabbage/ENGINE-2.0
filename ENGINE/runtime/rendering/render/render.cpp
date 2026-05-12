@@ -95,7 +95,7 @@ void SceneRenderer::render(SDL_Texture* ui_overlay_texture) {
         const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
         vibble::log::error("[SceneRenderer] OpenGL runtime frame failed: reason='" + error_message +
                            "' floor_packet_count=" + std::to_string(stats.floor_packet_count) +
-                           " sprite_packet_count=" + std::to_string(stats.sprite_packet_count) +
+                           " xy_sprite_packet_count=" + std::to_string(stats.xy_sprite_packet_count) +
                            " draw_call_count=" + std::to_string(stats.draw_call_count) +
                            " skipped_textures=" + std::to_string(stats.skipped_texture_count) +
                            " failed_texture_names='" + stats.failed_texture_names + "'" +

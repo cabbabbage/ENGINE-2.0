@@ -40,17 +40,19 @@ struct RenderFrameStats {
     std::uint32_t present_call_count = 0;
     std::uint32_t gpu_failed_frame_count = 0;
     std::uint32_t gpu_scene_floor_draw_count = 0;
-    std::uint32_t gpu_scene_layer_draw_count = 0;
+    std::uint32_t gpu_scene_xy_sprite_draw_count = 0;
     bool gpu_scene_composite_source_ready = false;
     bool command_buffer_acquired = false;
     bool swapchain_acquired = false;
     std::uint32_t swapchain_width = 0;
     std::uint32_t swapchain_height = 0;
-    std::uint32_t floor_target_width = 0;
-    std::uint32_t floor_target_height = 0;
+    std::uint32_t floor_pass_target_width = 0;
+    std::uint32_t floor_pass_target_height = 0;
+    std::uint32_t xy_sprite_pass_target_width = 0;
+    std::uint32_t xy_sprite_pass_target_height = 0;
     bool clear_executed = false;
     std::uint32_t floor_packet_count = 0;
-    std::uint32_t sprite_packet_count = 0;
+    std::uint32_t xy_sprite_packet_count = 0;
     std::uint32_t active_depth_layer_count = 0;
     std::uint32_t blur_pass_count = 0;
     std::uint32_t skipped_texture_count = 0;
@@ -96,14 +98,15 @@ void set_gpu_pipeline_cache_stats(std::uint64_t hits,
 void note_present_call(std::uint32_t count = 1);
 void note_gpu_frame_skipped_due_to_failure(std::uint32_t count = 1);
 void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
-                                std::uint32_t layer_draw_count,
+                                std::uint32_t xy_sprite_draw_count,
                                 bool composite_source_ready);
 void set_command_buffer_acquired(bool acquired);
 void set_swapchain_acquired(bool acquired);
 void set_swapchain_dimensions(std::uint32_t width, std::uint32_t height);
-void set_floor_target_dimensions(std::uint32_t width, std::uint32_t height);
+void set_floor_pass_target_dimensions(std::uint32_t width, std::uint32_t height);
+void set_xy_sprite_pass_target_dimensions(std::uint32_t width, std::uint32_t height);
 void set_clear_executed(bool executed);
-void set_packet_counts(std::uint32_t floor_packets, std::uint32_t sprite_packets);
+void set_pass_packet_counts(std::uint32_t floor_packets, std::uint32_t xy_sprite_packets);
 void set_active_depth_layer_count(std::uint32_t count);
 void set_blur_pass_count(std::uint32_t count);
 void set_packets_per_depth_layer(const std::string& summary);

@@ -119,17 +119,19 @@ void begin_frame() {
     g_frame_stats.present_call_count = 0;
     g_frame_stats.gpu_failed_frame_count = 0;
     g_frame_stats.gpu_scene_floor_draw_count = 0;
-    g_frame_stats.gpu_scene_layer_draw_count = 0;
+    g_frame_stats.gpu_scene_xy_sprite_draw_count = 0;
     g_frame_stats.gpu_scene_composite_source_ready = false;
     g_frame_stats.command_buffer_acquired = false;
     g_frame_stats.swapchain_acquired = false;
     g_frame_stats.swapchain_width = 0;
     g_frame_stats.swapchain_height = 0;
-    g_frame_stats.floor_target_width = 0;
-    g_frame_stats.floor_target_height = 0;
+    g_frame_stats.floor_pass_target_width = 0;
+    g_frame_stats.floor_pass_target_height = 0;
+    g_frame_stats.xy_sprite_pass_target_width = 0;
+    g_frame_stats.xy_sprite_pass_target_height = 0;
     g_frame_stats.clear_executed = false;
     g_frame_stats.floor_packet_count = 0;
-    g_frame_stats.sprite_packet_count = 0;
+    g_frame_stats.xy_sprite_packet_count = 0;
     g_frame_stats.active_depth_layer_count = 0;
     g_frame_stats.blur_pass_count = 0;
     g_frame_stats.skipped_texture_count = 0;
@@ -253,10 +255,10 @@ void note_gpu_frame_skipped_due_to_failure(std::uint32_t count) {
 }
 
 void set_gpu_scene_packet_stats(std::uint32_t floor_draw_count,
-                                std::uint32_t layer_draw_count,
+                                std::uint32_t xy_sprite_draw_count,
                                 bool composite_source_ready) {
     g_frame_stats.gpu_scene_floor_draw_count = floor_draw_count;
-    g_frame_stats.gpu_scene_layer_draw_count = layer_draw_count;
+    g_frame_stats.gpu_scene_xy_sprite_draw_count = xy_sprite_draw_count;
     g_frame_stats.gpu_scene_composite_source_ready = composite_source_ready;
 }
 void set_command_buffer_acquired(bool acquired) { g_frame_stats.command_buffer_acquired = acquired; }
@@ -265,14 +267,18 @@ void set_swapchain_dimensions(std::uint32_t width, std::uint32_t height) {
     g_frame_stats.swapchain_width = width;
     g_frame_stats.swapchain_height = height;
 }
-void set_floor_target_dimensions(std::uint32_t width, std::uint32_t height) {
-    g_frame_stats.floor_target_width = width;
-    g_frame_stats.floor_target_height = height;
+void set_floor_pass_target_dimensions(std::uint32_t width, std::uint32_t height) {
+    g_frame_stats.floor_pass_target_width = width;
+    g_frame_stats.floor_pass_target_height = height;
+}
+void set_xy_sprite_pass_target_dimensions(std::uint32_t width, std::uint32_t height) {
+    g_frame_stats.xy_sprite_pass_target_width = width;
+    g_frame_stats.xy_sprite_pass_target_height = height;
 }
 void set_clear_executed(bool executed) { g_frame_stats.clear_executed = executed; }
-void set_packet_counts(std::uint32_t floor_packets, std::uint32_t sprite_packets) {
+void set_pass_packet_counts(std::uint32_t floor_packets, std::uint32_t xy_sprite_packets) {
     g_frame_stats.floor_packet_count = floor_packets;
-    g_frame_stats.sprite_packet_count = sprite_packets;
+    g_frame_stats.xy_sprite_packet_count = xy_sprite_packets;
 }
 void set_active_depth_layer_count(std::uint32_t count) { g_frame_stats.active_depth_layer_count = count; }
 void set_blur_pass_count(std::uint32_t count) { g_frame_stats.blur_pass_count = count; }

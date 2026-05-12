@@ -28,23 +28,24 @@ bool draw_packets_share_sort_key(float lhs, float rhs);
 bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
                                 const GpuSpriteDrawPacket& rhs);
 
+// Floor-pass compatibility tags are parsed for diagnostics only.
+// They do not change pass routing under strict floor (XZ) / XY sprite separation.
+bool info_requests_floor_pass_tag_for_diagnostics(const std::string& type,
+                                                  const std::vector<std::string>& tags);
+bool info_is_xy_sprite_pass_eligible(bool tillable);
+
 bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
                                    const std::vector<world::Chunk*>& chunks,
                                    std::uint32_t target_width,
                                    std::uint32_t target_height,
                                    std::vector<GpuSpriteDrawPacket>& out_packets);
-bool build_floor_sprite_draw_packets(const WarpedScreenGrid& camera,
-                                     const std::vector<Asset*>& visible_assets,
-                                     std::uint32_t target_width,
-                                     std::uint32_t target_height,
-                                     std::vector<GpuSpriteDrawPacket>& out_floor_draws,
-                                     std::vector<GpuSpriteDrawPacket>& out_layer_draws,
-                                     std::string& out_error);
+bool build_xy_sprite_draw_packets(const WarpedScreenGrid& camera,
+                                  const std::vector<Asset*>& visible_assets,
+                                  std::uint32_t target_width,
+                                  std::uint32_t target_height,
+                                  std::vector<GpuSpriteDrawPacket>& out_xy_sprite_draws,
+                                  std::string& out_error);
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset);
-void append_classified_sprite_draw_packet(bool floor_tagged,
-                                          const GpuSpriteDrawPacket& packet,
-                                          std::vector<GpuSpriteDrawPacket>& out_floor_draws,
-                                          std::vector<GpuSpriteDrawPacket>& out_layer_draws);
 const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
                                                                bool focus_filter_active,
                                                                const std::vector<Asset*>& active_assets,
@@ -110,6 +111,8 @@ private:
                                              int height,
                                              const std::string& label,
                                              std::string& out_error);
+    static SDL_Texture* create_solid_white_texture(SDL_Renderer* renderer,
+                                                   std::string& out_error);
     static void configure_render_target(SDL_Texture* texture);
     static SDL_FPoint clip_to_screen(float clip_x, float clip_y, float target_width, float target_height);
     static void packet_to_vertices(const GpuSpriteDrawPacket& packet,
@@ -131,7 +134,9 @@ private:
     int output_target_width_ = 1;
     int output_target_height_ = 1;
     SDL_Texture* floor_target_ = nullptr;
+    SDL_Texture* xy_sprite_target_ = nullptr;
     SDL_Texture* composite_target_ = nullptr;
+    SDL_Texture* floor_marker_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
 };

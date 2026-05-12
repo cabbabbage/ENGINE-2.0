@@ -17,7 +17,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/gpu_scene_renderer.hpp"
 #include "rendering/render/render_diagnostics.hpp"
-#include "rendering/render/runtime_gpu_renderer.hpp"
+#include "rendering/render/opengl_runtime_renderer.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/cache_manager.hpp"
 #include "stubs/asset/child_asset_runtime_test_support.hpp"

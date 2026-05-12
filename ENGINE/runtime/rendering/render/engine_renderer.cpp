@@ -84,11 +84,6 @@ EngineRenderer::EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, OpenGLQu
         present_mode_name_ = "unknown";
     }
 
-    std::string format_error;
-    has_gpu_format_policy_ = GpuFormatPolicyResolver::Resolve(nullptr, false, gpu_format_policy_, format_error);
-    if (!has_gpu_format_policy_) {
-        vibble::log::warn("[EngineRenderer] Default format policy init failed: " + format_error);
-    }
 }
 
 EngineRenderer::~EngineRenderer() {

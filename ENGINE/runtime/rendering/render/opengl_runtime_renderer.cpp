@@ -16,6 +16,7 @@
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/render_diagnostics.hpp"
+#include "rendering/render/layer_depth_bins.hpp"
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/opengl_runtime_renderer.hpp"
@@ -105,6 +106,124 @@ bool debug_draw_sort_enabled() {
     return value && value[0] != '\0' && value[0] != '0';
 }
 
+float to_clip_x(float screen_x, float target_width) {
+    if (!std::isfinite(screen_x) || !std::isfinite(target_width) || target_width <= 0.0f) {
+        return 0.0f;
+    }
+    return (screen_x / target_width) * 2.0f - 1.0f;
+}
+
+float to_clip_y(float screen_y, float target_height) {
+    if (!std::isfinite(screen_y) || !std::isfinite(target_height) || target_height <= 0.0f) {
+        return 0.0f;
+    }
+    return 1.0f - (screen_y / target_height) * 2.0f;
+}
+
+void fill_quad_packet_vertices(const SDL_FPoint& tl,
+                               const SDL_FPoint& tr,
+                               const SDL_FPoint& br,
+                               const SDL_FPoint& bl,
+                               float u0,
+                               float v0,
+                               float u1,
+                               float v1,
+                               float target_width,
+                               float target_height,
+                               GpuSpriteDrawPacket& out_packet) {
+    const auto make_vertex = [target_width, target_height](const SDL_FPoint& point, float u, float v) {
+        GpuSpriteVertex vertex{};
+        vertex.clip_x = to_clip_x(point.x, target_width);
+        vertex.clip_y = to_clip_y(point.y, target_height);
+        vertex.uv_x = u;
+        vertex.uv_y = v;
+        return vertex;
+    };
+
+    out_packet.vertices[0] = make_vertex(tl, u0, v0);
+    out_packet.vertices[1] = make_vertex(tr, u1, v0);
+    out_packet.vertices[2] = make_vertex(br, u1, v1);
+    out_packet.vertices[3] = make_vertex(tl, u0, v0);
+    out_packet.vertices[4] = make_vertex(br, u1, v1);
+    out_packet.vertices[5] = make_vertex(bl, u0, v1);
+}
+
+void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& projected,
+                                 float u0,
+                                 float v0,
+                                 float u1,
+                                 float v1,
+                                 float target_width,
+                                 float target_height,
+                                 GpuSpriteDrawPacket& out_packet) {
+    fill_quad_packet_vertices(projected.screen_tl,
+                              projected.screen_tr,
+                              projected.screen_br,
+                              projected.screen_bl,
+                              u0,
+                              v0,
+                              u1,
+                              v1,
+                              target_width,
+                              target_height,
+                              out_packet);
+}
+
+enum class SpriteRenderPassIntent {
+    Floor,
+    Layer,
+};
+
+bool tag_requests_floor_render_pass(const std::string& tag) {
+    return tag == "render_pass:floor" ||
+           tag == "render-pass:floor" ||
+           tag == "render_floor_pass" ||
+           tag == "floor_render_pass";
+}
+
+SpriteRenderPassIntent resolve_sprite_render_pass_intent(const Asset* asset) {
+    if (!asset || !asset->info) {
+        return SpriteRenderPassIntent::Layer;
+    }
+
+    const AssetInfo& info = *asset->info;
+    if (tag_requests_floor_render_pass(info.type)) {
+        return SpriteRenderPassIntent::Floor;
+    }
+    for (const std::string& tag : info.tags) {
+        if (tag_requests_floor_render_pass(tag)) {
+            return SpriteRenderPassIntent::Floor;
+        }
+    }
+    return SpriteRenderPassIntent::Layer;
+}
+
+void emit_floor_box_render_pass_mismatch_diagnostic(const Asset* asset,
+                                                    SpriteRenderPassIntent intent,
+                                                    bool floor_boxes_enabled) {
+    if (!asset || !asset->info) {
+        return;
+    }
+
+    const bool routes_to_floor_pass = (intent == SpriteRenderPassIntent::Floor);
+    if (floor_boxes_enabled == routes_to_floor_pass) {
+        return;
+    }
+
+    const std::string asset_name = asset->info->name.empty() ? std::string{"<unnamed-asset>"} : asset->info->name;
+    const std::string hint = floor_boxes_enabled
+        ? "floor boxes enabled but render-pass intent resolves to layer"
+        : "render-pass intent resolves to floor but floor boxes are disabled";
+    vibble::log::warn("[OpenGLRuntimeRenderer] Render/floor-box manifest mismatch for asset='" +
+                      asset_name + "': " + hint + ".");
+}
+
+std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
+    constexpr std::uintptr_t kSpritePacketSortOffset =
+        std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
+    return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
+}
+
 void log_draw_sort_sample(const std::string& context, const std::vector<GpuSpriteDrawPacket>& packets) {
     if (!debug_draw_sort_enabled() || packets.empty()) {
         return;
@@ -167,7 +286,39 @@ bool opengl_runtime_renderer_detail::draw_packet_sort_predicate(const GpuSpriteD
 namespace opengl_runtime_renderer_detail {
 
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
-    return ::classify_depth_layer_for_asset(camera, asset);
+    const auto& settings = camera.get_settings();
+    const double focus_world_z = camera.current_focus_plane_world_z();
+    const double asset_world_z =
+        static_cast<double>(asset.world_z()) +
+        static_cast<double>(asset.world_z_offset()) +
+        static_cast<double>(asset.render_anchor_offset_z());
+    const double signed_distance = asset_world_z - focus_world_z;
+    const double distance = std::fabs(signed_distance);
+    if (!std::isfinite(distance) || distance <= 1.0e-4) {
+        return 0;
+    }
+
+    const double interval = std::max(1.0, static_cast<double>(settings.layer_depth_interval));
+    const double curve = std::max(0.0, static_cast<double>(settings.layer_depth_curve));
+    const double effective_max_depth = std::max(interval, static_cast<double>(settings.max_cull_depth));
+    const std::vector<double> edges =
+        render_depth::build_background_depth_edges(effective_max_depth, interval, curve);
+
+    std::size_t bin_index = 0;
+    for (std::size_t i = 1; i < edges.size(); ++i) {
+        if (distance <= edges[i]) {
+            bin_index = i - 1;
+            break;
+        }
+        bin_index = i - 1;
+    }
+
+    const std::uint32_t max_layer = static_cast<std::uint32_t>(render_depth::kMaxLayersPerSide);
+    const std::uint32_t clamped_layer = static_cast<std::uint32_t>(
+        std::min<std::size_t>(bin_index + 1u, static_cast<std::size_t>(max_layer)));
+    const int signed_layer = (signed_distance >= 0.0) ? static_cast<int>(clamped_layer)
+                                                      : -static_cast<int>(clamped_layer);
+    return signed_layer;
 }
 
 bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,

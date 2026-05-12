@@ -35,6 +35,7 @@ struct GpuSpriteDrawPacket {
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
     std::uint8_t sort_group = 0;
     float sort_key = 0.0f;
+    float depth_metric = 0.0f;
     std::uintptr_t stable_sort_id = 0u;
     bool is_floor_packet = false;
     int depth_layer = 0;

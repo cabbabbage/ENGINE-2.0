@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <limits>
 #include <numeric>
@@ -96,6 +97,47 @@ std::string join_ints(const std::vector<int>& values) {
         oss << values[i];
     }
     return oss.str();
+}
+
+constexpr float kDrawSortKeyEpsilon = 1.0e-3f;
+
+bool draw_packets_share_sort_key(float lhs, float rhs) {
+    return std::fabs(lhs - rhs) <= kDrawSortKeyEpsilon;
+}
+
+bool draw_packet_sort_predicate(const GpuSpriteDrawPacket& lhs,
+                                const GpuSpriteDrawPacket& rhs) {
+    if (!draw_packets_share_sort_key(lhs.sort_key, rhs.sort_key)) {
+        return lhs.sort_key < rhs.sort_key;
+    }
+    if (lhs.depth_metric != rhs.depth_metric) {
+        return lhs.depth_metric < rhs.depth_metric;
+    }
+    return lhs.stable_sort_id < rhs.stable_sort_id;
+}
+
+bool debug_draw_sort_enabled() {
+    const char* value = std::getenv("ENGINE_DEBUG_DRAW_SORT");
+    return value && value[0] != '\0' && value[0] != '0';
+}
+
+void log_draw_sort_sample(const std::string& context, const std::vector<GpuSpriteDrawPacket>& packets) {
+    if (!debug_draw_sort_enabled() || packets.empty()) {
+        return;
+    }
+    const std::size_t sample_count = std::min<std::size_t>(packets.size(), 5u);
+    std::ostringstream stream;
+    stream << "[OpenGLRuntimeRenderer] sort sample context='" << context << "' ";
+    for (std::size_t i = 0; i < sample_count; ++i) {
+        const GpuSpriteDrawPacket& packet = packets[i];
+        if (i != 0u) {
+            stream << " | ";
+        }
+        stream << "(" << packet.sort_key << ", "
+               << packet.depth_metric << ", "
+               << static_cast<std::uint64_t>(packet.stable_sort_id) << ")";
+    }
+    vibble::log::debug(stream.str());
 }
 
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
@@ -463,14 +505,8 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         GpuDepthLayerDrawPackets layer{};
         layer.depth_layer = layer_id;
         layer.packets = std::move(depth_layer_packets[layer_id]);
-        const auto draw_sort_predicate = [](const GpuSpriteDrawPacket& lhs,
-                                            const GpuSpriteDrawPacket& rhs) {
-            if (lhs.sort_key == rhs.sort_key) {
-                return lhs.stable_sort_id < rhs.stable_sort_id;
-            }
-            return lhs.sort_key < rhs.sort_key;
-        };
-        std::stable_sort(layer.packets.begin(), layer.packets.end(), draw_sort_predicate);
+        std::stable_sort(layer.packets.begin(), layer.packets.end(), draw_packet_sort_predicate);
+        log_draw_sort_sample("depth-layer:" + std::to_string(layer_id), layer.packets);
         const float blur_distance = max_layer_distance > 0
             ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)
             : 0.0f;

@@ -11,15 +11,15 @@
 
 namespace render_internal {
 
-std::filesystem::path runtime_gpu_shader_manifest_path() {
+std::filesystem::path opengl_runtime_shader_manifest_path() {
     if (SDL_Environment* env = SDL_GetEnvironment()) {
         if (const char* override_manifest_path =
-                SDL_GetEnvironmentVariable(env, "VIBBLE_GPU_SHADER_MANIFEST");
+                SDL_GetEnvironmentVariable(env, "VIBBLE_OPENGL_SHADER_MANIFEST");
             override_manifest_path && *override_manifest_path) {
             return std::filesystem::path(override_manifest_path);
         }
     }
-    if (const char* override_manifest_path = std::getenv("VIBBLE_GPU_SHADER_MANIFEST");
+    if (const char* override_manifest_path = std::getenv("VIBBLE_OPENGL_SHADER_MANIFEST");
         override_manifest_path && *override_manifest_path) {
         return std::filesystem::path(override_manifest_path);
     }
@@ -47,9 +47,9 @@ SceneRenderer::SceneRenderer(SDL_Renderer* renderer,
     }
 
     std::string runtime_error;
-    runtime_gpu_renderer_ =
+    opengl_runtime_renderer_ =
         OpenGLRuntimeRenderer::Create(renderer_, assets_, screen_width_, screen_height_, runtime_error);
-    if (!runtime_gpu_renderer_) {
+    if (!opengl_runtime_renderer_) {
         throw std::runtime_error("[SceneRenderer] OpenGL runtime renderer initialization failed: " + runtime_error);
     }
 
@@ -72,20 +72,20 @@ void SceneRenderer::set_output_dimensions(int screen_width, int screen_height) {
 
     screen_width_ = safe_w;
     screen_height_ = safe_h;
-    if (runtime_gpu_renderer_) {
-        runtime_gpu_renderer_->set_output_dimensions(screen_width_, screen_height_);
+    if (opengl_runtime_renderer_) {
+        opengl_runtime_renderer_->set_output_dimensions(screen_width_, screen_height_);
     }
 }
 
 std::optional<SDL_Point> SceneRenderer::postprocess_target_size() const {
-    if (!runtime_gpu_renderer_) {
+    if (!opengl_runtime_renderer_) {
         return std::nullopt;
     }
-    return runtime_gpu_renderer_->scene_target_size();
+    return opengl_runtime_renderer_->scene_target_size();
 }
 
 void SceneRenderer::render(SDL_Texture* ui_overlay_texture) {
-    if (!renderer_ || !assets_ || !runtime_gpu_renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
+    if (!renderer_ || !assets_ || !opengl_runtime_renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
 
@@ -104,7 +104,7 @@ void SceneRenderer::render(SDL_Texture* ui_overlay_texture) {
     };
 
     std::string frame_error;
-    if (!runtime_gpu_renderer_->render_frame(frame_error, ui_overlay_texture)) {
+    if (!opengl_runtime_renderer_->render_frame(frame_error, ui_overlay_texture)) {
         fail_gpu_frame(frame_error.empty() ? "Unknown OpenGL frame failure." : frame_error);
         return;
     }

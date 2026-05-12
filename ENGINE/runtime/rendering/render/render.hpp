@@ -14,7 +14,7 @@
 class Assets;
 
 namespace render_internal {
-std::filesystem::path runtime_gpu_shader_manifest_path();
+std::filesystem::path opengl_runtime_shader_manifest_path();
 }
 
 class SceneRenderer {
@@ -62,7 +62,7 @@ private:
     int screen_width_ = 1;
     int screen_height_ = 1;
 
-    std::unique_ptr<OpenGLRuntimeRenderer> runtime_gpu_renderer_;
+    std::unique_ptr<OpenGLRuntimeRenderer> opengl_runtime_renderer_;
 
     bool gpu_runtime_path_enabled_ = false;
 };

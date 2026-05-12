@@ -40,7 +40,7 @@ bool probe_texture_scale_mode(SDL_Renderer* renderer) {
     return ok;
 }
 
-RenderCaps build_caps(SDL_Renderer* renderer, RenderBackendType backend_type) {
+RenderCaps build_caps(SDL_Renderer* renderer, OpenGLRendererType backend_type) {
     RenderCaps caps{};
     caps.backend_type = backend_type;
     caps.is_software = false;
@@ -60,8 +60,7 @@ RenderCaps build_caps(SDL_Renderer* renderer, RenderBackendType backend_type) {
 
 void log_caps(const RenderCaps& caps) {
     std::ostringstream oss;
-    oss << "[EngineRenderer] Backend="
-        << (caps.backend_type == RenderBackendType::OpenGL ? "OpenGL" : "GPU")
+    oss << "[EngineRenderer] Renderer=OpenGL"
         << " name=" << (caps.renderer_name.empty() ? std::string("<unknown>") : caps.renderer_name)
         << " max_texture_size=" << caps.max_texture_size
         << " render_targets=" << (caps.supports_render_targets ? "yes" : "no")
@@ -73,7 +72,7 @@ void log_caps(const RenderCaps& caps) {
 
 } // namespace
 
-EngineRenderer::EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, RenderQualityTier tier, SDL_Window* window)
+EngineRenderer::EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, OpenGLQualityTier tier, SDL_Window* window)
     : renderer_(renderer), window_(window), caps_(std::move(caps)), quality_tier_(tier) {
     if (renderer_) {
         int vsync = 0;
@@ -114,7 +113,7 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
 
     log_caps(attempt.caps);
     return std::unique_ptr<EngineRenderer>(
-        new EngineRenderer(attempt.renderer, attempt.caps, RenderQualityTier::OpenGL, window));
+        new EngineRenderer(attempt.renderer, attempt.caps, OpenGLQualityTier::OpenGLFull, window));
 }
 
 void EngineRenderer::begin_frame(const SDL_Color& clear_color) {
@@ -214,7 +213,7 @@ EngineRenderer::AttemptResult EngineRenderer::try_create_opengl(SDL_Window* wind
 
     SDL_SetDefaultTextureScaleMode(attempt.renderer, SDL_SCALEMODE_LINEAR);
     SDL_SetRenderVSync(attempt.renderer, prefer_vsync ? 1 : 0);
-    attempt.caps = EngineRenderer::build_caps(attempt.renderer, RenderBackendType::OpenGL);
+    attempt.caps = EngineRenderer::build_caps(attempt.renderer, OpenGLRendererType::OpenGL);
     int vsync = 0;
     if (SDL_GetRenderVSync(attempt.renderer, &vsync)) {
         attempt.caps.vsync_enabled = vsync != 0;
@@ -222,7 +221,7 @@ EngineRenderer::AttemptResult EngineRenderer::try_create_opengl(SDL_Window* wind
     return attempt;
 }
 
-RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, RenderBackendType backend_type) {
+RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, OpenGLRendererType backend_type) {
     return ::build_caps(renderer, backend_type);
 }
 

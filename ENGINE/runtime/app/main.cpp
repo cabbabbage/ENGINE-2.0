@@ -1066,23 +1066,16 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
-        switch (engine_renderer->quality_tier()) {
-        case RenderQualityTier::OpenGL:
-                vibble::log::info("[Main] Render quality tier: OpenGL (full effects).");
-                break;
-        case RenderQualityTier::GPU:
-                vibble::log::info("[Main] Render quality tier: legacy GPU.");
-                break;
-        default:
-                vibble::log::error("[Main] Non-OpenGL render quality tier detected; exiting because OpenGL is required.");
+        if (engine_renderer->quality_tier() != OpenGLQualityTier::OpenGLFull) {
+                vibble::log::error("[Main] Unexpected non-OpenGL quality tier detected; exiting.");
                 show_gpu_required_dialog_and_wait(window, "This build only supports OpenGL rendering.");
                 engine_renderer.reset();
                 SDL_DestroyWindow(window);
                 TTF_Quit();
                 SDL_Quit();
                 return 1;
-                break;
         }
+        vibble::log::info("[Main] Render quality tier: OpenGL full.");
 
         int screen_width = window_width;
         int screen_height = window_height;

@@ -518,7 +518,8 @@ private:
     void rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                               double current_scale,
                                               double current_pitch,
-                                              std::uint64_t current_projection_version);
+                                              std::uint64_t current_projection_version,
+                                              bool allow_live_dynamic_reconcile = true);
     void mark_grid_dirty();
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
@@ -652,5 +653,6 @@ private:
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
     std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
     std::unordered_map<LiveDynamicPointKey, LiveDynamicState, LiveDynamicPointKeyHash> live_dynamic_states_;
+    std::unordered_map<std::string, std::uint64_t> live_dynamic_scan_cursors_;
     std::uint32_t last_live_dynamic_log_frame_ = std::numeric_limits<std::uint32_t>::max();
 };

@@ -17,6 +17,8 @@
 #include "core/runtime_world_context.hpp"
 #include "gameplay/map_generation/generate_rooms.hpp"
 #include "gameplay/map_generation/room.hpp"
+#include "rendering/render/render_object.hpp"
+#include "rendering/render/render_object_builder.hpp"
 #include "utils/map_grid_settings.hpp"
 
 namespace {
@@ -24,7 +26,9 @@ namespace {
 nlohmann::json make_asset_metadata(const std::string& type = std::string(asset_types::object),
                                    nlohmann::json tags = nlohmann::json::array(),
                                    int y_pos_min = 0,
-                                   int y_pos_max = 0) {
+                                   int y_pos_max = 0,
+                                   int tilt_min_deg = 0,
+                                   int tilt_max_deg = 0) {
     return nlohmann::json::object({
         {"asset_type", type},
         {"tags", std::move(tags)},
@@ -36,7 +40,9 @@ nlohmann::json make_asset_metadata(const std::string& type = std::string(asset_t
         {"impassable_enabled", false},
         {"floor_boxes_enabled", false},
         {"y_pos_min", y_pos_min},
-        {"y_pos_max", y_pos_max}
+        {"y_pos_max", y_pos_max},
+        {"tilt_range_min_deg", tilt_min_deg},
+        {"tilt_range_max_deg", tilt_max_deg}
     });
 }
 
@@ -415,6 +421,70 @@ TEST_CASE("Live dynamic boundary and inherited selectors both render with distri
     const auto normal_positions = collect_live_positions_named(assets, "normal_asset");
     CHECK(boundary_positions.size() > 1);
     CHECK(normal_positions.size() > 1);
+}
+
+TEST_CASE("Live dynamic spawned assets apply normal tilt and sink render metadata") {
+    AssetLibrary library(false);
+    library.add_asset("tilted_sink_asset",
+                      make_asset_metadata(std::string(asset_types::object),
+                                          nlohmann::json::array(),
+                                          -18,
+                                          -18,
+                                          13,
+                                          13));
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-tilt-sink", "tilted_sink_asset", 4)})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 48);
+    nlohmann::json room_data = make_room_data(true);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  0,
+                  0,
+                  256,
+                  nullptr,
+                  "live_dynamic_tilt_sink_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds visible = world::GridBounds::from_xywh(-32, -32, 64, 64, 0, 4);
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+
+    REQUIRE_FALSE(assets.getLiveDynamicRenderAssets().empty());
+    const Asset* asset = assets.getLiveDynamicRenderAssets().front();
+    REQUIRE(asset != nullptr);
+    CHECK(asset->world_y() == -18);
+    CHECK(asset->effective_render_angle() == doctest::Approx(13.0));
+
+    render_build::DirectAssetRenderCacheRecord cache{};
+    cache.texture = reinterpret_cast<SDL_Texture*>(0x1);
+    cache.atlas_w = 32;
+    cache.atlas_h = 32;
+    cache.has_atlas_size = true;
+    cache.frame_w = 32;
+    cache.frame_h = 32;
+    cache.has_texture_size = true;
+
+    RenderObject object{};
+    REQUIRE(render_build::build_direct_asset_render_object(const_cast<Asset*>(asset), cache, object));
+    CHECK(object.sink_clip_enabled);
+    CHECK(object.sink_height_offset_px == doctest::Approx(-18.0f));
+    CHECK(object.angle == doctest::Approx(13.0));
 }
 
 TEST_CASE("Live dynamic boundary selectors do not starve inherited room selectors") {

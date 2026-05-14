@@ -8,6 +8,8 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
+#include "rendering/render/sink_clip.hpp"
+
 struct GpuSpriteVertex {
     float clip_x = 0.0f;
     float clip_y = 0.0f;
@@ -23,7 +25,10 @@ struct GpuSpriteDrawPacket {
     std::string source_texture_id{};
     int source_frame_index = -1;
     int source_variant_index = -1;
-    std::array<GpuSpriteVertex, 6> vertices{};
+    std::array<GpuSpriteVertex, render_sink::kMaxClippedVertices> vertices{};
+    std::array<int, render_sink::kMaxClippedIndices> indices{0, 1, 2, 0, 2, 3};
+    int vertex_count = 4;
+    int index_count = 6;
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
     std::uint8_t sort_group = 0;
     // Canonical XY ordering fields:

@@ -1503,5 +1503,8 @@ struct RoomEditorTestAccess {
     static bool spawn_membership_allows_room_selection(const RoomEditor& editor,
                                                        const std::string& spawn_id,
                                                        const std::string& owning_room_name);
+    static bool select_current_room_from_nav(RoomEditor& editor, Room* room);
+    static Room* current_room(const RoomEditor& editor);
+    static std::string room_config_header_text(const RoomEditor& editor);
 };
 #endif

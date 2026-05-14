@@ -19,8 +19,11 @@
 #include "devtools/room_editor.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
+#include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "room_editor_payload_contract_test_helper.hpp"
+#include "utils/area.hpp"
+#include "utils/map_grid_settings.hpp"
 
 namespace {
 
@@ -69,6 +72,42 @@ std::unique_ptr<Asset> make_boundary_proxy_test_asset(const std::string& asset_n
                                    spawn_id,
                                    std::string{},
                                    0);
+}
+
+std::unique_ptr<Room> make_nav_test_room(const std::string& name) {
+    std::vector<SDL_Point> points{
+        SDL_Point{0, 0},
+        SDL_Point{100, 0},
+        SDL_Point{100, 100},
+        SDL_Point{0, 100},
+    };
+    Area area(name, points, 0);
+    nlohmann::json data = nlohmann::json::object({
+        {"name", name},
+        {"geometry", "Square"},
+        {"width", 100},
+        {"height", 100},
+        {"spawn_groups", nlohmann::json::array()},
+    });
+    auto room = std::make_unique<Room>(
+        Room::Point{0, 0},
+        "room",
+        name,
+        nullptr,
+        "test_map",
+        nullptr,
+        &area,
+        nullptr,
+        MapGridSettings::defaults(),
+        1000.0,
+        "rooms_data",
+        nullptr,
+        nullptr,
+        std::string{},
+        Room::ManifestWriter{},
+        false);
+    room->assets_data() = std::move(data);
+    return room;
 }
 
 struct BoundaryProxyFixture {
@@ -323,6 +362,22 @@ TEST_CASE("RoomEditor candidate source validation blocks cross-domain contexts")
         editor, RoomEditorTestAccess::candidate_source_floor_box()));
     CHECK_FALSE(RoomEditorTestAccess::validate_floor_candidate_source(
         editor, RoomEditorTestAccess::candidate_source_anchor_light()));
+}
+
+TEST_CASE("RoomEditor room nav selection updates current room and visible room config") {
+    auto spawn_room = make_nav_test_room("spawn_room");
+    auto clicked_room = make_nav_test_room("clicked_room");
+
+    RoomEditor editor(nullptr, 1280, 720);
+    editor.set_current_room(spawn_room.get());
+    editor.open_room_config();
+    REQUIRE(RoomEditorTestAccess::current_room(editor) == spawn_room.get());
+    CHECK(RoomEditorTestAccess::room_config_header_text(editor) == "Room: spawn_room");
+
+    CHECK(RoomEditorTestAccess::select_current_room_from_nav(editor, clicked_room.get()));
+
+    CHECK(RoomEditorTestAccess::current_room(editor) == clicked_room.get());
+    CHECK(RoomEditorTestAccess::room_config_header_text(editor) == "Room: clicked_room");
 }
 
 TEST_CASE("RoomEditor oval candidate source requires explicit center or point selection") {

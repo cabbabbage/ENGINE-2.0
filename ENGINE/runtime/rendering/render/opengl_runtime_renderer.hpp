@@ -121,7 +121,7 @@ private:
     static void packet_to_vertices(const GpuSpriteDrawPacket& packet,
                                    std::uint32_t target_width,
                                    std::uint32_t target_height,
-                                   std::array<SDL_Vertex, 6>& out_vertices);
+                                   std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices);
 
     SDL_Renderer* renderer_ = nullptr;
     Assets* assets_ = nullptr;

@@ -26986,4 +26986,16 @@ bool RoomEditorTestAccess::spawn_membership_allows_room_selection(
     const std::string& owning_room_name) {
     return editor.spawn_membership_allows_room_selection(spawn_id, owning_room_name);
 }
+
+bool RoomEditorTestAccess::select_current_room_from_nav(RoomEditor& editor, Room* room) {
+    return editor.select_current_room_from_nav(room);
+}
+
+Room* RoomEditorTestAccess::current_room(const RoomEditor& editor) {
+    return editor.current_room_;
+}
+
+std::string RoomEditorTestAccess::room_config_header_text(const RoomEditor& editor) {
+    return editor.room_cfg_ui_ ? editor.room_cfg_ui_->current_header_text() : std::string{};
+}
 #endif

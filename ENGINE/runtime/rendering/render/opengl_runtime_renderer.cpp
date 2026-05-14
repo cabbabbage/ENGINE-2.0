@@ -22,6 +22,7 @@
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/opengl_runtime_renderer.hpp"
+#include "rendering/render/sink_clip.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
 #include "utils/ranged_color.hpp"
@@ -156,9 +157,10 @@ void fill_quad_packet_vertices(const SDL_FPoint& tl,
     out_packet.vertices[0] = make_vertex(tl, u0, v0);
     out_packet.vertices[1] = make_vertex(tr, u1, v0);
     out_packet.vertices[2] = make_vertex(br, u1, v1);
-    out_packet.vertices[3] = make_vertex(tl, u0, v0);
-    out_packet.vertices[4] = make_vertex(br, u1, v1);
-    out_packet.vertices[5] = make_vertex(bl, u0, v1);
+    out_packet.vertices[3] = make_vertex(bl, u0, v1);
+    out_packet.indices = std::array<int, render_sink::kMaxClippedIndices>{0, 1, 2, 0, 2, 3};
+    out_packet.vertex_count = 4;
+    out_packet.index_count = 6;
 }
 
 void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& projected,
@@ -180,6 +182,77 @@ void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& 
                               target_width,
                               target_height,
                               out_packet);
+}
+
+bool fill_sink_clipped_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& projected,
+                                              float u0,
+                                              float v0,
+                                              float u1,
+                                              float v1,
+                                              float sink_height_offset_px,
+                                              float target_width,
+                                              float target_height,
+                                              GpuSpriteDrawPacket& out_packet) {
+    if (!std::isfinite(sink_height_offset_px) || sink_height_offset_px >= 0.0f ||
+        projected.final_height_px <= 0) {
+        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, target_width, target_height, out_packet);
+        return true;
+    }
+
+    const float final_height = static_cast<float>(std::max(1, projected.final_height_px));
+    const float visible_v = std::clamp((final_height + sink_height_offset_px) / final_height, 0.0f, 1.0f);
+    if (visible_v <= 1.0e-4f) {
+        return false;
+    }
+
+    const SDL_FPoint sink_sample = projected.sample_screen_from_uv(SDL_FPoint{0.5f, visible_v});
+    if (!std::isfinite(sink_sample.y)) {
+        return false;
+    }
+
+    const auto make_vertex = [](const SDL_FPoint& point, float u, float v) {
+        SDL_Vertex vertex{};
+        vertex.position = point;
+        vertex.tex_coord = SDL_FPoint{u, v};
+        vertex.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+        return vertex;
+    };
+
+    SDL_Vertex quad[4]{
+        make_vertex(projected.screen_tl, u0, v0),
+        make_vertex(projected.screen_tr, u1, v0),
+        make_vertex(projected.screen_br, u1, v1),
+        make_vertex(projected.screen_bl, u0, v1),
+    };
+
+    const render_sink::ClipResult clipped =
+        render_sink::clip_quad_against_horizontal_sink_line(quad, sink_sample.y);
+    if (clipped.fully_clipped || !clipped.valid ||
+        clipped.vertex_count <= 0 ||
+        clipped.index_count <= 0) {
+        return false;
+    }
+
+    const auto to_gpu_vertex = [target_width, target_height](const SDL_Vertex& vertex) {
+        GpuSpriteVertex out{};
+        out.clip_x = to_clip_x(vertex.position.x, target_width);
+        out.clip_y = to_clip_y(vertex.position.y, target_height);
+        out.uv_x = vertex.tex_coord.x;
+        out.uv_y = vertex.tex_coord.y;
+        return out;
+    };
+
+    out_packet.vertices = {};
+    out_packet.indices = {};
+    for (int i = 0; i < clipped.vertex_count; ++i) {
+        out_packet.vertices[static_cast<std::size_t>(i)] = to_gpu_vertex(clipped.vertices[static_cast<std::size_t>(i)]);
+    }
+    for (int i = 0; i < clipped.index_count; ++i) {
+        out_packet.indices[static_cast<std::size_t>(i)] = clipped.indices[static_cast<std::size_t>(i)];
+    }
+    out_packet.vertex_count = clipped.vertex_count;
+    out_packet.index_count = clipped.index_count;
+    return true;
 }
 
 bool tag_requests_floor_render_pass(const std::string& tag) {
@@ -231,7 +304,7 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
                             std::uint32_t target_width,
                             std::uint32_t target_height,
-                            std::array<SDL_Vertex, 6>& out_vertices) {
+                            std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices) {
     const float width = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float height = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
     const auto convert_position = [width, height](float clip_x, float clip_y) -> SDL_FPoint {
@@ -240,13 +313,14 @@ void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
         return SDL_FPoint{x, y};
     };
 
-    for (std::size_t i = 0; i < out_vertices.size(); ++i) {
+    const int vertex_count = std::clamp(packet.vertex_count, 0, static_cast<int>(out_vertices.size()));
+    for (int i = 0; i < vertex_count; ++i) {
         const GpuSpriteVertex& src = packet.vertices[i];
         SDL_Vertex dst{};
         dst.position = convert_position(src.clip_x, src.clip_y);
         dst.tex_coord = SDL_FPoint{src.uv_x, src.uv_y};
         dst.color = packet.modulate;
-        out_vertices[i] = dst;
+        out_vertices[static_cast<std::size_t>(i)] = dst;
     }
 }
 
@@ -698,7 +772,20 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         packet.stable_sort_id = xy_sequence++;
         packet.is_floor_packet = false;
         packet.depth_layer = opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
-        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet);
+        const bool packet_geometry_valid = object.sink_clip_enabled
+            ? fill_sink_clipped_sprite_packet_vertices(projected,
+                                                       u0,
+                                                       v0,
+                                                       u1,
+                                                       v1,
+                                                       object.sink_height_offset_px,
+                                                       output_w,
+                                                       output_h,
+                                                       packet)
+            : (fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet), true);
+        if (!packet_geometry_valid) {
+            continue;
+        }
         out_xy_sprite_draws.push_back(packet);
     }
 
@@ -907,7 +994,7 @@ SDL_FPoint OpenGLRuntimeRenderer::clip_to_screen(float clip_x, float clip_y, flo
 void OpenGLRuntimeRenderer::packet_to_vertices(const GpuSpriteDrawPacket& packet,
                                                std::uint32_t target_width,
                                                std::uint32_t target_height,
-                                               std::array<SDL_Vertex, 6>& out_vertices) {
+                                               std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices) {
     fill_geometry_vertices(packet, target_width, target_height, out_vertices);
 }
 
@@ -1247,7 +1334,7 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
         return false;
     }
 
-    std::array<SDL_Vertex, 6> vertices{};
+    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> vertices{};
     for (const GpuSpriteDrawPacket& packet : packets) {
         if (!packet.source_texture) {
             out_error = "Missing source SDL texture; " + describe_draw_packet_source(packet);
@@ -1255,13 +1342,18 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
             render_diagnostics::set_failed_texture_names(describe_draw_packet_source(packet));
             return false;
         }
+        const int vertex_count = std::clamp(packet.vertex_count, 0, static_cast<int>(vertices.size()));
+        const int index_count = std::clamp(packet.index_count, 0, static_cast<int>(packet.indices.size()));
+        if (vertex_count < 3 || index_count < 3) {
+            continue;
+        }
         packet_to_vertices(packet, target_width, target_height, vertices);
         if (!render_diagnostics::render_geometry(renderer_,
                                                  packet.source_texture,
                                                  vertices.data(),
-                                                 static_cast<int>(vertices.size()),
-                                                 nullptr,
-                                                 0)) {
+                                                 vertex_count,
+                                                 packet.indices.data(),
+                                                 index_count)) {
             out_error = "SDL_RenderGeometry failed for " + describe_draw_packet_source(packet) +
                         ": " + safe_string(SDL_GetError());
             return false;

@@ -4698,6 +4698,85 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
                     SDL_SetRenderDrawBlendMode(renderer, prev_blend);
                 }
+            } else if (overlay_ctx.kind == Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint &&
+                       overlay_ctx.has_selected_point_center) {
+                const SDL_FPoint exact_floor_xz = overlay_ctx.exact_floor_xz;
+                if (std::isfinite(exact_floor_xz.x) && std::isfinite(exact_floor_xz.y)) {
+                    const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
+                    constexpr int kMaxSamplesPerPass = 32000;
+
+                    constexpr int kGridPointSizePx = 2;
+                    constexpr int kGridPointHalf = kGridPointSizePx / 2;
+                    constexpr int kHighlightPointSizePx = 4;
+                    constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
+
+                    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+                    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+                    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+                    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+                    int radius_cells = std::clamp(
+                        std::max(screen_w_, screen_h_) / std::max(4, cell),
+                        24,
+                        320);
+                    while (((2 * radius_cells + 1) * (2 * radius_cells + 1)) > kMaxSamplesPerPass &&
+                           radius_cells > 12) {
+                        --radius_cells;
+                    }
+                    const float radius_cells_f = static_cast<float>(std::max(1, radius_cells));
+                    const float radius_cells_sq = radius_cells_f * radius_cells_f;
+
+                    const int center_grid_x = overlay_ctx.snapped_floor_xz.x;
+                    const int center_grid_z = overlay_ctx.snapped_floor_xz.y;
+                    for (int gz = -radius_cells; gz <= radius_cells; ++gz) {
+                        for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
+                            const float dist_cells_sq = static_cast<float>(gx * gx + gz * gz);
+                            if (dist_cells_sq > radius_cells_sq) {
+                                continue;
+                            }
+
+                            const SDL_FPoint floor_world_xz{
+                                static_cast<float>(center_grid_x + gx * cell),
+                                static_cast<float>(center_grid_z + gz * cell)
+                            };
+                            SDL_FPoint screen_point{};
+                            if (!project_floor_world_xz_to_screen(cam, floor_world_xz, screen_point)) {
+                                continue;
+                            }
+
+                            const float edge_t =
+                                std::clamp(std::sqrt(std::max(0.0f, dist_cells_sq) / radius_cells_sq), 0.0f, 1.0f);
+                            const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));
+                            SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+
+                            const int px = static_cast<int>(std::lround(screen_point.x));
+                            const int py = static_cast<int>(std::lround(screen_point.y));
+                            const SDL_FRect point_rect{
+                                static_cast<float>(px - kGridPointHalf),
+                                static_cast<float>(py - kGridPointHalf),
+                                static_cast<float>(kGridPointSizePx),
+                                static_cast<float>(kGridPointSizePx)};
+                            SDL_RenderFillRect(renderer, &point_rect);
+                        }
+                    }
+
+                    SDL_FPoint exact_screen_point{};
+                    if (project_floor_world_xz_to_screen(cam, exact_floor_xz, exact_screen_point)) {
+                        SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
+                        const int px = static_cast<int>(std::lround(exact_screen_point.x));
+                        const int py = static_cast<int>(std::lround(exact_screen_point.y));
+                        const SDL_FRect point_rect{
+                            static_cast<float>(px - kHighlightPointHalf),
+                            static_cast<float>(py - kHighlightPointHalf),
+                            static_cast<float>(kHighlightPointSizePx),
+                            static_cast<float>(kHighlightPointSizePx)};
+                        SDL_RenderFillRect(renderer, &point_rect);
+                    }
+
+                    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+                    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+                }
             }
         }
 

@@ -21945,8 +21945,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               }
             ]
           ],
@@ -23045,8 +23045,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23121,8 +23121,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23197,8 +23197,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23273,8 +23273,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23349,8 +23349,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23425,8 +23425,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23501,8 +23501,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23577,8 +23577,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -24818,8 +24818,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -24894,8 +24894,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -24970,8 +24970,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25046,8 +25046,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25122,8 +25122,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25198,8 +25198,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25274,8 +25274,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25350,8 +25350,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25800,6 +25800,9 @@
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [
@@ -25822,6 +25825,18 @@
               "texture_y": 1
             },
             {
+              "angle_degrees": 45.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": -18.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": 0,
+              "texture_y": 2
+            },
+            {
               "angle_degrees": 90.0,
               "anti_tags": [],
               "depth_offset": 0.0,
@@ -25832,6 +25847,18 @@
               "tags": [],
               "texture_x": -21,
               "texture_y": 1
+            },
+            {
+              "angle_degrees": 135.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": -30,
+              "texture_y": 0
             },
             {
               "angle_degrees": 180.0,
@@ -25846,6 +25873,18 @@
               "texture_y": -1
             },
             {
+              "angle_degrees": 225.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 18.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": 0,
+              "texture_y": -2
+            },
+            {
               "angle_degrees": 270.0,
               "anti_tags": [],
               "depth_offset": 0.0,
@@ -25856,6 +25895,18 @@
               "tags": [],
               "texture_x": 21,
               "texture_y": -1
+            },
+            {
+              "angle_degrees": 315.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": 30,
+              "texture_y": 0
             }
           ],
           "radius_offset_degrees": 315.0,
@@ -26170,16 +26221,37 @@
         }
       ],
       "size_settings": {
-        "scale_percentage": 28.0
+        "scale_percentage": 28.0,
+        "size_variation": 0.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "vibble_attack_1": {
       "anchor_point_child_candidates": [],
@@ -27347,9 +27419,9 @@
             }
           },
           "display_color": [
-            208,
-            36,
-            242,
+            32,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -27366,12 +27438,12 @@
             }
           },
           "inherit_map_floor_color": false,
-          "inherits_live_dynamic_assets": false,
+          "inherits_live_dynamic_assets": true,
           "is_boss": false,
-          "name": "baseball",
+          "name": "Loot_Room",
           "room_floor_color": [
+            111,
             138,
-            59,
             52
           ],
           "room_tags": [],
@@ -27436,9 +27508,9 @@
             }
           },
           "display_color": [
-            85,
-            149,
+            36,
             242,
+            161,
             255
           ],
           "edge_smoothness": 4,
@@ -27495,8 +27567,8 @@
             }
           },
           "display_color": [
-            61,
-            242,
+            139,
+            36,
             242,
             255
           ],
@@ -27554,9 +27626,9 @@
             }
           },
           "display_color": [
+            203,
             242,
-            162,
-            85,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -27643,9 +27715,9 @@
             }
           },
           "display_color": [
-            167,
-            242,
-            85,
+            204,
+            118,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27708,7 +27780,7 @@
           },
           "display_color": [
             31,
-            93,
+            120,
             204,
             255
           ],
@@ -27807,9 +27879,9 @@
             }
           },
           "display_color": [
-            85,
+            36,
             242,
-            105,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27825,14 +27897,14 @@
               "falloff": 0.0
             }
           },
-          "inherit_map_floor_color": true,
+          "inherit_map_floor_color": false,
           "inherits_live_dynamic_assets": true,
           "is_boss": false,
           "name": "baseball",
           "room_floor_color": [
-            0,
-            0,
-            0
+            138,
+            97,
+            52
           ],
           "room_tags": [],
           "spawn_groups": [
@@ -27878,15 +27950,15 @@
                 }
               ],
               "display_name": "vibble (Copy)",
-              "dx": 6072,
-              "dz": -3838,
+              "dx": 10,
+              "dz": -186,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12104,
+              "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
               "priority": 1,
@@ -28127,9 +28199,9 @@
             }
           },
           "display_color": [
-            146,
-            71,
-            204,
+            85,
+            86,
+            242,
             255
           ],
           "edge_smoothness": 96,

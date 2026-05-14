@@ -1120,11 +1120,13 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         return false;
     }
 
-    if (assets_->dev_grid_overlay_enabled()) {
+    const Assets::DevGridOverlayContext dev_grid_overlay_context = assets_->dev_grid_overlay_context();
+    if (assets_->dev_grid_overlay_enabled() &&
+        dev_grid_overlay_context.kind != Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint) {
         std::vector<GpuSpriteDrawPacket> floor_grid_overlay_draws{};
         if (!opengl_runtime_renderer_detail::build_dev_floor_grid_overlay_draw_packets(
                 camera,
-                assets_->dev_grid_overlay_context(),
+                dev_grid_overlay_context,
                 assets_->dev_grid_overlay_cell_size_px(),
                 floor_marker_texture_,
                 target_width,

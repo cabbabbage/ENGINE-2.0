@@ -674,6 +674,7 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
 
     base_view_    = make_rect_area("base_view", start_center, screen_width_, screen_height_, adjusted_start.resolution());
     current_view_ = adjusted_start;
+    display_view_ = adjusted_start;
 
     CameraParams initial_params;
     initial_params.height_px = settings_.base_height_px;
@@ -1263,70 +1264,89 @@ void WarpedScreenGrid::recompute_current_view() {
     runtime_pitch_deg_ = cam.pitch_degrees;
     runtime_depth_offset_px_ = static_cast<float>(cam.reference_depth);
 
-    std::vector<SDL_FPoint> ground_points;
-    ground_points.reserve(6);
-    const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
-    const float safe_h = static_cast<float>(std::max(1, screen_height_));
-    const float near_horizon_sample_y = std::clamp(
-        static_cast<float>(cam.horizon_screen_y) +
-            std::max(kMinNearHorizonSampleOffsetPx, safe_h * kNearHorizonSampleOffsetRatio),
-        virtual_bounds.top,
-        virtual_bounds.bottom);
-    const float mid_x = (virtual_bounds.left + virtual_bounds.right) * 0.5f;
-    const std::array<SDL_FPoint, 6> screen_samples{
-        SDL_FPoint{virtual_bounds.left, near_horizon_sample_y},
-        SDL_FPoint{mid_x, near_horizon_sample_y},
-        SDL_FPoint{virtual_bounds.right, near_horizon_sample_y},
-        SDL_FPoint{virtual_bounds.left, virtual_bounds.bottom},
-        SDL_FPoint{mid_x, virtual_bounds.bottom},
-        SDL_FPoint{virtual_bounds.right, virtual_bounds.bottom}
-    };
-    for (const auto& sample : screen_samples) {
-        const auto [nx, ny] = screen_to_ndc_point(
-            cam,
-            static_cast<double>(sample.x),
-            static_cast<double>(sample.y),
-            screen_width_,
-            screen_height_);
-        auto gp = project_ndc_to_ground(cam, nx, ny);
-        if (gp.has_value()) {
-            ground_points.push_back(*gp);
+    auto build_view_from_screen_bounds = [&](const ScreenBounds& screen_bounds,
+                                             float world_padding,
+                                             const char* view_name) -> Area {
+        std::vector<SDL_FPoint> ground_points;
+        ground_points.reserve(6);
+        const float safe_h = static_cast<float>(std::max(1, screen_height_));
+        const float near_horizon_sample_y = std::clamp(
+            static_cast<float>(cam.horizon_screen_y) +
+                std::max(kMinNearHorizonSampleOffsetPx, safe_h * kNearHorizonSampleOffsetRatio),
+            screen_bounds.top,
+            screen_bounds.bottom);
+        const float mid_x = (screen_bounds.left + screen_bounds.right) * 0.5f;
+        const std::array<SDL_FPoint, 6> screen_samples{
+            SDL_FPoint{screen_bounds.left, near_horizon_sample_y},
+            SDL_FPoint{mid_x, near_horizon_sample_y},
+            SDL_FPoint{screen_bounds.right, near_horizon_sample_y},
+            SDL_FPoint{screen_bounds.left, screen_bounds.bottom},
+            SDL_FPoint{mid_x, screen_bounds.bottom},
+            SDL_FPoint{screen_bounds.right, screen_bounds.bottom}
+        };
+        for (const auto& sample : screen_samples) {
+            const auto [nx, ny] = screen_to_ndc_point(
+                cam,
+                static_cast<double>(sample.x),
+                static_cast<double>(sample.y),
+                screen_width_,
+                screen_height_);
+            auto gp = project_ndc_to_ground(cam, nx, ny);
+            if (gp.has_value()) {
+                ground_points.push_back(*gp);
+            }
         }
-    }
 
-    if (ground_points.empty()) {
+        if (ground_points.empty()) {
+            SDL_Point center{
+                static_cast<int>(std::lround(cam.anchor_world_px.x)),
+                static_cast<int>(std::lround(cam.anchor_world_px.y))
+            };
+            const int view_w =
+                std::max(1, static_cast<int>(std::lround(screen_bounds.right - screen_bounds.left)));
+            const int view_h =
+                std::max(1, static_cast<int>(std::lround(screen_bounds.bottom - screen_bounds.top)));
+            return make_rect_area(view_name, center, view_w, view_h, 0);
+        }
+
+        float minx = ground_points.front().x;
+        float maxx = ground_points.front().x;
+        float miny = ground_points.front().y;
+        float maxy = ground_points.front().y;
+        for (const auto& p : ground_points) {
+            minx = std::min(minx, p.x);
+            maxx = std::max(maxx, p.x);
+            miny = std::min(miny, p.y);
+            maxy = std::max(maxy, p.y);
+        }
+
+        minx -= world_padding;
+        maxx += world_padding;
+        miny -= world_padding;
+        maxy += world_padding;
+
+        const int view_w = std::max(1, static_cast<int>(std::lround(maxx - minx)));
+        const int view_h = std::max(1, static_cast<int>(std::lround(maxy - miny)));
         SDL_Point center{
-            static_cast<int>(std::lround(cam.anchor_world_px.x)), static_cast<int>(std::lround(cam.anchor_world_px.y)) };
-        const int virtual_w = std::max(1, static_cast<int>(std::lround(virtual_bounds.right - virtual_bounds.left)));
-        const int virtual_h = std::max(1, static_cast<int>(std::lround(virtual_bounds.bottom - virtual_bounds.top)));
-        current_view_ = make_rect_area("current_view", center, virtual_w, virtual_h, 0);
-        return;
-    }
-
-    float minx = ground_points.front().x;
-    float maxx = ground_points.front().x;
-    float miny = ground_points.front().y;
-    float maxy = ground_points.front().y;
-    for (const auto& p : ground_points) {
-        minx = std::min(minx, p.x);
-        maxx = std::max(maxx, p.x);
-        miny = std::min(miny, p.y);
-        maxy = std::max(maxy, p.y);
-    }
-
-    const float world_padding = std::max(0.0f, frustum_padding_world_);
-    minx -= world_padding;
-    maxx += world_padding;
-    miny -= world_padding;
-    maxy += world_padding;
-
-    const int cur_w = std::max(1, static_cast<int>(std::lround(maxx - minx)));
-    const int cur_h = std::max(1, static_cast<int>(std::lround(maxy - miny)));
-    SDL_Point center{
-        static_cast<int>(std::lround((minx + maxx) * 0.5f)),
-        static_cast<int>(std::lround((miny + maxy) * 0.5f))
+            static_cast<int>(std::lround((minx + maxx) * 0.5f)),
+            static_cast<int>(std::lround((miny + maxy) * 0.5f))
+        };
+        return make_rect_area(view_name, center, view_w, view_h, 0);
     };
-    current_view_ = make_rect_area("current_view", center, cur_w, cur_h, 0);
+
+    const ScreenBounds strict_screen_bounds{
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, screen_width_)),
+        static_cast<float>(std::max(1, screen_height_))
+    };
+    const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
+
+    display_view_ = build_view_from_screen_bounds(strict_screen_bounds, 0.0f, "display_view");
+    current_view_ = build_view_from_screen_bounds(
+        virtual_bounds,
+        std::max(0.0f, frustum_padding_world_),
+        "current_view");
 }
 
 

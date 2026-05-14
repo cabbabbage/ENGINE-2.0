@@ -259,6 +259,7 @@ public:
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
+    const Area& get_display_area() const { return display_view_; }
     world::CameraProjectionParams projection_params() const;
 
     bool is_manual_height_override() const;
@@ -358,6 +359,7 @@ private:
 
     Area base_view_;
     Area current_view_;
+    Area display_view_;
 
     Room* starting_room_ = nullptr;
     double starting_area_ = 0.0;

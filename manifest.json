@@ -27328,7 +27328,10 @@
         "light_max_cull_depth": 15135.0,
         "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
+        "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.01100000087171793,
+        "live_dynamic_preload_margin_world_px": 192,
+        "live_dynamic_velocity_lookahead_seconds": 0.18000000715255737,
         "max_camera_velocity": 2200.0,
         "max_cull_depth": 6574.0,
         "mid_light_cap": 24.0,
@@ -27474,9 +27477,9 @@
             }
           },
           "display_color": [
-            204,
-            109,
-            31,
+            242,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27564,8 +27567,8 @@
           },
           "display_color": [
             135,
-            204,
-            31,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27622,9 +27625,9 @@
             }
           },
           "display_color": [
-            36,
-            38,
-            242,
+            51,
+            204,
+            149,
             255
           ],
           "edge_smoothness": 4,
@@ -27681,9 +27684,9 @@
             }
           },
           "display_color": [
-            85,
             242,
-            157,
+            36,
+            60,
             255
           ],
           "edge_smoothness": 4,
@@ -27771,7 +27774,7 @@
           },
           "display_color": [
             242,
-            167,
+            170,
             85,
             255
           ],
@@ -27834,9 +27837,9 @@
             }
           },
           "display_color": [
-            242,
-            36,
-            50,
+            31,
+            115,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -27917,10 +27920,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -1172,
-          "camera_center_dz": -1531,
-          "camera_height_px": 700,
-          "camera_tilt_deg": 30.015079498291016,
+          "camera_center_dx": -1558,
+          "camera_center_dz": -508,
+          "camera_height_px": 1364,
+          "camera_tilt_deg": 64.41497802734375,
           "camera_zoom_percent": 100,
           "curvyness": {
             "center": 2,
@@ -27934,9 +27937,9 @@
             }
           },
           "display_color": [
-            180,
-            242,
-            85,
+            174,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -28231,6 +28234,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-ff9bd67553fd"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -5948,
+              "dz": -5709,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 18496,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 9,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-3ac064a8aaaf"
             }
           ],
           "trail_connection_sector": {
@@ -28314,9 +28347,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            190,
+            178,
+            71,
+            204,
             255
           ],
           "edge_smoothness": 96,

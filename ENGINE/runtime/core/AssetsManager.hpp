@@ -314,6 +314,14 @@ public:
 
     void test_reconcile_live_dynamic_assets_for_bounds(const world::GridBounds& bounds);
     std::size_t test_live_dynamic_state_count() const { return live_dynamic_states_.size(); }
+    std::uint64_t test_live_dynamic_resolution_nonce_for_key(LiveDynamicMode mode,
+                                                             int grid_resolution,
+                                                             int grid_x,
+                                                             int grid_z,
+                                                             const std::string& spawn_id) const;
+    world::GridBounds test_live_dynamic_display_bounds() const;
+    world::GridBounds test_live_dynamic_spawn_bounds() const;
+    world::GridBounds test_live_dynamic_despawn_bounds() const;
 
 private:
     void save_map_info_json();
@@ -434,6 +442,9 @@ private:
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
     float boundary_min_visible_screen_ratio_ = 0.015f;
+    int live_dynamic_preload_margin_world_px_ = 192;
+    int live_dynamic_despawn_margin_world_px_ = 256;
+    float live_dynamic_velocity_lookahead_seconds_ = 0.18f;
     int camera_height_min_px_ = 1;
     int camera_height_max_px_ = 100000;
     int map_radius_world_ = 0;
@@ -580,6 +591,7 @@ private:
     bool compute_asset_dimension_cache(const Asset* asset, float camera_scale, AssetDimensionCache& out) const;
     void finalize_max_asset_dimensions(float max_width, float max_height);
     world::GridBounds screen_world_rect() const;
+    world::GridBounds screen_world_rect_display() const;
     int audio_effect_max_distance_world() const;
 
     void mark_non_player_update_buffer_dirty() {
@@ -651,9 +663,20 @@ private:
         bool null_selection = false;
     };
 
+    struct LiveDynamicLifecycleBounds {
+        world::GridBounds display;
+        world::GridBounds spawn;
+        world::GridBounds despawn;
+    };
+
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
     std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
     std::unordered_map<LiveDynamicPointKey, LiveDynamicState, LiveDynamicPointKeyHash> live_dynamic_states_;
+    std::unordered_map<LiveDynamicPointKey, std::uint64_t, LiveDynamicPointKeyHash> live_dynamic_resolution_nonces_;
     std::unordered_map<std::string, std::uint64_t> live_dynamic_scan_cursors_;
     std::uint32_t last_live_dynamic_log_frame_ = std::numeric_limits<std::uint32_t>::max();
+    LiveDynamicLifecycleBounds last_live_dynamic_lifecycle_bounds_{
+        world::GridBounds::from_xywh(0, 0, 1, 1, 0, 0),
+        world::GridBounds::from_xywh(0, 0, 1, 1, 0, 0),
+        world::GridBounds::from_xywh(0, 0, 1, 1, 0, 0)};
 };

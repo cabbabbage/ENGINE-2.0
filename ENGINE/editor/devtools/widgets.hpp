@@ -355,12 +355,9 @@ private:
     enum class DragMode {
         None,
         CenterValue,
-        SpanValue,
+        BoundaryValue,
         FalloffValue,
-        EdgeValue,
-        EdgeWeight,
-        FalloffWeight,
-        CenterWeight
+        WeightHandle
     };
 
     struct ColumnGeometry {
@@ -407,6 +404,7 @@ private:
     bool dragging_ = false;
     bool drag_started_ = false;
     DragMode drag_mode_ = DragMode::None;
+    int drag_handle_index_ = 2;
     int drag_start_x_ = 0;
     int drag_start_y_ = 0;
     vibble::weighted_range::WeightedIntRange drag_start_value_{};

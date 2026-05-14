@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstring>
 #include <iterator>
+#include <sstream>
 #include <optional>
 #include <string_view>
 #include <system_error>

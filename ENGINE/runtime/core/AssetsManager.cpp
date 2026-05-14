@@ -460,8 +460,9 @@ bool live_dynamic_is_boundary_info(const AssetInfo* info) {
     if (!info) {
         return false;
     }
-    return info->has_tag("boundary") ||
-           asset_types::canonicalize(info->type) == std::string(asset_types::boundary);
+    // Boundary classification for live-dynamic spawning is tag-driven only.
+    // Asset type is intentionally ignored.
+    return info->has_tag("boundary");
 }
 
 bool live_dynamic_label_is_trail(const std::string& value) {

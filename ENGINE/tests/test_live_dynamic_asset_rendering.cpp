@@ -194,7 +194,9 @@ std::set<std::pair<int, int>> collect_live_positions_named(const Assets& assets,
 
 TEST_CASE("GenerateRooms does not materialize live dynamic config into room assets") {
     AssetLibrary library(false);
-    library.add_asset("candidate_boundary", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("candidate_boundary",
+                      make_asset_metadata(std::string(asset_types::boundary),
+                                          nlohmann::json::array({"boundary"})));
 
     nlohmann::json map_manifest = nlohmann::json::object();
     nlohmann::json rooms_data = make_rooms_manifest_data(true);
@@ -219,7 +221,9 @@ TEST_CASE("GenerateRooms does not materialize live dynamic config into room asse
 
 TEST_CASE("Live dynamic assets reconcile into render-only state without persistence") {
     AssetLibrary library(false);
-    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("boundary_asset",
+                      make_asset_metadata(std::string(asset_types::boundary),
+                                          nlohmann::json::array({"boundary"})));
     library.add_asset("normal_asset", make_asset_metadata());
 
     nlohmann::json manifest = nlohmann::json::object({
@@ -283,14 +287,20 @@ TEST_CASE("Live dynamic shared selectors render tag candidates in trail areas") 
     library.add_asset("grass_asset",
                       make_asset_metadata(std::string(asset_types::object),
                                           nlohmann::json::array({"grass"})));
-    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("boundary_asset",
+                      make_asset_metadata(std::string(asset_types::boundary),
+                                          nlohmann::json::array({"boundary"})));
 
     nlohmann::json manifest = nlohmann::json::object({
         {"schema_version", manifest::kMapSchemaVersion},
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"boundary_area_selectors", nlohmann::json::array({make_live_tag_selector("spn-grass", "grass", 4)})}
+             {"boundary_area_selectors",
+              nlohmann::json::array({
+                  make_live_tag_selector("spn-grass", "grass", 4),
+                  make_live_selector("spn-boundary", "boundary_asset", 4)
+              })}
          })}
     });
 
@@ -472,7 +482,9 @@ TEST_CASE("Live dynamic jittered coordinates are deterministic across reconciles
 
 TEST_CASE("Live dynamic shared selector list renders boundary and room candidates with distributed positions") {
     AssetLibrary library(false);
-    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("boundary_asset",
+                      make_asset_metadata(std::string(asset_types::boundary),
+                                          nlohmann::json::array({"boundary"})));
     library.add_asset("normal_asset", make_asset_metadata());
 
     auto boundary_selector = make_live_selector("spn-boundary-distribution", "boundary_asset", 4);
@@ -584,7 +596,9 @@ TEST_CASE("Live dynamic spawned assets apply normal tilt and sink render metadat
 
 TEST_CASE("Live dynamic boundary selectors do not starve inherited room selectors") {
     AssetLibrary library(false);
-    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("boundary_asset",
+                      make_asset_metadata(std::string(asset_types::boundary),
+                                          nlohmann::json::array({"boundary"})));
     library.add_asset("normal_asset", make_asset_metadata());
 
     nlohmann::json manifest = nlohmann::json::object({
@@ -688,7 +702,9 @@ TEST_CASE("Live dynamic clamped selector sampling remains spatially distributed 
 
 TEST_CASE("Live dynamic boundary selectors use map-local center instead of world origin") {
     AssetLibrary library(false);
-    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("boundary_asset",
+                      make_asset_metadata(std::string(asset_types::boundary),
+                                          nlohmann::json::array({"boundary"})));
 
     nlohmann::json manifest = nlohmann::json::object({
         {"schema_version", manifest::kMapSchemaVersion},

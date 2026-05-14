@@ -21643,6 +21643,7 @@
       },
       "start": "default",
       "tags": [
+        "boundary",
         "tree"
       ],
       "tillable": false,
@@ -21721,6 +21722,7 @@
       },
       "start": "default",
       "tags": [
+        "boundary",
         "tree"
       ],
       "tillable": false,
@@ -21797,6 +21799,7 @@
       },
       "start": "default",
       "tags": [
+        "boundary",
         "tree"
       ],
       "tillable": false,
@@ -27419,9 +27422,9 @@
             }
           },
           "display_color": [
-            32,
-            31,
-            204,
+            154,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -27481,7 +27484,7 @@
           ],
           "trail_connection_sector": {
             "direction_deg": 182.0,
-            "width_percent": 69
+            "width_percent": 73
           },
           "width": {
             "center": 18504,
@@ -27508,9 +27511,9 @@
             }
           },
           "display_color": [
-            36,
+            85,
             242,
-            161,
+            143,
             255
           ],
           "edge_smoothness": 4,
@@ -27567,9 +27570,9 @@
             }
           },
           "display_color": [
-            139,
-            36,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27626,9 +27629,9 @@
             }
           },
           "display_color": [
-            203,
-            242,
-            36,
+            204,
+            121,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27715,9 +27718,9 @@
             }
           },
           "display_color": [
-            204,
-            118,
-            31,
+            235,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -27779,9 +27782,9 @@
             }
           },
           "display_color": [
-            31,
-            120,
+            96,
             204,
+            71,
             255
           ],
           "edge_smoothness": 70,
@@ -27879,8 +27882,8 @@
             }
           },
           "display_color": [
-            36,
-            242,
+            85,
+            146,
             242,
             255
           ],
@@ -28120,7 +28123,7 @@
           ],
           "trail_connection_sector": {
             "direction_deg": 182.0,
-            "width_percent": 69
+            "width_percent": 74
           },
           "width": {
             "center": 18504,
@@ -28199,9 +28202,9 @@
             }
           },
           "display_color": [
-            85,
-            86,
-            242,
+            31,
+            204,
+            109,
             255
           ],
           "edge_smoothness": 96,

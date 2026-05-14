@@ -196,10 +196,10 @@ bool clip_quad_against_v_threshold(const SDL_Vertex (&quad)[4],
     out_index_count = 0;
 
     constexpr float kEpsilon = 1.0e-6f;
-    const auto inside = [visible_v](const SDL_Vertex& v) {
+    const auto inside = [visible_v, kEpsilon](const SDL_Vertex& v) {
         return v.tex_coord.y <= (visible_v + kEpsilon);
     };
-    const auto interpolate = [visible_v](const SDL_Vertex& a, const SDL_Vertex& b) {
+    const auto interpolate = [visible_v, kEpsilon](const SDL_Vertex& a, const SDL_Vertex& b) {
         SDL_Vertex out{};
         const float dv = b.tex_coord.y - a.tex_coord.y;
         float t = 0.0f;

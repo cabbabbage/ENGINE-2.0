@@ -20,6 +20,7 @@
 #include "draw_utils.hpp"
 #include "dm_styles.hpp"
 #include "font_cache.hpp"
+#include "map_layers_common.hpp"
 #include "map_layers_container_configurator.hpp"
 #include "map_layers_controller.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
@@ -2159,20 +2160,10 @@ void MapLayersPreviewWidget::create_new_room_entry() {
     if (!map_info_ || !map_info_->is_object()) {
         return;
     }
-    nlohmann::json& rooms = (*map_info_)["rooms_data"];
-    if (!rooms.is_object()) {
-        rooms = nlohmann::json::object();
+    const std::string key = map_layers::create_room_entry(*map_info_);
+    if (key.empty()) {
+        return;
     }
-    std::string base = "NewRoom";
-    std::string key = base;
-    int suffix = 1;
-    while (rooms.contains(key)) {
-        key = base + std::to_string(suffix++);
-    }
-    std::vector<SDL_Color> colors = utils::display_color::collect(rooms);
-    nlohmann::json& entry = rooms[key];
-    entry = nlohmann::json{{"name", key}};
-    utils::display_color::ensure(entry, colors);
     mark_dirty();
     if (on_change_) {
         on_change_();

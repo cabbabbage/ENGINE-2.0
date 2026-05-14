@@ -82,6 +82,10 @@ public:
         }
     }
 
+    void set_on_create_room(std::function<void()> cb) {
+        on_create_room_ = std::move(cb);
+    }
+
     void update(const Input& input, int screen_w = 0, int screen_h = 0) override {
         DockableCollapsible::update(input, screen_w, screen_h);
     }
@@ -134,7 +138,16 @@ private:
         button_row.push_back(owned_widgets_.back().get());
 
         owned_widgets_.push_back(std::make_unique<ButtonWidget>(create_room_btn_.get(), [this]() {
-            (void)preview_widget_;
+            if (on_create_room_) {
+                on_create_room_();
+                if (preview_widget_) {
+                    preview_widget_->mark_dirty();
+                }
+                return;
+            }
+            if (preview_widget_) {
+                preview_widget_->create_new_room_entry();
+            }
         }));
         button_row.push_back(owned_widgets_.back().get());
 
@@ -191,6 +204,7 @@ private:
     std::function<void(int)> on_select_layer_{};
     std::function<void(const std::string&)> on_select_room_{};
     std::function<void()> on_show_room_list_{};
+    std::function<void()> on_create_room_{};
 };
 
 namespace {
@@ -834,6 +848,9 @@ void MapModeUI::ensure_panels() {
             if (layers_panel_) {
                 layers_panel_->show_room_list();
             }
+        });
+        layers_preview_panel_->set_on_create_room([this]() {
+            this->create_room_from_panel(SlidingPanel::RoomsList);
         });
     }
     if (layers_preview_panel_ && layers_controller_) {
@@ -1602,7 +1619,32 @@ void MapModeUI::create_room_from_layers_controls() {
 }
 
 void MapModeUI::create_room_from_panel(SlidingPanel return_panel) {
-    (void)return_panel;
+    if (!map_info_ || !map_info_->is_object()) {
+        return;
+    }
+
+    const std::string key = map_layers::create_room_entry(*map_info_);
+    if (key.empty()) {
+        return;
+    }
+
+    active_room_config_key_ = key;
+    handle_rooms_data_mutated(true);
+    mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
+
+    if (layers_panel_) {
+        layers_panel_->mark_dirty(true);
+        layers_panel_->select_room(key);
+    }
+    if (rooms_display_) {
+        rooms_display_->refresh();
+    }
+
+    if (return_panel == SlidingPanel::None) {
+        show_sliding_panel(SlidingPanel::RoomsList);
+    } else {
+        show_sliding_panel(return_panel);
+    }
 }
 
 void MapModeUI::begin_map_color_sampling(const utils::color::RangedColor&,

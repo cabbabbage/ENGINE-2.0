@@ -21631,6 +21631,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -21643,11 +21646,31 @@
         "tree"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 2,
-      "tilt_range_min_deg": -2,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 6,
+        "random": true,
+        "span": 15,
+        "weights": {
+          "center": 0.5510204081632653,
+          "edge": 0.2142857142857143,
+          "falloff": 0.2346938775510204
+        }
+      },
+      "tilt_range_max_deg": 15,
+      "tilt_range_min_deg": -15,
       "weight_kg": 584.0,
-      "y_pos_max": 0,
-      "y_pos_min": -6
+      "y_position_range": {
+        "center": -3,
+        "falloff": 1,
+        "random": true,
+        "span": 2,
+        "weights": {
+          "center": 0.3934426229508196,
+          "edge": 0.2786885245901639,
+          "falloff": 0.3278688524590164
+        }
+      }
     },
     "tree_darker": {
       "anchor_point_child_candidates": [],
@@ -27234,6 +27257,10 @@
                 "name": "#grass",
                 "tag": true,
                 "tag_name": "grass"
+              },
+              {
+                "chance": 0.25,
+                "name": "blue_flower"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -27320,9 +27347,9 @@
             }
           },
           "display_color": [
+            208,
             36,
             242,
-            188,
             255
           ],
           "edge_smoothness": 101,
@@ -27409,9 +27436,9 @@
             }
           },
           "display_color": [
-            204,
-            71,
-            138,
+            85,
+            149,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27468,9 +27495,9 @@
             }
           },
           "display_color": [
-            142,
-            31,
-            204,
+            61,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27527,9 +27554,9 @@
             }
           },
           "display_color": [
-            85,
             242,
-            103,
+            162,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27616,9 +27643,9 @@
             }
           },
           "display_color": [
-            85,
-            191,
+            167,
             242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27680,9 +27707,9 @@
             }
           },
           "display_color": [
-            204,
-            116,
             31,
+            93,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -27780,9 +27807,9 @@
             }
           },
           "display_color": [
-            31,
-            146,
-            204,
+            85,
+            242,
+            105,
             255
           ],
           "edge_smoothness": 101,
@@ -27940,15 +27967,15 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -2580,
-              "dz": 1392,
+              "dx": -1982,
+              "dz": -311,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
+              "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
               "priority": 4,
@@ -28100,9 +28127,9 @@
             }
           },
           "display_color": [
-            178,
-            85,
-            242,
+            146,
+            71,
+            204,
             255
           ],
           "edge_smoothness": 96,

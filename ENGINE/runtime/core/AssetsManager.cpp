@@ -464,6 +464,25 @@ bool live_dynamic_is_boundary_info(const AssetInfo* info) {
            asset_types::canonicalize(info->type) == std::string(asset_types::boundary);
 }
 
+bool live_dynamic_label_is_trail(const std::string& value) {
+    if (value.empty()) {
+        return false;
+    }
+    std::string lowered;
+    lowered.reserve(value.size());
+    for (unsigned char ch : value) {
+        lowered.push_back(static_cast<char>(std::tolower(ch)));
+    }
+    return lowered == "trail";
+}
+
+bool live_dynamic_named_area_is_trail(const Room::NamedArea& named_area) {
+    return named_area.area &&
+           (live_dynamic_label_is_trail(named_area.type) ||
+            live_dynamic_label_is_trail(named_area.kind) ||
+            live_dynamic_label_is_trail(named_area.name));
+}
+
 bool live_dynamic_info_allowed(const AssetInfo* info, Assets::LiveDynamicMode mode) {
     const bool boundary = live_dynamic_is_boundary_info(info);
     if (mode == Assets::LiveDynamicMode::BoundaryArea) {
@@ -3034,10 +3053,38 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
         return resolved;
     };
 
+    auto for_each_live_dynamic_area = [&](const Room* room, const auto& fn) {
+        if (!room) {
+            return;
+        }
+        if (room->room_area) {
+            fn(room->room_area.get());
+        }
+        for (const auto& named_area : room->areas) {
+            if (!live_dynamic_named_area_is_trail(named_area)) {
+                continue;
+            }
+            fn(named_area.area.get());
+        }
+    };
+
+    auto room_contains_live_dynamic_area = [&](const Room* room, SDL_Point point) {
+        bool contains = false;
+        for_each_live_dynamic_area(room, [&](const Area* area) {
+            if (contains || !area) {
+                return;
+            }
+            if (area->contains_point(point)) {
+                contains = true;
+            }
+        });
+        return contains;
+    };
+
     auto room_for_point = [&](SDL_Point point, bool require_inherited, bool& inside_any_room) -> Room* {
         inside_any_room = false;
         for (Room* room : rooms()) {
-            if (!room || !room->room_area || !room->room_area->contains_point(point)) {
+            if (!room || !room_contains_live_dynamic_area(room, point)) {
                 continue;
             }
             inside_any_room = true;
@@ -3165,29 +3212,34 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
         if (selector.mode == LiveDynamicMode::InheritedMap) {
             bool has_inherited_scan_area = false;
             for (Room* room : rooms()) {
-                if (!room || !room->room_area || !room->inherits_map_assets()) {
+                if (!room || !room->inherits_map_assets()) {
                     continue;
                 }
-                auto [room_min_x, room_min_z, room_max_x, room_max_z] = room->room_area->get_bounds();
-                const int clipped_min_x = std::max(min_world_x, room_min_x);
-                const int clipped_min_z = std::max(min_world_z, room_min_z);
-                const int clipped_max_x = std::min(max_world_x, room_max_x);
-                const int clipped_max_z = std::min(max_world_z, room_max_z);
-                if (clipped_min_x > clipped_max_x || clipped_min_z > clipped_max_z) {
-                    continue;
-                }
-                if (!has_inherited_scan_area) {
-                    selector_min_world_x = clipped_min_x;
-                    selector_min_world_z = clipped_min_z;
-                    selector_max_world_x = clipped_max_x;
-                    selector_max_world_z = clipped_max_z;
-                    has_inherited_scan_area = true;
-                } else {
-                    selector_min_world_x = std::min(selector_min_world_x, clipped_min_x);
-                    selector_min_world_z = std::min(selector_min_world_z, clipped_min_z);
-                    selector_max_world_x = std::max(selector_max_world_x, clipped_max_x);
-                    selector_max_world_z = std::max(selector_max_world_z, clipped_max_z);
-                }
+                for_each_live_dynamic_area(room, [&](const Area* area) {
+                    if (!area) {
+                        return;
+                    }
+                    auto [room_min_x, room_min_z, room_max_x, room_max_z] = area->get_bounds();
+                    const int clipped_min_x = std::max(min_world_x, room_min_x);
+                    const int clipped_min_z = std::max(min_world_z, room_min_z);
+                    const int clipped_max_x = std::min(max_world_x, room_max_x);
+                    const int clipped_max_z = std::min(max_world_z, room_max_z);
+                    if (clipped_min_x > clipped_max_x || clipped_min_z > clipped_max_z) {
+                        continue;
+                    }
+                    if (!has_inherited_scan_area) {
+                        selector_min_world_x = clipped_min_x;
+                        selector_min_world_z = clipped_min_z;
+                        selector_max_world_x = clipped_max_x;
+                        selector_max_world_z = clipped_max_z;
+                        has_inherited_scan_area = true;
+                    } else {
+                        selector_min_world_x = std::min(selector_min_world_x, clipped_min_x);
+                        selector_min_world_z = std::min(selector_min_world_z, clipped_min_z);
+                        selector_max_world_x = std::max(selector_max_world_x, clipped_max_x);
+                        selector_max_world_z = std::max(selector_max_world_z, clipped_max_z);
+                    }
+                });
             }
             if (!has_inherited_scan_area) {
                 return;

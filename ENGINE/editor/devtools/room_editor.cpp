@@ -163,6 +163,26 @@ bool is_integral_weight(double value) {
     return std::fabs(value - rounded) < 1e-9;
 }
 
+std::optional<int> read_json_int(const nlohmann::json& obj, const char* key) {
+    if (!obj.is_object() || !obj.contains(key)) {
+        return std::nullopt;
+    }
+    const auto& value = obj.at(key);
+    if (value.is_number_integer()) {
+        return value.get<int>();
+    }
+    if (value.is_number_float()) {
+        return static_cast<int>(std::lround(value.get<double>()));
+    }
+    if (value.is_string()) {
+        try {
+            return std::stoi(value.get<std::string>());
+        } catch (...) {
+        }
+    }
+    return std::nullopt;
+}
+
 vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& root,
                                                                    const char* key,
                                                                    const vibble::weighted_range::WeightedIntRange& fallback) {

@@ -3047,12 +3047,13 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
         return nullptr;
     };
 
+    const SDL_Point boundary_center_world = camera_.get_screen_center();
     auto point_in_boundary_area = [&](SDL_Point point, bool inside_any_room) {
         if (inside_any_room || map_radius_world_ <= 0) {
             return false;
         }
-        const std::int64_t dx = static_cast<std::int64_t>(point.x);
-        const std::int64_t dz = static_cast<std::int64_t>(point.y);
+        const std::int64_t dx = static_cast<std::int64_t>(point.x) - static_cast<std::int64_t>(boundary_center_world.x);
+        const std::int64_t dz = static_cast<std::int64_t>(point.y) - static_cast<std::int64_t>(boundary_center_world.y);
         const std::int64_t radius = static_cast<std::int64_t>(map_radius_world_);
         return dx * dx + dz * dz <= radius * radius;
     };

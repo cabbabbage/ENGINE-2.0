@@ -414,3 +414,45 @@ TEST_CASE("Live dynamic boundary and inherited selectors both render with distri
     CHECK(boundary_positions.size() > 1);
     CHECK(normal_positions.size() > 1);
 }
+
+TEST_CASE("Live dynamic boundary selectors use map-local center instead of world origin") {
+    AssetLibrary library(false);
+    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors", nlohmann::json::array({make_live_selector("spn-boundary-offset", "boundary_asset", 4)})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 48);
+    nlohmann::json room_data = make_room_data(false);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  6000,
+                  6000,
+                  256,
+                  nullptr,
+                  "live_dynamic_boundary_offset_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds visible_near_center = world::GridBounds::from_xywh(5960, 5960, 80, 80, 0, 4);
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible_near_center);
+    CHECK(count_live_assets_named(assets, "boundary_asset") > 0);
+
+    const world::GridBounds origin_window = world::GridBounds::from_xywh(-32, -32, 64, 64, 0, 4);
+    assets.test_reconcile_live_dynamic_assets_for_bounds(origin_window);
+    CHECK(count_live_assets_named(assets, "boundary_asset") == 0);
+}

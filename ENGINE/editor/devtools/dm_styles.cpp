@@ -274,6 +274,10 @@ float DMStyles::HighlightIntensity() { return kHighlightIntensity; }
 
 float DMStyles::ShadowIntensity() { return kShadowIntensity; }
 
+const SDL_Color &DMStyles::AccentColor() {
+  return DMStyles::AccentButton().bg;
+}
+
 const SDL_Color &DMStyles::ButtonBaseFill() {
   static const SDL_Color c = kButtonBaseFill;
   return c;

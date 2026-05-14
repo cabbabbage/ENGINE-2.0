@@ -89,6 +89,7 @@ public:
   static const SDL_Color &ShadowColor();
   static float HighlightIntensity();
   static float ShadowIntensity();
+  static const SDL_Color &AccentColor();
   static const SDL_Color &ButtonBaseFill();
   static const SDL_Color &ButtonHoverFill();
   static const SDL_Color &ButtonPressedFill();

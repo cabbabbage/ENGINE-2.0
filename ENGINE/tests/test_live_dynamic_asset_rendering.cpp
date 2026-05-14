@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <limits>
 #include <memory>
 #include <set>
 #include <string>
@@ -413,6 +415,63 @@ TEST_CASE("Live dynamic boundary and inherited selectors both render with distri
     const auto normal_positions = collect_live_positions_named(assets, "normal_asset");
     CHECK(boundary_positions.size() > 1);
     CHECK(normal_positions.size() > 1);
+}
+
+
+TEST_CASE("Live dynamic clamped selector sampling remains spatially distributed across wide windows") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-wide-clamped", "normal_asset", 4)})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 256);
+    nlohmann::json room_data = make_room_data(true);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  0,
+                  0,
+                  256,
+                  nullptr,
+                  "live_dynamic_clamped_distribution_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds wide_visible = world::GridBounds::from_xywh(-400, -32, 800, 64, 0, 4);
+    for (int i = 0; i < 16; ++i) {
+        assets.test_reconcile_live_dynamic_assets_for_bounds(wide_visible);
+    }
+
+    const auto positions = collect_live_positions_named(assets, "normal_asset");
+    REQUIRE(positions.size() > 32);
+
+    int min_x = std::numeric_limits<int>::max();
+    int max_x = std::numeric_limits<int>::min();
+    int min_z = std::numeric_limits<int>::max();
+    int max_z = std::numeric_limits<int>::min();
+    for (const auto& [x, z] : positions) {
+        min_x = std::min(min_x, x);
+        max_x = std::max(max_x, x);
+        min_z = std::min(min_z, z);
+        max_z = std::max(max_z, z);
+    }
+
+    CHECK((max_x - min_x) >= 600);
+    CHECK((max_z - min_z) <= 96);
 }
 
 TEST_CASE("Live dynamic boundary selectors use map-local center instead of world origin") {

@@ -61,6 +61,7 @@
 #include <unordered_map>
 #include <array>
 #include <sstream>
+#include <numeric>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -3179,21 +3180,8 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             span_x > kLiveDynamicMaxSelectorAxisSpan ||
             span_z > kLiveDynamicMaxSelectorAxisSpan ||
             (span_z > 0 && span_x > (kLiveDynamicMaxSelectorWindowPoints / span_z));
-        bool clamped = false;
-        if (raw_window_too_large) {
-            const SDL_Point center_index = vibble::grid::global_grid().world_to_index(
-                SDL_Point{
-                    midpoint_int(min_world_x, max_world_x),
-                    midpoint_int(min_world_z, max_world_z)},
-                resolution);
-            const std::int64_t half_span = kLiveDynamicMaxSelectorAxisSpan / 2;
-            scan_min_x = static_cast<std::int64_t>(center_index.x) - half_span;
-            scan_max_x = scan_min_x + kLiveDynamicMaxSelectorAxisSpan - 1;
-            scan_min_z = static_cast<std::int64_t>(center_index.y) - half_span;
-            scan_max_z = scan_min_z + kLiveDynamicMaxSelectorAxisSpan - 1;
-            span_x = scan_max_x - scan_min_x + 1;
-            span_z = scan_max_z - scan_min_z + 1;
-            clamped = true;
+        const bool clamped = raw_window_too_large;
+        if (clamped) {
             ++stats.clamped_selectors;
         }
 
@@ -3205,6 +3193,23 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
 
         const std::string cursor_key = selector_cursor_key(selector);
         std::uint64_t cursor = live_dynamic_scan_cursors_[cursor_key] % total_points;
+
+        std::uint64_t sample_points_target = total_points;
+        if (clamped) {
+            sample_points_target = std::min<std::uint64_t>(total_points, kLiveDynamicMaxSelectorWindowPoints);
+        }
+
+        std::uint64_t sample_stride = 1;
+        if (sample_points_target < total_points) {
+            sample_stride = std::max<std::uint64_t>(1, total_points / sample_points_target);
+            while (sample_stride < total_points && std::gcd(sample_stride, total_points) != 1) {
+                ++sample_stride;
+            }
+            if (sample_stride >= total_points) {
+                sample_stride = 1;
+            }
+        }
+
         std::uint64_t visited = 0;
         bool stopped_by_budget = false;
 
@@ -3218,7 +3223,7 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             " points=" + std::to_string(total_points) +
             " clamped=" + (clamped ? std::string("true") : std::string("false")));
 
-        while (visited < total_points) {
+        while (visited < sample_points_target) {
             if (stats.candidate_points_considered >= kLiveDynamicMaxCandidatePointsPerFrame ||
                 stats.spawned >= kLiveDynamicMaxSpawnsPerFrame ||
                 live_dynamic_states_.size() >= kLiveDynamicMaxStates) {
@@ -3228,7 +3233,7 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
                 break;
             }
 
-            const std::uint64_t linear = (cursor + visited) % total_points;
+            const std::uint64_t linear = (cursor + (visited * sample_stride) % total_points) % total_points;
             const int ix = static_cast<int>(scan_min_x + static_cast<std::int64_t>(linear % static_cast<std::uint64_t>(span_x)));
             const int iz = static_cast<int>(scan_min_z + static_cast<std::int64_t>(linear / static_cast<std::uint64_t>(span_x)));
             ++visited;
@@ -3291,11 +3296,8 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             live_dynamic_states_.emplace(std::move(key), std::move(state));
         }
 
-        if (stopped_by_budget) {
-            live_dynamic_scan_cursors_[cursor_key] = (cursor + visited) % total_points;
-        } else {
-            live_dynamic_scan_cursors_[cursor_key] = 0;
-        }
+        const std::uint64_t advanced = (visited * sample_stride) % total_points;
+        live_dynamic_scan_cursors_[cursor_key] = (cursor + advanced) % total_points;
     };
 
     for (const LiveDynamicSelector& selector : live_dynamic_boundary_selectors_) {

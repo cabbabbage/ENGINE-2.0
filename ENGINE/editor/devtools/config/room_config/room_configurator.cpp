@@ -826,28 +826,16 @@ struct RoomConfigurator::State {
         const auto height_fallback = vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
         const auto curvy_fallback = vibble::weighted_range::make_flat(2);
 
-        auto read_weighted_field = [&](const char* key,
-                                       const vibble::weighted_range::WeightedIntRange& fallback) {
-            if (src.contains(key)) {
-                return vibble::weighted_range::from_json(src.at(key), fallback);
-            }
-            return fallback;
-        };
-
         if (src.contains("width")) {
             width_range = vibble::weighted_range::from_json(src["width"], width_fallback);
         } else {
-            bool has_min_width = false;
-            bool has_max_width = false;
             int legacy_min = 500;
             int legacy_max = kMaxRoomDimension;
             if (auto value = read_json_int(src, "min_width")) {
                 legacy_min = *value;
-                has_min_width = true;
             }
             if (auto value = read_json_int(src, "max_width")) {
                 legacy_max = *value;
-                has_max_width = true;
             }
             int legacy_min_radius = 0;
             int legacy_max_radius = 0;

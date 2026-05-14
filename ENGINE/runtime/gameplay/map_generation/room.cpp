@@ -46,27 +46,6 @@ bool read_json_int(const nlohmann::json& src, const char* key, int& out_value) {
         return false;
 }
 
-int clamp_room_dimension(int value) {
-        return std::clamp(value, kMinRoomDimension, kMaxRoomDimension);
-}
-
-void sanitize_dimension_bounds(int& min_value, int& max_value) {
-        if (min_value <= 0 && max_value > 0) {
-                min_value = max_value;
-        } else if (max_value <= 0 && min_value > 0) {
-                max_value = min_value;
-        } else if (min_value <= 0 && max_value <= 0) {
-                min_value = kMinRoomDimension;
-                max_value = kMinRoomDimension;
-        }
-
-        min_value = clamp_room_dimension(min_value);
-        max_value = clamp_room_dimension(max_value);
-        if (max_value < min_value) {
-                std::swap(min_value, max_value);
-        }
-}
-
 void migrate_legacy_radius_bounds_if_needed(const nlohmann::json& src,
                                             int& min_w,
                                             int& max_w,
@@ -123,16 +102,6 @@ void migrate_legacy_radius_bounds_if_needed(const nlohmann::json& src,
         if (max_w <= 0) max_w = migrated_max_diameter;
         if (min_h <= 0) min_h = migrated_min_diameter;
         if (max_h <= 0) max_h = migrated_max_diameter;
-}
-
-int sample_dimension_inclusive(int min_value, int max_value) {
-        sanitize_dimension_bounds(min_value, max_value);
-        if (max_value <= min_value) {
-                return min_value;
-        }
-        static thread_local std::mt19937 room_rng{std::random_device{}()};
-        std::uniform_int_distribution<int> dist(min_value, max_value);
-        return dist(room_rng);
 }
 
 vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& src,

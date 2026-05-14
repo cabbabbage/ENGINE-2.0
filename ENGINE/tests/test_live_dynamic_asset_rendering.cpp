@@ -1,7 +1,9 @@
 #include <doctest/doctest.h>
 
 #include <memory>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -18,7 +20,9 @@
 namespace {
 
 nlohmann::json make_asset_metadata(const std::string& type = std::string(asset_types::object),
-                                   nlohmann::json tags = nlohmann::json::array()) {
+                                   nlohmann::json tags = nlohmann::json::array(),
+                                   int y_pos_min = 0,
+                                   int y_pos_max = 0) {
     return nlohmann::json::object({
         {"asset_type", type},
         {"tags", std::move(tags)},
@@ -28,7 +32,9 @@ nlohmann::json make_asset_metadata(const std::string& type = std::string(asset_t
         {"attack_box_enabled", false},
         {"hitbox_enabled", false},
         {"impassable_enabled", false},
-        {"floor_boxes_enabled", false}
+        {"floor_boxes_enabled", false},
+        {"y_pos_min", y_pos_min},
+        {"y_pos_max", y_pos_max}
     });
 }
 
@@ -126,6 +132,17 @@ int count_live_assets_named(const Assets& assets, const std::string& name) {
         }
     }
     return count;
+}
+
+std::set<std::pair<int, int>> collect_live_positions_named(const Assets& assets, const std::string& name) {
+    std::set<std::pair<int, int>> out;
+    for (const Asset* asset : assets.getLiveDynamicRenderAssets()) {
+        if (!asset || !asset->info || asset->info->name != name) {
+            continue;
+        }
+        out.emplace(asset->world_x(), asset->world_z());
+    }
+    return out;
 }
 
 }  // namespace
@@ -253,4 +270,147 @@ TEST_CASE("Live dynamic null selections reserve visible points without render as
     CHECK(assets.getLiveDynamicRenderAssets().empty());
     CHECK(assets.all.empty());
     CHECK(assets.world_grid().all_assets().empty());
+}
+
+TEST_CASE("Live dynamic spawned assets preserve initialized world height and get runtime perspective override") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata(std::string(asset_types::object),
+                                                           nlohmann::json::array(),
+                                                           12,
+                                                           12));
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-height", "normal_asset", 4)})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 48);
+    nlohmann::json room_data = make_room_data(true);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  0,
+                  0,
+                  256,
+                  nullptr,
+                  "live_dynamic_height_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds visible = world::GridBounds::from_xywh(-32, -32, 64, 64, 0, 4);
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+
+    REQUIRE_FALSE(assets.getLiveDynamicRenderAssets().empty());
+    for (const Asset* asset : assets.getLiveDynamicRenderAssets()) {
+        REQUIRE(asset != nullptr);
+        CHECK(asset->world_y() == 12);
+        CHECK(asset->has_anchor_perspective_override());
+    }
+}
+
+TEST_CASE("Live dynamic jittered coordinates are deterministic across reconciles") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    auto selector = make_live_selector("spn-jitter", "normal_asset", 4);
+    selector["jitter"] = 40;
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"inherited_map_selectors", nlohmann::json::array({selector})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 64);
+    nlohmann::json room_data = make_room_data(true);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  0,
+                  0,
+                  256,
+                  nullptr,
+                  "live_dynamic_jitter_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds visible = world::GridBounds::from_xywh(-64, -64, 128, 128, 0, 4);
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+    const auto first_positions = collect_live_positions_named(assets, "normal_asset");
+    const std::size_t first_state_count = assets.test_live_dynamic_state_count();
+    REQUIRE_FALSE(first_positions.empty());
+
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+    const auto second_positions = collect_live_positions_named(assets, "normal_asset");
+    CHECK(second_positions == first_positions);
+    CHECK(assets.test_live_dynamic_state_count() == first_state_count);
+}
+
+TEST_CASE("Live dynamic boundary and inherited selectors both render with distributed positions") {
+    AssetLibrary library(false);
+    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    auto boundary_selector = make_live_selector("spn-boundary-distribution", "boundary_asset", 4);
+    boundary_selector["jitter"] = 24;
+    auto inherited_selector = make_live_selector("spn-normal-distribution", "normal_asset", 4);
+    inherited_selector["jitter"] = 24;
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors", nlohmann::json::array({boundary_selector})},
+             {"inherited_map_selectors", nlohmann::json::array({inherited_selector})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 48);
+    nlohmann::json room_data = make_room_data(true);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  0,
+                  0,
+                  256,
+                  nullptr,
+                  "live_dynamic_distribution_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds visible = world::GridBounds::from_xywh(-96, -96, 192, 192, 0, 4);
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+
+    const auto boundary_positions = collect_live_positions_named(assets, "boundary_asset");
+    const auto normal_positions = collect_live_positions_named(assets, "normal_asset");
+    CHECK(boundary_positions.size() > 1);
+    CHECK(normal_positions.size() > 1);
 }

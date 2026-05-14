@@ -899,7 +899,8 @@ void Assets::rebuild_live_dynamic_selectors() {
             ? selector_json.value("grid_resolution", map_grid_settings_.grid_resolution)
             : selector_json.value("resolution", map_grid_settings_.grid_resolution);
         selector.grid_resolution = vibble::grid::clamp_resolution(raw_resolution);
-        selector.jitter_px = std::clamp(selector_json.value("jitter", 0), 0, 2048);
+        const int selector_jitter = selector_json.value("jitter", map_grid_settings_.position_jitter_px);
+        selector.jitter_px = std::clamp(selector_jitter, 0, 2048);
 
         for (const nlohmann::json& candidate_json : *candidates_json) {
             const double weight = live_dynamic_candidate_weight(candidate_json);
@@ -2875,8 +2876,6 @@ void Assets::rebuild_live_dynamic_active_assets() {
         float perspective_scale = 1.0f;
         if (live_dynamic_projected_perspective_scale(camera_, *asset, perspective_scale)) {
             asset->set_anchor_perspective_override(perspective_scale, asset->grid_resolution);
-        } else {
-            asset->clear_anchor_perspective_override();
         }
         asset->last_active_frame_id = frame_id_;
         asset->last_visible_frame_id = frame_id_;
@@ -2887,6 +2886,11 @@ void Assets::rebuild_live_dynamic_active_assets() {
 }
 
 void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_bounds) {
+    struct ResolvedLiveDynamicPoint {
+        SDL_Point grid_vertex_world_xz{0, 0};
+        SDL_Point spawn_world_xz{0, 0};
+    };
+
     struct ReconcileStats {
         std::size_t visible_points = 0;
         std::size_t candidate_points_considered = 0;
@@ -3002,6 +3006,33 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
         return jittered;
     };
 
+    auto find_selector_for_key = [&](const LiveDynamicPointKey& key) -> const LiveDynamicSelector* {
+        const auto selector_matches = [&](const LiveDynamicSelector& selector) {
+            return selector.mode == key.mode &&
+                   selector.grid_resolution == key.grid_resolution &&
+                   selector.spawn_id == key.spawn_id;
+        };
+        const auto& list = key.mode == LiveDynamicMode::BoundaryArea
+            ? live_dynamic_boundary_selectors_
+            : live_dynamic_inherited_selectors_;
+        auto it = std::find_if(list.begin(), list.end(), selector_matches);
+        if (it != list.end()) {
+            return &(*it);
+        }
+        return nullptr;
+    };
+
+    auto resolve_world_points = [&](const LiveDynamicSelector& selector,
+                                    const LiveDynamicPointKey& key) -> ResolvedLiveDynamicPoint {
+        ResolvedLiveDynamicPoint resolved{};
+        resolved.grid_vertex_world_xz = vibble::grid::global_grid().index_to_world(
+            key.grid_x,
+            key.grid_z,
+            key.grid_resolution);
+        resolved.spawn_world_xz = jittered_world_point(selector, key, resolved.grid_vertex_world_xz);
+        return resolved;
+    };
+
     auto room_for_point = [&](SDL_Point point, bool require_inherited, bool& inside_any_room) -> Room* {
         inside_any_room = false;
         for (Room* room : rooms()) {
@@ -3082,7 +3113,10 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             spawn_area,
             world_point,
             0,
-            std::string("live_dynamic:") + key.spawn_id,
+            std::string("live_dynamic:") + key.spawn_id +
+                ":" + std::to_string(key.grid_resolution) +
+                ":" + std::to_string(key.grid_x) +
+                ":" + std::to_string(key.grid_z),
             std::string("live_dynamic"),
             selector.grid_resolution);
         Asset* raw = asset.get();
@@ -3200,22 +3234,21 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             ++stats.candidate_points_considered;
 
             const LiveDynamicPointKey key{selector.mode, resolution, ix, iz, selector.spawn_id};
-            const SDL_Point base_world_point = vibble::grid::global_grid().index_to_world(ix, iz, resolution);
-            const SDL_Point world_point = jittered_world_point(selector, key, base_world_point);
-            if (!point_inside_visible_bounds(world_point)) {
+            const ResolvedLiveDynamicPoint resolved_point = resolve_world_points(selector, key);
+            if (!point_inside_visible_bounds(resolved_point.spawn_world_xz)) {
                 continue;
             }
 
             bool inside_any_room = false;
             Room* owner = nullptr;
             if (selector.mode == LiveDynamicMode::InheritedMap) {
-                owner = room_for_point(world_point, true, inside_any_room);
+                owner = room_for_point(resolved_point.spawn_world_xz, true, inside_any_room);
                 if (!owner) {
                     continue;
                 }
             } else {
-                (void)room_for_point(world_point, false, inside_any_room);
-                if (!point_in_boundary_area(world_point, inside_any_room)) {
+                (void)room_for_point(resolved_point.spawn_world_xz, false, inside_any_room);
+                if (!point_in_boundary_area(resolved_point.spawn_world_xz, inside_any_room)) {
                     continue;
                 }
             }
@@ -3231,7 +3264,8 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
                 continue;
             }
 
-            if (static_point_occupied(world_point, resolution) || live_point_occupied(key, world_point)) {
+            if (static_point_occupied(resolved_point.spawn_world_xz, resolution) ||
+                live_point_occupied(key, resolved_point.spawn_world_xz)) {
                 ++stats.skipped_occupied;
                 LiveDynamicState state;
                 state.null_selection = true;
@@ -3246,7 +3280,7 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
                 ++stats.null_selected;
             } else {
                 const std::string owner_name = owner ? owner->room_name : map_id_;
-                state.asset = spawn_live_asset(selector, key, world_point, *candidate, owner_name);
+                state.asset = spawn_live_asset(selector, key, resolved_point.spawn_world_xz, *candidate, owner_name);
                 if (state.asset) {
                     ++stats.spawned;
                 } else {
@@ -3271,11 +3305,15 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
     }
 
     for (auto it = live_dynamic_states_.begin(); it != live_dynamic_states_.end();) {
-        const SDL_Point world_point = vibble::grid::global_grid().index_to_world(
-            it->first.grid_x,
-            it->first.grid_z,
-            it->first.grid_resolution);
-        if (point_inside_visible_bounds(world_point)) {
+        const LiveDynamicPointKey& key = it->first;
+        SDL_Point point_to_test = vibble::grid::global_grid().index_to_world(
+            key.grid_x,
+            key.grid_z,
+            key.grid_resolution);
+        if (const LiveDynamicSelector* selector = find_selector_for_key(key)) {
+            point_to_test = resolve_world_points(*selector, key).spawn_world_xz;
+        }
+        if (point_inside_visible_bounds(point_to_test)) {
             ++it;
             continue;
         }

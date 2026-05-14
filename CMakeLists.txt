@@ -308,6 +308,7 @@ add_executable(engine_tests
     ENGINE/tests/test_map_manifest_normalizer.cpp
     ENGINE/tests/test_live_dynamic_asset_rendering.cpp
     ENGINE/tests/test_generate_trails_geometry.cpp
+    ENGINE/tests/test_generate_rooms_connectivity.cpp
     ENGINE/tests/test_movement_payload_geometry.cpp
     ENGINE/tests/test_player_direction_intent.cpp
     ENGINE/tests/test_room_anchor_mode_utils.cpp

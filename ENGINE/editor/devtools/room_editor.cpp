@@ -6487,9 +6487,9 @@ void RoomEditor::regenerate_room_from_template(const std::string& template_key) 
             &map_info,
             assets_->manifest_store(),
             {});
-        if (!generated.empty()) {
-            generated_trail_pairs += static_cast<int>(generated.size());
-            for (auto& trail_room : generated) {
+        if (!generated.trail_rooms.empty()) {
+            generated_trail_pairs += static_cast<int>(generated.trail_rooms.size());
+            for (auto& trail_room : generated.trail_rooms) {
                 if (trail_room) {
                     successful_new_trails.push_back(std::move(trail_room));
                 }

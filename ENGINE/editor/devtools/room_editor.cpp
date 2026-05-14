@@ -6271,7 +6271,7 @@ void RoomEditor::open_room_config_for_json_entry(nlohmann::json& room_data, bool
     }
     room_cfg_ui_->set_room_metadata_only_mode(true);
     room_cfg_ui_->set_bounds(room_config_bounds_);
-    room_cfg_ui_->open(room_data, [this, is_trail_context]() {
+    room_cfg_ui_->open(room_data, is_trail_context, [this, is_trail_context]() {
         if (!assets_) {
             return;
         }

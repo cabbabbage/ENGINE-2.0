@@ -64,6 +64,7 @@ public:
 
     void open(const nlohmann::json& room_data);
     void open(nlohmann::json& room_data, std::function<void()> on_change = {});
+    void open(nlohmann::json& room_data, bool is_trail_context, std::function<void()> on_change = {});
     void open(Room* room);
 
     void set_manifest_store(class devmode::core::ManifestStore* store);

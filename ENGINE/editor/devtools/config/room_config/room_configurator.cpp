@@ -1916,17 +1916,23 @@ void RoomConfigurator::open(const nlohmann::json& room_data) {
 }
 
 void RoomConfigurator::open(nlohmann::json& room_data, std::function<void()> on_change) {
+    open(room_data, false, std::move(on_change));
+}
+
+void RoomConfigurator::open(nlohmann::json& room_data, bool is_trail_context, std::function<void()> on_change) {
     const bool was_visible = container_ && container_->is_visible();
 
     if (!was_visible) {
         reset_expanded_state_pending_ = true;
     }
 
+    const bool context_changed = is_trail_context_ != is_trail_context;
     room_ = nullptr;
     external_room_json_ = &room_data;
     on_external_change_ = std::move(on_change);
-    is_trail_context_ = false;
-    bool changed = apply_room_data(room_data);
+    is_trail_context_ = is_trail_context;
+    const bool data_changed = apply_room_data(room_data);
+    const bool changed = context_changed || data_changed;
     if (changed || !was_visible) {
         rebuild_rows();
         if (!was_visible) {
@@ -1958,7 +1964,8 @@ void RoomConfigurator::open(Room* room) {
     }
 
     const nlohmann::json& source = room ? room->assets_data() : empty_object();
-    bool changed = (room != previous) || apply_room_data(source);
+    const bool data_changed = apply_room_data(source);
+    const bool changed = (room != previous) || data_changed;
     if (changed || !was_visible) {
         rebuild_rows();
         if (!was_visible) {

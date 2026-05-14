@@ -5,6 +5,7 @@
 #include "utils/sdl_render_conversions.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -335,7 +336,10 @@ public:
     using ValueChangedCallback = std::function<void(const vibble::weighted_range::WeightedIntRange&)>;
 
     DMWeightedRangeWidget(const std::string& label,
-                          const vibble::weighted_range::WeightedIntRange& value);
+                          const vibble::weighted_range::WeightedIntRange& value,
+                          std::int64_t min_allowed,
+                          std::int64_t max_allowed,
+                          bool loop);
     void set_rect(const SDL_Rect& r);
     const SDL_Rect& rect() const { return rect_; }
     void set_label(const std::string& label);
@@ -376,10 +380,16 @@ private:
     bool toggle_random();
     void sanitize_value();
     void notify_value_changed();
+    void sync_visual_range_from_value();
+    void clamp_visual_range();
+    int control_x_for_index(int index) const;
+    std::int64_t raw_value_for_index(int index) const;
+    std::int64_t display_value(std::int64_t raw) const;
+    double density_for_raw_value(double raw) const;
     double display_weight_for_index(int index) const;
     void set_weight_for_index(int index, double weight);
     std::string format_value(std::int64_t value) const;
-    std::string format_weight(double weight) const;
+    double units_per_pixel() const;
     SDL_Rect content_rect() const;
     SDL_Rect checkbox_rect() const;
     SDL_Rect histogram_rect() const;
@@ -397,6 +407,9 @@ private:
     SDL_Rect content_rect_{0,0,200,160};
     std::string label_;
     vibble::weighted_range::WeightedIntRange value_{};
+    std::int64_t min_allowed_ = 0;
+    std::int64_t max_allowed_ = 0;
+    bool loop_ = false;
     bool enabled_ = true;
     bool hovered_ = false;
     bool checkbox_hovered_ = false;
@@ -408,8 +421,12 @@ private:
     int drag_start_x_ = 0;
     int drag_start_y_ = 0;
     vibble::weighted_range::WeightedIntRange drag_start_value_{};
+    double drag_start_visual_span_px_ = 0.0;
+    double drag_start_visual_falloff_px_ = 0.0;
     vibble::weighted_range::WeightedIntRange random_snapshot_{};
     bool has_random_snapshot_ = false;
+    double visual_span_px_ = 0.0;
+    double visual_falloff_px_ = 0.0;
     ColumnGeometry columns_[5]{};
     mutable std::array<SDL_Rect, 5> label_rects_{};
     mutable std::array<SDL_Rect, 5> value_rects_{};

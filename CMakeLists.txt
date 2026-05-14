@@ -332,6 +332,7 @@ add_executable(engine_tests
     ENGINE/tests/test_movement_pathing_axis.cpp
     ENGINE/tests/test_dev_mode_animation_policy.cpp
     ENGINE/tests/test_playback_settings_inheritance.cpp
+    ENGINE/tests/test_weighted_range.cpp
     
     ENGINE/tests/test_screen_space_math.cpp
     ENGINE/tests/test_sink_clip.cpp

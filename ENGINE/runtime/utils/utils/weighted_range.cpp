@@ -316,6 +316,36 @@ std::int64_t resolve(const WeightedIntRange& value, std::mt19937& rng) {
                                                                  cursor)));
 }
 
+std::int64_t wrap_inclusive(std::int64_t value, std::int64_t min_value, std::int64_t max_value) {
+    if (max_value < min_value) {
+        std::swap(min_value, max_value);
+    }
+    const std::int64_t size = (max_value - min_value) + 1;
+    if (size <= 0) {
+        return value;
+    }
+    std::int64_t offset = (value - min_value) % size;
+    if (offset < 0) {
+        offset += size;
+    }
+    return min_value + offset;
+}
+
+std::int64_t resolve(const WeightedIntRange& value,
+                     std::mt19937& rng,
+                     std::int64_t min_allowed,
+                     std::int64_t max_allowed,
+                     bool loop) {
+    const std::int64_t resolved = resolve(value, rng);
+    if (max_allowed < min_allowed) {
+        std::swap(min_allowed, max_allowed);
+    }
+    if (loop) {
+        return wrap_inclusive(resolved, min_allowed, max_allowed);
+    }
+    return std::clamp(resolved, min_allowed, max_allowed);
+}
+
 std::int64_t resolve(const nlohmann::json& value, std::mt19937& rng, const WeightedIntRange& fallback) {
     return resolve(from_json(value, fallback), rng);
 }

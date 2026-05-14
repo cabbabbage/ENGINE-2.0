@@ -534,6 +534,9 @@
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -545,11 +548,31 @@
       "starting_health": 200,
       "tags": [],
       "tillable": false,
-      "tilt_range_max_deg": 7,
-      "tilt_range_min_deg": -7,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 3,
+        "random": true,
+        "span": 21,
+        "weights": {
+          "center": 0.38715446642059165,
+          "edge": 0.3064227667897042,
+          "falloff": 0.3064227667897042
+        }
+      },
+      "tilt_range_max_deg": 21,
+      "tilt_range_min_deg": -21,
       "weight_kg": 953.0,
-      "y_pos_max": 0,
-      "y_pos_min": -13
+      "y_position_range": {
+        "center": -6,
+        "falloff": 3,
+        "random": true,
+        "span": 4,
+        "weights": {
+          "center": 0.4717474258717856,
+          "edge": 0.26412628706410723,
+          "falloff": 0.26412628706410723
+        }
+      }
     },
     "baseball_field": {
       "anchor_point_child_candidates": [],
@@ -27201,7 +27224,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 70.71067811865476,
+          "bounding_extent": 11057.23876019687,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -27219,12 +27242,12 @@
           ]
         },
         {
-          "bounding_extent": 70.71067811865476,
+          "bounding_extent": 28284.2712474619,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 1142.0,
+          "ring_radius": 40342.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -27260,9 +27283,9 @@
             }
           },
           "display_color": [
-            32,
-            31,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -27349,9 +27372,9 @@
             }
           },
           "display_color": [
-            242,
-            242,
-            85,
+            31,
+            204,
+            144,
             255
           ],
           "edge_smoothness": 4,
@@ -27408,9 +27431,9 @@
             }
           },
           "display_color": [
-            143,
-            36,
+            164,
             242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27467,9 +27490,9 @@
             }
           },
           "display_color": [
-            138,
-            242,
             36,
+            143,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27556,9 +27579,9 @@
             }
           },
           "display_color": [
-            31,
+            146,
+            71,
             204,
-            100,
             255
           ],
           "edge_smoothness": 4,
@@ -27575,7 +27598,7 @@
             }
           },
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "name": "NewRoom3",
           "room_floor_color": [
@@ -27583,6 +27606,7 @@
             0,
             0
           ],
+          "room_tags": [],
           "spawn_groups": [],
           "tags": [],
           "trail_connection_sector": {
@@ -27619,9 +27643,9 @@
             }
           },
           "display_color": [
-            36,
             242,
-            224,
+            235,
+            36,
             255
           ],
           "edge_smoothness": 70,
@@ -27719,9 +27743,9 @@
             }
           },
           "display_color": [
-            242,
-            87,
-            85,
+            125,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27739,6 +27763,7 @@
           },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": true,
+          "inherits_map_assets": false,
           "is_boss": false,
           "name": "baseball",
           "room_floor_color": [
@@ -28039,9 +28064,9 @@
             }
           },
           "display_color": [
-            31,
-            110,
-            204,
+            85,
+            242,
+            108,
             255
           ],
           "edge_smoothness": 96,

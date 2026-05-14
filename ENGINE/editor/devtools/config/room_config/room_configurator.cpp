@@ -32,6 +32,7 @@ constexpr int kRoomConfigPanelMinWidth = 260;
 constexpr bool kTrailsAllowIndependentDimensions = true;
 constexpr int kMinRoomDimension = 1;
 constexpr int kMaxRoomDimension = 40000;
+constexpr int kMaxTrailCurvyness = 20;
 constexpr int kSliderExpansionMargin = 64;
 constexpr int kSliderExpansionFactor = 2;
 constexpr double kDegreesFullCircle = 360.0;
@@ -2057,12 +2058,12 @@ void RoomConfigurator::rebuild_rows_internal() {
     }
 
     width_slider_max_range_ = 0;
-    width_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Width", state_->width_range);
+    width_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Width", state_->width_range, kMinRoomDimension, kMaxRoomDimension, false);
     width_range_control_ = std::make_unique<WeightedRangeWidget>(width_range_widget_.get());
 
     if (allow_height) {
         height_slider_max_range_ = 0;
-        height_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Height", state_->height_range);
+        height_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Height", state_->height_range, kMinRoomDimension, kMaxRoomDimension, false);
         height_range_control_ = std::make_unique<WeightedRangeWidget>(height_range_widget_.get());
     } else {
         height_range_widget_.reset();
@@ -2079,7 +2080,7 @@ void RoomConfigurator::rebuild_rows_internal() {
     }
 
     if (is_trail_context_) {
-        curvy_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Curvyness", state_->curvyness_range);
+        curvy_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Curvyness", state_->curvyness_range, 0, kMaxTrailCurvyness, false);
         curvy_widget_ = std::make_unique<WeightedRangeWidget>(curvy_range_widget_.get());
     } else {
         curvy_range_widget_.reset();

@@ -183,7 +183,7 @@ inline void Section_BasicInfo::build() {
     int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
     s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
-    wr_size_variation_ = std::make_unique<DMWeightedRangeWidget>("Size Variation (%)", info_->size_variation_range);
+    wr_size_variation_ = std::make_unique<DMWeightedRangeWidget>("Size Variation (%)", info_->size_variation_range, 0, 20, false);
     wr_size_variation_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
         this->on_size_variation_range_changed(range);
     });
@@ -210,7 +210,7 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_size_variation.get() });
     widgets_.push_back(std::move(w_size_variation));
 
-    wr_tilt_range_ = std::make_unique<DMWeightedRangeWidget>("Tilt Variation (deg)", info_->tilt_range);
+    wr_tilt_range_ = std::make_unique<DMWeightedRangeWidget>("Tilt Variation (deg)", info_->tilt_range, -180, 180, true);
     wr_tilt_range_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
         this->on_tilt_range_changed(range);
     });
@@ -218,7 +218,7 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_tilt.get() });
     widgets_.push_back(std::move(w_tilt));
 
-    wr_y_pos_range_ = std::make_unique<DMWeightedRangeWidget>("Y Position", info_->y_position_range);
+    wr_y_pos_range_ = std::make_unique<DMWeightedRangeWidget>("Y Position", info_->y_position_range, -50, 200, false);
     wr_y_pos_range_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
         this->on_y_position_range_changed(range);
     });

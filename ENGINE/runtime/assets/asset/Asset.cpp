@@ -79,7 +79,7 @@ static double sample_spawn_tilt_degrees(const std::shared_ptr<AssetInfo>& info)
 
         const vibble::weighted_range::WeightedIntRange range = info->tilt_range;
         std::lock_guard<std::mutex> lock(asset_rng_mutex());
-        const std::int64_t resolved = vibble::weighted_range::resolve(range, asset_rng());
+        const std::int64_t resolved = vibble::weighted_range::resolve(range, asset_rng(), -180, 180, true);
         return static_cast<double>(vibble::weighted_range::normalize_signed_degrees(resolved));
 }
 

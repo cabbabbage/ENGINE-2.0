@@ -15,6 +15,7 @@
 
 #include "dm_styles.hpp"
 #include "devtools/shared/shared/formatting.hpp"
+#include "utils/weighted_range.hpp"
 
 struct DMWidgetTooltipState {
     bool enabled = false;
@@ -329,6 +330,96 @@ private:
     DMWidgetTooltipState* tooltip_state_ = nullptr;
 };
 
+class DMWeightedRangeWidget {
+public:
+    using ValueChangedCallback = std::function<void(const vibble::weighted_range::WeightedIntRange&)>;
+
+    DMWeightedRangeWidget(const std::string& label,
+                          const vibble::weighted_range::WeightedIntRange& value);
+    void set_rect(const SDL_Rect& r);
+    const SDL_Rect& rect() const { return rect_; }
+    void set_label(const std::string& label);
+    const std::string& label() const { return label_; }
+    void set_value(const vibble::weighted_range::WeightedIntRange& value);
+    const vibble::weighted_range::WeightedIntRange& value() const { return value_; }
+    void set_on_value_changed(ValueChangedCallback callback);
+    void set_tooltip_state(DMWidgetTooltipState* state);
+    void set_enabled(bool enabled);
+    bool enabled() const { return enabled_; }
+    bool handle_event(const SDL_Event& e);
+    void render(SDL_Renderer* r) const;
+    int preferred_height(int width) const;
+    static int height();
+
+private:
+    enum class DragMode {
+        None,
+        CenterValue,
+        SpanValue,
+        FalloffValue,
+        EdgeValue,
+        EdgeWeight,
+        FalloffWeight,
+        CenterWeight
+    };
+
+    struct ColumnGeometry {
+        int x = 0;
+        SDL_Rect line{};
+        SDL_Rect weight_handle{};
+        SDL_Rect value_hitbox{};
+    };
+
+    void update_geometry();
+    void update_hover(SDL_Point point);
+    bool begin_drag(SDL_Point point);
+    void end_drag();
+    bool apply_drag_delta(SDL_Point point);
+    bool apply_wheel_delta(int wheel_y);
+    bool toggle_random();
+    void sanitize_value();
+    void notify_value_changed();
+    double display_weight_for_index(int index) const;
+    void set_weight_for_index(int index, double weight);
+    std::string format_value(std::int64_t value) const;
+    std::string format_weight(double weight) const;
+    SDL_Rect content_rect() const;
+    SDL_Rect checkbox_rect() const;
+    SDL_Rect histogram_rect() const;
+    SDL_Rect column_label_rect(int index) const;
+    SDL_Rect column_value_rect(int index) const;
+    SDL_Rect histogram_line_rect(int index) const;
+    SDL_Rect histogram_handle_rect(int index) const;
+    int line_index_for_point(SDL_Point point) const;
+    int weight_index_for_point(SDL_Point point) const;
+    int value_for_weight_y(int index, int y) const;
+    int weight_y_for_value(double weight) const;
+    void draw_text(SDL_Renderer* r, const std::string& s, int x, int y) const;
+
+    SDL_Rect rect_{0,0,200,160};
+    SDL_Rect content_rect_{0,0,200,160};
+    std::string label_;
+    vibble::weighted_range::WeightedIntRange value_{};
+    bool enabled_ = true;
+    bool hovered_ = false;
+    bool checkbox_hovered_ = false;
+    bool random_hovered_ = false;
+    bool dragging_ = false;
+    bool drag_started_ = false;
+    DragMode drag_mode_ = DragMode::None;
+    int drag_start_x_ = 0;
+    int drag_start_y_ = 0;
+    vibble::weighted_range::WeightedIntRange drag_start_value_{};
+    vibble::weighted_range::WeightedIntRange random_snapshot_{};
+    bool has_random_snapshot_ = false;
+    ColumnGeometry columns_[5]{};
+    mutable std::array<SDL_Rect, 5> label_rects_{};
+    mutable std::array<SDL_Rect, 5> value_rects_{};
+    ValueChangedCallback on_value_changed_{};
+    DMWidgetTooltipState* tooltip_state_ = nullptr;
+    static constexpr double kMaxRawWeight = 3.0;
+};
+
 class DMDropdown {
 public:
     DMDropdown(const std::string& label, const std::vector<std::string>& options, int idx = 0);
@@ -603,6 +694,24 @@ public:
     bool wants_full_row() const override { return true; }
 private:
     DMRangeSlider* s_ = nullptr;
+};
+
+class WeightedRangeWidget : public Widget {
+public:
+    explicit WeightedRangeWidget(DMWeightedRangeWidget* w) : w_(w) {
+        if (w_) w_->set_tooltip_state(this->tooltip_state());
+    }
+    ~WeightedRangeWidget() override {
+        if (w_) w_->set_tooltip_state(nullptr);
+    }
+    void set_rect(const SDL_Rect& r) override { if (w_) w_->set_rect(r); }
+    const SDL_Rect& rect() const override { return w_->rect(); }
+    int height_for_width(int w) const override { return w_ ? w_->preferred_height(w) : DMWeightedRangeWidget::height(); }
+    bool handle_event(const SDL_Event& e) override { return w_ ? w_->handle_event(e) : false; }
+    void render(SDL_Renderer* r) const override { if (w_) w_->render(r); }
+    bool wants_full_row() const override { return true; }
+private:
+    DMWeightedRangeWidget* w_ = nullptr;
 };
 
 class DropdownWidget : public Widget {

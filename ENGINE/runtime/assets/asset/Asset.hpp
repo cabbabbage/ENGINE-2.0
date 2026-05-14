@@ -559,6 +559,7 @@ private:
 
     std::optional<TilingInfo> tiling_info_{};
     float size_variation_sample_ = 0.0f;
+    float size_variation_percent_ = 0.0f;
     double base_spawn_tilt_degrees_ = 0.0;
     void ensure_animation_runtime(bool force_recreate);
 

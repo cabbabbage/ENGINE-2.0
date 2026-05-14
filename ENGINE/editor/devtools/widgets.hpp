@@ -383,9 +383,11 @@ private:
     void sync_visual_range_from_value();
     void clamp_visual_range();
     int control_x_for_index(int index) const;
+    int active_control_index() const;
     std::int64_t raw_value_for_index(int index) const;
     std::int64_t display_value(std::int64_t raw) const;
     double density_for_raw_value(double raw) const;
+    std::int64_t ruler_tick_step(double target_px) const;
     double display_weight_for_index(int index) const;
     void set_weight_for_index(int index, double weight);
     std::string format_value(std::int64_t value) const;
@@ -414,6 +416,8 @@ private:
     bool hovered_ = false;
     bool checkbox_hovered_ = false;
     bool random_hovered_ = false;
+    int hovered_line_index_ = -1;
+    int hovered_handle_index_ = -1;
     bool dragging_ = false;
     bool drag_started_ = false;
     DragMode drag_mode_ = DragMode::None;

@@ -552,25 +552,25 @@
         "center": 0,
         "falloff": 3,
         "random": true,
-        "span": 21,
+        "span": 6,
         "weights": {
-          "center": 0.38715446642059165,
-          "edge": 0.3064227667897042,
-          "falloff": 0.3064227667897042
+          "center": 0.46820760766692104,
+          "edge": 0.20827898723391633,
+          "falloff": 0.3235134050991626
         }
       },
-      "tilt_range_max_deg": 21,
-      "tilt_range_min_deg": -21,
+      "tilt_range_max_deg": 6,
+      "tilt_range_min_deg": -6,
       "weight_kg": 953.0,
       "y_position_range": {
         "center": -6,
-        "falloff": 3,
+        "falloff": 2,
         "random": true,
         "span": 4,
         "weights": {
-          "center": 0.4717474258717856,
-          "edge": 0.26412628706410723,
-          "falloff": 0.26412628706410723
+          "center": 0.7273572936670549,
+          "edge": 0.0,
+          "falloff": 0.27264270633294513
         }
       }
     },
@@ -27133,7 +27133,7 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 663.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "far_light_cap": 32.0,
@@ -27188,16 +27188,22 @@
           {
             "candidates": [
               {
-                "chance": 9,
+                "chance": 2,
                 "name": "null"
               },
               {
-                "chance": 0.45,
-                "name": "fog_1"
+                "chance": 5,
+                "display_name": "#tree",
+                "name": "#tree",
+                "tag": true,
+                "tag_name": "tree"
               },
               {
-                "chance": 0.45,
-                "name": "fog_2"
+                "chance": 2.25,
+                "display_name": "#grass",
+                "name": "#grass",
+                "tag": true,
+                "tag_name": "grass"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -27205,7 +27211,7 @@
             "explicit_flip": false,
             "force_flipped": false,
             "grid_resolution": 4,
-            "jitter": 0,
+            "jitter": 7,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -27213,9 +27219,10 @@
             "resolution": 8,
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-456f5f025984"
+            "spawn_id": "spn-327ae2d1230b"
           }
-        ]
+        ],
+        "regen_seed": 1
       },
       "map_grid_settings": {
         "grid_resolution": 6,
@@ -27283,9 +27290,9 @@
             }
           },
           "display_color": [
-            85,
             242,
-            242,
+            183,
+            36,
             255
           ],
           "edge_smoothness": 2,
@@ -27372,9 +27379,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            144,
+            85,
+            154,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27431,9 +27438,9 @@
             }
           },
           "display_color": [
-            164,
+            36,
             242,
-            85,
+            226,
             255
           ],
           "edge_smoothness": 4,
@@ -27490,9 +27497,9 @@
             }
           },
           "display_color": [
-            36,
-            143,
-            242,
+            110,
+            71,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27579,8 +27586,8 @@
             }
           },
           "display_color": [
-            146,
-            71,
+            31,
+            107,
             204,
             255
           ],
@@ -27643,9 +27650,9 @@
             }
           },
           "display_color": [
+            217,
             242,
-            235,
-            36,
+            85,
             255
           ],
           "edge_smoothness": 70,
@@ -27743,9 +27750,9 @@
             }
           },
           "display_color": [
-            125,
-            204,
-            31,
+            242,
+            85,
+            193,
             255
           ],
           "edge_smoothness": 101,
@@ -27763,7 +27770,6 @@
           },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": true,
-          "inherits_map_assets": false,
           "is_boss": false,
           "name": "baseball",
           "room_floor_color": [
@@ -28064,9 +28070,9 @@
             }
           },
           "display_color": [
-            85,
+            36,
             242,
-            108,
+            62,
             255
           ],
           "edge_smoothness": 96,

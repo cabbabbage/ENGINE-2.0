@@ -2269,16 +2269,25 @@ constexpr int kWeightedRangeWeightBottomPad = 30;
 constexpr double kWeightedRangeWheelScaleUp = 1.12;
 constexpr double kWeightedRangeWheelScaleDown = 0.89;
 constexpr double kWeightedRangeDefaultSpanScreenRatio = 0.88;
+constexpr int kWeightedRangeMinorTickHeight = 5;
+constexpr int kWeightedRangeMidTickHeight = 9;
+constexpr int kWeightedRangeMajorTickHeight = 14;
+constexpr int kWeightedRangeImportantTickHeight = 19;
 
-const char* weighted_range_column_label(int index) {
-    switch (index) {
-    case 0: return "Min";
-    case 1: return "Falloff";
-    case 2: return "Center";
-    case 3: return "Falloff";
-    case 4: return "Max";
-    default: return "";
+double weighted_range_smoothstep(double t) {
+    t = std::clamp(t, 0.0, 1.0);
+    return t * t * (3.0 - (2.0 * t));
+}
+
+std::int64_t weighted_range_floor_to_step(std::int64_t value, std::int64_t step) {
+    if (step <= 0) {
+        return value;
     }
+    std::int64_t remainder = value % step;
+    if (remainder < 0) {
+        remainder += step;
+    }
+    return value - remainder;
 }
 }
 
@@ -2410,6 +2419,8 @@ void DMWeightedRangeWidget::update_hover(SDL_Point point) {
     hovered_ = SDL_PointInRect(&point, &rect_);
     checkbox_hovered_ = SDL_PointInRect(&point, &checkbox_rect());
     random_hovered_ = checkbox_hovered_;
+    hovered_handle_index_ = hovered_ ? weight_index_for_point(point) : -1;
+    hovered_line_index_ = (hovered_ && hovered_handle_index_ < 0) ? line_index_for_point(point) : -1;
 }
 
 void DMWeightedRangeWidget::sync_visual_range_from_value() {
@@ -2453,6 +2464,16 @@ int DMWeightedRangeWidget::control_x_for_index(int index) const {
     }
 }
 
+int DMWeightedRangeWidget::active_control_index() const {
+    if (dragging_) {
+        return drag_handle_index_;
+    }
+    if (hovered_handle_index_ >= 0) {
+        return hovered_handle_index_;
+    }
+    return hovered_line_index_;
+}
+
 std::int64_t DMWeightedRangeWidget::raw_value_for_index(int index) const {
     switch (index) {
     case 0: return value_.center - value_.span;
@@ -2485,12 +2506,28 @@ double DMWeightedRangeWidget::density_for_raw_value(double raw) const {
     }
     const auto weights = value_.weights;
     if (d <= falloff || falloff >= span) {
-        const double t = falloff <= 0.0 ? 1.0 : d / falloff;
+        const double t = falloff <= 0.0 ? 1.0 : weighted_range_smoothstep(d / falloff);
         return weights.center + (weights.falloff - weights.center) * t;
     }
     const double denom = std::max(1e-9, span - falloff);
-    const double t = (d - falloff) / denom;
+    const double t = weighted_range_smoothstep((d - falloff) / denom);
     return weights.falloff + (weights.edge - weights.falloff) * t;
+}
+
+std::int64_t DMWeightedRangeWidget::ruler_tick_step(double target_px) const {
+    const double raw_step = std::max(1.0, units_per_pixel() * std::max(1.0, target_px));
+    const double exponent = std::floor(std::log10(raw_step));
+    const double scale = std::pow(10.0, exponent);
+    const double normalized = raw_step / scale;
+    double nice = 10.0;
+    if (normalized <= 1.0) {
+        nice = 1.0;
+    } else if (normalized <= 2.0) {
+        nice = 2.0;
+    } else if (normalized <= 5.0) {
+        nice = 5.0;
+    }
+    return std::max<std::int64_t>(1, static_cast<std::int64_t>(std::llround(nice * scale)));
 }
 
 double DMWeightedRangeWidget::display_weight_for_index(int index) const {
@@ -2562,10 +2599,10 @@ int DMWeightedRangeWidget::line_index_for_point(SDL_Point point) const {
 }
 
 int DMWeightedRangeWidget::weight_index_for_point(SDL_Point point) const {
-    if (!value_.random) {
-        return -1;
-    }
     for (int i = 0; i < 5; ++i) {
+        if (!value_.random && i != 2) {
+            continue;
+        }
         if (SDL_PointInRect(&point, &histogram_handle_rect(i))) {
             return i;
         }
@@ -2673,7 +2710,7 @@ bool DMWeightedRangeWidget::begin_drag(SDL_Point point) {
         return false;
     }
     const int weight_idx = weight_index_for_point(point);
-    if (weight_idx >= 0) {
+    if (weight_idx >= 0 && value_.random) {
         drag_mode_ = DragMode::WeightHandle;
         drag_handle_index_ = weight_idx;
         drag_start_x_ = point.x;
@@ -2832,6 +2869,8 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         hovered_ = false;
         checkbox_hovered_ = false;
         random_hovered_ = false;
+        hovered_line_index_ = -1;
+        hovered_handle_index_ = -1;
         if (dragging_) {
             end_drag();
         }
@@ -2895,18 +2934,55 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
     SDL_SetRenderDrawColor(r, bar_col.r, bar_col.g, bar_col.b, bar_col.a);
     sdl_render::FillRect(r, &range_bar);
 
-    SDL_Color fill_col = DMStyles::AccentColor();
-    fill_col.a = value_.random ? 70 : 90;
-    SDL_Color curve_col = DMStyles::AccentColor();
-    curve_col.a = 205;
     const double units = units_per_pixel();
+    const std::int64_t minor_step = ruler_tick_step(16.0);
+    const std::int64_t major_step = std::max<std::int64_t>(minor_step, minor_step * 5);
+    const std::int64_t important_step = std::max<std::int64_t>(major_step, major_step * 2);
+    const double visible_raw_min = static_cast<double>(value_.center) + static_cast<double>(range_bar.x - center_x) * units;
+    const double visible_raw_max = static_cast<double>(value_.center) + static_cast<double>((range_bar.x + range_bar.w) - center_x) * units;
+    const std::int64_t first_tick = weighted_range_floor_to_step(static_cast<std::int64_t>(std::floor(visible_raw_min)), minor_step);
+    const DMLabelStyle& base_tick_style = label_style;
+    DMLabelStyle small_tick_style = label_style;
+    small_tick_style.font_size = std::max(8, label_style.font_size - 2);
+    DMLabelStyle important_tick_style = label_style;
+    important_tick_style.font_size = label_style.font_size + 1;
+    int last_label_right = hist.x - 100;
+    for (std::int64_t tick = first_tick; tick <= static_cast<std::int64_t>(std::ceil(visible_raw_max)) + minor_step; tick += minor_step) {
+        const int tick_x = center_x + static_cast<int>(std::lround((static_cast<double>(tick - value_.center)) / std::max(1e-9, units)));
+        if (tick_x < range_bar.x || tick_x > range_bar.x + range_bar.w) {
+            continue;
+        }
+        const bool important = (tick % important_step) == 0;
+        const bool major = (tick % major_step) == 0;
+        const int tick_h = important ? kWeightedRangeImportantTickHeight
+                         : major ? kWeightedRangeMajorTickHeight
+                         : ((tick % (minor_step * 2)) == 0 ? kWeightedRangeMidTickHeight : kWeightedRangeMinorTickHeight);
+        SDL_Color tick_col = important ? SDL_Color{238, 244, 255, 230}
+                           : major ? SDL_Color{184, 195, 216, 205}
+                                   : SDL_Color{126, 138, 164, 165};
+        SDL_SetRenderDrawColor(r, tick_col.r, tick_col.g, tick_col.b, tick_col.a);
+        SDL_RenderLine(r, tick_x, baseline + 4, tick_x, baseline + 4 + tick_h);
+        if (major) {
+            const std::string label = format_value(display_value(tick));
+            const DMLabelStyle& tick_style = important ? important_tick_style : small_tick_style;
+            SDL_Point size = DMFontCache::instance().measure_text(tick_style, label);
+            const int text_x = std::clamp(tick_x - (size.x / 2), hist.x, std::max(hist.x, hist.x + hist.w - size.x));
+            if (text_x > last_label_right + 8) {
+                DMFontCache::instance().draw_text(r, tick_style, label, text_x, baseline + 7 + tick_h);
+                last_label_right = text_x + size.x;
+            }
+        }
+    }
+
+    SDL_Color fill_col{245, 132, 42, static_cast<Uint8>(value_.random ? 92 : 112)};
+    SDL_Color curve_col{255, 174, 86, 230};
     int prev_x = hist.x;
     int prev_y = baseline;
-    for (int x = hist.x + 1; x < hist.x + hist.w; x += 2) {
+    for (int x = hist.x + 1; x < hist.x + hist.w; ++x) {
         const double raw = static_cast<double>(value_.center) + static_cast<double>(x - center_x) * units;
         const double density = std::clamp(density_for_raw_value(raw), 0.0, 1.0);
         const int y = baseline - static_cast<int>(std::lround(density * static_cast<double>(std::max(1, baseline - top))));
-        SDL_Rect column{x, y, 2, std::max(1, baseline - y)};
+        SDL_Rect column{x, y, 1, std::max(1, baseline - y)};
         SDL_SetRenderDrawColor(r, fill_col.r, fill_col.g, fill_col.b, fill_col.a);
         sdl_render::FillRect(r, &column);
         SDL_SetRenderDrawColor(r, curve_col.r, curve_col.g, curve_col.b, curve_col.a);
@@ -2922,9 +2998,19 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
         const int x = control_x_for_index(i);
         const double weight = value_.random ? display_weight_for_index(i) : 1.0;
         const int handle_y = weight_y_for_value(weight);
-        const SDL_Color line_col = (i == 2) ? DMStyles::AccentColor() : SDL_Color{154, 164, 188, 220};
+        const bool line_active = dragging_ && drag_handle_index_ == i && drag_mode_ != DragMode::WeightHandle;
+        const bool handle_active = dragging_ && drag_handle_index_ == i && drag_mode_ == DragMode::WeightHandle;
+        const bool line_hovered = hovered_line_index_ == i || hovered_handle_index_ == i || line_active || handle_active;
+        SDL_Color line_col = (i == 2) ? DMStyles::AccentColor() : SDL_Color{154, 164, 188, 220};
+        if (line_hovered) {
+            line_col = SDL_Color{255, 207, 136, 255};
+        }
         SDL_SetRenderDrawColor(r, line_col.r, line_col.g, line_col.b, line_col.a);
         SDL_RenderLine(r, x, baseline, x, handle_y);
+        if (line_hovered) {
+            SDL_RenderLine(r, x - 1, baseline, x - 1, handle_y);
+            SDL_RenderLine(r, x + 1, baseline, x + 1, handle_y);
+        }
 
         SDL_Rect value_rect = column_value_rect(i);
         const std::string value_text = format_value(display_value(raw_value_for_index(i)));
@@ -2932,15 +3018,33 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
         const int text_x = std::clamp(value_rect.x + (value_rect.w - value_size.x) / 2,
                                       hist.x,
                                       std::max(hist.x, hist.x + hist.w - value_size.x));
-        draw_text(r, value_text, text_x, value_rect.y);
+        DMLabelStyle value_style = label_style;
+        if (line_hovered) {
+            value_style.color = SDL_Color{255, 225, 176, 255};
+        }
+        DMFontCache::instance().draw_text(r, value_style, value_text, text_x, std::max(top, baseline - 18));
 
         SDL_Rect handle{ x - (kWeightedRangeHandleSize / 2),
                          handle_y - (kWeightedRangeHandleSize / 2),
                          kWeightedRangeHandleSize,
                          kWeightedRangeHandleSize };
-        const SDL_Color handle_fill = (i == 2) ? DMStyles::AccentColor() : DMStyles::HighlightColor();
-        dm_draw::DrawRoundedSolidRect(r, handle, 4, handle_fill);
-        dm_draw::DrawRoundedOutline(r, handle, 4, 1, border);
+        SDL_Color handle_fill = (i == 2) ? DMStyles::AccentColor() : DMStyles::HighlightColor();
+        if (hovered_handle_index_ == i || handle_active) {
+            handle_fill = SDL_Color{255, 184, 78, 255};
+        }
+        if (handle_active) {
+            handle.x -= 2;
+            handle.y -= 2;
+            handle.w += 4;
+            handle.h += 4;
+        } else if (hovered_handle_index_ == i) {
+            handle.x -= 1;
+            handle.y -= 1;
+            handle.w += 2;
+            handle.h += 2;
+        }
+        dm_draw::DrawRoundedSolidRect(r, handle, 5, handle_fill);
+        dm_draw::DrawRoundedOutline(r, handle, 5, line_hovered ? 2 : 1, line_hovered ? SDL_Color{255, 235, 194, 255} : border);
     }
 
     if (tooltip_state_) {

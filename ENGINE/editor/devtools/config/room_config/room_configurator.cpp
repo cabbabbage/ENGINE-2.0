@@ -742,12 +742,12 @@ private:
 struct RoomConfigurator::State {
     std::string name;
     std::string geometry;
-    int width_min = 500;
-    int width_max = kMaxRoomDimension;
-    int height_min = 500;
-    int height_max = kMaxRoomDimension;
+    vibble::weighted_range::WeightedIntRange width_range =
+        vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
+    vibble::weighted_range::WeightedIntRange height_range =
+        vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
     int edge_smoothness = 2;
-    int curvyness = 2;
+    vibble::weighted_range::WeightedIntRange curvyness_range = vibble::weighted_range::make_flat(2);
     double trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
     int trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
     bool is_boss = false;
@@ -758,56 +758,26 @@ struct RoomConfigurator::State {
     bool geometry_is_circle() const { return lowercase_copy(geometry) == "circle"; }
 
     bool ensure_valid(bool allow_height, bool enforce_dimensions = true) {
+        (void)enforce_dimensions;
         bool mutated = false;
-        if (enforce_dimensions) {
-            if (width_min > width_max) {
-                std::swap(width_min, width_max);
-                mutated = true;
-            }
-            if (height_min > height_max) {
-                std::swap(height_min, height_max);
-                mutated = true;
-            }
-        }
-
-        const int clamped_width_min = std::clamp(width_min, kMinRoomDimension, kMaxRoomDimension);
-        const int clamped_width_max = std::clamp(width_max, kMinRoomDimension, kMaxRoomDimension);
-        const int clamped_height_min = std::clamp(height_min, kMinRoomDimension, kMaxRoomDimension);
-        const int clamped_height_max = std::clamp(height_max, kMinRoomDimension, kMaxRoomDimension);
-
-        if (clamped_width_min != width_min) {
-            width_min = clamped_width_min;
+        const auto width_json = vibble::weighted_range::to_json(width_range);
+        const auto height_json = vibble::weighted_range::to_json(height_range);
+        const auto curvy_json = vibble::weighted_range::to_json(curvyness_range);
+        width_range = vibble::weighted_range::from_json(width_json, vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension));
+        height_range = vibble::weighted_range::from_json(height_json, vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension));
+        curvyness_range = vibble::weighted_range::from_json(curvy_json, vibble::weighted_range::make_flat(2));
+        if (vibble::weighted_range::to_json(width_range) != width_json) {
             mutated = true;
         }
-        if (clamped_width_max != width_max) {
-            width_max = clamped_width_max;
+        if (vibble::weighted_range::to_json(height_range) != height_json) {
             mutated = true;
         }
-        if (clamped_height_min != height_min) {
-            height_min = clamped_height_min;
+        if (vibble::weighted_range::to_json(curvyness_range) != curvy_json) {
             mutated = true;
         }
-        if (clamped_height_max != height_max) {
-            height_max = clamped_height_max;
-            mutated = true;
-        }
-
-        if (width_min > width_max) {
-            width_max = width_min;
-            mutated = true;
-        }
-        if (height_min > height_max) {
-            height_max = height_min;
-            mutated = true;
-        }
-
-        if (!allow_height) {
-            if (height_min != width_min) {
-                height_min = width_min;
-                mutated = true;
-            }
-            if (height_max != width_max) {
-                height_max = width_max;
+        if (!allow_height || geometry_is_circle()) {
+            if (vibble::weighted_range::to_json(height_range) != vibble::weighted_range::to_json(width_range)) {
+                height_range = width_range;
                 mutated = true;
             }
         }
@@ -815,11 +785,6 @@ struct RoomConfigurator::State {
         int new_edge = std::clamp(edge_smoothness, 0, 101);
         if (new_edge != edge_smoothness) {
             edge_smoothness = new_edge;
-            mutated = true;
-        }
-        int new_curvy = std::max(0, curvyness);
-        if (new_curvy != curvyness) {
-            curvyness = new_curvy;
             mutated = true;
         }
         const double normalized_direction = normalize_angle_degrees(trail_connection_direction_deg);
@@ -857,80 +822,106 @@ struct RoomConfigurator::State {
             geometry = geometry_options.empty() ? std::string{"Square"} : geometry_options.front();
         }
 
-        bool has_min_width = false;
-        bool has_max_width = false;
-        bool has_min_height = false;
-        bool has_max_height = false;
+        const auto width_fallback = vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
+        const auto height_fallback = vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
+        const auto curvy_fallback = vibble::weighted_range::make_flat(2);
 
-        if (auto value = read_json_int(src, "min_width")) {
-            width_min = *value;
-            has_min_width = true;
+        auto read_weighted_field = [&](const char* key,
+                                       const vibble::weighted_range::WeightedIntRange& fallback) {
+            if (src.contains(key)) {
+                return vibble::weighted_range::from_json(src.at(key), fallback);
+            }
+            return fallback;
+        };
+
+        if (src.contains("width")) {
+            width_range = vibble::weighted_range::from_json(src["width"], width_fallback);
+        } else {
+            bool has_min_width = false;
+            bool has_max_width = false;
+            int legacy_min = 500;
+            int legacy_max = kMaxRoomDimension;
+            if (auto value = read_json_int(src, "min_width")) {
+                legacy_min = *value;
+                has_min_width = true;
+            }
+            if (auto value = read_json_int(src, "max_width")) {
+                legacy_max = *value;
+                has_max_width = true;
+            }
+            int legacy_min_radius = 0;
+            int legacy_max_radius = 0;
+            bool has_legacy_min_radius = false;
+            bool has_legacy_max_radius = false;
+            if (auto value = read_json_int(src, "min_radius")) {
+                legacy_min_radius = std::max(0, *value);
+                has_legacy_min_radius = true;
+            }
+            if (auto value = read_json_int(src, "max_radius")) {
+                legacy_max_radius = std::max(0, *value);
+                has_legacy_max_radius = true;
+            }
+            if (auto value = read_legacy_radius_value(src)) {
+                if (!has_legacy_min_radius) {
+                    legacy_min_radius = *value;
+                    has_legacy_min_radius = true;
+                }
+                if (!has_legacy_max_radius) {
+                    legacy_max_radius = *value;
+                    has_legacy_max_radius = true;
+                }
+            }
+            if (has_legacy_min_radius || has_legacy_max_radius) {
+                if (legacy_min_radius <= 0 && legacy_max_radius > 0) {
+                    legacy_min_radius = legacy_max_radius;
+                }
+                if (legacy_max_radius <= 0 && legacy_min_radius > 0) {
+                    legacy_max_radius = legacy_min_radius;
+                }
+                if (legacy_max_radius < legacy_min_radius) {
+                    std::swap(legacy_min_radius, legacy_max_radius);
+                }
+                legacy_min = legacy_min_radius > 0 ? legacy_min_radius * 2 : legacy_min;
+                legacy_max = legacy_max_radius > 0 ? legacy_max_radius * 2 : legacy_min;
+            }
+            width_range = vibble::weighted_range::make_legacy_uniform(legacy_min, legacy_max);
         }
-        if (auto value = read_json_int(src, "max_width")) {
-            width_max = *value;
-            has_max_width = true;
-        }
-        if (allow_height) {
+
+        if (allow_height && src.contains("height")) {
+            height_range = vibble::weighted_range::from_json(src["height"], height_fallback);
+        } else if (allow_height) {
+            bool has_min_height = false;
+            bool has_max_height = false;
+            int legacy_min = 500;
+            int legacy_max = kMaxRoomDimension;
             if (auto value = read_json_int(src, "min_height")) {
-                height_min = *value;
+                legacy_min = *value;
                 has_min_height = true;
             }
             if (auto value = read_json_int(src, "max_height")) {
-                height_max = *value;
+                legacy_max = *value;
                 has_max_height = true;
             }
+            if (!has_min_height && !has_max_height) {
+                height_range = width_range;
+            } else {
+                height_range = vibble::weighted_range::make_legacy_uniform(legacy_min, legacy_max);
+            }
+        } else {
+            height_range = width_range;
         }
 
-        int legacy_min_radius = 0;
-        int legacy_max_radius = 0;
-        bool has_legacy_min_radius = false;
-        bool has_legacy_max_radius = false;
-        if (auto value = read_json_int(src, "min_radius")) {
-            legacy_min_radius = std::max(0, *value);
-            has_legacy_min_radius = true;
-        }
-        if (auto value = read_json_int(src, "max_radius")) {
-            legacy_max_radius = std::max(0, *value);
-            has_legacy_max_radius = true;
-        }
-        if (auto value = read_legacy_radius_value(src)) {
-            if (!has_legacy_min_radius) {
-                legacy_min_radius = *value;
-                has_legacy_min_radius = true;
+        if (src.contains("curvyness")) {
+            if (src["curvyness"].is_object()) {
+                curvyness_range = vibble::weighted_range::from_json(src["curvyness"], curvy_fallback);
+            } else if (auto cv = read_json_int(src, "curvyness")) {
+                curvyness_range = vibble::weighted_range::make_flat(std::max(0, *cv));
             }
-            if (!has_legacy_max_radius) {
-                legacy_max_radius = *value;
-                has_legacy_max_radius = true;
-            }
-        }
-
-        if (geometry_is_circle() && (has_legacy_min_radius || has_legacy_max_radius)) {
-            if (legacy_min_radius <= 0 && legacy_max_radius > 0) {
-                legacy_min_radius = legacy_max_radius;
-            }
-            if (legacy_max_radius <= 0 && legacy_min_radius > 0) {
-                legacy_max_radius = legacy_min_radius;
-            }
-            if (legacy_max_radius < legacy_min_radius) {
-                std::swap(legacy_min_radius, legacy_max_radius);
-            }
-
-            const int legacy_min_diameter = legacy_min_radius > 0 ? legacy_min_radius * 2 : 0;
-            const int legacy_max_diameter = legacy_max_radius > 0 ? legacy_max_radius * 2 : legacy_min_diameter;
-
-            if (!has_min_width && legacy_min_diameter > 0) {
-                width_min = legacy_min_diameter;
-            }
-            if (!has_max_width && legacy_max_diameter > 0) {
-                width_max = legacy_max_diameter;
-            }
-            if (allow_height) {
-                if (!has_min_height && legacy_min_diameter > 0) {
-                    height_min = legacy_min_diameter;
-                }
-                if (!has_max_height && legacy_max_diameter > 0) {
-                    height_max = legacy_max_diameter;
-                }
+        } else if (src.contains("curviness")) {
+            if (src["curviness"].is_object()) {
+                curvyness_range = vibble::weighted_range::from_json(src["curviness"], curvy_fallback);
+            } else if (auto cv = read_json_int(src, "curviness")) {
+                curvyness_range = vibble::weighted_range::make_flat(std::max(0, *cv));
             }
         }
 
@@ -959,11 +950,6 @@ struct RoomConfigurator::State {
             edge_smoothness = *value;
         } else {
             edge_smoothness = 4;
-        }
-        if (src.contains("curvyness")) {
-            if (auto cv = read_json_int(src, "curvyness")) {
-                curvyness = std::max(0, *cv);
-            }
         }
 
         trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
@@ -994,19 +980,21 @@ struct RoomConfigurator::State {
         dest["room_floor_color"] = nlohmann::json::array(
             {static_cast<int>(room_floor_color.r), static_cast<int>(room_floor_color.g), static_cast<int>(room_floor_color.b)});
         dest["edge_smoothness"] = edge_smoothness;
-        dest["curvyness"] = curvyness;
+        dest["width"] = vibble::weighted_range::to_json(width_range);
+        dest["height"] = allow_height ? vibble::weighted_range::to_json(height_range)
+                                       : vibble::weighted_range::to_json(width_range);
+        dest["curvyness"] = vibble::weighted_range::to_json(curvyness_range);
 
-        // Camera fields are authored by RoomEditor shortcuts (Ctrl+A/Ctrl+R).
-        // RoomConfigurator no longer owns camera state, so preserve any existing keys.
         (void)include_camera;
 
         dest.erase("radius");
         dest.erase("min_radius");
         dest.erase("max_radius");
-        dest["min_width"] = width_min;
-        dest["max_width"] = width_max;
-        dest["min_height"] = allow_height ? height_min : width_min;
-        dest["max_height"] = allow_height ? height_max : width_max;
+        dest.erase("min_width");
+        dest.erase("max_width");
+        dest.erase("min_height");
+        dest.erase("max_height");
+        dest.erase("curviness");
         if (include_trail_connection_sector) {
             dest["trail_connection_sector"] = nlohmann::json::object({
                 {"direction_deg", normalize_angle_degrees(trail_connection_direction_deg)},
@@ -1065,13 +1053,8 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     copy_field("name");
     copy_field("room_name");
     copy_field("geometry");
-    copy_field("min_width");
-    copy_field("max_width");
-    copy_field("min_height");
-    copy_field("max_height");
-    copy_field("radius");
-    copy_field("min_radius");
-    copy_field("max_radius");
+    copy_field("width");
+    copy_field("height");
     copy_field("edge_smoothness");
     copy_field("curvyness");
     if (include_trail_connection_sector) {
@@ -1483,11 +1466,11 @@ void RoomConfigurator::refresh_base_panel_rows() {
         DockableCollapsible::Rows rows;
         if (name_widget_) rows.push_back({name_widget_.get()});
         if (geometry_widget_) rows.push_back({geometry_widget_.get()});
-        if (width_range_widget_) {
-            rows.push_back({width_range_widget_.get()});
+        if (width_range_control_) {
+            rows.push_back({width_range_control_.get()});
         }
-        if (height_range_widget_) {
-            rows.push_back({height_range_widget_.get()});
+        if (height_range_control_) {
+            rows.push_back({height_range_control_.get()});
         }
         if (edge_widget_) rows.push_back({edge_widget_.get()});
         if (curvy_widget_) rows.push_back({curvy_widget_.get()});
@@ -1822,12 +1805,10 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
         state_changed =
             new_state.name != state_->name ||
             new_state.geometry != state_->geometry ||
-            new_state.width_min != state_->width_min ||
-            new_state.width_max != state_->width_max ||
-            new_state.height_min != state_->height_min ||
-            new_state.height_max != state_->height_max ||
+            vibble::weighted_range::to_json(new_state.width_range) != vibble::weighted_range::to_json(state_->width_range) ||
+            vibble::weighted_range::to_json(new_state.height_range) != vibble::weighted_range::to_json(state_->height_range) ||
             new_state.edge_smoothness != state_->edge_smoothness ||
-            new_state.curvyness != state_->curvyness ||
+            vibble::weighted_range::to_json(new_state.curvyness_range) != vibble::weighted_range::to_json(state_->curvyness_range) ||
             std::abs(new_state.trail_connection_direction_deg - state_->trail_connection_direction_deg) > 1e-6 ||
             new_state.trail_connection_width_percent != state_->trail_connection_width_percent ||
             new_state.is_boss != state_->is_boss ||
@@ -2087,19 +2068,17 @@ void RoomConfigurator::rebuild_rows_internal() {
         geometry_widget_.reset();
     }
 
-    width_slider_max_range_ = kMaxRoomDimension;
-    width_range_slider_ = std::make_unique<DMRangeSlider>(kMinRoomDimension, width_slider_max_range_, state_->width_min, state_->width_max);
-    width_range_slider_->set_defer_commit_until_unfocus(true);
-    width_range_widget_ = std::make_unique<RangeSliderWidget>(width_range_slider_.get());
+    width_slider_max_range_ = 0;
+    width_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Width", state_->width_range);
+    width_range_control_ = std::make_unique<WeightedRangeWidget>(width_range_widget_.get());
 
     if (allow_height) {
-        height_slider_max_range_ = kMaxRoomDimension;
-        height_range_slider_ = std::make_unique<DMRangeSlider>(kMinRoomDimension, height_slider_max_range_, state_->height_min, state_->height_max);
-        height_range_slider_->set_defer_commit_until_unfocus(true);
-        height_range_widget_ = std::make_unique<RangeSliderWidget>(height_range_slider_.get());
+        height_slider_max_range_ = 0;
+        height_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Height", state_->height_range);
+        height_range_control_ = std::make_unique<WeightedRangeWidget>(height_range_widget_.get());
     } else {
-        height_range_slider_.reset();
         height_range_widget_.reset();
+        height_range_control_.reset();
         height_slider_max_range_ = 0;
     }
 
@@ -2112,10 +2091,10 @@ void RoomConfigurator::rebuild_rows_internal() {
     }
 
     if (is_trail_context_) {
-        curvy_slider_ = std::make_unique<DMSlider>("Curvyness", 0, 16, state_->curvyness);
-        curvy_widget_ = std::make_unique<SliderWidget>(curvy_slider_.get());
+        curvy_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Curvyness", state_->curvyness_range);
+        curvy_widget_ = std::make_unique<WeightedRangeWidget>(curvy_range_widget_.get());
     } else {
-        curvy_slider_.reset();
+        curvy_range_widget_.reset();
         curvy_widget_.reset();
     }
 
@@ -2361,53 +2340,10 @@ void RoomConfigurator::prepare_for_event(int screen_w, int screen_h) {
     }
 }
 
-void RoomConfigurator::expand_width_slider_range_if_needed() {
-    if (!width_range_slider_ || !state_) {
-        return;
-    }
-    if (width_slider_max_range_ >= kMaxRoomDimension) {
-        return;
-    }
-    if (state_->width_max + kSliderExpansionMargin < width_slider_max_range_) {
-        return;
-    }
-    int desired = std::max(width_slider_max_range_ * kSliderExpansionFactor, state_->width_max + kSliderExpansionMargin);
-    desired = std::min(desired, kMaxRoomDimension);
-    if (desired <= width_slider_max_range_) {
-        return;
-    }
-    width_slider_max_range_ = desired;
-    width_range_slider_ = std::make_unique<DMRangeSlider>(kMinRoomDimension, width_slider_max_range_, state_->width_min, state_->width_max);
-    width_range_slider_->set_defer_commit_until_unfocus(true);
-    width_range_widget_ = std::make_unique<RangeSliderWidget>(width_range_slider_.get());
-    refresh_base_panel_rows();
-    request_container_layout();
-}
+void RoomConfigurator::expand_width_slider_range_if_needed() {}
 
 
-
-void RoomConfigurator::expand_height_slider_range_if_needed() {
-    if (!height_range_slider_ || !state_) {
-        return;
-    }
-    if (height_slider_max_range_ >= kMaxRoomDimension) {
-        return;
-    }
-    if (state_->height_max + kSliderExpansionMargin < height_slider_max_range_) {
-        return;
-    }
-    int desired = std::max(height_slider_max_range_ * kSliderExpansionFactor, state_->height_max + kSliderExpansionMargin);
-    desired = std::min(desired, kMaxRoomDimension);
-    if (desired <= height_slider_max_range_) {
-        return;
-    }
-    height_slider_max_range_ = desired;
-    height_range_slider_ = std::make_unique<DMRangeSlider>(kMinRoomDimension, height_slider_max_range_, state_->height_min, state_->height_max);
-    height_range_slider_->set_defer_commit_until_unfocus(true);
-    height_range_widget_ = std::make_unique<RangeSliderWidget>(height_range_slider_.get());
-    refresh_base_panel_rows();
-    request_container_layout();
-}
+void RoomConfigurator::expand_height_slider_range_if_needed() {}
 
 bool RoomConfigurator::sync_state_from_widgets() {
     if (!state_) return false;
@@ -2467,26 +2403,20 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
-    if (width_range_slider_) {
-        int slider_min = width_range_slider_->min_value();
-        int slider_max = width_range_slider_->max_value();
-        if (slider_min != state_->width_min || slider_max != state_->width_max) {
-            state_->width_min = slider_min;
-            state_->width_max = slider_max;
+    if (width_range_widget_) {
+        const auto value = width_range_widget_->value();
+        if (vibble::weighted_range::to_json(value) != vibble::weighted_range::to_json(state_->width_range)) {
+            state_->width_range = value;
             changed = true;
         }
-        expand_width_slider_range_if_needed();
     }
 
-    if (height_range_slider_) {
-        int slider_min = height_range_slider_->min_value();
-        int slider_max = height_range_slider_->max_value();
-        if (slider_min != state_->height_min || slider_max != state_->height_max) {
-            state_->height_min = slider_min;
-            state_->height_max = slider_max;
+    if (height_range_widget_) {
+        const auto value = height_range_widget_->value();
+        if (vibble::weighted_range::to_json(value) != vibble::weighted_range::to_json(state_->height_range)) {
+            state_->height_range = value;
             changed = true;
         }
-        expand_height_slider_range_if_needed();
     }
     if (edge_slider_) {
         int v = std::clamp(edge_slider_->value(), 0, 101);
@@ -2496,10 +2426,10 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
-    if (curvy_slider_) {
-        int v = std::max(0, curvy_slider_->value());
-        if (v != state_->curvyness) {
-            state_->curvyness = v;
+    if (curvy_range_widget_) {
+        const auto value = curvy_range_widget_->value();
+        if (vibble::weighted_range::to_json(value) != vibble::weighted_range::to_json(state_->curvyness_range)) {
+            state_->curvyness_range = value;
             changed = true;
         }
     }
@@ -2578,21 +2508,14 @@ bool RoomConfigurator::sync_state_from_widgets() {
         sector_width_stepper_->set_value(state_->trail_connection_width_percent);
     }
 
-    if (width_range_slider_) {
-        bool skip_slider_sync =
-            width_range_slider_->defer_commit_until_unfocus() && width_range_slider_->has_pending_values();
-        if (!skip_slider_sync) {
-            width_range_slider_->set_min_value(state_->width_min);
-            width_range_slider_->set_max_value(state_->width_max);
-        }
+    if (width_range_widget_) {
+        width_range_widget_->set_value(state_->width_range);
     }
-    if (height_range_slider_) {
-        bool skip_slider_sync =
-            height_range_slider_->defer_commit_until_unfocus() && height_range_slider_->has_pending_values();
-        if (!skip_slider_sync) {
-            height_range_slider_->set_min_value(state_->height_min);
-            height_range_slider_->set_max_value(state_->height_max);
-        }
+    if (height_range_widget_) {
+        height_range_widget_->set_value(state_->height_range);
+    }
+    if (curvy_range_widget_) {
+        curvy_range_widget_->set_value(state_->curvyness_range);
     }
 
     if (changed) {

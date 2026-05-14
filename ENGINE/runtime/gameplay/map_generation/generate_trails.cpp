@@ -3,6 +3,7 @@
 #include "utils/display_color.hpp"
 #include "utils/log.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "utils/weighted_range.hpp"
 #include "rendering/render/camera_controller.hpp"
 
 #include <algorithm>
@@ -38,6 +39,67 @@ constexpr int kTrailSectorDefaultWidthPercent = 100;
 constexpr int kTrailSectorMinWidthPercent = 25;
 constexpr int kTrailSectorMaxWidthPercent = 100;
 constexpr int kTrailContactAngleSamples = 36;
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_field(const json& src,
+                                                                   const char* key,
+                                                                   const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (!src.is_object() || !src.contains(key)) {
+        return fallback;
+    }
+    return vibble::weighted_range::from_json(src.at(key), fallback);
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const json& src,
+                                                                         const char* min_key,
+                                                                         const char* max_key,
+                                                                         const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (!src.is_object()) {
+        return fallback;
+    }
+    bool has_min = false;
+    bool has_max = false;
+    std::int64_t min_value = fallback.center;
+    std::int64_t max_value = fallback.center;
+    if (src.contains(min_key)) {
+        if (src.at(min_key).is_number_integer()) {
+            min_value = src.at(min_key).get<std::int64_t>();
+            has_min = true;
+        } else if (src.at(min_key).is_number_float()) {
+            min_value = static_cast<std::int64_t>(std::llround(src.at(min_key).get<double>()));
+            has_min = true;
+        }
+    }
+    if (src.contains(max_key)) {
+        if (src.at(max_key).is_number_integer()) {
+            max_value = src.at(max_key).get<std::int64_t>();
+            has_max = true;
+        } else if (src.at(max_key).is_number_float()) {
+            max_value = static_cast<std::int64_t>(std::llround(src.at(max_key).get<double>()));
+            has_max = true;
+        }
+    }
+    if (!has_min && !has_max) {
+        return fallback;
+    }
+    if (!has_min) {
+        min_value = max_value;
+    }
+    if (!has_max) {
+        max_value = min_value;
+    }
+    return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
+}
+
+int resolve_weighted_dimension(const vibble::weighted_range::WeightedIntRange& range, std::mt19937& rng) {
+    const std::int64_t resolved = vibble::weighted_range::resolve(range, rng);
+    if (resolved < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
+        return std::numeric_limits<int>::min();
+    }
+    if (resolved > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+        return std::numeric_limits<int>::max();
+    }
+    return static_cast<int>(resolved);
+}
 constexpr int kTrailRouteSearchMaxExpansions = 500000;
 constexpr int kTrailRouteSearchMaxCellSpan = 512;
 constexpr int kTrailRouteInitialCellSizeWorldPx = 96;
@@ -2195,9 +2257,24 @@ bool attempt_trail_connection(Room* a,
     }
 
     json& config = *trail_config;
-    const int min_width = config.value("min_width", 40);
-    const int max_width = config.value("max_width", min_width);
-    const int curvyness = config.value("curvyness", 2);
+    const auto default_width = vibble::weighted_range::make_legacy_uniform(40, 40);
+    const auto default_curvy = vibble::weighted_range::make_flat(2);
+    vibble::weighted_range::WeightedIntRange width_range = config.contains("width")
+        ? read_weighted_range_field(config, "width", default_width)
+        : (config.contains("min_width") || config.contains("max_width")
+               ? read_weighted_range_legacy_pair(config, "min_width", "max_width", default_width)
+               : default_width);
+    if (!config.contains("width") && !config.contains("min_width") && !config.contains("max_width") &&
+        (config.contains("min_radius") || config.contains("max_radius") || config.contains("radius"))) {
+        width_range = read_weighted_range_legacy_pair(config, "min_radius", "max_radius", default_width);
+    }
+    vibble::weighted_range::WeightedIntRange curvyness_range = config.contains("curvyness")
+        ? read_weighted_range_field(config, "curvyness", default_curvy)
+        : (config.contains("curviness") ? read_weighted_range_field(config, "curviness", default_curvy) : default_curvy);
+    const int resolved_width = std::max(1, resolve_weighted_dimension(width_range, rng));
+    const int min_width = resolved_width;
+    const int max_width = resolved_width;
+    const int curvyness = std::max(0, resolve_weighted_dimension(curvyness_range, rng));
     const std::string name = config.value("name", trail_name.empty() ? std::string("trail_segment") : trail_name);
     const int routing_clearance_px = std::max(8, max_width / 2 + 12);
     const int gate_clearance_px = std::max(4, max_width / 3);

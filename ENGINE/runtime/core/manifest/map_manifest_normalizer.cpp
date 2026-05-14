@@ -4,11 +4,13 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "utils/weighted_range.hpp"
 
 namespace manifest {
 namespace {
@@ -54,6 +56,56 @@ bool json_to_double(const nlohmann::json& value, double& out) {
         return true;
     }
     return false;
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& entry,
+                                                                   const char* key,
+                                                                   const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (!entry.is_object() || !entry.contains(key)) {
+        return fallback;
+    }
+    return vibble::weighted_range::from_json(entry.at(key), fallback);
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const nlohmann::json& entry,
+                                                                         const char* min_key,
+                                                                         const char* max_key,
+                                                                         const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (!entry.is_object()) {
+        return fallback;
+    }
+    bool has_min = false;
+    bool has_max = false;
+    std::int64_t min_value = fallback.center;
+    std::int64_t max_value = fallback.center;
+    if (entry.contains(min_key)) {
+        if (entry[min_key].is_number_integer()) {
+            min_value = entry[min_key].get<std::int64_t>();
+            has_min = true;
+        } else if (entry[min_key].is_number_float()) {
+            min_value = static_cast<std::int64_t>(std::llround(entry[min_key].get<double>()));
+            has_min = true;
+        }
+    }
+    if (entry.contains(max_key)) {
+        if (entry[max_key].is_number_integer()) {
+            max_value = entry[max_key].get<std::int64_t>();
+            has_max = true;
+        } else if (entry[max_key].is_number_float()) {
+            max_value = static_cast<std::int64_t>(std::llround(entry[max_key].get<double>()));
+            has_max = true;
+        }
+    }
+    if (!has_min && !has_max) {
+        return fallback;
+    }
+    if (!has_min) {
+        min_value = max_value;
+    }
+    if (!has_max) {
+        max_value = min_value;
+    }
+    return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
 }
 
 double normalize_direction_degrees(double value) {
@@ -174,97 +226,43 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
         changed = true;
     }
 
-    int width_min = kDefaultRoomMinDimension;
-    int width_max = kDefaultRoomMaxDimension;
-    int height_min = kDefaultRoomMinDimension;
-    int height_max = kDefaultRoomMaxDimension;
-    bool has_width_min = false;
-    bool has_width_max = false;
-    bool has_height_min = false;
-    bool has_height_max = false;
-
-    if (entry.contains("min_width") && json_to_int(entry["min_width"], width_min)) {
-        has_width_min = true;
-    }
-    if (entry.contains("max_width") && json_to_int(entry["max_width"], width_max)) {
-        has_width_max = true;
-    }
-    if (entry.contains("min_height") && json_to_int(entry["min_height"], height_min)) {
-        has_height_min = true;
-    }
-    if (entry.contains("max_height") && json_to_int(entry["max_height"], height_max)) {
-        has_height_max = true;
-    }
-
-    int legacy_min_radius = 0;
-    int legacy_max_radius = 0;
-    bool has_legacy_min_radius = false;
-    bool has_legacy_max_radius = false;
-    if (entry.contains("min_radius") && json_to_int(entry["min_radius"], legacy_min_radius)) {
-        legacy_min_radius = std::max(0, legacy_min_radius);
-        has_legacy_min_radius = true;
-    }
-    if (entry.contains("max_radius") && json_to_int(entry["max_radius"], legacy_max_radius)) {
-        legacy_max_radius = std::max(0, legacy_max_radius);
-        has_legacy_max_radius = true;
-    }
-    int legacy_radius = 0;
-    if (entry.contains("radius") && json_to_int(entry["radius"], legacy_radius)) {
-        legacy_radius = std::max(0, legacy_radius);
-        if (!has_legacy_min_radius) {
-            legacy_min_radius = legacy_radius;
-            has_legacy_min_radius = true;
-        }
-        if (!has_legacy_max_radius) {
-            legacy_max_radius = legacy_radius;
-            has_legacy_max_radius = true;
+    const auto default_range = vibble::weighted_range::make_legacy_uniform(kDefaultRoomMinDimension, kDefaultRoomMaxDimension);
+    vibble::weighted_range::WeightedIntRange width_range = read_weighted_range_field(entry, "width", default_range);
+    if (!entry.contains("width")) {
+        if (entry.contains("min_width") || entry.contains("max_width")) {
+            width_range = read_weighted_range_legacy_pair(entry, "min_width", "max_width", default_range);
+        } else if (entry.contains("min_radius") || entry.contains("max_radius") || entry.contains("radius")) {
+            width_range = read_weighted_range_legacy_pair(entry, "min_radius", "max_radius", default_range);
         }
     }
 
-    if (geometry_is_circle(geometry) && (has_legacy_min_radius || has_legacy_max_radius)) {
-        if (legacy_min_radius <= 0 && legacy_max_radius > 0) {
-            legacy_min_radius = legacy_max_radius;
-        }
-        if (legacy_max_radius <= 0 && legacy_min_radius > 0) {
-            legacy_max_radius = legacy_min_radius;
-        }
-        if (legacy_max_radius < legacy_min_radius) {
-            std::swap(legacy_min_radius, legacy_max_radius);
-        }
-
-        const int migrated_min_diameter = legacy_min_radius > 0 ? legacy_min_radius * 2 : 0;
-        const int migrated_max_diameter = legacy_max_radius > 0 ? legacy_max_radius * 2 : migrated_min_diameter;
-        if (!has_width_min && migrated_min_diameter > 0) width_min = migrated_min_diameter;
-        if (!has_width_max && migrated_max_diameter > 0) width_max = migrated_max_diameter;
-        if (!has_height_min && migrated_min_diameter > 0) height_min = migrated_min_diameter;
-        if (!has_height_max && migrated_max_diameter > 0) height_max = migrated_max_diameter;
+    vibble::weighted_range::WeightedIntRange height_range = read_weighted_range_field(entry, "height", width_range);
+    if (!entry.contains("height") && (entry.contains("min_height") || entry.contains("max_height"))) {
+        height_range = read_weighted_range_legacy_pair(entry, "min_height", "max_height", width_range);
     }
 
-    sanitize_dimension_pair(width_min, width_max);
-    sanitize_dimension_pair(height_min, height_max);
+    if (geometry_is_circle(geometry)) {
+        if (entry.contains("min_radius") || entry.contains("max_radius") || entry.contains("radius")) {
+            width_range = read_weighted_range_legacy_pair(entry, "min_radius", "max_radius", default_range);
+        }
+        height_range = width_range;
+    }
 
-    int existing_value = 0;
-    const bool has_numeric_min_width = entry.contains("min_width") && json_to_int(entry["min_width"], existing_value);
-    if (!has_numeric_min_width || existing_value != width_min) {
-        entry["min_width"] = width_min;
+    const nlohmann::json width_json = vibble::weighted_range::to_json(width_range);
+    const nlohmann::json height_json = vibble::weighted_range::to_json(height_range);
+    if (!entry.contains("width") || entry["width"] != width_json) {
+        entry["width"] = width_json;
         changed = true;
     }
-    const bool has_numeric_max_width = entry.contains("max_width") && json_to_int(entry["max_width"], existing_value);
-    if (!has_numeric_max_width || existing_value != width_max) {
-        entry["max_width"] = width_max;
-        changed = true;
-    }
-    const bool has_numeric_min_height = entry.contains("min_height") && json_to_int(entry["min_height"], existing_value);
-    if (!has_numeric_min_height || existing_value != height_min) {
-        entry["min_height"] = height_min;
-        changed = true;
-    }
-    const bool has_numeric_max_height = entry.contains("max_height") && json_to_int(entry["max_height"], existing_value);
-    if (!has_numeric_max_height || existing_value != height_max) {
-        entry["max_height"] = height_max;
+    if (!entry.contains("height") || entry["height"] != height_json) {
+        entry["height"] = height_json;
         changed = true;
     }
 
+    if (entry.erase("min_width") > 0) changed = true;
+    if (entry.erase("max_width") > 0) changed = true;
+    if (entry.erase("min_height") > 0) changed = true;
+    if (entry.erase("max_height") > 0) changed = true;
     if (entry.erase("radius") > 0) changed = true;
     if (entry.erase("min_radius") > 0) changed = true;
     if (entry.erase("max_radius") > 0) changed = true;
@@ -334,15 +332,20 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
         changed = true;
     }
 
-    if (entry.contains("curvyness")) {
-        int curvyness = 0;
-        (void)json_to_int(entry["curvyness"], curvyness);
-        curvyness = std::max(0, curvyness);
-        const bool has_numeric_curvy = json_to_int(entry["curvyness"], existing_value);
-        if (!has_numeric_curvy || existing_value != curvyness) {
-            entry["curvyness"] = curvyness;
-            changed = true;
+    const auto curvy_fallback = vibble::weighted_range::make_flat(2);
+    vibble::weighted_range::WeightedIntRange curvyness_range = read_weighted_range_field(entry, "curvyness", curvy_fallback);
+    if (!entry.contains("curvyness")) {
+        if (entry.contains("curviness")) {
+            curvyness_range = read_weighted_range_field(entry, "curviness", curvy_fallback);
         }
+    }
+    const nlohmann::json curvy_json = vibble::weighted_range::to_json(curvyness_range);
+    if (!entry.contains("curvyness") || entry["curvyness"] != curvy_json) {
+        entry["curvyness"] = curvy_json;
+        changed = true;
+    }
+    if (entry.erase("curviness") > 0) {
+        changed = true;
     }
 
     if (!entry.contains("spawn_groups") || !entry["spawn_groups"].is_array()) {
@@ -855,10 +858,9 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"geometry", "Line"},
             {"inherits_live_dynamic_assets", false},
             {"is_boss", false},
-            {"min_width", 400},
-            {"max_width", 800},
-            {"min_height", 400},
-            {"max_height", 800},
+            {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
+            {"height", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
+            {"curvyness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2))},
             {"spawn_groups", nlohmann::json::array()}
         })}
     });
@@ -868,12 +870,10 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     nlohmann::json spawn_room = nlohmann::json::object();
     spawn_room["name"] = "Spawn";
     spawn_room["geometry"] = "Circle";
-    spawn_room["min_width"] = diameter;
-    spawn_room["max_width"] = diameter;
-    spawn_room["min_height"] = diameter;
-    spawn_room["max_height"] = diameter;
+    spawn_room["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
+    spawn_room["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
     spawn_room["edge_smoothness"] = 2;
-    spawn_room["curvyness"] = 2;
+    spawn_room["curvyness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2));
     spawn_room["is_boss"] = false;
     spawn_room["inherits_live_dynamic_assets"] = true;
     spawn_room["trail_connection_sector"] = nlohmann::json::object({

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
@@ -160,6 +161,63 @@ bool is_integral_weight(double value) {
     }
     const double rounded = std::round(value);
     return std::fabs(value - rounded) < 1e-9;
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& root,
+                                                                   const char* key,
+                                                                   const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (root.is_object() && root.contains(key)) {
+        return vibble::weighted_range::from_json(root.at(key), fallback);
+    }
+    return fallback;
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const nlohmann::json& root,
+                                                                         const char* min_key,
+                                                                         const char* max_key,
+                                                                         const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (!root.is_object()) {
+        return fallback;
+    }
+    bool has_min = false;
+    bool has_max = false;
+    std::int64_t min_value = fallback.center;
+    std::int64_t max_value = fallback.center;
+    if (auto value = read_json_int(root, min_key)) {
+        min_value = *value;
+        has_min = true;
+    }
+    if (auto value = read_json_int(root, max_key)) {
+        max_value = *value;
+        has_max = true;
+    }
+    if (!has_min && !has_max) {
+        return fallback;
+    }
+    if (!has_min) {
+        min_value = max_value;
+    }
+    if (!has_max) {
+        max_value = min_value;
+    }
+    return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
+}
+
+std::pair<int, int> range_bounds(const vibble::weighted_range::WeightedIntRange& value) {
+    const std::int64_t min_value = value.center - value.span;
+    const std::int64_t max_value = value.center + value.span;
+    return {
+        static_cast<int>(std::clamp<std::int64_t>(min_value, std::numeric_limits<int>::min(), std::numeric_limits<int>::max())),
+        static_cast<int>(std::clamp<std::int64_t>(max_value, std::numeric_limits<int>::min(), std::numeric_limits<int>::max())),
+    };
+}
+
+int resolve_weighted_dimension(const vibble::weighted_range::WeightedIntRange& value,
+                               std::mt19937& rng) {
+    const std::int64_t resolved = vibble::weighted_range::resolve(value, rng);
+    return static_cast<int>(std::clamp<std::int64_t>(resolved,
+                                                     std::numeric_limits<int>::min(),
+                                                     std::numeric_limits<int>::max()));
 }
 
 bool sanitize_anchor_candidate_entry_for_source(nlohmann::json& candidate_entry,
@@ -6221,12 +6279,10 @@ void RoomEditor::create_room_from_footer() {
     }
     nlohmann::json& room_entry = map_info["rooms_data"][key];
     room_entry["geometry"] = "Square";
-    room_entry["min_width"] = 1200;
-    room_entry["max_width"] = 1800;
-    room_entry["min_height"] = 1200;
-    room_entry["max_height"] = 1800;
+    room_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800));
+    room_entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800));
     room_entry["edge_smoothness"] = 4;
-    room_entry["curvyness"] = 2;
+    room_entry["curvyness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2));
     room_entry["is_boss"] = false;
     room_entry["inherits_map_assets"] = false;
     room_entry["tags"] = nlohmann::json::array();
@@ -6255,12 +6311,10 @@ void RoomEditor::create_trail_from_footer() {
     trail_entry = nlohmann::json::object();
     trail_entry["name"] = key;
     trail_entry["geometry"] = "Square";
-    trail_entry["min_width"] = 600;
-    trail_entry["max_width"] = 900;
-    trail_entry["min_height"] = 600;
-    trail_entry["max_height"] = 900;
+    trail_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
+    trail_entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
     trail_entry["edge_smoothness"] = 4;
-    trail_entry["curvyness"] = 2;
+    trail_entry["curvyness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2));
     trail_entry["tags"] = nlohmann::json::array();
     trail_entry["anti_tags"] = nlohmann::json::array();
     if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {
@@ -8835,9 +8889,18 @@ RoomEditor::GeometryHandle RoomEditor::hit_test_geometry_handle(Room* room, SDL_
         std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
         return g == "circle";
     }();
-
-    const int min_w = std::max(1, root.value("min_width", 1));
-    const int max_w = std::max(min_w, root.value("max_width", min_w));
+    const auto default_range = vibble::weighted_range::make_legacy_uniform(1, 1);
+    vibble::weighted_range::WeightedIntRange width_range = default_range;
+    if (root.contains("width")) {
+        width_range = read_weighted_range_field(root, "width", default_range);
+    } else if (root.contains("min_width") || root.contains("max_width")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_width", "max_width", default_range);
+    } else if (root.contains("min_radius") || root.contains("max_radius") || root.contains("radius")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_radius", "max_radius", default_range);
+    }
+    auto [min_w, max_w] = range_bounds(width_range);
+    min_w = std::max(1, min_w);
+    max_w = std::max(min_w, max_w);
     const SDL_Point c = room->room_area->get_center();
     const double dx = static_cast<double>(world_point.x - c.x);
     const double dy = static_cast<double>(world_point.y - c.y);
@@ -8860,10 +8923,26 @@ bool RoomEditor::is_point_between_geometry_bounds(Room* room, SDL_Point world_po
         std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
         return g == "circle";
     }();
-    const int min_w = std::max(1, root.value("min_width", 1));
-    int max_w = std::max(min_w, root.value("max_width", min_w));
+    const auto default_range = vibble::weighted_range::make_legacy_uniform(1, 1);
+    vibble::weighted_range::WeightedIntRange width_range = default_range;
+    if (root.contains("width")) {
+        width_range = read_weighted_range_field(root, "width", default_range);
+    } else if (root.contains("min_width") || root.contains("max_width")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_width", "max_width", default_range);
+    } else if (root.contains("min_radius") || root.contains("max_radius") || root.contains("radius")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_radius", "max_radius", default_range);
+    }
+    auto [min_w, max_w] = range_bounds(width_range);
+    min_w = std::max(1, min_w);
+    max_w = std::max(min_w, max_w);
     if (geometry_room_is_trail(room)) {
-        max_w = std::max(max_w, root.value("max_height", max_w));
+        if (root.contains("height")) {
+            const auto height_range = read_weighted_range_field(root, "height", default_range);
+            auto [min_h, max_h] = range_bounds(height_range);
+            max_w = std::max(max_w, std::max(min_h, max_h));
+        } else {
+            max_w = std::max(max_w, root.value("max_height", max_w));
+        }
     }
 
     const SDL_Point c = room->room_area->get_center();
@@ -8895,24 +8974,44 @@ void RoomEditor::mark_geometry_dirty(Room* room) {
 bool RoomEditor::regenerate_geometry(Room* room) {
     if (!room || !room->room_area || !assets_) return false;
     auto& root = room->assets_data();
-    const int min_w = std::max(1, root.value("min_width", 1));
-    const int max_w = std::max(min_w, root.value("max_width", min_w));
-    int chosen = min_w;
-    if (max_w - min_w >= 2) {
-        std::mt19937 rng(std::random_device{}());
-        chosen = std::uniform_int_distribution<int>(min_w + 1, max_w - 1)(rng);
-    } else {
-        chosen = max_w;
+    const auto default_range = vibble::weighted_range::make_legacy_uniform(1, 1);
+    vibble::weighted_range::WeightedIntRange width_range = root.contains("width")
+        ? read_weighted_range_field(root, "width", default_range)
+        : (root.contains("min_width") || root.contains("max_width")
+               ? read_weighted_range_legacy_pair(root, "min_width", "max_width", default_range)
+               : default_range);
+    vibble::weighted_range::WeightedIntRange height_range = root.contains("height")
+        ? read_weighted_range_field(root, "height", width_range)
+        : (root.contains("min_height") || root.contains("max_height")
+               ? read_weighted_range_legacy_pair(root, "min_height", "max_height", width_range)
+               : width_range);
+    if (root.contains("geometry")) {
+        std::string g = root.value("geometry", std::string{"square"});
+        std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (g == "circle") {
+            height_range = width_range;
+        }
     }
+    std::mt19937 rng(std::random_device{}());
+    const int chosen_w = std::max(1, resolve_weighted_dimension(width_range, rng));
+    const int chosen_h = std::max(1, resolve_weighted_dimension(height_range, rng));
 
     const int edge_smoothness = root.value("edge_smoothness", 2);
     std::string geometry = root.value("geometry", std::string{"Square"});
     if (!geometry.empty()) geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
     const SDL_Point center = room->room_area->get_center();
-    const int map_w = std::max(1, std::abs(center.x) * 2 + max_w * 4);
-    const int map_h = std::max(1, std::abs(center.y) * 2 + max_w * 4);
+    const int map_w = std::max(1, std::abs(center.x) * 2 + chosen_w * 4);
+    const int map_h = std::max(1, std::abs(center.y) * 2 + chosen_h * 4);
     try {
-        room->room_area = std::make_unique<Area>(room->room_name, center, chosen, chosen, geometry, edge_smoothness, map_w, map_h, room->room_area->resolution());
+        room->room_area = std::make_unique<Area>(room->room_name,
+                                                 center,
+                                                 chosen_w,
+                                                 chosen_h,
+                                                 geometry,
+                                                 edge_smoothness,
+                                                 map_w,
+                                                 map_h,
+                                                 room->room_area->resolution());
         room->room_area->set_type(room->type);
     } catch (...) {
         return false;

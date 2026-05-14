@@ -27159,8 +27159,8 @@
           255
         ]
       },
-      "map_boundary_data": {
-        "candidate_selectors": [
+      "live_dynamic_spawns": {
+        "boundary_area_selectors": [
           {
             "candidates": [
               {
@@ -27244,9 +27244,7 @@
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-456f5f025984"
           }
-        ],
-        "inherits_map_assets": false,
-        "regen_seed": 2
+        ]
       },
       "map_grid_settings": {
         "grid_resolution": 6,
@@ -27312,7 +27310,7 @@
           "edge_smoothness": 2,
           "geometry": "Square",
           "inherit_map_floor_color": false,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "max_height": 40000,
           "max_width": 40000,
@@ -27373,7 +27371,7 @@
           "edge_smoothness": 4,
           "geometry": "Square",
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "max_height": 1800,
           "max_width": 1800,
@@ -27404,7 +27402,7 @@
           "edge_smoothness": 4,
           "geometry": "Square",
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "max_height": 1800,
           "max_width": 1800,
@@ -27435,7 +27433,7 @@
           "edge_smoothness": 4,
           "geometry": "Square",
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "max_height": 1800,
           "max_width": 1800,
@@ -27501,7 +27499,7 @@
           "edge_smoothness": 70,
           "geometry": "Circle",
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "max_height": 1634,
           "max_width": 1362,
@@ -27573,7 +27571,7 @@
           "edge_smoothness": 101,
           "geometry": "Square",
           "inherit_map_floor_color": true,
-          "inherits_map_assets": true,
+          "inherits_live_dynamic_assets": true,
           "is_boss": false,
           "max_height": 12110,
           "max_width": 18504,
@@ -27865,7 +27863,7 @@
           "edge_smoothness": 96,
           "geometry": "Square",
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "max_height": 6668,
           "max_width": 5715,
@@ -28184,7 +28182,7 @@
           "edge_smoothness": 2,
           "geometry": "Square",
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
           "max_height": 1162,
           "max_width": 1162,

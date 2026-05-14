@@ -552,25 +552,25 @@
         "center": 0,
         "falloff": 3,
         "random": true,
-        "span": 6,
+        "span": 8,
         "weights": {
-          "center": 0.46820760766692104,
-          "edge": 0.20827898723391633,
-          "falloff": 0.3235134050991626
+          "center": 0.4906197462692994,
+          "edge": 0.2183058230274431,
+          "falloff": 0.29107443070325745
         }
       },
-      "tilt_range_max_deg": 6,
-      "tilt_range_min_deg": -6,
+      "tilt_range_max_deg": 8,
+      "tilt_range_min_deg": -8,
       "weight_kg": 953.0,
       "y_position_range": {
-        "center": -6,
+        "center": -10,
         "falloff": 2,
         "random": true,
-        "span": 4,
+        "span": 3,
         "weights": {
-          "center": 0.7273572936670549,
+          "center": 0.6774193548387096,
           "edge": 0.0,
-          "falloff": 0.27264270633294513
+          "falloff": 0.3225806451612903
         }
       }
     },
@@ -27129,11 +27129,11 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "blur_px": 1.71999990940094,
+        "blur_px": 18.079999923706055,
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 663.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "far_light_cap": 32.0,
@@ -27161,7 +27161,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 6.889999866485596,
+        "radial_blur_px": 53.959999084472656,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -27290,9 +27290,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            46,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27310,7 +27310,6 @@
           },
           "inherit_map_floor_color": false,
           "inherits_live_dynamic_assets": false,
-          "inherits_map_assets": true,
           "is_boss": false,
           "name": "baseball",
           "room_floor_color": [
@@ -27380,7 +27379,7 @@
             }
           },
           "display_color": [
-            147,
+            127,
             242,
             85,
             255
@@ -27439,9 +27438,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            161,
+            31,
+            204,
+            146,
             255
           ],
           "edge_smoothness": 4,
@@ -27499,8 +27498,8 @@
           },
           "display_color": [
             204,
+            154,
             31,
-            158,
             255
           ],
           "edge_smoothness": 4,
@@ -27587,9 +27586,9 @@
             }
           },
           "display_color": [
-            31,
-            110,
             204,
+            31,
+            163,
             255
           ],
           "edge_smoothness": 4,
@@ -27651,8 +27650,8 @@
             }
           },
           "display_color": [
+            146,
             36,
-            242,
             242,
             255
           ],
@@ -27751,9 +27750,9 @@
             }
           },
           "display_color": [
-            104,
-            204,
-            31,
+            183,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -27771,7 +27770,6 @@
           },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": true,
-          "inherits_map_assets": false,
           "is_boss": false,
           "name": "baseball",
           "room_floor_color": [
@@ -28072,9 +28070,9 @@
             }
           },
           "display_color": [
-            71,
+            102,
             204,
-            104,
+            31,
             255
           ],
           "edge_smoothness": 96,
@@ -28408,7 +28406,7 @@
           "camera_tilt_deg": 71.4345932006836,
           "camera_zoom_percent": 18,
           "curvyness": {
-            "center": 10,
+            "center": 2,
             "falloff": 0,
             "random": false,
             "span": 0,
@@ -28424,10 +28422,10 @@
             73,
             255
           ],
-          "edge_smoothness": 2,
+          "edge_smoothness": 101,
           "geometry": "Square",
           "height": {
-            "center": 1162,
+            "center": 18504,
             "falloff": 0,
             "random": false,
             "span": 0,
@@ -28439,9 +28437,8 @@
           },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
-          "inherits_map_assets": false,
           "is_boss": false,
-          "name": "basic",
+          "name": "baseball",
           "room_floor_color": [
             0,
             0,
@@ -28535,7 +28532,7 @@
             }
           ],
           "width": {
-            "center": 1162,
+            "center": 18504,
             "falloff": 0,
             "random": false,
             "span": 0,

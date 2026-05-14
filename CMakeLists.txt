@@ -314,6 +314,7 @@ add_executable(engine_tests
     ENGINE/tests/test_room_anchor_mode_utils.cpp
     ENGINE/tests/test_room_editor_point_mode_isolation.cpp
     ENGINE/tests/test_room_editor_onion_skin_regressions.cpp
+    ENGINE/tests/test_room_configurator_persistence.cpp
     ENGINE/tests/test_room_selection_filter_utils.cpp
     ENGINE/tests/test_spawn_group_codec.cpp
     ENGINE/tests/test_runtime_candidates.cpp

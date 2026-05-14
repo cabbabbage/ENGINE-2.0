@@ -752,6 +752,7 @@ struct RoomConfigurator::State {
     double trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
     int trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
     bool is_boss = false;
+    bool has_boss_field = false;
     bool inherits_assets = false;
     bool inherit_map_floor_color = true;
     SDL_Color room_floor_color{0, 0, 0, 255};
@@ -914,13 +915,16 @@ struct RoomConfigurator::State {
             }
         }
 
+        has_boss_field = src.is_object() && src.contains("is_boss");
         if (auto value = read_json_bool(src, "is_boss")) {
             is_boss = *value;
         } else {
             is_boss = false;
         }
-        if (auto value = read_json_bool(src, "inherits_map_assets")) {
+        if (auto value = read_json_bool(src, "inherits_live_dynamic_assets")) {
             inherits_assets = *value;
+        } else if (auto legacy_value = read_json_bool(src, "inherits_map_assets")) {
+            inherits_assets = *legacy_value;
         } else {
             inherits_assets = false;
         }
@@ -934,6 +938,8 @@ struct RoomConfigurator::State {
                 room_floor_color = *parsed;
                 room_floor_color.a = 255;
             }
+        } else {
+            room_floor_color = SDL_Color{0, 0, 0, 255};
         }
         if (auto value = read_json_int(src, "edge_smoothness")) {
             edge_smoothness = *value;
@@ -959,12 +965,17 @@ struct RoomConfigurator::State {
     void apply_to_json(nlohmann::json& dest,
                        bool allow_height,
                        bool include_camera = true,
-                       bool include_trail_connection_sector = true) const {
+                       bool include_trail_connection_sector = true,
+                       bool include_boss = true) const {
         if (!dest.is_object()) dest = nlohmann::json::object();
         dest["name"] = name;
         dest["geometry"] = geometry;
-        dest["is_boss"] = is_boss;
-        dest["inherits_map_assets"] = inherits_assets;
+        if (include_boss || has_boss_field) {
+            dest["is_boss"] = is_boss;
+        } else {
+            dest.erase("is_boss");
+        }
+        dest["inherits_live_dynamic_assets"] = inherits_assets;
         dest["inherit_map_floor_color"] = inherit_map_floor_color;
         dest["room_floor_color"] = nlohmann::json::array(
             {static_cast<int>(room_floor_color.r), static_cast<int>(room_floor_color.g), static_cast<int>(room_floor_color.b)});
@@ -984,6 +995,7 @@ struct RoomConfigurator::State {
         dest.erase("min_height");
         dest.erase("max_height");
         dest.erase("curviness");
+        dest.erase("inherits_map_assets");
         if (include_trail_connection_sector) {
             dest["trail_connection_sector"] = nlohmann::json::object({
                 {"direction_deg", normalize_angle_degrees(trail_connection_direction_deg)},
@@ -1046,10 +1058,12 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     copy_field("height");
     copy_field("edge_smoothness");
     copy_field("curvyness");
+    copy_field("curviness");
     if (include_trail_connection_sector) {
         copy_field("trail_connection_sector");
     }
     copy_field("is_boss");
+    copy_field("inherits_live_dynamic_assets");
     copy_field("inherits_map_assets");
     copy_field("inherit_map_floor_color");
     copy_field("room_floor_color");
@@ -1775,8 +1789,9 @@ void RoomConfigurator::handle_container_closed() {
 
 bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     const nlohmann::json& source = data.is_object() ? data : empty_object();
-    const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
+    const bool allow_height = kTrailsAllowIndependentDimensions;
     const bool include_trail_connection_sector = !is_trail_context_;
+    const bool include_boss = !is_trail_context_;
     const bool include_tags = !room_metadata_only_mode_;
 
     nlohmann::json source_object = source.is_object() ? source : nlohmann::json::object();
@@ -1830,7 +1845,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     tags_dirty_ = false;
     trail_connection_sector_dirty_ = false;
 
-    state_->apply_to_json(loaded_json_, allow_height, false, include_trail_connection_sector);
+    state_->apply_to_json(loaded_json_, allow_height, false, include_trail_connection_sector, include_boss);
     if (include_tags) {
         write_tags_to_json(loaded_json_);
     }
@@ -1840,7 +1855,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     const bool needs_persist = (patched_metadata_raw != source_metadata_raw);
 
     nlohmann::json canonical_metadata = nlohmann::json::object();
-    state_->apply_to_json(canonical_metadata, allow_height, false, include_trail_connection_sector);
+    state_->apply_to_json(canonical_metadata, allow_height, false, include_trail_connection_sector, include_boss);
     nlohmann::json new_snapshot = build_metadata_snapshot_json(
         canonical_metadata,
         room_tags_,
@@ -1855,7 +1870,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
             if (!target.is_object()) {
                 target = nlohmann::json::object();
             }
-            state_->apply_to_json(target, allow_height, false, include_trail_connection_sector);
+            state_->apply_to_json(target, allow_height, false, include_trail_connection_sector, include_boss);
             if (include_tags) {
                 write_tags_to_json(target);
             }
@@ -2043,7 +2058,7 @@ void RoomConfigurator::rebuild_rows_internal() {
     name_widget_ = std::make_unique<TextBoxWidget>(name_box_.get());
 
     bool allow_geometry_choice = !is_trail_context_;
-    const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
+    const bool allow_height = kTrailsAllowIndependentDimensions;
     if (allow_geometry_choice) {
         auto geom_it = std::find(geometry_options_.begin(), geometry_options_.end(), state_->geometry);
         int geom_index = 0;
@@ -2058,12 +2073,14 @@ void RoomConfigurator::rebuild_rows_internal() {
     }
 
     width_slider_max_range_ = 0;
-    width_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Width", state_->width_range, kMinRoomDimension, kMaxRoomDimension, false);
+    const std::string context_label = is_trail_context_ ? "Trail" : "Room";
+
+    width_range_widget_ = std::make_unique<DMWeightedRangeWidget>(context_label + " Width", state_->width_range, kMinRoomDimension, kMaxRoomDimension, false);
     width_range_control_ = std::make_unique<WeightedRangeWidget>(width_range_widget_.get());
 
     if (allow_height) {
         height_slider_max_range_ = 0;
-        height_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Room Height", state_->height_range, kMinRoomDimension, kMaxRoomDimension, false);
+        height_range_widget_ = std::make_unique<DMWeightedRangeWidget>(context_label + " Height", state_->height_range, kMinRoomDimension, kMaxRoomDimension, false);
         height_range_control_ = std::make_unique<WeightedRangeWidget>(height_range_widget_.get());
     } else {
         height_range_widget_.reset();
@@ -2071,21 +2088,11 @@ void RoomConfigurator::rebuild_rows_internal() {
         height_slider_max_range_ = 0;
     }
 
-    if (!is_trail_context_) {
-        edge_slider_ = std::make_unique<DMSlider>("Edge Smoothness", 0, 101, state_->edge_smoothness);
-        edge_widget_ = std::make_unique<SliderWidget>(edge_slider_.get());
-    } else {
-        edge_slider_.reset();
-        edge_widget_.reset();
-    }
+    edge_slider_ = std::make_unique<DMSlider>("Edge Smoothness", 0, 101, state_->edge_smoothness);
+    edge_widget_ = std::make_unique<SliderWidget>(edge_slider_.get());
 
-    if (is_trail_context_) {
-        curvy_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Curvyness", state_->curvyness_range, 0, kMaxTrailCurvyness, false);
-        curvy_widget_ = std::make_unique<WeightedRangeWidget>(curvy_range_widget_.get());
-    } else {
-        curvy_range_widget_.reset();
-        curvy_widget_.reset();
-    }
+    curvy_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Curvyness", state_->curvyness_range, 0, kMaxTrailCurvyness, false);
+    curvy_widget_ = std::make_unique<WeightedRangeWidget>(curvy_range_widget_.get());
 
     if (!is_trail_context_) {
         trail_connection_sector_widget_ = std::make_unique<TrailConnectionSectorWidget>(
@@ -2340,8 +2347,9 @@ bool RoomConfigurator::sync_state_from_widgets() {
     bool changed = false;
     bool rebuild_required = false;
     bool tags_changed = false;
-    const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
+    const bool allow_height = kTrailsAllowIndependentDimensions;
     const bool include_trail_connection_sector = !is_trail_context_;
+    const bool include_boss = !is_trail_context_;
 
     if (!room_metadata_only_mode_ && tags_dirty_) {
         changed = true;
@@ -2510,7 +2518,7 @@ bool RoomConfigurator::sync_state_from_widgets() {
     if (changed) {
         const bool include_tags = !room_metadata_only_mode_;
         nlohmann::json canonical_metadata = nlohmann::json::object();
-        state_->apply_to_json(canonical_metadata, allow_height, false, include_trail_connection_sector);
+        state_->apply_to_json(canonical_metadata, allow_height, false, include_trail_connection_sector, include_boss);
         nlohmann::json new_snapshot = build_metadata_snapshot_json(
             canonical_metadata,
             room_tags_,
@@ -2521,14 +2529,14 @@ bool RoomConfigurator::sync_state_from_widgets() {
             if (!loaded_json_.is_object()) {
                 loaded_json_ = nlohmann::json::object();
             }
-            state_->apply_to_json(loaded_json_, allow_height, false, include_trail_connection_sector);
+            state_->apply_to_json(loaded_json_, allow_height, false, include_trail_connection_sector, include_boss);
             if (include_tags) {
                 write_tags_to_json(loaded_json_);
             }
 
             if (room_ || external_room_json_) {
                 auto& root = live_room_json();
-                state_->apply_to_json(root, allow_height, false, include_trail_connection_sector);
+                state_->apply_to_json(root, allow_height, false, include_trail_connection_sector, include_boss);
                 if (include_tags) {
                     write_tags_to_json(root);
                 }
@@ -2616,10 +2624,11 @@ nlohmann::json RoomConfigurator::build_json() const {
     nlohmann::json result = loaded_json_.is_object() ? loaded_json_ : nlohmann::json::object();
     if (state_) {
         State copy = *state_;
-        const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
+        const bool allow_height = kTrailsAllowIndependentDimensions;
         const bool include_trail_connection_sector = !is_trail_context_;
+        const bool include_boss = !is_trail_context_;
         copy.ensure_valid(allow_height);
-        copy.apply_to_json(result, allow_height, !room_metadata_only_mode_, include_trail_connection_sector);
+        copy.apply_to_json(result, allow_height, !room_metadata_only_mode_, include_trail_connection_sector, include_boss);
         if (!room_metadata_only_mode_) {
             write_tags_to_json(result);
         }

@@ -27201,7 +27201,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 11057.23876019687,
+          "bounding_extent": 70.71067811865476,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -27219,12 +27219,12 @@
           ]
         },
         {
-          "bounding_extent": 28284.2712474619,
+          "bounding_extent": 70.71067811865476,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 40342.0,
+          "ring_radius": 1142.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -27248,22 +27248,39 @@
           "camera_height_px": 456,
           "camera_tilt_deg": 37.47359085083008,
           "camera_zoom_percent": 40,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            242,
-            101,
-            36,
+            32,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 2,
           "geometry": "Square",
+          "height": {
+            "center": 20250,
+            "falloff": 9875,
+            "random": true,
+            "span": 19750,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
           "inherit_map_floor_color": false,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 40000,
-          "max_width": 40000,
-          "min_height": 500,
-          "min_width": 500,
           "name": "Loot_Room",
           "room_floor_color": [
             138,
@@ -27306,25 +27323,53 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 20250,
+            "falloff": 9875,
+            "random": true,
+            "span": 19750,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
           }
         },
         "NewRoom": {
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            39,
             242,
-            36,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1800,
-          "max_width": 1800,
-          "min_height": 1200,
-          "min_width": 1200,
           "name": "NewRoom",
           "room_floor_color": [
             0,
@@ -27337,25 +27382,53 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
           }
         },
         "NewRoom1": {
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
+            143,
+            36,
             242,
-            242,
-            85,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1800,
-          "max_width": 1800,
-          "min_height": 1200,
-          "min_width": 1200,
           "name": "NewRoom1",
           "room_floor_color": [
             0,
@@ -27368,25 +27441,53 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
           }
         },
         "NewRoom2": {
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            85,
+            138,
             242,
-            233,
+            36,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1800,
-          "max_width": 1800,
-          "min_height": 1200,
-          "min_width": 1200,
           "name": "NewRoom2",
           "room_floor_color": [
             0,
@@ -27429,6 +27530,75 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
+        },
+        "NewRoom3": {
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
+          "display_color": [
+            31,
+            204,
+            100,
+            255
+          ],
+          "edge_smoothness": 4,
+          "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_map_assets": false,
+          "is_boss": false,
+          "name": "NewRoom3",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "spawn_groups": [],
+          "tags": [],
+          "trail_connection_sector": {
+            "direction_deg": 0.0,
+            "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
           }
         },
         "Random_Enemy_Easy": {
@@ -27437,22 +27607,39 @@
           "camera_height_px": 109,
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            205,
             36,
             242,
+            224,
             255
           ],
           "edge_smoothness": 70,
           "geometry": "Circle",
+          "height": {
+            "center": 1362,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1634,
-          "max_width": 1362,
-          "min_height": 1634,
-          "min_width": 1362,
           "name": "Random_Enemy_Easy",
           "room_floor_color": [
             0,
@@ -27501,6 +27688,17 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1362,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         },
         "baseball": {
@@ -27509,22 +27707,39 @@
           "camera_height_px": 263,
           "camera_tilt_deg": 20.848411560058594,
           "camera_zoom_percent": 26,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            107,
             242,
+            87,
             85,
             255
           ],
           "edge_smoothness": 101,
           "geometry": "Square",
+          "height": {
+            "center": 12110,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": true,
           "is_boss": false,
-          "max_height": 12110,
-          "max_width": 18504,
-          "min_height": 12110,
-          "min_width": 18504,
           "name": "baseball",
           "room_floor_color": [
             0,
@@ -27746,6 +27961,17 @@
           "trail_connection_sector": {
             "direction_deg": 182.0,
             "width_percent": 69
+          },
+          "width": {
+            "center": 18504,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         },
         "hub_world": {
@@ -27801,22 +28027,39 @@
           "camera_height_px": 1155,
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            204,
             31,
-            56,
+            110,
+            204,
             255
           ],
           "edge_smoothness": 96,
           "geometry": "Square",
+          "height": {
+            "center": 6668,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 6668,
-          "max_width": 5715,
-          "min_height": 6668,
-          "min_width": 5715,
           "name": "hub_world",
           "room_floor_color": [
             0,
@@ -28099,6 +28342,17 @@
           "trail_connection_sector": {
             "direction_deg": 180.0,
             "width_percent": 70
+          },
+          "width": {
+            "center": 5715,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         }
       },
@@ -28120,7 +28374,17 @@
           "camera_height_px": 1158,
           "camera_tilt_deg": 63.06760787963867,
           "camera_zoom_percent": 0,
-          "curvyness": 10,
+          "curvyness": {
+            "center": 10,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
             31,
             204,
@@ -28129,13 +28393,20 @@
           ],
           "edge_smoothness": 2,
           "geometry": "Square",
+          "height": {
+            "center": 1162,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1162,
-          "max_width": 1162,
-          "min_height": 1162,
-          "min_width": 1162,
           "name": "basic",
           "room_floor_color": [
             0,
@@ -28228,7 +28499,18 @@
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-f9db5b023535"
             }
-          ]
+          ],
+          "width": {
+            "center": 1162,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          }
         }
       }
     },

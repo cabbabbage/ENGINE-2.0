@@ -89,9 +89,12 @@ class AssetInfo {
     int starting_health = 100;
     float scale_factor;
     vibble::weighted_range::WeightedIntRange size_variation_range{};
+    float size_variation_percent = 0.0f;
     float weight_kg = 0.0f;
     int bounce_amount = 0;
     vibble::weighted_range::WeightedIntRange tilt_range{};
+    int tilt_range_min_deg = 0;
+    int tilt_range_max_deg = 0;
     vibble::weighted_range::WeightedIntRange y_position_range{};
     bool smooth_scaling = true;
     int original_canvas_width = 0;
@@ -254,11 +257,13 @@ class AssetInfo {
     void set_scale_factor(float factor);
     void set_scale_percentage(float percent);
     void set_size_variation_range(const vibble::weighted_range::WeightedIntRange& range);
+    void set_size_variation_percentage(float percent);
     void set_weight_kg(float weight);
     float get_weight_kg() const { return weight_kg; }
     void set_bounce_amount(int amount);
     int get_bounce_amount() const { return bounce_amount; }
     void set_tilt_range(const vibble::weighted_range::WeightedIntRange& range);
+    void set_tilt_range_degrees(int min_deg, int max_deg);
     void set_y_position_range(const vibble::weighted_range::WeightedIntRange& range);
     void set_scale_filter(bool smooth);
     void set_tags(const std::vector<std::string> &t);

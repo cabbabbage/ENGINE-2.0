@@ -154,6 +154,17 @@ vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const n
         return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
 }
 
+int resolve_weighted_dimension(const vibble::weighted_range::WeightedIntRange& range, std::mt19937& rng) {
+        const std::int64_t resolved = vibble::weighted_range::resolve(range, rng);
+        if (resolved < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
+                return std::numeric_limits<int>::min();
+        }
+        if (resolved > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+                return std::numeric_limits<int>::max();
+        }
+        return static_cast<int>(resolved);
+}
+
 std::pair<int, int> range_bounds(const vibble::weighted_range::WeightedIntRange& value) {
         const std::int64_t min_value = value.center - value.span;
         const std::int64_t max_value = value.center + value.span;

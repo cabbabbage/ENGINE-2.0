@@ -326,6 +326,7 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
         (void)json_to_int(entry["edge_smoothness"], edge_smoothness);
     }
     edge_smoothness = std::clamp(edge_smoothness, 0, 101);
+    int existing_value = 0;
     const bool has_numeric_edge = entry.contains("edge_smoothness") && json_to_int(entry["edge_smoothness"], existing_value);
     if (!has_numeric_edge || existing_value != edge_smoothness) {
         entry["edge_smoothness"] = edge_smoothness;

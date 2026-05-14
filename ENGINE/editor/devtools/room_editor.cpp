@@ -2860,7 +2860,6 @@ void RoomEditor::set_room_config_visible(bool visible) {
     room_config_dock_open_ = visible;
     room_config_panel_visible_ = visible;
     if (visible) {
-        sync_current_room_from_assets();
         room_cfg_ui_->set_room_metadata_only_mode(false);
         room_cfg_ui_->set_bounds(room_config_bounds_);
         room_cfg_ui_->open(current_room_);
@@ -2985,7 +2984,6 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
         close_asset_info_editor();
         ensure_room_configurator();
         if (room_cfg_ui_) {
-            sync_current_room_from_assets();
             room_cfg_ui_->open(current_room_);
             refresh_room_config_visibility();
         }
@@ -4133,9 +4131,6 @@ bool RoomEditor::select_current_room_from_nav(Room* room) {
         return false;
     }
 
-    if (assets_) {
-        assets_->set_editor_current_room(room);
-    }
     if (current_room_ != room) {
         set_current_room(room);
     } else if (room_cfg_ui_ && room_cfg_ui_->visible()) {
@@ -4144,17 +4139,16 @@ bool RoomEditor::select_current_room_from_nav(Room* room) {
         room_cfg_ui_->set_room_metadata_only_mode(false);
         room_cfg_ui_->open(current_room_);
     }
+    if (assets_ && assets_->current_room() != room) {
+        assets_->set_editor_current_room(room);
+    }
+    if (room_cfg_ui_ && room_cfg_ui_->visible() && current_room_ == room) {
+        room_config_dock_open_ = true;
+        room_config_panel_visible_ = true;
+        room_cfg_ui_->set_room_metadata_only_mode(false);
+        room_cfg_ui_->open(current_room_);
+    }
     return current_room_ == room;
-}
-
-void RoomEditor::sync_current_room_from_assets() {
-    if (!assets_) {
-        return;
-    }
-    Room* room = assets_->current_room();
-    if (room && room != current_room_) {
-        set_current_room(room);
-    }
 }
 
 void RoomEditor::pan_camera_to_room(Room* room) {

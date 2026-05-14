@@ -16,6 +16,7 @@
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_payload_utils.hpp"
 #include "devtools/room_box_tools_panel.hpp"
+#include "devtools/dev_controls.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
@@ -378,6 +379,20 @@ TEST_CASE("RoomEditor room nav selection updates current room and visible room c
 
     CHECK(RoomEditorTestAccess::current_room(editor) == clicked_room.get());
     CHECK(RoomEditorTestAccess::room_config_header_text(editor) == "Room: clicked_room");
+}
+
+TEST_CASE("DevControls preserves dev-selected room when runtime sync reports player room") {
+    auto player_room = make_nav_test_room("baseball");
+    auto clicked_room = make_nav_test_room("clicked_room");
+
+    DevControls controls(nullptr, 1280, 720);
+    controls.set_current_room(player_room.get(), true);
+    controls.set_enabled(true);
+
+    controls.set_current_room(clicked_room.get(), true);
+    controls.set_current_room(player_room.get(), false);
+
+    CHECK(controls.resolve_current_room(player_room.get()) == clicked_room.get());
 }
 
 TEST_CASE("RoomEditor oval candidate source requires explicit center or point selection") {

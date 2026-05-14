@@ -382,7 +382,6 @@ private:
     void clear_room_trail_nav_entries();
     bool handle_room_nav_click(const SDL_Point& screen_pt);
     bool select_current_room_from_nav(Room* room);
-    void sync_current_room_from_assets();
     void pan_camera_to_room(Room* room);
     SDL_Rect label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const;
     SDL_Rect resolve_edge_overlap(SDL_Rect rect, SDL_FPoint desired_center);

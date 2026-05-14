@@ -1902,6 +1902,9 @@ void DevControls::set_screen_dimensions(int width, int height) {
 }
 
 void DevControls::set_current_room(Room* room, bool force_refresh) {
+    if (enabled_ && !force_refresh && dev_selected_room_ && room != dev_selected_room_) {
+        room = dev_selected_room_;
+    }
     const std::string header_label = format_room_header_label(room);
 
     if (!force_refresh && current_room_ == room) {

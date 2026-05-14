@@ -1963,7 +1963,11 @@ void RoomConfigurator::open(Room* room) {
         }
     }
 
-    const nlohmann::json& source = room ? room->assets_data() : empty_object();
+    nlohmann::json source = room ? room->assets_data() : empty_object();
+    if (room && source.is_object() && !room->room_name.empty()) {
+        source["name"] = room->room_name;
+        source.erase("room_name");
+    }
     const bool data_changed = apply_room_data(source);
     const bool changed = (room != previous) || data_changed;
     if (changed || !was_visible) {

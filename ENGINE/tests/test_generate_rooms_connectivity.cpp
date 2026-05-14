@@ -41,6 +41,13 @@ nlohmann::json trail_template() {
     });
 }
 
+std::vector<LayerSpec> two_room_layers() {
+    return {
+        LayerSpec{0, 1, {RoomSpec{"spawn", 1, {}}}},
+        LayerSpec{1, 1, {RoomSpec{"room_a", 1, {}}}},
+    };
+}
+
 std::vector<LayerSpec> connected_layers() {
     return {
         LayerSpec{0, 1, {RoomSpec{"spawn", 1, {}}}},
@@ -83,6 +90,26 @@ bool connected_to(const Room* trail, const Room* room) {
         return false;
     }
     return std::find(trail->connected_rooms.begin(), trail->connected_rooms.end(), room) != trail->connected_rooms.end();
+}
+
+int non_trail_room_count(const std::vector<std::unique_ptr<Room>>& rooms) {
+    int count = 0;
+    for (const auto& room : rooms) {
+        if (room && !is_trail(room.get())) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+int trail_room_count(const std::vector<std::unique_ptr<Room>>& rooms) {
+    int count = 0;
+    for (const auto& room : rooms) {
+        if (is_trail(room.get())) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 nlohmann::json weighted_range_json(int min_value, int max_value) {
@@ -222,6 +249,46 @@ TEST_CASE("generated connected_rooms graph reaches every non-trail room from spa
 
     REQUIRE_FALSE(rooms.empty());
     REQUIRE(all_non_trail_rooms_reachable(rooms.front().get(), rooms));
+}
+
+TEST_CASE("room generation keeps placed rooms when required trail routing is impossible") {
+    nlohmann::json manifest = nlohmann::json::object();
+    nlohmann::json rooms_data = nlohmann::json::object({
+        {"spawn", room_template("spawn", 80)},
+        {"room_a", room_template("room_a", 80)},
+    });
+    rooms_data["spawn"]["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", 0.0},
+        {"width_percent", 25},
+    });
+    rooms_data["room_a"]["trail_connection_sector"] = nlohmann::json::object({
+        {"direction_deg", 0.0},
+        {"width_percent", 25},
+    });
+    nlohmann::json trails_data = nlohmann::json::object({
+        {"oversized_trail", nlohmann::json::object({
+            {"name", "oversized_trail"},
+            {"min_width", 2000},
+            {"max_width", 2000},
+            {"curvyness", 0},
+            {"edge_smoothness", 1},
+        })},
+    });
+
+    GenerateRooms generator(two_room_layers(), 0, 0, "fallback_test", manifest, 120.0);
+    std::vector<double> layer_radii{0.0, 450.0};
+    auto rooms = generator.build(
+        nullptr,
+        1600.0,
+        layer_radii,
+        nlohmann::json::object(),
+        rooms_data,
+        trails_data,
+        MapGridSettings::defaults());
+
+    REQUIRE_FALSE(rooms.empty());
+    CHECK(non_trail_room_count(rooms) == 2);
+    CHECK(trail_room_count(rooms) == 0);
 }
 
 TEST_CASE("final trail areas do not overlap unrelated room areas") {

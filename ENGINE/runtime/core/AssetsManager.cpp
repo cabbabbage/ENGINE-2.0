@@ -350,6 +350,43 @@ double live_dynamic_unit_interval(std::uint64_t value) {
     return static_cast<double>(value) / static_cast<double>(std::numeric_limits<std::uint64_t>::max());
 }
 
+bool live_dynamic_projected_perspective_scale(const WarpedScreenGrid& camera,
+                                              const Asset& asset,
+                                              float& out_scale) {
+    out_scale = 1.0f;
+    const float world_anchor_x = asset.smoothed_translation_x() + asset.render_anchor_offset_x();
+    const float world_anchor_y = asset.smoothed_translation_y() + asset.render_anchor_offset_y();
+    const float world_anchor_z =
+        static_cast<float>(asset.world_z()) + asset.world_z_offset() + asset.render_anchor_offset_z();
+    if (!std::isfinite(world_anchor_x) ||
+        !std::isfinite(world_anchor_y) ||
+        !std::isfinite(world_anchor_z)) {
+        return false;
+    }
+
+    SDL_FPoint left{};
+    SDL_FPoint right{};
+    constexpr float kHalfWorldSpan = 0.5f;
+    if (!camera.project_world_point(SDL_FPoint{world_anchor_x - kHalfWorldSpan, world_anchor_y},
+                                    world_anchor_z,
+                                    left) ||
+        !camera.project_world_point(SDL_FPoint{world_anchor_x + kHalfWorldSpan, world_anchor_y},
+                                    world_anchor_z,
+                                    right)) {
+        return false;
+    }
+
+    const float dx = right.x - left.x;
+    const float dy = right.y - left.y;
+    const float span_px = std::hypot(dx, dy);
+    if (!std::isfinite(span_px) || span_px <= 1.0e-5f) {
+        return false;
+    }
+
+    out_scale = std::max(0.0001f, span_px);
+    return true;
+}
+
 double live_dynamic_candidate_weight(const nlohmann::json& candidate) {
     if (candidate.is_object()) {
         for (const char* key : {"chance", "weight", "probability"}) {
@@ -862,6 +899,7 @@ void Assets::rebuild_live_dynamic_selectors() {
             ? selector_json.value("grid_resolution", map_grid_settings_.grid_resolution)
             : selector_json.value("resolution", map_grid_settings_.grid_resolution);
         selector.grid_resolution = vibble::grid::clamp_resolution(raw_resolution);
+        selector.jitter_px = std::clamp(selector_json.value("jitter", 0), 0, 2048);
 
         for (const nlohmann::json& candidate_json : *candidates_json) {
             const double weight = live_dynamic_candidate_weight(candidate_json);
@@ -2834,6 +2872,12 @@ void Assets::rebuild_live_dynamic_active_assets() {
         if (!asset || asset->dead) {
             continue;
         }
+        float perspective_scale = 1.0f;
+        if (live_dynamic_projected_perspective_scale(camera_, *asset, perspective_scale)) {
+            asset->set_anchor_perspective_override(perspective_scale, asset->grid_resolution);
+        } else {
+            asset->clear_anchor_perspective_override();
+        }
         asset->last_active_frame_id = frame_id_;
         asset->last_visible_frame_id = frame_id_;
         asset->active = true;
@@ -2930,6 +2974,34 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
                std::to_string(selector.grid_resolution) + ":" + selector.spawn_id;
     };
 
+    auto jittered_world_point = [&](const LiveDynamicSelector& selector,
+                                    const LiveDynamicPointKey& key,
+                                    SDL_Point base_point) {
+        if (selector.jitter_px <= 0) {
+            return base_point;
+        }
+        std::uint64_t seed = std::hash<std::string>{}(map_id_);
+        seed = mix_u64(seed, std::hash<std::string>{}(selector.spawn_id));
+        seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.grid_x)));
+        seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.grid_z)));
+        seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<int>(key.mode)));
+        const double u0 = live_dynamic_unit_interval(seed);
+        const double u1 = live_dynamic_unit_interval(mix_u64(seed, 0x9e3779b97f4a7c15ULL));
+        const int jitter = selector.jitter_px;
+        const int jitter_x = static_cast<int>(std::lround((u0 * 2.0 - 1.0) * static_cast<double>(jitter)));
+        const int jitter_z = static_cast<int>(std::lround((u1 * 2.0 - 1.0) * static_cast<double>(jitter)));
+        SDL_Point jittered = base_point;
+        jittered.x = static_cast<int>(std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(base_point.x) + static_cast<std::int64_t>(jitter_x),
+            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
+        jittered.y = static_cast<int>(std::clamp<std::int64_t>(
+            static_cast<std::int64_t>(base_point.y) + static_cast<std::int64_t>(jitter_z),
+            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
+        return jittered;
+    };
+
     auto room_for_point = [&](SDL_Point point, bool require_inherited, bool& inside_any_room) -> Room* {
         inside_any_room = false;
         for (Room* room : rooms()) {
@@ -3018,7 +3090,8 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
         raw->set_camera(&camera_);
         raw->set_owning_room_name(owner_name);
         raw->finalize_setup();
-        raw->set_provisional_grid_point(world_point.x, 0, world_point.y, selector.grid_resolution);
+        const int initialized_world_y = raw->world_y();
+        raw->set_provisional_grid_point(world_point.x, initialized_world_y, world_point.y, selector.grid_resolution);
         raw->active = true;
         raw->last_active_frame_id = frame_id_;
         raw->last_visible_frame_id = frame_id_;
@@ -3126,7 +3199,9 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             ++visited;
             ++stats.candidate_points_considered;
 
-            const SDL_Point world_point = vibble::grid::global_grid().index_to_world(ix, iz, resolution);
+            const LiveDynamicPointKey key{selector.mode, resolution, ix, iz, selector.spawn_id};
+            const SDL_Point base_world_point = vibble::grid::global_grid().index_to_world(ix, iz, resolution);
+            const SDL_Point world_point = jittered_world_point(selector, key, base_world_point);
             if (!point_inside_visible_bounds(world_point)) {
                 continue;
             }
@@ -3145,7 +3220,6 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
                 }
             }
 
-            LiveDynamicPointKey key{selector.mode, resolution, ix, iz, selector.spawn_id};
             if (!attempted_keys.insert(key).second) {
                 ++stats.skipped_repeated_attempt;
                 continue;

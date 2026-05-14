@@ -621,6 +621,7 @@ private:
         std::string spawn_id;
         std::string display_name;
         int grid_resolution = 0;
+        int jitter_px = 0;
         LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
         std::vector<LiveDynamicCandidate> candidates;
     };

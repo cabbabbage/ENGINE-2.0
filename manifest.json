@@ -27210,8 +27210,8 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 4,
-            "jitter": 7,
+            "grid_resolution": 5,
+            "jitter": 32,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -27249,12 +27249,12 @@
           ]
         },
         {
-          "bounding_extent": 28284.2712474619,
+          "bounding_extent": 11057.23876019687,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 40342.0,
+          "ring_radius": 23115.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -27292,31 +27292,31 @@
           "display_color": [
             36,
             242,
-            242,
+            46,
             255
           ],
-          "edge_smoothness": 2,
+          "edge_smoothness": 101,
           "geometry": "Square",
           "height": {
-            "center": 28979,
-            "falloff": 9961,
-            "random": true,
-            "span": 9961,
+            "center": 12110,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
             "weights": {
-              "center": 0.2916247439105031,
-              "edge": 0.2916247439105031,
-              "falloff": 0.4167505121789939
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
             }
           },
-          "inherit_map_floor_color": true,
+          "inherit_map_floor_color": false,
           "inherits_live_dynamic_assets": false,
-          "inherits_map_assets": false,
+          "inherits_map_assets": true,
           "is_boss": false,
-          "name": "",
+          "name": "baseball",
           "room_floor_color": [
-            0,
-            0,
-            0
+            138,
+            59,
+            52
           ],
           "room_tags": [],
           "spawn_groups": [
@@ -27352,18 +27352,18 @@
             }
           ],
           "trail_connection_sector": {
-            "direction_deg": 0.0,
-            "width_percent": 100
+            "direction_deg": 182.0,
+            "width_percent": 69
           },
           "width": {
-            "center": 20152,
-            "falloff": 6081,
-            "random": true,
-            "span": 11161,
+            "center": 18504,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
             "weights": {
-              "center": 0.5764558015461474,
-              "edge": 0.07071137900683308,
-              "falloff": 0.3528328194470195
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
             }
           }
         },
@@ -27380,7 +27380,7 @@
             }
           },
           "display_color": [
-            242,
+            147,
             242,
             85,
             255
@@ -27439,9 +27439,9 @@
             }
           },
           "display_color": [
-            79,
-            142,
-            224,
+            36,
+            242,
+            161,
             255
           ],
           "edge_smoothness": 4,
@@ -27498,9 +27498,9 @@
             }
           },
           "display_color": [
-            31,
             204,
             31,
+            158,
             255
           ],
           "edge_smoothness": 4,
@@ -27587,8 +27587,8 @@
             }
           },
           "display_color": [
-            123,
             31,
+            110,
             204,
             255
           ],
@@ -27651,9 +27651,9 @@
             }
           },
           "display_color": [
-            85,
+            36,
             242,
-            185,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -27734,11 +27734,11 @@
           }
         },
         "baseball": {
-          "camera_center_dx": 3099,
-          "camera_center_dz": -2935,
-          "camera_height_px": 564,
-          "camera_tilt_deg": 48.04841232299805,
-          "camera_zoom_percent": 26,
+          "camera_center_dx": -3672,
+          "camera_center_dz": 3671,
+          "camera_height_px": 1816,
+          "camera_tilt_deg": 48.41472625732422,
+          "camera_zoom_percent": 100,
           "curvyness": {
             "center": 2,
             "falloff": 0,
@@ -27751,9 +27751,9 @@
             }
           },
           "display_color": [
-            242,
-            107,
-            85,
+            104,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27823,15 +27823,15 @@
                 }
               ],
               "display_name": "vibble (Copy)",
-              "dx": -1524,
-              "dz": 1168,
+              "dx": 6072,
+              "dz": -3838,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
+              "origional_height": 12104,
               "origional_width": 18504,
               "position": "Exact",
               "priority": 1,
@@ -28072,9 +28072,9 @@
             }
           },
           "display_color": [
-            31,
-            93,
+            71,
             204,
+            104,
             255
           ],
           "edge_smoothness": 96,
@@ -28402,11 +28402,11 @@
       "schema_version": 1,
       "trails_data": {
         "basic": {
-          "camera_center_dx": -3379,
-          "camera_center_dz": 463,
-          "camera_height_px": 1158,
-          "camera_tilt_deg": 63.06760787963867,
-          "camera_zoom_percent": 0,
+          "camera_center_dx": -2702,
+          "camera_center_dz": 1550,
+          "camera_height_px": 1276,
+          "camera_tilt_deg": 71.4345932006836,
+          "camera_zoom_percent": 18,
           "curvyness": {
             "center": 10,
             "falloff": 0,
@@ -28439,6 +28439,7 @@
           },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
+          "inherits_map_assets": false,
           "is_boss": false,
           "name": "basic",
           "room_floor_color": [

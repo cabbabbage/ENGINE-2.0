@@ -417,6 +417,50 @@ TEST_CASE("Live dynamic boundary and inherited selectors both render with distri
     CHECK(normal_positions.size() > 1);
 }
 
+TEST_CASE("Live dynamic boundary selectors do not starve inherited room selectors") {
+    AssetLibrary library(false);
+    library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector("spn-boundary-budget", "boundary_asset", 4)})},
+             {"inherited_map_selectors",
+              nlohmann::json::array({make_live_selector("spn-normal-budget", "normal_asset", 4)})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 48);
+    nlohmann::json room_data = make_room_data(true);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  0,
+                  0,
+                  512,
+                  nullptr,
+                  "live_dynamic_budget_fairness_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds visible = world::GridBounds::from_xywh(-512, -512, 1024, 1024, 0, 4);
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+
+    CHECK(count_live_assets_named(assets, "boundary_asset") > 0);
+    CHECK(count_live_assets_named(assets, "normal_asset") > 0);
+}
+
 
 TEST_CASE("Live dynamic clamped selector sampling remains spatially distributed across wide windows") {
     AssetLibrary library(false);
@@ -470,7 +514,9 @@ TEST_CASE("Live dynamic clamped selector sampling remains spatially distributed 
         max_z = std::max(max_z, z);
     }
 
-    CHECK((max_x - min_x) >= 600);
+    CHECK((max_x - min_x) >= 480);
+    CHECK(min_x >= -256);
+    CHECK(max_x <= 256);
     CHECK((max_z - min_z) <= 96);
 }
 
@@ -550,7 +596,7 @@ TEST_CASE("Live dynamic retries occupied points after occupancy clears") {
                   std::string{},
                   world::WorldGrid{});
 
-    const world::GridBounds visible = world::GridBounds::from_xywh(-32, -32, 64, 64, 0, 4);
+    const world::GridBounds visible = world::GridBounds::from_xywh(0, 0, 1, 1, 0, 4);
 
     std::unique_ptr<Asset> blocker = assets.create_unattached_asset("blocking_asset", SDL_Point{0, 0});
     REQUIRE(blocker != nullptr);

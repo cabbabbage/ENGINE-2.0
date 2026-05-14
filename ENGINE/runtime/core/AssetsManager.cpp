@@ -3136,9 +3136,7 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
     };
 
     auto reconcile_selector = [&](const LiveDynamicSelector& selector) {
-        if (stats.candidate_points_considered >= kLiveDynamicMaxCandidatePointsPerFrame ||
-            stats.spawned >= kLiveDynamicMaxSpawnsPerFrame ||
-            live_dynamic_states_.size() >= kLiveDynamicMaxStates) {
+        if (live_dynamic_states_.size() >= kLiveDynamicMaxStates) {
             ++stats.budget_stops;
             stats.state_cap_reached = live_dynamic_states_.size() >= kLiveDynamicMaxStates;
             return;
@@ -3160,10 +3158,46 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             return;
         }
 
+        int selector_min_world_x = min_world_x;
+        int selector_min_world_z = min_world_z;
+        int selector_max_world_x = max_world_x;
+        int selector_max_world_z = max_world_z;
+        if (selector.mode == LiveDynamicMode::InheritedMap) {
+            bool has_inherited_scan_area = false;
+            for (Room* room : rooms()) {
+                if (!room || !room->room_area || !room->inherits_map_assets()) {
+                    continue;
+                }
+                auto [room_min_x, room_min_z, room_max_x, room_max_z] = room->room_area->get_bounds();
+                const int clipped_min_x = std::max(min_world_x, room_min_x);
+                const int clipped_min_z = std::max(min_world_z, room_min_z);
+                const int clipped_max_x = std::min(max_world_x, room_max_x);
+                const int clipped_max_z = std::min(max_world_z, room_max_z);
+                if (clipped_min_x > clipped_max_x || clipped_min_z > clipped_max_z) {
+                    continue;
+                }
+                if (!has_inherited_scan_area) {
+                    selector_min_world_x = clipped_min_x;
+                    selector_min_world_z = clipped_min_z;
+                    selector_max_world_x = clipped_max_x;
+                    selector_max_world_z = clipped_max_z;
+                    has_inherited_scan_area = true;
+                } else {
+                    selector_min_world_x = std::min(selector_min_world_x, clipped_min_x);
+                    selector_min_world_z = std::min(selector_min_world_z, clipped_min_z);
+                    selector_max_world_x = std::max(selector_max_world_x, clipped_max_x);
+                    selector_max_world_z = std::max(selector_max_world_z, clipped_max_z);
+                }
+            }
+            if (!has_inherited_scan_area) {
+                return;
+            }
+        }
+
         const SDL_Point min_index = vibble::grid::global_grid().world_to_index(
-            SDL_Point{min_world_x, min_world_z}, resolution);
+            SDL_Point{selector_min_world_x, selector_min_world_z}, resolution);
         const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
-            SDL_Point{max_world_x, max_world_z}, resolution);
+            SDL_Point{selector_max_world_x, selector_max_world_z}, resolution);
 
         std::int64_t scan_min_x = static_cast<std::int64_t>(std::min(min_index.x, max_index.x)) - 1;
         std::int64_t scan_max_x = static_cast<std::int64_t>(std::max(min_index.x, max_index.x)) + 1;
@@ -3211,7 +3245,8 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
         }
 
         std::uint64_t visited = 0;
-        bool stopped_by_budget = false;
+        std::size_t selector_candidate_points_considered = 0;
+        std::size_t selector_spawned = 0;
 
         live_dynamic_guard_log(
             std::string("[LiveDynamicSpawn] bounds frame=") + std::to_string(frame_id_) +
@@ -3224,10 +3259,9 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             " clamped=" + (clamped ? std::string("true") : std::string("false")));
 
         while (visited < sample_points_target) {
-            if (stats.candidate_points_considered >= kLiveDynamicMaxCandidatePointsPerFrame ||
-                stats.spawned >= kLiveDynamicMaxSpawnsPerFrame ||
+            if (selector_candidate_points_considered >= kLiveDynamicMaxCandidatePointsPerFrame ||
+                selector_spawned >= kLiveDynamicMaxSpawnsPerFrame ||
                 live_dynamic_states_.size() >= kLiveDynamicMaxStates) {
-                stopped_by_budget = true;
                 ++stats.budget_stops;
                 stats.state_cap_reached = live_dynamic_states_.size() >= kLiveDynamicMaxStates;
                 break;
@@ -3237,6 +3271,7 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             const int ix = static_cast<int>(scan_min_x + static_cast<std::int64_t>(linear % static_cast<std::uint64_t>(span_x)));
             const int iz = static_cast<int>(scan_min_z + static_cast<std::int64_t>(linear / static_cast<std::uint64_t>(span_x)));
             ++visited;
+            ++selector_candidate_points_considered;
             ++stats.candidate_points_considered;
 
             const LiveDynamicPointKey key{selector.mode, resolution, ix, iz, selector.spawn_id};
@@ -3285,6 +3320,7 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
                 const std::string owner_name = owner ? owner->room_name : map_id_;
                 state.asset = spawn_live_asset(selector, key, resolved_point.spawn_world_xz, *candidate, owner_name);
                 if (state.asset) {
+                    ++selector_spawned;
                     ++stats.spawned;
                 } else {
                     state.null_selection = true;

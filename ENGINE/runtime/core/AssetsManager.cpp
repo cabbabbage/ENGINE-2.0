@@ -3225,7 +3225,7 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
                     const int clipped_max_x = std::min(max_world_x, room_max_x);
                     const int clipped_max_z = std::min(max_world_z, room_max_z);
                     if (clipped_min_x > clipped_max_x || clipped_min_z > clipped_max_z) {
-                        continue;
+                        return;
                     }
                     if (!has_inherited_scan_area) {
                         selector_min_world_x = clipped_min_x;

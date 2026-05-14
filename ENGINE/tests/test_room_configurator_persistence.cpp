@@ -217,6 +217,28 @@ TEST_CASE("room configurator open Room pointer reloads each room json") {
     CHECK(output.value("inherits_live_dynamic_assets", false));
 }
 
+TEST_CASE("room configurator live room uses actual room name over copied template metadata") {
+    nlohmann::json input = nlohmann::json::object({
+        {"name", "baseball"},
+        {"room_name", "baseball"},
+        {"geometry", "Square"},
+        {"width", uniform_range(700, 900)},
+        {"height", uniform_range(1100, 1300)},
+        {"curvyness", flat_range(8)},
+        {"edge_smoothness", 44},
+    });
+
+    std::unique_ptr<Room> room = make_room(input, "Loot_Room");
+
+    RoomConfigurator configurator;
+    configurator.open(room.get());
+    const nlohmann::json output = configurator.build_json();
+
+    CHECK(configurator.current_header_text() == "Room: Loot_Room");
+    CHECK(output.value("name", std::string{}) == "Loot_Room");
+    CHECK_FALSE(output.contains("room_name"));
+}
+
 TEST_CASE("room configurator external trail template opens in trail context") {
     nlohmann::json input = nlohmann::json::object({
         {"name", "external_trail"},

@@ -184,75 +184,79 @@ void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& 
                               out_packet);
 }
 
-bool fill_sink_clipped_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& projected,
-                                              float u0,
-                                              float v0,
-                                              float u1,
-                                              float v1,
-                                              float sink_height_offset_px,
-                                              float target_width,
-                                              float target_height,
-                                              GpuSpriteDrawPacket& out_packet) {
-    if (!std::isfinite(sink_height_offset_px) || sink_height_offset_px >= 0.0f ||
-        projected.final_height_px <= 0) {
-        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, target_width, target_height, out_packet);
-        return true;
-    }
+bool clip_quad_against_v_threshold(const SDL_Vertex (&quad)[4],
+                                   float visible_v,
+                                   std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices,
+                                   std::array<int, render_sink::kMaxClippedIndices>& out_indices,
+                                   int& out_vertex_count,
+                                   int& out_index_count) {
+    out_vertices = {};
+    out_indices = {};
+    out_vertex_count = 0;
+    out_index_count = 0;
 
-    const float final_height = static_cast<float>(std::max(1, projected.final_height_px));
-    const float visible_v = std::clamp((final_height + sink_height_offset_px) / final_height, 0.0f, 1.0f);
-    if (visible_v <= 1.0e-4f) {
-        return false;
-    }
-
-    const SDL_FPoint sink_sample = projected.sample_screen_from_uv(SDL_FPoint{0.5f, visible_v});
-    if (!std::isfinite(sink_sample.y)) {
-        return false;
-    }
-
-    const auto make_vertex = [](const SDL_FPoint& point, float u, float v) {
-        SDL_Vertex vertex{};
-        vertex.position = point;
-        vertex.tex_coord = SDL_FPoint{u, v};
-        vertex.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
-        return vertex;
+    constexpr float kEpsilon = 1.0e-6f;
+    const auto inside = [visible_v](const SDL_Vertex& v) {
+        return v.tex_coord.y <= (visible_v + kEpsilon);
     };
-
-    SDL_Vertex quad[4]{
-        make_vertex(projected.screen_tl, u0, v0),
-        make_vertex(projected.screen_tr, u1, v0),
-        make_vertex(projected.screen_br, u1, v1),
-        make_vertex(projected.screen_bl, u0, v1),
-    };
-
-    const render_sink::ClipResult clipped =
-        render_sink::clip_quad_against_horizontal_sink_line(quad, sink_sample.y);
-    if (clipped.fully_clipped || !clipped.valid ||
-        clipped.vertex_count <= 0 ||
-        clipped.index_count <= 0) {
-        return false;
-    }
-
-    const auto to_gpu_vertex = [target_width, target_height](const SDL_Vertex& vertex) {
-        GpuSpriteVertex out{};
-        out.clip_x = to_clip_x(vertex.position.x, target_width);
-        out.clip_y = to_clip_y(vertex.position.y, target_height);
-        out.uv_x = vertex.tex_coord.x;
-        out.uv_y = vertex.tex_coord.y;
+    const auto interpolate = [visible_v](const SDL_Vertex& a, const SDL_Vertex& b) {
+        SDL_Vertex out{};
+        const float dv = b.tex_coord.y - a.tex_coord.y;
+        float t = 0.0f;
+        if (std::fabs(dv) > kEpsilon) {
+            t = std::clamp((visible_v - a.tex_coord.y) / dv, 0.0f, 1.0f);
+        }
+        out.position.x = a.position.x + (b.position.x - a.position.x) * t;
+        out.position.y = a.position.y + (b.position.y - a.position.y) * t;
+        out.tex_coord.x = a.tex_coord.x + (b.tex_coord.x - a.tex_coord.x) * t;
+        out.tex_coord.y = visible_v;
+        out.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
         return out;
     };
 
-    out_packet.vertices = {};
-    out_packet.indices = {};
-    for (int i = 0; i < clipped.vertex_count; ++i) {
-        out_packet.vertices[static_cast<std::size_t>(i)] = to_gpu_vertex(clipped.vertices[static_cast<std::size_t>(i)]);
+    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> poly{};
+    int poly_count = 0;
+    SDL_Vertex prev = quad[3];
+    bool prev_inside = inside(prev);
+    for (int i = 0; i < 4; ++i) {
+        const SDL_Vertex curr = quad[i];
+        const bool curr_inside = inside(curr);
+        if (curr_inside) {
+            if (!prev_inside && poly_count < static_cast<int>(poly.size())) {
+                poly[static_cast<std::size_t>(poly_count++)] = interpolate(prev, curr);
+            }
+            if (poly_count < static_cast<int>(poly.size())) {
+                poly[static_cast<std::size_t>(poly_count++)] = curr;
+            }
+        } else if (prev_inside) {
+            if (poly_count < static_cast<int>(poly.size())) {
+                poly[static_cast<std::size_t>(poly_count++)] = interpolate(prev, curr);
+            }
+        }
+        prev = curr;
+        prev_inside = curr_inside;
     }
-    for (int i = 0; i < clipped.index_count; ++i) {
-        out_packet.indices[static_cast<std::size_t>(i)] = clipped.indices[static_cast<std::size_t>(i)];
+
+    if (poly_count < 3) {
+        return false;
     }
-    out_packet.vertex_count = clipped.vertex_count;
-    out_packet.index_count = clipped.index_count;
-    return true;
+
+    out_vertex_count = poly_count;
+    for (int i = 0; i < poly_count; ++i) {
+        out_vertices[static_cast<std::size_t>(i)] = poly[static_cast<std::size_t>(i)];
+    }
+
+    int index_cursor = 0;
+    for (int i = 1; i + 1 < poly_count; ++i) {
+        if (index_cursor + 2 >= static_cast<int>(out_indices.size())) {
+            break;
+        }
+        out_indices[static_cast<std::size_t>(index_cursor++)] = 0;
+        out_indices[static_cast<std::size_t>(index_cursor++)] = i;
+        out_indices[static_cast<std::size_t>(index_cursor++)] = i + 1;
+    }
+    out_index_count = index_cursor;
+    return out_index_count >= 3;
 }
 
 bool tag_requests_floor_render_pass(const std::string& tag) {
@@ -773,15 +777,15 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         packet.is_floor_packet = false;
         packet.depth_layer = opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
         const bool packet_geometry_valid = object.sink_clip_enabled
-            ? fill_sink_clipped_sprite_packet_vertices(projected,
-                                                       u0,
-                                                       v0,
-                                                       u1,
-                                                       v1,
-                                                       object.sink_height_offset_px,
-                                                       output_w,
-                                                       output_h,
-                                                       packet)
+            ? opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(projected,
+                                                                                u0,
+                                                                                v0,
+                                                                                u1,
+                                                                                v1,
+                                                                                object.sink_height_offset_px,
+                                                                                target_width,
+                                                                                target_height,
+                                                                                packet)
             : (fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet), true);
         if (!packet_geometry_valid) {
             continue;
@@ -996,6 +1000,82 @@ void OpenGLRuntimeRenderer::packet_to_vertices(const GpuSpriteDrawPacket& packet
                                                std::uint32_t target_height,
                                                std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices) {
     fill_geometry_vertices(packet, target_width, target_height, out_vertices);
+}
+
+bool opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
+    const render_projection::ProjectedSpriteFrame& projected,
+    float u0,
+    float v0,
+    float u1,
+    float v1,
+    float sink_height_offset_px,
+    std::uint32_t target_width,
+    std::uint32_t target_height,
+    GpuSpriteDrawPacket& out_packet) {
+    const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
+    const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+
+    if (!std::isfinite(sink_height_offset_px) || sink_height_offset_px >= 0.0f ||
+        projected.final_height_px <= 0) {
+        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, out_packet);
+        return true;
+    }
+
+    const float final_height = static_cast<float>(std::max(1, projected.final_height_px));
+    const float visible_v = std::clamp((final_height + sink_height_offset_px) / final_height, 0.0f, 1.0f);
+    if (visible_v <= 1.0e-4f) {
+        return false;
+    }
+
+    const auto make_vertex = [](const SDL_FPoint& point, float u, float v) {
+        SDL_Vertex vertex{};
+        vertex.position = point;
+        vertex.tex_coord = SDL_FPoint{u, v};
+        vertex.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+        return vertex;
+    };
+
+    SDL_Vertex quad[4]{
+        make_vertex(projected.screen_tl, u0, v0),
+        make_vertex(projected.screen_tr, u1, v0),
+        make_vertex(projected.screen_br, u1, v1),
+        make_vertex(projected.screen_bl, u0, v1),
+    };
+
+    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> clipped_vertices{};
+    std::array<int, render_sink::kMaxClippedIndices> clipped_indices{};
+    int clipped_vertex_count = 0;
+    int clipped_index_count = 0;
+    if (!clip_quad_against_v_threshold(quad,
+                                       visible_v,
+                                       clipped_vertices,
+                                       clipped_indices,
+                                       clipped_vertex_count,
+                                       clipped_index_count)) {
+        return false;
+    }
+
+    const auto to_gpu_vertex = [output_w, output_h](const SDL_Vertex& vertex) {
+        GpuSpriteVertex out{};
+        out.clip_x = to_clip_x(vertex.position.x, output_w);
+        out.clip_y = to_clip_y(vertex.position.y, output_h);
+        out.uv_x = vertex.tex_coord.x;
+        out.uv_y = vertex.tex_coord.y;
+        return out;
+    };
+
+    out_packet.vertices = {};
+    out_packet.indices = {};
+    for (int i = 0; i < clipped_vertex_count; ++i) {
+        out_packet.vertices[static_cast<std::size_t>(i)] =
+            to_gpu_vertex(clipped_vertices[static_cast<std::size_t>(i)]);
+    }
+    for (int i = 0; i < clipped_index_count; ++i) {
+        out_packet.indices[static_cast<std::size_t>(i)] = clipped_indices[static_cast<std::size_t>(i)];
+    }
+    out_packet.vertex_count = clipped_vertex_count;
+    out_packet.index_count = clipped_index_count;
+    return true;
 }
 
 void OpenGLRuntimeRenderer::set_output_dimensions(int screen_width, int screen_height) {

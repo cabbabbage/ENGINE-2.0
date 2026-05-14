@@ -845,6 +845,9 @@ void Assets::migrate_live_dynamic_spawn_config() {
     if (map_info_json_.erase("candidate_selectors") > 0) {
         vibble::log::info("[LiveDynamicSpawn] Dropped deprecated top-level candidate_selectors.");
     }
+    // Canonical config uses one shared selector set:
+    // live_dynamic_spawns.boundary_area_selectors.
+    // inherited_map_selectors is deprecated and ignored at runtime.
     if (live.contains("inherited_map_selectors")) {
         live.erase("inherited_map_selectors");
         vibble::log::info("[LiveDynamicSpawn] Dropped deprecated live_dynamic_spawns.inherited_map_selectors.");
@@ -968,6 +971,8 @@ void Assets::rebuild_live_dynamic_selectors() {
     };
 
     append_section("boundary_area_selectors", LiveDynamicMode::BoundaryArea, live_dynamic_boundary_selectors_);
+    // Shared-candidates design: room/trail inherited sampling reuses the exact
+    // authored boundary selector set with only mode adjusted at runtime.
     live_dynamic_inherited_selectors_ = live_dynamic_boundary_selectors_;
     for (LiveDynamicSelector& selector : live_dynamic_inherited_selectors_) {
         selector.mode = LiveDynamicMode::InheritedMap;

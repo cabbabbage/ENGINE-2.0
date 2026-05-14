@@ -11,6 +11,7 @@
 #include <SDL3/SDL.h>
 
 #include "rendering/render/opengl_scene_frame_data.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
 
 class Assets;
 class Asset;
@@ -46,6 +47,15 @@ bool build_xy_sprite_draw_packets(const WarpedScreenGrid& camera,
                                   std::uint32_t target_height,
                                   std::vector<GpuSpriteDrawPacket>& out_xy_sprite_draws,
                                   std::string& out_error);
+bool build_sink_clipped_sprite_packet(const render_projection::ProjectedSpriteFrame& projected,
+                                      float u0,
+                                      float v0,
+                                      float u1,
+                                      float v1,
+                                      float sink_height_offset_px,
+                                      std::uint32_t target_width,
+                                      std::uint32_t target_height,
+                                      GpuSpriteDrawPacket& out_packet);
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset);
 const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
                                                                bool focus_filter_active,

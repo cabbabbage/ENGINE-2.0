@@ -227,8 +227,11 @@ TEST_CASE("Live dynamic assets reconcile into render-only state without persiste
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"boundary_area_selectors", nlohmann::json::array({make_live_selector("spn-boundary", "boundary_asset", 4)})},
-             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-normal", "normal_asset", 4)})}
+             {"boundary_area_selectors",
+              nlohmann::json::array({
+                  make_live_selector("spn-boundary", "boundary_asset", 4),
+                  make_live_selector("spn-normal", "normal_asset", 4)
+              })}
          })}
     });
 
@@ -275,7 +278,7 @@ TEST_CASE("Live dynamic assets reconcile into render-only state without persiste
     CHECK(assets.getLiveDynamicRenderAssets().empty());
 }
 
-TEST_CASE("Live dynamic inherited selectors render in trail areas and boundary selectors stay out") {
+TEST_CASE("Live dynamic shared selectors render tag candidates in trail areas") {
     AssetLibrary library(false);
     library.add_asset("grass_asset",
                       make_asset_metadata(std::string(asset_types::object),
@@ -287,8 +290,7 @@ TEST_CASE("Live dynamic inherited selectors render in trail areas and boundary s
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"boundary_area_selectors", nlohmann::json::array({make_live_selector("spn-boundary", "boundary_asset", 4)})},
-             {"inherited_map_selectors", nlohmann::json::array({make_live_tag_selector("spn-grass", "grass", 4)})}
+             {"boundary_area_selectors", nlohmann::json::array({make_live_tag_selector("spn-grass", "grass", 4)})}
          })}
     });
 
@@ -341,7 +343,7 @@ TEST_CASE("Live dynamic null selections reserve visible points without render as
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"inherited_map_selectors", nlohmann::json::array({make_null_live_selector("spn-null", 4)})}
+             {"boundary_area_selectors", nlohmann::json::array({make_null_live_selector("spn-null", 4)})}
          })}
     });
 
@@ -386,7 +388,7 @@ TEST_CASE("Live dynamic spawned assets preserve initialized world height and get
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-height", "normal_asset", 4)})}
+             {"boundary_area_selectors", nlohmann::json::array({make_live_selector("spn-height", "normal_asset", 4)})}
          })}
     });
 
@@ -432,7 +434,7 @@ TEST_CASE("Live dynamic jittered coordinates are deterministic across reconciles
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"inherited_map_selectors", nlohmann::json::array({selector})}
+             {"boundary_area_selectors", nlohmann::json::array({selector})}
          })}
     });
 
@@ -468,7 +470,7 @@ TEST_CASE("Live dynamic jittered coordinates are deterministic across reconciles
     CHECK(assets.test_live_dynamic_state_count() == first_state_count);
 }
 
-TEST_CASE("Live dynamic boundary and inherited selectors both render with distributed positions") {
+TEST_CASE("Live dynamic shared selector list renders boundary and room candidates with distributed positions") {
     AssetLibrary library(false);
     library.add_asset("boundary_asset", make_asset_metadata(std::string(asset_types::boundary)));
     library.add_asset("normal_asset", make_asset_metadata());
@@ -483,8 +485,7 @@ TEST_CASE("Live dynamic boundary and inherited selectors both render with distri
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"boundary_area_selectors", nlohmann::json::array({boundary_selector})},
-             {"inherited_map_selectors", nlohmann::json::array({inherited_selector})}
+             {"boundary_area_selectors", nlohmann::json::array({boundary_selector, inherited_selector})}
          })}
     });
 
@@ -532,7 +533,7 @@ TEST_CASE("Live dynamic spawned assets apply normal tilt and sink render metadat
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-tilt-sink", "tilted_sink_asset", 4)})}
+             {"boundary_area_selectors", nlohmann::json::array({make_live_selector("spn-tilt-sink", "tilted_sink_asset", 4)})}
          })}
     });
 
@@ -592,9 +593,10 @@ TEST_CASE("Live dynamic boundary selectors do not starve inherited room selector
         {"live_dynamic_spawns",
          nlohmann::json::object({
              {"boundary_area_selectors",
-              nlohmann::json::array({make_live_selector("spn-boundary-budget", "boundary_asset", 4)})},
-             {"inherited_map_selectors",
-              nlohmann::json::array({make_live_selector("spn-normal-budget", "normal_asset", 4)})}
+              nlohmann::json::array({
+                  make_live_selector("spn-boundary-budget", "boundary_asset", 4),
+                  make_live_selector("spn-normal-budget", "normal_asset", 4)
+              })}
          })}
     });
 
@@ -635,7 +637,7 @@ TEST_CASE("Live dynamic clamped selector sampling remains spatially distributed 
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-wide-clamped", "normal_asset", 4)})}
+             {"boundary_area_selectors", nlohmann::json::array({make_live_selector("spn-wide-clamped", "normal_asset", 4)})}
          })}
     });
 
@@ -736,7 +738,7 @@ TEST_CASE("Live dynamic retries occupied points after occupancy clears") {
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
-             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-retry-occupied", "normal_asset", 4)})}
+             {"boundary_area_selectors", nlohmann::json::array({make_live_selector("spn-retry-occupied", "normal_asset", 4)})}
          })}
     });
 

@@ -796,9 +796,6 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
         if (normalize_spawn_group_array(live_dynamic_spawns, "boundary_area_selectors", lookup)) {
             changed = true;
         }
-        if (normalize_spawn_group_array(live_dynamic_spawns, "inherited_map_selectors", lookup)) {
-            changed = true;
-        }
     }
 
     auto normalize_room_like_section = [&](const char* section_name) {
@@ -973,12 +970,12 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         if (!live.is_object()) {
             live = nlohmann::json::object();
         }
-        const bool missing_inherited =
-            !live.contains("inherited_map_selectors") ||
-            !live["inherited_map_selectors"].is_array() ||
-            live["inherited_map_selectors"].empty();
-        if (missing_inherited) {
-            live["inherited_map_selectors"] = map_manifest["candidate_selectors"];
+        const bool missing_boundary =
+            !live.contains("boundary_area_selectors") ||
+            !live["boundary_area_selectors"].is_array() ||
+            live["boundary_area_selectors"].empty();
+        if (missing_boundary) {
+            live["boundary_area_selectors"] = map_manifest["candidate_selectors"];
         }
         map_manifest.erase("candidate_selectors");
         changed = true;
@@ -1002,6 +999,15 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         }
         map_manifest.erase("map_boundary_data");
         changed = true;
+    }
+    if (map_manifest["live_dynamic_spawns"].is_object()) {
+        nlohmann::json& live = map_manifest["live_dynamic_spawns"];
+        // Canonical authored representation uses one shared selector source:
+        // live_dynamic_spawns.boundary_area_selectors.
+        // inherited_map_selectors is deprecated and removed during normalization.
+        if (live.erase("inherited_map_selectors") > 0) {
+            changed = true;
+        }
     }
 
     if (ensure_map_layers_settings_defaults(map_manifest)) {

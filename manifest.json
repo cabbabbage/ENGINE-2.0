@@ -119,11 +119,15 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 36.0
+        "scale_percentage": 66.0,
+        "size_variation": 0.0
       },
       "start": "default",
       "tags": [
@@ -133,11 +137,31 @@
         "small_surface_top"
       ],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "aluminum_pole_transparent_11549833983xjwlyimgun": {
       "anchor_point_child_candidates": [],
@@ -563,14 +587,14 @@
       "tilt_range_min_deg": -8,
       "weight_kg": 953.0,
       "y_position_range": {
-        "center": -10,
-        "falloff": 2,
+        "center": -1,
+        "falloff": 0,
         "random": true,
-        "span": 3,
+        "span": 1,
         "weights": {
-          "center": 0.6774193548387096,
+          "center": 0.7777777777777778,
           "edge": 0.0,
-          "falloff": 0.3225806451612903
+          "falloff": 0.2222222222222222
         }
       }
     },
@@ -20634,17 +20658,17 @@
               0.0
             ],
             [
-              -21,
+              -16,
               0,
-              -4,
+              23,
               0.0
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -41,
+            "dx": -36,
             "dy": 0,
-            "dz": 44.0
+            "dz": 71.0
           },
           "number_of_frames": 6,
           "on_end": "loop",
@@ -21118,10 +21142,14 @@
       "asset_name": "spider",
       "asset_type": "enemy",
       "attack_box_enabled": true,
+      "bounce_amount": 0,
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "min_distance_all": 0,
       "min_same_type_distance": 513,
       "movement_enabled": true,
@@ -21135,7 +21163,31 @@
       "starting_health": 200,
       "tags": [],
       "tillable": false,
-      "weight_kg": 4.0
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 4.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "stagecoach": {
       "animations": {
@@ -27422,9 +27474,9 @@
             }
           },
           "display_color": [
-            154,
-            242,
-            36,
+            204,
+            109,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27511,9 +27563,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            143,
+            135,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27570,9 +27622,9 @@
             }
           },
           "display_color": [
-            204,
-            31,
-            31,
+            36,
+            38,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27629,9 +27681,9 @@
             }
           },
           "display_color": [
-            204,
-            121,
-            31,
+            85,
+            242,
+            157,
             255
           ],
           "edge_smoothness": 4,
@@ -27718,9 +27770,9 @@
             }
           },
           "display_color": [
-            235,
             242,
-            36,
+            167,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27782,9 +27834,9 @@
             }
           },
           "display_color": [
-            96,
-            204,
-            71,
+            242,
+            36,
+            50,
             255
           ],
           "edge_smoothness": 70,
@@ -27865,10 +27917,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -3672,
-          "camera_center_dz": 3671,
-          "camera_height_px": 1816,
-          "camera_tilt_deg": 48.41472625732422,
+          "camera_center_dx": -1172,
+          "camera_center_dz": -1531,
+          "camera_height_px": 700,
+          "camera_tilt_deg": 30.015079498291016,
           "camera_zoom_percent": 100,
           "curvyness": {
             "center": 2,
@@ -27882,9 +27934,9 @@
             }
           },
           "display_color": [
-            85,
-            146,
+            180,
             242,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -28042,8 +28094,8 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -1982,
-              "dz": -311,
+              "dx": -2587,
+              "dz": -607,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -28119,6 +28171,66 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-d6eecb87c41e"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -3518,
+              "dz": -5709,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 18496,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 7,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-082b2e741f0c"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -359,
+              "dz": -5223,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 18496,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 8,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-ff9bd67553fd"
             }
           ],
           "trail_connection_sector": {
@@ -28202,9 +28314,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            109,
+            242,
+            85,
+            190,
             255
           ],
           "edge_smoothness": 96,

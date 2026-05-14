@@ -971,13 +971,12 @@ void Assets::rebuild_live_dynamic_selectors() {
         }
     };
 
+    // Shared dataset, mode-specific filtering:
+    // - boundary pass resolves candidates allowed for boundary mode
+    // - inherited pass resolves candidates allowed for room/trail inherited mode
+    // Both passes read the same authored boundary_area_selectors JSON.
     append_section("boundary_area_selectors", LiveDynamicMode::BoundaryArea, live_dynamic_boundary_selectors_);
-    // Shared-candidates design: room/trail inherited sampling reuses the exact
-    // authored boundary selector set with only mode adjusted at runtime.
-    live_dynamic_inherited_selectors_ = live_dynamic_boundary_selectors_;
-    for (LiveDynamicSelector& selector : live_dynamic_inherited_selectors_) {
-        selector.mode = LiveDynamicMode::InheritedMap;
-    }
+    append_section("boundary_area_selectors", LiveDynamicMode::InheritedMap, live_dynamic_inherited_selectors_);
     clear_live_dynamic_assets();
 }
 
@@ -3362,8 +3361,20 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             ++stats.visible_points;
             auto state_it = live_dynamic_states_.find(key);
             if (state_it != live_dynamic_states_.end()) {
-                ++stats.kept;
-                continue;
+                Asset* existing_asset = state_it->second.asset.get();
+                const AssetInfo* existing_info =
+                    (existing_asset && existing_asset->info) ? existing_asset->info.get() : nullptr;
+                if (existing_info && !live_dynamic_info_allowed(existing_info, key.mode)) {
+                    if (existing_asset) {
+                        existing_asset->dead = true;
+                        existing_asset->active = false;
+                    }
+                    live_dynamic_states_.erase(state_it);
+                    ++stats.despawned;
+                } else {
+                    ++stats.kept;
+                    continue;
+                }
             }
 
             if (static_point_occupied(resolved_point.spawn_world_xz, resolution) ||
@@ -3403,6 +3414,21 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
 
     for (auto it = live_dynamic_states_.begin(); it != live_dynamic_states_.end();) {
         const LiveDynamicPointKey& key = it->first;
+        if (it->second.asset && it->second.asset->info) {
+            const AssetInfo* info = it->second.asset->info.get();
+            if (info && !live_dynamic_info_allowed(info, key.mode)) {
+                if (stats.despawned >= kLiveDynamicMaxDespawnsPerFrame) {
+                    ++stats.budget_stops;
+                    break;
+                }
+                it->second.asset->dead = true;
+                it->second.asset->active = false;
+                it = live_dynamic_states_.erase(it);
+                ++stats.despawned;
+                continue;
+            }
+        }
+
         SDL_Point point_to_test = vibble::grid::global_grid().index_to_world(
             key.grid_x,
             key.grid_z,

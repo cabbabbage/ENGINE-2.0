@@ -27110,8 +27110,8 @@
         "boundary_min_visible_screen_ratio": 0.01100000087171793,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": false,
-        "dynamic_renderer_depth_efficiency_depth": 529.0,
+        "depth_of_field_enabled": true,
+        "dynamic_renderer_depth_efficiency_depth": 663.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
         "far_light_cap": 32.0,
         "far_light_depth_threshold": 4000.0,
@@ -27127,7 +27127,7 @@
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_min_visible_screen_ratio": 0.01100000087171793,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 6952.0,
+        "max_cull_depth": 6574.0,
         "mid_light_cap": 24.0,
         "mid_light_depth_threshold": 251.0,
         "min_visible_screen_ratio": 0.004000000189989805,
@@ -27162,59 +27162,6 @@
       },
       "live_dynamic_spawns": {
         "boundary_area_selectors": [
-          {
-            "candidates": [
-              {
-                "chance": 32,
-                "name": "null"
-              },
-              {
-                "chance": 43.2625,
-                "name": "grass_fps_2"
-              },
-              {
-                "chance": 32.2625,
-                "name": "grass_1_fps_2"
-              },
-              {
-                "chance": 139.013125,
-                "display_name": "#tree",
-                "name": "#tree",
-                "tag": true,
-                "tag_name": "tree"
-              },
-              {
-                "chance": 3.5506562500000003,
-                "display_name": "#flower",
-                "name": "#flower",
-                "tag": true,
-                "tag_name": "flower"
-              },
-              {
-                "chance": 0.5506562500000001,
-                "display_name": "#candle",
-                "name": "#candle",
-                "tag": true,
-                "tag_name": "candle"
-              }
-            ],
-            "display_name": "batch_map_boundary",
-            "enforce_spacing": false,
-            "execution_mode": "batch_grid",
-            "explicit_flip": false,
-            "force_flipped": false,
-            "grid_resolution": 5,
-            "jitter": 86,
-            "locked": false,
-            "max_number": 1,
-            "min_number": 1,
-            "position": "Random",
-            "priority": 0,
-            "resolution": 0,
-            "resolve_geometry_to_room_size": false,
-            "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-forrest-map_boundary"
-          },
           {
             "candidates": [
               {
@@ -27303,8 +27250,8 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            124,
             242,
+            101,
             36,
             255
           ],
@@ -27364,9 +27311,9 @@
         "NewRoom": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            39,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -27396,8 +27343,8 @@
           "curvyness": 2,
           "display_color": [
             242,
-            36,
-            224,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27426,9 +27373,9 @@
         "NewRoom2": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            42,
+            85,
+            242,
+            233,
             255
           ],
           "edge_smoothness": 4,
@@ -27492,9 +27439,9 @@
           "camera_zoom_percent": 40,
           "curvyness": 2,
           "display_color": [
-            207,
+            205,
+            36,
             242,
-            85,
             255
           ],
           "edge_smoothness": 70,
@@ -27564,9 +27511,9 @@
           "camera_zoom_percent": 26,
           "curvyness": 2,
           "display_color": [
-            85,
+            107,
             242,
-            205,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27856,9 +27803,9 @@
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            103,
+            204,
+            31,
+            56,
             255
           ],
           "edge_smoothness": 96,

@@ -5,6 +5,7 @@
 #include "utils/cache_manager.hpp"
 #include "utils/log.hpp"
 #include "utils/oval_anchor_math.hpp"
+#include "utils/weighted_range.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include <algorithm>
 #include <iomanip>
@@ -70,6 +71,8 @@ constexpr const char* kImpassableEnabledKey = "impassable_enabled";
 constexpr const char* kImpassableShapesKey = "impassable_shapes";
 constexpr const char* kFloorBoxesEnabledKey = "floor_boxes_enabled";
 constexpr const char* kFloorBoxesKey = "floor_boxes";
+constexpr const char* kTiltRangeKey = "tilt_range";
+constexpr const char* kYPositionRangeKey = "y_position_range";
 constexpr const char* kBoundaryTag = "boundary";
 constexpr const char* kFloorBoxCandidateKey = "candidate";
 constexpr const char* kFloorBoxCandidateCandidatesKey = "candidates";
@@ -623,6 +626,39 @@ std::optional<double> parse_number_like_json(const nlohmann::json& value) {
         }
     }
     return std::nullopt;
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_field(
+    const nlohmann::json& data,
+    const char* key,
+    const vibble::weighted_range::WeightedIntRange& fallback = vibble::weighted_range::make_flat(0)) {
+    if (!data.is_object() || !data.contains(key)) {
+        return fallback;
+    }
+    return vibble::weighted_range::from_json(data.at(key), fallback);
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(
+    const nlohmann::json& data,
+    const char* min_key,
+    const char* max_key,
+    const vibble::weighted_range::WeightedIntRange& fallback = vibble::weighted_range::make_flat(0)) {
+    if (!data.is_object()) {
+        return fallback;
+    }
+    const auto min_it = data.find(min_key);
+    const auto max_it = data.find(max_key);
+    if (min_it == data.end() && max_it == data.end()) {
+        return fallback;
+    }
+    const auto min_value = min_it != data.end() ? parse_number_like_json(*min_it) : std::nullopt;
+    const auto max_value = max_it != data.end() ? parse_number_like_json(*max_it) : std::nullopt;
+    if (min_value || max_value) {
+        const std::int64_t min_i = static_cast<std::int64_t>(std::llround(min_value.value_or(fallback.center)));
+        const std::int64_t max_i = static_cast<std::int64_t>(std::llround(max_value.value_or(min_i)));
+        return vibble::weighted_range::make_legacy_uniform(min_i, max_i);
+    }
+    return fallback;
 }
 
 std::string ensure_tag_prefix(std::string value) {
@@ -2446,20 +2482,12 @@ nlohmann::json AssetInfo::manifest_payload() const {
         }
         payload["weight_kg"] = weight_kg;
         payload["bounce_amount"] = bounce_amount;
-        int sanitized_tilt_min = clamp_tilt_degrees(tilt_range_min_deg);
-        int sanitized_tilt_max = clamp_tilt_degrees(tilt_range_max_deg);
-        if (sanitized_tilt_max < sanitized_tilt_min) {
-                std::swap(sanitized_tilt_min, sanitized_tilt_max);
-        }
-        payload["tilt_range_min_deg"] = sanitized_tilt_min;
-        payload["tilt_range_max_deg"] = sanitized_tilt_max;
-        int sanitized_y_min = clamp_y_position_value(y_pos_min);
-        int sanitized_y_max = clamp_y_position_value(y_pos_max);
-        if (sanitized_y_max < sanitized_y_min) {
-                std::swap(sanitized_y_min, sanitized_y_max);
-        }
-        payload["y_pos_min"] = sanitized_y_min;
-        payload["y_pos_max"] = sanitized_y_max;
+        payload[kTiltRangeKey] = vibble::weighted_range::to_json(tilt_range);
+        payload[kYPositionRangeKey] = vibble::weighted_range::to_json(y_position_range);
+        payload.erase("tilt_range_min_deg");
+        payload.erase("tilt_range_max_deg");
+        payload.erase("y_pos_min");
+        payload.erase("y_pos_max");
         payload[kAnchorPointChildCandidatesKey] = anchor_point_child_candidates_payload();
         payload.erase(kAnchorPointChildCandidatesLegacyKey);
         payload[kOvalAnchorMappingsKey] = oval_anchor_mappings_payload();
@@ -2603,15 +2631,6 @@ void AssetInfo::set_scale_percentage(float percent) {
         info_json_["size_settings"]["scale_percentage"] = percent;
 }
 
-void AssetInfo::set_size_variation_percentage(float percent) {
-        size_variation_percent = clamp_size_variation_percent(percent);
-        if (!info_json_.contains("size_settings") ||
-        !info_json_["size_settings"].is_object()) {
-                info_json_["size_settings"] = nlohmann::json::object();
-        }
-        info_json_["size_settings"]["size_variation"] = size_variation_percent;
-}
-
 void AssetInfo::set_weight_kg(float weight) {
         if (weight < 0.0f) {
                 weight = 0.0f;
@@ -2625,28 +2644,27 @@ void AssetInfo::set_bounce_amount(int amount) {
         info_json_["bounce_amount"] = bounce_amount;
 }
 
-void AssetInfo::set_tilt_range_degrees(int min_degrees, int max_degrees) {
-        int sanitized_min = clamp_tilt_degrees(min_degrees);
-        int sanitized_max = clamp_tilt_degrees(max_degrees);
-        if (sanitized_max < sanitized_min) {
-                std::swap(sanitized_min, sanitized_max);
+void AssetInfo::set_size_variation_range(const vibble::weighted_range::WeightedIntRange& range) {
+        size_variation_range = vibble::weighted_range::from_json(vibble::weighted_range::to_json(range), vibble::weighted_range::make_flat(0));
+        if (!info_json_.contains("size_settings") ||
+        !info_json_["size_settings"].is_object()) {
+                info_json_["size_settings"] = nlohmann::json::object();
         }
-        tilt_range_min_deg = sanitized_min;
-        tilt_range_max_deg = sanitized_max;
-        info_json_["tilt_range_min_deg"] = tilt_range_min_deg;
-        info_json_["tilt_range_max_deg"] = tilt_range_max_deg;
+        info_json_["size_settings"]["size_variation"] = vibble::weighted_range::to_json(size_variation_range);
 }
 
-void AssetInfo::set_y_position_range(int min_value, int max_value) {
-        int sanitized_min = clamp_y_position_value(min_value);
-        int sanitized_max = clamp_y_position_value(max_value);
-        if (sanitized_max < sanitized_min) {
-                std::swap(sanitized_min, sanitized_max);
-        }
-        y_pos_min = sanitized_min;
-        y_pos_max = sanitized_max;
-        info_json_["y_pos_min"] = y_pos_min;
-        info_json_["y_pos_max"] = y_pos_max;
+void AssetInfo::set_tilt_range(const vibble::weighted_range::WeightedIntRange& range) {
+        tilt_range = vibble::weighted_range::from_json(vibble::weighted_range::to_json(range), vibble::weighted_range::make_flat(0));
+        info_json_[kTiltRangeKey] = vibble::weighted_range::to_json(tilt_range);
+        info_json_.erase("tilt_range_min_deg");
+        info_json_.erase("tilt_range_max_deg");
+}
+
+void AssetInfo::set_y_position_range(const vibble::weighted_range::WeightedIntRange& range) {
+        y_position_range = vibble::weighted_range::from_json(vibble::weighted_range::to_json(range), vibble::weighted_range::make_flat(0));
+        info_json_[kYPositionRangeKey] = vibble::weighted_range::to_json(y_position_range);
+        info_json_.erase("y_pos_min");
+        info_json_.erase("y_pos_max");
 }
 
 void AssetInfo::set_scale_filter(bool smooth) {
@@ -3016,7 +3034,16 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
 
         const auto &ss = data.value("size_settings", nlohmann::json::object());
         scale_factor = ss.value("scale_percentage", 100.0f) / 100.0f;
-        size_variation_percent = clamp_size_variation_percent(ss.value("size_variation", 0.0f));
+        if (ss.contains("size_variation") && ss["size_variation"].is_object()) {
+                size_variation_range = vibble::weighted_range::from_json(ss["size_variation"],
+                                                                         vibble::weighted_range::make_flat(0));
+        } else if (ss.contains("size_variation")) {
+                const auto value = parse_number_like_json(ss["size_variation"]).value_or(0.0);
+                size_variation_range = vibble::weighted_range::make_flat(
+                    static_cast<std::int64_t>(std::llround(value)));
+        } else {
+                size_variation_range = vibble::weighted_range::make_flat(0);
+        }
         if (ss.contains("scale_filter")) {
                 std::string filter = ss.value("scale_filter", std::string{});
                 for (char& ch : filter) {
@@ -3044,52 +3071,22 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 } else {
                         bounce_amount = 0;
                 }
-                int tilt_min = 0;
-                int tilt_max = 0;
-                if (data.contains("tilt_range_min_deg")) {
-                        if (const auto parsed = parse_number_like_json(data["tilt_range_min_deg"])) {
-                                tilt_min = static_cast<int>(std::lround(*parsed));
-                        }
+                tilt_range = read_weighted_range_field(data, kTiltRangeKey);
+                if (!tilt_range.random && (!data.contains(kTiltRangeKey) || !data[kTiltRangeKey].is_object())) {
+                        tilt_range = read_weighted_range_legacy_pair(data,
+                                                                     "tilt_range_min_deg",
+                                                                     "tilt_range_max_deg");
                 }
-                if (data.contains("tilt_range_max_deg")) {
-                        if (const auto parsed = parse_number_like_json(data["tilt_range_max_deg"])) {
-                                tilt_max = static_cast<int>(std::lround(*parsed));
-                        }
+                y_position_range = read_weighted_range_field(data, kYPositionRangeKey);
+                if (!y_position_range.random && (!data.contains(kYPositionRangeKey) || !data[kYPositionRangeKey].is_object())) {
+                        y_position_range = read_weighted_range_legacy_pair(data, "y_pos_min", "y_pos_max");
                 }
-                tilt_min = clamp_tilt_degrees(tilt_min);
-                tilt_max = clamp_tilt_degrees(tilt_max);
-                if (tilt_max < tilt_min) {
-                        std::swap(tilt_min, tilt_max);
-                }
-                tilt_range_min_deg = tilt_min;
-                tilt_range_max_deg = tilt_max;
-                int y_min = 0;
-                int y_max = 0;
-                if (data.contains("y_pos_min")) {
-                        if (const auto parsed = parse_number_like_json(data["y_pos_min"])) {
-                                y_min = static_cast<int>(std::lround(*parsed));
-                        }
-                }
-                if (data.contains("y_pos_max")) {
-                        if (const auto parsed = parse_number_like_json(data["y_pos_max"])) {
-                                y_max = static_cast<int>(std::lround(*parsed));
-                        }
-                }
-                y_min = clamp_y_position_value(y_min);
-                y_max = clamp_y_position_value(y_max);
-                if (y_max < y_min) {
-                        std::swap(y_min, y_max);
-                }
-                y_pos_min = y_min;
-                y_pos_max = y_max;
         } catch (...) {
 
         }
         info_json_["bounce_amount"] = bounce_amount;
-        info_json_["tilt_range_min_deg"] = tilt_range_min_deg;
-        info_json_["tilt_range_max_deg"] = tilt_range_max_deg;
-        info_json_["y_pos_min"] = y_pos_min;
-        info_json_["y_pos_max"] = y_pos_max;
+        info_json_[kTiltRangeKey] = vibble::weighted_range::to_json(tilt_range);
+        info_json_[kYPositionRangeKey] = vibble::weighted_range::to_json(y_position_range);
 
         if (is_vibble_asset_name(name) && oval_anchor_mappings.empty()) {
                 const std::vector<std::string> vibble_mapping_names{

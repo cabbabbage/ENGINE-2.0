@@ -20,34 +20,44 @@ nlohmann::json uniform_range(int min_value, int max_value) {
     return vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(min_value, max_value));
 }
 
-std::unique_ptr<Room> make_trail_room(nlohmann::json data) {
+std::unique_ptr<Room> make_config_room(const std::string& type,
+                                       const std::string& name,
+                                       const std::string& data_section,
+                                       nlohmann::json data) {
     std::vector<SDL_Point> points{
         SDL_Point{0, 0},
         SDL_Point{100, 0},
         SDL_Point{100, 100},
         SDL_Point{0, 100},
     };
-    auto area = std::make_unique<Area>("trail_template", points, 3);
-    auto room_data = std::make_unique<nlohmann::json>(std::move(data));
+    Area area(name, points, 3);
     auto room = std::make_unique<Room>(
         Room::Point{0, 0},
-        "trail",
-        "trail_template",
+        type,
+        name,
         nullptr,
         "test_map",
         nullptr,
-        area.get(),
-        room_data.get(),
+        &area,
+        nullptr,
         MapGridSettings::defaults(),
         3000.0,
-        "trails_data",
+        data_section,
         nullptr,
         nullptr,
         std::string{},
         Room::ManifestWriter{},
         false);
-    room->assets_data() = *room_data;
+    room->assets_data() = std::move(data);
     return room;
+}
+
+std::unique_ptr<Room> make_room(nlohmann::json data, const std::string& name = "room_template") {
+    return make_config_room("room", name, "rooms_data", std::move(data));
+}
+
+std::unique_ptr<Room> make_trail_room(nlohmann::json data) {
+    return make_config_room("trail", "trail_template", "trails_data", std::move(data));
 }
 
 }  // namespace
@@ -172,3 +182,70 @@ TEST_CASE("room configurator trail roundtrip preserves independent height and om
     CHECK(output["custom_metadata"] == input["custom_metadata"]);
 }
 
+TEST_CASE("room configurator open Room pointer reloads each room json") {
+    nlohmann::json first_input = nlohmann::json::object({
+        {"name", "first"},
+        {"geometry", "Square"},
+        {"width", uniform_range(100, 200)},
+        {"height", uniform_range(300, 400)},
+        {"curvyness", flat_range(2)},
+        {"edge_smoothness", 5},
+    });
+    nlohmann::json second_input = nlohmann::json::object({
+        {"name", "second"},
+        {"geometry", "Square"},
+        {"width", uniform_range(700, 900)},
+        {"height", uniform_range(1100, 1300)},
+        {"curvyness", flat_range(8)},
+        {"edge_smoothness", 44},
+        {"inherits_live_dynamic_assets", true},
+    });
+
+    std::unique_ptr<Room> first = make_room(first_input, "first");
+    std::unique_ptr<Room> second = make_room(second_input, "second");
+
+    RoomConfigurator configurator;
+    configurator.open(first.get());
+    configurator.open(second.get());
+    const nlohmann::json output = configurator.build_json();
+
+    CHECK(output.value("name", std::string{}) == "second");
+    CHECK(output["width"] == second_input["width"]);
+    CHECK(output["height"] == second_input["height"]);
+    CHECK(output["curvyness"] == second_input["curvyness"]);
+    CHECK(output.value("edge_smoothness", 0) == 44);
+    CHECK(output.value("inherits_live_dynamic_assets", false));
+}
+
+TEST_CASE("room configurator external trail template opens in trail context") {
+    nlohmann::json input = nlohmann::json::object({
+        {"name", "external_trail"},
+        {"geometry", "Square"},
+        {"width", uniform_range(300, 500)},
+        {"height", uniform_range(90, 120)},
+        {"curvyness", flat_range(6)},
+        {"edge_smoothness", 17},
+        {"is_boss", true},
+        {"trail_connection_sector", nlohmann::json::object({{"direction_deg", 45.0}, {"width_percent", 25}})},
+        {"tags", nlohmann::json::object({{"include", nlohmann::json::array({"trail"})},
+                                         {"exclude", nlohmann::json::array({"blocked"})}})},
+    });
+
+    bool changed = false;
+    RoomConfigurator configurator;
+    configurator.set_room_metadata_only_mode(true);
+    configurator.open(input, true, [&changed]() { changed = true; });
+    const nlohmann::json output = configurator.build_json();
+
+    CHECK(changed);
+    CHECK(output["width"] == uniform_range(300, 500));
+    CHECK(output["height"] == uniform_range(90, 120));
+    CHECK(output["curvyness"] == flat_range(6));
+    CHECK(output.value("edge_smoothness", 0) == 17);
+    CHECK_FALSE(output.contains("trail_connection_sector"));
+    CHECK_FALSE(output.contains("is_boss"));
+    CHECK(output["tags"]["include"] == nlohmann::json::array({"trail"}));
+    CHECK(output["tags"]["exclude"] == nlohmann::json::array({"blocked"}));
+    CHECK_FALSE(input.contains("trail_connection_sector"));
+    CHECK_FALSE(input.contains("is_boss"));
+}

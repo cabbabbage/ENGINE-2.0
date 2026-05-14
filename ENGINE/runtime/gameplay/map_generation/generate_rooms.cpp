@@ -113,6 +113,36 @@ bool graph_reaches_all_non_trail(Room* spawn, const std::vector<Room*>& rooms) {
     return true;
 }
 
+int count_reachable_non_trail(Room* spawn, const std::vector<Room*>& rooms) {
+    if (!spawn) {
+        return 0;
+    }
+    std::unordered_set<Room*> seen;
+    std::queue<Room*> queue;
+    seen.insert(spawn);
+    queue.push(spawn);
+    while (!queue.empty()) {
+        Room* current = queue.front();
+        queue.pop();
+        if (!current) {
+            continue;
+        }
+        for (Room* next : current->connected_rooms) {
+            if (next && seen.insert(next).second) {
+                queue.push(next);
+            }
+        }
+    }
+
+    int count = 0;
+    for (Room* room : rooms) {
+        if (room && !is_trail_room(room) && seen.find(room) != seen.end()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 double bounds_radius_from_rooms(int center_x,
                                 int center_y,
                                 const std::vector<std::unique_ptr<Room>>& rooms,
@@ -293,6 +323,51 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
     struct ScratchBuild {
         std::vector<std::unique_ptr<Room>> rooms;
         std::vector<std::pair<Room*, Room*>> required_connections;
+    };
+
+    struct FallbackBuild {
+        ScratchBuild scratch;
+        TrailGenerationResult trail_result;
+        bool has = false;
+        int attempt_index = -1;
+        int required_successes = -1;
+        int reachable_non_trail = -1;
+        std::size_t trail_count = 0;
+    };
+
+    FallbackBuild best_fallback;
+
+    auto remember_fallback = [&](ScratchBuild&& scratch,
+                                 TrailGenerationResult&& trail_result,
+                                 int attempt_index,
+                                 int required_successes,
+                                 int reachable_non_trail) {
+        const std::size_t trail_count = trail_result.trail_rooms.size();
+        bool better = !best_fallback.has;
+        if (!better && required_successes != best_fallback.required_successes) {
+            better = required_successes > best_fallback.required_successes;
+        }
+        if (!better && reachable_non_trail != best_fallback.reachable_non_trail) {
+            better = reachable_non_trail > best_fallback.reachable_non_trail;
+        }
+        if (!better && trail_count != best_fallback.trail_count) {
+            better = trail_count > best_fallback.trail_count;
+        }
+        if (!better && scratch.rooms.size() != best_fallback.scratch.rooms.size()) {
+            better = scratch.rooms.size() > best_fallback.scratch.rooms.size();
+        }
+        if (!better) {
+            return;
+        }
+
+        trail_result.all_required_connected = false;
+        best_fallback.scratch = std::move(scratch);
+        best_fallback.trail_result = std::move(trail_result);
+        best_fallback.has = true;
+        best_fallback.attempt_index = attempt_index;
+        best_fallback.required_successes = required_successes;
+        best_fallback.reachable_non_trail = reachable_non_trail;
+        best_fallback.trail_count = trail_count;
     };
 
     auto make_scratch_room = [&](const std::string& name,
@@ -647,6 +722,14 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                 Room::ManifestWriter{});
         } catch (const std::exception& ex) {
             vibble::log::error(std::string("[GenerateRooms] Trail generation setup failed: ") + ex.what());
+            TrailGenerationResult empty_trails;
+            auto committed = commit_from_scratch(scratch, empty_trails);
+            if (!committed.empty()) {
+                vibble::log::warn(
+                    std::string("[GenerateRooms] Committed degraded room layout without trails after setup failure") +
+                    " rooms=" + std::to_string(committed.size()));
+                return committed;
+            }
             return empty_result;
         }
 
@@ -659,6 +742,11 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
             connectivity_refs.push_back(trail_ptr.get());
         }
 
+        const int reachable_non_trail = count_reachable_non_trail(scratch.rooms.front().get(), connectivity_refs);
+        const int required_successes = std::max(
+            0,
+            static_cast<int>(scratch.required_connections.size()) -
+                static_cast<int>(trail_result.required_failures.size()));
         const bool connected = trail_result.required_failures.empty() &&
                                graph_reaches_all_non_trail(scratch.rooms.front().get(), connectivity_refs);
         trail_result.all_required_connected = connected;
@@ -700,7 +788,31 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
             std::string("[GenerateRooms] Draft layout rejected") +
             " attempt=" + std::to_string(attempt + 1) +
             " connected=" + std::string(connected ? "true" : "false") +
+            " required_successes=" + std::to_string(required_successes) +
+            " reachable_non_trail=" + std::to_string(reachable_non_trail) +
             " attempt_ms=" + std::to_string(duration_ms(clock::now() - attempt_start)));
+
+        remember_fallback(std::move(scratch),
+                          std::move(trail_result),
+                          attempt,
+                          required_successes,
+                          reachable_non_trail);
+    }
+
+    if (best_fallback.has) {
+        auto committed = commit_from_scratch(best_fallback.scratch, best_fallback.trail_result);
+        if (!committed.empty()) {
+            const auto build_end = clock::now();
+            vibble::log::warn(
+                std::string("[GenerateRooms] Failed to produce a fully connected map after bounded layout attempts; committed degraded layout") +
+                " attempt=" + std::to_string(best_fallback.attempt_index + 1) +
+                " total_rooms=" + std::to_string(committed.size()) +
+                " required_successes=" + std::to_string(best_fallback.required_successes) +
+                " reachable_non_trail=" + std::to_string(best_fallback.reachable_non_trail) +
+                " trails=" + std::to_string(best_fallback.trail_count) +
+                " total_ms=" + std::to_string(duration_ms(build_end - build_start)));
+            return committed;
+        }
     }
 
     vibble::log::error("[GenerateRooms] Failed to produce a fully connected map after bounded layout attempts");

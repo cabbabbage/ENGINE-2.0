@@ -970,7 +970,7 @@ struct RoomConfigurator::State {
         if (!dest.is_object()) dest = nlohmann::json::object();
         dest["name"] = name;
         dest["geometry"] = geometry;
-        if (include_boss || has_boss_field) {
+        if (include_boss) {
             dest["is_boss"] = is_boss;
         } else {
             dest.erase("is_boss");
@@ -1059,7 +1059,7 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     copy_field("edge_smoothness");
     copy_field("curvyness");
     copy_field("curviness");
-    if (include_trail_connection_sector) {
+    if (include_trail_connection_sector || source.contains("trail_connection_sector")) {
         copy_field("trail_connection_sector");
     }
     copy_field("is_boss");

@@ -3273,9 +3273,6 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             if (static_point_occupied(resolved_point.spawn_world_xz, resolution) ||
                 live_point_occupied(key, resolved_point.spawn_world_xz)) {
                 ++stats.skipped_occupied;
-                LiveDynamicState state;
-                state.null_selection = true;
-                live_dynamic_states_.emplace(std::move(key), std::move(state));
                 continue;
             }
 

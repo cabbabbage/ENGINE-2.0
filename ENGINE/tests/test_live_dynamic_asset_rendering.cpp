@@ -515,3 +515,58 @@ TEST_CASE("Live dynamic boundary selectors use map-local center instead of world
     assets.test_reconcile_live_dynamic_assets_for_bounds(origin_window);
     CHECK(count_live_assets_named(assets, "boundary_asset") == 0);
 }
+
+TEST_CASE("Live dynamic retries occupied points after occupancy clears") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+    library.add_asset("blocking_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"inherited_map_selectors", nlohmann::json::array({make_live_selector("spn-retry-occupied", "normal_asset", 4)})}
+         })}
+    });
+
+    Area room_area = make_rect_area("Spawn", 48);
+    nlohmann::json room_data = make_room_data(true);
+    std::vector<std::unique_ptr<Room>> owned_rooms;
+    owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
+    auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
+
+    Assets assets(library,
+                  nullptr,
+                  world_context,
+                  800,
+                  600,
+                  0,
+                  0,
+                  256,
+                  nullptr,
+                  "live_dynamic_retry_occupied_test",
+                  manifest,
+                  std::string{},
+                  world::WorldGrid{});
+
+    const world::GridBounds visible = world::GridBounds::from_xywh(-32, -32, 64, 64, 0, 4);
+
+    std::unique_ptr<Asset> blocker = assets.create_unattached_asset("blocking_asset", SDL_Point{0, 0});
+    REQUIRE(blocker != nullptr);
+    Asset* blocker_raw = assets.attach_asset(std::move(blocker), 0, 4);
+    REQUIRE(blocker_raw != nullptr);
+
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+    const std::size_t occupied_state_count = assets.test_live_dynamic_state_count();
+    CHECK(count_live_assets_named(assets, "normal_asset") == 0);
+
+    std::unique_ptr<Asset> extracted = assets.extract_asset(blocker_raw);
+    REQUIRE(extracted != nullptr);
+    CHECK(extracted->dead == false);
+    CHECK(assets.world_grid().all_assets().empty());
+
+    assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
+    CHECK(count_live_assets_named(assets, "normal_asset") > 0);
+    CHECK(assets.test_live_dynamic_state_count() >= occupied_state_count);
+}

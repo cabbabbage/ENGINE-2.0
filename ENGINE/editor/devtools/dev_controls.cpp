@@ -982,8 +982,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                         std::cerr << "[DevControls] Cannot batch-save map: id empty\n";
                         return false;
                     }
-                    std::cerr << "[DevControls] Serializing rooms (spawn groups included) into map payload for '"
-                              << map_id << "'\n";
                     nlohmann::json payload = assets_->map_info_json();
                     bool ok = save_manager_.persist_map_entry(
                         map_id, std::move(payload), priority, "Map session",

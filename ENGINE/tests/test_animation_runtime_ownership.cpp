@@ -299,6 +299,38 @@ TEST_CASE("AnimationRuntime advances locked attack frames when playing tagged at
     CHECK(asset->current_frame->frame_index == 1);
 }
 
+TEST_CASE("committed auto attack loop finishes one cycle and releases follow-through") {
+    auto asset = make_attack_runtime_test_asset();
+    REQUIRE(asset != nullptr);
+    REQUIRE(asset->info != nullptr);
+
+    asset->info->animations["attack_right"].on_end_behavior = Animation::OnEndDirective::Loop;
+
+    AnimationRuntime runtime(asset.get(), nullptr);
+    AnimationUpdate updater(asset.get(), nullptr);
+    runtime.set_planner(&updater);
+
+    runtime.switch_to("attack_right");
+    animation_runtime::test_hooks::force_committed_attack_target(runtime, "player");
+    REQUIRE(asset->current_frame != nullptr);
+    CHECK(asset->current_frame->frame_index == 0);
+    CHECK(runtime.auto_attack_commitment_active());
+
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    REQUIRE(asset->current_frame != nullptr);
+    CHECK(asset->current_animation == "attack_right");
+    CHECK(asset->current_frame->frame_index == 1);
+    CHECK(runtime.auto_attack_commitment_active());
+
+    force_single_advance_tick(*asset);
+    CHECK(runtime.advance(asset->current_frame));
+    REQUIRE(asset->current_frame != nullptr);
+    CHECK(asset->current_animation == "default");
+    CHECK(asset->needs_target);
+    CHECK_FALSE(runtime.auto_attack_commitment_active());
+}
+
 TEST_CASE("AnimationUpdate defers auto_move planning during committed attack follow-through") {
     auto asset = make_attack_runtime_test_asset();
     REQUIRE(asset != nullptr);

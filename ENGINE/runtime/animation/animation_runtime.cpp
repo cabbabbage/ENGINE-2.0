@@ -190,6 +190,14 @@ int attack_facing_match_score(const std::vector<std::string>& animation_tags,
     return attack_facing_match_score_impl(animation_tags, animation_id, target_delta_x, deadzone_px);
 }
 
+void force_committed_attack_target(AnimationRuntime& runtime, std::string target_asset_id) {
+    runtime.committed_attack_target_asset_id_ = std::move(target_asset_id);
+    runtime.committed_attack_animation_id_ =
+        runtime.self_ ? runtime.self_->current_animation : std::string{};
+    runtime.committed_attack_last_dispatched_frame_index_ = -1;
+    runtime.committed_attack_last_payload_id_.clear();
+}
+
 }
 
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
@@ -530,6 +538,16 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     target->send_attack(attack);
     committed_attack_last_dispatched_frame_index_ = attack.source_frame_index;
     committed_attack_last_payload_id_ = attack.attack_payload_id;
+}
+
+void AnimationRuntime::refresh_runtime_frame_geometry() {
+    if (!self_) {
+        return;
+    }
+
+    self_->update_anchor_basis_if_needed();
+    self_->refresh_anchor_point_cache_from_frame();
+    self_->refresh_runtime_box_cache_from_frame();
 }
 
 bool AnimationRuntime::committed_attack_execution_active() const {
@@ -1020,6 +1038,27 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
         const Animation::OnEndDirective directive = anim->on_end_behavior;
         switch (directive) {
         case Animation::OnEndDirective::Loop: {
+            if (current_animation_is_attack() &&
+                committed_attack_target_asset_id_.has_value()) {
+                clear_attack_commitment();
+                switch_to(animation_update::detail::kDefaultAnimation,
+                          path_index_for(animation_update::detail::kDefaultAnimation));
+                if (self_) {
+                    self_->needs_target = true;
+                }
+                frame = self_->current_frame;
+                if (!frame) {
+                    return false;
+                }
+                it = self_->info->animations.find(self_->current_animation);
+                if (it == self_->info->animations.end()) {
+                    return false;
+                }
+                anim = &it->second;
+                path_index = path_index_for(self_->current_animation);
+                advanced_any = true;
+                break;
+            }
             frame = anim->get_first_frame(path_index);
             if (!frame) {
                 return false;
@@ -1063,9 +1102,15 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
             break;
         }
         case Animation::OnEndDirective::Default:
-        default:
+        default: {
+            const bool completed_committed_attack =
+                current_animation_is_attack() &&
+                committed_attack_target_asset_id_.has_value();
             switch_to(animation_update::detail::kDefaultAnimation,
                       path_index_for(animation_update::detail::kDefaultAnimation));
+            if (completed_committed_attack && self_) {
+                self_->needs_target = true;
+            }
             frame = self_->current_frame;
             if (!frame) {
                 return false;
@@ -1079,10 +1124,12 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
             advanced_any = true;
             break;
         }
+        }
     }
     if (advanced_any) {
         self_->mark_composite_dirty();
         self_->mark_anchors_dirty();
+        refresh_runtime_frame_geometry();
     }
     return true;
 }
@@ -1135,6 +1182,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     active_paths_[self_->current_animation] = path_index;
     self_->mark_composite_dirty();
     self_->mark_anchors_dirty();
+    refresh_runtime_frame_geometry();
 }
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {

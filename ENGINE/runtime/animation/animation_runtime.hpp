@@ -28,10 +28,15 @@ class Assets;
 class AnimationFrame;
 class Animation;
 class AnimationUpdate;
+class AnimationRuntime;
 
 class PathSanitizer;
 class GetBestPath;
 class MovementPlanExecutor;
+
+namespace animation_runtime::test_hooks {
+void force_committed_attack_target(AnimationRuntime& runtime, std::string target_asset_id);
+}
 
 class AnimationRuntime {
 public:
@@ -112,10 +117,14 @@ private:
     Asset* resolve_asset_by_stable_id(const std::string& stable_id) const;
     bool current_animation_is_attack() const;
     void dispatch_active_attack_payload();
+    void refresh_runtime_frame_geometry();
     void clear_attack_commitment();
 
 private:
     friend class MovementPlanExecutor;
+    friend void animation_runtime::test_hooks::force_committed_attack_target(
+        AnimationRuntime& runtime,
+        std::string target_asset_id);
 
     Asset*  self_         = nullptr;
     Assets* assets_owner_ = nullptr;

@@ -2252,6 +2252,604 @@ int DMRangeSlider::height() {
     return kBoxTopPadding + slider_value_height() + kLabelControlGap + kSliderControlHeight + kBoxBottomPadding;
 }
 
+namespace {
+constexpr int kWeightedRangeTopPadding = 8;
+constexpr int kWeightedRangeBottomPadding = 8;
+constexpr int kWeightedRangeHeaderHeight = 28;
+constexpr int kWeightedRangeCheckboxSize = 18;
+constexpr int kWeightedRangeCheckboxGap = 8;
+constexpr int kWeightedRangeHistogramTopGap = 10;
+constexpr int kWeightedRangeHistogramBottomGap = 12;
+constexpr int kWeightedRangeLineThickness = 2;
+constexpr int kWeightedRangeHandleSize = 12;
+constexpr int kWeightedRangeHandleHitSize = 18;
+constexpr int kWeightedRangeColumnPad = 18;
+constexpr int kWeightedRangeWeightTopPad = 22;
+constexpr int kWeightedRangeWeightBottomPad = 28;
+constexpr double kWeightedRangeWheelScaleUp = 1.12;
+constexpr double kWeightedRangeWheelScaleDown = 0.89;
+
+const char* weighted_range_column_label(int index) {
+    switch (index) {
+    case 0: return "Min";
+    case 1: return "Falloff";
+    case 2: return "Center";
+    case 3: return "Falloff";
+    case 4: return "Max";
+    default: return "";
+    }
+}
+}
+
+DMWeightedRangeWidget::DMWeightedRangeWidget(const std::string& label,
+                                             const vibble::weighted_range::WeightedIntRange& value)
+    : label_(label), value_(value) {
+    sanitize_value();
+    update_geometry();
+}
+
+void DMWeightedRangeWidget::set_rect(const SDL_Rect& r) {
+    rect_ = r;
+    update_geometry();
+}
+
+void DMWeightedRangeWidget::set_label(const std::string& label) {
+    label_ = label;
+    update_geometry();
+}
+
+void DMWeightedRangeWidget::set_value(const vibble::weighted_range::WeightedIntRange& value) {
+    value_ = value;
+    sanitize_value();
+    update_geometry();
+}
+
+void DMWeightedRangeWidget::set_on_value_changed(ValueChangedCallback callback) {
+    on_value_changed_ = std::move(callback);
+}
+
+void DMWeightedRangeWidget::set_tooltip_state(DMWidgetTooltipState* state) {
+    tooltip_state_ = state;
+}
+
+void DMWeightedRangeWidget::set_enabled(bool enabled) {
+    enabled_ = enabled;
+}
+
+int DMWeightedRangeWidget::height() {
+    return kWeightedRangeTopPadding + kWeightedRangeHeaderHeight + kWeightedRangeHistogramTopGap + 108 + kWeightedRangeHistogramBottomGap + kWeightedRangeBottomPadding;
+}
+
+int DMWeightedRangeWidget::preferred_height(int) const {
+    return height();
+}
+
+SDL_Rect DMWeightedRangeWidget::content_rect() const {
+    return content_rect_;
+}
+
+SDL_Rect DMWeightedRangeWidget::checkbox_rect() const {
+    return SDL_Rect{
+        rect_.x + 8,
+        rect_.y + 6,
+        kWeightedRangeCheckboxSize,
+        kWeightedRangeCheckboxSize,
+    };
+}
+
+SDL_Rect DMWeightedRangeWidget::histogram_rect() const {
+    const int header_bottom = rect_.y + kWeightedRangeTopPadding + kWeightedRangeHeaderHeight;
+    const int top = header_bottom + kWeightedRangeHistogramTopGap;
+    const int bottom = rect_.y + rect_.h - kWeightedRangeHistogramBottomGap;
+    return SDL_Rect{ rect_.x + 4, top, std::max(0, rect_.w - 8), std::max(0, bottom - top) };
+}
+
+SDL_Rect DMWeightedRangeWidget::column_label_rect(int index) const {
+    const SDL_Rect hist = histogram_rect();
+    const int pad = kWeightedRangeColumnPad;
+    const int usable = std::max(0, hist.w - (pad * 2));
+    const int x = hist.x + pad + ((usable * index) / 4);
+    const int y = hist.y + hist.h - 18;
+    return SDL_Rect{ x - 42, y, 84, 14 };
+}
+
+SDL_Rect DMWeightedRangeWidget::column_value_rect(int index) const {
+    const SDL_Rect hist = histogram_rect();
+    const int pad = kWeightedRangeColumnPad;
+    const int usable = std::max(0, hist.w - (pad * 2));
+    const int x = hist.x + pad + ((usable * index) / 4);
+    return SDL_Rect{ x - 42, hist.y + 2, 84, 14 };
+}
+
+SDL_Rect DMWeightedRangeWidget::histogram_line_rect(int index) const {
+    const SDL_Rect hist = histogram_rect();
+    const int pad = kWeightedRangeColumnPad;
+    const int usable = std::max(0, hist.w - (pad * 2));
+    const int x = hist.x + pad + ((usable * index) / 4);
+    const int top = hist.y + kWeightedRangeWeightTopPad;
+    const int bottom = hist.y + hist.h - kWeightedRangeWeightBottomPad;
+    return SDL_Rect{ x - 2, top, 4, std::max(0, bottom - top) };
+}
+
+SDL_Rect DMWeightedRangeWidget::histogram_handle_rect(int index) const {
+    const SDL_Rect line = histogram_line_rect(index);
+    const int handle_y = weight_y_for_value(display_weight_for_index(index));
+    return SDL_Rect{ line.x - (kWeightedRangeHandleHitSize - line.w) / 2,
+                     handle_y - kWeightedRangeHandleHitSize / 2,
+                     kWeightedRangeHandleHitSize,
+                     kWeightedRangeHandleHitSize };
+}
+
+void DMWeightedRangeWidget::update_geometry() {
+    content_rect_ = rect_;
+    const SDL_Rect hist = histogram_rect();
+    const int pad = kWeightedRangeColumnPad;
+    const int usable = std::max(0, hist.w - (pad * 2));
+    for (int i = 0; i < 5; ++i) {
+        const int x = hist.x + pad + ((usable * i) / 4);
+        columns_[i].x = x;
+        const int line_top = hist.y + kWeightedRangeWeightTopPad;
+        const int line_bottom = hist.y + hist.h - kWeightedRangeWeightBottomPad;
+        columns_[i].line = SDL_Rect{ x - 2, line_top, 4, std::max(0, line_bottom - line_top) };
+        const int weight_y = weight_y_for_value(display_weight_for_index(i));
+        columns_[i].weight_handle = SDL_Rect{ x - (kWeightedRangeHandleHitSize / 2),
+                                              weight_y - (kWeightedRangeHandleHitSize / 2),
+                                              kWeightedRangeHandleHitSize,
+                                              kWeightedRangeHandleHitSize };
+        columns_[i].value_hitbox = SDL_Rect{ x - 18, hist.y, 36, hist.h };
+    }
+}
+
+void DMWeightedRangeWidget::update_hover(SDL_Point point) {
+    hovered_ = SDL_PointInRect(&point, &rect_);
+    checkbox_hovered_ = SDL_PointInRect(&point, &checkbox_rect());
+    random_hovered_ = checkbox_hovered_;
+}
+
+double DMWeightedRangeWidget::display_weight_for_index(int index) const {
+    const vibble::weighted_range::WeightedRangeWeights weights = value_.weights;
+    switch (index) {
+    case 0:
+    case 4:
+        return weights.edge;
+    case 1:
+    case 3:
+        return weights.falloff;
+    case 2:
+    default:
+        return weights.center;
+    }
+}
+
+void DMWeightedRangeWidget::set_weight_for_index(int index, double weight) {
+    weight = std::clamp(weight, 0.0, kMaxRawWeight);
+    switch (index) {
+    case 0:
+    case 4:
+        value_.weights.edge = weight;
+        break;
+    case 1:
+    case 3:
+        value_.weights.falloff = weight;
+        break;
+    case 2:
+    default:
+        value_.weights.center = weight;
+        break;
+    }
+}
+
+std::string DMWeightedRangeWidget::format_value(std::int64_t value) const {
+    return std::to_string(value);
+}
+
+std::string DMWeightedRangeWidget::format_weight(double weight) const {
+    std::ostringstream out;
+    out.setf(std::ios::fixed);
+    out.precision(2);
+    out << weight;
+    return out.str();
+}
+
+int DMWeightedRangeWidget::weight_y_for_value(double weight) const {
+    const SDL_Rect hist = histogram_rect();
+    const int top = hist.y + kWeightedRangeWeightTopPad;
+    const int bottom = hist.y + hist.h - kWeightedRangeWeightBottomPad;
+    const int span = std::max(1, bottom - top);
+    const double normalized = std::clamp(weight, 0.0, 1.0);
+    const int y = bottom - static_cast<int>(std::lround(normalized * static_cast<double>(span)));
+    return std::clamp(y, top, bottom);
+}
+
+double DMWeightedRangeWidget::weight_for_y(int y) const {
+    const SDL_Rect hist = histogram_rect();
+    const int top = hist.y + kWeightedRangeWeightTopPad;
+    const int bottom = hist.y + hist.h - kWeightedRangeWeightBottomPad;
+    const int span = std::max(1, bottom - top);
+    const int clamped = std::clamp(y, top, bottom);
+    return static_cast<double>(bottom - clamped) / static_cast<double>(span);
+}
+
+int DMWeightedRangeWidget::line_index_for_point(SDL_Point point) const {
+    for (int i = 0; i < 5; ++i) {
+        if (SDL_PointInRect(&point, &histogram_line_rect(i))) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int DMWeightedRangeWidget::weight_index_for_point(SDL_Point point) const {
+    if (!value_.random) {
+        return -1;
+    }
+    for (int i = 0; i < 5; ++i) {
+        if (SDL_PointInRect(&point, &histogram_handle_rect(i))) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void DMWeightedRangeWidget::sanitize_value() {
+    value_ = vibble::weighted_range::from_json(vibble::weighted_range::to_json(value_),
+                                               vibble::weighted_range::make_flat(value_.center));
+}
+
+void DMWeightedRangeWidget::notify_value_changed() {
+    if (on_value_changed_) {
+        on_value_changed_(value_);
+    }
+}
+
+bool DMWeightedRangeWidget::toggle_random() {
+    if (!enabled_) {
+        return false;
+    }
+    if (value_.random) {
+        random_snapshot_ = value_;
+        has_random_snapshot_ = true;
+        value_.random = false;
+        value_.span = 0;
+        value_.falloff = 0;
+        value_.weights = vibble::weighted_range::WeightedRangeWeights{0.0, 0.0, 1.0};
+    } else {
+        if (has_random_snapshot_) {
+            value_ = random_snapshot_;
+        } else {
+            value_.random = true;
+            if (value_.span <= 0) {
+                value_.span = 1;
+            }
+            if (value_.falloff > value_.span) {
+                value_.falloff = value_.span;
+            }
+            value_.weights = vibble::weighted_range::WeightedRangeWeights{1.0, 1.0, 1.0};
+        }
+    }
+    sanitize_value();
+    update_geometry();
+    notify_value_changed();
+    return true;
+}
+
+bool DMWeightedRangeWidget::apply_wheel_delta(int wheel_y) {
+    if (!enabled_ || !value_.random) {
+        return false;
+    }
+    if (wheel_y == 0) {
+        return false;
+    }
+    const double factor = wheel_y > 0 ? kWeightedRangeWheelScaleDown : kWeightedRangeWheelScaleUp;
+    const std::int64_t old_span = value_.span;
+    const std::int64_t old_falloff = value_.falloff;
+    std::int64_t new_span = static_cast<std::int64_t>(std::llround(static_cast<double>(old_span) * factor));
+    std::int64_t new_falloff = static_cast<std::int64_t>(std::llround(static_cast<double>(old_falloff) * factor));
+    if (old_span == 0 && factor > 1.0) {
+        new_span = 1;
+    }
+    if (new_falloff > new_span) {
+        new_falloff = new_span;
+    }
+    if (new_span < 0) {
+        new_span = 0;
+    }
+    if (new_falloff < 0) {
+        new_falloff = 0;
+    }
+    if (new_span == value_.span && new_falloff == value_.falloff) {
+        return false;
+    }
+    value_.span = new_span;
+    value_.falloff = new_falloff;
+    sanitize_value();
+    update_geometry();
+    notify_value_changed();
+    return true;
+}
+
+bool DMWeightedRangeWidget::begin_drag(SDL_Point point) {
+    if (!enabled_) {
+        return false;
+    }
+    const int weight_idx = weight_index_for_point(point);
+    if (weight_idx >= 0) {
+        drag_mode_ = DragMode::WeightHandle;
+        drag_handle_index_ = weight_idx;
+        drag_start_x_ = point.x;
+        drag_start_y_ = point.y;
+        drag_start_value_ = value_;
+        dragging_ = true;
+        drag_started_ = true;
+        set_slider_scroll_capture(this, true);
+        return true;
+    }
+    const int line_idx = line_index_for_point(point);
+    if (line_idx < 0) {
+        return false;
+    }
+    if (!value_.random && line_idx != 2) {
+        return false;
+    }
+    drag_handle_index_ = line_idx;
+    drag_start_x_ = point.x;
+    drag_start_y_ = point.y;
+    drag_start_value_ = value_;
+    dragging_ = true;
+    drag_started_ = true;
+    set_slider_scroll_capture(this, true);
+    if (line_idx == 2) {
+        drag_mode_ = DragMode::CenterValue;
+    } else if (line_idx == 0 || line_idx == 4) {
+        drag_mode_ = DragMode::BoundaryValue;
+    } else {
+        drag_mode_ = DragMode::FalloffValue;
+    }
+    return true;
+}
+
+void DMWeightedRangeWidget::end_drag() {
+    dragging_ = false;
+    drag_started_ = false;
+    drag_mode_ = DragMode::None;
+    set_slider_scroll_capture(this, false);
+}
+
+bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
+    if (!dragging_ || !enabled_) {
+        return false;
+    }
+    const int dx = point.x - drag_start_x_;
+    const int dy = point.y - drag_start_y_;
+    bool changed = false;
+    const SDL_Rect hist = histogram_rect();
+    const std::int64_t scale_base = std::max<std::int64_t>(1, std::max<std::int64_t>(value_.span, value_.falloff));
+    const double units_per_pixel = std::max(1.0, static_cast<double>(scale_base) / std::max(1, hist.w / 2));
+    const std::int64_t delta_units = static_cast<std::int64_t>(std::llround(static_cast<double>(dx) * units_per_pixel));
+    switch (drag_mode_) {
+    case DragMode::CenterValue:
+        value_.center = drag_start_value_.center + delta_units;
+        changed = true;
+        break;
+    case DragMode::BoundaryValue:
+        if (drag_handle_index_ == 0) {
+            value_.span = std::max<std::int64_t>(0, drag_start_value_.span - delta_units);
+        } else {
+            value_.span = std::max<std::int64_t>(0, drag_start_value_.span + delta_units);
+        }
+        if (value_.falloff > value_.span) {
+            value_.falloff = value_.span;
+        }
+        changed = true;
+        break;
+    case DragMode::FalloffValue:
+        if (drag_handle_index_ == 1) {
+            value_.falloff = std::max<std::int64_t>(0, drag_start_value_.falloff - delta_units);
+        } else {
+            value_.falloff = std::max<std::int64_t>(0, drag_start_value_.falloff + delta_units);
+        }
+        if (value_.falloff > value_.span) {
+            value_.falloff = value_.span;
+        }
+        changed = true;
+        break;
+    case DragMode::WeightHandle: {
+        const SDL_Rect line = histogram_line_rect(drag_handle_index_);
+        const int top = line.y;
+        const int bottom = line.y + line.h;
+        const int adjusted_y = std::clamp(drag_start_y_ + dy, top, bottom);
+        const double raw = weight_for_y(adjusted_y);
+        const double clamped = std::clamp(raw, 0.0, 1.0);
+        set_weight_for_index(drag_handle_index_, clamped);
+        changed = true;
+        break;
+    }
+    case DragMode::None:
+    default:
+        break;
+    }
+    if (changed) {
+        sanitize_value();
+        update_geometry();
+        notify_value_changed();
+    }
+    return changed;
+}
+
+bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
+    if (tooltip_state_) {
+        DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state_);
+    }
+    bool used = false;
+    switch (e.type) {
+    case SDL_EVENT_MOUSE_MOTION: {
+        SDL_Point p{e.motion.x, e.motion.y};
+        update_hover(p);
+        set_slider_scroll_capture(this, hovered_ || dragging_);
+        if (dragging_) {
+            used = apply_drag_delta(p);
+        }
+        break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        if (e.button.button != SDL_BUTTON_LEFT) {
+            break;
+        }
+        SDL_Point p{e.button.x, e.button.y};
+        update_hover(p);
+        if (!SDL_PointInRect(&p, &rect_)) {
+            break;
+        }
+        if (SDL_PointInRect(&p, &checkbox_rect())) {
+            used = toggle_random();
+            break;
+        }
+        used = begin_drag(p);
+        break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        if (dragging_ && e.button.button == SDL_BUTTON_LEFT) {
+            end_drag();
+            used = true;
+        }
+        break;
+    case SDL_EVENT_MOUSE_WHEEL:
+        if (hovered_ || dragging_) {
+            used = apply_wheel_delta(e.wheel.y);
+        }
+        break;
+    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        hovered_ = false;
+        checkbox_hovered_ = false;
+        random_hovered_ = false;
+        if (dragging_) {
+            end_drag();
+        }
+        break;
+    default:
+        break;
+    }
+    return used;
+}
+
+void DMWeightedRangeWidget::draw_text(SDL_Renderer* r, const std::string& s, int x, int y) const {
+    const DMLabelStyle& style = DMStyles::Label();
+    DMFontCache::instance().draw_text(r, style, s, x, y);
+}
+
+void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
+    const SDL_Rect box = rect_;
+    const SDL_Color fill = enabled_ ? DMStyles::PanelHeader() : SDL_Color{32, 36, 46, 220};
+    const SDL_Color border = hovered_ ? DMStyles::HighlightColor() : DMStyles::Border();
+    dm_draw::DrawBeveledRect(r, box, DMStyles::CornerRadius(), DMStyles::BevelDepth(), fill, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+    dm_draw::DrawRoundedOutline(r, box, DMStyles::CornerRadius(), kControlOutlineThickness, border);
+
+    const SDL_Rect cb = checkbox_rect();
+    SDL_Color cb_fill = value_.random ? DMStyles::AccentColor() : DMStyles::ButtonBaseFill();
+    if (!enabled_) {
+        cb_fill.a = 160;
+    } else if (checkbox_hovered_) {
+        cb_fill = DMStyles::ButtonHoverFill();
+    }
+    SDL_SetRenderDrawColor(r, cb_fill.r, cb_fill.g, cb_fill.b, cb_fill.a);
+    sdl_render::FillRect(r, &cb);
+    SDL_SetRenderDrawColor(r, border.r, border.g, border.b, border.a);
+    sdl_render::Rect(r, &cb);
+    if (value_.random) {
+        SDL_Rect check_inner{ cb.x + 4, cb.y + 4, std::max(0, cb.w - 8), std::max(0, cb.h - 8) };
+        SDL_SetRenderDrawColor(r, DMStyles::AccentColor().r, DMStyles::AccentColor().g, DMStyles::AccentColor().b, 255);
+        sdl_render::FillRect(r, &check_inner);
+    }
+
+    const DMLabelStyle& label_style = DMStyles::Label();
+    const int label_x = cb.x + cb.w + kWeightedRangeCheckboxGap;
+    const int label_y = box.y + 6;
+    DMFontCache::instance().draw_text(r, label_style, std::string("Random"), label_x, label_y);
+    if (!label_.empty()) {
+        SDL_Point label_size = DMFontCache::instance().measure_text(label_style, label_);
+        const int title_x = std::max(box.x + 8, box.x + box.w - label_size.x - 8);
+        DMFontCache::instance().draw_text(r, label_style, label_, title_x, label_y);
+    }
+
+    const SDL_Rect hist = histogram_rect();
+    SDL_Color grid{76, 86, 110, 160};
+    SDL_SetRenderDrawColor(r, grid.r, grid.g, grid.b, grid.a);
+    sdl_render::Rect(r, &hist);
+
+    std::array<SDL_Point, 5> points{};
+    for (int i = 0; i < 5; ++i) {
+        if (!value_.random && i != 2) {
+            continue;
+        }
+        const SDL_Rect line = histogram_line_rect(i);
+        const double weight = value_.random ? display_weight_for_index(i) : (i == 2 ? 1.0 : 0.0);
+        const int handle_y = weight_y_for_value(weight);
+        points[i] = SDL_Point{ columns_[i].x, handle_y };
+
+        const SDL_Color line_col = (i == 2) ? DMStyles::AccentColor() : DMStyles::Border();
+        SDL_SetRenderDrawColor(r, line_col.r, line_col.g, line_col.b, line_col.a);
+        sdl_render::Rect(r, &line);
+
+        const SDL_Rect value_rect = column_value_rect(i);
+        const std::string value_text = format_value((i == 2) ? value_.center :
+                                                    (i == 0 ? value_.center - value_.span :
+                                                     (i == 1 ? value_.center - value_.falloff :
+                                                      (i == 3 ? value_.center + value_.falloff :
+                                                                value_.center + value_.span))));
+        SDL_Point value_size = DMFontCache::instance().measure_text(label_style, value_text);
+        draw_text(r, value_text, value_rect.x + (value_rect.w - value_size.x) / 2, value_rect.y);
+
+        const SDL_Rect label_rect = column_label_rect(i);
+        const std::string title = weighted_range_column_label(i);
+        SDL_Point title_size = DMFontCache::instance().measure_text(label_style, title);
+        draw_text(r, title, label_rect.x + (label_rect.w - title_size.x) / 2, label_rect.y);
+
+        if (value_.random || i == 2) {
+            SDL_Rect weight_box{ columns_[i].x - (kWeightedRangeHandleSize / 2),
+                                 handle_y - (kWeightedRangeHandleSize / 2),
+                                 kWeightedRangeHandleSize,
+                                 kWeightedRangeHandleSize };
+            const SDL_Color handle_fill = (i == 2) ? DMStyles::AccentColor() : DMStyles::HighlightColor();
+            SDL_SetRenderDrawColor(r, handle_fill.r, handle_fill.g, handle_fill.b, handle_fill.a);
+            sdl_render::FillRect(r, &weight_box);
+            SDL_SetRenderDrawColor(r, border.r, border.g, border.b, border.a);
+            sdl_render::Rect(r, &weight_box);
+            const std::string weight_text = format_weight(display_weight_for_index(i));
+            SDL_Point weight_size = DMFontCache::instance().measure_text(label_style, weight_text);
+            const int text_lo = hist.x;
+            const int text_hi = std::max(hist.x, hist.x + hist.w - weight_size.x);
+            const int text_x = std::clamp(weight_box.x + (weight_box.w - weight_size.x) / 2, text_lo, text_hi);
+            const int text_y = std::max(hist.y + 4, weight_box.y - weight_size.y - 2);
+            draw_text(r, weight_text, text_x, text_y);
+        }
+    }
+
+    if (value_.random) {
+        SDL_Color fill_col = DMStyles::AccentColor();
+        fill_col.a = 95;
+        const SDL_Rect hist_inner{ hist.x + 10, hist.y + kWeightedRangeWeightTopPad, hist.w - 20, hist.h - (kWeightedRangeWeightTopPad + kWeightedRangeWeightBottomPad) };
+        const int baseline = hist_inner.y + hist_inner.h - 1;
+        for (int i = 0; i < 5; ++i) {
+            const int x = points[i].x;
+            const int y = std::clamp(points[i].y, hist_inner.y, baseline);
+            SDL_Rect bar{ x - 4, y, 8, std::max(1, baseline - y) };
+            SDL_SetRenderDrawColor(r, fill_col.r, fill_col.g, fill_col.b, fill_col.a);
+            sdl_render::FillRect(r, &bar);
+        }
+    } else {
+        const int center_x = columns_[2].x;
+        SDL_Rect bar{ center_x - 4, points[2].y, 8, std::max(1, (hist.y + hist.h - kWeightedRangeWeightBottomPad) - points[2].y) };
+        SDL_Color fill_col = DMStyles::AccentColor();
+        fill_col.a = 110;
+        SDL_SetRenderDrawColor(r, fill_col.r, fill_col.g, fill_col.b, fill_col.a);
+        sdl_render::FillRect(r, &bar);
+    }
+
+    if (tooltip_state_) {
+        DMWidgetTooltipRender(r, rect_, *tooltip_state_);
+    }
+}
+
 DMDropdown::DMDropdown(const std::string& label, const std::vector<std::string>& options, int idx)
     : label_(label), options_(options), index_(idx) {
     set_selected(idx);

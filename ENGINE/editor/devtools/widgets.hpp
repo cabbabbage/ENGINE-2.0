@@ -389,7 +389,7 @@ private:
     SDL_Rect histogram_handle_rect(int index) const;
     int line_index_for_point(SDL_Point point) const;
     int weight_index_for_point(SDL_Point point) const;
-    int value_for_weight_y(int index, int y) const;
+    double weight_for_y(int y) const;
     int weight_y_for_value(double weight) const;
     void draw_text(SDL_Renderer* r, const std::string& s, int x, int y) const;
 

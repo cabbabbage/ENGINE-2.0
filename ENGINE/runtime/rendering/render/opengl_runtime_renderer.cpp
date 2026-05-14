@@ -798,7 +798,6 @@ std::vector<world::Chunk*> OpenGLRuntimeRenderer::runtime_floor_chunks() const {
         if (active_has_tiles) {
             return std::vector<world::Chunk*>(active_chunks.begin(), active_chunks.end());
         }
-        vibble::log::warn("[OpenGLRuntimeRenderer] Active chunk set had no floor tiles; falling back to all world chunks.");
     }
     return assets_->world_grid().all_chunks();
 }

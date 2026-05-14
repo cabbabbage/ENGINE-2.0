@@ -3903,17 +3903,11 @@ void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
     struct LabelInfo {
         Room* room = nullptr;
         SDL_FPoint desired_center{0.0f, 0.0f};
-        float priority = 0.0f;
+        bool is_current_room = false;
     };
 
     std::vector<LabelInfo> render_queue;
     render_queue.reserve(rooms.size());
-
-    const float bounds_center_x =
-        static_cast<float>(active_label_bounds_.x) + static_cast<float>(active_label_bounds_.w) * 0.5f;
-    const float bounds_center_y =
-        static_cast<float>(active_label_bounds_.y) + static_cast<float>(active_label_bounds_.h) * 0.5f;
-    SDL_FPoint screen_center{bounds_center_x, bounds_center_y};
 
     WarpedScreenGrid& view = assets_->getView();
 
@@ -3922,21 +3916,20 @@ void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
 
         SDL_Point center = room->room_area->get_center();
         SDL_FPoint screen_pt = view.map_to_screen(center);
-        SDL_FPoint desired_center{screen_pt.x,
-                                  screen_pt.y - kLabelVerticalOffset};
-
-        float dx = desired_center.x - screen_center.x;
-        float dy = desired_center.y - screen_center.y;
-        float dist2 = dx * dx + dy * dy;
-
-        render_queue.push_back(LabelInfo{room, desired_center, dist2});
+        SDL_FPoint desired_center{screen_pt.x, screen_pt.y};
+        render_queue.push_back(LabelInfo{room, desired_center, room == current_room_});
     }
 
-    std::sort(render_queue.begin(), render_queue.end(), [](const LabelInfo& a, const LabelInfo& b) {
-        if (a.priority == b.priority) {
-            return a.room < b.room;
+    std::stable_sort(render_queue.begin(), render_queue.end(), [](const LabelInfo& a, const LabelInfo& b) {
+        if (a.is_current_room != b.is_current_room) {
+            return !a.is_current_room && b.is_current_room;
         }
-        return a.priority < b.priority;
+        const std::string a_name = a.room ? a.room->room_name : std::string{};
+        const std::string b_name = b.room ? b.room->room_name : std::string{};
+        if (a_name != b_name) {
+            return a_name < b_name;
+        }
+        return a.room < b.room;
     });
 
     for (const auto& info : render_queue) {
@@ -4094,46 +4087,16 @@ SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint de
     const float min_y = static_cast<float>(bounds.y) + half_h;
     const float max_y = static_cast<float>(bounds.y + bounds.h) - half_h;
 
-    auto clamp_center = [&](const SDL_FPoint& point) {
-        SDL_FPoint clamped = point;
-        clamped.x = std::clamp(clamped.x, min_x, max_x);
-        clamped.y = std::clamp(clamped.y, min_y, max_y);
-        return clamped;
-};
-
-    SDL_FPoint center = clamp_center(desired_center);
-
-    const bool inside = desired_center.x >= min_x && desired_center.x <= max_x &&
-                        desired_center.y >= min_y && desired_center.y <= max_y;
-
-    if (!inside) {
-        SDL_FPoint screen_center{static_cast<float>(bounds.x) + static_cast<float>(bounds.w) * 0.5f,
-                                 static_cast<float>(bounds.y) + static_cast<float>(bounds.h) * 0.5f};
-        const float dx = desired_center.x - screen_center.x;
-        const float dy = desired_center.y - screen_center.y;
-        const float epsilon = 0.0001f;
-
-        if (std::fabs(dx) > epsilon || std::fabs(dy) > epsilon) {
-            float t_min = 1.0f;
-
-            auto update_t = [&](float boundary, float origin, float delta) {
-                if (std::fabs(delta) < epsilon) return;
-                float t = (boundary - origin) / delta;
-                if (t >= 0.0f) {
-                    t_min = std::min(t_min, t);
-                }
-};
-
-            if (dx > 0.0f) update_t(max_x, screen_center.x, dx);
-            else if (dx < 0.0f) update_t(min_x, screen_center.x, dx);
-
-            if (dy > 0.0f) update_t(max_y, screen_center.y, dy);
-            else if (dy < 0.0f) update_t(min_y, screen_center.y, dy);
-
-            center.x = screen_center.x + dx * t_min;
-            center.y = screen_center.y + dy * t_min;
-            center = clamp_center(center);
-        }
+    SDL_FPoint center = desired_center;
+    if (max_x >= min_x) {
+        center.x = std::clamp(center.x, min_x, max_x);
+    } else {
+        center.x = static_cast<float>(bounds.x) + static_cast<float>(bounds.w) * 0.5f;
+    }
+    if (max_y >= min_y) {
+        center.y = std::clamp(center.y, min_y, max_y);
+    } else {
+        center.y = static_cast<float>(bounds.y) + static_cast<float>(bounds.h) * 0.5f;
     }
 
     rect.x = static_cast<int>(std::lround(center.x - half_w));
@@ -4418,20 +4381,63 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         render_room_trail_nav_buttons(renderer);
     }
 
-    if (renderer) {
+    if (renderer && assets_) {
+        const std::vector<Room*>& rooms = assets_->rooms();
+        auto render_room_overlay = [&](Room* room, bool selected, bool dimmed) {
+            if (!room || !room->room_area) {
+                return;
+            }
+
+            SDL_Color base_color = room->display_color();
+            auto style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
+
+            if (geometry_room_is_trail(room)) {
+                style.fill.a = 34;
+                style.outline.a = 170;
+                style.center.a = 180;
+                style.glow.a = 80;
+            } else {
+                style.fill.a = 52;
+                style.outline.a = 190;
+                style.center.a = 200;
+                style.glow.a = 100;
+            }
+
+            if (dimmed) {
+                style.fill.a = static_cast<Uint8>(std::max(18, static_cast<int>(style.fill.a) - 16));
+                style.outline.a = static_cast<Uint8>(std::max(120, static_cast<int>(style.outline.a) - 24));
+                style.center.a = static_cast<Uint8>(std::max(140, static_cast<int>(style.center.a) - 28));
+                style.glow.a = static_cast<Uint8>(std::max(48, static_cast<int>(style.glow.a) - 24));
+            }
+
+            if (selected) {
+                const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
+                style = dm_draw::ResolveRoomBoundsOverlayStyle(accent_hover);
+                SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
+                accent_fill.a = 110;
+                style.fill = accent_fill;
+                style.outline = DMStyles::AccentButton().border;
+                style.center = DMStyles::HighlightColor();
+                style.center.a = 235;
+                SDL_Color accent_glow = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.35f);
+                accent_glow.a = 140;
+                style.glow = accent_glow;
+            }
+
+            dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *room->room_area, style);
+        };
+
+        for (Room* room : rooms) {
+            if (!room || !room->room_area) {
+                continue;
+            }
+            if (room == current_room_) {
+                continue;
+            }
+            render_room_overlay(room, false, true);
+        }
         if (current_room_ && current_room_->room_area) {
-            const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
-            auto style = dm_draw::ResolveRoomBoundsOverlayStyle(accent_hover);
-            SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
-            accent_fill.a = 110;
-            style.fill = accent_fill;
-            style.outline = DMStyles::AccentButton().border;
-            style.center = DMStyles::HighlightColor();
-            style.center.a = 235;
-            SDL_Color accent_glow = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.35f);
-            accent_glow.a = 140;
-            style.glow = accent_glow;
-            dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *current_room_->room_area, style);
+            render_room_overlay(current_room_, true, false);
         }
     }
 

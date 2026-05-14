@@ -17848,6 +17848,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -17860,7 +17861,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -17868,10 +17870,14 @@
       "asset_name": "grass_1_fps_2",
       "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -17884,7 +17890,31 @@
         "grass"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "grass_fps_2": {
       "anchor_point_child_candidates": [],
@@ -27231,7 +27261,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 11057.23876019687,
+          "bounding_extent": 9252.0,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -27254,7 +27284,7 @@
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 23115.0,
+          "ring_radius": 21310.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -27290,9 +27320,9 @@
             }
           },
           "display_color": [
-            242,
             36,
-            234,
+            242,
+            188,
             255
           ],
           "edge_smoothness": 101,
@@ -27379,9 +27409,9 @@
             }
           },
           "display_color": [
-            31,
             204,
-            146,
+            71,
+            138,
             255
           ],
           "edge_smoothness": 4,
@@ -27438,9 +27468,9 @@
             }
           },
           "display_color": [
-            204,
+            142,
             31,
-            133,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27497,9 +27527,9 @@
             }
           },
           "display_color": [
-            149,
-            36,
+            85,
             242,
+            103,
             255
           ],
           "edge_smoothness": 4,
@@ -27586,9 +27616,9 @@
             }
           },
           "display_color": [
-            91,
-            242,
             85,
+            191,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -27650,9 +27680,9 @@
             }
           },
           "display_color": [
-            34,
-            170,
-            224,
+            204,
+            116,
+            31,
             255
           ],
           "edge_smoothness": 70,
@@ -27750,9 +27780,9 @@
             }
           },
           "display_color": [
-            224,
-            182,
-            34,
+            31,
+            146,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -28070,9 +28100,9 @@
             }
           },
           "display_color": [
-            242,
+            178,
             85,
-            173,
+            242,
             255
           ],
           "edge_smoothness": 96,

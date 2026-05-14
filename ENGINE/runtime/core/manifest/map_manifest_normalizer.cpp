@@ -277,7 +277,21 @@ bool normalize_room_config_entry(nlohmann::json& entry, const std::string& key_n
         }
     };
     normalize_bool("is_boss", false);
-    normalize_bool("inherits_map_assets", false);
+    const bool inherits_live_dynamic =
+        entry.contains("inherits_live_dynamic_assets") && entry["inherits_live_dynamic_assets"].is_boolean()
+            ? entry["inherits_live_dynamic_assets"].get<bool>()
+            : (entry.contains("inherits_map_assets") && entry["inherits_map_assets"].is_boolean()
+                ? entry["inherits_map_assets"].get<bool>()
+                : false);
+    if (!entry.contains("inherits_live_dynamic_assets") ||
+        !entry["inherits_live_dynamic_assets"].is_boolean() ||
+        entry["inherits_live_dynamic_assets"].get<bool>() != inherits_live_dynamic) {
+        entry["inherits_live_dynamic_assets"] = inherits_live_dynamic;
+        changed = true;
+    }
+    if (entry.erase("inherits_map_assets") > 0) {
+        changed = true;
+    }
     normalize_bool("inherit_map_floor_color", true);
     if (entry.erase("is_spawn") > 0) {
         changed = true;
@@ -402,7 +416,7 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["max_height"] = diameter;
     entry["edge_smoothness"] = 2;
     entry["is_boss"] = false;
-    entry["inherits_map_assets"] = false;
+    entry["inherits_live_dynamic_assets"] = false;
     entry["inherit_map_floor_color"] = true;
     entry["room_floor_color"] = nlohmann::json::array({0, 0, 0});
     entry["spawn_groups"] = nlohmann::json::array();
@@ -773,12 +787,12 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
         changed = true;
     }
 
-    if (map_manifest.contains("map_boundary_data") && map_manifest["map_boundary_data"].is_object()) {
-        nlohmann::json& map_boundary_data = map_manifest["map_boundary_data"];
-        if (normalize_spawn_group_array(map_boundary_data, "candidate_selectors", lookup)) {
+    if (map_manifest.contains("live_dynamic_spawns") && map_manifest["live_dynamic_spawns"].is_object()) {
+        nlohmann::json& live_dynamic_spawns = map_manifest["live_dynamic_spawns"];
+        if (normalize_spawn_group_array(live_dynamic_spawns, "boundary_area_selectors", lookup)) {
             changed = true;
         }
-        if (normalize_spawn_group_array(map_boundary_data, "spawn_groups", lookup)) {
+        if (normalize_spawn_group_array(live_dynamic_spawns, "inherited_map_selectors", lookup)) {
             changed = true;
         }
     }
@@ -829,9 +843,8 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     layer["rooms"] = nlohmann::json::array({spawn_spec});
     map_info["map_layers"] = nlohmann::json::array({layer});
 
-    map_info["map_boundary_data"] = nlohmann::json::object({
-        {"inherits_map_assets", false},
-        {"candidate_selectors",
+    map_info["live_dynamic_spawns"] = nlohmann::json::object({
+        {"boundary_area_selectors",
          nlohmann::json::array({make_batch_spawn_group(map_name, "map_boundary", "batch_map_boundary")})}
     });
     map_info["trails_data"] = nlohmann::json::object({
@@ -840,7 +853,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"display_color", nlohmann::json::array({85, 242, 143, 255})},
             {"edge_smoothness", 2},
             {"geometry", "Line"},
-            {"inherits_map_assets", false},
+            {"inherits_live_dynamic_assets", false},
             {"is_boss", false},
             {"min_width", 400},
             {"max_width", 800},
@@ -862,7 +875,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_room["edge_smoothness"] = 2;
     spawn_room["curvyness"] = 2;
     spawn_room["is_boss"] = false;
-    spawn_room["inherits_map_assets"] = true;
+    spawn_room["inherits_live_dynamic_assets"] = true;
     spawn_room["trail_connection_sector"] = nlohmann::json::object({
         {"direction_deg", kDefaultTrailSectorDirectionDeg},
         {"width_percent", kDefaultTrailSectorWidthPercent},
@@ -942,7 +955,7 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     }
 
     const std::array<const char*, 3> object_sections{
-        "map_boundary_data",
+        "live_dynamic_spawns",
         "rooms_data",
         "trails_data"
     };
@@ -952,6 +965,41 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         }
     }
     if (map_manifest.erase("map_assets_data") > 0) {
+        changed = true;
+    }
+    if (map_manifest.contains("candidate_selectors") && map_manifest["candidate_selectors"].is_array()) {
+        nlohmann::json& live = map_manifest["live_dynamic_spawns"];
+        if (!live.is_object()) {
+            live = nlohmann::json::object();
+        }
+        const bool missing_inherited =
+            !live.contains("inherited_map_selectors") ||
+            !live["inherited_map_selectors"].is_array() ||
+            live["inherited_map_selectors"].empty();
+        if (missing_inherited) {
+            live["inherited_map_selectors"] = map_manifest["candidate_selectors"];
+        }
+        map_manifest.erase("candidate_selectors");
+        changed = true;
+    }
+    if (map_manifest.contains("map_boundary_data") && map_manifest["map_boundary_data"].is_object()) {
+        nlohmann::json& live = map_manifest["live_dynamic_spawns"];
+        if (!live.is_object()) {
+            live = nlohmann::json::object();
+        }
+        const bool missing_boundary =
+            !live.contains("boundary_area_selectors") ||
+            !live["boundary_area_selectors"].is_array() ||
+            live["boundary_area_selectors"].empty();
+        if (missing_boundary) {
+            const nlohmann::json& legacy = map_manifest["map_boundary_data"];
+            auto candidates = legacy.find("candidate_selectors");
+            if (candidates != legacy.end() && candidates->is_array()) {
+                live["boundary_area_selectors"] = *candidates;
+                changed = true;
+            }
+        }
+        map_manifest.erase("map_boundary_data");
         changed = true;
     }
 

@@ -839,15 +839,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const std::size_t traversal_count = camera.visible_traversal_entries().size();
 
     std::vector<Asset*> render_assets = *visible_assets;
-    if (assets_->boundary_assets_visible() && assets_->is_dev_mode() && assets_->focus_filter_active()) {
+    if (assets_->live_dynamic_assets_visible()) {
         std::unordered_set<Asset*> selected_assets(render_assets.begin(), render_assets.end());
-        for (Asset* asset : active_assets) {
-            if (!asset || !asset->info) {
-                continue;
-            }
-            if (asset_types::canonicalize(asset->info->type) != std::string(asset_types::boundary)) {
-                continue;
-            }
+        for (Asset* asset : assets_->getLiveDynamicRenderAssets()) {
             if (selected_assets.insert(asset).second) {
                 render_assets.push_back(asset);
             }

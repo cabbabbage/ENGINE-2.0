@@ -236,12 +236,12 @@ void AssetLoader::loadRooms() {
         vibble::log::info("[AssetLoader] Starting room generation for map '" + map_id_ + "'");
         const double min_edge_distance = map_layers::min_edge_distance_from_map_manifest(map_manifest_json_);
         GenerateRooms generator(map_layers_, map_center_x_, map_center_y_, map_id_, map_manifest_json_, min_edge_distance, manifest_store_);
-        nlohmann::json empty_boundary = nlohmann::json::object();
+        nlohmann::json empty_live_dynamic_spawns = nlohmann::json::object();
         nlohmann::json empty_rooms    = nlohmann::json::object();
         nlohmann::json empty_trails   = nlohmann::json::object();
         map_grid_settings_ = MapGridSettings::from_json(map_manifest_json_.contains("map_grid_settings") ? &map_manifest_json_["map_grid_settings"] : nullptr);
         MapGridSettings grid_settings = map_grid_settings_;
-        auto room_ptrs = generator.build( asset_library_, map_radius_, layer_radii_, map_boundary_data_ ? *map_boundary_data_ : empty_boundary, rooms_data_        ? *rooms_data_        : empty_rooms, trails_data_       ? *trails_data_       : empty_trails, grid_settings);
+        auto room_ptrs = generator.build( asset_library_, map_radius_, layer_radii_, live_dynamic_spawns_data_ ? *live_dynamic_spawns_data_ : empty_live_dynamic_spawns, rooms_data_        ? *rooms_data_        : empty_rooms, trails_data_       ? *trails_data_       : empty_trails, grid_settings);
         world_context_->adopt_rooms(std::move(room_ptrs));
         if (getRooms().empty()) {
                 throw std::runtime_error("[AssetLoader] Room generation produced zero rooms after manifest normalization.");
@@ -479,7 +479,7 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                 return nullptr;
         };
 
-        map_boundary_data_ = bind_object_section("map_boundary_data");
+        live_dynamic_spawns_data_ = bind_object_section("live_dynamic_spawns");
         rooms_data_        = bind_object_section("rooms_data");
         trails_data_       = bind_object_section("trails_data");
 
@@ -495,7 +495,7 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                 throw std::runtime_error(
                     std::string("[AssetLoader] map_graph planning failed for map '") + map_id_ + "'.");
         }
-        map_boundary_data_ = bind_object_section("map_boundary_data");
+        live_dynamic_spawns_data_ = bind_object_section("live_dynamic_spawns");
         rooms_data_        = bind_object_section("rooms_data");
         trails_data_       = bind_object_section("trails_data");
 

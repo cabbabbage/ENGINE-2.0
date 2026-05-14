@@ -257,7 +257,7 @@ void CameraUIPanel::build_ui() {
     min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     boundary_min_render_size_slider_ = std::make_unique<FloatSliderWidget>(
-        "Boundary Min On-Screen Size",
+        "Live Dynamic Min On-Screen Size",
         0.0f,
         0.05f,
         0.001f,

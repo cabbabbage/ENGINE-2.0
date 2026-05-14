@@ -40,7 +40,7 @@ TEST_CASE("map data manifest roundtrip preserves canonical sections") {
     CHECK(roundtrip.contains("trails_data"));
     CHECK(roundtrip.contains("map_layers"));
     CHECK(roundtrip.contains("map_layers_settings"));
-    CHECK(roundtrip.contains("map_boundary_data"));
+    CHECK(roundtrip.contains("live_dynamic_spawns"));
     CHECK(roundtrip.contains("dev_map_settings"));
 }
 

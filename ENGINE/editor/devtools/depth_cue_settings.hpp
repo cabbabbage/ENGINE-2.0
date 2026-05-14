@@ -10,7 +10,7 @@ namespace devmode::camera_prefs {
 
 inline constexpr std::string_view kMinVisibleScreenRatioSettingKey = "dev_ui.camera.min_visible_screen_ratio";
 inline constexpr std::string_view kCullMarginSettingKey = "dev_ui.camera.extra_cull_margin";
-inline constexpr std::string_view kBoundaryMinVisibleScreenRatioSettingKey = "dev_ui.camera.boundary_min_visible_screen_ratio";
+inline constexpr std::string_view kBoundaryMinVisibleScreenRatioSettingKey = "dev_ui.camera.live_dynamic_min_visible_screen_ratio";
 
 
 

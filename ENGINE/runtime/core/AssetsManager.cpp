@@ -29,6 +29,7 @@
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/integer_grid_math.hpp"
+#include "utils/grid.hpp"
 #include "utils/area.hpp"
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
@@ -329,6 +330,108 @@ bool vibble_runtime_convergence_trace_enabled() {
     return enabled;
 }
 
+std::uint64_t mix_u64(std::uint64_t seed, std::uint64_t value) {
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    return seed;
+}
+
+double live_dynamic_unit_interval(std::uint64_t value) {
+    value ^= value >> 33;
+    value *= 0xff51afd7ed558ccdULL;
+    value ^= value >> 33;
+    value *= 0xc4ceb9fe1a85ec53ULL;
+    value ^= value >> 33;
+    return static_cast<double>(value) / static_cast<double>(std::numeric_limits<std::uint64_t>::max());
+}
+
+double live_dynamic_candidate_weight(const nlohmann::json& candidate) {
+    if (candidate.is_object()) {
+        for (const char* key : {"chance", "weight", "probability"}) {
+            auto it = candidate.find(key);
+            if (it != candidate.end() && it->is_number()) {
+                const double value = it->get<double>();
+                return std::isfinite(value) && value > 0.0 ? value : 0.0;
+            }
+        }
+        return 0.0;
+    }
+    if (candidate.is_string() || candidate.is_null()) {
+        return 100.0;
+    }
+    if (candidate.is_number()) {
+        const double value = candidate.get<double>();
+        return std::isfinite(value) && value > 0.0 ? value : 0.0;
+    }
+    return 0.0;
+}
+
+std::string live_dynamic_candidate_name(const nlohmann::json& candidate, bool& is_tag, bool& is_null) {
+    is_tag = false;
+    is_null = candidate.is_null();
+    std::string name;
+    if (candidate.is_object()) {
+        if (candidate.contains("name") && candidate["name"].is_string()) {
+            name = candidate["name"].get<std::string>();
+        } else if (candidate.contains("asset_name") && candidate["asset_name"].is_string()) {
+            name = candidate["asset_name"].get<std::string>();
+        }
+        if (candidate.contains("tag")) {
+            if (candidate["tag"].is_string()) {
+                is_tag = true;
+                name = candidate["tag"].get<std::string>();
+            } else if (candidate["tag"].is_boolean() && candidate["tag"].get<bool>()) {
+                is_tag = true;
+            }
+        }
+        if (candidate.contains("tag_name") && candidate["tag_name"].is_string()) {
+            is_tag = true;
+            name = candidate["tag_name"].get<std::string>();
+        }
+    } else if (candidate.is_string()) {
+        name = candidate.get<std::string>();
+    }
+
+    name.erase(name.begin(), std::find_if(name.begin(), name.end(), [](unsigned char ch) {
+        return std::isspace(ch) == 0;
+    }));
+    name.erase(std::find_if(name.rbegin(), name.rend(), [](unsigned char ch) {
+        return std::isspace(ch) == 0;
+    }).base(), name.end());
+    if (!name.empty() && name.front() == '#') {
+        is_tag = true;
+        name.erase(name.begin());
+    }
+
+    std::string lowered = name;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (lowered == "null") {
+        is_null = true;
+    }
+    return name;
+}
+
+bool live_dynamic_is_boundary_info(const AssetInfo* info) {
+    if (!info) {
+        return false;
+    }
+    return info->has_tag("boundary") ||
+           asset_types::canonicalize(info->type) == std::string(asset_types::boundary);
+}
+
+bool live_dynamic_info_allowed(const AssetInfo* info, Assets::LiveDynamicMode mode) {
+    const bool boundary = live_dynamic_is_boundary_info(info);
+    if (mode == Assets::LiveDynamicMode::BoundaryArea) {
+        return boundary;
+    }
+    return !boundary;
+}
+
+const char* live_dynamic_mode_name(Assets::LiveDynamicMode mode) {
+    return mode == Assets::LiveDynamicMode::BoundaryArea ? "boundary_area" : "inherited_map";
+}
+
 std::uint64_t hash_grid_cell(const world::GridCoord& coord) {
     const std::uint64_t ux = static_cast<std::uint32_t>(coord.x);
     const std::uint64_t uz = static_cast<std::uint32_t>(coord.z);
@@ -379,7 +482,8 @@ Assets::Assets(AssetLibrary& library,
       library_(library),
       world_context_(std::move(world_context)),
       map_id_(map_id),
-      map_path_(std::move(content_root))
+      map_path_(std::move(content_root)),
+      map_radius_world_(std::max(0, map_radius))
 {
     if (!world_context_) {
         world_context_ = std::make_shared<RuntimeWorldContext>();
@@ -636,13 +740,170 @@ void Assets::hydrate_map_info_sections() {
         }
 };
 
-    ensure_object("map_boundary_data");
+    migrate_live_dynamic_spawn_config();
+    ensure_object("live_dynamic_spawns");
     ensure_object("rooms_data");
     ensure_object("trails_data");
     ensure_object("runtime_game_config");
 
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
+    rebuild_live_dynamic_selectors();
+}
+
+void Assets::migrate_live_dynamic_spawn_config() {
+    if (!map_info_json_.is_object()) {
+        return;
+    }
+    if (!map_info_json_.contains("live_dynamic_spawns") ||
+        !map_info_json_["live_dynamic_spawns"].is_object()) {
+        map_info_json_["live_dynamic_spawns"] = nlohmann::json::object();
+    }
+    nlohmann::json& live = map_info_json_["live_dynamic_spawns"];
+
+    auto selector_empty = [](const nlohmann::json& owner, const char* key) {
+        auto it = owner.find(key);
+        return it == owner.end() || !it->is_array() || it->empty();
+    };
+
+    if (selector_empty(live, "boundary_area_selectors")) {
+        auto legacy = map_info_json_.find("map_boundary_data");
+        if (legacy != map_info_json_.end() && legacy->is_object()) {
+            auto candidates = legacy->find("candidate_selectors");
+            if (candidates != legacy->end() && candidates->is_array()) {
+                live["boundary_area_selectors"] = *candidates;
+            }
+        }
+    }
+    if (map_info_json_.erase("map_boundary_data") > 0) {
+        vibble::log::info("[LiveDynamicSpawn] Migrated map_boundary_data to live_dynamic_spawns.");
+    }
+
+    if (selector_empty(live, "inherited_map_selectors")) {
+        auto top_level = map_info_json_.find("candidate_selectors");
+        if (top_level != map_info_json_.end() && top_level->is_array()) {
+            live["inherited_map_selectors"] = *top_level;
+            map_info_json_.erase(top_level);
+        }
+    }
+}
+
+std::size_t Assets::LiveDynamicPointKeyHash::operator()(const LiveDynamicPointKey& key) const {
+    std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
+    auto mix = [&seed](std::size_t value) {
+        seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+    };
+    mix(std::hash<int>{}(key.grid_resolution));
+    mix(std::hash<int>{}(key.grid_x));
+    mix(std::hash<int>{}(key.grid_z));
+    mix(std::hash<std::string>{}(key.spawn_id));
+    return seed;
+}
+
+void Assets::clear_live_dynamic_assets() {
+    for (auto& [_, state] : live_dynamic_states_) {
+        if (state.asset) {
+            state.asset->dead = true;
+            state.asset->active = false;
+        }
+    }
+    live_dynamic_states_.clear();
+    live_dynamic_active_assets_.clear();
+}
+
+void Assets::rebuild_live_dynamic_selectors() {
+    live_dynamic_boundary_selectors_.clear();
+    live_dynamic_inherited_selectors_.clear();
+
+    if (!map_info_json_.is_object()) {
+        clear_live_dynamic_assets();
+        return;
+    }
+    const auto live_it = map_info_json_.find("live_dynamic_spawns");
+    if (live_it == map_info_json_.end() || !live_it->is_object()) {
+        clear_live_dynamic_assets();
+        return;
+    }
+
+    const auto catalog = library_.all();
+    const auto append_selector = [&](const nlohmann::json& selector_json,
+                                     LiveDynamicMode mode,
+                                     std::vector<LiveDynamicSelector>& out) {
+        if (!selector_json.is_object()) {
+            return;
+        }
+        const nlohmann::json* candidates_json = nullptr;
+        auto candidates_it = selector_json.find("candidates");
+        if (candidates_it != selector_json.end() && candidates_it->is_array()) {
+            candidates_json = &(*candidates_it);
+        }
+        if (!candidates_json || candidates_json->empty()) {
+            return;
+        }
+
+        LiveDynamicSelector selector;
+        selector.mode = mode;
+        selector.spawn_id = selector_json.value("spawn_id", std::string{});
+        if (selector.spawn_id.empty()) {
+            selector.spawn_id = selector_json.value("name", std::string{});
+        }
+        if (selector.spawn_id.empty()) {
+            selector.spawn_id = std::string("live_dynamic_") + std::to_string(out.size() + 1);
+        }
+        selector.display_name = selector_json.value("display_name", selector.spawn_id);
+        const int raw_resolution = selector_json.contains("grid_resolution")
+            ? selector_json.value("grid_resolution", map_grid_settings_.grid_resolution)
+            : selector_json.value("resolution", map_grid_settings_.grid_resolution);
+        selector.grid_resolution = vibble::grid::clamp_resolution(raw_resolution);
+
+        for (const nlohmann::json& candidate_json : *candidates_json) {
+            const double weight = live_dynamic_candidate_weight(candidate_json);
+            if (weight <= 0.0) {
+                continue;
+            }
+            bool is_tag = false;
+            bool is_null = false;
+            std::string name = live_dynamic_candidate_name(candidate_json, is_tag, is_null);
+            if (is_null || name.empty()) {
+                selector.candidates.push_back(LiveDynamicCandidate{{}, nullptr, weight, true});
+                continue;
+            }
+
+            if (is_tag) {
+                for (const auto& [asset_name, info] : catalog) {
+                    if (!info || !info->has_tag(name) || !live_dynamic_info_allowed(info.get(), mode)) {
+                        continue;
+                    }
+                    selector.candidates.push_back(LiveDynamicCandidate{asset_name, info, weight, false});
+                }
+                continue;
+            }
+
+            std::shared_ptr<AssetInfo> info = library_.get(name);
+            if (!info || !live_dynamic_info_allowed(info.get(), mode)) {
+                continue;
+            }
+            selector.candidates.push_back(LiveDynamicCandidate{name, info, weight, false});
+        }
+
+        if (!selector.candidates.empty()) {
+            out.push_back(std::move(selector));
+        }
+    };
+
+    auto append_section = [&](const char* key, LiveDynamicMode mode, std::vector<LiveDynamicSelector>& out) {
+        auto section_it = live_it->find(key);
+        if (section_it == live_it->end() || !section_it->is_array()) {
+            return;
+        }
+        for (const nlohmann::json& selector : *section_it) {
+            append_selector(selector, mode, out);
+        }
+    };
+
+    append_section("boundary_area_selectors", LiveDynamicMode::BoundaryArea, live_dynamic_boundary_selectors_);
+    append_section("inherited_map_selectors", LiveDynamicMode::InheritedMap, live_dynamic_inherited_selectors_);
+    clear_live_dynamic_assets();
 }
 
 void Assets::load_camera_settings_from_json() {
@@ -655,8 +916,11 @@ void Assets::load_camera_settings_from_json() {
     const nlohmann::json& camera_settings = map_info_json_["camera_settings"];
     camera_.apply_camera_settings(camera_settings);
 
-    const auto parse_boundary_ratio = [&](const nlohmann::json& source) {
-        auto it = source.find("boundary_min_visible_screen_ratio");
+    const auto parse_live_dynamic_ratio = [&](const nlohmann::json& source) {
+        auto it = source.find("live_dynamic_min_visible_screen_ratio");
+        if (it == source.end()) {
+            it = source.find("boundary_min_visible_screen_ratio");
+        }
         if (it == source.end() || !it->is_number()) {
             return kDefaultBoundaryMinVisibleScreenRatio;
         }
@@ -686,7 +950,7 @@ void Assets::load_camera_settings_from_json() {
         }
     };
 
-    const float boundary_ratio = parse_boundary_ratio(camera_settings);
+    const float boundary_ratio = parse_live_dynamic_ratio(camera_settings);
     const int min_height = parse_height_bound(camera_settings, "camera_height_min_px", kDefaultCameraHeightMinPx);
     int max_height = parse_height_bound(camera_settings, "camera_height_max_px", kDefaultCameraHeightMaxPx);
     if (max_height < min_height) {
@@ -708,7 +972,7 @@ void Assets::write_camera_settings_to_json() {
         return;
     }
     nlohmann::json camera_settings = camera_.camera_settings_to_json();
-    camera_settings["boundary_min_visible_screen_ratio"] = boundary_min_visible_screen_ratio_;
+    camera_settings["live_dynamic_min_visible_screen_ratio"] = boundary_min_visible_screen_ratio_;
     camera_settings["camera_height_min_px"] = camera_height_min_px_;
     camera_settings["camera_height_max_px"] = camera_height_max_px_;
     map_info_json_["camera_settings"] = std::move(camera_settings);
@@ -921,6 +1185,10 @@ bool Assets::boundary_assets_visible() const {
         return true;
     }
     return dev_controls_->boundary_assets_visible();
+}
+
+bool Assets::live_dynamic_assets_visible() const {
+    return boundary_assets_visible();
 }
 
 bool Assets::dev_grid_overlay_enabled() const {
@@ -2520,6 +2788,227 @@ world::GridBounds Assets::screen_world_rect() const {
     return world::GridBounds::from_xywh(minx, miny, width, height, 0, world_grid_.default_resolution_layer());
 }
 
+void Assets::rebuild_live_dynamic_active_assets() {
+    live_dynamic_active_assets_.clear();
+    live_dynamic_active_assets_.reserve(live_dynamic_states_.size());
+    for (auto& [_, state] : live_dynamic_states_) {
+        Asset* asset = state.asset.get();
+        if (!asset || asset->dead) {
+            continue;
+        }
+        asset->last_active_frame_id = frame_id_;
+        asset->last_visible_frame_id = frame_id_;
+        asset->active = true;
+        asset->update_scale_values(true);
+        live_dynamic_active_assets_.push_back(asset);
+    }
+}
+
+void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_bounds) {
+    struct ReconcileStats {
+        std::size_t visible_points = 0;
+        std::size_t kept = 0;
+        std::size_t spawned = 0;
+        std::size_t null_selected = 0;
+        std::size_t despawned = 0;
+        std::size_t skipped_missing_pool = 0;
+        std::size_t skipped_invalid_candidate = 0;
+    } stats;
+
+    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> visible_keys;
+    visible_keys.reserve(live_dynamic_states_.size() + 64);
+
+    auto pick_candidate = [&](const LiveDynamicSelector& selector,
+                              const LiveDynamicPointKey& key) -> const LiveDynamicCandidate* {
+        double total_weight = 0.0;
+        for (const LiveDynamicCandidate& candidate : selector.candidates) {
+            if (candidate.weight > 0.0 && std::isfinite(candidate.weight)) {
+                total_weight += candidate.weight;
+            }
+        }
+        if (total_weight <= 0.0) {
+            return nullptr;
+        }
+
+        std::uint64_t hash = std::hash<std::string>{}(map_id_);
+        hash = mix_u64(hash, std::hash<std::string>{}(key.spawn_id));
+        hash = mix_u64(hash, static_cast<std::uint64_t>(key.grid_resolution));
+        hash = mix_u64(hash, static_cast<std::uint32_t>(key.grid_x));
+        hash = mix_u64(hash, static_cast<std::uint32_t>(key.grid_z));
+        hash = mix_u64(hash, static_cast<std::uint64_t>(key.mode));
+        const double roll = live_dynamic_unit_interval(hash) * total_weight;
+
+        double cumulative = 0.0;
+        const LiveDynamicCandidate* fallback = nullptr;
+        for (const LiveDynamicCandidate& candidate : selector.candidates) {
+            if (candidate.weight <= 0.0 || !std::isfinite(candidate.weight)) {
+                continue;
+            }
+            fallback = &candidate;
+            cumulative += candidate.weight;
+            if (roll < cumulative) {
+                return &candidate;
+            }
+        }
+        return fallback;
+    };
+
+    auto room_for_point = [&](SDL_Point point, bool require_inherited, bool& inside_any_room) -> Room* {
+        inside_any_room = false;
+        for (Room* room : rooms()) {
+            if (!room || !room->room_area || !room->room_area->contains_point(point)) {
+                continue;
+            }
+            inside_any_room = true;
+            if (!require_inherited || room->inherits_map_assets()) {
+                return room;
+            }
+        }
+        return nullptr;
+    };
+
+    auto point_in_boundary_area = [&](SDL_Point point, bool inside_any_room) {
+        if (inside_any_room || map_radius_world_ <= 0) {
+            return false;
+        }
+        const std::int64_t dx = static_cast<std::int64_t>(point.x);
+        const std::int64_t dz = static_cast<std::int64_t>(point.y);
+        const std::int64_t radius = static_cast<std::int64_t>(map_radius_world_);
+        return dx * dx + dz * dz <= radius * radius;
+    };
+
+    auto spawn_live_asset = [&](const LiveDynamicSelector& selector,
+                                const LiveDynamicPointKey& key,
+                                SDL_Point world_point,
+                                const LiveDynamicCandidate& candidate,
+                                const std::string& owner_name) -> std::unique_ptr<Asset> {
+        if (!candidate.info || candidate.asset_name.empty()) {
+            ++stats.skipped_invalid_candidate;
+            return nullptr;
+        }
+        Area spawn_area(owner_name.empty() ? std::string("live_dynamic") : owner_name, selector.grid_resolution);
+        auto asset = std::make_unique<Asset>(
+            candidate.info,
+            spawn_area,
+            world_point,
+            0,
+            std::string("live_dynamic:") + key.spawn_id,
+            std::string("live_dynamic"),
+            selector.grid_resolution);
+        Asset* raw = asset.get();
+        raw->set_assets(this);
+        raw->set_camera(&camera_);
+        raw->set_owning_room_name(owner_name);
+        raw->finalize_setup();
+        raw->set_provisional_grid_point(world_point.x, 0, world_point.y, selector.grid_resolution);
+        raw->active = true;
+        raw->last_active_frame_id = frame_id_;
+        raw->last_visible_frame_id = frame_id_;
+        raw->update_scale_values(true);
+        return asset;
+    };
+
+    auto reconcile_selector = [&](const LiveDynamicSelector& selector) {
+        if (selector.candidates.empty()) {
+            ++stats.skipped_missing_pool;
+            return;
+        }
+        const int resolution = vibble::grid::clamp_resolution(selector.grid_resolution);
+        const SDL_Point min_index = vibble::grid::global_grid().world_to_index(
+            SDL_Point{visible_bounds.min.world_x(), visible_bounds.min.world_z()}, resolution);
+        const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
+            SDL_Point{visible_bounds.max.world_x(), visible_bounds.max.world_z()}, resolution);
+
+        for (int iz = min_index.y - 1; iz <= max_index.y + 1; ++iz) {
+            for (int ix = min_index.x - 1; ix <= max_index.x + 1; ++ix) {
+                const SDL_Point world_point = vibble::grid::global_grid().index_to_world(ix, iz, resolution);
+                if (world_point.x < visible_bounds.min.world_x() || world_point.x > visible_bounds.max.world_x() ||
+                    world_point.y < visible_bounds.min.world_z() || world_point.y > visible_bounds.max.world_z()) {
+                    continue;
+                }
+
+                bool inside_any_room = false;
+                Room* owner = nullptr;
+                if (selector.mode == LiveDynamicMode::InheritedMap) {
+                    owner = room_for_point(world_point, true, inside_any_room);
+                    if (!owner) {
+                        continue;
+                    }
+                } else {
+                    (void)room_for_point(world_point, false, inside_any_room);
+                    if (!point_in_boundary_area(world_point, inside_any_room)) {
+                        continue;
+                    }
+                }
+
+                LiveDynamicPointKey key{selector.mode, resolution, ix, iz, selector.spawn_id};
+                ++stats.visible_points;
+                visible_keys.insert(key);
+                auto state_it = live_dynamic_states_.find(key);
+                if (state_it != live_dynamic_states_.end()) {
+                    ++stats.kept;
+                    continue;
+                }
+
+                const LiveDynamicCandidate* candidate = pick_candidate(selector, key);
+                LiveDynamicState state;
+                if (!candidate || candidate->is_null) {
+                    state.null_selection = true;
+                    ++stats.null_selected;
+                } else {
+                    const std::string owner_name = owner ? owner->room_name : map_id_;
+                    state.asset = spawn_live_asset(selector, key, world_point, *candidate, owner_name);
+                    if (state.asset) {
+                        ++stats.spawned;
+                    } else {
+                        state.null_selection = true;
+                    }
+                }
+                live_dynamic_states_.emplace(std::move(key), std::move(state));
+            }
+        }
+    };
+
+    for (const LiveDynamicSelector& selector : live_dynamic_boundary_selectors_) {
+        reconcile_selector(selector);
+    }
+    for (const LiveDynamicSelector& selector : live_dynamic_inherited_selectors_) {
+        reconcile_selector(selector);
+    }
+
+    for (auto it = live_dynamic_states_.begin(); it != live_dynamic_states_.end();) {
+        if (visible_keys.find(it->first) != visible_keys.end()) {
+            ++it;
+            continue;
+        }
+        if (it->second.asset) {
+            it->second.asset->dead = true;
+            it->second.asset->active = false;
+        }
+        it = live_dynamic_states_.erase(it);
+        ++stats.despawned;
+    }
+
+    rebuild_live_dynamic_active_assets();
+    if (stats.spawned > 0 || stats.despawned > 0 || stats.null_selected > 0 ||
+        last_live_dynamic_log_frame_ != frame_id_) {
+        last_live_dynamic_log_frame_ = frame_id_;
+        vibble::log::debug(
+            std::string("[LiveDynamicSpawn] reconcile frame=") + std::to_string(frame_id_) +
+            " visible_points=" + std::to_string(stats.visible_points) +
+            " kept=" + std::to_string(stats.kept) +
+            " spawned=" + std::to_string(stats.spawned) +
+            " null=" + std::to_string(stats.null_selected) +
+            " despawned=" + std::to_string(stats.despawned) +
+            " skipped_missing_pool=" + std::to_string(stats.skipped_missing_pool) +
+            " skipped_invalid_candidate=" + std::to_string(stats.skipped_invalid_candidate));
+    }
+}
+
+void Assets::test_reconcile_live_dynamic_assets_for_bounds(const world::GridBounds& bounds) {
+    reconcile_live_dynamic_assets(bounds);
+}
+
 int Assets::audio_effect_max_distance_world() const {
     const_cast<Assets*>(this)->update_max_asset_dimensions();
     const float horizontal_padding = std::max(0.0f, max_asset_width_world_ * 1.5f);
@@ -2983,6 +3472,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                          frame_id_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
+    reconcile_live_dynamic_assets(screen_world_rect());
     mark_anchor_bases_dirty_for_active_assets();
 
     grid_dirty_ = false;
@@ -3989,12 +4479,16 @@ const devmode::core::ManifestStore* Assets::manifest_store() const {
 }
 
 void Assets::notify_spawn_group_config_changed(const nlohmann::json& entry) {
+    rebuild_live_dynamic_selectors();
+    mark_grid_dirty();
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->notify_spawn_group_config_changed(entry);
     }
 }
 
 void Assets::notify_spawn_group_removed(const std::string& spawn_id) {
+    rebuild_live_dynamic_selectors();
+    mark_grid_dirty();
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->notify_spawn_group_removed(spawn_id);
     }

@@ -513,7 +513,9 @@ Room::Room(Point origin,
         assets_json = json::object();
     }
 
-    inherits_map_assets_ = assets_json.value("inherits_map_assets", false);
+    inherits_map_assets_ = assets_json.value(
+        "inherits_live_dynamic_assets",
+        assets_json.value("inherits_map_assets", false));
 
     const nlohmann::json* map_camera_settings = nullptr;
     if (map_info_root_ && map_info_root_->is_object()) {
@@ -1128,7 +1130,9 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out.erase("min_radius");
         out.erase("max_radius");
 	out["is_boss"] = assets_json.value("is_boss", false);
-	out["inherits_map_assets"] = assets_json.value("inherits_map_assets", false);
+	out["inherits_live_dynamic_assets"] = assets_json.value(
+            "inherits_live_dynamic_assets",
+            assets_json.value("inherits_map_assets", false));
         out["inherit_map_floor_color"] = assets_json.value("inherit_map_floor_color", true);
         if (assets_json.contains("room_floor_color")) {
                 out["room_floor_color"] = assets_json["room_floor_color"];

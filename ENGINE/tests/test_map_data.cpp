@@ -32,9 +32,9 @@ TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
             {"min_edge_distance", 120},
             {"custom_setting", "persist"}
         }},
-        {"map_boundary_data", {
-            {"inherits_map_assets", false},
-            {"unknown_boundary", 7}
+        {"live_dynamic_spawns", {
+            {"boundary_area_selectors", nlohmann::json::array()},
+            {"unknown_live_dynamic", 7}
         }},
         {"dev_map_settings", {
             {"show_grid", true},
@@ -84,7 +84,7 @@ TEST_CASE("MapData writes known section schema keys when entry is missing") {
     CHECK(out.contains("trails_data"));
     CHECK(out.contains("map_layers"));
     CHECK(out.contains("map_layers_settings"));
-    CHECK(out.contains("map_boundary_data"));
+    CHECK(out.contains("live_dynamic_spawns"));
     CHECK(out.contains("dev_map_settings"));
 
     CHECK(out["rooms_data"].is_object());

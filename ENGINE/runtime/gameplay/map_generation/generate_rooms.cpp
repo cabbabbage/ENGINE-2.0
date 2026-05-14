@@ -95,11 +95,11 @@ std::vector<RoomSpec> GenerateRooms::get_children_from_layer(const LayerSpec& la
 std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                                                         double map_radius,
                                                         const std::vector<double>& layer_radii,
-                                                        const nlohmann::json& boundary_data,
+                                                        const nlohmann::json& live_dynamic_spawns_data,
                                                         nlohmann::json& rooms_data,
                                                         nlohmann::json& trails_data,
                                                         const MapGridSettings& grid_settings) {
-    (void)boundary_data;
+    (void)live_dynamic_spawns_data;
 
     using clock = std::chrono::steady_clock;
     const auto build_start = clock::now();

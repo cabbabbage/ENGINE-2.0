@@ -4515,7 +4515,7 @@ void DevControls::configure_header_button_sets() {
     {
         MapModeUI::HeaderButtonConfig boundary_btn;
         boundary_btn.id = "map_boundary";
-        boundary_btn.label = "Boundary Assets";
+        boundary_btn.label = "Live Dynamic Spawns";
         boundary_btn.active = (boundary_assets_modal_ && boundary_assets_modal_->visible());
         boundary_btn.group = FooterButtonGroup::Panels;
         boundary_btn.style_override = &DMStyles::ListButton();
@@ -5162,7 +5162,7 @@ void DevControls::ensure_boundary_assets_modal_open() {
     if (!boundary_assets_modal_) {
         boundary_assets_modal_ = std::make_unique<BoundarySpawnGroupModal>();
         boundary_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
-        boundary_assets_modal_->set_floating_stack_key("boundary_assets_modal");
+        boundary_assets_modal_->set_floating_stack_key("live_dynamic_spawns_modal");
     } else {
         boundary_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
     }
@@ -5176,7 +5176,7 @@ void DevControls::ensure_boundary_assets_modal_open() {
     auto regen = [this](const nlohmann::json& entry) { this->regenerate_boundary_spawn_group(entry); };
     auto& map_json = assets_->map_info_json();
     SDL_Color color{255, 200, 120, 255};
-    boundary_assets_modal_->open(map_json, "map_boundary_data", "batch_map_boundary", "Boundary", color, save, regen);
+    boundary_assets_modal_->open(map_json, "live_dynamic_spawns", "batch_map_boundary", "Boundary Area", color, save, regen);
 }
 
 void DevControls::open_boundary_assets_modal() {

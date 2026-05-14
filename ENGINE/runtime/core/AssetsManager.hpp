@@ -53,6 +53,11 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
+    enum class LiveDynamicMode {
+        BoundaryArea = 0,
+        InheritedMap = 1,
+    };
+
     enum class DevGridOverlayKind {
         FloorMouseCentered,
         XYPlaneAtAssetDepth,
@@ -124,6 +129,7 @@ public:
 
     const std::vector<Asset*>& getActive() const;
     const std::vector<Asset*>& getFilteredActiveAssets() const;
+    const std::vector<Asset*>& getLiveDynamicRenderAssets() const { return live_dynamic_active_assets_; }
     const std::unordered_set<Asset*>& filtered_active_asset_membership() const { return filtered_active_asset_membership_; }
     using ActiveTraversalEntry = WarpedScreenGrid::VisibleTraversalEntry;
     struct FrameCollisionEntry {
@@ -186,6 +192,7 @@ public:
     void force_camera_view_refresh();
     bool fog_visible() const;
     bool boundary_assets_visible() const;
+    bool live_dynamic_assets_visible() const;
     float boundary_min_visible_screen_ratio() const;
     void set_boundary_min_visible_screen_ratio(float value);
     std::pair<int, int> camera_height_bounds_px() const;
@@ -305,6 +312,9 @@ public:
     void set_output_dimensions(int width, int height);
     std::optional<SDL_Point> scene_postprocess_target_size() const;
 
+    void test_reconcile_live_dynamic_assets_for_bounds(const world::GridBounds& bounds);
+    std::size_t test_live_dynamic_state_count() const { return live_dynamic_states_.size(); }
+
 private:
     void save_map_info_json();
     void hydrate_map_info_sections();
@@ -348,6 +358,7 @@ private:
     int delta_z_ = 0;
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
+    std::vector<Asset*> live_dynamic_active_assets_;
     std::unordered_set<Asset*> filtered_active_asset_membership_;
     std::shared_ptr<RuntimeWorldContext> world_context_;
     Room* current_room_ = nullptr;
@@ -425,6 +436,7 @@ private:
     float boundary_min_visible_screen_ratio_ = 0.015f;
     int camera_height_min_px_ = 1;
     int camera_height_max_px_ = 100000;
+    int map_radius_world_ = 0;
     struct AssetDimensionCache {
         float width = 0.0f;
         float height = 0.0f;
@@ -512,6 +524,11 @@ private:
     void register_pending_static_assets();
     void rebuild_all_assets_from_grid();
     void rebuild_active_from_screen_grid();
+    void migrate_live_dynamic_spawn_config();
+    void rebuild_live_dynamic_selectors();
+    void reconcile_live_dynamic_assets(const world::GridBounds& visible_bounds);
+    void clear_live_dynamic_assets();
+    void rebuild_live_dynamic_active_assets();
 
     std::vector<Asset*> moving_assets_for_grid_;
     std::vector<Asset*> pending_static_grid_registration_;
@@ -591,4 +608,49 @@ private:
     int runtime_ui_overlay_width_ = 0;
     int runtime_ui_overlay_height_ = 0;
     runtime::context::GameRuntimeContext game_context_{};
+
+    struct LiveDynamicCandidate {
+        std::string asset_name;
+        std::shared_ptr<AssetInfo> info;
+        double weight = 0.0;
+        bool is_null = false;
+    };
+
+    struct LiveDynamicSelector {
+        std::string spawn_id;
+        std::string display_name;
+        int grid_resolution = 0;
+        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
+        std::vector<LiveDynamicCandidate> candidates;
+    };
+
+    struct LiveDynamicPointKey {
+        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
+        int grid_resolution = 0;
+        int grid_x = 0;
+        int grid_z = 0;
+        std::string spawn_id;
+
+        bool operator==(const LiveDynamicPointKey& other) const {
+            return mode == other.mode &&
+                   grid_resolution == other.grid_resolution &&
+                   grid_x == other.grid_x &&
+                   grid_z == other.grid_z &&
+                   spawn_id == other.spawn_id;
+        }
+    };
+
+    struct LiveDynamicPointKeyHash {
+        std::size_t operator()(const LiveDynamicPointKey& key) const;
+    };
+
+    struct LiveDynamicState {
+        std::unique_ptr<Asset> asset;
+        bool null_selection = false;
+    };
+
+    std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
+    std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
+    std::unordered_map<LiveDynamicPointKey, LiveDynamicState, LiveDynamicPointKeyHash> live_dynamic_states_;
+    std::uint32_t last_live_dynamic_log_frame_ = std::numeric_limits<std::uint32_t>::max();
 };

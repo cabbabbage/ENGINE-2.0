@@ -358,10 +358,7 @@ public:
 private:
     enum class DragMode {
         None,
-        CenterValue,
-        BoundaryValue,
-        FalloffValue,
-        WeightHandle
+        NodeHandle
     };
 
     struct ColumnGeometry {
@@ -381,9 +378,9 @@ private:
     void sanitize_value();
     void notify_value_changed();
     void sync_visual_range_from_value();
+    void sync_falloff_value_from_visual();
     void clamp_visual_range();
     int control_x_for_index(int index) const;
-    int active_control_index() const;
     std::int64_t raw_value_for_index(int index) const;
     std::int64_t display_value(std::int64_t raw) const;
     double density_for_raw_value(double raw) const;
@@ -399,7 +396,6 @@ private:
     SDL_Rect column_value_rect(int index) const;
     SDL_Rect histogram_line_rect(int index) const;
     SDL_Rect histogram_handle_rect(int index) const;
-    int line_index_for_point(SDL_Point point) const;
     int weight_index_for_point(SDL_Point point) const;
     double weight_for_y(int y) const;
     int weight_y_for_value(double weight) const;
@@ -416,7 +412,6 @@ private:
     bool hovered_ = false;
     bool checkbox_hovered_ = false;
     bool random_hovered_ = false;
-    int hovered_line_index_ = -1;
     int hovered_handle_index_ = -1;
     bool dragging_ = false;
     bool drag_started_ = false;

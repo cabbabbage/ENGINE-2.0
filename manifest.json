@@ -27290,32 +27290,33 @@
             }
           },
           "display_color": [
-            242,
-            183,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,
           "geometry": "Square",
           "height": {
-            "center": 20250,
-            "falloff": 9875,
+            "center": 28979,
+            "falloff": 9961,
             "random": true,
-            "span": 19750,
+            "span": 9961,
             "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.3333333333333333,
-              "falloff": 0.3333333333333333
+              "center": 0.2916247439105031,
+              "edge": 0.2916247439105031,
+              "falloff": 0.4167505121789939
             }
           },
-          "inherit_map_floor_color": false,
+          "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
+          "inherits_map_assets": false,
           "is_boss": false,
-          "name": "Loot_Room",
+          "name": "",
           "room_floor_color": [
-            138,
-            78,
-            52
+            0,
+            0,
+            0
           ],
           "room_tags": [],
           "spawn_groups": [
@@ -27355,14 +27356,14 @@
             "width_percent": 100
           },
           "width": {
-            "center": 20250,
-            "falloff": 9875,
+            "center": 20152,
+            "falloff": 6081,
             "random": true,
-            "span": 19750,
+            "span": 11161,
             "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.3333333333333333,
-              "falloff": 0.3333333333333333
+              "center": 0.5764558015461474,
+              "edge": 0.07071137900683308,
+              "falloff": 0.3528328194470195
             }
           }
         },
@@ -27379,9 +27380,9 @@
             }
           },
           "display_color": [
-            85,
-            154,
             242,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -27438,9 +27439,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            226,
+            79,
+            142,
+            224,
             255
           ],
           "edge_smoothness": 4,
@@ -27497,9 +27498,9 @@
             }
           },
           "display_color": [
-            110,
-            71,
+            31,
             204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27586,8 +27587,8 @@
             }
           },
           "display_color": [
+            123,
             31,
-            107,
             204,
             255
           ],
@@ -27650,9 +27651,9 @@
             }
           },
           "display_color": [
-            217,
-            242,
             85,
+            242,
+            185,
             255
           ],
           "edge_smoothness": 70,
@@ -27733,10 +27734,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -3772,
-          "camera_center_dz": 3175,
-          "camera_height_px": 263,
-          "camera_tilt_deg": 20.848411560058594,
+          "camera_center_dx": 3099,
+          "camera_center_dz": -2935,
+          "camera_height_px": 564,
+          "camera_tilt_deg": 48.04841232299805,
           "camera_zoom_percent": 26,
           "curvyness": {
             "center": 2,
@@ -27751,8 +27752,8 @@
           },
           "display_color": [
             242,
+            107,
             85,
-            193,
             255
           ],
           "edge_smoothness": 101,
@@ -27770,6 +27771,7 @@
           },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": true,
+          "inherits_map_assets": false,
           "is_boss": false,
           "name": "baseball",
           "room_floor_color": [
@@ -28070,9 +28072,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            62,
+            31,
+            93,
+            204,
             255
           ],
           "edge_smoothness": 96,

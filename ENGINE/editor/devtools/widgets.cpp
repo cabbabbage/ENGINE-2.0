@@ -2420,7 +2420,6 @@ void DMWeightedRangeWidget::update_hover(SDL_Point point) {
     checkbox_hovered_ = SDL_PointInRect(&point, &checkbox_rect());
     random_hovered_ = checkbox_hovered_;
     hovered_handle_index_ = hovered_ ? weight_index_for_point(point) : -1;
-    hovered_line_index_ = (hovered_ && hovered_handle_index_ < 0) ? line_index_for_point(point) : -1;
 }
 
 void DMWeightedRangeWidget::sync_visual_range_from_value() {
@@ -2440,6 +2439,19 @@ void DMWeightedRangeWidget::clamp_visual_range() {
     const double max_span_px = std::max(1.0, static_cast<double>(std::max(1, hist.w - (kWeightedRangeColumnPad * 2))) * 0.5);
     visual_span_px_ = std::clamp(visual_span_px_, 1.0, max_span_px);
     visual_falloff_px_ = std::clamp(visual_falloff_px_, 0.0, visual_span_px_);
+}
+
+void DMWeightedRangeWidget::sync_falloff_value_from_visual() {
+    if (!value_.random || value_.span <= 0) {
+        value_.falloff = 0;
+        return;
+    }
+    clamp_visual_range();
+    const double ratio = std::clamp(visual_falloff_px_ / std::max(1.0, visual_span_px_), 0.0, 1.0);
+    value_.falloff = std::clamp<std::int64_t>(
+        static_cast<std::int64_t>(std::llround(static_cast<double>(value_.span) * ratio)),
+        0,
+        value_.span);
 }
 
 double DMWeightedRangeWidget::units_per_pixel() const {
@@ -2462,16 +2474,6 @@ int DMWeightedRangeWidget::control_x_for_index(int index) const {
     default:
         return center_x;
     }
-}
-
-int DMWeightedRangeWidget::active_control_index() const {
-    if (dragging_) {
-        return drag_handle_index_;
-    }
-    if (hovered_handle_index_ >= 0) {
-        return hovered_handle_index_;
-    }
-    return hovered_line_index_;
 }
 
 std::int64_t DMWeightedRangeWidget::raw_value_for_index(int index) const {
@@ -2586,18 +2588,6 @@ double DMWeightedRangeWidget::weight_for_y(int y) const {
     return static_cast<double>(bottom - clamped) / static_cast<double>(span);
 }
 
-int DMWeightedRangeWidget::line_index_for_point(SDL_Point point) const {
-    for (int i = 0; i < 5; ++i) {
-        SDL_Rect line = histogram_line_rect(i);
-        line.x -= 6;
-        line.w += 12;
-        if (SDL_PointInRect(&point, &line) || SDL_PointInRect(&point, &histogram_handle_rect(i))) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 int DMWeightedRangeWidget::weight_index_for_point(SDL_Point point) const {
     for (int i = 0; i < 5; ++i) {
         if (!value_.random && i != 2) {
@@ -2611,8 +2601,21 @@ int DMWeightedRangeWidget::weight_index_for_point(SDL_Point point) const {
 }
 
 void DMWeightedRangeWidget::sanitize_value() {
-    value_ = vibble::weighted_range::from_json(vibble::weighted_range::to_json(value_),
-                                               vibble::weighted_range::make_flat(value_.center));
+    value_.span = std::llabs(value_.span);
+    value_.falloff = std::llabs(value_.falloff);
+    auto clean_weight = [](double weight) {
+        if (!std::isfinite(weight) || weight < 0.0) {
+            return 0.5;
+        }
+        return std::clamp(weight, 0.0, 1.0);
+    };
+    if (value_.random) {
+        value_.weights.edge = clean_weight(value_.weights.edge);
+        value_.weights.falloff = clean_weight(value_.weights.falloff);
+        value_.weights.center = clean_weight(value_.weights.center);
+    } else {
+        value_.weights = vibble::weighted_range::WeightedRangeWeights{0.5, 0.5, 0.5};
+    }
     if (loop_) {
         value_.center = vibble::weighted_range::wrap_inclusive(value_.center, min_allowed_, max_allowed_);
         const std::int64_t domain = std::max<std::int64_t>(1, (max_allowed_ - min_allowed_) + 1);
@@ -2628,7 +2631,7 @@ void DMWeightedRangeWidget::sanitize_value() {
     if (value_.span == 0) {
         value_.random = false;
         value_.falloff = 0;
-        value_.weights = vibble::weighted_range::WeightedRangeWeights{0.0, 0.0, 1.0};
+        value_.weights = vibble::weighted_range::WeightedRangeWeights{0.5, 0.5, 0.5};
     }
 }
 
@@ -2648,7 +2651,7 @@ bool DMWeightedRangeWidget::toggle_random() {
         value_.random = false;
         value_.span = 0;
         value_.falloff = 0;
-        value_.weights = vibble::weighted_range::WeightedRangeWeights{0.0, 0.0, 1.0};
+        value_.weights = vibble::weighted_range::WeightedRangeWeights{0.5, 0.5, 0.5};
     } else {
         if (has_random_snapshot_) {
             value_ = random_snapshot_;
@@ -2660,7 +2663,7 @@ bool DMWeightedRangeWidget::toggle_random() {
             if (value_.falloff > value_.span) {
                 value_.falloff = value_.span;
             }
-            value_.weights = vibble::weighted_range::WeightedRangeWeights{1.0, 1.0, 1.0};
+            value_.weights = vibble::weighted_range::WeightedRangeWeights{0.5, 0.5, 0.5};
         }
     }
     sanitize_value();
@@ -2679,27 +2682,19 @@ bool DMWeightedRangeWidget::apply_wheel_delta(int wheel_y) {
     }
     const double factor = wheel_y > 0 ? kWeightedRangeWheelScaleDown : kWeightedRangeWheelScaleUp;
     const std::int64_t old_span = value_.span;
-    const std::int64_t old_falloff = value_.falloff;
     std::int64_t new_span = static_cast<std::int64_t>(std::llround(static_cast<double>(old_span) * factor));
-    std::int64_t new_falloff = static_cast<std::int64_t>(std::llround(static_cast<double>(old_falloff) * factor));
     if (old_span == 0 && factor > 1.0) {
         new_span = 1;
-    }
-    if (new_falloff > new_span) {
-        new_falloff = new_span;
     }
     if (new_span < 0) {
         new_span = 0;
     }
-    if (new_falloff < 0) {
-        new_falloff = 0;
-    }
-    if (new_span == value_.span && new_falloff == value_.falloff) {
+    if (new_span == value_.span) {
         return false;
     }
     value_.span = new_span;
-    value_.falloff = new_falloff;
     sanitize_value();
+    sync_falloff_value_from_visual();
     update_geometry();
     notify_value_changed();
     return true;
@@ -2710,8 +2705,11 @@ bool DMWeightedRangeWidget::begin_drag(SDL_Point point) {
         return false;
     }
     const int weight_idx = weight_index_for_point(point);
-    if (weight_idx >= 0 && value_.random) {
-        drag_mode_ = DragMode::WeightHandle;
+    if (weight_idx >= 0) {
+        if (!value_.random && weight_idx != 2) {
+            return false;
+        }
+        drag_mode_ = DragMode::NodeHandle;
         drag_handle_index_ = weight_idx;
         drag_start_x_ = point.x;
         drag_start_y_ = point.y;
@@ -2723,30 +2721,7 @@ bool DMWeightedRangeWidget::begin_drag(SDL_Point point) {
         set_slider_scroll_capture(this, true);
         return true;
     }
-    const int line_idx = line_index_for_point(point);
-    if (line_idx < 0) {
-        return false;
-    }
-    if (!value_.random && line_idx != 2) {
-        return false;
-    }
-    drag_handle_index_ = line_idx;
-    drag_start_x_ = point.x;
-    drag_start_y_ = point.y;
-    drag_start_value_ = value_;
-    drag_start_visual_span_px_ = visual_span_px_;
-    drag_start_visual_falloff_px_ = visual_falloff_px_;
-    dragging_ = true;
-    drag_started_ = true;
-    set_slider_scroll_capture(this, true);
-    if (line_idx == 2) {
-        drag_mode_ = DragMode::CenterValue;
-    } else if (line_idx == 0 || line_idx == 4) {
-        drag_mode_ = DragMode::BoundaryValue;
-    } else {
-        drag_mode_ = DragMode::FalloffValue;
-    }
-    return true;
+    return false;
 }
 
 void DMWeightedRangeWidget::end_drag() {
@@ -2765,49 +2740,35 @@ bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
     bool changed = false;
     const double start_units_per_pixel =
         static_cast<double>(std::max<std::int64_t>(1, drag_start_value_.span)) / std::max(1.0, drag_start_visual_span_px_);
-    const std::int64_t delta_units = static_cast<std::int64_t>(std::llround(static_cast<double>(dx) * start_units_per_pixel));
     switch (drag_mode_) {
-    case DragMode::CenterValue:
-        value_.center = drag_start_value_.center + delta_units;
-        changed = true;
-        break;
-    case DragMode::BoundaryValue:
-        if (drag_handle_index_ == 0) {
-            visual_span_px_ = drag_start_visual_span_px_ - static_cast<double>(dx);
+    case DragMode::NodeHandle: {
+        if (drag_handle_index_ == 2) {
+            const double center_units_per_pixel = std::max(1.0, start_units_per_pixel);
+            value_.center = drag_start_value_.center +
+                            static_cast<std::int64_t>(std::llround(static_cast<double>(dx) * center_units_per_pixel));
+        } else if (drag_handle_index_ == 0 || drag_handle_index_ == 4) {
+            if (drag_handle_index_ == 0) {
+                visual_span_px_ = drag_start_visual_span_px_ - static_cast<double>(dx);
+            } else {
+                visual_span_px_ = drag_start_visual_span_px_ + static_cast<double>(dx);
+            }
+            clamp_visual_range();
+            value_.span = std::max<std::int64_t>(0, static_cast<std::int64_t>(std::llround(visual_span_px_ * start_units_per_pixel)));
         } else {
-            visual_span_px_ = drag_start_visual_span_px_ + static_cast<double>(dx);
+            if (drag_handle_index_ == 1) {
+                visual_falloff_px_ = drag_start_visual_falloff_px_ - static_cast<double>(dx);
+            } else {
+                visual_falloff_px_ = drag_start_visual_falloff_px_ + static_cast<double>(dx);
+            }
+            clamp_visual_range();
         }
-        clamp_visual_range();
-        value_.span = std::max<std::int64_t>(0, static_cast<std::int64_t>(std::llround(visual_span_px_ * start_units_per_pixel)));
-        value_.falloff = std::min<std::int64_t>(
-            value_.span,
-            std::max<std::int64_t>(0, static_cast<std::int64_t>(std::llround(visual_falloff_px_ * start_units_per_pixel))));
-        if (value_.falloff > value_.span) {
-            value_.falloff = value_.span;
+        if (value_.random) {
+            const SDL_Rect line = histogram_line_rect(drag_handle_index_);
+            const int top = line.y;
+            const int bottom = line.y + line.h;
+            const int adjusted_y = std::clamp(drag_start_y_ + dy, top, bottom);
+            set_weight_for_index(drag_handle_index_, weight_for_y(adjusted_y));
         }
-        changed = true;
-        break;
-    case DragMode::FalloffValue:
-        if (drag_handle_index_ == 1) {
-            visual_falloff_px_ = drag_start_visual_falloff_px_ - static_cast<double>(dx);
-        } else {
-            visual_falloff_px_ = drag_start_visual_falloff_px_ + static_cast<double>(dx);
-        }
-        clamp_visual_range();
-        value_.falloff = std::max<std::int64_t>(0, static_cast<std::int64_t>(std::llround(visual_falloff_px_ * start_units_per_pixel)));
-        if (value_.falloff > value_.span) {
-            value_.falloff = value_.span;
-        }
-        changed = true;
-        break;
-    case DragMode::WeightHandle: {
-        const SDL_Rect line = histogram_line_rect(drag_handle_index_);
-        const int top = line.y;
-        const int bottom = line.y + line.h;
-        const int adjusted_y = std::clamp(drag_start_y_ + dy, top, bottom);
-        const double raw = weight_for_y(adjusted_y);
-        const double clamped = std::clamp(raw, 0.0, 1.0);
-        set_weight_for_index(drag_handle_index_, clamped);
         changed = true;
         break;
     }
@@ -2817,6 +2778,7 @@ bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
     }
     if (changed) {
         sanitize_value();
+        sync_falloff_value_from_visual();
         update_geometry();
         notify_value_changed();
     }
@@ -2830,7 +2792,7 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
     bool used = false;
     switch (e.type) {
     case SDL_EVENT_MOUSE_MOTION: {
-        SDL_Point p{e.motion.x, e.motion.y};
+        SDL_Point p{static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
         update_hover(p);
         set_slider_scroll_capture(this, hovered_ || dragging_);
         if (dragging_) {
@@ -2842,7 +2804,7 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         if (e.button.button != SDL_BUTTON_LEFT) {
             break;
         }
-        SDL_Point p{e.button.x, e.button.y};
+        SDL_Point p{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
         update_hover(p);
         if (!SDL_PointInRect(&p, &rect_)) {
             break;
@@ -2869,7 +2831,6 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         hovered_ = false;
         checkbox_hovered_ = false;
         random_hovered_ = false;
-        hovered_line_index_ = -1;
         hovered_handle_index_ = -1;
         if (dragging_) {
             end_drag();
@@ -2941,7 +2902,6 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
     const double visible_raw_min = static_cast<double>(value_.center) + static_cast<double>(range_bar.x - center_x) * units;
     const double visible_raw_max = static_cast<double>(value_.center) + static_cast<double>((range_bar.x + range_bar.w) - center_x) * units;
     const std::int64_t first_tick = weighted_range_floor_to_step(static_cast<std::int64_t>(std::floor(visible_raw_min)), minor_step);
-    const DMLabelStyle& base_tick_style = label_style;
     DMLabelStyle small_tick_style = label_style;
     small_tick_style.font_size = std::max(8, label_style.font_size - 2);
     DMLabelStyle important_tick_style = label_style;
@@ -2998,9 +2958,8 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
         const int x = control_x_for_index(i);
         const double weight = value_.random ? display_weight_for_index(i) : 1.0;
         const int handle_y = weight_y_for_value(weight);
-        const bool line_active = dragging_ && drag_handle_index_ == i && drag_mode_ != DragMode::WeightHandle;
-        const bool handle_active = dragging_ && drag_handle_index_ == i && drag_mode_ == DragMode::WeightHandle;
-        const bool line_hovered = hovered_line_index_ == i || hovered_handle_index_ == i || line_active || handle_active;
+        const bool handle_active = dragging_ && drag_handle_index_ == i;
+        const bool line_hovered = hovered_handle_index_ == i || handle_active;
         SDL_Color line_col = (i == 2) ? DMStyles::AccentColor() : SDL_Color{154, 164, 188, 220};
         if (line_hovered) {
             line_col = SDL_Color{255, 207, 136, 255};

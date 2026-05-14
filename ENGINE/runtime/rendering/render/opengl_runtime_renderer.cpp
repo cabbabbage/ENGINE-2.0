@@ -460,6 +460,160 @@ bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
     return true;
 }
 
+bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
+                                               const Assets::DevGridOverlayContext& overlay_context,
+                                               int cell_size_px,
+                                               SDL_Texture* marker_texture,
+                                               std::uint32_t target_width,
+                                               std::uint32_t target_height,
+                                               std::vector<GpuSpriteDrawPacket>& out_packets,
+                                               std::string& out_error) {
+    out_packets.clear();
+    out_error.clear();
+    if (!marker_texture) {
+        out_error = "Missing floor grid overlay marker texture.";
+        return false;
+    }
+
+    const int cell = std::max(1, cell_size_px);
+    const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
+    const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+    const float screen_radius = std::max(240.0f, std::min(output_w, output_h) * 0.42f);
+    const float radius_sq = screen_radius * screen_radius;
+    const float point_world_half_extent = std::max(2.0f, static_cast<float>(cell) * 0.045f);
+    constexpr std::size_t kMaxGridPoints = 18000;
+
+    SDL_FPoint fade_center{output_w * 0.5f, output_h * 0.5f};
+    if (overlay_context.kind == Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint &&
+        overlay_context.has_selected_point_center) {
+        SDL_FPoint projected_center{};
+        if (camera.project_world_point(SDL_FPoint{overlay_context.exact_floor_xz.x, 0.0f},
+                                       overlay_context.exact_floor_xz.y,
+                                       projected_center) &&
+            std::isfinite(projected_center.x) &&
+            std::isfinite(projected_center.y)) {
+            fade_center = projected_center;
+        }
+    } else {
+        float mouse_x = 0.0f;
+        float mouse_y = 0.0f;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        if (std::isfinite(mouse_x) && std::isfinite(mouse_y)) {
+            fade_center = SDL_FPoint{
+                std::clamp(mouse_x, 0.0f, output_w),
+                std::clamp(mouse_y, 0.0f, output_h)
+            };
+        }
+    }
+
+    auto [view_min_x, view_min_z, view_max_x, view_max_z] = camera.get_current_view().get_bounds();
+    const float min_view_x = static_cast<float>(std::min(view_min_x, view_max_x));
+    const float max_view_x = static_cast<float>(std::max(view_min_x, view_max_x));
+    const float min_view_z = static_cast<float>(std::min(view_min_z, view_max_z));
+    const float max_view_z = static_cast<float>(std::max(view_min_z, view_max_z));
+    const float world_padding = static_cast<float>(cell) * 5.0f;
+    const float depth_padding = std::max(0.0f, camera.current_depth_offset_px()) *
+                                std::max(0.0001f, static_cast<float>(camera.get_scale()));
+    const float min_world_x = min_view_x - world_padding;
+    const float max_world_x = max_view_x + world_padding;
+    const float min_world_z = min_view_z - world_padding - depth_padding * 0.5f;
+    const float max_world_z = max_view_z + world_padding + depth_padding;
+
+    int sample_step = cell;
+    const double estimated_cols = std::max(1.0, std::ceil((max_world_x - min_world_x) / sample_step) + 1.0);
+    const double estimated_rows = std::max(1.0, std::ceil((max_world_z - min_world_z) / sample_step) + 1.0);
+    if (estimated_cols * estimated_rows > static_cast<double>(kMaxGridPoints)) {
+        const double scale = std::sqrt((estimated_cols * estimated_rows) / static_cast<double>(kMaxGridPoints));
+        sample_step = std::max(cell, static_cast<int>(std::ceil(static_cast<double>(cell) * scale)));
+    }
+
+    const float start_x = std::floor(min_world_x / static_cast<float>(sample_step)) * static_cast<float>(sample_step);
+    const float start_z = std::floor(min_world_z / static_cast<float>(sample_step)) * static_cast<float>(sample_step);
+    std::uintptr_t sequence = 0u;
+    out_packets.reserve(static_cast<std::size_t>(std::min<double>(estimated_cols * estimated_rows,
+                                                                  static_cast<double>(kMaxGridPoints))));
+
+    for (float z = start_z; z <= max_world_z + sample_step; z += static_cast<float>(sample_step)) {
+        for (float x = start_x; x <= max_world_x + sample_step; x += static_cast<float>(sample_step)) {
+            SDL_FPoint center{};
+            if (!camera.project_world_point(SDL_FPoint{x, 0.0f}, z, center) ||
+                !std::isfinite(center.x) ||
+                !std::isfinite(center.y)) {
+                continue;
+            }
+            if (center.x < -32.0f || center.y < -32.0f ||
+                center.x > output_w + 32.0f || center.y > output_h + 32.0f) {
+                continue;
+            }
+
+            const float dx = center.x - fade_center.x;
+            const float dy = center.y - fade_center.y;
+            const float distance_sq = dx * dx + dy * dy;
+            if (distance_sq > radius_sq) {
+                continue;
+            }
+
+            const float fade = 1.0f - std::sqrt(distance_sq / radius_sq);
+            const float alpha = std::clamp(fade * fade * 0.72f, 0.0f, 0.72f);
+            if (alpha <= 0.02f) {
+                continue;
+            }
+
+            const float left = x - point_world_half_extent;
+            const float right = x + point_world_half_extent;
+            const float top_z = z - point_world_half_extent;
+            const float bottom_z = z + point_world_half_extent;
+
+            SDL_FPoint screen_tl{};
+            SDL_FPoint screen_tr{};
+            SDL_FPoint screen_br{};
+            SDL_FPoint screen_bl{};
+            if (!camera.project_world_point(SDL_FPoint{left, 0.0f}, top_z, screen_tl) ||
+                !camera.project_world_point(SDL_FPoint{right, 0.0f}, top_z, screen_tr) ||
+                !camera.project_world_point(SDL_FPoint{right, 0.0f}, bottom_z, screen_br) ||
+                !camera.project_world_point(SDL_FPoint{left, 0.0f}, bottom_z, screen_bl)) {
+                continue;
+            }
+
+            GpuSpriteDrawPacket packet{};
+            packet.source_texture = marker_texture;
+            packet.source_asset_name = "<dev-floor-grid-overlay>";
+            packet.source_animation_name = "<dev-floor-grid-overlay>";
+            packet.source_texture_id =
+                "floor_grid_overlay_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(marker_texture));
+            packet.source_frame_index = -1;
+            packet.source_variant_index = -1;
+            packet.modulate = SDL_FColor{0.0f, 1.0f, 1.0f, alpha};
+            packet.projected_foot_y_key = std::max(screen_br.y, screen_bl.y);
+            packet.camera_depth_key = z;
+            packet.stable_sort_id = floor_sort_id(true, sequence++);
+            packet.is_floor_packet = true;
+            packet.depth_layer = 0;
+            fill_quad_packet_vertices(screen_tl,
+                                      screen_tr,
+                                      screen_br,
+                                      screen_bl,
+                                      0.0f,
+                                      0.0f,
+                                      1.0f,
+                                      1.0f,
+                                      output_w,
+                                      output_h,
+                                      packet);
+            out_packets.push_back(packet);
+            if (out_packets.size() >= kMaxGridPoints) {
+                break;
+            }
+        }
+        if (out_packets.size() >= kMaxGridPoints) {
+            break;
+        }
+    }
+
+    std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+    return true;
+}
+
 } // namespace opengl_runtime_renderer_detail
 
 bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
@@ -877,6 +1031,29 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             out_data.floor_draws)) {
         out_error = "Failed to build map-floor tile packets.";
         return false;
+    }
+
+    if (assets_->dev_grid_overlay_enabled()) {
+        std::vector<GpuSpriteDrawPacket> floor_grid_overlay_draws{};
+        if (!opengl_runtime_renderer_detail::build_dev_floor_grid_overlay_draw_packets(
+                camera,
+                assets_->dev_grid_overlay_context(),
+                assets_->dev_grid_overlay_cell_size_px(),
+                floor_marker_texture_,
+                target_width,
+                target_height,
+                floor_grid_overlay_draws,
+                out_error)) {
+            return false;
+        }
+        if (!floor_grid_overlay_draws.empty()) {
+            out_data.floor_draws.insert(out_data.floor_draws.end(),
+                                        std::make_move_iterator(floor_grid_overlay_draws.begin()),
+                                        std::make_move_iterator(floor_grid_overlay_draws.end()));
+            std::stable_sort(out_data.floor_draws.begin(),
+                             out_data.floor_draws.end(),
+                             opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+        }
     }
 
     std::vector<GpuSpriteDrawPacket> floor_marker_draws{};

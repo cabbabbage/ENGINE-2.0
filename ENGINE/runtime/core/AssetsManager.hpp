@@ -112,6 +112,7 @@ public:
            int screen_center_z,
            int map_radius,
            SDL_Renderer* renderer,
+           SDL_Window* window,
            const std::string& map_id,
            const nlohmann::json& map_manifest,
            std::string content_root = {},
@@ -366,6 +367,7 @@ private:
     Uint32 screenshot_create_task_start_ticks_ = 0;
     SDL_Rect screenshot_create_task_button_rect_{};
     PopupManager popup_manager_;
+    SDL_Window* app_window_ = nullptr;
     WarpedScreenGrid camera_;
     std::unique_ptr<SceneRenderer> scene;
     int screen_width;

@@ -17,6 +17,7 @@ class AssetLibrary;
 class Assets;
 class Input;
 struct SDL_Renderer;
+struct SDL_Window;
 
 namespace app::bootstrap {
 
@@ -49,7 +50,8 @@ RuntimeBootstrapResult prepare_runtime_bootstrap(RuntimeBootstrapRequest request
 std::unique_ptr<Assets> create_assets_from_bootstrap(RuntimeBootstrapResult& bootstrap,
                                                      int screen_w,
                                                      int screen_h,
-                                                     SDL_Renderer* renderer);
+                                                     SDL_Renderer* renderer,
+                                                     SDL_Window* window = nullptr);
 
 void finalize_assets_post_init(Assets& assets,
                                std::unique_ptr<Input>& input,

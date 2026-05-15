@@ -348,7 +348,8 @@ void MainApp::setup() {
                         game_assets_ = app::bootstrap::create_assets_from_bootstrap(bootstrap_result,
                                                                                     screen_w_,
                                                                                     screen_h_,
-                                                                                    renderer);
+                                                                                    renderer,
+                                                                                    window_);
                         loader_ = std::move(bootstrap_result.loader);
                         world_context_ = bootstrap_result.world_context;
                         vibble::log::info("[MainApp] Assets object created successfully.");

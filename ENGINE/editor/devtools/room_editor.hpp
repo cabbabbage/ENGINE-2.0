@@ -74,6 +74,7 @@ public:
     ~RoomEditor();
 
     void set_input(Input* input);
+    void set_parent_window(SDL_Window* window);
     void set_player(Asset* player);
     void set_active_assets(std::vector<Asset*>& actives, std::uint64_t generation);
     void set_screen_dimensions(int width, int height);
@@ -872,6 +873,7 @@ private:
 
 private:
     Assets* assets_ = nullptr;
+    SDL_Window* parent_window_ = nullptr;
     Input* input_ = nullptr;
     std::vector<Asset*>* active_assets_ = nullptr;
     std::uint64_t active_assets_version_ = 0;

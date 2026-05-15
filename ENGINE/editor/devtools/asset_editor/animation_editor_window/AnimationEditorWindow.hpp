@@ -78,6 +78,7 @@ class AnimationEditorWindow {
     void set_assets(Assets* assets) { assets_ = assets; }
     void set_target_asset(Asset* asset) { target_asset_ = asset; }
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
+    void set_parent_window(SDL_Window* window) { parent_window_ = window; }
 
   FRAME_EDITOR_ACCESS:
     void handle_document_saved();
@@ -214,7 +215,11 @@ class AnimationEditorWindow {
 
     Assets* assets_ = nullptr;
     Asset* target_asset_ = nullptr;
+    SDL_Window* parent_window_ = nullptr;
     std::unique_ptr<CustomControllerService> custom_controller_service_;
+    std::function<std::vector<std::filesystem::path>()> png_sequence_picker_override_;
+    std::function<std::optional<std::string>(const std::string&, const std::string&, const std::string&)> text_prompt_override_;
+    std::function<std::optional<int>(const std::string&, const std::string&, const std::vector<int>&)> choice_prompt_override_;
 
 };
 

@@ -41,15 +41,6 @@
 #include "core/manifest/manifest_loader.hpp"
 #include "PreviewProvider.hpp"
 #include "string_utils.hpp"
-#include "ui/tinyfiledialogs.h"
-#ifdef _WIN32
-#  ifndef NOMINMAX
-#    define NOMINMAX
-#  endif
-#  include <windows.h>
-#  include <shobjidl.h>
-#  include <shlwapi.h>
-#endif
 #include "utils/input.hpp"
 
 #include "assets/asset/asset_info.hpp"
@@ -60,6 +51,7 @@
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_paths.hpp"
 #include "devtools/dev_mode_utils.hpp"
+#include "devtools/sdl_modal_dialog.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace {
@@ -1311,13 +1303,18 @@ std::string AnimationEditorWindow::normalize_animation_name(std::string_view raw
 void AnimationEditorWindow::prompt_rename_animation(const std::string& animation_id) {
     if (!document_) return;
 
-    const char* input = tinyfd_inputBox("Rename Animation", "Enter new animation identifier", animation_id.c_str());
+    std::optional<std::string> input;
+    if (text_prompt_override_) {
+        input = text_prompt_override_("Rename Animation", "Enter new animation identifier", animation_id);
+    } else {
+        input = devmode::dialogs::prompt_text(parent_window_, "Rename Animation", "Enter new animation identifier", animation_id);
+    }
     if (!input) {
         set_status_message("Rename cancelled.", 120);
         return;
     }
 
-    std::string desired = normalize_animation_name(input);
+    std::string desired = normalize_animation_name(*input);
     if (desired.empty()) {
         set_status_message("Animation name cannot be empty.", 180);
         return;
@@ -1392,8 +1389,14 @@ void AnimationEditorWindow::delete_animation_with_confirmation(const std::string
     if (!document_) return;
 
     std::string message = "Delete animation '" + animation_id + "'? This cannot be undone.";
-    int result = tinyfd_messageBox("Delete Animation", message.c_str(), "yesno", "warning", 0);
-    if (result != 1) {
+    bool confirmed = false;
+    if (choice_prompt_override_) {
+        auto result = choice_prompt_override_("Delete Animation", message, {0, 1});
+        confirmed = result && *result == 1;
+    } else {
+        confirmed = devmode::dialogs::confirm(parent_window_, "Delete Animation", message, "Delete", "Cancel", true);
+    }
+    if (!confirmed) {
         set_status_message("Deletion cancelled.", 120);
         if (list_context_menu_) {
             list_context_menu_->close();
@@ -2132,6 +2135,17 @@ void AnimationEditorWindow::handle_create_defaults() {
         return;
     }
 
+    if (defaults_base_frame_paths_.empty()) {
+        handle_pick_defaults_base_frames();
+        if (defaults_base_frame_paths_.empty()) {
+            devmode::dialogs::show_message(parent_window_,
+                                           "Create Defaults",
+                                           "Select at least one base PNG frame before creating default animations.",
+                                           devmode::dialogs::MessageIcon::Warning);
+            return;
+        }
+    }
+
     std::vector<std::filesystem::path> base_frames;
     base_frames.reserve(defaults_base_frame_paths_.size());
     for (const auto& path : defaults_base_frame_paths_) {
@@ -2141,6 +2155,10 @@ void AnimationEditorWindow::handle_create_defaults() {
     }
     if (base_frames.empty()) {
         set_status_message("Select at least one base PNG frame.", 180);
+        devmode::dialogs::show_message(parent_window_,
+                                       "Create Defaults",
+                                       "Select at least one base PNG frame before creating default animations.",
+                                       devmode::dialogs::MessageIcon::Warning);
         return;
     }
     base_frames = normalize_sequence_paths(base_frames);
@@ -2333,9 +2351,14 @@ void AnimationEditorWindow::handle_create_defaults() {
 }
 
 void AnimationEditorWindow::create_animation_via_prompt() {
-    const char* input = tinyfd_inputBox("Create Animation", "Enter new animation identifier", "animation");
+    std::optional<std::string> input;
+    if (text_prompt_override_) {
+        input = text_prompt_override_("Create Animation", "Enter new animation identifier", "animation");
+    } else {
+        input = devmode::dialogs::prompt_text(parent_window_, "Create Animation", "Enter new animation identifier", "animation");
+    }
     if (!input) return;
-    std::string name = normalize_animation_name(input);
+    std::string name = normalize_animation_name(*input);
 
     if (name.empty()) {
         return;
@@ -2719,48 +2742,9 @@ std::optional<std::string> AnimationEditorWindow::resolve_manifest_key(const Ass
 }
 
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_folder() const {
-    std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileDialog* pfd = nullptr;
-    std::optional<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Upload Folder");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(pfd->GetResult(&item))) {
-                PWSTR psz = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                    picked = std::filesystem::path(std::wstring(psz));
-                    CoTaskMemFree(psz);
-                }
-                item->Release();
-            }
-        }
-        pfd->Release();
-    }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* result = tinyfd_selectFolderDialog("Select Animation Folder", default_path.empty() ? nullptr : default_path.c_str());
-    if (!result || std::string(result).empty()) {
-        return std::nullopt;
-    }
-    return std::filesystem::path(result);
-#endif
+    return devmode::dialogs::open_folder(parent_window_,
+                                         "Select Animation Folder",
+                                         asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_);
 }
 
 void AnimationEditorWindow::handle_controller_button_click() {
@@ -2975,121 +2959,21 @@ void AnimationEditorWindow::open_controller() {
 }
 
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_gif() const {
-    std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileDialog* pfd = nullptr;
-    std::optional<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_FORCEFILESYSTEM;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Upload GIF");
-        COMDLG_FILTERSPEC filters[] = { {L"GIF Image", L"*.gif"} };
-        pfd->SetFileTypes(1, filters);
-        pfd->SetDefaultExtension(L"gif");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(pfd->GetResult(&item))) {
-                PWSTR psz = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                    picked = std::filesystem::path(std::wstring(psz));
-                    CoTaskMemFree(psz);
-                }
-                item->Release();
-            }
-        }
-        pfd->Release();
-    }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* filters[] = {"*.gif"};
-    const char* result = tinyfd_openFileDialog("Import GIF", default_path.c_str(), 1, filters, "GIF Image", 0);
-    if (!result || std::string(result).empty()) {
-        return std::nullopt;
-    }
-    return std::filesystem::path(result);
-#endif
+    return devmode::dialogs::open_file(parent_window_,
+                                       "Import GIF",
+                                       asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_,
+                                       {devmode::dialogs::FileDialogFilter{"GIF Image", "gif"}});
 }
 
 std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() const {
-    std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileOpenDialog* pfd = nullptr;
-    std::vector<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Upload PNG");
-        COMDLG_FILTERSPEC filters[] = { {L"PNG Images", L"*.png"} };
-        pfd->SetFileTypes(1, filters);
-        pfd->SetDefaultExtension(L"png");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItemArray* items = nullptr;
-            if (SUCCEEDED(pfd->GetResults(&items)) && items) {
-                DWORD count = 0;
-                if (SUCCEEDED(items->GetCount(&count))) {
-                    for (DWORD i = 0; i < count; ++i) {
-                        IShellItem* item = nullptr;
-                        if (!SUCCEEDED(items->GetItemAt(i, &item)) || !item) {
-                            continue;
-                        }
-                        PWSTR psz = nullptr;
-                        if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                            picked.emplace_back(std::wstring(psz));
-                            CoTaskMemFree(psz);
-                        }
-                        item->Release();
-                    }
-                }
-                items->Release();
-            } else {
-                IShellItem* item = nullptr;
-                if (SUCCEEDED(pfd->GetResult(&item)) && item) {
-                    PWSTR psz = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                        picked.emplace_back(std::wstring(psz));
-                        CoTaskMemFree(psz);
-                    }
-                    item->Release();
-                }
-            }
-        }
-        pfd->Release();
+    if (png_sequence_picker_override_) {
+        return png_sequence_picker_override_();
     }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* filters[] = {"*.png"};
-    const char* result = tinyfd_openFileDialog("Upload PNG", default_path.c_str(), 1, filters, "PNG Images", 1);
-    if (!result || std::string(result).empty()) {
-        return {};
-    }
-    return split_paths(result);
-#endif
+    return devmode::dialogs::open_files(parent_window_,
+                                        "Upload PNG",
+                                        asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_,
+                                        {devmode::dialogs::FileDialogFilter{"PNG Images", "png"}},
+                                        true);
 }
 
 std::optional<std::string> AnimationEditorWindow::pick_animation_reference() const {
@@ -3134,9 +3018,14 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
         oss << " - " << id << "\n";
     }
 
-    const char* result = tinyfd_inputBox("Select Animation", oss.str().c_str(), selectable.front().c_str());
+    std::optional<std::string> result;
+    if (text_prompt_override_) {
+        result = text_prompt_override_("Select Animation", oss.str(), selectable.front());
+    } else {
+        result = devmode::dialogs::prompt_text(parent_window_, "Select Animation", oss.str(), selectable.front());
+    }
     if (!result) return std::nullopt;
-    std::string choice = animation_editor::strings::trim_copy(result);
+    std::string choice = animation_editor::strings::trim_copy(*result);
     if (choice.empty()) return std::nullopt;
 
     auto match_it = std::find(selectable.begin(), selectable.end(), choice);
@@ -3154,60 +3043,19 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
 }
 
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_audio_file() const {
-    std::string default_path;
+    std::filesystem::path default_path;
     if (!asset_root_path_.empty()) {
-        default_path = (asset_root_path_ / default_audio_subdir()).string();
+        default_path = asset_root_path_ / default_audio_subdir();
     }
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileDialog* pfd = nullptr;
-    std::optional<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_FORCEFILESYSTEM;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Select Audio Clip");
-        COMDLG_FILTERSPEC filters[] = {
-            {L"Audio Files", L"*.wav;*.ogg;*.mp3"},
-            {L"WAV", L"*.wav"},
-            {L"OGG", L"*.ogg"},
-            {L"MP3", L"*.mp3"}
-};
-        pfd->SetFileTypes(4, filters);
-        pfd->SetDefaultExtension(L"wav");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(pfd->GetResult(&item))) {
-                PWSTR psz = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                    picked = std::filesystem::path(std::wstring(psz));
-                    CoTaskMemFree(psz);
-                }
-                item->Release();
-            }
-        }
-        pfd->Release();
-    }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* filters[] = {"*.wav", "*.ogg", "*.mp3"};
-    const char* result = tinyfd_openFileDialog("Select Audio Clip", default_path.c_str(), 3, filters, "Audio Files", 0);
-    if (!result || std::string(result).empty()) {
-        return std::nullopt;
-    }
-    return std::filesystem::path(result);
-#endif
+    return devmode::dialogs::open_file(parent_window_,
+                                       "Select Audio Clip",
+                                       default_path,
+                                       {
+                                           devmode::dialogs::FileDialogFilter{"Audio Files", "wav;ogg;mp3"},
+                                           devmode::dialogs::FileDialogFilter{"WAV", "wav"},
+                                           devmode::dialogs::FileDialogFilter{"OGG", "ogg"},
+                                           devmode::dialogs::FileDialogFilter{"MP3", "mp3"},
+                                       });
 }
 
 }

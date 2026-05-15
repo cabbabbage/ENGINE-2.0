@@ -61,6 +61,7 @@ class AssetInfoUI {
     void set_on_animation_editor_closed(std::function<void()> callback);
     bool has_info() const { return static_cast<bool>(info_); }
     void set_assets(Assets* a);
+    void set_parent_window(SDL_Window* window);
     Assets* assets() const { return assets_; }
     void set_manifest_store(devmode::core::ManifestStore* store);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
@@ -121,6 +122,7 @@ class AssetInfoUI {
     std::shared_ptr<AssetInfo> info_{};
     mutable SDL_Renderer* last_renderer_ = nullptr;
     Assets* assets_ = nullptr;
+    SDL_Window* parent_window_ = nullptr;
 
     std::vector<std::unique_ptr<DockableCollapsible>> sections_;
     DockableCollapsible* focused_section_ = nullptr;

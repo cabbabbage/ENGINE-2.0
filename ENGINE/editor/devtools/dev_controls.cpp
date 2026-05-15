@@ -902,6 +902,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
+        room_editor_->set_parent_window(parent_window_);
         room_editor_->set_manifest_store(&manifest_store_);
         room_editor_->set_save_coordinator(&save_coordinator_);
         room_editor_->set_save_manager(&save_manager_);
@@ -1120,6 +1121,13 @@ DevControls::~DevControls() {
     devmode::ui_settings::flush_if_dirty();
     AssetInfo::set_manifest_store_provider({});
     simple_label_cache().clear();
+}
+
+void DevControls::set_parent_window(SDL_Window* window) {
+    parent_window_ = window;
+    if (room_editor_) {
+        room_editor_->set_parent_window(parent_window_);
+    }
 }
 
 devmode::core::ManifestStore& DevControls::manifest_store() {

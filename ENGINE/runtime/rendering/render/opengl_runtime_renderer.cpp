@@ -1221,14 +1221,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         : 0;
 
     std::vector<Asset*> render_assets = *visible_assets;
-    if (assets_->live_dynamic_assets_visible()) {
-        std::unordered_set<Asset*> selected_assets(render_assets.begin(), render_assets.end());
-        for (Asset* asset : assets_->getLiveDynamicRenderAssets()) {
-            if (selected_assets.insert(asset).second) {
-                render_assets.push_back(asset);
-            }
-        }
-    }
 
     out_data.target_width = target_width;
     out_data.target_height = target_height;

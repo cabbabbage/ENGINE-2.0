@@ -138,7 +138,6 @@ public:
 
     const std::vector<Asset*>& getActive() const;
     const std::vector<Asset*>& getFilteredActiveAssets() const;
-    const std::vector<Asset*>& getLiveDynamicRenderAssets() const { return live_dynamic_active_assets_; }
     const std::unordered_set<Asset*>& filtered_active_asset_membership() const { return filtered_active_asset_membership_; }
     using ActiveTraversalEntry = WarpedScreenGrid::VisibleTraversalEntry;
     struct FrameCollisionEntry {
@@ -376,7 +375,6 @@ private:
     int delta_z_ = 0;
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
-    std::vector<Asset*> live_dynamic_active_assets_;
     std::unordered_set<Asset*> filtered_active_asset_membership_;
     std::shared_ptr<RuntimeWorldContext> world_context_;
     Room* current_room_ = nullptr;
@@ -550,7 +548,9 @@ private:
     void rebuild_live_dynamic_selectors();
     void reconcile_live_dynamic_assets(const world::GridBounds& visible_bounds);
     void clear_live_dynamic_assets();
-    void rebuild_live_dynamic_active_assets();
+    void delete_inactive_live_dynamic_assets();
+    std::size_t delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete,
+                                               bool increment_nonces);
 
     std::vector<Asset*> moving_assets_for_grid_;
     std::vector<Asset*> pending_static_grid_registration_;
@@ -669,8 +669,10 @@ private:
     };
 
     struct LiveDynamicState {
-        std::unique_ptr<Asset> asset;
+        Asset* asset = nullptr;
         bool null_selection = false;
+        SDL_Point spawn_world_xz{0, 0};
+        bool has_spawn_world_xz = false;
     };
 
     struct LiveDynamicLifecycleBounds {
@@ -682,6 +684,7 @@ private:
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
     std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
     std::unordered_map<LiveDynamicPointKey, LiveDynamicState, LiveDynamicPointKeyHash> live_dynamic_states_;
+    std::unordered_map<Asset*, LiveDynamicPointKey> live_dynamic_asset_keys_;
     std::unordered_map<LiveDynamicPointKey, std::uint64_t, LiveDynamicPointKeyHash> live_dynamic_resolution_nonces_;
     std::unordered_map<std::string, std::uint64_t> live_dynamic_scan_cursors_;
     std::uint32_t last_live_dynamic_log_frame_ = std::numeric_limits<std::uint32_t>::max();

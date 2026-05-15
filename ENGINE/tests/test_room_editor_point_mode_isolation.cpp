@@ -143,6 +143,7 @@ struct BoundaryProxyFixture {
                                           0,
                                           0,
                                           nullptr,
+                                          nullptr,
                                           "boundary_proxy_test",
                                           map_info,
                                           std::string{},

@@ -13,6 +13,7 @@
 #include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_info_ui.hpp"
+#include "devtools/sdl_modal_dialog.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
 #include "devtools/bottom_navigation_panel.hpp"
@@ -4125,6 +4126,13 @@ bool RoomEditor::handle_room_nav_click(const SDL_Point& screen_pt) {
     return false;
 }
 
+void RoomEditor::set_parent_window(SDL_Window* window) {
+    parent_window_ = window;
+    if (info_ui_) {
+        info_ui_->set_parent_window(parent_window_);
+    }
+}
+
 bool RoomEditor::select_current_room_from_nav(Room* room) {
     if (!room) {
         return false;
@@ -5978,6 +5986,7 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
     if (!info_ui_) {
         info_ui_ = std::make_unique<AssetInfoUI>();
         if (info_ui_) {
+            info_ui_->set_parent_window(parent_window_);
             info_ui_->set_save_coordinator(save_coordinator_);
             info_ui_->set_manifest_store(manifest_store_);
             info_ui_->set_on_animation_editor_closed([this]() { this->on_animation_editor_closed(); });
@@ -9659,29 +9668,24 @@ RoomEditor::DeleteConfirmResult RoomEditor::prompt_delete_confirmation(const Del
     body << "Affected: " << summary.affected_count << "\n\n";
     body << "Confirm delete?";
 
-    const SDL_MessageBoxButtonData buttons[] = {
-        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
-        {0, 1, "Delete"},
-        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 2, "Delete + Don't Ask Again"},
-    };
     const std::string title = delete_mode_label(summary.mode) + " Delete Confirmation";
-    const SDL_MessageBoxData msg{
-        SDL_MESSAGEBOX_WARNING,
-        nullptr,
-        title.c_str(),
-        body.str().c_str(),
-        static_cast<int>(sizeof(buttons) / sizeof(buttons[0])),
-        buttons,
-        nullptr,
-    };
-    int pressed = 0;
-    if (SDL_ShowMessageBox(&msg, &pressed) != 0) {
+    const auto pressed = devmode::dialogs::show_choice(
+        parent_window_,
+        title,
+        body.str(),
+        {
+            devmode::dialogs::DialogButton{0, "Cancel", false, true, false},
+            devmode::dialogs::DialogButton{1, "Delete", false, false, true},
+            devmode::dialogs::DialogButton{2, "Delete + Don't Ask Again", true, false, true},
+        },
+        devmode::dialogs::MessageIcon::Warning);
+    if (!pressed) {
         return DeleteConfirmResult::Cancel;
     }
-    if (pressed == 2) {
+    if (*pressed == 2) {
         return DeleteConfirmResult::ConfirmDontAskAgain;
     }
-    if (pressed == 1) {
+    if (*pressed == 1) {
         return DeleteConfirmResult::Confirm;
     }
     return DeleteConfirmResult::Cancel;

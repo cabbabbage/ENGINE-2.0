@@ -822,6 +822,7 @@ AssetInfoUI::AssetInfoUI() {
         animation_editor_window_ = std::make_unique<animation_editor::AnimationEditorWindow>();
         if (animation_editor_window_) {
             animation_editor_window_->set_manifest_store(manifest_store_);
+            animation_editor_window_->set_parent_window(parent_window_);
             animation_editor_window_->set_on_document_saved([this]() { this->on_animation_document_saved(); });
             animation_editor_window_->set_on_closed([this]() {
                 if (!animation_editor_fullscreen_mode_) {
@@ -1025,6 +1026,13 @@ void AssetInfoUI::set_assets(Assets* a) {
         apply_camera_override(true);
     }
     validate_target_asset();
+}
+
+void AssetInfoUI::set_parent_window(SDL_Window* window) {
+    parent_window_ = window;
+    if (animation_editor_window_) {
+        animation_editor_window_->set_parent_window(parent_window_);
+    }
 }
 
 void AssetInfoUI::set_manifest_store(devmode::core::ManifestStore* store) {

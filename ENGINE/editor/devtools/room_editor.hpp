@@ -1405,6 +1405,17 @@ struct RoomEditorTestAccess {
     static bool validate_anchor_candidate_source(const RoomEditor& editor, int source_context);
     static bool validate_floor_candidate_source(const RoomEditor& editor, int source_context);
     static void set_oval_candidate_selection(RoomEditor& editor, bool center_selected, int selected_point_index);
+    static void configure_oval_lock_target_for_tests(RoomEditor& editor,
+                                                     Asset* target_asset,
+                                                     int selected_oval_index,
+                                                     int selected_point_index,
+                                                     float center_world_x,
+                                                     float center_world_y,
+                                                     float center_world_z);
+    static bool resolve_oval_lock_target_for_tests(const RoomEditor& editor,
+                                                   float& out_world_x,
+                                                   float& out_world_z,
+                                                   float& out_heading_radians);
 
     static int active_subview(const RoomEditor& editor);
     static void set_active_subview(RoomEditor& editor, int subview);

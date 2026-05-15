@@ -557,6 +557,7 @@ Asset::Asset(const Asset& o)
     , spawn_id(o.spawn_id)
     , spawn_method(o.spawn_method)
     , owning_room_name_(o.owning_room_name_)
+    , dynamic_spawned_asset_(o.dynamic_spawned_asset_)
     , controller_(nullptr)
     , tiling_info_(o.tiling_info_)
     , anim_(nullptr)
@@ -653,6 +654,7 @@ Asset& Asset::operator=(const Asset& o) {
         assets_              = o.assets_;
         spawn_id             = o.spawn_id;
         spawn_method         = o.spawn_method;
+        dynamic_spawned_asset_ = o.dynamic_spawned_asset_;
         size_variation_sample_ = o.size_variation_sample_;
         size_variation_percent_ = o.size_variation_percent_;
         owning_room_name_    = o.owning_room_name_;

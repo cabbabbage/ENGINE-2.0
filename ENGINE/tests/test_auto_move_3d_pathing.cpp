@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "animation/animation_update.hpp"
+#include "animation/animation_runtime.hpp"
 #include "animation/get_best_path.hpp"
 #include "animation/get_best_path_3d.hpp"
 #include "animation/movement_target_utils.hpp"
@@ -32,6 +33,24 @@ Animation make_single_path_animation(int dx, int dy, int dz) {
     std::vector<std::vector<AnimationFrame>> paths;
     paths.push_back(std::move(path));
     animation.replace_movement_paths(std::move(paths));
+    return animation;
+}
+
+Animation make_runtime_path_animation(const std::vector<axis::WorldPos>& deltas,
+                                      std::string on_end = "loop") {
+    Animation animation;
+    std::vector<Animation::FrameCache> caches(deltas.size());
+    animation.adopt_prebuilt_frames(std::move(caches), {1.0f});
+    auto& path = animation.movement_path(0);
+    path.resize(deltas.size());
+    for (std::size_t i = 0; i < deltas.size(); ++i) {
+        path[i].dx = deltas[i].x;
+        path[i].dy = deltas[i].y;
+        path[i].dz = deltas[i].z;
+    }
+    animation.on_end_animation = std::move(on_end);
+    animation.on_end_behavior = Animation::classify_on_end(animation.on_end_animation);
+    animation.synchronize_runtime_frames();
     return animation;
 }
 
@@ -61,6 +80,19 @@ std::unique_ptr<Asset> make_test_asset(
     asset->move_to_world_position(world_x, world_y, world_z, grid_resolution);
     return asset;
 }
+
+struct RuntimeAutoMoveHarness {
+    std::unique_ptr<Asset> asset;
+    AnimationUpdate updater;
+    AnimationRuntime runtime;
+
+    explicit RuntimeAutoMoveHarness(std::unique_ptr<Asset> asset_in)
+        : asset(std::move(asset_in))
+        , updater(asset.get(), nullptr)
+        , runtime(asset.get(), nullptr) {
+        runtime.set_planner(&updater);
+    }
+};
 
 bool same_world_pos(const axis::WorldPos& lhs, const axis::WorldPos& rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y && lhs.z == rhs.z;
@@ -217,6 +249,144 @@ TEST_CASE("2D GetBestPath behavior remains unchanged") {
     REQUIRE_FALSE(plan.strides.empty());
     CHECK(plan.strides.front().animation_id == "b_right");
     CHECK(plan.final_dest.x > asset->world_x());
+}
+
+TEST_CASE("auto_move root motion is consumed at animation frame cadence") {
+    RuntimeAutoMoveHarness harness(make_test_asset(
+        {
+            {"default", make_runtime_path_animation({axis::WorldPos{0, 0, 0}})},
+            {"walk_right",
+             make_runtime_path_animation({
+                 axis::WorldPos{0, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+             })},
+        },
+        "default"));
+    REQUIRE(harness.asset != nullptr);
+
+    harness.updater.auto_move(SDL_Point{50, 0}, 0);
+    REQUIRE(harness.updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::Plan2D);
+    REQUIRE_FALSE(harness.updater.current_plan()->strides.empty());
+    CHECK(harness.updater.current_plan()->strides.front().frames == 6);
+
+    harness.runtime.update();
+    CHECK(harness.asset->world_x() == 0);
+    harness.runtime.update();
+    CHECK(harness.asset->world_x() == 0);
+    harness.runtime.update();
+    CHECK(harness.asset->world_x() == 10);
+
+    for (int i = 0; i < 32 && !harness.updater.current_plan()->strides.empty(); ++i) {
+        harness.runtime.update();
+    }
+    CHECK(harness.asset->world_x() == 50);
+    CHECK(harness.updater.current_plan()->strides.empty());
+}
+
+TEST_CASE("auto_move consumes multiple advanced frames in one update without replaying frames") {
+    RuntimeAutoMoveHarness harness(make_test_asset(
+        {
+            {"default", make_runtime_path_animation({axis::WorldPos{0, 0, 0}})},
+            {"walk_right",
+             make_runtime_path_animation({
+                 axis::WorldPos{0, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+                 axis::WorldPos{10, 0, 0},
+             })},
+        },
+        "default"));
+    REQUIRE(harness.asset != nullptr);
+
+    harness.updater.auto_move(SDL_Point{30, 0}, 0);
+    REQUIRE(harness.updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::Plan2D);
+
+    harness.asset->set_frame_progress(3.0f / static_cast<float>(kBaseAnimationFps));
+    harness.runtime.update();
+
+    CHECK(harness.asset->world_x() == 30);
+    CHECK(harness.updater.current_plan()->strides.empty());
+}
+
+TEST_CASE("auto_move_3d root motion uses the same frame cadence for height movement") {
+    RuntimeAutoMoveHarness harness(make_test_asset(
+        {
+            {"default", make_runtime_path_animation({axis::WorldPos{0, 0, 0}})},
+            {"lift",
+             make_runtime_path_animation({
+                 axis::WorldPos{0, 0, 0},
+                 axis::WorldPos{0, 5, 0},
+                 axis::WorldPos{0, 5, 0},
+             })},
+        },
+        "default"));
+    REQUIRE(harness.asset != nullptr);
+
+    harness.updater.auto_move_3d(axis::WorldPos{0, 10, 0}, 0);
+    REQUIRE(harness.updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::Plan3D);
+
+    harness.runtime.update();
+    CHECK(harness.asset->world_y() == 0);
+    harness.runtime.update();
+    CHECK(harness.asset->world_y() == 0);
+    harness.runtime.update();
+    CHECK(harness.asset->world_y() == 5);
+
+    for (int i = 0; i < 16 && !harness.updater.current_plan_3d()->strides.empty(); ++i) {
+        harness.runtime.update();
+    }
+    CHECK(harness.asset->world_y() == 10);
+    CHECK(harness.updater.current_plan_3d()->strides.empty());
+}
+
+TEST_CASE("spider-style inherited mirrored movement plans and executes at source cadence") {
+    Animation forward_left = make_runtime_path_animation({
+        axis::WorldPos{0, 0, 0},
+        axis::WorldPos{-7, 0, 10},
+        axis::WorldPos{-8, 0, 10},
+        axis::WorldPos{-8, 0, 9},
+        axis::WorldPos{-9, 0, 9},
+        axis::WorldPos{-9, 0, 9},
+    });
+    Animation forward_right = make_runtime_path_animation({
+        axis::WorldPos{0, 0, 0},
+        axis::WorldPos{7, 0, 10},
+        axis::WorldPos{8, 0, 10},
+        axis::WorldPos{8, 0, 9},
+        axis::WorldPos{9, 0, 9},
+        axis::WorldPos{9, 0, 9},
+    });
+    forward_right.source.kind = "animation";
+    forward_right.source.name = "forward_left";
+    forward_right.inherit_data = true;
+    forward_right.invert_x = true;
+
+    RuntimeAutoMoveHarness harness(make_test_asset(
+        {
+            {"default", make_runtime_path_animation({axis::WorldPos{0, 0, 0}})},
+            {"forward_left", forward_left},
+            {"forward_right", forward_right},
+        },
+        "default"));
+    REQUIRE(harness.asset != nullptr);
+
+    harness.updater.auto_move(SDL_Point{41, 47}, 0);
+    REQUIRE(harness.updater.current_plan_mode() == AnimationUpdate::ActivePlanMode::Plan2D);
+    REQUIRE_FALSE(harness.updater.current_plan()->strides.empty());
+    CHECK(harness.updater.current_plan()->strides.front().animation_id == "forward_right");
+    CHECK(harness.updater.current_plan()->strides.front().frames == 6);
+
+    for (int i = 0; i < 48 && !harness.updater.current_plan()->strides.empty(); ++i) {
+        harness.runtime.update();
+    }
+
+    CHECK(harness.asset->world_x() == 41);
+    CHECK(harness.asset->world_z() == 47);
+    CHECK(harness.updater.current_plan()->strides.empty());
 }
 
 TEST_CASE("Path planners exclude attack-tagged animations from locomotion candidates") {

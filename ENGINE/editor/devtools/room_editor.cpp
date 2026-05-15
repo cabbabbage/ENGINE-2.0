@@ -26663,6 +26663,37 @@ void RoomEditorTestAccess::set_oval_candidate_selection(RoomEditor& editor,
     editor.oval_edit_.selected_point_index = selected_point_index;
 }
 
+void RoomEditorTestAccess::configure_oval_lock_target_for_tests(RoomEditor& editor,
+                                                                Asset* target_asset,
+                                                                int selected_oval_index,
+                                                                int selected_point_index,
+                                                                float center_world_x,
+                                                                float center_world_y,
+                                                                float center_world_z) {
+    editor.editor_mode_ = RoomEditor::EditorMode::OvalAnchorEdit;
+    editor.oval_edit_.target_asset = target_asset;
+    editor.oval_edit_.selected_oval_index = selected_oval_index;
+    editor.oval_edit_.selected_point_index = selected_point_index;
+    editor.oval_edit_.center_selected = false;
+    editor.oval_edit_.center_hovered = false;
+    editor.oval_edit_.body_hovered = false;
+    editor.oval_edit_.center_dragging = false;
+    editor.oval_edit_.center_world_x = center_world_x;
+    editor.oval_edit_.center_world_y = center_world_y;
+    editor.oval_edit_.center_world_z = center_world_z;
+    editor.oval_edit_.has_center_world =
+        std::isfinite(center_world_x) &&
+        std::isfinite(center_world_y) &&
+        std::isfinite(center_world_z);
+}
+
+bool RoomEditorTestAccess::resolve_oval_lock_target_for_tests(const RoomEditor& editor,
+                                                              float& out_world_x,
+                                                              float& out_world_z,
+                                                              float& out_heading_radians) {
+    return editor.resolve_selected_oval_lock_target(out_world_x, out_world_z, out_heading_radians);
+}
+
 int RoomEditorTestAccess::active_subview(const RoomEditor& editor) {
     return static_cast<int>(editor.asset_editor_subview_);
 }

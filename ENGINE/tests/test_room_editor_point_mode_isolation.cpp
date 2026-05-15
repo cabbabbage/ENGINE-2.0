@@ -25,6 +25,7 @@
 #include "room_editor_payload_contract_test_helper.hpp"
 #include "utils/area.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "utils/oval_anchor_math.hpp"
 
 namespace {
 
@@ -416,6 +417,63 @@ TEST_CASE("RoomEditor oval candidate source requires explicit center or point se
         editor, RoomEditorTestAccess::candidate_source_oval_point()));
     CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
         editor, RoomEditorTestAccess::candidate_source_oval_center()));
+}
+
+TEST_CASE("RoomEditor oval lock target selected point compensates radius offset without requiring selected binding") {
+    RoomEditor editor(nullptr, 1280, 720);
+
+    auto info = std::make_shared<AssetInfo>("oval_owner");
+    info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "oval_owner";
+    mapping.width_radius_x = 40.0f;
+    mapping.height_radius_z = 20.0f;
+    mapping.radius_offset_degrees = 30.0f;
+    AssetInfo::OvalAnchorPoint point{};
+    point.angle_degrees = 90.0f;
+    point.texture_x = 0;
+    point.texture_y = 0;
+    point.depth_offset = 0.0f;
+    point.rotation_degrees = 0.0f;
+    point.hidden = false;
+    point.resolve_x = true;
+    point.scaling_method = AnchorScalingMethod::Parent;
+    mapping.points.push_back(point);
+    REQUIRE(info->upsert_oval_anchor_mapping(mapping));
+
+    Area spawn_area("oval_lock_target_area", 0);
+    Asset asset(info, spawn_area, SDL_Point{0, 0}, 0);
+    RoomEditorTestAccess::configure_oval_lock_target_for_tests(
+        editor,
+        &asset,
+        0,
+        0,
+        100.0f,
+        0.0f,
+        200.0f);
+
+    float target_world_x = 0.0f;
+    float target_world_z = 0.0f;
+    float heading_radians = 0.0f;
+    REQUIRE(RoomEditorTestAccess::resolve_oval_lock_target_for_tests(
+        editor,
+        target_world_x,
+        target_world_z,
+        heading_radians));
+
+    int expected_offset_x = 0;
+    int expected_offset_z = 0;
+    oval_anchor_math::compute_xz_offsets_from_angle(60.0f,
+                                                    mapping.width_radius_x,
+                                                    mapping.height_radius_z,
+                                                    expected_offset_x,
+                                                    expected_offset_z);
+    CHECK(target_world_x == doctest::Approx(100.0f + static_cast<float>(expected_offset_x)));
+    CHECK(target_world_z == doctest::Approx(200.0f + static_cast<float>(expected_offset_z)));
+    CHECK(heading_radians == doctest::Approx(std::atan2(static_cast<float>(expected_offset_z),
+                                                        static_cast<float>(expected_offset_x))));
 }
 
 TEST_CASE("RoomEditor delete confirmation cancel path produces zero mutation") {

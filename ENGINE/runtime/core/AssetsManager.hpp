@@ -689,12 +689,23 @@ private:
         }
     };
 
+    struct LiveDynamicPendingScanRegion {
+        int min_x = 0;
+        int max_x = -1;
+        int min_z = 0;
+        int max_z = -1;
+        int next_x = 0;
+        int next_z = 0;
+        int stride = 1;
+    };
+
     struct LiveDynamicSelectorScanState {
         bool valid = false;
         int min_x = 0;
         int max_x = -1;
         int min_z = 0;
         int max_z = -1;
+        std::vector<LiveDynamicPendingScanRegion> pending_regions;
     };
 
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
@@ -707,9 +718,9 @@ private:
                        LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
     int live_dynamic_preload_margin_world_px_ = 192;
     int live_dynamic_despawn_margin_world_px_ = 256;
-    std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 8192;
-    std::size_t max_live_dynamic_new_spawns_per_frame_ = 8192;
-    std::size_t max_total_live_dynamic_assets_ = 20000;
+    std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 768;
+    std::size_t max_live_dynamic_new_spawns_per_frame_ = 128;
+    std::size_t max_total_live_dynamic_assets_ = 8000;
     std::uint32_t last_live_dynamic_guard_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
     int live_dynamic_sync_min_camera_delta_world_px_ = 96;
     std::uint32_t live_dynamic_sync_min_interval_frames_ = 8;

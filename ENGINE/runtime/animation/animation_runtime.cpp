@@ -928,25 +928,38 @@ void AnimationRuntime::apply_pending_move_3d() {
     }
 }
 
-bool AnimationRuntime::advance(AnimationFrame*& frame) {
+AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(AnimationFrame*& frame, int max_events) {
+    FrameAdvanceReport report{};
     if (!self_ || !self_->info) {
-        return false;
+        report.ok = false;
+        return report;
     }
 
     auto it = self_->info->animations.find(self_->current_animation);
     if (it == self_->info->animations.end()) {
-        return false;
+        report.ok = false;
+        return report;
     }
 
     Animation* anim = &it->second;
     std::size_t path_index = path_index_for(self_->current_animation);
+    auto record_entered_frame = [&](bool cycle_boundary_before_advance) {
+        report.advanced_any = true;
+        report.entered_frames.push_back(FrameAdvanceEvent{
+            frame,
+            self_ ? self_->current_animation : std::string{},
+            path_index,
+            cycle_boundary_before_advance
+        });
+    };
     if (!reverse_mode_applies_to_current_animation()) {
         clear_reverse_playback_state();
     }
     if (!frame) {
         frame = anim->get_first_frame(path_index);
         if (!frame) {
-            return false;
+            report.ok = false;
+            return report;
         }
     }
 
@@ -970,7 +983,7 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     }
     if (should_skip && !has_overriding_plan) {
         self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || lock_on_end_active_;
-        return true;
+        return report;
     }
     if (is_player) {
         self_->static_frame = false;
@@ -987,23 +1000,26 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     }
 
     self_->frame_progress += dt;
-    bool advanced_any = false;
-    while (self_->frame_progress >= frame_interval) {
+    while (self_->frame_progress >= frame_interval &&
+           (max_events < 0 || static_cast<int>(report.entered_frames.size()) < max_events)) {
         self_->frame_progress -= frame_interval;
+        const bool cycle_boundary_before_advance =
+            frame && frame->next == nullptr;
 
         if (reverse_mode_applies_to_current_animation()) {
             if (frame->prev) {
                 frame = frame->prev;
-                advanced_any = true;
+                record_entered_frame(false);
                 continue;
             }
 
             if (reverse_playback_mode_ == ReversePlaybackMode::ReverseUntilStopCurrentAnimation) {
                 frame = last_frame_for(*anim, path_index);
                 if (!frame) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
-                advanced_any = true;
+                record_entered_frame(false);
                 continue;
             }
 
@@ -1014,15 +1030,17 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
                           path_index_for(animation_update::detail::kDefaultAnimation));
                 frame = self_->current_frame;
                 if (!frame) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
                 it = self_->info->animations.find(self_->current_animation);
                 if (it == self_->info->animations.end()) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
                 anim = &it->second;
                 path_index = path_index_for(self_->current_animation);
-                advanced_any = true;
+                record_entered_frame(cycle_boundary_before_advance);
                 continue;
             }
 
@@ -1031,7 +1049,7 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
 
         if (frame->next) {
             frame = frame->next;
-            advanced_any = true;
+            record_entered_frame(false);
             continue;
         }
 
@@ -1048,31 +1066,35 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
                 }
                 frame = self_->current_frame;
                 if (!frame) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
                 it = self_->info->animations.find(self_->current_animation);
                 if (it == self_->info->animations.end()) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
                 anim = &it->second;
                 path_index = path_index_for(self_->current_animation);
-                advanced_any = true;
+                record_entered_frame(cycle_boundary_before_advance);
                 break;
             }
             frame = anim->get_first_frame(path_index);
             if (!frame) {
-                return false;
+                report.ok = false;
+                return report;
             }
-            advanced_any = true;
+            record_entered_frame(cycle_boundary_before_advance);
             break;
         }
         case Animation::OnEndDirective::Kill:
             self_->Delete();
-            return false;
+            report.ok = false;
+            return report;
         case Animation::OnEndDirective::Lock:
             lock_on_end_active_ = true;
             self_->static_frame = true;
-            return true;
+            return report;
         case Animation::OnEndDirective::Reverse:
             activate_reverse_playback(ReversePlaybackMode::ReverseToDefaultAtStart);
             lock_on_end_active_ = false;
@@ -1090,15 +1112,17 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
             switch_to(resolved, path_index_for(requested));
             frame = self_->current_frame;
             if (!frame) {
-                return false;
+                report.ok = false;
+                return report;
             }
             it = self_->info->animations.find(self_->current_animation);
             if (it == self_->info->animations.end()) {
-                return false;
+                report.ok = false;
+                return report;
             }
             anim = &it->second;
             path_index = path_index_for(self_->current_animation);
-            advanced_any = true;
+            record_entered_frame(cycle_boundary_before_advance);
             break;
         }
         case Animation::OnEndDirective::Default:
@@ -1113,25 +1137,31 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
             }
             frame = self_->current_frame;
             if (!frame) {
-                return false;
+                report.ok = false;
+                return report;
             }
             it = self_->info->animations.find(self_->current_animation);
             if (it == self_->info->animations.end()) {
-                return false;
+                report.ok = false;
+                return report;
             }
             anim = &it->second;
             path_index = path_index_for(self_->current_animation);
-            advanced_any = true;
+            record_entered_frame(cycle_boundary_before_advance);
             break;
         }
         }
     }
-    if (advanced_any) {
+    if (report.advanced_any) {
         self_->mark_composite_dirty();
         self_->mark_anchors_dirty();
         refresh_runtime_frame_geometry();
     }
-    return true;
+    return report;
+}
+
+bool AnimationRuntime::advance(AnimationFrame*& frame) {
+    return advance_with_report(frame).ok;
 }
 
 void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_index) {

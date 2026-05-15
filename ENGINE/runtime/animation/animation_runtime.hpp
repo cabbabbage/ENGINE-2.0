@@ -118,7 +118,7 @@ private:
 
     void       apply_pending_move();
     void       apply_pending_move_3d();
-    FrameAdvanceReport advance_with_report(AnimationFrame*& frame);
+    FrameAdvanceReport advance_with_report(AnimationFrame*& frame, int max_events = -1);
     void       clear_reverse_playback_state();
     void       activate_reverse_playback(ReversePlaybackMode mode);
     AnimationFrame* last_frame_for(const Animation& anim, std::size_t path_index) const;

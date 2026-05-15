@@ -15483,7 +15483,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.5,
+                "depth_offset": -4.999998092651367,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15491,8 +15491,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 917,
-                "texture_y": 734
+                "texture_x": 915,
+                "texture_y": 727
               },
               {
                 "depth_offset": -15.0,
@@ -15708,12 +15708,32 @@
       "start": "default",
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "update_radius": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "clock": {
       "anchor_point_child_candidates": [],
@@ -27478,8 +27498,8 @@
           },
           "display_color": [
             242,
-            85,
-            242,
+            36,
+            119,
             255
           ],
           "edge_smoothness": 101,
@@ -27566,9 +27586,9 @@
             }
           },
           "display_color": [
-            135,
-            242,
-            85,
+            153,
+            71,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27625,9 +27645,9 @@
             }
           },
           "display_color": [
-            51,
+            31,
             204,
-            149,
+            172,
             255
           ],
           "edge_smoothness": 4,
@@ -27684,9 +27704,9 @@
             }
           },
           "display_color": [
-            242,
-            36,
-            60,
+            127,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -27774,7 +27794,7 @@
           },
           "display_color": [
             242,
-            170,
+            172,
             85,
             255
           ],
@@ -27838,7 +27858,7 @@
           },
           "display_color": [
             31,
-            115,
+            107,
             204,
             255
           ],
@@ -27937,9 +27957,9 @@
             }
           },
           "display_color": [
-            174,
-            204,
-            31,
+            242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -28347,9 +28367,9 @@
             }
           },
           "display_color": [
-            178,
-            71,
-            204,
+            242,
+            85,
+            181,
             255
           ],
           "edge_smoothness": 96,

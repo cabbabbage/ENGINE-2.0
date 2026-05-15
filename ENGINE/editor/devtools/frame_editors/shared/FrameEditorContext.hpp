@@ -14,6 +14,7 @@ class Asset;
 class WarpedScreenGrid;
 class Input;
 struct SDL_Renderer;
+struct SDL_Window;
 
 namespace animation_editor {
 class AnimationDocument;
@@ -24,6 +25,7 @@ namespace devmode::frame_editors {
 
 struct FrameEditorContext {
     Assets* assets = nullptr;
+    SDL_Window* parent_window = nullptr;
     Asset* target = nullptr;
     std::shared_ptr<animation_editor::AnimationDocument> document;
     std::shared_ptr<animation_editor::PreviewProvider> preview;

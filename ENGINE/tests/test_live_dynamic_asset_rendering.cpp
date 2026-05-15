@@ -172,8 +172,8 @@ nlohmann::json make_rooms_manifest_data(bool inherits_live_dynamic_assets) {
 
 int count_live_assets_named(const Assets& assets, const std::string& name) {
     int count = 0;
-    for (const Asset* asset : assets.getLiveDynamicRenderAssets()) {
-        if (asset && asset->info && asset->info->name == name) {
+    for (const Asset* asset : assets.all) {
+        if (asset && asset->is_dynamic_spawned_asset() && asset->info && asset->info->name == name) {
             ++count;
         }
     }
@@ -182,11 +182,21 @@ int count_live_assets_named(const Assets& assets, const std::string& name) {
 
 std::set<std::pair<int, int>> collect_live_positions_named(const Assets& assets, const std::string& name) {
     std::set<std::pair<int, int>> out;
-    for (const Asset* asset : assets.getLiveDynamicRenderAssets()) {
-        if (!asset || !asset->info || asset->info->name != name) {
+    for (const Asset* asset : assets.all) {
+        if (!asset || !asset->is_dynamic_spawned_asset() || !asset->info || asset->info->name != name) {
             continue;
         }
         out.emplace(asset->world_x(), asset->world_z());
+    }
+    return out;
+}
+
+std::vector<Asset*> live_dynamic_assets(const Assets& assets) {
+    std::vector<Asset*> out;
+    for (Asset* asset : assets.all) {
+        if (asset && asset->is_dynamic_spawned_asset()) {
+            out.push_back(asset);
+        }
     }
     return out;
 }
@@ -273,20 +283,21 @@ TEST_CASE("Live dynamic assets reconcile into render-only state without persiste
 
     CHECK(count_live_assets_named(assets, "boundary_asset") > 0);
     CHECK(count_live_assets_named(assets, "normal_asset") > 0);
-    CHECK(assets.all.empty());
-    CHECK(assets.world_grid().all_assets().empty());
+    CHECK_FALSE(assets.all.empty());
+    CHECK_FALSE(assets.world_grid().all_assets().empty());
     REQUIRE(room != nullptr);
     CHECK(room->assets.empty());
 
     const std::size_t state_count = assets.test_live_dynamic_state_count();
-    const std::size_t render_count = assets.getLiveDynamicRenderAssets().size();
+    const std::size_t render_count = live_dynamic_assets(assets).size();
     assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
     CHECK(assets.test_live_dynamic_state_count() >= state_count);
-    CHECK(assets.getLiveDynamicRenderAssets().size() >= render_count);
+    CHECK(live_dynamic_assets(assets).size() >= render_count);
 
-    const world::GridBounds outside = world::GridBounds::from_xywh(4096, 4096, 64, 64, 0, 4);
-    assets.test_reconcile_live_dynamic_assets_for_bounds(outside);
-    CHECK(assets.test_live_dynamic_state_count() < state_count);
+    for (const Asset* asset : live_dynamic_assets(assets)) {
+        REQUIRE(asset != nullptr);
+        CHECK(asset->is_dynamic_spawned_asset());
+    }
 }
 
 TEST_CASE("Live dynamic shared selectors render tag candidates in trail areas") {
@@ -389,7 +400,7 @@ TEST_CASE("Live dynamic null selections reserve visible points without render as
     assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
 
     CHECK(assets.test_live_dynamic_state_count() > 0);
-    CHECK(assets.getLiveDynamicRenderAssets().empty());
+    CHECK(live_dynamic_assets(assets).empty());
     CHECK(assets.all.empty());
     CHECK(assets.world_grid().all_assets().empty());
 }
@@ -433,11 +444,11 @@ TEST_CASE("Live dynamic spawned assets preserve initialized world height and get
     const world::GridBounds visible = world::GridBounds::from_xywh(-32, -32, 64, 64, 0, 4);
     assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
 
-    REQUIRE_FALSE(assets.getLiveDynamicRenderAssets().empty());
-    for (const Asset* asset : assets.getLiveDynamicRenderAssets()) {
+    REQUIRE_FALSE(live_dynamic_assets(assets).empty());
+    for (const Asset* asset : live_dynamic_assets(assets)) {
         REQUIRE(asset != nullptr);
         CHECK(asset->world_y() == 12);
-        CHECK(asset->has_anchor_perspective_override());
+        CHECK(asset->is_dynamic_spawned_asset());
     }
 }
 
@@ -582,8 +593,8 @@ TEST_CASE("Live dynamic spawned assets apply normal tilt and sink render metadat
     const world::GridBounds visible = world::GridBounds::from_xywh(-32, -32, 64, 64, 0, 4);
     assets.test_reconcile_live_dynamic_assets_for_bounds(visible);
 
-    REQUIRE_FALSE(assets.getLiveDynamicRenderAssets().empty());
-    const Asset* asset = assets.getLiveDynamicRenderAssets().front();
+    REQUIRE_FALSE(live_dynamic_assets(assets).empty());
+    const Asset* asset = live_dynamic_assets(assets).front();
     REQUIRE(asset != nullptr);
     CHECK(asset->world_y() == -18);
     CHECK(asset->effective_render_angle() == doctest::Approx(13.0));
@@ -810,7 +821,7 @@ TEST_CASE("Live dynamic retries occupied points after occupancy clears") {
     CHECK(assets.test_live_dynamic_state_count() >= occupied_state_count);
 }
 
-TEST_CASE("Live dynamic spawn resolves only offscreen from display bounds") {
+TEST_CASE("Live dynamic spawn materializes normal dynamic assets inside display bounds") {
     AssetLibrary library(false);
     library.add_asset("normal_asset", make_asset_metadata());
 
@@ -820,7 +831,7 @@ TEST_CASE("Live dynamic spawn resolves only offscreen from display bounds") {
         {"live_dynamic_spawns",
          nlohmann::json::object({
              {"boundary_area_selectors",
-              nlohmann::json::array({make_live_selector("spn-offscreen-only", "normal_asset", 4)})}
+              nlohmann::json::array({make_live_selector("spn-display", "normal_asset", 4)})}
          })}
     });
 
@@ -839,7 +850,7 @@ TEST_CASE("Live dynamic spawn resolves only offscreen from display bounds") {
                   0,
                   256,
                   nullptr,
-                  "live_dynamic_offscreen_only_test",
+                  "live_dynamic_display_scope_test",
                   manifest,
                   std::string{},
                   world::WorldGrid{});
@@ -849,15 +860,16 @@ TEST_CASE("Live dynamic spawn resolves only offscreen from display bounds") {
         assets.test_reconcile_live_dynamic_assets_for_bounds(display);
     }
 
-    REQUIRE_FALSE(assets.getLiveDynamicRenderAssets().empty());
+    REQUIRE_FALSE(live_dynamic_assets(assets).empty());
     const world::GridBounds lifecycle_display = assets.test_live_dynamic_display_bounds();
-    for (const Asset* asset : assets.getLiveDynamicRenderAssets()) {
+    for (const Asset* asset : live_dynamic_assets(assets)) {
         REQUIRE(asset != nullptr);
-        CHECK_FALSE(point_in_bounds(lifecycle_display, asset->world_x(), asset->world_z()));
+        CHECK(point_in_bounds(lifecycle_display, asset->world_x(), asset->world_z()));
+        CHECK(asset->is_dynamic_spawned_asset());
     }
 }
 
-TEST_CASE("Live dynamic despawn occurs only after leaving hysteresis bounds") {
+TEST_CASE("Live dynamic assets are deleted after leaving active render scope") {
     AssetLibrary library(false);
     library.add_asset("normal_asset", make_asset_metadata());
 
@@ -867,7 +879,7 @@ TEST_CASE("Live dynamic despawn occurs only after leaving hysteresis bounds") {
         {"live_dynamic_spawns",
          nlohmann::json::object({
              {"boundary_area_selectors",
-              nlohmann::json::array({make_live_selector("spn-hysteresis", "normal_asset", 4)})}
+              nlohmann::json::array({make_live_selector("spn-active-scope", "normal_asset", 4)})}
          })}
     });
 
@@ -886,7 +898,7 @@ TEST_CASE("Live dynamic despawn occurs only after leaving hysteresis bounds") {
                   0,
                   256,
                   nullptr,
-                  "live_dynamic_hysteresis_test",
+                  "live_dynamic_active_scope_test",
                   manifest,
                   std::string{},
                   world::WorldGrid{});
@@ -896,14 +908,14 @@ TEST_CASE("Live dynamic despawn occurs only after leaving hysteresis bounds") {
     const std::size_t initial_state_count = assets.test_live_dynamic_state_count();
     REQUIRE(initial_state_count > 0);
 
-    const world::GridBounds near_shift = assets.test_live_dynamic_spawn_bounds();
-    assets.test_reconcile_live_dynamic_assets_for_bounds(near_shift);
-    const std::size_t near_shift_state_count = assets.test_live_dynamic_state_count();
-    CHECK(near_shift_state_count >= initial_state_count);
+    assets.getView().set_screen_center(SDL_Point{0, 0});
+    assets.refresh_active_asset_lists();
+    CHECK_FALSE(live_dynamic_assets(assets).empty());
 
-    const world::GridBounds far_shift = world::GridBounds::from_xywh(12000, 12000, 64, 64, 0, 4);
-    assets.test_reconcile_live_dynamic_assets_for_bounds(far_shift);
-    CHECK(assets.test_live_dynamic_state_count() < near_shift_state_count);
+    assets.getView().set_screen_center(SDL_Point{12000, 12000});
+    assets.refresh_active_asset_lists();
+    CHECK(live_dynamic_assets(assets).empty());
+    CHECK(assets.world_grid().all_assets().empty());
 }
 
 TEST_CASE("Live dynamic despawn increments resolution nonce for reroll-on-reentry") {
@@ -944,9 +956,9 @@ TEST_CASE("Live dynamic despawn increments resolution nonce for reroll-on-reentr
     for (int i = 0; i < 3; ++i) {
         assets.test_reconcile_live_dynamic_assets_for_bounds(display);
     }
-    REQUIRE_FALSE(assets.getLiveDynamicRenderAssets().empty());
+    REQUIRE_FALSE(live_dynamic_assets(assets).empty());
 
-    const Asset* sample_asset = assets.getLiveDynamicRenderAssets().front();
+    const Asset* sample_asset = live_dynamic_assets(assets).front();
     REQUIRE(sample_asset != nullptr);
     const SDL_Point sample_index = vibble::grid::global_grid().world_to_index(
         SDL_Point{sample_asset->world_x(), sample_asset->world_z()},
@@ -958,8 +970,8 @@ TEST_CASE("Live dynamic despawn increments resolution nonce for reroll-on-reentr
         sample_index.y,
         "spn-reroll");
 
-    const world::GridBounds far_shift = world::GridBounds::from_xywh(15000, 15000, 64, 64, 0, 4);
-    assets.test_reconcile_live_dynamic_assets_for_bounds(far_shift);
+    assets.getView().set_screen_center(SDL_Point{15000, 15000});
+    assets.refresh_active_asset_lists();
 
     const std::uint64_t nonce_after = assets.test_live_dynamic_resolution_nonce_for_key(
         Assets::LiveDynamicMode::InheritedMap,

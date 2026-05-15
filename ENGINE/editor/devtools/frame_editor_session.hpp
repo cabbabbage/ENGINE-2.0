@@ -44,6 +44,7 @@ public:
                std::shared_ptr<animation_editor::PreviewProvider> preview,
                const std::string& animation_id,
                FrameEditorLaunchMode launch_mode,
+               SDL_Window* parent_window,
                std::function<void(const std::string&)> on_host_closed,
                std::function<void()> on_end_callback = {},
                std::function<void()> on_save_and_update_callback = {});

@@ -324,3 +324,62 @@ TEST_CASE("AnimationEditorWindow create defaults emits one movement node for sin
     std::error_code ec;
     fs::remove_all(root, ec);
 }
+
+TEST_CASE("AnimationEditorWindow create defaults requests base PNGs when none are selected") {
+    const fs::path root = make_unique_temp_dir("picker_required");
+    const fs::path frame0 = root / "base_0.png";
+    const fs::path frame1 = root / "base_1.png";
+    write_dummy_png(frame0);
+    write_dummy_png(frame1);
+
+    auto document = make_document(root);
+    animation_editor::AnimationEditorWindow window;
+    configure_defaults(window, document, root, {}, 6, true, false, false, false, true);
+
+    bool picker_called = false;
+    window.png_sequence_picker_override_ = [&]() {
+        picker_called = true;
+        return std::vector<fs::path>{frame1, frame0};
+    };
+
+    window.handle_create_defaults();
+
+    CHECK(picker_called);
+    CHECK(window.defaults_base_frame_paths_.size() == 2);
+    nlohmann::json payload_storage;
+    const nlohmann::json* right = payload_for(document, "right", payload_storage);
+    REQUIRE(right != nullptr);
+    check_local_movement_payload(*right, 2, 6, 0, 0);
+    CHECK(fs::exists(root / "right" / "0.png"));
+
+    std::error_code ec;
+    fs::remove_all(root, ec);
+}
+
+TEST_CASE("AnimationEditorWindow delete animation uses injectable SDL confirmation result") {
+    const fs::path root = make_unique_temp_dir("delete_confirm");
+    auto document = make_document(root);
+    animation_editor::AnimationEditorWindow window;
+    configure_defaults(window, document, root, {}, 4, true, false, false, false, false);
+
+    document->create_animation("walk");
+    auto ids_before = document->animation_ids();
+    REQUIRE(std::find(ids_before.begin(), ids_before.end(), "walk") != ids_before.end());
+
+    window.choice_prompt_override_ = [](const std::string&, const std::string&, const std::vector<int>&) {
+        return std::optional<int>{0};
+    };
+    window.delete_animation_with_confirmation("walk");
+    auto ids_after_cancel = document->animation_ids();
+    CHECK(std::find(ids_after_cancel.begin(), ids_after_cancel.end(), "walk") != ids_after_cancel.end());
+
+    window.choice_prompt_override_ = [](const std::string&, const std::string&, const std::vector<int>&) {
+        return std::optional<int>{1};
+    };
+    window.delete_animation_with_confirmation("walk");
+    auto ids_after_confirm = document->animation_ids();
+    CHECK(std::find(ids_after_confirm.begin(), ids_after_confirm.end(), "walk") == ids_after_confirm.end());
+
+    std::error_code ec;
+    fs::remove_all(root, ec);
+}

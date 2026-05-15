@@ -3608,11 +3608,6 @@ void Assets::reconcile_live_dynamic_assets(const world::GridBounds& visible_boun
             if (!point_in_bounds(spawn_bounds, resolved_point.spawn_world_xz)) {
                 continue;
             }
-            if (point_in_bounds(display_bounds, resolved_point.spawn_world_xz)) {
-                ++stats.skipped_on_screen_spawn;
-                continue;
-            }
-
             bool inside_any_room = false;
             Room* owner = nullptr;
             if (selector.mode == LiveDynamicMode::InheritedMap) {

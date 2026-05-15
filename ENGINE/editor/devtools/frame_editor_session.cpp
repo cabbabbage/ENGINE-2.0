@@ -56,6 +56,7 @@ void FrameEditorSession::begin(Assets* assets,
                                std::shared_ptr<animation_editor::PreviewProvider> preview,
                                const std::string& animation_id,
                                FrameEditorLaunchMode launch_mode,
+                               SDL_Window* parent_window,
                                std::function<void(const std::string&)> on_host_closed,
                                std::function<void()> on_end_callback,
                                std::function<void()> on_save_and_update_callback) {
@@ -82,6 +83,7 @@ void FrameEditorSession::begin(Assets* assets,
     target_->set_hidden(false);
 
     editor_context_.assets = assets_;
+    editor_context_.parent_window = parent_window;
     editor_context_.target = target_;
     editor_context_.document = document_;
     editor_context_.preview = preview_;

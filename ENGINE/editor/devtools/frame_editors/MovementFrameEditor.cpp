@@ -150,6 +150,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     cb_smooth_ = std::make_unique<DMCheckbox>("Smooth", smooth_enabled_);
     cb_curve_ = std::make_unique<DMCheckbox>("Curve", curve_enabled_);
     frame_navigator_ = std::make_unique<FrameNavigator>();
+    frame_navigator_->set_parent_window(context_.parent_window);
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
     frame_navigator_->set_current_frame(selected_index_);
     frame_navigator_->set_on_frame_changed([this](int frame) {

@@ -4191,6 +4191,7 @@ void DevControls::begin_frame_editor_session(Asset* asset,
                                  std::move(preview),
                                  animation_id,
                                  launch_mode,
+                                 parent_window_,
                                  std::move(on_host_closed),
                                  [this]() {
 

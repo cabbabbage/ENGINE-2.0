@@ -132,7 +132,10 @@ void check_tags(const nlohmann::json& payload, std::initializer_list<const char*
     REQUIRE(payload.contains("tags"));
     REQUIRE(payload["tags"].is_array());
     for (const char* tag : tags) {
-        CHECK(std::find(payload["tags"].begin(), payload["tags"].end(), tag) != payload["tags"].end());
+        const bool found = std::any_of(payload["tags"].begin(), payload["tags"].end(), [tag](const nlohmann::json& entry) {
+            return entry.is_string() && entry.get<std::string>() == tag;
+        });
+        CHECK(found);
     }
 }
 

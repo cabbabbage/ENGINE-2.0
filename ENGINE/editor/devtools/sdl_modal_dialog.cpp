@@ -13,6 +13,7 @@
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
+#include "devtools/font_cache.hpp"
 #include "devtools/widgets.hpp"
 
 namespace devmode::dialogs {

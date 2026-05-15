@@ -4661,5 +4661,5 @@ AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer* r
 }
 
 void AssetInfo::loadAnimations(SDL_Renderer* renderer, bool include_all_animations, bool assume_cache_ready) {
-    (void)loadAnimationsDetailed(renderer, include_all_animations, assume_cache_ready, false);
+    (void)loadAnimationsDetailed(renderer, include_all_animations, assume_cache_ready, true);
 }

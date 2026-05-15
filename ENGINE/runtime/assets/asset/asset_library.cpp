@@ -792,7 +792,7 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                 }
 
                 PrimaryAssetCache::WarmupOutcome outcome = PrimaryAssetCache::WarmupOutcome::Failed;
-                if (!primary_cache.ensure_cache_ready(*info, nullptr, nullptr, &outcome)) {
+                if (!primary_cache.ensure_cache_ready(*info, nullptr, nullptr, &outcome, true)) {
                         stats.cache_failed.push_back(name);
                         vibble::log::warn(std::string("[AssetLibrary] ") + preload_label + " cache_failed '" + name + "'");
                         continue;
@@ -900,7 +900,7 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
                 }
                 try {
                         const auto item_begin = std::chrono::steady_clock::now();
-                        const auto load_result = info->loadAnimationsDetailed(renderer, true, true, false);
+                        const auto load_result = info->loadAnimationsDetailed(renderer, true, true, true);
                         const auto item_end = std::chrono::steady_clock::now();
                         const auto item_ms = std::chrono::duration_cast<std::chrono::milliseconds>(item_end - item_begin).count();
                         if (!load_result.ok()) {

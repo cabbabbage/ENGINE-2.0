@@ -26251,9 +26251,9 @@
             }
           },
           "display_color": [
+            36,
             242,
-            85,
-            136,
+            200,
             255
           ],
           "edge_smoothness": 101,
@@ -26340,9 +26340,9 @@
             }
           },
           "display_color": [
-            157,
-            85,
             242,
+            142,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26399,7 +26399,7 @@
             }
           },
           "display_color": [
-            113,
+            121,
             204,
             31,
             255
@@ -26458,9 +26458,9 @@
             }
           },
           "display_color": [
-            71,
-            204,
-            156,
+            169,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26547,9 +26547,9 @@
             }
           },
           "display_color": [
-            242,
-            179,
-            85,
+            31,
+            90,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26611,9 +26611,9 @@
             }
           },
           "display_color": [
-            31,
-            103,
+            71,
             204,
+            139,
             255
           ],
           "edge_smoothness": 70,
@@ -26694,10 +26694,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -976,
-          "camera_center_dz": -1064,
-          "camera_height_px": 1364,
-          "camera_tilt_deg": 50.014976501464844,
+          "camera_center_dx": -4,
+          "camera_center_dz": -3105,
+          "camera_height_px": 270,
+          "camera_tilt_deg": 26.813932418823242,
           "camera_zoom_percent": 100,
           "curvyness": {
             "center": 2,
@@ -26712,8 +26712,8 @@
           },
           "display_color": [
             204,
+            102,
             31,
-            175,
             255
           ],
           "edge_smoothness": 101,
@@ -27121,7 +27121,7 @@
             }
           },
           "display_color": [
-            147,
+            158,
             242,
             85,
             255

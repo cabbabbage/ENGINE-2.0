@@ -4701,7 +4701,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                        overlay_ctx.has_selected_point_center) {
                 const SDL_FPoint exact_floor_xz = overlay_ctx.exact_floor_xz;
                 if (std::isfinite(exact_floor_xz.x) && std::isfinite(exact_floor_xz.y)) {
-                    const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
+                    const int resolution = current_grid_resolution();
+                    const int cell = std::max(1, vibble::grid::delta(resolution));
+                    vibble::grid::Grid& grid_service = vibble::grid::global_grid();
                     constexpr int kMaxSamplesPerPass = 32000;
 
                     constexpr int kGridPointSizePx = 2;
@@ -4726,8 +4728,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     const float radius_cells_f = static_cast<float>(std::max(1, radius_cells));
                     const float radius_cells_sq = radius_cells_f * radius_cells_f;
 
-                    const int center_grid_x = overlay_ctx.snapped_floor_xz.x;
-                    const int center_grid_z = overlay_ctx.snapped_floor_xz.y;
+                    const SDL_Point center_index =
+                        grid_service.world_to_index(overlay_ctx.snapped_floor_xz, resolution);
                     for (int gz = -radius_cells; gz <= radius_cells; ++gz) {
                         for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
                             const float dist_cells_sq = static_cast<float>(gx * gx + gz * gz);
@@ -4735,10 +4737,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                 continue;
                             }
 
+                            const SDL_Point floor_world =
+                                grid_service.index_to_world(center_index.x + gx, center_index.y + gz, resolution);
                             const SDL_FPoint floor_world_xz{
-                                static_cast<float>(center_grid_x + gx * cell),
-                                static_cast<float>(center_grid_z + gz * cell)
-                            };
+                                static_cast<float>(floor_world.x),
+                                static_cast<float>(floor_world.y)};
                             SDL_FPoint screen_point{};
                             if (!project_floor_world_xz_to_screen(cam, floor_world_xz, screen_point)) {
                                 continue;
@@ -20479,18 +20482,16 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
     if (scroll_preview_floor_overlay_active_) {
         SDL_FPoint selected_world_xz{};
         if (resolve_selected_overlay_point_floor_xz(selected_world_xz)) {
-            const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
-            auto snap_axis = [cell](float value) -> int {
-                const long double ratio = static_cast<long double>(value) / static_cast<long double>(cell);
-                const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
-                return static_cast<int>(std::clamp<long long>(snapped,
-                                                               std::numeric_limits<int>::min(),
-                                                               std::numeric_limits<int>::max()));
-            };
+            const int resolution = current_grid_resolution();
+            const SDL_Point selected_world_point{
+                static_cast<int>(std::lround(selected_world_xz.x)),
+                static_cast<int>(std::lround(selected_world_xz.y))};
+            const SDL_Point snapped_floor_xz =
+                vibble::grid::global_grid().snap_to_vertex(selected_world_point, resolution);
 
             ctx.kind = Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint;
             ctx.exact_floor_xz = selected_world_xz;
-            ctx.snapped_floor_xz = SDL_Point{snap_axis(selected_world_xz.x), snap_axis(selected_world_xz.y)};
+            ctx.snapped_floor_xz = snapped_floor_xz;
             ctx.has_selected_point_center = true;
         }
     }

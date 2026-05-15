@@ -181,16 +181,8 @@ private:
 constexpr const char* kModeIdRoom = "room";
 constexpr int kPopupOutlineThickness = 1;
 
-int layer_spacing(int layer) {
-    if (layer <= 0) return 1;
-    int result = 1;
-    for (int i = 0; i < layer; ++i) {
-        if (result > std::numeric_limits<int>::max() / 3) {
-            return std::numeric_limits<int>::max();
-        }
-        result *= 3;
-    }
-    return result;
+int grid_world_spacing_for_resolution(int resolution) {
+    return std::max(1, vibble::grid::delta(resolution));
 }
 
 constexpr const char* kGridOverlayEnabledKey = "dev.grid.overlay.enabled";
@@ -905,7 +897,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     } else {
         grid_overlay_resolution_r_ = 0;
     }
-    grid_cell_size_px_ = layer_spacing(grid_overlay_resolution_r_);
+    grid_cell_size_px_ = grid_world_spacing_for_resolution(grid_overlay_resolution_r_);
     movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
     anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
@@ -1425,15 +1417,6 @@ void DevControls::rebuild_settings_schema() {
 void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
     grid_overlay_enabled_ = enabled;
     persist_dev_bool(kGridOverlayEnabledKey, enabled);
-    if (!enabled) {
-        snap_to_grid_enabled_ = false;
-        persist_dev_bool(kGridSnapEnabledKey, false);
-        other_settings_.set_setting_value(OtherSettingsAndControls::kSnapToGridSettingId, false);
-        if (room_editor_) {
-            room_editor_->set_snap_to_grid_enabled(false);
-            room_editor_->refresh_cursor_snap();
-        }
-    }
     if (update_footer && map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
             footer->set_grid_overlay_enabled(enabled, false);
@@ -1473,7 +1456,7 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
     (void)update_stepper;
     const int clamped = vibble::grid::clamp_resolution(resolution);
     grid_overlay_resolution_r_ = clamped;
-    grid_cell_size_px_ = layer_spacing(clamped);
+    grid_cell_size_px_ = grid_world_spacing_for_resolution(clamped);
     if (user_override) {
         grid_overlay_resolution_user_override_ = true;
         persist_dev_number(kGridOverlayResolutionKey, clamped);
@@ -2186,8 +2169,6 @@ void DevControls::set_enabled(bool enabled) {
             room_editor_->set_room_trail_nav_visibility(false);
         }
         WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
-        sync_grid_overlay_enabled(false, true);
-        other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, false);
         close_all_floating_panels();
         if (map_editor_ && map_editor_->is_enabled()) {
             map_editor_->exit(true, false);

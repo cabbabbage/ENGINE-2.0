@@ -10,7 +10,6 @@
 #include "core/manifest/map_manifest_normalizer.hpp"
 #include "asset_loader.hpp"
 #include "assets/asset/asset_library.hpp"
-#include "rendering/render/render.hpp"
 #include "rendering/render/engine_renderer.hpp"
 #include "rendering/render/render_diagnostics.hpp"
 #include "AssetsManager.hpp"
@@ -556,7 +555,7 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                 frustum_max_z = cam.last_max_world_z();
                 frustum_nodes = static_cast<int>(cam.last_nodes_visited());
                 frustum_skipped = static_cast<int>(cam.last_branches_skipped());
-                if (const std::optional<SDL_Point> pp_size = game_assets_->scene_postprocess_target_size()) {
+                if (const std::optional<SDL_Point> pp_size = game_assets_->opengl_postprocess_target_size()) {
                         postprocess_text = std::to_string(pp_size->x) + "x" + std::to_string(pp_size->y);
                 }
         }
@@ -565,7 +564,7 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
         const std::string backend_name = !stats.backend_name.empty()
             ? stats.backend_name
-            : (renderer_ ? renderer_->caps().renderer_name : std::string("unknown"));
+            : (renderer_ ? renderer_->renderer_name() : std::string("unknown"));
         const std::string present_mode = !stats.present_mode.empty()
             ? stats.present_mode
             : (renderer_ ? renderer_->present_mode_name() : std::string("unknown"));
@@ -1057,25 +1056,6 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
-        if (!engine_renderer->opengl_runtime_supported()) {
-                vibble::log::error("[Main] Renderer initialization did not produce a hardware-backed renderer.");
-                show_gpu_required_dialog_and_wait(window, "No compatible OpenGL renderer was available.");
-                engine_renderer.reset();
-                SDL_DestroyWindow(window);
-                TTF_Quit();
-                SDL_Quit();
-                return 1;
-        }
-
-        if (engine_renderer->quality_tier() != OpenGLQualityTier::OpenGLFull) {
-                vibble::log::error("[Main] Unexpected non-OpenGL quality tier detected; exiting.");
-                show_gpu_required_dialog_and_wait(window, "This build only supports OpenGL rendering.");
-                engine_renderer.reset();
-                SDL_DestroyWindow(window);
-                TTF_Quit();
-                SDL_Quit();
-                return 1;
-        }
         vibble::log::info("[Main] Render quality tier: OpenGL full.");
 
         int screen_width = window_width;

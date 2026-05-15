@@ -30,7 +30,7 @@
 #include "runtime_world_context.hpp"
 
 class Asset;
-class SceneRenderer;
+class OpenGLRuntimeRenderer;
 struct SDL_Renderer;
 class CurrentRoomFinder;
 class Room;
@@ -318,7 +318,7 @@ public:
     std::size_t delete_assets_for_spawn_groups(const std::vector<std::string>& spawn_ids);
     WorldMutationBatch begin_world_mutation_batch();
     void set_output_dimensions(int width, int height);
-    std::optional<SDL_Point> scene_postprocess_target_size() const;
+    std::optional<SDL_Point> opengl_postprocess_target_size() const;
 
     void test_sync_live_dynamic_assets_for_bounds(const world::GridBounds& bounds);
 
@@ -344,7 +344,6 @@ private:
     void reset_dev_controls_current_room_cache();
     void log_camera_fog_state(const char* label) const;
 
-    friend class SceneRenderer;
     friend class Asset;
 
     CurrentRoomFinder* finder_ = nullptr;
@@ -358,8 +357,9 @@ private:
     SDL_Rect screenshot_create_task_button_rect_{};
     PopupManager popup_manager_;
     SDL_Window* app_window_ = nullptr;
+    SDL_Renderer* renderer_ = nullptr;
     WarpedScreenGrid camera_;
-    std::unique_ptr<SceneRenderer> scene;
+    std::unique_ptr<OpenGLRuntimeRenderer> opengl_renderer_;
     int screen_width;
     int screen_height;
     int delta_x_ = 0;

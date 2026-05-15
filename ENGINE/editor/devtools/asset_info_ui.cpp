@@ -50,7 +50,6 @@
 #include "core/AssetsManager.hpp"
 #include "assets/asset/Asset.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/render.hpp"
 #include "search_assets.hpp"
 #include "draw_utils.hpp"
 #include <SDL3_ttf/SDL_ttf.h>

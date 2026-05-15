@@ -9,7 +9,6 @@
 #include "json_coercion.hpp"
 #include "surface_utils.hpp"
 #include "utils/cache_manager.hpp"
-#include "rendering/render/render.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"
 #include <SDL3/SDL.h>

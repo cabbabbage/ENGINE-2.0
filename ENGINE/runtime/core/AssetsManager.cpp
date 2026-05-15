@@ -23,7 +23,8 @@
 #include "core/manifest/map_data.hpp"
 #include "core/tile_builder.hpp"
 #include "core/dev_mode_animation_policy.hpp"
-#include "rendering/render/render.hpp"
+#include "rendering/render/opengl_runtime_renderer.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -572,12 +573,18 @@ Assets::Assets(AssetLibrary& library,
 
 
 
-    if (!renderer) {
-        vibble::log::error("[Assets] SceneRenderer not created: SDL_Renderer pointer is null.");
+    renderer_ = renderer;
+    if (!renderer_) {
+        vibble::log::error("[Assets] OpenGL runtime renderer not created: SDL_Renderer pointer is null.");
     } else {
-        vibble::log::info("[Assets] Constructor: Creating SceneRenderer");
-        scene = std::make_unique<SceneRenderer>(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
-        vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
+        vibble::log::info("[Assets] Constructor: Creating OpenGL runtime renderer");
+        std::string runtime_error;
+        opengl_renderer_ = OpenGLRuntimeRenderer::Create(renderer_, this, screen_width_, screen_height_, runtime_error);
+        if (!opengl_renderer_) {
+            throw std::runtime_error("[Assets] OpenGL runtime renderer initialization failed: " +
+                                     (runtime_error.empty() ? std::string("unknown error") : runtime_error));
+        }
+        vibble::log::info("[Assets] Constructor: OpenGL runtime renderer created successfully");
     }
     apply_map_grid_settings(map_grid_settings_, false);
 
@@ -621,8 +628,8 @@ void Assets::set_output_dimensions(int width, int height) {
     screen_height = safe_h;
 
     camera_.set_screen_dimensions(screen_width, screen_height);
-    if (scene) {
-        scene->set_output_dimensions(screen_width, screen_height);
+    if (opengl_renderer_) {
+        opengl_renderer_->set_output_dimensions(screen_width, screen_height);
     }
     if (dev_controls_) {
         dev_controls_->set_screen_dimensions(screen_width, screen_height);
@@ -633,11 +640,11 @@ void Assets::set_output_dimensions(int width, int height) {
     needs_filtered_active_refresh_ = true;
 }
 
-std::optional<SDL_Point> Assets::scene_postprocess_target_size() const {
-    if (!scene) {
+std::optional<SDL_Point> Assets::opengl_postprocess_target_size() const {
+    if (!opengl_renderer_) {
         return std::nullopt;
     }
-    return scene->postprocess_target_size();
+    return opengl_renderer_->scene_target_size();
 }
 
 std::vector<const Room::NamedArea*> Assets::current_room_trigger_areas() const {
@@ -2470,7 +2477,7 @@ void Assets::refresh_filtered_active_assets_if_needed() {
 }
 
 void Assets::render_runtime_frame() {
-    bool should_render = !suppress_render_ && scene != nullptr;
+    bool should_render = !suppress_render_ && opengl_renderer_ != nullptr;
     if (should_render && startup_runtime_safety_active(frame_id_)) {
         const std::uint32_t skip_frames = startup_skip_render_frames();
         if (frame_id_ <= skip_frames) {
@@ -2483,8 +2490,6 @@ void Assets::render_runtime_frame() {
         }
     }
 
-    const bool gpu_runtime_available = scene && scene->gpu_runtime_path_enabled();
-    const bool gpu_runtime_scene = should_render && gpu_runtime_available;
     auto render_guard_log = [this](const std::string& message) {
         if (frame_id_ <= 8) {
             vibble::log::info(message);
@@ -2493,28 +2498,29 @@ void Assets::render_runtime_frame() {
         }
     };
     if (should_render) {
-        if (gpu_runtime_scene) {
-            SDL_Texture* ui_overlay = prepare_runtime_ui_overlay_texture();
-            render_guard_log("[RenderGuard] before renderer submission frame=" + std::to_string(frame_id_) +
-                             " path=gpu ui_overlay=" + (ui_overlay ? std::string("true") : std::string("false")) +
-                             " active=" + std::to_string(active_assets.size()) +
-                             " live_dynamic_assets=" + std::to_string(live_dynamic_asset_keys_.size()));
-            scene->render(ui_overlay);
-            render_guard_log("[RenderGuard] after renderer submission frame=" + std::to_string(frame_id_) +
-                             " path=gpu");
-            return;
-        }
-
+        SDL_Texture* ui_overlay = prepare_runtime_ui_overlay_texture();
         render_guard_log("[RenderGuard] before renderer submission frame=" + std::to_string(frame_id_) +
-                         " path=scene active=" + std::to_string(active_assets.size()) +
+                         " path=opengl ui_overlay=" + (ui_overlay ? std::string("true") : std::string("false")) +
+                         " active=" + std::to_string(active_assets.size()) +
                          " live_dynamic_assets=" + std::to_string(live_dynamic_asset_keys_.size()));
-        scene->render();
-        render_guard_log("[RenderGuard] after renderer submission frame=" + std::to_string(frame_id_) +
-                         " path=scene");
-    }
 
-    if (!gpu_runtime_available) {
-        render_overlays(renderer());
+        std::string frame_error;
+        if (!opengl_renderer_->render_frame(frame_error, ui_overlay)) {
+            render_diagnostics::set_renderer_runtime_info("opengl", "failed", "fatal");
+            render_diagnostics::set_submit_result(false);
+            const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+            const std::string reason = frame_error.empty() ? std::string("Unknown OpenGL frame failure.") : frame_error;
+            vibble::log::error("[Assets] OpenGL runtime frame failed: reason='" + reason +
+                               "' floor_packet_count=" + std::to_string(stats.floor_packet_count) +
+                               " xy_sprite_packet_count=" + std::to_string(stats.xy_sprite_packet_count) +
+                               " draw_call_count=" + std::to_string(stats.draw_call_count) +
+                               " skipped_textures=" + std::to_string(stats.skipped_texture_count) +
+                               " failed_texture_names='" + stats.failed_texture_names + "'" +
+                               " submit_succeeded=" + (stats.submit_succeeded ? std::string("true") : "false"));
+            throw std::runtime_error("[Assets] Fatal OpenGL runtime failure: " + reason);
+        }
+        render_guard_log("[RenderGuard] after renderer submission frame=" + std::to_string(frame_id_) +
+                         " path=opengl");
     }
 }
 
@@ -2559,10 +2565,6 @@ void Assets::update(const Input& input)
 
     const bool ctrl_down = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
     const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
-    if (scene && ctrl_down && input.wasScancodePressed(SDL_SCANCODE_Q)) {
-
-    }
-
     if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_B)) {
         asset_boundary_box_display_enabled_ = !asset_boundary_box_display_enabled_;
         std::cout << "[Assets] Asset boundary box display "
@@ -3305,7 +3307,7 @@ void Assets::set_render_suppressed(bool suppressed) {
     }
     suppress_render_ = suppressed;
 
-    if (scene) {
+    if (opengl_renderer_) {
         if (suppressed) {
 
         } else {
@@ -3641,6 +3643,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                                   std::uint64_t current_projection_version,
                                                   bool allow_live_dynamic_sync) {
     last_grid_rebuild_frame_ = frame_id_;
+    camera_.recompute_current_view();
     const world::GridBounds render_bounds = screen_world_rect();
     if (allow_live_dynamic_sync) {
         sync_live_dynamic_assets_to_render_bounds(render_bounds);
@@ -4352,7 +4355,7 @@ SDL_Renderer* Assets::renderer() const {
     if (suppress_dev_renderer_) {
         return nullptr;
     }
-    return scene ? scene->get_renderer() : nullptr;
+    return renderer_;
 }
 
 std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* asset) const {
@@ -4508,6 +4511,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
 
     if (resolution_changed) {
         update_max_asset_dimensions();
+        camera_.recompute_current_view();
         world_grid_.update_active_chunks(screen_world_rect(), 0);
         mark_grid_dirty();
     }

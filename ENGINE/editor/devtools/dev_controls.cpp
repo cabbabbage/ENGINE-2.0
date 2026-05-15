@@ -52,7 +52,6 @@
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
 #include "widgets.hpp"
-#include "rendering/render/render.hpp"
 #include "rendering/render/layer_depth_bins.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
@@ -1030,7 +1029,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             devmode::core::SaveManager::Stage::Cache});
     }
     map_grid_regen_cb_ = [this]() {
-        // Boundary regeneration is no longer driven through SceneRenderer hooks.
+        // Boundary regeneration is no longer driven through renderer hooks.
     };
     map_grid_save_cb_ = [this]() {
         this->mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -3847,7 +3846,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     };
 
     const bool show_depth_guides = camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_debug_section_expanded();
-    const bool show_grid_overlay = false; // Grid is now rendered in SceneRenderer
+    const bool show_grid_overlay = false; // Grid is now rendered by the OpenGL runtime renderer.
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
     const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;

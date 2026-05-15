@@ -13,7 +13,6 @@
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/render.hpp"
 #include "gameplay/world/world_grid.hpp"
 
 namespace world {

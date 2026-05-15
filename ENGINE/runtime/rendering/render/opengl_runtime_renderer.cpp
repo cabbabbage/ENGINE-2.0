@@ -70,54 +70,6 @@ int clamp_dimension_to_renderer_limit(int value, int renderer_limit, const char*
     return renderer_limit;
 }
 
-std::string describe_asset_sprite_source(const Asset* asset,
-                                         const char* texture_id = nullptr,
-                                         int frame_index = -1,
-                                         int variant_index = -1) {
-    const std::string asset_name = (asset && asset->info && !asset->info->name.empty())
-        ? asset->info->name
-        : std::string{"<unknown-asset>"};
-    const std::string animation_name = (asset && !asset->current_animation.empty())
-        ? asset->current_animation
-        : std::string{"<none>"};
-    const int resolved_frame_index = (frame_index >= 0)
-        ? frame_index
-        : ((asset && asset->current_frame) ? asset->current_frame->frame_index : -1);
-    const int resolved_variant_index = (variant_index >= 0)
-        ? variant_index
-        : (asset ? asset->current_variant_index : -1);
-
-    std::string description = "asset='" + asset_name +
-                              "' animation='" + animation_name +
-                              "' frame=" + std::to_string(resolved_frame_index) +
-                              " variant=" + std::to_string(resolved_variant_index);
-    if (texture_id && *texture_id) {
-        description += " texture='" + std::string(texture_id) + "'";
-    }
-    return description;
-}
-
-std::string describe_draw_packet_source(const GpuSpriteDrawPacket& draw) {
-    return "asset='" + draw.source_asset_name +
-           "' animation='" + (draw.source_animation_name.empty()
-               ? std::string{"<none>"}
-               : draw.source_animation_name) +
-           "' frame=" + std::to_string(draw.source_frame_index) +
-           " variant=" + std::to_string(draw.source_variant_index) +
-           " texture='" + draw.source_texture_id + "'";
-}
-
-std::string join_ints(const std::vector<int>& values) {
-    std::ostringstream oss;
-    for (std::size_t i = 0; i < values.size(); ++i) {
-        if (i != 0) {
-            oss << ", ";
-        }
-        oss << values[i];
-    }
-    return oss.str();
-}
-
 double compute_asset_camera_depth_key(const WarpedScreenGrid& camera, const Asset& asset) {
     const auto projection = camera.projection_params();
     const double focus_world_z = camera.current_focus_plane_world_z();
@@ -130,6 +82,53 @@ double compute_asset_camera_depth_key(const WarpedScreenGrid& camera, const Asse
     // Canonical far-distance scalar in camera-forward space. Higher = farther.
     const double signed_depth_offset = (effective_world_z - focus_world_z) * depth_axis_sign;
     return signed_depth_offset + asset.render_depth_bias();
+}
+
+std::uint64_t mix_hash_u64(std::uint64_t seed, std::uint64_t value) {
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    return seed;
+}
+
+double hash_unit_interval(std::uint64_t hash) {
+    constexpr double kInv = 1.0 / static_cast<double>(std::numeric_limits<std::uint64_t>::max());
+    return static_cast<double>(hash) * kInv;
+}
+
+bool keep_dynamic_asset_for_depth_efficiency(const WarpedScreenGrid::RealismSettings& settings,
+                                             const Asset& asset,
+                                             double camera_depth_key) {
+    if (asset.info && asset_types::canonicalize(asset.info->type) == asset_types::player) {
+        return true;
+    }
+    if (!asset.is_dynamic_spawned_asset()) {
+        return true;
+    }
+
+    const double depth_start = std::max(0.0, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
+    const double depth_value = std::max(0.0, camera_depth_key);
+    if (depth_value <= depth_start) {
+        return true;
+    }
+
+    const double max_depth = std::max(depth_start + 1.0, static_cast<double>(settings.max_cull_depth));
+    const double t = std::clamp((depth_value - depth_start) / (max_depth - depth_start), 0.0, 1.0);
+    const double min_density = std::clamp(
+        static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
+        0.0,
+        1.0);
+    const double density = std::clamp(1.0 - (1.0 - min_density) * t, min_density, 1.0);
+    if (density >= 1.0) {
+        return true;
+    }
+
+    std::uint64_t hash = std::hash<std::string>{}(asset.spawn_id);
+    hash = mix_hash_u64(hash, std::hash<std::string>{}(asset.info ? asset.info->name : std::string{}));
+    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_x())));
+    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_z())));
+    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.grid_resolution)));
+    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_y())));
+    const double roll = hash_unit_interval(hash);
+    return roll <= density;
 }
 
 float to_clip_x(float screen_x, float target_width) {
@@ -705,6 +704,7 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
 
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+    const auto& camera_settings = camera.get_settings();
     std::uintptr_t xy_sequence = 0u;
 
     for (Asset* asset : visible_assets) {
@@ -726,6 +726,9 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         const float perspective_scale = perspective.scale;
         const float world_z = static_cast<float>(asset->world_z()) + object.world_z_offset;
         const double camera_depth_key = compute_asset_camera_depth_key(camera, *asset);
+        if (!keep_dynamic_asset_for_depth_efficiency(camera_settings, *asset, camera_depth_key)) {
+            continue;
+        }
 
         render_projection::ProjectedSpriteFrame projected{};
         if (!render_projection::build_render_object_projected_frame(camera,
@@ -1199,7 +1202,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     const std::vector<Asset*>& active_assets = assets_->getActive();
     const std::vector<Asset*>& filtered_active_assets = assets_->getFilteredActiveAssets();
-    const std::vector<Asset*>& all_assets = assets_->all;
     bool used_active_fallback = false;
     const std::vector<Asset*>& selected_visible_assets =
         opengl_runtime_renderer_detail::select_visible_assets_for_gpu_frame(
@@ -1208,19 +1210,13 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             active_assets,
             filtered_active_assets,
             used_active_fallback);
-    const std::vector<Asset*>* visible_assets = &selected_visible_assets;
-    bool used_all_assets_visibility_fallback = false;
-    if (visible_assets->empty() && !all_assets.empty()) {
-        visible_assets = &all_assets;
-        used_all_assets_visibility_fallback = true;
-    }
     const WarpedScreenGrid& camera = assets_->getView();
     const std::size_t traversal_count = camera.visible_traversal_entries().size();
     out_data.focus_depth_layer = assets_->player
         ? opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *assets_->player)
         : 0;
 
-    std::vector<Asset*> render_assets = *visible_assets;
+    std::vector<Asset*> render_assets = selected_visible_assets;
 
     out_data.target_width = target_width;
     out_data.target_height = target_height;
@@ -1307,69 +1303,52 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         return false;
     }
 
-    // Emergency fallback for movement-time visibility/culling gaps: retry sprite packet build
-    // against all tracked assets before presenting a floor-only frame.
-    if (out_data.xy_sprite_draws.empty() && !all_assets.empty() && !used_all_assets_visibility_fallback) {
-        std::vector<GpuSpriteDrawPacket> fallback_xy_sprite_draws{};
-        std::string fallback_error;
-        if (!opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
-                camera,
-                all_assets,
-                target_width,
-                target_height,
-                fallback_xy_sprite_draws,
-                fallback_error)) {
-            out_error = fallback_error;
-            return false;
-        }
-        if (!fallback_xy_sprite_draws.empty()) {
-            out_data.xy_sprite_draws = std::move(fallback_xy_sprite_draws);
-            out_data.selected_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
-                all_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
-            vibble::log::warn("[OpenGLRuntimeRenderer] Rebuilt XY sprite packets from all assets after primary visibility pass produced no XY packets.");
-        }
-    }
-
     out_data.floor_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         out_data.floor_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.xy_sprite_draw_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         out_data.xy_sprite_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
 
-    std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> depth_xy_sprite_packets{};
-    depth_xy_sprite_packets.reserve(out_data.xy_sprite_draws.size());
-    for (const GpuSpriteDrawPacket& packet : out_data.xy_sprite_draws) {
-        depth_xy_sprite_packets[packet.depth_layer].push_back(packet);
-    }
-
-    std::vector<int> depth_layer_ids{};
-    depth_layer_ids.reserve(depth_xy_sprite_packets.size());
-    for (const auto& entry : depth_xy_sprite_packets) {
-        depth_layer_ids.push_back(entry.first);
-    }
-    std::sort(depth_layer_ids.begin(), depth_layer_ids.end(), [](int lhs, int rhs) {
-        return lhs > rhs;
-    });
-
     out_data.depth_layers.clear();
-    out_data.depth_layers.reserve(depth_layer_ids.size());
-    int max_layer_distance = 0;
-    for (int layer_id : depth_layer_ids) {
-        max_layer_distance = std::max(max_layer_distance, std::abs(layer_id - out_data.focus_depth_layer));
-    }
-    for (int layer_id : depth_layer_ids) {
-        GpuDepthLayerDrawPackets layer{};
-        layer.depth_layer = layer_id;
-        layer.packets = std::move(depth_xy_sprite_packets[layer_id]);
-        std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
-        const float blur_distance = max_layer_distance > 0
-            ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) / static_cast<float>(max_layer_distance)
-            : 0.0f;
-        const float blur_strength = std::clamp(
-            static_cast<float>(assets_->getView().get_settings().blur_px) * blur_distance,
-            0.0f,
-            static_cast<float>(assets_->getView().get_settings().blur_px));
-        layer.blur_strength_px = blur_strength;
-        out_data.depth_layers.push_back(std::move(layer));
+    const auto& camera_settings = assets_->getView().get_settings();
+    const bool dof_requested = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
+                                                       camera_settings.blur_px,
+                                                       camera_settings.radial_blur_px);
+    if (dof_requested) {
+        std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> depth_xy_sprite_packets{};
+        depth_xy_sprite_packets.reserve(out_data.xy_sprite_draws.size());
+        for (const GpuSpriteDrawPacket& packet : out_data.xy_sprite_draws) {
+            depth_xy_sprite_packets[packet.depth_layer].push_back(packet);
+        }
+
+        std::vector<int> depth_layer_ids{};
+        depth_layer_ids.reserve(depth_xy_sprite_packets.size());
+        for (const auto& entry : depth_xy_sprite_packets) {
+            depth_layer_ids.push_back(entry.first);
+        }
+        std::sort(depth_layer_ids.begin(), depth_layer_ids.end(), [](int lhs, int rhs) {
+            return lhs > rhs;
+        });
+
+        out_data.depth_layers.reserve(depth_layer_ids.size());
+        int max_layer_distance = 0;
+        for (int layer_id : depth_layer_ids) {
+            max_layer_distance = std::max(max_layer_distance, std::abs(layer_id - out_data.focus_depth_layer));
+        }
+        for (int layer_id : depth_layer_ids) {
+            GpuDepthLayerDrawPackets layer{};
+            layer.depth_layer = layer_id;
+            layer.packets = std::move(depth_xy_sprite_packets[layer_id]);
+            std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
+            const float blur_distance = max_layer_distance > 0
+                ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) / static_cast<float>(max_layer_distance)
+                : 0.0f;
+            const float blur_strength = std::clamp(
+                static_cast<float>(assets_->getView().get_settings().blur_px) * blur_distance,
+                0.0f,
+                static_cast<float>(assets_->getView().get_settings().blur_px));
+            layer.blur_strength_px = blur_strength;
+            out_data.depth_layers.push_back(std::move(layer));
+        }
     }
 
     out_data.active_depth_layer_count = static_cast<std::uint32_t>(std::min<std::size_t>(
@@ -1507,27 +1486,69 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
         return false;
     }
 
-    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> vertices{};
+    constexpr std::size_t kMaxBatchVertices = 4096;
+    constexpr std::size_t kMaxBatchIndices = 8192;
+    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> packet_vertices{};
+    std::vector<SDL_Vertex> batch_vertices{};
+    std::vector<int> batch_indices{};
+    batch_vertices.reserve(kMaxBatchVertices);
+    batch_indices.reserve(kMaxBatchIndices);
+    SDL_Texture* batch_texture = nullptr;
+
+    auto flush_batch = [&]() -> bool {
+        if (batch_vertices.empty() || batch_indices.empty()) {
+            batch_vertices.clear();
+            batch_indices.clear();
+            return true;
+        }
+        if (!render_diagnostics::render_geometry(renderer_,
+                                                 batch_texture,
+                                                 batch_vertices.data(),
+                                                 static_cast<int>(batch_vertices.size()),
+                                                 batch_indices.data(),
+                                                 static_cast<int>(batch_indices.size()))) {
+            out_error = "SDL_RenderGeometry failed for batched packets: " + safe_string(SDL_GetError());
+            return false;
+        }
+        batch_vertices.clear();
+        batch_indices.clear();
+        return true;
+    };
+
     for (const GpuSpriteDrawPacket& packet : packets) {
-        const int vertex_count = std::clamp(packet.vertex_count, 0, static_cast<int>(vertices.size()));
+        const int vertex_count = std::clamp(packet.vertex_count, 0, static_cast<int>(packet_vertices.size()));
         const int index_count = std::clamp(packet.index_count, 0, static_cast<int>(packet.indices.size()));
         if (vertex_count < 3 || index_count < 3) {
             continue;
         }
-        packet_to_vertices(packet, target_width, target_height, vertices);
-        if (!render_diagnostics::render_geometry(renderer_,
-                                                 packet.source_texture,
-                                                 vertices.data(),
-                                                 vertex_count,
-                                                 packet.indices.data(),
-                                                 index_count)) {
-            out_error = "SDL_RenderGeometry failed for " + describe_draw_packet_source(packet) +
-                        ": " + safe_string(SDL_GetError());
-            return false;
+        if (batch_texture != packet.source_texture && !batch_vertices.empty()) {
+            if (!flush_batch()) {
+                return false;
+            }
+        }
+
+        if (batch_texture != packet.source_texture) {
+            batch_texture = packet.source_texture;
+        }
+
+        const std::size_t required_vertices = batch_vertices.size() + static_cast<std::size_t>(vertex_count);
+        const std::size_t required_indices = batch_indices.size() + static_cast<std::size_t>(index_count);
+        if ((required_vertices > kMaxBatchVertices || required_indices > kMaxBatchIndices) && !batch_vertices.empty()) {
+            if (!flush_batch()) {
+                return false;
+            }
+            batch_texture = packet.source_texture;
+        }
+
+        packet_to_vertices(packet, target_width, target_height, packet_vertices);
+        const int base_vertex = static_cast<int>(batch_vertices.size());
+        batch_vertices.insert(batch_vertices.end(), packet_vertices.begin(), packet_vertices.begin() + vertex_count);
+        for (int i = 0; i < index_count; ++i) {
+            batch_indices.push_back(packet.indices[static_cast<std::size_t>(i)] + base_vertex);
         }
     }
 
-    return true;
+    return flush_batch();
 }
 
 bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui_overlay_texture) {
@@ -1755,21 +1776,13 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
             return false;
         }
 
-        std::ostringstream xy_depth_layer_summary;
-        bool first_layer = true;
-        for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
-            if (!first_layer) {
-                xy_depth_layer_summary << ", ";
-            }
-            first_layer = false;
-            xy_depth_layer_summary << layer.depth_layer << '(' << layer.packets.size() << ')';
-            if (!render_packet_batch(layer.packets,
-                                     frame_to_render->target_width,
-                                     frame_to_render->target_height,
-                                     out_error)) {
-                render_diagnostics::end_frame();
-                return false;
-            }
+        if (!frame_to_render->xy_sprite_draws.empty() &&
+            !render_packet_batch(frame_to_render->xy_sprite_draws,
+                                 frame_to_render->target_width,
+                                 frame_to_render->target_height,
+                                 out_error)) {
+            render_diagnostics::end_frame();
+            return false;
         }
 
         if (!bind_target(composite_target_, transparent_clear)) {

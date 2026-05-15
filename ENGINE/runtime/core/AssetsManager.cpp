@@ -1016,6 +1016,7 @@ void Assets::rebuild_live_dynamic_selectors() {
     append_section("boundary_area_selectors", LiveDynamicMode::BoundaryArea, live_dynamic_boundary_selectors_);
     append_section("boundary_area_selectors", LiveDynamicMode::InheritedMap, live_dynamic_inherited_selectors_);
     clear_live_dynamic_assets();
+    force_live_dynamic_sync_next_rebuild_ = true;
 }
 
 void Assets::load_camera_settings_from_json() {
@@ -1221,6 +1222,7 @@ void Assets::write_runtime_game_config_to_json() {
 void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
     sync_camera_settings_to_map_info_json();
+    force_live_dynamic_sync_next_rebuild_ = true;
     mark_camera_dirty();
     camera_view_dirty_ = true;
 }
@@ -1233,6 +1235,7 @@ void Assets::mark_camera_dirty() {
 void Assets::reload_camera_settings() {
     vibble::log::info("[Assets] Reloading camera settings from manifest");
     load_camera_settings_from_json();
+    force_live_dynamic_sync_next_rebuild_ = true;
     mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
     camera_view_dirty_ = true;
     vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
@@ -1252,6 +1255,7 @@ void Assets::force_camera_view_refresh() {
     mark_camera_dirty();
     camera_view_dirty_ = true;
     grid_dirty_ = true;
+    force_live_dynamic_sync_next_rebuild_ = true;
 
     camera_.update_camera_height(current_room_, finder_, player, true, last_frame_dt_seconds_, dev_mode);
 
@@ -2204,6 +2208,9 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         active_room = dev_controls_->resolve_current_room(detected_room);
     }
     room_changed = (current_room_ != active_room);
+    if (room_changed) {
+        force_live_dynamic_sync_next_rebuild_ = true;
+    }
     current_room_ = active_room;
     game_context_.begin_frame(
         this,
@@ -2960,6 +2967,123 @@ world::GridBounds Assets::screen_world_rect() const {
         0,
         std::clamp<std::int64_t>(max_height_from_min, 0, static_cast<std::int64_t>(std::numeric_limits<int>::max()))));
     return world::GridBounds::from_xywh(minx, miny, width, height, 0, world_grid_.default_resolution_layer());
+}
+
+world::GridBounds Assets::runtime_work_bounds_from_render_bounds(const world::GridBounds& render_bounds) {
+    const auto clamp_i64_to_int = [](std::int64_t value) {
+        return static_cast<int>(std::clamp<std::int64_t>(
+            value,
+            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
+    };
+
+    const int render_min_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
+    const int render_max_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
+    const int render_min_z = std::min(render_bounds.min.world_z(), render_bounds.max.world_z());
+    const int render_max_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
+    if (render_min_x > render_max_x || render_min_z > render_max_z) {
+        return render_bounds;
+    }
+
+    const auto& settings = camera_.get_settings();
+    const int despawn_margin = std::max(0, live_dynamic_despawn_margin_world_px_);
+    const int depth_bound = static_cast<int>(std::lround(std::max(
+        static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth),
+        static_cast<double>(settings.max_cull_depth))));
+    const int unclamped_radius = depth_bound + despawn_margin;
+    constexpr int kMinRuntimeWorkRadiusWorldPx = 1200;
+    constexpr int kMaxRuntimeWorkRadiusWorldPx = 48000;
+    const int work_radius = std::clamp(unclamped_radius, kMinRuntimeWorkRadiusWorldPx, kMaxRuntimeWorkRadiusWorldPx);
+
+    const SDL_Point camera_center = camera_.get_screen_center();
+    const int clamp_min_x = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.x) - work_radius);
+    const int clamp_max_x = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.x) + work_radius);
+    const int clamp_min_z = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.y) - work_radius);
+    const int clamp_max_z = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.y) + work_radius);
+
+    const int bounded_min_x = std::max(render_min_x, clamp_min_x);
+    const int bounded_max_x = std::min(render_max_x, clamp_max_x);
+    const int bounded_min_z = std::max(render_min_z, clamp_min_z);
+    const int bounded_max_z = std::min(render_max_z, clamp_max_z);
+
+    if (bounded_min_x <= bounded_max_x && bounded_min_z <= bounded_max_z) {
+        if ((bounded_min_x != render_min_x || bounded_max_x != render_max_x ||
+             bounded_min_z != render_min_z || bounded_max_z != render_max_z) &&
+            last_work_bounds_clamp_warning_frame_ != frame_id_) {
+            last_work_bounds_clamp_warning_frame_ = frame_id_;
+            vibble::log::warn("[DynamicWorkBounds] Clamped runtime bounds. frame=" +
+                              std::to_string(frame_id_) +
+                              " render_min=(" + std::to_string(render_min_x) + "," + std::to_string(render_min_z) + ")" +
+                              " render_max=(" + std::to_string(render_max_x) + "," + std::to_string(render_max_z) + ")" +
+                              " clamped_min=(" + std::to_string(bounded_min_x) + "," + std::to_string(bounded_min_z) + ")" +
+                              " clamped_max=(" + std::to_string(bounded_max_x) + "," + std::to_string(bounded_max_z) + ")" +
+                              " radius=" + std::to_string(work_radius));
+        }
+        return world::GridBounds::from_min_max(
+            world::GridPoint::make_virtual(bounded_min_x,
+                                           render_bounds.min.world_y(),
+                                           bounded_min_z,
+                                           render_bounds.min.resolution_layer()),
+            world::GridPoint::make_virtual(bounded_max_x,
+                                           render_bounds.max.world_y(),
+                                           bounded_max_z,
+                                           render_bounds.max.resolution_layer()));
+    }
+
+    return world::GridBounds::from_xywh(clamp_min_x,
+                                        clamp_min_z,
+                                        std::max(1, work_radius * 2 + 1),
+                                        std::max(1, work_radius * 2 + 1),
+                                        render_bounds.min.world_y(),
+                                        render_bounds.min.resolution_layer());
+}
+
+bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& work_bounds,
+                                                     bool allow_live_dynamic_sync) {
+    if (!allow_live_dynamic_sync) {
+        return false;
+    }
+
+    const int center_x = static_cast<int>((
+        static_cast<std::int64_t>(work_bounds.min.world_x()) +
+        static_cast<std::int64_t>(work_bounds.max.world_x())) / 2);
+    const int center_z = static_cast<int>((
+        static_cast<std::int64_t>(work_bounds.min.world_z()) +
+        static_cast<std::int64_t>(work_bounds.max.world_z())) / 2);
+
+    bool should_sync = force_live_dynamic_sync_next_rebuild_;
+    if (last_live_dynamic_sync_frame_ == std::numeric_limits<std::uint32_t>::max()) {
+        should_sync = true;
+    }
+
+    const auto abs_i64 = [](std::int64_t value) -> std::int64_t {
+        return value < 0 ? -value : value;
+    };
+    const std::int64_t dx =
+        abs_i64(static_cast<std::int64_t>(center_x) - static_cast<std::int64_t>(last_live_dynamic_sync_center_world_x_));
+    const std::int64_t dz =
+        abs_i64(static_cast<std::int64_t>(center_z) - static_cast<std::int64_t>(last_live_dynamic_sync_center_world_z_));
+    const std::int64_t movement_threshold = std::max<std::int64_t>(1, live_dynamic_sync_min_camera_delta_world_px_);
+    if (dx >= movement_threshold || dz >= movement_threshold) {
+        should_sync = true;
+    }
+
+    if (last_live_dynamic_sync_frame_ != std::numeric_limits<std::uint32_t>::max()) {
+        const std::uint32_t cadence = std::max<std::uint32_t>(1, live_dynamic_sync_min_interval_frames_);
+        if ((frame_id_ - last_live_dynamic_sync_frame_) >= cadence) {
+            should_sync = true;
+        }
+    }
+
+    if (!should_sync) {
+        return false;
+    }
+
+    last_live_dynamic_sync_center_world_x_ = center_x;
+    last_live_dynamic_sync_center_world_z_ = center_z;
+    last_live_dynamic_sync_frame_ = frame_id_;
+    force_live_dynamic_sync_next_rebuild_ = false;
+    return true;
 }
 
 void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds) {
@@ -3848,15 +3972,14 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
     last_grid_rebuild_frame_ = frame_id_;
     camera_.recompute_current_view();
     const world::GridBounds render_bounds = screen_world_rect();
-    if (allow_live_dynamic_sync) {
-        sync_live_dynamic_assets_to_render_bounds(render_bounds);
-    } else {
-        vibble::log::info("[LiveDynamicSpawn] sync skipped during forced startup camera refresh.");
+    const world::GridBounds work_bounds = runtime_work_bounds_from_render_bounds(render_bounds);
+    if (should_run_live_dynamic_sync_for_bounds(work_bounds, allow_live_dynamic_sync)) {
+        sync_live_dynamic_assets_to_render_bounds(work_bounds);
     }
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
                          frame_id_);
-    world_grid_.update_active_chunks(render_bounds, 0);
+    world_grid_.update_active_chunks(work_bounds, 0);
     rebuild_active_from_screen_grid();
     mark_anchor_bases_dirty_for_active_assets();
 
@@ -4720,7 +4843,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
     if (resolution_changed) {
         update_max_asset_dimensions();
         camera_.recompute_current_view();
-        world_grid_.update_active_chunks(screen_world_rect(), 0);
+        world_grid_.update_active_chunks(runtime_work_bounds_from_render_bounds(screen_world_rect()), 0);
         mark_grid_dirty();
     }
 }

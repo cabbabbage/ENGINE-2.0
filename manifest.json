@@ -26100,7 +26100,7 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 663.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
         "layer_depth_curve": 68.61000061035156,
@@ -26250,9 +26250,9 @@
             }
           },
           "display_color": [
-            141,
-            85,
-            242,
+            204,
+            152,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26398,9 +26398,9 @@
             }
           },
           "display_color": [
-            242,
-            36,
-            36,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26457,9 +26457,9 @@
             }
           },
           "display_color": [
-            36,
+            85,
+            157,
             242,
-            125,
             255
           ],
           "edge_smoothness": 4,
@@ -26546,9 +26546,9 @@
             }
           },
           "display_color": [
-            185,
-            204,
             31,
+            204,
+            127,
             255
           ],
           "edge_smoothness": 4,
@@ -26610,9 +26610,9 @@
             }
           },
           "display_color": [
-            85,
-            174,
-            242,
+            103,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -26710,9 +26710,9 @@
             }
           },
           "display_color": [
-            204,
-            107,
-            31,
+            180,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -27120,9 +27120,9 @@
             }
           },
           "display_color": [
-            106,
-            31,
-            204,
+            85,
+            242,
+            160,
             255
           ],
           "edge_smoothness": 96,

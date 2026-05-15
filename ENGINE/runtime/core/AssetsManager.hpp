@@ -535,6 +535,8 @@ private:
     void migrate_live_dynamic_spawn_config();
     void rebuild_live_dynamic_selectors();
     void sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds);
+    world::GridBounds runtime_work_bounds_from_render_bounds(const world::GridBounds& render_bounds);
+    bool should_run_live_dynamic_sync_for_bounds(const world::GridBounds& work_bounds, bool allow_live_dynamic_sync);
     void clear_live_dynamic_assets();
     std::size_t delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete);
 
@@ -673,4 +675,11 @@ private:
     std::size_t max_live_dynamic_new_spawns_per_frame_ = 8192;
     std::size_t max_total_live_dynamic_assets_ = 20000;
     std::uint32_t last_live_dynamic_guard_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
+    int live_dynamic_sync_min_camera_delta_world_px_ = 96;
+    std::uint32_t live_dynamic_sync_min_interval_frames_ = 8;
+    bool force_live_dynamic_sync_next_rebuild_ = true;
+    int last_live_dynamic_sync_center_world_x_ = 0;
+    int last_live_dynamic_sync_center_world_z_ = 0;
+    std::uint32_t last_live_dynamic_sync_frame_ = std::numeric_limits<std::uint32_t>::max();
+    std::uint32_t last_work_bounds_clamp_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
 };

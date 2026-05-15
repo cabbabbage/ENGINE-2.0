@@ -320,16 +320,7 @@ public:
     void set_output_dimensions(int width, int height);
     std::optional<SDL_Point> scene_postprocess_target_size() const;
 
-    void test_reconcile_live_dynamic_assets_for_bounds(const world::GridBounds& bounds);
-    std::size_t test_live_dynamic_state_count() const { return live_dynamic_states_.size(); }
-    std::uint64_t test_live_dynamic_resolution_nonce_for_key(LiveDynamicMode mode,
-                                                             int grid_resolution,
-                                                             int grid_x,
-                                                             int grid_z,
-                                                             const std::string& spawn_id) const;
-    world::GridBounds test_live_dynamic_display_bounds() const;
-    world::GridBounds test_live_dynamic_spawn_bounds() const;
-    world::GridBounds test_live_dynamic_despawn_bounds() const;
+    void test_sync_live_dynamic_assets_for_bounds(const world::GridBounds& bounds);
 
 private:
     void save_map_info_json();
@@ -450,9 +441,6 @@ private:
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
     float boundary_min_visible_screen_ratio_ = 0.015f;
-    int live_dynamic_preload_margin_world_px_ = 192;
-    int live_dynamic_despawn_margin_world_px_ = 256;
-    float live_dynamic_velocity_lookahead_seconds_ = 0.18f;
     int camera_height_min_px_ = 1;
     int camera_height_max_px_ = 100000;
     int map_radius_world_ = 0;
@@ -538,7 +526,7 @@ private:
                                               double current_scale,
                                               double current_pitch,
                                               std::uint64_t current_projection_version,
-                                              bool allow_live_dynamic_reconcile = true);
+                                              bool allow_live_dynamic_sync = true);
     void mark_grid_dirty();
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
@@ -546,11 +534,9 @@ private:
     void rebuild_active_from_screen_grid();
     void migrate_live_dynamic_spawn_config();
     void rebuild_live_dynamic_selectors();
-    void reconcile_live_dynamic_assets(const world::GridBounds& visible_bounds);
+    void sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds);
     void clear_live_dynamic_assets();
-    void delete_inactive_live_dynamic_assets();
-    std::size_t delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete,
-                                               bool increment_nonces);
+    std::size_t delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete);
 
     std::vector<Asset*> moving_assets_for_grid_;
     std::vector<Asset*> pending_static_grid_registration_;
@@ -601,7 +587,6 @@ private:
     bool compute_asset_dimension_cache(const Asset* asset, float camera_scale, AssetDimensionCache& out) const;
     void finalize_max_asset_dimensions(float max_width, float max_height);
     world::GridBounds screen_world_rect() const;
-    world::GridBounds screen_world_rect_display() const;
     int audio_effect_max_distance_world() const;
 
     void mark_non_player_update_buffer_dirty() {
@@ -664,32 +649,7 @@ private:
         }
     };
 
-    struct LiveDynamicPointKeyHash {
-        std::size_t operator()(const LiveDynamicPointKey& key) const;
-    };
-
-    struct LiveDynamicState {
-        Asset* asset = nullptr;
-        bool null_selection = false;
-        SDL_Point spawn_world_xz{0, 0};
-        bool has_spawn_world_xz = false;
-    };
-
-    struct LiveDynamicLifecycleBounds {
-        world::GridBounds display;
-        world::GridBounds spawn;
-        world::GridBounds despawn;
-    };
-
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
     std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
-    std::unordered_map<LiveDynamicPointKey, LiveDynamicState, LiveDynamicPointKeyHash> live_dynamic_states_;
     std::unordered_map<Asset*, LiveDynamicPointKey> live_dynamic_asset_keys_;
-    std::unordered_map<LiveDynamicPointKey, std::uint64_t, LiveDynamicPointKeyHash> live_dynamic_resolution_nonces_;
-    std::unordered_map<std::string, std::uint64_t> live_dynamic_scan_cursors_;
-    std::uint32_t last_live_dynamic_log_frame_ = std::numeric_limits<std::uint32_t>::max();
-    LiveDynamicLifecycleBounds last_live_dynamic_lifecycle_bounds_{
-        world::GridBounds::from_xywh(0, 0, 1, 1, 0, 0),
-        world::GridBounds::from_xywh(0, 0, 1, 1, 0, 0),
-        world::GridBounds::from_xywh(0, 0, 1, 1, 0, 0)};
 };

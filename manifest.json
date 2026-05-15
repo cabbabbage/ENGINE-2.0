@@ -26097,18 +26097,18 @@
       "camera_settings": {
         "base_height_px": 720.0,
         "blur_px": 0.3400000035762787,
-        "boundary_min_visible_screen_ratio": 0.01100000087171793,
+        "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
         "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 663.0,
-        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.07999999821186066,
-        "layer_depth_curve": 9.869999885559082,
-        "layer_depth_interval": 4.0,
+        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
+        "layer_depth_curve": 68.61000061035156,
+        "layer_depth_interval": 7.0,
         "light_max_cull_depth": 16480.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
-        "live_dynamic_min_visible_screen_ratio": 0.01100000087171793,
+        "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "live_dynamic_velocity_lookahead_seconds": 0.18000000715255737,
         "max_camera_velocity": 2200.0,
@@ -26251,9 +26251,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            200,
+            204,
+            91,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26340,9 +26340,9 @@
             }
           },
           "display_color": [
-            242,
-            142,
+            141,
             85,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26399,9 +26399,9 @@
             }
           },
           "display_color": [
-            121,
+            71,
             204,
-            31,
+            165,
             255
           ],
           "edge_smoothness": 4,
@@ -26458,9 +26458,9 @@
             }
           },
           "display_color": [
-            169,
-            36,
-            242,
+            179,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26547,9 +26547,9 @@
             }
           },
           "display_color": [
-            31,
-            90,
+            80,
             204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26611,9 +26611,9 @@
             }
           },
           "display_color": [
-            71,
-            204,
-            139,
+            242,
+            36,
+            73,
             255
           ],
           "edge_smoothness": 70,
@@ -26694,9 +26694,9 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -4,
-          "camera_center_dz": -3105,
-          "camera_height_px": 270,
+          "camera_center_dx": -600,
+          "camera_center_dz": -2567,
+          "camera_height_px": 847,
           "camera_tilt_deg": 26.813932418823242,
           "camera_zoom_percent": 100,
           "curvyness": {
@@ -26711,9 +26711,9 @@
             }
           },
           "display_color": [
-            204,
-            102,
-            31,
+            242,
+            85,
+            181,
             255
           ],
           "edge_smoothness": 101,
@@ -27121,9 +27121,9 @@
             }
           },
           "display_color": [
-            158,
-            242,
             85,
+            182,
+            242,
             255
           ],
           "edge_smoothness": 96,

@@ -5121,7 +5121,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 const bool selected = (handle.point_index == oval_edit_.selected_point_index);
                 const bool hovered = (handle.point_index == oval_edit_.hovered_point_index);
                 if (oval_edit_.has_center_screen_px) {
-                    SDL_SetRenderDrawColor(renderer, 80, 170, 255, 170);
+                    if (oval_body_highlighted) {
+                        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                    } else {
+                        SDL_SetRenderDrawColor(renderer, 80, 170, 255, 170);
+                    }
                     SDL_RenderLine(renderer,
                                    static_cast<int>(std::lround(oval_edit_.center_screen_px.x)),
                                    static_cast<int>(std::lround(oval_edit_.center_screen_px.y)),

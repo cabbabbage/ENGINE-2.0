@@ -236,7 +236,7 @@ std::unique_ptr<Assets> make_assets(AssetLibrary& library,
     std::vector<std::unique_ptr<Room>> owned_rooms;
     owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
     auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
-    return std::make_unique<Assets>(
+    auto assets = std::make_unique<Assets>(
         library,
         nullptr,
         world_context,
@@ -251,6 +251,8 @@ std::unique_ptr<Assets> make_assets(AssetLibrary& library,
         manifest,
         std::string{},
         world::WorldGrid{});
+    assets->reload_camera_settings();
+    return assets;
 }
 
 }  // namespace
@@ -352,11 +354,11 @@ TEST_CASE("Live dynamic sync handles pathological near-limit bounds without runa
 
     nlohmann::json manifest = nlohmann::json::object({
         {"schema_version", manifest::kMapSchemaVersion},
-        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 0}, {"position_jitter_px", 0}})},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 1}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
              {"boundary_area_selectors",
-              nlohmann::json::array({make_live_selector("spn-pathological", "boundary_asset", 0)})}
+              nlohmann::json::array({make_live_selector("spn-pathological", "boundary_asset", 1)})}
          })}
     });
 
@@ -372,7 +374,7 @@ TEST_CASE("Live dynamic sync handles pathological near-limit bounds without runa
         std::numeric_limits<int>::max(),
         std::numeric_limits<int>::max(),
         0,
-        0);
+        1);
 
     assets->test_sync_live_dynamic_assets_for_bounds(pathological_bounds);
     CHECK(live_dynamic_assets(*assets).size() <= 8192);
@@ -420,11 +422,11 @@ TEST_CASE("Live dynamic throttled scans remain deterministic across repeated syn
 
     nlohmann::json manifest = nlohmann::json::object({
         {"schema_version", manifest::kMapSchemaVersion},
-        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 0}, {"position_jitter_px", 0}})},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 1}, {"position_jitter_px", 0}})},
         {"live_dynamic_spawns",
          nlohmann::json::object({
              {"boundary_area_selectors",
-              nlohmann::json::array({make_live_selector("spn-deterministic", "boundary_asset", 0)})}
+              nlohmann::json::array({make_live_selector("spn-deterministic", "boundary_asset", 1)})}
          })}
     });
 
@@ -435,7 +437,7 @@ TEST_CASE("Live dynamic throttled scans remain deterministic across repeated syn
                               "live_dynamic_deterministic_throttle_test",
                               1000000);
     const world::GridBounds large_bounds =
-        world::GridBounds::from_xywh(-500000, -500000, 1000000, 1000000, 0, 0);
+        world::GridBounds::from_xywh(-500000, -500000, 1000000, 1000000, 0, 1);
 
     assets->test_sync_live_dynamic_assets_for_bounds(large_bounds);
     const auto first_positions = collect_live_positions_named(*assets, "boundary_asset");
@@ -547,6 +549,11 @@ TEST_CASE("Live dynamic shared selector list renders trail candidates") {
     nlohmann::json manifest = nlohmann::json::object({
         {"schema_version", manifest::kMapSchemaVersion},
         {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"camera_settings",
+         nlohmann::json::object({
+             {"live_dynamic_preload_margin_world_px", 0},
+             {"live_dynamic_despawn_margin_world_px", 0}
+         })},
         {"live_dynamic_spawns",
          nlohmann::json::object({
              {"boundary_area_selectors",
@@ -575,6 +582,7 @@ TEST_CASE("Live dynamic shared selector list renders trail candidates") {
                   manifest,
                   std::string{},
                   world::WorldGrid{});
+    assets.reload_camera_settings();
 
     const world::GridBounds render_bounds = world::GridBounds::from_xywh(64, -16, 32, 32, 0, 4);
     assets.test_sync_live_dynamic_assets_for_bounds(render_bounds);

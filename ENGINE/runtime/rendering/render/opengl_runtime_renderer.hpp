@@ -124,8 +124,6 @@ private:
                                              int height,
                                              const std::string& label,
                                              std::string& out_error);
-    static SDL_Texture* create_solid_white_texture(SDL_Renderer* renderer,
-                                                   std::string& out_error);
     static void configure_render_target(SDL_Texture* texture);
     static SDL_FPoint clip_to_screen(float clip_x, float clip_y, float target_width, float target_height);
     static void packet_to_vertices(const GpuSpriteDrawPacket& packet,
@@ -149,7 +147,6 @@ private:
     SDL_Texture* floor_target_ = nullptr;
     SDL_Texture* xy_sprite_target_ = nullptr;
     SDL_Texture* composite_target_ = nullptr;
-    SDL_Texture* floor_marker_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
     SDL_Color smoothed_floor_clear_color_{0, 0, 0, 255};

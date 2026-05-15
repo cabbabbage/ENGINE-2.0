@@ -73,9 +73,17 @@ public:
     };
 
     struct DevFloorProjectionMarker {
+        enum class Shape {
+            Dot = 0,
+            Crosshair = 1,
+        };
+
         SDL_FPoint floor_world_xz{0.0f, 0.0f};
         SDL_Color color{255, 255, 255, 200};
-        float world_half_extent = 8.0f;
+        Shape shape = Shape::Dot;
+        int pixel_size = 3;
+        int crosshair_radius = 0;
+        bool emphasized = false;
     };
 
     class WorldMutationBatch {

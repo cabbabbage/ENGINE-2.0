@@ -110,7 +110,6 @@ constexpr float kShiftEdgePanExponent = 1.5f;
 constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr int kMovementPointPickRadiusPx = 16;
 constexpr int kOvalPointPickRadiusPx = 20;
-constexpr int kOvalCenterPickRadiusPx = 22;
 constexpr int kOvalGuidePickRadiusPx = 16;
 constexpr int kBoxCornerPickRadiusPx = 18;
 constexpr int kFloorBoxCornerPickRadiusPx = 18;
@@ -5061,27 +5060,13 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             refresh_oval_mode_handles();
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-            if (oval_edit_.has_center_screen_px) {
-                const int cx = static_cast<int>(std::lround(oval_edit_.center_screen_px.x));
-                const int cy = static_cast<int>(std::lround(oval_edit_.center_screen_px.y));
-                SDL_Color center_color{250, 205, 90, 220};
-                if (oval_edit_.center_selected) {
-                    center_color = SDL_Color{255, 255, 255, 255};
-                } else if (oval_edit_.center_hovered) {
-                    center_color = SDL_Color{255, 228, 128, 255};
-                }
-                SDL_SetRenderDrawColor(renderer, center_color.r, center_color.g, center_color.b, center_color.a);
-                SDL_RenderLine(renderer, cx - 8, cy, cx + 8, cy);
-                SDL_RenderLine(renderer, cx, cy - 8, cx, cy + 8);
-                if (oval_edit_.center_hovered || oval_edit_.center_selected) {
-                    SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
-                    SDL_Rect ring{cx - 11, cy - 11, 23, 23};
-                    sdl_render::Rect(renderer, &ring);
-                }
-            }
+            const bool oval_body_highlighted =
+                (oval_edit_.body_hovered || oval_edit_.center_selected) &&
+                oval_edit_.hovered_point_index < 0 &&
+                oval_edit_.selected_point_index < 0;
 
             if (oval_edit_.guide_screen_samples.size() >= 2) {
-                if (oval_edit_.body_hovered && oval_edit_.hovered_point_index < 0) {
+                if (oval_body_highlighted) {
                     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                 } else {
                     SDL_SetRenderDrawColor(renderer, 96, 192, 255, 220);
@@ -5112,7 +5097,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                           });
 
                 if (sorted_handles.size() >= 2) {
-                    if (oval_edit_.body_hovered && oval_edit_.hovered_point_index < 0) {
+                    if (oval_body_highlighted) {
                         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                     } else {
                         SDL_SetRenderDrawColor(renderer, 96, 192, 255, 220);
@@ -5150,7 +5135,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 if (selected) {
                     color = SDL_Color{255, 255, 255, 255};
                 } else if (hovered) {
-                    color = SDL_Color{255, 220, 120, 255};
+                    color = SDL_Color{255, 255, 255, 255};
                 }
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
                 SDL_Rect point_rect{cx - radius, cy - radius, radius * 2 + 1, radius * 2 + 1};
@@ -13019,9 +13004,6 @@ bool RoomEditor::resolve_selected_oval_lock_target(float& out_world_x,
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info || !oval_edit_.has_center_world) {
         return false;
     }
-    if (!selected_oval_mapping_binding_valid()) {
-        return false;
-    }
 
     const auto& mappings = oval_edit_.target_asset->info->oval_anchor_mappings;
     if (oval_edit_.selected_oval_index < 0 ||
@@ -17341,16 +17323,7 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
     const bool left_released = input.wasReleased(Input::LEFT);
     const bool right_pressed = input.wasPressed(Input::RIGHT);
     const bool pointer_blocked = is_oval_ui_blocking_point(screen_pt.x, screen_pt.y);
-    bool center_or_guide_hit = false;
-    const auto center_is_hit = [&](SDL_Point point) {
-        if (!oval_edit_.has_center_screen_px) {
-            return false;
-        }
-        const float dx = oval_edit_.center_screen_px.x - static_cast<float>(point.x);
-        const float dy = oval_edit_.center_screen_px.y - static_cast<float>(point.y);
-        const float dist_sq = dx * dx + dy * dy;
-        return dist_sq <= static_cast<float>(kOvalCenterPickRadiusPx * kOvalCenterPickRadiusPx);
-    };
+    bool body_hit = false;
     const auto guide_is_hit = [&](SDL_Point point) {
         if (oval_edit_.guide_screen_samples.size() < 2) {
             return false;
@@ -17386,14 +17359,24 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
     };
 
     if (!pointer_blocked) {
-        oval_edit_.center_hovered = center_is_hit(screen_pt);
         oval_edit_.hovered_point_index =
             find_oval_point_handle_at_point(screen_pt, kOvalPointPickRadiusPx, oval_edit_.selected_point_index);
-        const bool guide_hovered = guide_is_hit(screen_pt);
-        center_or_guide_hit =
-            oval_edit_.center_hovered || (guide_hovered && oval_edit_.hovered_point_index < 0);
-        oval_edit_.body_hovered = center_or_guide_hit;
-        if (left_pressed && center_or_guide_hit) {
+        body_hit = oval_edit_.hovered_point_index < 0 && guide_is_hit(screen_pt);
+        oval_edit_.center_hovered = body_hit;
+        oval_edit_.body_hovered = body_hit;
+
+        if (left_pressed && oval_edit_.hovered_point_index >= 0) {
+            const bool selection_changed =
+                oval_edit_.selected_point_index != oval_edit_.hovered_point_index || oval_edit_.center_selected;
+            oval_edit_.selected_point_index = oval_edit_.hovered_point_index;
+            oval_edit_.center_selected = false;
+            oval_edit_.center_hovered = false;
+            oval_edit_.body_hovered = false;
+            oval_edit_.center_dragging = false;
+            if (selection_changed) {
+                sync_oval_tools_panel();
+            }
+        } else if (left_pressed && body_hit) {
             const bool selection_changed = !oval_edit_.center_selected || oval_edit_.selected_point_index >= 0;
             oval_edit_.center_selected = true;
             oval_edit_.selected_point_index = -1;
@@ -17405,20 +17388,13 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
                 sync_oval_tools_panel();
             }
         } else if (left_pressed &&
-                   oval_edit_.hovered_point_index >= 0 &&
-                   oval_edit_.selected_point_index != oval_edit_.hovered_point_index) {
-            oval_edit_.selected_point_index = oval_edit_.hovered_point_index;
-            oval_edit_.center_selected = false;
-            oval_edit_.center_hovered = false;
-            oval_edit_.center_dragging = false;
-            sync_oval_tools_panel();
-        } else if (left_pressed &&
-                   !center_or_guide_hit &&
+                   !body_hit &&
                    oval_edit_.hovered_point_index < 0 &&
                    (oval_edit_.selected_point_index >= 0 || oval_edit_.center_selected)) {
             oval_edit_.selected_point_index = -1;
             oval_edit_.center_selected = false;
             oval_edit_.center_hovered = false;
+            oval_edit_.body_hovered = false;
             oval_edit_.center_dragging = false;
             sync_oval_tools_panel();
         }
@@ -17430,7 +17406,7 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
 
     if (right_pressed &&
         !pointer_blocked &&
-        center_or_guide_hit &&
+        body_hit &&
         oval_edit_.target_asset &&
         oval_edit_.target_asset->info) {
         const int mapping_index = oval_edit_.selected_oval_index;
@@ -20228,8 +20204,11 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
     }
 
     markers.reserve(256);
-    const int overlay_cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
-    auto add_marker = [&](const SDL_FPoint& floor_world_xz, SDL_Color color, bool emphasized) {
+    auto add_marker = [&](const SDL_FPoint& floor_world_xz,
+                          SDL_Color color,
+                          bool emphasized,
+                          Assets::DevFloorProjectionMarker::Shape shape =
+                              Assets::DevFloorProjectionMarker::Shape::Dot) {
         if (!std::isfinite(floor_world_xz.x) || !std::isfinite(floor_world_xz.y)) {
             return;
         }
@@ -20237,8 +20216,10 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
         marker.floor_world_xz = floor_world_xz;
         marker.color = color;
         marker.color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(color.a), 90, 255));
-        marker.world_half_extent =
-            static_cast<float>(std::max(2, overlay_cell / 2)) * (emphasized ? 1.3f : 1.0f);
+        marker.shape = shape;
+        marker.emphasized = emphasized;
+        marker.pixel_size = std::clamp(emphasized ? 5 : 3, 2, 10);
+        marker.crosshair_radius = std::clamp(emphasized ? 5 : 4, 3, 12);
         markers.push_back(marker);
     };
 
@@ -20259,23 +20240,16 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
             } else if (subdued) {
                 color = SDL_Color{145, 145, 145, 105};
             }
-            add_marker(handle.floor_world_xz, color, selected || hovered);
+            add_marker(handle.floor_world_xz,
+                       color,
+                       selected || hovered,
+                       (selected || hovered) ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                             : Assets::DevFloorProjectionMarker::Shape::Dot);
         }
     }
 
     if (oval_mode_active()) {
         refresh_oval_mode_handles();
-        if (oval_edit_.has_center_world) {
-            SDL_Color center_color{250, 205, 90, 220};
-            if (oval_edit_.center_selected) {
-                center_color = SDL_Color{255, 255, 255, 255};
-            } else if (oval_edit_.center_hovered) {
-                center_color = SDL_Color{255, 228, 128, 255};
-            }
-            add_marker(SDL_FPoint{oval_edit_.center_world_x, oval_edit_.center_world_z},
-                       center_color,
-                       oval_edit_.center_selected || oval_edit_.center_hovered);
-        }
         for (const auto& handle : oval_edit_.handles) {
             if (!handle.has_floor_world_xz) {
                 continue;
@@ -20286,9 +20260,13 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
             if (selected) {
                 color = SDL_Color{255, 255, 255, 255};
             } else if (hovered) {
-                color = SDL_Color{255, 220, 120, 255};
+                color = SDL_Color{255, 255, 255, 255};
             }
-            add_marker(handle.floor_world_xz, color, selected || hovered);
+            add_marker(handle.floor_world_xz,
+                       color,
+                       selected || hovered,
+                       (selected || hovered) ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                             : Assets::DevFloorProjectionMarker::Shape::Dot);
         }
     }
 
@@ -20308,7 +20286,11 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
                 movement_edit_.rel_positions[i].x + static_cast<float>(anchor.x),
                 movement_edit_.rel_positions[i].y + static_cast<float>(anchor.y)
             };
-            add_marker(floor_world_xz, color, selected || hovered);
+            add_marker(floor_world_xz,
+                       color,
+                       selected || hovered,
+                       (selected || hovered) ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                             : Assets::DevFloorProjectionMarker::Shape::Dot);
         }
     }
 
@@ -20341,7 +20323,12 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
                         draw_color = SDL_Color{255, 255, 255, 255};
                     }
                     const auto& wp = volume.world_points[static_cast<std::size_t>(point_index)];
-                    add_marker(SDL_FPoint{wp.x, wp.z}, draw_color, selected_corner_point || hovered_corner_point);
+                    add_marker(SDL_FPoint{wp.x, wp.z},
+                               draw_color,
+                               selected_corner_point || hovered_corner_point,
+                               (selected_corner_point || hovered_corner_point)
+                                   ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                   : Assets::DevFloorProjectionMarker::Shape::Dot);
                 }
             }
         };
@@ -20426,7 +20413,12 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
                 } else if (point_hovered) {
                     point_color = SDL_Color{255, 240, 176, 255};
                 }
-                add_marker(projection.floor_world_points[point_index], point_color, point_selected || point_hovered);
+                add_marker(projection.floor_world_points[point_index],
+                           point_color,
+                           point_selected || point_hovered,
+                           (point_selected || point_hovered)
+                               ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                               : Assets::DevFloorProjectionMarker::Shape::Dot);
             }
         }
     }

@@ -163,6 +163,19 @@ void fill_quad_packet_vertices(const SDL_FPoint& tl,
     out_packet.index_count = 6;
 }
 
+void fill_screen_quad_packet_vertices(float center_x,
+                                      float center_y,
+                                      float half_extent_px,
+                                      float target_width,
+                                      float target_height,
+                                      GpuSpriteDrawPacket& out_packet) {
+    const SDL_FPoint tl{center_x - half_extent_px, center_y - half_extent_px};
+    const SDL_FPoint tr{center_x + half_extent_px, center_y - half_extent_px};
+    const SDL_FPoint br{center_x + half_extent_px, center_y + half_extent_px};
+    const SDL_FPoint bl{center_x - half_extent_px, center_y + half_extent_px};
+    fill_quad_packet_vertices(tl, tr, br, bl, 0.0f, 0.0f, 1.0f, 1.0f, target_width, target_height, out_packet);
+}
+
 void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& projected,
                                  float u0,
                                  float v0,
@@ -464,74 +477,78 @@ bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
 
 bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
                                      const std::vector<Assets::DevFloorProjectionMarker>& markers,
-                                     SDL_Texture* marker_texture,
                                      std::uint32_t target_width,
                                      std::uint32_t target_height,
                                      std::vector<GpuSpriteDrawPacket>& out_packets,
                                      std::string& out_error) {
     out_packets.clear();
     out_error.clear();
-    if (!marker_texture) {
-        if (!markers.empty()) {
-            out_error = "Missing floor marker texture.";
-            return false;
-        }
-        return true;
-    }
-    out_packets.reserve(markers.size());
+    out_packets.reserve(markers.size() * 3);
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
     std::uintptr_t marker_sequence = 0u;
 
     for (const Assets::DevFloorProjectionMarker& marker : markers) {
-        const float extent = std::max(1.0f, marker.world_half_extent);
-        const float left = marker.floor_world_xz.x - extent;
-        const float right = marker.floor_world_xz.x + extent;
-        const float top_z = marker.floor_world_xz.y - extent;
-        const float bottom_z = marker.floor_world_xz.y + extent;
-
-        SDL_FPoint screen_tl{};
-        SDL_FPoint screen_tr{};
-        SDL_FPoint screen_br{};
-        SDL_FPoint screen_bl{};
-        if (!camera.project_world_point(SDL_FPoint{left, 0.0f}, top_z, screen_tl) ||
-            !camera.project_world_point(SDL_FPoint{right, 0.0f}, top_z, screen_tr) ||
-            !camera.project_world_point(SDL_FPoint{right, 0.0f}, bottom_z, screen_br) ||
-            !camera.project_world_point(SDL_FPoint{left, 0.0f}, bottom_z, screen_bl)) {
+        SDL_FPoint center{};
+        if (!camera.project_world_point(SDL_FPoint{marker.floor_world_xz.x, 0.0f}, marker.floor_world_xz.y, center) ||
+            !std::isfinite(center.x) || !std::isfinite(center.y)) {
             continue;
         }
+        const float packet_y = center.y;
+        const std::uintptr_t base_sort_id = floor_sort_id(true, marker_sequence++);
 
-        GpuSpriteDrawPacket packet{};
-        packet.source_texture = marker_texture;
-        packet.source_asset_name = "<floor-marker>";
-        packet.source_animation_name = "<floor-marker>";
-        packet.source_texture_id =
-            "floor_marker_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(marker_texture));
-        packet.source_frame_index = -1;
-        packet.source_variant_index = -1;
-        packet.modulate = SDL_FColor{
-            static_cast<float>(marker.color.r) / 255.0f,
-            static_cast<float>(marker.color.g) / 255.0f,
-            static_cast<float>(marker.color.b) / 255.0f,
-            static_cast<float>(marker.color.a) / 255.0f,
+        auto init_packet = [&](GpuSpriteDrawPacket& packet) {
+            packet.source_texture = nullptr;
+            packet.source_asset_name = "<floor-marker>";
+            packet.source_animation_name = "<floor-marker>";
+            packet.source_texture_id = "floor_marker_screen_primitive";
+            packet.source_frame_index = -1;
+            packet.source_variant_index = -1;
+            packet.modulate = SDL_FColor{
+                static_cast<float>(marker.color.r) / 255.0f,
+                static_cast<float>(marker.color.g) / 255.0f,
+                static_cast<float>(marker.color.b) / 255.0f,
+                static_cast<float>(marker.color.a) / 255.0f,
+            };
+            packet.projected_foot_y_key = packet_y;
+            packet.camera_depth_key = marker.floor_world_xz.y;
+            packet.is_floor_packet = true;
+            packet.depth_layer = 0;
         };
-        packet.projected_foot_y_key = std::max(screen_br.y, screen_bl.y);
-        packet.camera_depth_key = marker.floor_world_xz.y;
-        packet.stable_sort_id = floor_sort_id(true, marker_sequence++);
-        packet.is_floor_packet = true;
-        packet.depth_layer = 0;
-        fill_quad_packet_vertices(screen_tl,
-                                  screen_tr,
-                                  screen_br,
-                                  screen_bl,
-                                  0.0f,
-                                  0.0f,
-                                  1.0f,
-                                  1.0f,
-                                  output_w,
-                                  output_h,
-                                  packet);
-        out_packets.push_back(packet);
+
+        if (marker.shape == Assets::DevFloorProjectionMarker::Shape::Crosshair) {
+            const float line_half = static_cast<float>(std::clamp(marker.crosshair_radius, 3, 12));
+            const float thickness_half =
+                std::max(0.5f, 0.5f * static_cast<float>(std::clamp(marker.pixel_size, 2, 8)));
+
+            GpuSpriteDrawPacket horizontal{};
+            init_packet(horizontal);
+            horizontal.stable_sort_id = base_sort_id;
+            fill_quad_packet_vertices(SDL_FPoint{center.x - line_half, center.y - thickness_half},
+                                      SDL_FPoint{center.x + line_half, center.y - thickness_half},
+                                      SDL_FPoint{center.x + line_half, center.y + thickness_half},
+                                      SDL_FPoint{center.x - line_half, center.y + thickness_half},
+                                      0.0f, 0.0f, 1.0f, 1.0f, output_w, output_h, horizontal);
+            out_packets.push_back(horizontal);
+
+            GpuSpriteDrawPacket vertical{};
+            init_packet(vertical);
+            vertical.stable_sort_id = base_sort_id + 1u;
+            fill_quad_packet_vertices(SDL_FPoint{center.x - thickness_half, center.y - line_half},
+                                      SDL_FPoint{center.x + thickness_half, center.y - line_half},
+                                      SDL_FPoint{center.x + thickness_half, center.y + line_half},
+                                      SDL_FPoint{center.x - thickness_half, center.y + line_half},
+                                      0.0f, 0.0f, 1.0f, 1.0f, output_w, output_h, vertical);
+            out_packets.push_back(vertical);
+        } else {
+            GpuSpriteDrawPacket dot{};
+            init_packet(dot);
+            dot.stable_sort_id = base_sort_id;
+            const float half_extent_px =
+                std::max(1.0f, 0.5f * static_cast<float>(std::clamp(marker.pixel_size, 2, 10)));
+            fill_screen_quad_packet_vertices(center.x, center.y, half_extent_px, output_w, output_h, dot);
+            out_packets.push_back(dot);
+        }
     }
 
     std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
@@ -541,17 +558,12 @@ bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
 bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
                                                const Assets::DevGridOverlayContext& overlay_context,
                                                int cell_size_px,
-                                               SDL_Texture* marker_texture,
                                                std::uint32_t target_width,
                                                std::uint32_t target_height,
                                                std::vector<GpuSpriteDrawPacket>& out_packets,
                                                std::string& out_error) {
     out_packets.clear();
     out_error.clear();
-    if (!marker_texture) {
-        out_error = "Missing floor grid overlay marker texture.";
-        return false;
-    }
 
     const int cell = std::max(1, cell_size_px);
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
@@ -637,47 +649,21 @@ bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
                 continue;
             }
 
-            const float left = x - point_world_half_extent;
-            const float right = x + point_world_half_extent;
-            const float top_z = z - point_world_half_extent;
-            const float bottom_z = z + point_world_half_extent;
-
-            SDL_FPoint screen_tl{};
-            SDL_FPoint screen_tr{};
-            SDL_FPoint screen_br{};
-            SDL_FPoint screen_bl{};
-            if (!camera.project_world_point(SDL_FPoint{left, 0.0f}, top_z, screen_tl) ||
-                !camera.project_world_point(SDL_FPoint{right, 0.0f}, top_z, screen_tr) ||
-                !camera.project_world_point(SDL_FPoint{right, 0.0f}, bottom_z, screen_br) ||
-                !camera.project_world_point(SDL_FPoint{left, 0.0f}, bottom_z, screen_bl)) {
-                continue;
-            }
-
             GpuSpriteDrawPacket packet{};
-            packet.source_texture = marker_texture;
+            packet.source_texture = nullptr;
             packet.source_asset_name = "<dev-floor-grid-overlay>";
             packet.source_animation_name = "<dev-floor-grid-overlay>";
-            packet.source_texture_id =
-                "floor_grid_overlay_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(marker_texture));
+            packet.source_texture_id = "floor_grid_overlay_screen_dot";
             packet.source_frame_index = -1;
             packet.source_variant_index = -1;
             packet.modulate = SDL_FColor{0.0f, 1.0f, 1.0f, alpha};
-            packet.projected_foot_y_key = std::max(screen_br.y, screen_bl.y);
+            packet.projected_foot_y_key = center.y;
             packet.camera_depth_key = z;
             packet.stable_sort_id = floor_sort_id(true, sequence++);
             packet.is_floor_packet = true;
             packet.depth_layer = 0;
-            fill_quad_packet_vertices(screen_tl,
-                                      screen_tr,
-                                      screen_br,
-                                      screen_bl,
-                                      0.0f,
-                                      0.0f,
-                                      1.0f,
-                                      1.0f,
-                                      output_w,
-                                      output_h,
-                                      packet);
+            const float dot_half_extent = std::max(1.0f, point_world_half_extent);
+            fill_screen_quad_packet_vertices(center.x, center.y, dot_half_extent, output_w, output_h, packet);
             out_packets.push_back(packet);
             if (out_packets.size() >= kMaxGridPoints) {
                 break;
@@ -912,7 +898,6 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(floor_target_);
     render_diagnostics::destroy_texture(xy_sprite_target_);
     render_diagnostics::destroy_texture(composite_target_);
-    render_diagnostics::destroy_texture(floor_marker_texture_);
     for (auto& entry : depth_layer_targets_) {
         render_diagnostics::destroy_texture(entry.second);
     }
@@ -945,36 +930,6 @@ SDL_Texture* OpenGLRuntimeRenderer::create_render_target(SDL_Renderer* renderer,
 
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
-    return texture;
-}
-
-SDL_Texture* OpenGLRuntimeRenderer::create_solid_white_texture(SDL_Renderer* renderer,
-                                                               std::string& out_error) {
-    out_error.clear();
-    if (!renderer) {
-        out_error = "Renderer is null for solid white texture creation.";
-        return nullptr;
-    }
-
-    SDL_Texture* texture = render_diagnostics::create_texture(renderer,
-                                                              SDL_PIXELFORMAT_RGBA32,
-                                                              SDL_TEXTUREACCESS_STATIC,
-                                                              1,
-                                                              1);
-    if (!texture) {
-        out_error = "Failed to create floor marker texture: " + safe_string(SDL_GetError());
-        return nullptr;
-    }
-
-    const std::uint32_t white_pixel = 0xFFFFFFFFu;
-    if (!SDL_UpdateTexture(texture, nullptr, &white_pixel, sizeof(white_pixel))) {
-        out_error = "Failed to upload floor marker texture pixel: " + safe_string(SDL_GetError());
-        render_diagnostics::destroy_texture(texture);
-        return nullptr;
-    }
-
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
     return texture;
 }
 
@@ -1208,7 +1163,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                 camera,
                 dev_grid_overlay_context,
                 assets_->dev_grid_overlay_cell_size_px(),
-                floor_marker_texture_,
                 target_width,
                 target_height,
                 floor_grid_overlay_draws,
@@ -1229,7 +1183,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const std::vector<Assets::DevFloorProjectionMarker> floor_markers = assets_->dev_floor_projection_markers();
     if (!opengl_runtime_renderer_detail::build_floor_marker_draw_packets(camera,
                                                                          floor_markers,
-                                                                         floor_marker_texture_,
                                                                          target_width,
                                                                          target_height,
                                                                          floor_marker_draws,
@@ -1367,7 +1320,7 @@ bool OpenGLRuntimeRenderer::ensure_render_targets(const GpuSceneFrameData& frame
     }
 
     const bool size_changed = width != output_target_width_ || height != output_target_height_;
-    if (!size_changed && floor_target_ && xy_sprite_target_ && composite_target_ && floor_marker_texture_) {
+    if (!size_changed && floor_target_ && xy_sprite_target_ && composite_target_) {
         return true;
     }
 
@@ -1394,12 +1347,6 @@ bool OpenGLRuntimeRenderer::ensure_render_targets(const GpuSceneFrameData& frame
         return false;
     }
 
-    floor_marker_texture_ = create_solid_white_texture(renderer_, out_error);
-    if (!floor_marker_texture_) {
-        destroy_render_targets();
-        return false;
-    }
-
     return true;
 }
 
@@ -1418,12 +1365,6 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
 
     std::array<SDL_Vertex, render_sink::kMaxClippedVertices> vertices{};
     for (const GpuSpriteDrawPacket& packet : packets) {
-        if (!packet.source_texture) {
-            out_error = "Missing source SDL texture; " + describe_draw_packet_source(packet);
-            render_diagnostics::add_skipped_texture_count();
-            render_diagnostics::set_failed_texture_names(describe_draw_packet_source(packet));
-            return false;
-        }
         const int vertex_count = std::clamp(packet.vertex_count, 0, static_cast<int>(vertices.size()));
         const int index_count = std::clamp(packet.index_count, 0, static_cast<int>(packet.indices.size()));
         if (vertex_count < 3 || index_count < 3) {

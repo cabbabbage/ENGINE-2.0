@@ -178,6 +178,18 @@ double startup_stage_warning_ms() {
     return env_double_clamped("VIBBLE_STARTUP_STAGE_WARN_MS", 250.0, 10.0, 5000.0);
 }
 
+double dynamic_asset_camera_depth_from_focus_plane(const WarpedScreenGrid& camera, const Asset& asset) {
+    const auto projection = camera.projection_params();
+    const double focus_world_z = camera.current_focus_plane_world_z();
+    const double effective_world_z =
+        static_cast<double>(asset.world_z()) +
+        static_cast<double>(asset.world_z_offset()) +
+        static_cast<double>(asset.render_anchor_offset_z());
+    const double depth_axis_sign = static_cast<double>(render_depth::normalize_depth_axis_sign(
+        static_cast<float>(projection.forward_z)));
+    return (effective_world_z - focus_world_z) * depth_axis_sign;
+}
+
 std::size_t runtime_convergence_iteration_cap_for_frame(std::uint32_t frame_id) {
     const std::size_t base_cap = static_cast<std::size_t>(
         env_int_clamped("VIBBLE_RUNTIME_CONVERGENCE_ITERATION_CAP",
@@ -5267,6 +5279,18 @@ void Assets::set_camera_settings_panel_active(bool active) {
 bool Assets::should_advance_animation_for(const Asset* asset) const {
     if (!asset) {
         return false;
+    }
+
+    if (asset->is_dynamic_spawned_asset()) {
+        const auto& settings = camera_.get_settings();
+        const double efficiency_depth =
+            std::max(0.0, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
+        if (efficiency_depth > 0.0) {
+            const double depth_from_focus = dynamic_asset_camera_depth_from_focus_plane(camera_, *asset);
+            if (depth_from_focus > efficiency_depth) {
+                return false;
+            }
+        }
     }
 
     const bool frame_editor_session_active =

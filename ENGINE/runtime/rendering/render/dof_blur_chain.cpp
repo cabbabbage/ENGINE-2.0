@@ -421,9 +421,13 @@ bool enabled(bool depth_of_field_enabled, float blur_px, float radial_blur_px) {
 }
 
 std::vector<int> background_chain_layers(const std::vector<int>& depth_layers) {
+    return background_chain_layers(depth_layers, 0);
+}
+
+std::vector<int> background_chain_layers(const std::vector<int>& depth_layers, int focus_depth_layer) {
     std::vector<int> result;
     for (int depth_layer : depth_layers) {
-        if (depth_layer >= 0) {
+        if (depth_layer > focus_depth_layer) {
             result.push_back(depth_layer);
         }
     }
@@ -432,9 +436,13 @@ std::vector<int> background_chain_layers(const std::vector<int>& depth_layers) {
 }
 
 std::vector<int> foreground_chain_layers(const std::vector<int>& depth_layers) {
+    return foreground_chain_layers(depth_layers, 0);
+}
+
+std::vector<int> foreground_chain_layers(const std::vector<int>& depth_layers, int focus_depth_layer) {
     std::vector<int> result;
     for (int depth_layer : depth_layers) {
-        if (depth_layer < 0) {
+        if (depth_layer < focus_depth_layer) {
             result.push_back(depth_layer);
         }
     }
@@ -637,7 +645,8 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                   bool depth_of_field_enabled,
                                   float blur_px,
                                   float radial_blur_px,
-                                  SDL_FPoint optical_center) {
+                                  SDL_FPoint optical_center,
+                                  int focus_depth_layer) {
     CompositeResult result{};
     if (!renderer_ || layers.empty()) {
         return result;
@@ -669,7 +678,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
 
     bool background_has_content = false;
     bool foreground_has_content = false;
-    if (!compose_chain(background_chain_layers(layer_ids),
+    if (!compose_chain(background_chain_layers(layer_ids, focus_depth_layer),
                        layers,
                        background_seed,
                        background_mid_,
@@ -684,7 +693,18 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         return restore_and_return(CompositeResult{});
     }
 
-    if (!compose_chain(foreground_chain_layers(layer_ids),
+    if (SDL_Texture* focus_layer = texture_for_depth_layer(layers, focus_depth_layer)) {
+        if (!background_has_content) {
+            if (!copy_texture(focus_layer, background_mid_)) {
+                return restore_and_return(CompositeResult{});
+            }
+        } else if (!composite_texture_over(focus_layer, background_mid_)) {
+            return restore_and_return(CompositeResult{});
+        }
+        background_has_content = true;
+    }
+
+    if (!compose_chain(foreground_chain_layers(layer_ids, focus_depth_layer),
                        layers,
                        nullptr,
                        foreground_mid_,

@@ -102,6 +102,21 @@ bool fill_texture(SDL_Renderer* renderer, SDL_Texture* texture, SDL_Color color)
     return true;
 }
 
+bool draw_point(SDL_Renderer* renderer, SDL_Texture* texture, int x, int y, SDL_Color color) {
+    if (!renderer || !texture) {
+        return false;
+    }
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    if (!SDL_SetRenderTarget(renderer, texture)) {
+        return false;
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    const bool ok = SDL_RenderPoint(renderer, static_cast<float>(x), static_cast<float>(y));
+    SDL_SetRenderTarget(renderer, previous_target);
+    return ok;
+}
+
 bool read_pixel(SDL_Renderer* renderer, SDL_Texture* texture, int x, int y, SDL_Color& out_color) {
     out_color = SDL_Color{0, 0, 0, 0};
     if (!renderer || !texture || x < 0 || y < 0) {
@@ -158,8 +173,10 @@ TEST_CASE("DoF blur-chain gate requires DoF enabled and non-zero blur") {
 TEST_CASE("DoF signed depth chains split around focus layer") {
     const std::vector<int> depth_layers{3, 1, 0, -1, -3, -2};
 
-    CHECK(dof_blur_chain::background_chain_layers(depth_layers) == std::vector<int>({3, 1, 0}));
+    CHECK(dof_blur_chain::background_chain_layers(depth_layers) == std::vector<int>({3, 1}));
     CHECK(dof_blur_chain::foreground_chain_layers(depth_layers) == std::vector<int>({-3, -2, -1}));
+    CHECK(dof_blur_chain::background_chain_layers(depth_layers, 1) == std::vector<int>({3}));
+    CHECK(dof_blur_chain::foreground_chain_layers(depth_layers, 1) == std::vector<int>({-3, -2, -1, 0}));
 }
 
 TEST_CASE("DoF blur-chain compose restores target and reports blur passes") {
@@ -208,5 +225,49 @@ TEST_CASE("DoF blur-chain compose restores target and reports blur passes") {
     SDL_DestroyTexture(wrong_target);
     SDL_DestroyTexture(layer_focus);
     SDL_DestroyTexture(layer_far);
+    SDL_DestroyTexture(floor);
+}
+
+TEST_CASE("DoF focus layer stays unblurred in background mid") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    SDL_Texture* floor = create_target_texture(renderer, 16, 16);
+    SDL_Texture* layer_behind = create_target_texture(renderer, 16, 16);
+    SDL_Texture* layer_focus = create_target_texture(renderer, 16, 16);
+    REQUIRE(floor);
+    REQUIRE(layer_behind);
+    REQUIRE(layer_focus);
+
+    REQUIRE(fill_texture(renderer, floor, SDL_Color{0, 0, 0, 0}));
+    REQUIRE(fill_texture(renderer, layer_behind, SDL_Color{0, 64, 0, 255}));
+    REQUIRE(fill_texture(renderer, layer_focus, SDL_Color{0, 0, 0, 0}));
+    REQUIRE(draw_point(renderer, layer_focus, 8, 8, SDL_Color{255, 0, 0, 255}));
+
+    dof_blur_chain::Renderer dof(renderer);
+    dof.set_output_dimensions(16, 16);
+    const dof_blur_chain::CompositeResult result =
+        dof.compose({dof_blur_chain::LayerTexture{2, layer_behind},
+                     dof_blur_chain::LayerTexture{1, layer_focus}},
+                    floor,
+                    true,
+                    6.0f,
+                    0.0f,
+                    SDL_FPoint{8.0f, 8.0f},
+                    1);
+
+    REQUIRE(result.valid);
+    REQUIRE(result.background_mid != nullptr);
+
+    SDL_Color center{};
+    SDL_Color neighbor{};
+    REQUIRE(read_pixel(renderer, result.background_mid, 8, 8, center));
+    REQUIRE(read_pixel(renderer, result.background_mid, 9, 8, neighbor));
+    CHECK(center.r > 220);
+    CHECK(neighbor.r < 32);
+
+    SDL_DestroyTexture(layer_focus);
+    SDL_DestroyTexture(layer_behind);
     SDL_DestroyTexture(floor);
 }

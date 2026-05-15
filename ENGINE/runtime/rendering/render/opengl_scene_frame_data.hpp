@@ -61,6 +61,7 @@ struct GpuSceneFrameData {
     std::uint32_t filtered_active_asset_count = 0;
     std::uint32_t selected_asset_count = 0;
     std::uint32_t visible_traversal_count = 0;
+    int focus_depth_layer = 0;
     SDL_Texture* ui_overlay_texture = nullptr;
     SDL_GPUTexture* ui_overlay_gpu_texture = nullptr;
     bool dev_mode = false;

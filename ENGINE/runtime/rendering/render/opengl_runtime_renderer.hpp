@@ -118,6 +118,12 @@ private:
                             std::string& out_error);
     bool ensure_depth_layer_targets(const GpuSceneFrameData& frame_data, std::string& out_error);
     void destroy_depth_layer_targets();
+    bool ensure_horizon_textures();
+    void destroy_horizon_textures();
+    bool render_horizon_background(const WarpedScreenGrid& camera,
+                                   std::uint32_t target_width,
+                                   std::uint32_t target_height,
+                                   std::string& out_error);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
     SDL_Color update_smoothed_floor_clear_color(SDL_Color target);
@@ -150,6 +156,8 @@ private:
     SDL_Texture* floor_target_ = nullptr;
     SDL_Texture* xy_sprite_target_ = nullptr;
     SDL_Texture* composite_target_ = nullptr;
+    SDL_Texture* horizon_sky_texture_ = nullptr;
+    SDL_Texture* horizon_mountains_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
     dof_blur_chain::Renderer dof_blur_chain_{};

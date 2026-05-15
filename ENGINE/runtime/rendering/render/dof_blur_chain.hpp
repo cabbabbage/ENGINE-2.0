@@ -21,7 +21,9 @@ struct CompositeResult {
 
 bool enabled(bool depth_of_field_enabled, float blur_px, float radial_blur_px);
 std::vector<int> background_chain_layers(const std::vector<int>& depth_layers);
+std::vector<int> background_chain_layers(const std::vector<int>& depth_layers, int focus_depth_layer);
 std::vector<int> foreground_chain_layers(const std::vector<int>& depth_layers);
+std::vector<int> foreground_chain_layers(const std::vector<int>& depth_layers, int focus_depth_layer);
 
 class Renderer {
 public:
@@ -40,7 +42,8 @@ public:
                             bool depth_of_field_enabled,
                             float blur_px,
                             float radial_blur_px,
-                            SDL_FPoint optical_center);
+                            SDL_FPoint optical_center,
+                            int focus_depth_layer = 0);
 
 private:
     bool ensure_targets();

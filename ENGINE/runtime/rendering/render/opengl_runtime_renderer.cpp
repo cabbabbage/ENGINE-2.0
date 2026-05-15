@@ -4,12 +4,15 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <iterator>
 #include <limits>
 #include <numeric>
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
+
+#include <SDL3_image/SDL_image.h>
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_types.hpp"
@@ -32,6 +35,14 @@ namespace {
 
 constexpr float kFloorBlendRadius = 2400.0f;
 constexpr float kFloorLerpWhenMoving = 0.08f;
+
+std::filesystem::path project_root_path() {
+#ifdef PROJECT_ROOT
+    return std::filesystem::path(PROJECT_ROOT);
+#else
+    return std::filesystem::current_path();
+#endif
+}
 
 std::string safe_string(const char* value) {
     return value ? std::string(value) : std::string();
@@ -885,6 +896,7 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(composite_target_);
     destroy_depth_layer_targets();
     dof_blur_chain_.destroy_targets();
+    destroy_horizon_textures();
     output_target_width_ = 1;
     output_target_height_ = 1;
 }
@@ -895,6 +907,11 @@ void OpenGLRuntimeRenderer::destroy_depth_layer_targets() {
     }
     depth_layer_targets_.clear();
     cached_depth_layer_ids_.clear();
+}
+
+void OpenGLRuntimeRenderer::destroy_horizon_textures() {
+    render_diagnostics::destroy_texture(horizon_sky_texture_);
+    render_diagnostics::destroy_texture(horizon_mountains_texture_);
 }
 
 SDL_Texture* OpenGLRuntimeRenderer::create_render_target(SDL_Renderer* renderer,
@@ -929,6 +946,89 @@ void OpenGLRuntimeRenderer::configure_render_target(SDL_Texture* texture) {
     }
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
+}
+
+bool OpenGLRuntimeRenderer::ensure_horizon_textures() {
+    if (!renderer_) {
+        return false;
+    }
+    if (horizon_sky_texture_ && horizon_mountains_texture_) {
+        return true;
+    }
+
+    auto load_horizon_texture = [&](const char* filename, SDL_Texture*& out_texture) -> bool {
+        if (out_texture) {
+            return true;
+        }
+        const std::filesystem::path path = project_root_path() / "resources" / "misc_content" / filename;
+        SDL_Surface* surface = IMG_Load(path.u8string().c_str());
+        if (!surface) {
+            vibble::log::warn(std::string{"[OpenGLRuntimeRenderer] Failed to load horizon texture '"} +
+                              path.u8string() + "': " + safe_string(SDL_GetError()));
+            return false;
+        }
+        out_texture = SDL_CreateTextureFromSurface(renderer_, surface);
+        SDL_DestroySurface(surface);
+        if (!out_texture) {
+            vibble::log::warn(std::string{"[OpenGLRuntimeRenderer] Failed to upload horizon texture '"} +
+                              path.u8string() + "': " + safe_string(SDL_GetError()));
+            return false;
+        }
+        render_diagnostics::note_texture_created(out_texture);
+        SDL_SetTextureBlendMode(out_texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(out_texture, SDL_SCALEMODE_LINEAR);
+        return true;
+    };
+
+    const bool sky_ok = load_horizon_texture("sky.png", horizon_sky_texture_);
+    const bool mountains_ok = load_horizon_texture("mountains.png", horizon_mountains_texture_);
+    return sky_ok || mountains_ok;
+}
+
+bool OpenGLRuntimeRenderer::render_horizon_background(const WarpedScreenGrid& camera,
+                                                      std::uint32_t target_width,
+                                                      std::uint32_t target_height,
+                                                      std::string& out_error) {
+    out_error.clear();
+    if (!renderer_ || target_width == 0 || target_height == 0) {
+        return true;
+    }
+    if (!ensure_horizon_textures()) {
+        return true;
+    }
+
+    const WarpedScreenGrid::FloorDepthParams floor_params = camera.compute_floor_depth_params();
+    const float horizon_y = std::isfinite(floor_params.horizon_screen_y)
+        ? static_cast<float>(floor_params.horizon_screen_y)
+        : static_cast<float>(target_height) * 0.5f;
+    const float target_w = static_cast<float>(target_width);
+
+    auto draw_horizon_texture = [&](SDL_Texture* texture, const char* label) -> bool {
+        if (!texture) {
+            return true;
+        }
+        float source_w = 0.0f;
+        float source_h = 0.0f;
+        if (!SDL_GetTextureSize(texture, &source_w, &source_h) || source_w <= 0.0f || source_h <= 0.0f) {
+            return true;
+        }
+        const float scale = target_w / source_w;
+        const float target_h = source_h * scale;
+        const SDL_FRect dst{0.0f, horizon_y - target_h, target_w, target_h};
+        if (!render_diagnostics::render_texture(renderer_, texture, nullptr, &dst)) {
+            out_error = std::string{"Failed to render horizon "} + label + " texture: " + safe_string(SDL_GetError());
+            return false;
+        }
+        return true;
+    };
+
+    if (!draw_horizon_texture(horizon_sky_texture_, "sky")) {
+        return false;
+    }
+    if (!draw_horizon_texture(horizon_mountains_texture_, "mountains")) {
+        return false;
+    }
+    return true;
 }
 
 SDL_FPoint OpenGLRuntimeRenderer::clip_to_screen(float clip_x, float clip_y, float target_width, float target_height) {
@@ -1102,6 +1202,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     }
     const WarpedScreenGrid& camera = assets_->getView();
     const std::size_t traversal_count = camera.visible_traversal_entries().size();
+    out_data.focus_depth_layer = assets_->player
+        ? opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *assets_->player)
+        : 0;
 
     std::vector<Asset*> render_assets = *visible_assets;
     if (assets_->live_dynamic_assets_visible()) {
@@ -1245,7 +1348,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     out_data.depth_layers.reserve(depth_layer_ids.size());
     int max_layer_distance = 0;
     for (int layer_id : depth_layer_ids) {
-        max_layer_distance = std::max(max_layer_distance, std::abs(layer_id));
+        max_layer_distance = std::max(max_layer_distance, std::abs(layer_id - out_data.focus_depth_layer));
     }
     for (int layer_id : depth_layer_ids) {
         GpuDepthLayerDrawPackets layer{};
@@ -1253,7 +1356,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         layer.packets = std::move(depth_xy_sprite_packets[layer_id]);
         std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
         const float blur_distance = max_layer_distance > 0
-            ? static_cast<float>(std::abs(layer_id)) / static_cast<float>(max_layer_distance)
+            ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) / static_cast<float>(max_layer_distance)
             : 0.0f;
         const float blur_strength = std::clamp(
             static_cast<float>(assets_->getView().get_settings().blur_px) * blur_distance,
@@ -1548,6 +1651,13 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         render_diagnostics::end_frame();
         return false;
     }
+    if (!render_horizon_background(assets_->getView(),
+                                   frame_to_render->target_width,
+                                   frame_to_render->target_height,
+                                   out_error)) {
+        render_diagnostics::end_frame();
+        return false;
+    }
     if (!render_packet_batch(frame_to_render->floor_draws,
                              frame_to_render->target_width,
                              frame_to_render->target_height,
@@ -1601,7 +1711,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
                                     camera_settings.depth_of_field_enabled,
                                     camera_settings.blur_px,
                                     camera_settings.radial_blur_px,
-                                    optical_center);
+                                    optical_center,
+                                    frame_to_render->focus_depth_layer);
 
         if (dof_result.valid) {
             if (!bind_target(composite_target_, transparent_clear)) {

@@ -479,6 +479,7 @@ void Renderer::set_output_dimensions(int width, int height) {
 void Renderer::destroy_targets() {
     render_diagnostics::destroy_texture(background_mid_);
     render_diagnostics::destroy_texture(foreground_mid_);
+    render_diagnostics::destroy_texture(foreground_layer_);
     render_diagnostics::destroy_texture(chain_temp_);
     render_diagnostics::destroy_texture(blur_work_);
 }
@@ -512,6 +513,7 @@ bool Renderer::ensure_target(SDL_Texture*& texture, const char* label) {
 bool Renderer::ensure_targets() {
     return ensure_target(background_mid_, "dof_background_mid") &&
            ensure_target(foreground_mid_, "dof_foreground_mid") &&
+           ensure_target(foreground_layer_, "dof_foreground_layer") &&
            ensure_target(chain_temp_, "dof_chain_temp") &&
            ensure_target(blur_work_, "dof_blur_work");
 }
@@ -640,6 +642,69 @@ bool Renderer::compose_chain(const std::vector<int>& chain,
     return true;
 }
 
+bool Renderer::compose_foreground_chain(const std::vector<int>& chain,
+                                        const std::vector<LayerTexture>& layers,
+                                        bool blur_enabled,
+                                        float blur_px,
+                                        float radial_blur_px,
+                                        SDL_FPoint optical_center,
+                                        float blur_quality_scale,
+                                        bool& out_has_content,
+                                        std::uint32_t& in_out_blur_pass_count) const {
+    out_has_content = false;
+    if (!renderer_ || !foreground_mid_ || !foreground_layer_ || !chain_temp_) {
+        return false;
+    }
+
+    clear_target(foreground_mid_);
+    if (chain.empty()) {
+        return true;
+    }
+
+    const int total_pass_budget = blur_enabled ? compute_total_pass_budget(chain.size(), blur_px, radial_blur_px) : 0;
+    const std::vector<int> repeat_schedule = blur_enabled ? build_repeat_schedule(chain.size(), total_pass_budget) : std::vector<int>{};
+    std::vector<int> blur_exposure(chain.size(), 0);
+    int accumulated_exposure = 0;
+    for (std::size_t reverse_index = chain.size(); reverse_index > 0; --reverse_index) {
+        const std::size_t step = reverse_index - 1;
+        accumulated_exposure += (step < repeat_schedule.size()) ? std::max(0, repeat_schedule[step]) : 0;
+        blur_exposure[step] = accumulated_exposure;
+    }
+
+    for (std::size_t reverse_index = chain.size(); reverse_index > 0; --reverse_index) {
+        const std::size_t step = reverse_index - 1;
+        SDL_Texture* layer_texture = texture_for_depth_layer(layers, chain[step]);
+        if (!layer_texture) {
+            continue;
+        }
+
+        if (!copy_texture(layer_texture, foreground_layer_)) {
+            return false;
+        }
+
+        SDL_Texture* accum = foreground_layer_;
+        SDL_Texture* temp = chain_temp_;
+        const int repeat_count = (step < blur_exposure.size()) ? std::max(0, blur_exposure[step]) : 0;
+        for (int pass = 0; pass < repeat_count; ++pass) {
+            if (!blur_step(accum, temp, blur_work_, blur_px, optical_center, radial_blur_px, blur_quality_scale)) {
+                return false;
+            }
+            ++in_out_blur_pass_count;
+            std::swap(accum, temp);
+        }
+
+        if (accum != foreground_layer_ && !copy_texture(accum, foreground_layer_)) {
+            return false;
+        }
+        if (!composite_texture_over(foreground_layer_, foreground_mid_)) {
+            return false;
+        }
+        out_has_content = true;
+    }
+
+    return true;
+}
+
 CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                   SDL_Texture* background_seed,
                                   bool depth_of_field_enabled,
@@ -704,18 +769,15 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         background_has_content = true;
     }
 
-    if (!compose_chain(foreground_chain_layers(layer_ids, focus_depth_layer),
-                       layers,
-                       nullptr,
-                       foreground_mid_,
-                       chain_temp_,
-                       blur_enabled,
-                       safe_blur_px,
-                       safe_radial_blur_px,
-                       optical_center,
-                       quality_scale,
-                       foreground_has_content,
-                       result.blur_pass_count)) {
+    if (!compose_foreground_chain(foreground_chain_layers(layer_ids, focus_depth_layer),
+                                  layers,
+                                  blur_enabled,
+                                  safe_blur_px,
+                                  safe_radial_blur_px,
+                                  optical_center,
+                                  quality_scale,
+                                  foreground_has_content,
+                                  result.blur_pass_count)) {
         return restore_and_return(CompositeResult{});
     }
 

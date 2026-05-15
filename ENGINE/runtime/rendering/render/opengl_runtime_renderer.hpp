@@ -58,6 +58,7 @@ bool build_sink_clipped_sprite_packet(const render_projection::ProjectedSpriteFr
                                       std::uint32_t target_height,
                                       GpuSpriteDrawPacket& out_packet);
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset);
+float far_background_bottom_screen_y(const WarpedScreenGrid& camera, std::uint32_t target_height);
 const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
                                                                bool focus_filter_active,
                                                                const std::vector<Asset*>& active_assets,
@@ -118,12 +119,12 @@ private:
                             std::string& out_error);
     bool ensure_depth_layer_targets(const GpuSceneFrameData& frame_data, std::string& out_error);
     void destroy_depth_layer_targets();
-    bool ensure_horizon_textures();
-    void destroy_horizon_textures();
-    bool render_horizon_background(const WarpedScreenGrid& camera,
-                                   std::uint32_t target_width,
-                                   std::uint32_t target_height,
-                                   std::string& out_error);
+    bool ensure_far_background_textures();
+    void destroy_far_background_textures();
+    bool render_far_background(const WarpedScreenGrid& camera,
+                               std::uint32_t target_width,
+                               std::uint32_t target_height,
+                               std::string& out_error);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
     SDL_Color update_smoothed_floor_clear_color(SDL_Color target);
@@ -156,8 +157,8 @@ private:
     SDL_Texture* floor_target_ = nullptr;
     SDL_Texture* xy_sprite_target_ = nullptr;
     SDL_Texture* composite_target_ = nullptr;
-    SDL_Texture* horizon_sky_texture_ = nullptr;
-    SDL_Texture* horizon_mountains_texture_ = nullptr;
+    SDL_Texture* far_background_sky_texture_ = nullptr;
+    SDL_Texture* far_background_mountains_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
     dof_blur_chain::Renderer dof_blur_chain_{};

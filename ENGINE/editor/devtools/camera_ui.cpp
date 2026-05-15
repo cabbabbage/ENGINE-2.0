@@ -220,15 +220,8 @@ void CameraUIPanel::sync_debug_controls_from_settings(const WarpedScreenGrid::Re
         dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_value(
             settings.dynamic_renderer_depth_efficiency_min_density_ratio);
     }
-    if (near_light_depth_threshold_slider_) near_light_depth_threshold_slider_->set_value(settings.near_light_depth_threshold);
-    if (mid_light_depth_threshold_slider_) mid_light_depth_threshold_slider_->set_value(settings.mid_light_depth_threshold);
-    if (far_light_depth_threshold_slider_) far_light_depth_threshold_slider_->set_value(settings.far_light_depth_threshold);
-    if (near_light_cap_slider_) near_light_cap_slider_->set_value(settings.near_light_cap);
-    if (mid_light_cap_slider_) mid_light_cap_slider_->set_value(settings.mid_light_cap);
-    if (far_light_cap_slider_) far_light_cap_slider_->set_value(settings.far_light_cap);
-    if (shadow_quality_budget_slider_) shadow_quality_budget_slider_->set_value(settings.shadow_quality_budget);
-    if (global_ambient_slider_) global_ambient_slider_->set_value(settings.global_ambient);
-    if (global_exposure_slider_) global_exposure_slider_->set_value(settings.global_exposure);
+    if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
+    if (layer_depth_falloff_slider_) layer_depth_falloff_slider_->set_value(settings.layer_depth_curve);
 }
 
 void CameraUIPanel::build_ui() {
@@ -291,39 +284,24 @@ void CameraUIPanel::build_ui() {
         "Relative spawn density floor at Max Cull Depth after distance-based thinning.");
     dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_on_value_changed(
         [this](float) { on_control_value_changed(); });
-    near_light_depth_threshold_slider_ = std::make_unique<FloatSliderWidget>(
-        "Layer Depth Interval",
+    layer_depth_interval_slider_ = std::make_unique<FloatSliderWidget>(
+        "Layer Interval",
         1.0f,
         5000.0f,
         1.0f,
-        defaults.near_light_depth_threshold,
+        defaults.layer_depth_interval,
         0);
-    near_light_depth_threshold_slider_->set_tooltip("Base world-depth step for near DOF bins. Lower values increase near detail.");
-    near_light_depth_threshold_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    mid_light_depth_threshold_slider_ = std::make_unique<FloatSliderWidget>(
-        "Layer Depth Curve",
+    layer_depth_interval_slider_->set_tooltip("Base world-depth step for DoF bins. Lower values increase near-depth detail.");
+    layer_depth_interval_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    layer_depth_falloff_slider_ = std::make_unique<FloatSliderWidget>(
+        "Layer Falloff",
         0.0f,
         100.0f,
         0.01f,
-        defaults.mid_light_depth_threshold,
+        defaults.layer_depth_curve,
         2);
-    mid_light_depth_threshold_slider_->set_tooltip("Non-linear bin growth with distance. Higher values create fewer far-depth layers.");
-    mid_light_depth_threshold_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    far_light_depth_threshold_slider_ = std::make_unique<FloatSliderWidget>("Far Depth Threshold", 1.0f, 50000.0f, 1.0f, defaults.far_light_depth_threshold, 0);
-    far_light_depth_threshold_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    near_light_cap_slider_ = std::make_unique<FloatSliderWidget>("Near Light Cap", 0.0f, 256.0f, 1.0f, defaults.near_light_cap, 0);
-    near_light_cap_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    mid_light_cap_slider_ = std::make_unique<FloatSliderWidget>("Mid Light Cap", 0.0f, 256.0f, 1.0f, defaults.mid_light_cap, 0);
-    mid_light_cap_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    far_light_cap_slider_ = std::make_unique<FloatSliderWidget>("Far Light Cap", 0.0f, 256.0f, 1.0f, defaults.far_light_cap, 0);
-    far_light_cap_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    shadow_quality_budget_slider_ = std::make_unique<FloatSliderWidget>("Shadow Quality Budget", 0.0f, 4.0f, 0.01f, defaults.shadow_quality_budget, 2);
-    shadow_quality_budget_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    global_ambient_slider_ = std::make_unique<FloatSliderWidget>("Global Ambient", 0.0f, 1.0f, 0.01f, defaults.global_ambient, 2);
-    global_ambient_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    global_exposure_slider_ = std::make_unique<FloatSliderWidget>("Global Exposure", 0.1f, 8.0f, 0.01f, defaults.global_exposure, 2);
-    global_exposure_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    layer_depth_falloff_slider_->set_tooltip("Non-linear DoF bin growth with distance. Higher values create fewer far-depth layers.");
+    layer_depth_falloff_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     blur_px_slider_ = std::make_unique<FloatSliderWidget>("Blur (px)", 0.0f, 128.0f, 0.01f, defaults.blur_px, 3);
     blur_px_slider_->set_tooltip("Per-layer Gaussian-like blur budget. Larger values produce softer focus transitions and increase blur processing cost.");
     blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
@@ -470,15 +448,8 @@ void CameraUIPanel::rebuild_rows() {
         if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
             rows.push_back({ dynamic_renderer_depth_efficiency_min_density_ratio_slider_.get() });
         }
-        if (near_light_depth_threshold_slider_) rows.push_back({ near_light_depth_threshold_slider_.get() });
-        if (mid_light_depth_threshold_slider_) rows.push_back({ mid_light_depth_threshold_slider_.get() });
-        if (far_light_depth_threshold_slider_) rows.push_back({ far_light_depth_threshold_slider_.get() });
-        if (near_light_cap_slider_) rows.push_back({ near_light_cap_slider_.get() });
-        if (mid_light_cap_slider_) rows.push_back({ mid_light_cap_slider_.get() });
-        if (far_light_cap_slider_) rows.push_back({ far_light_cap_slider_.get() });
-        if (shadow_quality_budget_slider_) rows.push_back({ shadow_quality_budget_slider_.get() });
-        if (global_ambient_slider_) rows.push_back({ global_ambient_slider_.get() });
-        if (global_exposure_slider_) rows.push_back({ global_exposure_slider_.get() });
+        if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
+        if (layer_depth_falloff_slider_) rows.push_back({ layer_depth_falloff_slider_.get() });
     }
 
     set_rows(rows);
@@ -512,15 +483,8 @@ void CameraUIPanel::apply_settings_if_needed() {
         updated.dynamic_renderer_depth_efficiency_min_density_ratio =
             dynamic_renderer_depth_efficiency_min_density_ratio_slider_->value();
     }
-    if (near_light_depth_threshold_slider_) updated.near_light_depth_threshold = near_light_depth_threshold_slider_->value();
-    if (mid_light_depth_threshold_slider_) updated.mid_light_depth_threshold = mid_light_depth_threshold_slider_->value();
-    if (far_light_depth_threshold_slider_) updated.far_light_depth_threshold = far_light_depth_threshold_slider_->value();
-    if (near_light_cap_slider_) updated.near_light_cap = near_light_cap_slider_->value();
-    if (mid_light_cap_slider_) updated.mid_light_cap = mid_light_cap_slider_->value();
-    if (far_light_cap_slider_) updated.far_light_cap = far_light_cap_slider_->value();
-    if (shadow_quality_budget_slider_) updated.shadow_quality_budget = shadow_quality_budget_slider_->value();
-    if (global_ambient_slider_) updated.global_ambient = global_ambient_slider_->value();
-    if (global_exposure_slider_) updated.global_exposure = global_exposure_slider_->value();
+    if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
+    if (layer_depth_falloff_slider_) updated.layer_depth_curve = layer_depth_falloff_slider_->value();
     if (blur_px_slider_) updated.blur_px = blur_px_slider_->value();
     if (radial_blur_px_slider_) updated.radial_blur_px = radial_blur_px_slider_->value();
     if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
@@ -535,15 +499,8 @@ void CameraUIPanel::apply_settings_if_needed() {
                       current.dynamic_renderer_depth_efficiency_depth) ||
         float_changed(updated.dynamic_renderer_depth_efficiency_min_density_ratio,
                       current.dynamic_renderer_depth_efficiency_min_density_ratio) ||
-        float_changed(updated.near_light_depth_threshold, current.near_light_depth_threshold) ||
-        float_changed(updated.mid_light_depth_threshold, current.mid_light_depth_threshold) ||
-        float_changed(updated.far_light_depth_threshold, current.far_light_depth_threshold) ||
-        float_changed(updated.near_light_cap, current.near_light_cap) ||
-        float_changed(updated.mid_light_cap, current.mid_light_cap) ||
-        float_changed(updated.far_light_cap, current.far_light_cap) ||
-        float_changed(updated.shadow_quality_budget, current.shadow_quality_budget) ||
-        float_changed(updated.global_ambient, current.global_ambient) ||
-        float_changed(updated.global_exposure, current.global_exposure) ||
+        float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
+        float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
         float_changed(updated.blur_px, current.blur_px) ||
         float_changed(updated.radial_blur_px, current.radial_blur_px) ||
         (updated.depth_of_field_enabled != current.depth_of_field_enabled);

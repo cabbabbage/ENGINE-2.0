@@ -271,3 +271,40 @@ TEST_CASE("DoF focus layer stays unblurred in background mid") {
     SDL_DestroyTexture(layer_behind);
     SDL_DestroyTexture(floor);
 }
+
+TEST_CASE("DoF foreground layers composite in reversed visual depth order") {
+    ScopedRenderer renderer_scope;
+    REQUIRE(renderer_scope.ready());
+
+    SDL_Renderer* renderer = renderer_scope.get();
+    SDL_Texture* focus_adjacent = create_target_texture(renderer, 8, 8);
+    SDL_Texture* nearer_foreground = create_target_texture(renderer, 8, 8);
+    REQUIRE(focus_adjacent);
+    REQUIRE(nearer_foreground);
+
+    REQUIRE(fill_texture(renderer, focus_adjacent, SDL_Color{0, 0, 255, 255}));
+    REQUIRE(fill_texture(renderer, nearer_foreground, SDL_Color{255, 0, 0, 255}));
+
+    dof_blur_chain::Renderer dof(renderer);
+    dof.set_output_dimensions(8, 8);
+    const dof_blur_chain::CompositeResult result =
+        dof.compose({dof_blur_chain::LayerTexture{-1, focus_adjacent},
+                     dof_blur_chain::LayerTexture{-2, nearer_foreground}},
+                    nullptr,
+                    false,
+                    0.0f,
+                    0.0f,
+                    SDL_FPoint{4.0f, 4.0f});
+
+    REQUIRE(result.valid);
+    REQUIRE(result.foreground_mid != nullptr);
+
+    SDL_Color center{};
+    REQUIRE(read_pixel(renderer, result.foreground_mid, 4, 4, center));
+    CHECK(center.r == 255);
+    CHECK(center.g == 0);
+    CHECK(center.b == 0);
+
+    SDL_DestroyTexture(nearer_foreground);
+    SDL_DestroyTexture(focus_adjacent);
+}

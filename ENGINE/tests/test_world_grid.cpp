@@ -21,6 +21,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/opengl_runtime_renderer.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/input.hpp"
 
@@ -802,6 +803,24 @@ TEST_CASE("WarpedScreenGrid camera_settings_to_json omits removed legacy keys") 
     CHECK_FALSE(serialized.contains("extra_cull_margin"));
     CHECK_FALSE(serialized.contains("depth_near_world"));
     CHECK_FALSE(serialized.contains("depth_far_world"));
+    CHECK_FALSE(serialized.contains("near_light_depth_threshold"));
+    CHECK_FALSE(serialized.contains("mid_light_depth_threshold"));
+    CHECK_FALSE(serialized.contains("far_light_depth_threshold"));
+    CHECK_FALSE(serialized.contains("near_light_cap"));
+    CHECK_FALSE(serialized.contains("mid_light_cap"));
+    CHECK_FALSE(serialized.contains("far_light_cap"));
+    CHECK_FALSE(serialized.contains("shadow_quality_budget"));
+    CHECK_FALSE(serialized.contains("global_ambient"));
+    CHECK_FALSE(serialized.contains("global_exposure"));
+    CHECK_FALSE(serialized.contains("light_fade_smoothing_enabled"));
+    CHECK_FALSE(serialized.contains("light_fade_in_seconds"));
+    CHECK_FALSE(serialized.contains("light_fade_out_seconds"));
+    CHECK_FALSE(serialized.contains("light_min_fade_seconds"));
+    CHECK_FALSE(serialized.contains("light_distance_fade_start_ratio"));
+    CHECK_FALSE(serialized.contains("light_culling_debug_overlay"));
+    CHECK_FALSE(serialized.contains("dynamic_renderer_depth_efficiency_threshold"));
+    CHECK_FALSE(serialized.contains("max_blur_px"));
+    CHECK_FALSE(serialized.contains("radial_max_blur_px"));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") {
@@ -815,16 +834,36 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings ignores removed legacy keys") 
         {"near_camera_max_perspective_scale", 6.0},
         {"extra_cull_margin", 250.0},
         {"depth_near_world", 10.0},
-        {"depth_far_world", 100.0}
+        {"depth_far_world", 100.0},
+        {"near_light_depth_threshold", 32.0},
+        {"mid_light_depth_threshold", 64.0},
+        {"far_light_depth_threshold", 128.0},
+        {"near_light_cap", 4.0},
+        {"mid_light_cap", 8.0},
+        {"far_light_cap", 16.0},
+        {"shadow_quality_budget", 0.5},
+        {"global_ambient", 0.5},
+        {"global_exposure", 2.0},
+        {"light_fade_smoothing_enabled", false},
+        {"light_fade_in_seconds", 0.2},
+        {"light_fade_out_seconds", 0.3},
+        {"light_min_fade_seconds", 0.1},
+        {"light_distance_fade_start_ratio", 0.2},
+        {"light_culling_debug_overlay", true},
+        {"dynamic_renderer_depth_efficiency_threshold", 0.25},
+        {"max_blur_px", 7.25},
+        {"radial_max_blur_px", 12.5}
     });
 
     const WarpedScreenGrid::RealismSettings after = camera_grid.get_settings();
     CHECK(after.min_visible_screen_ratio == doctest::Approx(before.min_visible_screen_ratio));
     CHECK(after.base_height_px == doctest::Approx(before.base_height_px));
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
+    CHECK(after.dynamic_renderer_depth_efficiency_depth == doctest::Approx(before.dynamic_renderer_depth_efficiency_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
-    CHECK(after.light_distance_fade_start_ratio == doctest::Approx(before.light_distance_fade_start_ratio));
+    CHECK(after.blur_px == doctest::Approx(before.blur_px));
+    CHECK(after.radial_blur_px == doctest::Approx(before.radial_blur_px));
 }
 
 TEST_CASE("WarpedScreenGrid apply_camera_settings consumes boundary min-visible ratio and ignores height bounds") {
@@ -844,7 +883,6 @@ TEST_CASE("WarpedScreenGrid apply_camera_settings consumes boundary min-visible 
     CHECK(after.max_cull_depth == doctest::Approx(before.max_cull_depth));
     CHECK(after.layer_depth_interval == doctest::Approx(before.layer_depth_interval));
     CHECK(after.layer_depth_curve == doctest::Approx(before.layer_depth_curve));
-    CHECK(after.light_distance_fade_start_ratio == doctest::Approx(before.light_distance_fade_start_ratio));
 }
 
 TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer and DoF controls") {
@@ -856,14 +894,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
         {"dynamic_renderer_depth_efficiency_min_density_ratio", 0.2},
         {"layer_depth_interval", 180.0},
         {"layer_depth_curve", 1.75},
-        {"light_distance_fade_start_ratio", 0.8},
         {"min_visible_uses_light_radius", true},
         {"light_radius_overlap_culling_enabled", true},
-        {"light_fade_smoothing_enabled", true},
-        {"light_fade_in_seconds", 0.12},
-        {"light_fade_out_seconds", 0.22},
-        {"light_min_fade_seconds", 0.05},
-        {"light_culling_debug_overlay", true},
         {"blur_px", 20.0},
         {"radial_blur_px", 64.0},
         {"depth_of_field_enabled", true},
@@ -885,14 +917,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(0.2f));
     CHECK(settings.layer_depth_interval == doctest::Approx(180.0f));
     CHECK(settings.layer_depth_curve == doctest::Approx(1.75f));
-    CHECK(settings.light_distance_fade_start_ratio == doctest::Approx(0.8f));
     CHECK(settings.min_visible_uses_light_radius);
     CHECK(settings.light_radius_overlap_culling_enabled);
-    CHECK(settings.light_fade_smoothing_enabled);
-    CHECK(settings.light_fade_in_seconds == doctest::Approx(0.12f));
-    CHECK(settings.light_fade_out_seconds == doctest::Approx(0.22f));
-    CHECK(settings.light_min_fade_seconds == doctest::Approx(0.05f));
-    CHECK(settings.light_culling_debug_overlay);
     CHECK(settings.blur_px == doctest::Approx(20.0f));
     CHECK(settings.radial_blur_px == doctest::Approx(64.0f));
     CHECK(settings.depth_of_field_enabled);
@@ -915,14 +941,8 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK(serialized["dynamic_renderer_depth_efficiency_min_density_ratio"] == doctest::Approx(0.2));
     CHECK(serialized["layer_depth_interval"] == doctest::Approx(180.0));
     CHECK(serialized["layer_depth_curve"] == doctest::Approx(1.75));
-    CHECK(serialized["light_distance_fade_start_ratio"] == doctest::Approx(0.8));
     CHECK(serialized["min_visible_uses_light_radius"] == true);
     CHECK(serialized["light_radius_overlap_culling_enabled"] == true);
-    CHECK(serialized["light_fade_smoothing_enabled"] == true);
-    CHECK(serialized["light_fade_in_seconds"] == doctest::Approx(0.12));
-    CHECK(serialized["light_fade_out_seconds"] == doctest::Approx(0.22));
-    CHECK(serialized["light_min_fade_seconds"] == doctest::Approx(0.05));
-    CHECK(serialized["light_culling_debug_overlay"] == true);
     CHECK(serialized["blur_px"] == doctest::Approx(20.0));
     CHECK(serialized["radial_blur_px"] == doctest::Approx(64.0));
     CHECK(serialized["depth_of_field_enabled"] == true);
@@ -939,6 +959,9 @@ TEST_CASE("WarpedScreenGrid camera settings roundtrip includes supported layer a
     CHECK_FALSE(serialized.contains("max_blur_px"));
     CHECK_FALSE(serialized.contains("radial_max_blur_px"));
     CHECK_FALSE(serialized.contains("focus_depth"));
+    CHECK_FALSE(serialized.contains("near_light_depth_threshold"));
+    CHECK_FALSE(serialized.contains("light_distance_fade_start_ratio"));
+    CHECK_FALSE(serialized.contains("light_culling_debug_overlay"));
 }
 
 TEST_CASE("WarpedScreenGrid depth efficiency camera settings are clamped to cull-depth range") {
@@ -946,38 +969,22 @@ TEST_CASE("WarpedScreenGrid depth efficiency camera settings are clamped to cull
     camera_grid.apply_camera_settings(nlohmann::json{
         {"max_cull_depth", 300.0},
         {"dynamic_renderer_depth_efficiency_depth", -4.0},
-        {"dynamic_renderer_depth_efficiency_min_density_ratio", 9.0}
+        {"dynamic_renderer_depth_efficiency_min_density_ratio", 9.0},
+        {"layer_depth_interval", -20.0},
+        {"layer_depth_curve", 999.0}
     });
 
     const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
     CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(0.0f));
     CHECK(settings.dynamic_renderer_depth_efficiency_min_density_ratio == doctest::Approx(1.0f));
+    CHECK(settings.layer_depth_interval == doctest::Approx(1.0f));
+    CHECK(settings.layer_depth_curve == doctest::Approx(200.0f));
 
     const nlohmann::json serialized = camera_grid.camera_settings_to_json();
     CHECK(serialized["dynamic_renderer_depth_efficiency_depth"] == doctest::Approx(0.0));
     CHECK(serialized["dynamic_renderer_depth_efficiency_min_density_ratio"] == doctest::Approx(1.0));
-}
-
-TEST_CASE("WarpedScreenGrid migrates legacy depth efficiency threshold ratio to depth") {
-    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
-    camera_grid.apply_camera_settings(nlohmann::json{
-        {"max_cull_depth", 2500.0},
-        {"dynamic_renderer_depth_efficiency_threshold", 0.35}
-    });
-    const auto settings = camera_grid.get_settings();
-    CHECK(settings.dynamic_renderer_depth_efficiency_depth == doctest::Approx(875.0f));
-}
-
-TEST_CASE("WarpedScreenGrid camera settings accepts legacy blur keys") {
-    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
-    camera_grid.apply_camera_settings(nlohmann::json{
-        {"max_blur_px", 7.25},
-        {"radial_max_blur_px", 12.5}
-    });
-
-    const WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
-    CHECK(settings.blur_px == doctest::Approx(7.25f));
-    CHECK(settings.radial_blur_px == doctest::Approx(12.5f));
+    CHECK(serialized["layer_depth_interval"] == doctest::Approx(1.0));
+    CHECK(serialized["layer_depth_curve"] == doctest::Approx(200.0));
 }
 
 TEST_CASE("WarpedScreenGrid blur settings preserve tiny decimal values") {
@@ -996,6 +1003,61 @@ TEST_CASE("WarpedScreenGrid blur settings preserve tiny decimal values") {
     REQUIRE(serialized.contains("radial_blur_px"));
     CHECK(serialized["blur_px"].get<double>() == doctest::Approx(0.013).epsilon(1e-6));
     CHECK(serialized["radial_blur_px"].get<double>() == doctest::Approx(0.027).epsilon(1e-6));
+}
+
+TEST_CASE("OpenGL depth layer classification uses camera layer interval falloff and max cull depth") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    std::unique_ptr<Asset> far_asset = make_world_grid_test_asset(0, -3000);
+    REQUIRE(far_asset != nullptr);
+
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+    settings.max_cull_depth = 5000.0f;
+    settings.layer_depth_interval = 100.0f;
+    settings.layer_depth_curve = 0.0f;
+    camera_grid.set_realism_settings(settings);
+    const int linear_layer = std::abs(opengl_runtime_renderer_detail::classify_depth_layer_for_asset(
+        camera_grid,
+        *far_asset));
+
+    settings.layer_depth_interval = 500.0f;
+    camera_grid.set_realism_settings(settings);
+    const int wider_interval_layer = std::abs(opengl_runtime_renderer_detail::classify_depth_layer_for_asset(
+        camera_grid,
+        *far_asset));
+    CHECK(wider_interval_layer < linear_layer);
+
+    settings.layer_depth_interval = 100.0f;
+    settings.layer_depth_curve = 30.0f;
+    camera_grid.set_realism_settings(settings);
+    const int falloff_layer = std::abs(opengl_runtime_renderer_detail::classify_depth_layer_for_asset(
+        camera_grid,
+        *far_asset));
+    CHECK(falloff_layer < linear_layer);
+
+    settings.layer_depth_curve = 0.0f;
+    settings.max_cull_depth = 500.0f;
+    camera_grid.set_realism_settings(settings);
+    const int capped_layer = std::abs(opengl_runtime_renderer_detail::classify_depth_layer_for_asset(
+        camera_grid,
+        *far_asset));
+    CHECK(capped_layer < linear_layer);
+}
+
+TEST_CASE("OpenGL far background placement follows max cull depth") {
+    WarpedScreenGrid camera_grid(1280, 720, make_warped_screen_test_view("camera_view", SDL_Point{0, 0}));
+    WarpedScreenGrid::RealismSettings settings = camera_grid.get_settings();
+
+    settings.max_cull_depth = 500.0f;
+    camera_grid.set_realism_settings(settings);
+    const float near_cull_y = opengl_runtime_renderer_detail::far_background_bottom_screen_y(camera_grid, 720);
+
+    settings.max_cull_depth = 2500.0f;
+    camera_grid.set_realism_settings(settings);
+    const float far_cull_y = opengl_runtime_renderer_detail::far_background_bottom_screen_y(camera_grid, 720);
+
+    CHECK(std::isfinite(near_cull_y));
+    CHECK(std::isfinite(far_cull_y));
+    CHECK(far_cull_y != doctest::Approx(near_cull_y));
 }
 
 TEST_CASE("WarpedScreenGrid transition state machine handles room crossing, reversal, stop settle, and rapid transitions") {

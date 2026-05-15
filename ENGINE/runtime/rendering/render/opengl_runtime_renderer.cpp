@@ -420,6 +420,23 @@ int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& 
     return signed_layer;
 }
 
+float far_background_bottom_screen_y(const WarpedScreenGrid& camera, std::uint32_t target_height) {
+    const auto& settings = camera.get_settings();
+    const float far_world_z = static_cast<float>(
+        camera.current_anchor_world_z() - static_cast<double>(settings.max_cull_depth));
+    const SDL_FPoint center = camera.get_view_center_f();
+    SDL_FPoint far_screen{};
+    if (camera.project_world_point(SDL_FPoint{center.x, 0.0f}, far_world_z, far_screen) &&
+        std::isfinite(far_screen.y)) {
+        return far_screen.y;
+    }
+
+    const WarpedScreenGrid::FloorDepthParams floor_params = camera.compute_floor_depth_params();
+    return std::isfinite(floor_params.horizon_screen_y)
+        ? static_cast<float>(floor_params.horizon_screen_y)
+        : static_cast<float>(target_height) * 0.5f;
+}
+
 bool build_floor_tile_draw_packets(const WarpedScreenGrid& camera,
                                    const std::vector<world::Chunk*>& chunks,
                                    std::uint32_t target_width,
@@ -896,7 +913,7 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(composite_target_);
     destroy_depth_layer_targets();
     dof_blur_chain_.destroy_targets();
-    destroy_horizon_textures();
+    destroy_far_background_textures();
     output_target_width_ = 1;
     output_target_height_ = 1;
 }
@@ -909,9 +926,9 @@ void OpenGLRuntimeRenderer::destroy_depth_layer_targets() {
     cached_depth_layer_ids_.clear();
 }
 
-void OpenGLRuntimeRenderer::destroy_horizon_textures() {
-    render_diagnostics::destroy_texture(horizon_sky_texture_);
-    render_diagnostics::destroy_texture(horizon_mountains_texture_);
+void OpenGLRuntimeRenderer::destroy_far_background_textures() {
+    render_diagnostics::destroy_texture(far_background_sky_texture_);
+    render_diagnostics::destroy_texture(far_background_mountains_texture_);
 }
 
 SDL_Texture* OpenGLRuntimeRenderer::create_render_target(SDL_Renderer* renderer,
@@ -948,29 +965,29 @@ void OpenGLRuntimeRenderer::configure_render_target(SDL_Texture* texture) {
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
 }
 
-bool OpenGLRuntimeRenderer::ensure_horizon_textures() {
+bool OpenGLRuntimeRenderer::ensure_far_background_textures() {
     if (!renderer_) {
         return false;
     }
-    if (horizon_sky_texture_ && horizon_mountains_texture_) {
+    if (far_background_sky_texture_ && far_background_mountains_texture_) {
         return true;
     }
 
-    auto load_horizon_texture = [&](const char* filename, SDL_Texture*& out_texture) -> bool {
+    auto load_far_background_texture = [&](const char* filename, SDL_Texture*& out_texture) -> bool {
         if (out_texture) {
             return true;
         }
         const std::filesystem::path path = project_root_path() / "resources" / "misc_content" / filename;
         SDL_Surface* surface = IMG_Load(path.u8string().c_str());
         if (!surface) {
-            vibble::log::warn(std::string{"[OpenGLRuntimeRenderer] Failed to load horizon texture '"} +
+            vibble::log::warn(std::string{"[OpenGLRuntimeRenderer] Failed to load far background texture '"} +
                               path.u8string() + "': " + safe_string(SDL_GetError()));
             return false;
         }
         out_texture = SDL_CreateTextureFromSurface(renderer_, surface);
         SDL_DestroySurface(surface);
         if (!out_texture) {
-            vibble::log::warn(std::string{"[OpenGLRuntimeRenderer] Failed to upload horizon texture '"} +
+            vibble::log::warn(std::string{"[OpenGLRuntimeRenderer] Failed to upload far background texture '"} +
                               path.u8string() + "': " + safe_string(SDL_GetError()));
             return false;
         }
@@ -980,30 +997,27 @@ bool OpenGLRuntimeRenderer::ensure_horizon_textures() {
         return true;
     };
 
-    const bool sky_ok = load_horizon_texture("sky.png", horizon_sky_texture_);
-    const bool mountains_ok = load_horizon_texture("mountains.png", horizon_mountains_texture_);
+    const bool sky_ok = load_far_background_texture("sky.png", far_background_sky_texture_);
+    const bool mountains_ok = load_far_background_texture("mountains.png", far_background_mountains_texture_);
     return sky_ok || mountains_ok;
 }
 
-bool OpenGLRuntimeRenderer::render_horizon_background(const WarpedScreenGrid& camera,
-                                                      std::uint32_t target_width,
-                                                      std::uint32_t target_height,
-                                                      std::string& out_error) {
+bool OpenGLRuntimeRenderer::render_far_background(const WarpedScreenGrid& camera,
+                                                  std::uint32_t target_width,
+                                                  std::uint32_t target_height,
+                                                  std::string& out_error) {
     out_error.clear();
     if (!renderer_ || target_width == 0 || target_height == 0) {
         return true;
     }
-    if (!ensure_horizon_textures()) {
+    if (!ensure_far_background_textures()) {
         return true;
     }
 
-    const WarpedScreenGrid::FloorDepthParams floor_params = camera.compute_floor_depth_params();
-    const float horizon_y = std::isfinite(floor_params.horizon_screen_y)
-        ? static_cast<float>(floor_params.horizon_screen_y)
-        : static_cast<float>(target_height) * 0.5f;
+    const float bottom_y = opengl_runtime_renderer_detail::far_background_bottom_screen_y(camera, target_height);
     const float target_w = static_cast<float>(target_width);
 
-    auto draw_horizon_texture = [&](SDL_Texture* texture, const char* label) -> bool {
+    auto draw_far_background_texture = [&](SDL_Texture* texture, const char* label) -> bool {
         if (!texture) {
             return true;
         }
@@ -1014,18 +1028,18 @@ bool OpenGLRuntimeRenderer::render_horizon_background(const WarpedScreenGrid& ca
         }
         const float scale = target_w / source_w;
         const float target_h = source_h * scale;
-        const SDL_FRect dst{0.0f, horizon_y - target_h, target_w, target_h};
+        const SDL_FRect dst{0.0f, bottom_y - target_h, target_w, target_h};
         if (!render_diagnostics::render_texture(renderer_, texture, nullptr, &dst)) {
-            out_error = std::string{"Failed to render horizon "} + label + " texture: " + safe_string(SDL_GetError());
+            out_error = std::string{"Failed to render far background "} + label + " texture: " + safe_string(SDL_GetError());
             return false;
         }
         return true;
     };
 
-    if (!draw_horizon_texture(horizon_sky_texture_, "sky")) {
+    if (!draw_far_background_texture(far_background_sky_texture_, "sky")) {
         return false;
     }
-    if (!draw_horizon_texture(horizon_mountains_texture_, "mountains")) {
+    if (!draw_far_background_texture(far_background_mountains_texture_, "mountains")) {
         return false;
     }
     return true;
@@ -1651,10 +1665,10 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         render_diagnostics::end_frame();
         return false;
     }
-    if (!render_horizon_background(assets_->getView(),
-                                   frame_to_render->target_width,
-                                   frame_to_render->target_height,
-                                   out_error)) {
+    if (!render_far_background(assets_->getView(),
+                               frame_to_render->target_width,
+                               frame_to_render->target_height,
+                               out_error)) {
         render_diagnostics::end_frame();
         return false;
     }

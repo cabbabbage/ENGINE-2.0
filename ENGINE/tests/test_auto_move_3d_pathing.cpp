@@ -48,7 +48,7 @@ Animation make_runtime_path_animation(const std::vector<axis::WorldPos>& deltas,
         path[i].dy = deltas[i].y;
         path[i].dz = deltas[i].z;
     }
-    animation.on_end_animation = std::move(on_end);
+    animation.on_end_animation = on_end;
     animation.on_end_behavior = Animation::classify_on_end(animation.on_end_animation);
     animation.synchronize_runtime_frames();
     return animation;

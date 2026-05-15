@@ -4,7 +4,9 @@
 #include "rendering/render/screen_space_math.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
+#include <limits>
 #include <optional>
 
 namespace world {
@@ -43,6 +45,13 @@ namespace {
             return std::max(0.0001f, params.max_perspective_scale);
         }
         return 1.0f;
+    }
+
+    int clamp_i64_to_int(std::int64_t value) {
+        return static_cast<int>(std::clamp<std::int64_t>(
+            value,
+            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
     }
 } // namespace
 
@@ -474,8 +483,14 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
 }
 
 GridBounds GridBounds::from_xywh(int x, int z, int w, int h, int world_y, int layer) {
-    const int max_x = x + std::max(0, w - 1);
-    const int max_z = z + std::max(0, h - 1);
+    const std::int64_t max_x64 =
+        static_cast<std::int64_t>(x) +
+        std::max<std::int64_t>(0, static_cast<std::int64_t>(w) - 1);
+    const std::int64_t max_z64 =
+        static_cast<std::int64_t>(z) +
+        std::max<std::int64_t>(0, static_cast<std::int64_t>(h) - 1);
+    const int max_x = clamp_i64_to_int(max_x64);
+    const int max_z = clamp_i64_to_int(max_z64);
     const axis::WorldPos min_pos{x, world_y, z};
     const axis::WorldPos max_pos{max_x, world_y, max_z};
     GridPoint min = GridPoint::make_virtual(min_pos, layer);
@@ -493,9 +508,15 @@ bool GridBounds::contains(const GridPoint& pt) const {
 }
 
 GridBounds GridBounds::expanded(int margin) const {
-    const int m = std::max(0, margin);
-    const axis::WorldPos expanded_min{min.world_x() - m, min.world_y(), min.world_z() - m};
-    const axis::WorldPos expanded_max{max.world_x() + m, max.world_y(), max.world_z() + m};
+    const std::int64_t m = std::max<std::int64_t>(0, margin);
+    const axis::WorldPos expanded_min{
+        clamp_i64_to_int(static_cast<std::int64_t>(min.world_x()) - m),
+        min.world_y(),
+        clamp_i64_to_int(static_cast<std::int64_t>(min.world_z()) - m)};
+    const axis::WorldPos expanded_max{
+        clamp_i64_to_int(static_cast<std::int64_t>(max.world_x()) + m),
+        max.world_y(),
+        clamp_i64_to_int(static_cast<std::int64_t>(max.world_z()) + m)};
     GridPoint new_min = GridPoint::make_virtual(expanded_min, min.resolution_layer());
     GridPoint new_max = GridPoint::make_virtual(expanded_max, max.resolution_layer());
     return GridBounds(new_min, new_max);

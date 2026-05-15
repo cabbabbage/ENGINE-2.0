@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <set>
 #include <string>
@@ -181,6 +182,32 @@ std::set<std::pair<int, int>> collect_live_positions_named(const Assets& assets,
     return out;
 }
 
+std::set<const Asset*> collect_live_asset_pointers(const Assets& assets) {
+    std::set<const Asset*> out;
+    for (const Asset* asset : assets.all) {
+        if (asset && asset->is_dynamic_spawned_asset()) {
+            out.insert(asset);
+        }
+    }
+    return out;
+}
+
+int count_live_assets_named_at(const Assets& assets,
+                               const std::string& name,
+                               int world_x,
+                               int world_z) {
+    int count = 0;
+    for (const Asset* asset : assets.all) {
+        if (!asset || !asset->is_dynamic_spawned_asset() || !asset->info) {
+            continue;
+        }
+        if (asset->info->name == name && asset->world_x() == world_x && asset->world_z() == world_z) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 bool point_in_bounds(const world::GridBounds& bounds, int world_x, int world_z) {
     return world_x >= bounds.min.world_x() && world_x <= bounds.max.world_x() &&
            world_z >= bounds.min.world_z() && world_z <= bounds.max.world_z();
@@ -190,7 +217,22 @@ std::unique_ptr<Assets> make_assets(AssetLibrary& library,
                                     nlohmann::json manifest,
                                     Area room_area,
                                     nlohmann::json room_data,
-                                    const std::string& map_id = "live_dynamic_render_bounds_test") {
+                                    const std::string& map_id = "live_dynamic_render_bounds_test",
+                                    int map_radius_world = 256) {
+    if (!manifest.is_object()) {
+        manifest = nlohmann::json::object();
+    }
+    if (!manifest.contains("camera_settings") || !manifest["camera_settings"].is_object()) {
+        manifest["camera_settings"] = nlohmann::json::object();
+    }
+    nlohmann::json& camera_settings = manifest["camera_settings"];
+    if (!camera_settings.contains("live_dynamic_preload_margin_world_px")) {
+        camera_settings["live_dynamic_preload_margin_world_px"] = 0;
+    }
+    if (!camera_settings.contains("live_dynamic_despawn_margin_world_px")) {
+        camera_settings["live_dynamic_despawn_margin_world_px"] = 0;
+    }
+
     std::vector<std::unique_ptr<Room>> owned_rooms;
     owned_rooms.push_back(make_runtime_room(library, room_area, room_data));
     auto world_context = std::make_shared<RuntimeWorldContext>(std::move(owned_rooms));
@@ -202,7 +244,7 @@ std::unique_ptr<Assets> make_assets(AssetLibrary& library,
         600,
         0,
         0,
-        256,
+        map_radius_world,
         nullptr,
         nullptr,
         map_id,
@@ -300,6 +342,109 @@ TEST_CASE("Live dynamic sync keeps stable assets while points remain in render b
         CHECK(std::find(second_assets.begin(), second_assets.end(), asset) != second_assets.end());
     }
     CHECK(collect_live_positions_named(*assets, "normal_asset") == first_positions);
+}
+
+TEST_CASE("Live dynamic sync handles pathological near-limit bounds without runaway work") {
+    AssetLibrary library(false);
+    library.add_asset("boundary_asset",
+                      make_asset_metadata(std::string(asset_types::object),
+                                          nlohmann::json::array({"boundary"})));
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 0}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector("spn-pathological", "boundary_asset", 0)})}
+         })}
+    });
+
+    auto assets = make_assets(library,
+                              manifest,
+                              make_rect_area("Spawn", 32),
+                              make_room_data(true),
+                              "live_dynamic_pathological_bounds_test",
+                              1500000000);
+    const world::GridBounds pathological_bounds = world::GridBounds::from_xywh(
+        std::numeric_limits<int>::min() + 1024,
+        std::numeric_limits<int>::min() + 1024,
+        std::numeric_limits<int>::max(),
+        std::numeric_limits<int>::max(),
+        0,
+        0);
+
+    assets->test_sync_live_dynamic_assets_for_bounds(pathological_bounds);
+    CHECK(live_dynamic_assets(*assets).size() <= 8192);
+}
+
+TEST_CASE("Live dynamic preload and despawn margins are honored independently") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"camera_settings",
+         nlohmann::json::object({
+             {"live_dynamic_preload_margin_world_px", 16},
+             {"live_dynamic_despawn_margin_world_px", 48}
+         })},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector("spn-margin", "normal_asset", 4)})}
+         })}
+    });
+
+    auto assets = make_assets(library, manifest, make_rect_area("Spawn", 256), make_room_data(true));
+
+    const world::GridBounds first_bounds = world::GridBounds::from_xywh(80, 0, 1, 1, 0, 4);
+    assets->test_sync_live_dynamic_assets_for_bounds(first_bounds);
+    CHECK(count_live_assets_named_at(*assets, "normal_asset", 96, 0) > 0);
+
+    const world::GridBounds second_bounds = world::GridBounds::from_xywh(120, 0, 1, 1, 0, 4);
+    assets->test_sync_live_dynamic_assets_for_bounds(second_bounds);
+    CHECK(count_live_assets_named_at(*assets, "normal_asset", 96, 0) > 0);
+
+    const world::GridBounds third_bounds = world::GridBounds::from_xywh(200, 0, 1, 1, 0, 4);
+    assets->test_sync_live_dynamic_assets_for_bounds(third_bounds);
+    CHECK(count_live_assets_named_at(*assets, "normal_asset", 96, 0) == 0);
+}
+
+TEST_CASE("Live dynamic throttled scans remain deterministic across repeated sync") {
+    AssetLibrary library(false);
+    library.add_asset("boundary_asset",
+                      make_asset_metadata(std::string(asset_types::object),
+                                          nlohmann::json::array({"boundary"})));
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 0}, {"position_jitter_px", 0}})},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector("spn-deterministic", "boundary_asset", 0)})}
+         })}
+    });
+
+    auto assets = make_assets(library,
+                              manifest,
+                              make_rect_area("Spawn", 32),
+                              make_room_data(true),
+                              "live_dynamic_deterministic_throttle_test",
+                              1000000);
+    const world::GridBounds large_bounds =
+        world::GridBounds::from_xywh(-500000, -500000, 1000000, 1000000, 0, 0);
+
+    assets->test_sync_live_dynamic_assets_for_bounds(large_bounds);
+    const auto first_positions = collect_live_positions_named(*assets, "boundary_asset");
+    const auto first_ptrs = collect_live_asset_pointers(*assets);
+    REQUIRE_FALSE(first_positions.empty());
+
+    assets->test_sync_live_dynamic_assets_for_bounds(large_bounds);
+    CHECK(collect_live_positions_named(*assets, "boundary_asset") == first_positions);
+    CHECK(collect_live_asset_pointers(*assets) == first_ptrs);
 }
 
 TEST_CASE("Live dynamic sync deletes dynamic assets after they leave render bounds") {

@@ -27616,6 +27616,7 @@
         "layer_depth_interval": 250.0,
         "light_max_cull_depth": 32000.0,
         "light_radius_overlap_culling_enabled": true,
+        "live_dynamic_min_visible_screen_ratio": 0.014999999664723873,
         "max_camera_velocity": 2200.0,
         "max_cull_depth": 5000.0,
         "min_visible_screen_ratio": 0.009999999776482582,
@@ -27633,6 +27634,11 @@
       },
       "content_root": "content/loot",
       "dev_map_settings": {
+        "default_floor_color": [
+          0,
+          0,
+          0
+        ],
         "map_color": [
           0,
           0,
@@ -27640,8 +27646,8 @@
           255
         ]
       },
-      "map_boundary_data": {
-        "candidate_selectors": [
+      "live_dynamic_spawns": {
+        "boundary_area_selectors": [
           {
             "candidates": [
               {
@@ -27663,8 +27669,7 @@
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-loot-map_boundary"
           }
-        ],
-        "inherits_map_assets": false
+        ]
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -27749,22 +27754,45 @@
           "camera_height_px": 239,
           "camera_tilt_deg": 60.0,
           "camera_zoom_percent": 0,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 2,
           "geometry": "Circle",
-          "inherits_map_assets": true,
+          "height": {
+            "center": 3000,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
           "is_boss": false,
-          "max_height": 3000,
-          "max_width": 3000,
-          "min_height": 3000,
-          "min_width": 3000,
           "name": "Spawn",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
             {
@@ -27940,6 +27968,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 5,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -27969,6 +27998,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 6,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -27998,6 +28028,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 7,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -28027,6 +28058,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 8,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -28037,6 +28069,17 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 3000,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         }
       },
@@ -28053,6 +28096,17 @@
       "schema_version": 1,
       "trails_data": {
         "basic": {
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
             85,
             242,
@@ -28061,14 +28115,38 @@
           ],
           "edge_smoothness": 2,
           "geometry": "Line",
-          "inherits_map_assets": false,
+          "height": {
+            "center": 600,
+            "falloff": 100,
+            "random": true,
+            "span": 200,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 800,
-          "max_width": 800,
-          "min_height": 400,
-          "min_width": 400,
           "name": "basic",
-          "spawn_groups": []
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "spawn_groups": [],
+          "width": {
+            "center": 600,
+            "falloff": 100,
+            "random": true,
+            "span": 200,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
         }
       }
     },

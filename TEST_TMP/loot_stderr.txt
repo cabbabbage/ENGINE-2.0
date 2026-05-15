@@ -1,0 +1,6 @@
+[PLACEMENT_DEBUG] assets_spawn_asset name="flame_fps_12" requested_world=(2304,2304) floor_world=(2304,2304) floor_layer=8 runtime_world=(2304,2304) runtime_layer=8
+[PLACEMENT_DEBUG] assets_spawn_asset name="vibble_eyes" requested_world=(2304,2048) floor_world=(2304,2048) floor_layer=8 runtime_world=(2304,2048) runtime_layer=8
+[PLACEMENT_DEBUG] assets_spawn_asset name="vibble_attack_1" requested_world=(2304,2048) floor_world=(2304,2048) floor_layer=8 runtime_world=(2304,2048) runtime_layer=8
+[PLACEMENT_DEBUG] assets_spawn_asset name="flame_fps_12" requested_world=(2048,2560) floor_world=(2048,2560) floor_layer=8 runtime_world=(2048,2560) runtime_layer=8
+[PLACEMENT_DEBUG] assets_spawn_asset name="gun" requested_world=(2304,2048) floor_world=(2304,2048) floor_layer=8 runtime_world=(2304,2048) runtime_layer=8
+[ERROR] +33.312s: [MainApp] Setup error: Map identifier missing during runtime bootstrap.

@@ -649,7 +649,28 @@ private:
         }
     };
 
+    struct LiveDynamicPointKeyHash {
+        std::size_t operator()(const LiveDynamicPointKey& key) const {
+            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<int>{}(key.grid_resolution));
+            mix(std::hash<int>{}(key.grid_x));
+            mix(std::hash<int>{}(key.grid_z));
+            mix(std::hash<std::string>{}(key.spawn_id));
+            return seed;
+        }
+    };
+
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
     std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
     std::unordered_map<Asset*, LiveDynamicPointKey> live_dynamic_asset_keys_;
+    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_spawned_keys_;
+    int live_dynamic_preload_margin_world_px_ = 192;
+    int live_dynamic_despawn_margin_world_px_ = 256;
+    std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 8192;
+    std::size_t max_live_dynamic_new_spawns_per_frame_ = 8192;
+    std::size_t max_total_live_dynamic_assets_ = 20000;
+    std::uint32_t last_live_dynamic_guard_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
 };

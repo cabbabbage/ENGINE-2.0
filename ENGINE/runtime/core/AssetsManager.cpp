@@ -368,26 +368,13 @@ bool live_dynamic_projected_perspective_scale(const WarpedScreenGrid& camera,
         return false;
     }
 
-    SDL_FPoint left{};
-    SDL_FPoint right{};
-    constexpr float kHalfWorldSpan = 0.5f;
-    if (!camera.project_world_point(SDL_FPoint{world_anchor_x - kHalfWorldSpan, world_anchor_y},
-                                    world_anchor_z,
-                                    left) ||
-        !camera.project_world_point(SDL_FPoint{world_anchor_x + kHalfWorldSpan, world_anchor_y},
-                                    world_anchor_z,
-                                    right)) {
+    float sampled_scale = 1.0f;
+    if (!camera.sample_perspective_scale(SDL_FPoint{world_anchor_x, world_anchor_y},
+                                         world_anchor_z,
+                                         sampled_scale)) {
         return false;
     }
-
-    const float dx = right.x - left.x;
-    const float dy = right.y - left.y;
-    const float span_px = std::hypot(dx, dy);
-    if (!std::isfinite(span_px) || span_px <= 1.0e-5f) {
-        return false;
-    }
-
-    out_scale = std::max(0.0001f, span_px);
+    out_scale = std::max(0.0001f, sampled_scale);
     return true;
 }
 

@@ -5,3 +5,8 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
     out.y = world.y - world_z;
     return true;
 }
+
+bool WarpedScreenGrid::sample_perspective_scale(SDL_FPoint, float, float& out_scale) const {
+    out_scale = 1.0f;
+    return true;
+}

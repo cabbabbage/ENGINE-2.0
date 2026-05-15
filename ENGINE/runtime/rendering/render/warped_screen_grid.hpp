@@ -32,6 +32,8 @@ struct CameraState {
     double tan_half_fov_x = 0.0;
     double near_plane = 0.0;
     double far_plane  = 0.0;
+    double min_perspective_depth = 0.0;
+    float max_perspective_scale = 1.0f;
     double horizon_screen_y = 0.0;
     double meters_scale = 1.0;
     double pitch_radians = 0.0;
@@ -205,6 +207,7 @@ public:
     // world.y הוא גובה (Y).
     // world_z נושא עומק (Z) ביחס לעוגן המצלמה.
     bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
+    bool sample_perspective_scale(SDL_FPoint world, float world_z, float& out_scale) const;
     bool build_camera_ray_from_screen(const SDL_FPoint& screen_point,
                                       render_projection::CameraRay& out_ray) const;
     bool screen_to_world_on_depth_plane(const SDL_FPoint& screen_point,

@@ -172,9 +172,15 @@ namespace {
                                                          int screen_width,
                                                          int screen_height);
 
-    float compute_perspective_scale_from_depth(const CameraState& cam,
-                                               double depth_along_forward,
-                                               int screen_width);
+    float compute_raw_perspective_scale_from_depth(const CameraState& cam,
+                                                   double depth_along_forward,
+                                                   int screen_width);
+
+    float clamp_perspective_scale_to_camera_edge(const CameraState& cam, float scale);
+
+    double compute_min_perspective_depth_for_lower_edge(const CameraState& cam,
+                                                        int screen_width,
+                                                        int screen_height);
 
 CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings,
                                        double aspect,
@@ -275,6 +281,14 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
     state.anchor_world_y = 0.0; // עוגן גובה (Y)
     state.anchor_world_z = static_cast<double>(anchor_world.y); // עוגן עומק (Z)
 
+        state.min_perspective_depth = compute_min_perspective_depth_for_lower_edge(
+            state, screen_width, screen_height);
+        state.max_perspective_scale = compute_raw_perspective_scale_from_depth(
+            state, state.min_perspective_depth, screen_width);
+        if (!std::isfinite(state.max_perspective_scale) || state.max_perspective_scale <= 0.0f) {
+            state.max_perspective_scale = 1.0f;
+        }
+
         return state;
     }
 
@@ -305,9 +319,9 @@ struct ProjectionResult {
         return ndc_to_screen_point(cam, ndc_x, ndc_y, screen_width, screen_height);
     }
 
-    float compute_perspective_scale_from_depth(const CameraState& cam,
-                                               double depth_along_forward,
-                                               int screen_width) {
+    float compute_raw_perspective_scale_from_depth(const CameraState& cam,
+                                                   double depth_along_forward,
+                                                   int screen_width) {
         if (!std::isfinite(depth_along_forward) || depth_along_forward <= cam.near_plane) {
             return 1.0f;
         }
@@ -321,6 +335,50 @@ struct ProjectionResult {
         }
         float result = static_cast<float>(scale);
         return result;
+    }
+
+    float clamp_perspective_scale_to_camera_edge(const CameraState& cam, float scale) {
+        if (!std::isfinite(scale) || scale <= 0.0f) {
+            return 1.0f;
+        }
+        if (std::isfinite(cam.max_perspective_scale) && cam.max_perspective_scale > 0.0f) {
+            return std::clamp(scale, 0.0001f, cam.max_perspective_scale);
+        }
+        return std::max(0.0001f, scale);
+    }
+
+    double compute_min_perspective_depth_for_lower_edge(const CameraState& cam,
+                                                        int screen_width,
+                                                        int screen_height) {
+        const double fallback_depth = std::max(cam.near_plane * 4.0, cam.focus_depth);
+        if (!cam.valid || screen_width <= 0 || screen_height <= 0 ||
+            !std::isfinite(cam.position.y) ||
+            !std::isfinite(cam.forward.y) ||
+            !std::isfinite(cam.up.y) ||
+            !std::isfinite(cam.tan_half_fov_y)) {
+            return fallback_depth;
+        }
+
+        const ScreenBounds bounds = expanded_screen_bounds(screen_width, screen_height);
+        const double sample_x =
+            (static_cast<double>(bounds.left) + static_cast<double>(bounds.right)) * 0.5;
+        const auto [ndc_x, ndc_y] = screen_to_ndc_point(
+            cam, sample_x, static_cast<double>(bounds.bottom), screen_width, screen_height);
+        (void)ndc_x;
+        if (!std::isfinite(ndc_y)) {
+            return fallback_depth;
+        }
+
+        const double denom = cam.forward.y + ndc_y * cam.tan_half_fov_y * cam.up.y;
+        if (!std::isfinite(denom) || std::fabs(denom) <= 1e-9) {
+            return fallback_depth;
+        }
+
+        const double depth = -cam.position.y / denom;
+        if (!std::isfinite(depth) || depth <= cam.near_plane) {
+            return fallback_depth;
+        }
+        return std::max(depth, cam.near_plane * 1.25);
     }
 
     SDL_FPoint lerp_point(const SDL_FPoint& a, const SDL_FPoint& b, float t) {
@@ -413,7 +471,7 @@ struct ProjectionResult {
         const double screen_x = screen_pt.x;
         const double screen_y = screen_pt.y;
 
-        float perspective_scale = compute_perspective_scale_from_depth(
+        float perspective_scale = compute_raw_perspective_scale_from_depth(
             cam, depth_along_forward, screen_width);
         float vertical_scale = 1.0f;
 
@@ -465,6 +523,7 @@ struct ProjectionResult {
         if (!std::isfinite(perspective_scale) || perspective_scale <= 0.0f) {
             perspective_scale = 1.0f;
         }
+        perspective_scale = clamp_perspective_scale_to_camera_edge(cam, perspective_scale);
         if (!std::isfinite(vertical_scale) || vertical_scale <= 0.0f) {
             vertical_scale = 1.0f;
         }
@@ -582,6 +641,8 @@ WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
         params.tan_half_fov_y = cam.tan_half_fov_y;
         params.near_plane = cam.near_plane;
         params.far_plane = cam.far_plane;
+        params.min_perspective_depth = cam.min_perspective_depth;
+        params.max_perspective_scale = cam.max_perspective_scale;
         params.screen_zoom = cam.screen_zoom;
         params.screen_pan_y_px = cam.screen_pan_y_px;
         params.horizon_screen_y = cam.horizon_screen_y;
@@ -1384,6 +1445,23 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
         return false;
     }
     out = proj.screen;
+    return true;
+}
+
+bool WarpedScreenGrid::sample_perspective_scale(SDL_FPoint world, float world_z, float& out_scale) const {
+    out_scale = 1.0f;
+    const CameraState& cam = camera_state_cached();
+    ProjectionResult proj = project_world_point_internal(cam,
+                                                static_cast<double>(world.x),
+        static_cast<double>(world.y),
+        static_cast<double>(world_z),
+                                                screen_width_,
+                                                screen_height_,
+                                                horizon_fade_for_height(cam.camera_height));
+    if (!proj.valid || !std::isfinite(proj.perspective_scale) || proj.perspective_scale <= 0.0f) {
+        return false;
+    }
+    out_scale = std::max(0.0001f, proj.perspective_scale);
     return true;
 }
 

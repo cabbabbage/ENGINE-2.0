@@ -84,6 +84,20 @@ bool calibrate_pixels_per_world_x(const WarpedScreenGrid& cam,
     return true;
 }
 
+float fallback_perspective_scale_for_sprite(const WarpedScreenGrid& cam,
+                                            const render_projection::SpriteProjectionInput& input,
+                                            float safe_perspective) {
+    float sampled_scale = 1.0f;
+    if (cam.sample_perspective_scale(SDL_FPoint{input.world_x, input.world_y},
+                                     input.world_z,
+                                     sampled_scale) &&
+        std::isfinite(sampled_scale) &&
+        sampled_scale > 0.0f) {
+        return std::max(0.0001f, sampled_scale);
+    }
+    return std::max(0.0001f, safe_perspective);
+}
+
 bool compute_legacy_anchor_screen_point(const WarpedScreenGrid& cam,
                                         const render_projection::SpriteProjectionInput& input,
                                         float safe_perspective,
@@ -184,10 +198,12 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
     float pixels_per_world_x = 0.0f;
     const bool has_local_calibration =
         calibrate_pixels_per_world_x(cam, input, pixels_per_world_x);
+    const float fallback_perspective =
+        fallback_perspective_scale_for_sprite(cam, input, safe_perspective);
     const float world_width =
         has_local_calibration
             ? (final_width_px / pixels_per_world_x)
-            : (final_width_px / safe_perspective);
+            : (final_width_px / fallback_perspective);
     const float half_width = world_width * 0.5f;
     if (!std::isfinite(half_width) || half_width <= 0.0f) {
         return false;

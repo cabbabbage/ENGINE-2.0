@@ -26110,7 +26110,6 @@
         "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
-        "live_dynamic_velocity_lookahead_seconds": 0.18000000715255737,
         "max_camera_velocity": 2200.0,
         "max_cull_depth": 16480.0,
         "min_visible_screen_ratio": 0.004000000189989805,
@@ -26251,9 +26250,9 @@
             }
           },
           "display_color": [
-            204,
-            91,
-            31,
+            141,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -26340,9 +26339,9 @@
             }
           },
           "display_color": [
-            141,
-            85,
-            242,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26399,9 +26398,9 @@
             }
           },
           "display_color": [
-            71,
-            204,
-            165,
+            242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26458,9 +26457,9 @@
             }
           },
           "display_color": [
-            179,
-            204,
-            31,
+            36,
+            242,
+            125,
             255
           ],
           "edge_smoothness": 4,
@@ -26547,7 +26546,7 @@
             }
           },
           "display_color": [
-            80,
+            185,
             204,
             31,
             255
@@ -26611,9 +26610,9 @@
             }
           },
           "display_color": [
+            85,
+            174,
             242,
-            36,
-            73,
             255
           ],
           "edge_smoothness": 70,
@@ -26711,9 +26710,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            181,
+            204,
+            107,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27121,9 +27120,9 @@
             }
           },
           "display_color": [
-            85,
-            182,
-            242,
+            106,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 96,

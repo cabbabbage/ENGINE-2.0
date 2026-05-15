@@ -12,6 +12,7 @@
 
 #include "rendering/render/opengl_scene_frame_data.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/dof_blur_chain.hpp"
 
 class Assets;
 class Asset;
@@ -115,6 +116,8 @@ private:
                             std::uint32_t target_width,
                             std::uint32_t target_height,
                             std::string& out_error);
+    bool ensure_depth_layer_targets(const GpuSceneFrameData& frame_data, std::string& out_error);
+    void destroy_depth_layer_targets();
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
     SDL_Color update_smoothed_floor_clear_color(SDL_Color target);
@@ -149,6 +152,7 @@ private:
     SDL_Texture* composite_target_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
+    dof_blur_chain::Renderer dof_blur_chain_{};
     SDL_Color smoothed_floor_clear_color_{0, 0, 0, 255};
     bool smoothed_floor_color_valid_ = false;
     SDL_Point last_floor_color_player_xz_{0, 0};

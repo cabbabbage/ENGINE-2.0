@@ -828,7 +828,8 @@ OpenGLRuntimeRenderer::OpenGLRuntimeRenderer(SDL_Renderer* renderer,
     : renderer_(renderer),
       assets_(assets),
       screen_width_(std::max(1, screen_width)),
-      screen_height_(std::max(1, screen_height)) {
+      screen_height_(std::max(1, screen_height)),
+      dof_blur_chain_(renderer) {
     render_target_manager_.set_requested_size(screen_width_, screen_height_);
 }
 
@@ -882,13 +883,18 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(floor_target_);
     render_diagnostics::destroy_texture(xy_sprite_target_);
     render_diagnostics::destroy_texture(composite_target_);
+    destroy_depth_layer_targets();
+    dof_blur_chain_.destroy_targets();
+    output_target_width_ = 1;
+    output_target_height_ = 1;
+}
+
+void OpenGLRuntimeRenderer::destroy_depth_layer_targets() {
     for (auto& entry : depth_layer_targets_) {
         render_diagnostics::destroy_texture(entry.second);
     }
     depth_layer_targets_.clear();
     cached_depth_layer_ids_.clear();
-    output_target_width_ = 1;
-    output_target_height_ = 1;
 }
 
 SDL_Texture* OpenGLRuntimeRenderer::create_render_target(SDL_Renderer* renderer,
@@ -1312,6 +1318,7 @@ bool OpenGLRuntimeRenderer::ensure_render_targets(const GpuSceneFrameData& frame
 
     output_target_width_ = width;
     output_target_height_ = height;
+    dof_blur_chain_.set_output_dimensions(width, height);
 
     floor_target_ = create_render_target(renderer_, width, height, "floor", out_error);
     if (!floor_target_) {
@@ -1331,6 +1338,50 @@ bool OpenGLRuntimeRenderer::ensure_render_targets(const GpuSceneFrameData& frame
         return false;
     }
 
+    return true;
+}
+
+bool OpenGLRuntimeRenderer::ensure_depth_layer_targets(const GpuSceneFrameData& frame_data, std::string& out_error) {
+    out_error.clear();
+    const int width = static_cast<int>(frame_data.target_width);
+    const int height = static_cast<int>(frame_data.target_height);
+    if (width <= 0 || height <= 0) {
+        out_error = "Invalid depth-layer render target size.";
+        return false;
+    }
+
+    std::vector<int> active_layer_ids;
+    active_layer_ids.reserve(frame_data.depth_layers.size());
+    for (const GpuDepthLayerDrawPackets& layer : frame_data.depth_layers) {
+        active_layer_ids.push_back(layer.depth_layer);
+    }
+    std::sort(active_layer_ids.begin(), active_layer_ids.end());
+
+    for (auto it = depth_layer_targets_.begin(); it != depth_layer_targets_.end();) {
+        if (!std::binary_search(active_layer_ids.begin(), active_layer_ids.end(), it->first)) {
+            render_diagnostics::destroy_texture(it->second);
+            it = depth_layer_targets_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (int layer_id : active_layer_ids) {
+        SDL_Texture*& target = depth_layer_targets_[layer_id];
+        if (target) {
+            continue;
+        }
+        target = create_render_target(renderer_,
+                                      width,
+                                      height,
+                                      "depth_layer_" + std::to_string(layer_id),
+                                      out_error);
+        if (!target) {
+            return false;
+        }
+    }
+
+    cached_depth_layer_ids_ = std::move(active_layer_ids);
     return true;
 }
 
@@ -1506,51 +1557,130 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
     }
 
     const SDL_Color transparent_clear{0, 0, 0, 0};
-    if (!bind_target(xy_sprite_target_, transparent_clear)) {
-        render_diagnostics::end_frame();
-        return false;
-    }
+    const auto& camera_settings = assets_->getView().get_settings();
+    const bool dof_active =
+        dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
+                                camera_settings.blur_px,
+                                camera_settings.radial_blur_px) &&
+        !frame_to_render->depth_layers.empty();
+    bool dof_composited = false;
 
-    std::ostringstream xy_depth_layer_summary;
-    bool first_layer = true;
-    for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
-        if (!first_layer) {
-            xy_depth_layer_summary << ", ";
-        }
-        first_layer = false;
-        xy_depth_layer_summary << layer.depth_layer << '(' << layer.packets.size() << ')';
-        if (!render_packet_batch(layer.packets,
-                                 frame_to_render->target_width,
-                                 frame_to_render->target_height,
-                                 out_error)) {
+    if (dof_active) {
+        if (!ensure_depth_layer_targets(*frame_to_render, out_error)) {
             render_diagnostics::end_frame();
             return false;
         }
+
+        std::vector<dof_blur_chain::LayerTexture> dof_layers;
+        dof_layers.reserve(frame_to_render->depth_layers.size());
+        for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
+            SDL_Texture* layer_target = depth_layer_targets_[layer.depth_layer];
+            if (!bind_target(layer_target, transparent_clear)) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+            if (!render_packet_batch(layer.packets,
+                                     frame_to_render->target_width,
+                                     frame_to_render->target_height,
+                                     out_error)) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+            dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer_target});
+        }
+
+        const SDL_Point screen_center = assets_->getView().get_screen_center();
+        const SDL_FPoint optical_center{
+            std::clamp(static_cast<float>(screen_center.x), 0.0f, static_cast<float>(frame_to_render->target_width)),
+            std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(frame_to_render->target_height))};
+        dof_blur_chain_.set_output_dimensions(static_cast<int>(frame_to_render->target_width),
+                                              static_cast<int>(frame_to_render->target_height));
+        const dof_blur_chain::CompositeResult dof_result =
+            dof_blur_chain_.compose(dof_layers,
+                                    floor_target_,
+                                    camera_settings.depth_of_field_enabled,
+                                    camera_settings.blur_px,
+                                    camera_settings.radial_blur_px,
+                                    optical_center);
+
+        if (dof_result.valid) {
+            if (!bind_target(composite_target_, transparent_clear)) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+            if (dof_result.background_mid &&
+                !render_diagnostics::render_texture(renderer_, dof_result.background_mid, nullptr, &full_rect)) {
+                out_error = "Failed to composite DoF background target: " + safe_string(SDL_GetError());
+                render_diagnostics::end_frame();
+                return false;
+            }
+            if (dof_result.foreground_mid &&
+                !render_diagnostics::render_texture(renderer_, dof_result.foreground_mid, nullptr, &full_rect)) {
+                out_error = "Failed to composite DoF foreground target: " + safe_string(SDL_GetError());
+                render_diagnostics::end_frame();
+                return false;
+            }
+            render_diagnostics::set_blur_pass_count(dof_result.blur_pass_count);
+            render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->ui_overlay");
+            dof_composited = true;
+        } else {
+            vibble::log::warn("[OpenGLRuntimeRenderer] DoF blur chain failed; falling back to non-DoF XY sprite composite for this frame.");
+            render_diagnostics::set_blur_pass_count(0);
+        }
+    } else {
+        destroy_depth_layer_targets();
+        render_diagnostics::set_blur_pass_count(0);
     }
 
-    if (!bind_target(composite_target_, transparent_clear)) {
-        render_diagnostics::end_frame();
-        return false;
-    }
-
-    const SDL_FRect floor_full_rect{0.0f,
-                                    0.0f,
-                                    static_cast<float>(frame_to_render->target_width),
-                                    static_cast<float>(frame_to_render->target_height)};
-    if (floor_target_) {
-        if (!render_diagnostics::render_texture(renderer_, floor_target_, nullptr, &floor_full_rect)) {
-            out_error = "Failed to composite floor pass target: " + safe_string(SDL_GetError());
+    if (!dof_composited) {
+        if (!bind_target(xy_sprite_target_, transparent_clear)) {
             render_diagnostics::end_frame();
             return false;
         }
-    }
-    if (xy_sprite_target_) {
-        if (!render_diagnostics::render_texture(renderer_, xy_sprite_target_, nullptr, &floor_full_rect)) {
-            out_error = "Failed to composite XY sprite pass target: " + safe_string(SDL_GetError());
+
+        std::ostringstream xy_depth_layer_summary;
+        bool first_layer = true;
+        for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
+            if (!first_layer) {
+                xy_depth_layer_summary << ", ";
+            }
+            first_layer = false;
+            xy_depth_layer_summary << layer.depth_layer << '(' << layer.packets.size() << ')';
+            if (!render_packet_batch(layer.packets,
+                                     frame_to_render->target_width,
+                                     frame_to_render->target_height,
+                                     out_error)) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+        }
+
+        if (!bind_target(composite_target_, transparent_clear)) {
             render_diagnostics::end_frame();
             return false;
         }
+
+        const SDL_FRect floor_full_rect{0.0f,
+                                        0.0f,
+                                        static_cast<float>(frame_to_render->target_width),
+                                        static_cast<float>(frame_to_render->target_height)};
+        if (floor_target_) {
+            if (!render_diagnostics::render_texture(renderer_, floor_target_, nullptr, &floor_full_rect)) {
+                out_error = "Failed to composite floor pass target: " + safe_string(SDL_GetError());
+                render_diagnostics::end_frame();
+                return false;
+            }
+        }
+        if (xy_sprite_target_) {
+            if (!render_diagnostics::render_texture(renderer_, xy_sprite_target_, nullptr, &floor_full_rect)) {
+                out_error = "Failed to composite XY sprite pass target: " + safe_string(SDL_GetError());
+                render_diagnostics::end_frame();
+                return false;
+            }
+        }
+        render_diagnostics::set_composite_layers_submitted("floor_pass->xy_sprite_pass->ui_overlay");
     }
+
     if (frame_to_render->ui_overlay_texture) {
         if (!render_diagnostics::render_texture(renderer_, frame_to_render->ui_overlay_texture, nullptr, &full_rect)) {
             out_error = "Failed to composite UI overlay texture: " + safe_string(SDL_GetError());
@@ -1569,7 +1699,6 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         return false;
     }
 
-    render_diagnostics::set_composite_layers_submitted("floor_pass->xy_sprite_pass->ui_overlay");
     render_diagnostics::set_submit_result(true);
 
     if (!hold_incomplete_scene_frame &&

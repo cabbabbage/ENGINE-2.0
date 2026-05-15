@@ -321,6 +321,75 @@ nlohmann::json build_movement_total(const nlohmann::json& movement) {
     });
 }
 
+struct DefaultAnimationSpec {
+    std::string id;
+    int dx = 0;
+    int dy = 0;
+    int dz = 0;
+    std::string source_id;
+    bool folder_sourced = false;
+    bool invert_frames_horizontal = false;
+    bool invert_frames_vertical = false;
+};
+
+std::vector<std::string> default_direction_tags(const std::string& animation_id,
+                                                int dx,
+                                                int dy,
+                                                int dz) {
+    std::vector<std::string> tags;
+    std::unordered_set<std::string> seen;
+    auto append = [&](std::string tag) {
+        tag = animation_editor::strings::trim_copy(tag);
+        std::transform(tag.begin(), tag.end(), tag.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (!tag.empty() && seen.insert(tag).second) {
+            tags.push_back(std::move(tag));
+        }
+    };
+
+    append("movement");
+    append("directional");
+
+    std::stringstream id_stream(animation_id);
+    std::string part;
+    while (std::getline(id_stream, part, '_')) {
+        append(part);
+    }
+
+    if (dx < 0) {
+        append("left");
+        append("world_x_negative");
+    } else if (dx > 0) {
+        append("right");
+        append("world_x_positive");
+    }
+
+    if (dy < 0) {
+        append("down");
+        append("world_y_negative");
+    } else if (dy > 0) {
+        append("up");
+        append("world_y_positive");
+    }
+
+    if (dz < 0) {
+        append("up");
+        append("forward");
+        append("world_z_negative");
+    } else if (dz > 0) {
+        append("down");
+        append("backward");
+        append("world_z_positive");
+    }
+
+    if (dy != 0) {
+        append("elevation");
+    }
+
+    return tags;
+}
+
 std::string default_audio_subdir() { return "audio"; }
 
 std::string manifest_key_fallback(const AssetInfo& info) {
@@ -1546,6 +1615,9 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
     if (!defaults_3d_diagonals_checkbox_) {
         defaults_3d_diagonals_checkbox_ = std::make_unique<DMCheckbox>("3D Diagonals (8-Way)", false);
     }
+    if (!defaults_base_faces_right_checkbox_) {
+        defaults_base_faces_right_checkbox_ = std::make_unique<DMCheckbox>("Base Frames Face Right", false);
+    }
     if (!defaults_distance_box_) {
         defaults_distance_box_ = std::make_unique<DMTextBox>("Total movement per animation", "5");
     }
@@ -1583,7 +1655,7 @@ void AnimationEditorWindow::layout_defaults_modal() {
     ensure_defaults_modal_widgets();
 
     const int modal_width = std::clamp(bounds_.w - 120, 460, 720);
-    const int modal_height = 430;
+    const int modal_height = 455;
     defaults_modal_rect_ = SDL_Rect{
         bounds_.x + std::max(0, (bounds_.w - modal_width) / 2),
         bounds_.y + std::max(0, (bounds_.h - modal_height) / 2),
@@ -1611,6 +1683,10 @@ void AnimationEditorWindow::layout_defaults_modal() {
     }
     if (defaults_3d_diagonals_checkbox_) {
         defaults_3d_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
+        y += DMCheckbox::height() + row_gap;
+    }
+    if (defaults_base_faces_right_checkbox_) {
+        defaults_base_faces_right_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
         y += DMCheckbox::height() + row_gap;
     }
     if (defaults_distance_box_) {
@@ -1660,6 +1736,9 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
         consumed = true;
     }
     if (defaults_3d_diagonals_checkbox_ && defaults_3d_diagonals_checkbox_->handle_event(e)) {
+        consumed = true;
+    }
+    if (defaults_base_faces_right_checkbox_ && defaults_base_faces_right_checkbox_->handle_event(e)) {
         consumed = true;
     }
     if (defaults_distance_box_ && defaults_distance_box_->handle_event(e)) {
@@ -1755,6 +1834,7 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
     if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
     if (defaults_elevation_checkbox_) defaults_elevation_checkbox_->render(renderer);
     if (defaults_3d_diagonals_checkbox_) defaults_3d_diagonals_checkbox_->render(renderer);
+    if (defaults_base_faces_right_checkbox_) defaults_base_faces_right_checkbox_->render(renderer);
     if (defaults_distance_box_) defaults_distance_box_->render(renderer);
     if (defaults_base_frames_button_) defaults_base_frames_button_->render(renderer);
     if (defaults_create_button_) defaults_create_button_->render(renderer);
@@ -1819,6 +1899,10 @@ std::optional<int> AnimationEditorWindow::parse_defaults_total_movement() const 
         return std::nullopt;
     }
     return value;
+}
+
+bool AnimationEditorWindow::defaults_base_faces_right() const {
+    return defaults_base_faces_right_checkbox_ && defaults_base_faces_right_checkbox_->value();
 }
 
 bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& animation_id,
@@ -1942,7 +2026,8 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
                                                                           int frame_count,
                                                                           int dx,
                                                                           int dy,
-                                                                          int dz) const {
+                                                                          int dz,
+                                                                          const std::vector<std::string>& tags) const {
     const int safe_frames = std::max(frame_count, 1);
     nlohmann::json payload = nlohmann::json::object();
     payload["source"] = nlohmann::json::object({
@@ -1961,16 +2046,19 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
     payload["invert_z"] = false;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
+    payload["tags"] = tags;
     return payload;
 }
 
 nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::string& animation_id,
                                                                      const std::string& source_animation_id,
                                                                      int frame_count,
-                                                                     int dx,
-                                                                     int dy,
-                                                                     int dz,
-                                                                     bool invert_frames_horizontal) const {
+                                                                     bool invert_x,
+                                                                     bool invert_y,
+                                                                     bool invert_z,
+                                                                     bool invert_frames_horizontal,
+                                                                     bool invert_frames_vertical,
+                                                                     const std::vector<std::string>& tags) const {
     (void)animation_id;
     const int safe_frames = std::max(frame_count, 1);
     nlohmann::json payload = nlohmann::json::object();
@@ -1980,19 +2068,15 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
         {"name", source_animation_id}
     });
     payload["number_of_frames"] = safe_frames;
-    payload["inherit_data"] = false;
-    payload["movement"] = build_movement_sequence(safe_frames, dx, dy, dz);
-    payload["movement_total"] = build_movement_total(payload["movement"]);
-    payload["anchor_points"] = build_empty_geometry_frames(safe_frames);
-    payload["locked"] = false;
+    payload["inherit_data"] = true;
     payload["reverse_source"] = false;
-    payload["invert_x"] = false;
-    payload["invert_y"] = false;
-    payload["invert_z"] = false;
+    payload["invert_x"] = invert_x;
+    payload["invert_y"] = invert_y;
+    payload["invert_z"] = invert_z;
     payload["invert_frames_horizontal"] = invert_frames_horizontal;
-    payload["invert_frames_vertical"] = false;
-    payload["rnd_start"] = false;
+    payload["invert_frames_vertical"] = invert_frames_vertical;
     payload["on_end"] = "default";
+    payload["tags"] = tags;
     payload["derived_modifiers"] = nlohmann::json::object({
         {"reverse", false}
     });
@@ -2069,68 +2153,161 @@ void AnimationEditorWindow::handle_create_defaults() {
 
     const int d = *total_movement_per_animation;
     const int frame_count = static_cast<int>(base_frames.size());
+    const bool base_faces_right = defaults_base_faces_right();
     bool ok = true;
     std::vector<std::string> created_ids;
+    std::vector<DefaultAnimationSpec> specs;
 
-    auto create_file_based = [&](const std::string& id, int dx, int dy, int dz) {
-        if (!ok) return;
-        if (!copy_frames_to_animation_folder(id, base_frames)) {
-            ok = false;
-            return;
-        }
-        nlohmann::json payload = build_file_sourced_movement_payload(id, frame_count, dx, dy, dz);
-        if (!create_or_replace_animation_payload(id, payload)) {
-            ok = false;
-            return;
-        }
-        created_ids.push_back(id);
+    auto add_seed = [&](const std::string& id, int dx, int dy, int dz) {
+        specs.push_back(DefaultAnimationSpec{
+            id,
+            dx,
+            dy,
+            dz,
+            {},
+            true,
+            false,
+            false,
+        });
     };
 
-    auto create_derived = [&](const std::string& id,
-                              const std::string& source,
-                              int dx,
-                              int dy,
-                              int dz,
-                              bool invert_frames_horizontal) {
-        if (!ok) return;
-        nlohmann::json payload =
-            build_derived_movement_payload(id, source, frame_count, dx, dy, dz, invert_frames_horizontal);
-        if (!create_or_replace_animation_payload(id, payload)) {
-            ok = false;
-            return;
-        }
-        created_ids.push_back(id);
+    auto add_derived = [&](const std::string& id,
+                           const std::string& source_id,
+                           int dx,
+                           int dy,
+                           int dz,
+                           bool invert_frames_horizontal,
+                           bool invert_frames_vertical) {
+        specs.push_back(DefaultAnimationSpec{
+            id,
+            dx,
+            dy,
+            dz,
+            source_id,
+            false,
+            invert_frames_horizontal,
+            invert_frames_vertical,
+        });
     };
+
+    const int x_seed_dx = base_faces_right ? d : -d;
+    const std::string x_seed_id = base_faces_right ? "right" : "left";
+    const std::string x_opposite_id = base_faces_right ? "left" : "right";
+    const int x_opposite_dx = -x_seed_dx;
 
     if (create_basic) {
-        create_file_based("left", -d, 0, 0);
-        create_file_based("right", d, 0, 0);
-        create_file_based("forward", 0, 0, -d);
-        create_file_based("backward", 0, 0, d);
+        add_seed(x_seed_id, x_seed_dx, 0, 0);
+        add_derived(x_opposite_id, x_seed_id, x_opposite_dx, 0, 0, true, false);
+
+        add_seed("up", 0, 0, -d);
+        add_derived("forward", "up", 0, 0, -d, false, false);
+        add_derived("down", "up", 0, 0, d, false, true);
+        add_derived("backward", "up", 0, 0, d, false, true);
     }
 
     if (create_diagonals) {
-        create_file_based("forward_left", -d, 0, -d);
-        create_file_based("forward_right", d, 0, -d);
-        create_file_based("backward_left", -d, 0, d);
-        create_file_based("backward_right", d, 0, d);
+        const std::string seed_id = base_faces_right ? "forward_right" : "forward_left";
+        const std::string opposite_forward_id = base_faces_right ? "forward_left" : "forward_right";
+        const std::string same_backward_id = base_faces_right ? "backward_right" : "backward_left";
+        const std::string opposite_backward_id = base_faces_right ? "backward_left" : "backward_right";
+        add_seed(seed_id, x_seed_dx, 0, -d);
+        add_derived(opposite_forward_id, seed_id, x_opposite_dx, 0, -d, true, false);
+        add_derived(same_backward_id, seed_id, x_seed_dx, 0, d, false, true);
+        add_derived(opposite_backward_id, seed_id, x_opposite_dx, 0, d, true, true);
     }
 
     if (create_elevation) {
-        create_file_based("up", 0, d, 0);
-        create_file_based("down", 0, -d, 0);
+        add_seed("elevation_up", 0, d, 0);
+        add_derived("elevation_down", "elevation_up", 0, -d, 0, false, true);
     }
 
     if (create_3d_diagonals) {
-        create_file_based("up_forward_left", -d, d, -d);
-        create_derived("up_forward_right", "up_forward_left", d, d, -d, true);
-        create_derived("up_backward_left", "up_forward_left", -d, d, d, false);
-        create_derived("up_backward_right", "up_forward_left", d, d, d, true);
+        const std::string seed_id = base_faces_right ? "up_forward_right" : "up_forward_left";
+        add_seed(seed_id, x_seed_dx, d, -d);
 
-        create_file_based("down_forward_left", -d, -d, -d);
-        create_derived("down_forward_right", "down_forward_left", d, -d, -d, true);
-        create_derived("down_backward_left", "down_forward_left", -d, -d, d, false);
-        create_derived("down_backward_right", "down_forward_left", d, -d, d, true);
+        const std::array<int, 2> y_signs{1, -1};
+        const std::array<int, 2> z_signs{-1, 1};
+        const std::array<int, 2> x_signs{-1, 1};
+        for (const int y_sign : y_signs) {
+            for (const int z_sign : z_signs) {
+                for (const int x_sign : x_signs) {
+                    const int target_dx = x_sign * d;
+                    const int target_dy = y_sign * d;
+                    const int target_dz = z_sign * d;
+                    const std::string id =
+                        std::string(y_sign > 0 ? "up" : "down") + "_" +
+                        (z_sign < 0 ? "forward" : "backward") + "_" +
+                        (x_sign < 0 ? "left" : "right");
+                    if (id == seed_id) {
+                        continue;
+                    }
+                    const bool flip_h = target_dx != x_seed_dx;
+                    const bool flip_v = target_dy != d || target_dz != -d;
+                    add_derived(id, seed_id, target_dx, target_dy, target_dz, flip_h, flip_v);
+                }
+            }
+        }
+    }
+
+    auto find_source = [&](const std::string& id) -> const DefaultAnimationSpec* {
+        for (const auto& spec : specs) {
+            if (spec.id == id) {
+                return &spec;
+            }
+        }
+        return nullptr;
+    };
+
+    auto create_file_based = [&](const DefaultAnimationSpec& spec) {
+        if (!ok) return;
+        if (!copy_frames_to_animation_folder(spec.id, base_frames)) {
+            ok = false;
+            return;
+        }
+        nlohmann::json payload = build_file_sourced_movement_payload(
+            spec.id,
+            frame_count,
+            spec.dx,
+            spec.dy,
+            spec.dz,
+            default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
+        if (!create_or_replace_animation_payload(spec.id, payload)) {
+            ok = false;
+            return;
+        }
+        created_ids.push_back(spec.id);
+    };
+
+    auto create_derived = [&](const DefaultAnimationSpec& spec) {
+        if (!ok) return;
+        const DefaultAnimationSpec* source = find_source(spec.source_id);
+        if (!source) {
+            ok = false;
+            return;
+        }
+        nlohmann::json payload = build_derived_movement_payload(
+            spec.id,
+            spec.source_id,
+            frame_count,
+            source->dx != 0 && source->dx != spec.dx,
+            source->dy != 0 && source->dy != spec.dy,
+            source->dz != 0 && source->dz != spec.dz,
+            spec.invert_frames_horizontal,
+            spec.invert_frames_vertical,
+            default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
+        if (!create_or_replace_animation_payload(spec.id, payload)) {
+            ok = false;
+            return;
+        }
+        created_ids.push_back(spec.id);
+    };
+
+    for (const auto& spec : specs) {
+        if (spec.folder_sourced) {
+            create_file_based(spec);
+        } else {
+            create_derived(spec);
+        }
     }
 
     if (!ok) {

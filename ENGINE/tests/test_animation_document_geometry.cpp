@@ -234,7 +234,7 @@ TEST_CASE("AnimationDocument normalizes missing on_end and strips legacy loop") 
     CHECK_FALSE(payload->contains("loop"));
 }
 
-TEST_CASE("AnimationDocument disables vertical frame inversion during payload coercion") {
+TEST_CASE("AnimationDocument preserves vertical frame inversion for animation-sourced payloads") {
     animation_editor::AnimationDocument document;
     const nlohmann::json manifest = {
         {"animations",
@@ -270,7 +270,7 @@ TEST_CASE("AnimationDocument disables vertical frame inversion during payload co
     REQUIRE(derived_payload.has_value());
     REQUIRE(derived_payload->is_object());
     CHECK((*derived_payload)["invert_frames_horizontal"] == true);
-    CHECK((*derived_payload)["invert_frames_vertical"] == false);
+    CHECK((*derived_payload)["invert_frames_vertical"] == true);
 
     const auto folder_payload = document.animation_payload_json("folder_anim");
     REQUIRE(folder_payload.has_value());

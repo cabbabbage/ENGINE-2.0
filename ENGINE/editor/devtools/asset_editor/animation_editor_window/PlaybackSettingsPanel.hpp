@@ -41,6 +41,7 @@ class PlaybackSettingsPanel {
         bool reverse_source = false;
         bool inherit_data = true;
         bool invert_frames_horizontal = false;
+        bool invert_frames_vertical = false;
         bool locked = false;
         bool random_start = false;
 
@@ -51,6 +52,7 @@ class PlaybackSettingsPanel {
                    reverse_source == other.reverse_source &&
                    inherit_data == other.inherit_data &&
                    invert_frames_horizontal == other.invert_frames_horizontal &&
+                   invert_frames_vertical == other.invert_frames_vertical &&
                    locked == other.locked &&
                    random_start == other.random_start;
         }
@@ -86,6 +88,7 @@ class PlaybackSettingsPanel {
     std::unique_ptr<DMCheckbox> invert_y_checkbox_;
     std::unique_ptr<DMCheckbox> invert_z_checkbox_;
     std::unique_ptr<DMCheckbox> invert_frames_horizontal_checkbox_;
+    std::unique_ptr<DMCheckbox> invert_frames_vertical_checkbox_;
     std::unique_ptr<DMCheckbox> inherit_geometry_checkbox_;
     std::unique_ptr<DMCheckbox> reverse_checkbox_;
     std::unique_ptr<DMCheckbox> locked_checkbox_;

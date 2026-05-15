@@ -310,6 +310,7 @@ TEST_CASE("AnimationLoader applies sourced movement inversion only when inherit_
         {"invert_x", true},
         {"invert_y", false},
         {"invert_z", true},
+        {"invert_frames_vertical", true},
     };
 
     SDL_Texture* base_sprite = nullptr;
@@ -346,6 +347,7 @@ TEST_CASE("AnimationLoader applies sourced movement inversion only when inherit_
     CHECK(info.animations["derived_inherit"].total_dx == -4);
     CHECK(info.animations["derived_inherit"].total_dy == -1);
     CHECK(info.animations["derived_inherit"].total_dz == -6);
+    CHECK(info.animations["derived_inherit"].invert_frames_vertical);
 
     nlohmann::json local_payload = {
         {"source", {{"kind", "animation"}, {"path", "base"}, {"name", "base"}}},

@@ -1119,7 +1119,7 @@ void AnimationLoader::load(Animation& animation,
         animation.invert_z = read_bool_field_like(anim_json, "invert_z", false);
         animation.reverse_source = read_bool_field_like(anim_json, "reverse_source", false);
         animation.invert_frames_horizontal = read_bool_field_like(anim_json, "invert_frames_horizontal", false);
-        animation.invert_frames_vertical = false;
+        animation.invert_frames_vertical = read_bool_field_like(anim_json, "invert_frames_vertical", false);
         if (animation.source.kind == "animation" && anim_json.contains("derived_modifiers") &&
             anim_json["derived_modifiers"].is_object()) {
                 const auto& modifiers = anim_json["derived_modifiers"];
@@ -1342,7 +1342,7 @@ void AnimationLoader::load(Animation& animation,
                         if (src_anim.has_frames()) {
                                 AnimationCloner::Options opts{};
                                 opts.flip_horizontal = animation.invert_frames_horizontal;
-                                opts.flip_vertical   = false;
+                                opts.flip_vertical   = animation.invert_frames_vertical;
                                 opts.reverse_frames  = animation.reverse_source;
                                 opts.invert_movement_x = animation.inherit_data && animation.invert_x;
                                 opts.invert_movement_y = animation.inherit_data && animation.invert_y;
@@ -1384,7 +1384,7 @@ void AnimationLoader::load(Animation& animation,
                 if (src_it != info.animations.end() && !src_it->second.frame_cache_.empty()) {
                         AnimationCloner::Options opts{};
                         opts.flip_horizontal = animation.invert_frames_horizontal;
-                        opts.flip_vertical   = false;
+                        opts.flip_vertical   = animation.invert_frames_vertical;
                         opts.reverse_frames  = animation.reverse_source;
                         opts.invert_movement_x = animation.inherit_data && animation.invert_x;
                         opts.invert_movement_y = animation.inherit_data && animation.invert_y;
@@ -1409,7 +1409,7 @@ void AnimationLoader::load(Animation& animation,
                         (void)it;
                 }
         }
-        if (movement_enabled) {
+        if (movement_enabled && !(use_inherited_data && reused_animation)) {
                 animation.movement_paths_ = authored_movement_paths;
         } else if (!movement_enabled) {
                 animation.movement_paths_.assign(1, {});

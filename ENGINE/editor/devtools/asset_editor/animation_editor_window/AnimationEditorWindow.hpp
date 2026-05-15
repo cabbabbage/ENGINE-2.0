@@ -111,6 +111,7 @@ class AnimationEditorWindow {
     bool ensure_animation_exists(const std::string& animation_id);
     bool create_or_replace_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
     std::optional<int> parse_defaults_total_movement() const;
+    bool defaults_base_faces_right() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
     bool remove_animation_source_folder(const std::string& animation_id, std::string& error_message);
@@ -119,14 +120,17 @@ class AnimationEditorWindow {
                                                        int frame_count,
                                                        int dx,
                                                        int dy,
-                                                       int dz) const;
+                                                       int dz,
+                                                       const std::vector<std::string>& tags) const;
     nlohmann::json build_derived_movement_payload(const std::string& animation_id,
                                                   const std::string& source_animation_id,
                                                   int frame_count,
-                                                  int dx,
-                                                  int dy,
-                                                  int dz,
-                                                  bool invert_frames_horizontal) const;
+                                                  bool invert_x,
+                                                  bool invert_y,
+                                                  bool invert_z,
+                                                  bool invert_frames_horizontal,
+                                                  bool invert_frames_vertical,
+                                                  const std::vector<std::string>& tags) const;
     void create_animation_via_prompt();
     void reload_document();
     void process_auto_save();
@@ -178,6 +182,7 @@ class AnimationEditorWindow {
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_elevation_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_3d_diagonals_checkbox_;
+    std::unique_ptr<DMCheckbox> defaults_base_faces_right_checkbox_;
     std::unique_ptr<DMTextBox> defaults_distance_box_;
     std::unique_ptr<DMButton> defaults_base_frames_button_;
     std::unique_ptr<DMButton> defaults_create_button_;

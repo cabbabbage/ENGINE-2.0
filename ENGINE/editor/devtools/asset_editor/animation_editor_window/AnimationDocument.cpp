@@ -183,7 +183,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload["invert_z"] = derived_invert_z;
     if (derived_from_animation) {
         payload["invert_frames_horizontal"] = read_bool_field_like(payload, "invert_frames_horizontal", false);
-        payload["invert_frames_vertical"] = false;
+        payload["invert_frames_vertical"] = read_bool_field_like(payload, "invert_frames_vertical", false);
     } else {
         payload.erase("invert_frames_horizontal");
         payload.erase("invert_frames_vertical");

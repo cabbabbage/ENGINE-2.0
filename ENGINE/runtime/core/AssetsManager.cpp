@@ -839,6 +839,8 @@ void Assets::clear_live_dynamic_assets() {
     (void)delete_live_dynamic_assets_now(assets_to_delete);
     live_dynamic_asset_keys_.clear();
     live_dynamic_spawned_keys_.clear();
+    live_dynamic_null_keys_.clear();
+    live_dynamic_selector_scan_state_.clear();
 }
 
 std::size_t Assets::delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete) {
@@ -3131,6 +3133,12 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
         return a * b;
     };
+    const auto sat_add_u64 = [](std::uint64_t a, std::uint64_t b) {
+        if (a > std::numeric_limits<std::uint64_t>::max() - b) {
+            return std::numeric_limits<std::uint64_t>::max();
+        }
+        return a + b;
+    };
 
     const int render_min_world_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
     const int render_max_world_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
@@ -3349,6 +3357,13 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     };
 
     auto sync_selector = [&](const LiveDynamicSelector& selector) -> bool {
+        struct ScanRegion {
+            std::int64_t min_x = 0;
+            std::int64_t max_x = -1;
+            std::int64_t min_z = 0;
+            std::int64_t max_z = -1;
+        };
+
         if (selector.candidates.empty() || selector.grid_resolution <= 0) {
             return true;
         }
@@ -3375,9 +3390,91 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             return true;
         }
 
-        const std::uint64_t scan_cells_x = inclusive_count_u64(scan_min_x64, scan_max_x64);
-        const std::uint64_t scan_cells_z = inclusive_count_u64(scan_min_z64, scan_max_z64);
-        const std::uint64_t total_scan_cells = sat_mul_u64(scan_cells_x, scan_cells_z);
+        const LiveDynamicSelectorStateKey selector_state_key{
+            selector.mode,
+            resolution,
+            selector.spawn_id};
+        const auto prior_state_it = live_dynamic_selector_scan_state_.find(selector_state_key);
+        const bool have_prior_state =
+            prior_state_it != live_dynamic_selector_scan_state_.end() &&
+            prior_state_it->second.valid;
+
+        const auto selector_key_matches = [&](const LiveDynamicPointKey& key) {
+            return key.mode == selector.mode &&
+                   key.grid_resolution == resolution &&
+                   key.spawn_id == selector.spawn_id;
+        };
+        for (auto it = live_dynamic_null_keys_.begin(); it != live_dynamic_null_keys_.end();) {
+            if (selector_key_matches(*it) &&
+                (it->grid_x < scan_min_x64 || it->grid_x > scan_max_x64 ||
+                 it->grid_z < scan_min_z64 || it->grid_z > scan_max_z64)) {
+                it = live_dynamic_null_keys_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        const auto append_region = [](std::vector<ScanRegion>& regions,
+                                      std::int64_t min_x,
+                                      std::int64_t max_x,
+                                      std::int64_t min_z,
+                                      std::int64_t max_z) {
+            if (min_x > max_x || min_z > max_z) {
+                return;
+            }
+            regions.push_back(ScanRegion{min_x, max_x, min_z, max_z});
+        };
+
+        std::vector<ScanRegion> scan_regions;
+        if (!have_prior_state) {
+            scan_regions.push_back(ScanRegion{scan_min_x64, scan_max_x64, scan_min_z64, scan_max_z64});
+        } else {
+            const LiveDynamicSelectorScanState& prior = prior_state_it->second;
+            append_region(scan_regions,
+                          scan_min_x64,
+                          scan_max_x64,
+                          scan_min_z64,
+                          std::min(scan_max_z64, static_cast<std::int64_t>(prior.min_z) - 1));
+            append_region(scan_regions,
+                          scan_min_x64,
+                          scan_max_x64,
+                          std::max(scan_min_z64, static_cast<std::int64_t>(prior.max_z) + 1),
+                          scan_max_z64);
+
+            const std::int64_t overlap_min_z =
+                std::max(scan_min_z64, static_cast<std::int64_t>(prior.min_z));
+            const std::int64_t overlap_max_z =
+                std::min(scan_max_z64, static_cast<std::int64_t>(prior.max_z));
+            if (overlap_min_z <= overlap_max_z) {
+                append_region(scan_regions,
+                              scan_min_x64,
+                              std::min(scan_max_x64, static_cast<std::int64_t>(prior.min_x) - 1),
+                              overlap_min_z,
+                              overlap_max_z);
+                append_region(scan_regions,
+                              std::max(scan_min_x64, static_cast<std::int64_t>(prior.max_x) + 1),
+                              scan_max_x64,
+                              overlap_min_z,
+                              overlap_max_z);
+            }
+        }
+
+        if (scan_regions.empty()) {
+            live_dynamic_selector_scan_state_[selector_state_key] =
+                LiveDynamicSelectorScanState{true,
+                                             static_cast<int>(scan_min_x64),
+                                             static_cast<int>(scan_max_x64),
+                                             static_cast<int>(scan_min_z64),
+                                             static_cast<int>(scan_max_z64)};
+            return true;
+        }
+
+        std::uint64_t total_scan_cells = 0;
+        for (const ScanRegion& region : scan_regions) {
+            const std::uint64_t region_cells_x = inclusive_count_u64(region.min_x, region.max_x);
+            const std::uint64_t region_cells_z = inclusive_count_u64(region.min_z, region.max_z);
+            total_scan_cells = sat_add_u64(total_scan_cells, sat_mul_u64(region_cells_x, region_cells_z));
+        }
 
         std::int64_t scan_stride = 1;
         if (total_scan_cells > static_cast<std::uint64_t>(scan_cell_cap)) {
@@ -3386,14 +3483,25 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                 static_cast<long double>(total_scan_cells) /
                 static_cast<long double>(scan_cell_cap);
             scan_stride = std::max<std::int64_t>(2, static_cast<std::int64_t>(std::ceil(std::sqrt(ratio))));
+            const auto sampled_cells_for_stride = [&](std::int64_t stride) {
+                std::uint64_t sampled_total = 0;
+                const std::uint64_t stride_u64 = static_cast<std::uint64_t>(std::max<std::int64_t>(1, stride));
+                for (const ScanRegion& region : scan_regions) {
+                    const std::uint64_t region_cells_x = inclusive_count_u64(region.min_x, region.max_x);
+                    const std::uint64_t region_cells_z = inclusive_count_u64(region.min_z, region.max_z);
+                    const std::uint64_t sampled_x =
+                        (region_cells_x + stride_u64 - std::uint64_t{1}) / stride_u64;
+                    const std::uint64_t sampled_z =
+                        (region_cells_z + stride_u64 - std::uint64_t{1}) / stride_u64;
+                    sampled_total = sat_add_u64(sampled_total, sat_mul_u64(sampled_x, sampled_z));
+                    if (sampled_total >= static_cast<std::uint64_t>(scan_cell_cap)) {
+                        break;
+                    }
+                }
+                return sampled_total;
+            };
             while (scan_stride < static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
-                const std::uint64_t sampled_x =
-                    (scan_cells_x + static_cast<std::uint64_t>(scan_stride) - 1) /
-                    static_cast<std::uint64_t>(scan_stride);
-                const std::uint64_t sampled_z =
-                    (scan_cells_z + static_cast<std::uint64_t>(scan_stride) - 1) /
-                    static_cast<std::uint64_t>(scan_stride);
-                if (sat_mul_u64(sampled_x, sampled_z) <= static_cast<std::uint64_t>(scan_cell_cap)) {
+                if (sampled_cells_for_stride(scan_stride) <= static_cast<std::uint64_t>(scan_cell_cap)) {
                     break;
                 }
                 ++scan_stride;
@@ -3401,80 +3509,91 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
 
         std::size_t scanned_cells = 0;
-        for (std::int64_t ix = scan_min_x64; ix <= scan_max_x64; ix += scan_stride) {
+        for (const ScanRegion& region : scan_regions) {
             bool should_break = false;
-            for (std::int64_t iz = scan_min_z64; iz <= scan_max_z64; iz += scan_stride) {
-                if (scanned_cells >= scan_cell_cap) {
-                    scan_cap_guard_hit = true;
-                    should_break = true;
+            for (std::int64_t ix = region.min_x; ix <= region.max_x; ix += scan_stride) {
+                for (std::int64_t iz = region.min_z; iz <= region.max_z; iz += scan_stride) {
+                    if (scanned_cells >= scan_cell_cap) {
+                        scan_cap_guard_hit = true;
+                        should_break = true;
+                        break;
+                    }
+                    ++scanned_cells;
+
+                    const LiveDynamicPointKey key{
+                        selector.mode,
+                        resolution,
+                        static_cast<int>(ix),
+                        static_cast<int>(iz),
+                        selector.spawn_id};
+                    if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
+                        live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
+                        continue;
+                    }
+
+                    const SDL_Point grid_vertex_world = vibble::grid::global_grid().index_to_world(
+                        static_cast<int>(ix),
+                        static_cast<int>(iz),
+                        resolution);
+                    const SDL_Point world_point = jittered_world_point(selector, key, grid_vertex_world);
+                    if (!in_world_bounds(world_point.x,
+                                         world_point.y,
+                                         spawn_min_world_x,
+                                         spawn_max_world_x,
+                                         spawn_min_world_z,
+                                         spawn_max_world_z)) {
+                        continue;
+                    }
+
+                    if (total_spawn_cap > 0 && live_dynamic_asset_keys_.size() >= total_spawn_cap) {
+                        total_spawn_cap_guard_hit = true;
+                        return false;
+                    }
+                    if (new_spawn_cap > 0 && new_spawns_this_frame >= new_spawn_cap) {
+                        frame_spawn_cap_guard_hit = true;
+                        return false;
+                    }
+
+                    bool inside_any_room = false;
+                    Room* owner = nullptr;
+                    if (selector.mode == LiveDynamicMode::InheritedMap) {
+                        owner = room_for_point(world_point, true, inside_any_room);
+                        if (!owner) {
+                            continue;
+                        }
+                    } else {
+                        (void)room_for_point(world_point, false, inside_any_room);
+                        if (!point_in_boundary_area(world_point, inside_any_room)) {
+                            continue;
+                        }
+                    }
+
+                    if (point_occupied(world_point, resolution)) {
+                        continue;
+                    }
+
+                    const LiveDynamicCandidate* candidate = pick_candidate(selector, key);
+                    if (!candidate || candidate->is_null) {
+                        live_dynamic_null_keys_.insert(key);
+                        continue;
+                    }
+                    const std::string owner_name = owner ? owner->room_name : map_id_;
+                    if (spawn_live_asset(selector, key, world_point, *candidate, owner_name)) {
+                        ++new_spawns_this_frame;
+                    }
+                }
+                if (should_break) {
                     break;
                 }
-                ++scanned_cells;
-
-                const LiveDynamicPointKey key{
-                    selector.mode,
-                    resolution,
-                    static_cast<int>(ix),
-                    static_cast<int>(iz),
-                    selector.spawn_id};
-                if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end()) {
-                    continue;
-                }
-
-                const SDL_Point grid_vertex_world = vibble::grid::global_grid().index_to_world(
-                    static_cast<int>(ix),
-                    static_cast<int>(iz),
-                    resolution);
-                const SDL_Point world_point = jittered_world_point(selector, key, grid_vertex_world);
-                if (!in_world_bounds(world_point.x,
-                                     world_point.y,
-                                     spawn_min_world_x,
-                                     spawn_max_world_x,
-                                     spawn_min_world_z,
-                                     spawn_max_world_z)) {
-                    continue;
-                }
-
-                if (total_spawn_cap > 0 && live_dynamic_asset_keys_.size() >= total_spawn_cap) {
-                    total_spawn_cap_guard_hit = true;
-                    return false;
-                }
-                if (new_spawn_cap > 0 && new_spawns_this_frame >= new_spawn_cap) {
-                    frame_spawn_cap_guard_hit = true;
-                    return false;
-                }
-
-                bool inside_any_room = false;
-                Room* owner = nullptr;
-                if (selector.mode == LiveDynamicMode::InheritedMap) {
-                    owner = room_for_point(world_point, true, inside_any_room);
-                    if (!owner) {
-                        continue;
-                    }
-                } else {
-                    (void)room_for_point(world_point, false, inside_any_room);
-                    if (!point_in_boundary_area(world_point, inside_any_room)) {
-                        continue;
-                    }
-                }
-
-                if (point_occupied(world_point, resolution)) {
-                    continue;
-                }
-
-                const LiveDynamicCandidate* candidate = pick_candidate(selector, key);
-                if (!candidate || candidate->is_null) {
-                    continue;
-                }
-                const std::string owner_name = owner ? owner->room_name : map_id_;
-                if (spawn_live_asset(selector, key, world_point, *candidate, owner_name)) {
-                    ++new_spawns_this_frame;
-                }
-            }
-            if (should_break) {
-                break;
             }
         }
+
+        live_dynamic_selector_scan_state_[selector_state_key] =
+            LiveDynamicSelectorScanState{true,
+                                         static_cast<int>(scan_min_x64),
+                                         static_cast<int>(scan_max_x64),
+                                         static_cast<int>(scan_min_z64),
+                                         static_cast<int>(scan_max_z64)};
         return true;
     };
 

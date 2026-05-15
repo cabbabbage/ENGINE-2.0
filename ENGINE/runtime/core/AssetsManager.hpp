@@ -665,10 +665,46 @@ private:
         }
     };
 
+    struct LiveDynamicSelectorStateKey {
+        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
+        int grid_resolution = 0;
+        std::string spawn_id;
+
+        bool operator==(const LiveDynamicSelectorStateKey& other) const {
+            return mode == other.mode &&
+                   grid_resolution == other.grid_resolution &&
+                   spawn_id == other.spawn_id;
+        }
+    };
+
+    struct LiveDynamicSelectorStateKeyHash {
+        std::size_t operator()(const LiveDynamicSelectorStateKey& key) const {
+            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<int>{}(key.grid_resolution));
+            mix(std::hash<std::string>{}(key.spawn_id));
+            return seed;
+        }
+    };
+
+    struct LiveDynamicSelectorScanState {
+        bool valid = false;
+        int min_x = 0;
+        int max_x = -1;
+        int min_z = 0;
+        int max_z = -1;
+    };
+
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
     std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
     std::unordered_map<Asset*, LiveDynamicPointKey> live_dynamic_asset_keys_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_spawned_keys_;
+    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_null_keys_;
+    std::unordered_map<LiveDynamicSelectorStateKey,
+                       LiveDynamicSelectorScanState,
+                       LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
     int live_dynamic_preload_margin_world_px_ = 192;
     int live_dynamic_despawn_margin_world_px_ = 256;
     std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 8192;

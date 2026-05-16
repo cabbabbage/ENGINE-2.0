@@ -1595,7 +1595,18 @@ bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
 
     handle_button(add_button_, [this]() { create_animation_via_prompt(); });
     handle_button(controller_button_, [this]() { handle_controller_button_click(); });
-    handle_button(create_defaults_button_, [this]() { open_defaults_modal(); });
+    if (create_defaults_button_) {
+        const bool activated = create_defaults_button_->handle_event(e);
+        if (activated) {
+            // Opening this modal on button-down makes the action resilient to
+            // upstream consumers that may swallow the matching mouse-up event.
+            if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+                e.button.button == SDL_BUTTON_LEFT) {
+                open_defaults_modal();
+            }
+            consumed = true;
+        }
+    }
 
     return consumed;
 }

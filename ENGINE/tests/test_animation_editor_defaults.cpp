@@ -383,3 +383,20 @@ TEST_CASE("AnimationEditorWindow delete animation uses injectable SDL confirmati
     std::error_code ec;
     fs::remove_all(root, ec);
 }
+
+TEST_CASE("AnimationEditorWindow create defaults button opens modal on mouse down") {
+    animation_editor::AnimationEditorWindow window;
+    REQUIRE(window.create_defaults_button_ != nullptr);
+    window.create_defaults_button_->set_rect(SDL_Rect{20, 20, 170, DMButton::height()});
+    window.defaults_modal_visible_ = false;
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = 30;
+    down.button.y = 30;
+
+    const bool handled = window.handle_header_event(down);
+    CHECK(handled);
+    CHECK(window.defaults_modal_visible_);
+}

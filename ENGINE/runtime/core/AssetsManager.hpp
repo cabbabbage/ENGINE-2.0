@@ -741,12 +741,10 @@ private:
     double live_dynamic_sync_ema_ms_ = 0.0;
     bool live_dynamic_sync_ema_initialized_ = false;
     std::size_t max_total_live_dynamic_assets_ = 8000;
-    std::uint32_t last_live_dynamic_guard_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
     bool force_live_dynamic_sync_next_rebuild_ = true;
     bool last_live_dynamic_sync_bounds_valid_ = false;
     int last_live_dynamic_sync_bounds_min_x_ = 0;
     int last_live_dynamic_sync_bounds_max_x_ = 0;
     int last_live_dynamic_sync_bounds_min_z_ = 0;
     int last_live_dynamic_sync_bounds_max_z_ = 0;
-    std::uint32_t last_work_bounds_clamp_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
 };

@@ -3022,22 +3022,6 @@ world::GridBounds Assets::runtime_work_bounds_from_render_bounds(const world::Gr
     const int bounded_max_z = std::min(render_max_z, clamp_max_z);
 
     if (bounded_min_x <= bounded_max_x && bounded_min_z <= bounded_max_z) {
-        constexpr std::uint32_t kDynamicWorkBoundsWarningIntervalFrames = 120;
-        const bool should_log_clamp =
-            last_work_bounds_clamp_warning_frame_ == std::numeric_limits<std::uint32_t>::max() ||
-            (frame_id_ - last_work_bounds_clamp_warning_frame_) >= kDynamicWorkBoundsWarningIntervalFrames;
-        if ((bounded_min_x != render_min_x || bounded_max_x != render_max_x ||
-             bounded_min_z != render_min_z || bounded_max_z != render_max_z) &&
-            should_log_clamp) {
-            last_work_bounds_clamp_warning_frame_ = frame_id_;
-            vibble::log::warn("[DynamicWorkBounds] Clamped runtime bounds. frame=" +
-                              std::to_string(frame_id_) +
-                              " render_min=(" + std::to_string(render_min_x) + "," + std::to_string(render_min_z) + ")" +
-                              " render_max=(" + std::to_string(render_max_x) + "," + std::to_string(render_max_z) + ")" +
-                              " clamped_min=(" + std::to_string(bounded_min_x) + "," + std::to_string(bounded_min_z) + ")" +
-                              " clamped_max=(" + std::to_string(bounded_max_x) + "," + std::to_string(bounded_max_z) + ")" +
-                              " radius=" + std::to_string(work_radius));
-        }
         return world::GridBounds::from_min_max(
             world::GridPoint::make_virtual(bounded_min_x,
                                            render_bounds.min.world_y(),
@@ -3189,10 +3173,6 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         std::max<std::size_t>(1, max_live_dynamic_new_spawns_per_frame_));
     const std::size_t total_spawn_cap = max_total_live_dynamic_assets_;
     std::size_t new_spawns_this_frame = 0;
-    std::size_t throttled_selector_count = 0;
-    bool scan_cap_guard_hit = false;
-    bool frame_spawn_cap_guard_hit = false;
-    bool total_spawn_cap_guard_hit = false;
 
     auto jittered_world_point = [&](const LiveDynamicSelector& selector,
                                     const LiveDynamicPointKey& key,
@@ -3439,7 +3419,6 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             }
             int scan_stride = 1;
             if (total_scan_cells > static_cast<std::uint64_t>(scan_cell_cap)) {
-                ++throttled_selector_count;
                 const long double ratio =
                     static_cast<long double>(total_scan_cells) /
                     static_cast<long double>(scan_cell_cap);
@@ -3576,7 +3555,6 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                             world_point.y,
                             static_cast<std::uint64_t>(dx * dx + dz * dz)});
                         if (points.size() >= scan_cell_cap) {
-                            scan_cap_guard_hit = true;
                             return points;
                         }
                     }
@@ -3643,15 +3621,12 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         std::size_t scanned_cells = 0;
         while (state.pending_cursor < state.pending_points.size()) {
             if (scanned_cells >= scan_cell_cap) {
-                scan_cap_guard_hit = true;
                 break;
             }
             if (total_spawn_cap > 0 && live_dynamic_asset_keys_.size() >= total_spawn_cap) {
-                total_spawn_cap_guard_hit = true;
                 break;
             }
             if (new_spawn_cap > 0 && new_spawns_this_frame >= new_spawn_cap) {
-                frame_spawn_cap_guard_hit = true;
                 break;
             }
             ++scanned_cells;
@@ -3728,29 +3703,6 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                 break;
             }
         }
-    }
-
-    constexpr std::uint32_t kLiveDynamicGuardWarningIntervalFrames = 120;
-    const bool should_log_live_dynamic_guard =
-        last_live_dynamic_guard_warning_frame_ == std::numeric_limits<std::uint32_t>::max() ||
-        (frame_id_ - last_live_dynamic_guard_warning_frame_) >= kLiveDynamicGuardWarningIntervalFrames;
-    if ((throttled_selector_count > 0 ||
-         scan_cap_guard_hit ||
-         frame_spawn_cap_guard_hit ||
-         total_spawn_cap_guard_hit) &&
-        should_log_live_dynamic_guard) {
-        last_live_dynamic_guard_warning_frame_ = frame_id_;
-        vibble::log::warn("[LiveDynamicSpawn] Guard engaged. frame=" +
-                          std::to_string(frame_id_) +
-                          " throttled_selectors=" + std::to_string(throttled_selector_count) +
-                          " scan_cap_hit=" + (scan_cap_guard_hit ? std::string("1") : std::string("0")) +
-                          " frame_spawn_cap_hit=" + (frame_spawn_cap_guard_hit ? std::string("1") : std::string("0")) +
-                          " total_spawn_cap_hit=" + (total_spawn_cap_guard_hit ? std::string("1") : std::string("0")) +
-                          " new_spawns=" + std::to_string(new_spawns_this_frame) +
-                          " live_dynamic_assets=" + std::to_string(live_dynamic_asset_keys_.size()) +
-                          " scan_cap=" + std::to_string(scan_cell_cap) +
-                          " frame_spawn_cap=" + std::to_string(new_spawn_cap) +
-                          " total_spawn_cap=" + std::to_string(total_spawn_cap));
     }
 
     const std::uint64_t perf_end = SDL_GetPerformanceCounter();

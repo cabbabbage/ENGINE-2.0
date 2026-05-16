@@ -958,7 +958,7 @@ void Assets::rebuild_live_dynamic_selectors() {
     const auto catalog = library_.all();
     const auto append_selector = [&](const nlohmann::json& selector_json,
                                      LiveDynamicMode mode,
-                                     std::vector<LiveDynamicSelector>& out) {
+                                     std::vector<LiveDynamicCompiledSelector>& out) {
         if (!selector_json.is_object()) {
             return;
         }
@@ -971,7 +971,7 @@ void Assets::rebuild_live_dynamic_selectors() {
             return;
         }
 
-        LiveDynamicSelector selector;
+        LiveDynamicCompiledSelector selector;
         selector.mode = mode;
         selector.spawn_id = selector_json.value("spawn_id", std::string{});
         if (selector.spawn_id.empty()) {
@@ -987,6 +987,11 @@ void Assets::rebuild_live_dynamic_selectors() {
         selector.grid_resolution = vibble::grid::clamp_resolution(raw_resolution);
         const int selector_jitter = selector_json.value("jitter", map_grid_settings_.position_jitter_px);
         selector.jitter_px = std::clamp(selector_jitter, 0, 2048);
+        selector.require_inherited_room_owner = (mode == LiveDynamicMode::InheritedMap);
+        selector.allow_boundary_owner = (mode == LiveDynamicMode::BoundaryArea);
+        selector.spawn_id_hash = std::hash<std::string>{}(selector.spawn_id);
+        selector.jitter_seed = mix_u64(std::hash<std::string>{}(map_id_), selector.spawn_id_hash);
+        selector.candidate_seed = mix_u64(selector.jitter_seed, 0x9e3779b97f4a7c15ULL);
 
         for (const nlohmann::json& candidate_json : *candidates_json) {
             const double weight = live_dynamic_candidate_weight(candidate_json);
@@ -1019,11 +1024,20 @@ void Assets::rebuild_live_dynamic_selectors() {
         }
 
         if (!selector.candidates.empty()) {
+            selector.cumulative_candidate_weights.reserve(selector.candidates.size());
+            double cumulative = 0.0;
+            for (const LiveDynamicCandidate& candidate : selector.candidates) {
+                if (candidate.weight > 0.0 && std::isfinite(candidate.weight)) {
+                    cumulative += candidate.weight;
+                }
+                selector.cumulative_candidate_weights.push_back(cumulative);
+            }
+            selector.total_candidate_weight = cumulative;
             out.push_back(std::move(selector));
         }
     };
 
-    auto append_section = [&](const char* key, LiveDynamicMode mode, std::vector<LiveDynamicSelector>& out) {
+    auto append_section = [&](const char* key, LiveDynamicMode mode, std::vector<LiveDynamicCompiledSelector>& out) {
         auto section_it = live_it->find(key);
         if (section_it == live_it->end() || !section_it->is_array()) {
             return;
@@ -3198,14 +3212,13 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     const std::size_t total_spawn_cap = max_total_live_dynamic_assets_;
     const double target_ms = std::max(0.1, live_dynamic_sync_budget_target_ms_);
 
-    auto jittered_world_point = [&](const LiveDynamicSelector& selector,
+    auto jittered_world_point = [&](const LiveDynamicCompiledSelector& selector,
                                     const LiveDynamicPointKey& key,
                                     SDL_Point base_point) {
         if (selector.jitter_px <= 0) {
             return base_point;
         }
-        std::uint64_t seed = std::hash<std::string>{}(map_id_);
-        seed = mix_u64(seed, std::hash<std::string>{}(selector.spawn_id));
+        std::uint64_t seed = selector.jitter_seed;
         seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.grid_x)));
         seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.grid_z)));
         seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<int>(key.mode)));
@@ -3228,39 +3241,24 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     auto owner_anchor_world_point = [](const LiveDynamicPointKey& key) {
         return vibble::grid::global_grid().index_to_world(key.grid_x, key.grid_z, key.grid_resolution);
     };
-    auto pick_candidate = [&](const LiveDynamicSelector& selector,
+    auto pick_candidate = [&](const LiveDynamicCompiledSelector& selector,
                               const LiveDynamicPointKey& key) -> const LiveDynamicCandidate* {
-        double total_weight = 0.0;
-        for (const LiveDynamicCandidate& candidate : selector.candidates) {
-            if (candidate.weight > 0.0 && std::isfinite(candidate.weight)) {
-                total_weight += candidate.weight;
-            }
-        }
-        if (total_weight <= 0.0) {
+        if (selector.total_candidate_weight <= 0.0 || selector.candidates.empty()) {
             return nullptr;
         }
-
-        std::uint64_t hash = std::hash<std::string>{}(map_id_);
-        hash = mix_u64(hash, std::hash<std::string>{}(key.spawn_id));
+        std::uint64_t hash = selector.candidate_seed;
+        hash = mix_u64(hash, selector.spawn_id_hash);
         hash = mix_u64(hash, static_cast<std::uint64_t>(key.grid_resolution));
         hash = mix_u64(hash, static_cast<std::uint32_t>(key.grid_x));
         hash = mix_u64(hash, static_cast<std::uint32_t>(key.grid_z));
         hash = mix_u64(hash, static_cast<std::uint64_t>(key.mode));
-        const double roll = live_dynamic_unit_interval(hash) * total_weight;
-
-        double cumulative = 0.0;
-        const LiveDynamicCandidate* fallback = nullptr;
-        for (const LiveDynamicCandidate& candidate : selector.candidates) {
-            if (candidate.weight <= 0.0 || !std::isfinite(candidate.weight)) {
-                continue;
-            }
-            fallback = &candidate;
-            cumulative += candidate.weight;
-            if (roll < cumulative) {
-                return &candidate;
+        const double roll = live_dynamic_unit_interval(hash) * selector.total_candidate_weight;
+        for (std::size_t i = 0; i < selector.cumulative_candidate_weights.size(); ++i) {
+            if (roll < selector.cumulative_candidate_weights[i]) {
+                return &selector.candidates[i];
             }
         }
-        return fallback;
+        return &selector.candidates.back();
     };
 
     auto for_each_live_dynamic_area = [&](const Room* room, const auto& fn) {
@@ -3355,11 +3353,11 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     };
 
     std::unordered_map<LiveDynamicSelectorStateKey,
-                       const LiveDynamicSelector*,
+                       const LiveDynamicCompiledSelector*,
                        LiveDynamicSelectorStateKeyHash> selector_lookup;
     selector_lookup.reserve(live_dynamic_boundary_selectors_.size() + live_dynamic_inherited_selectors_.size());
 
-    const auto add_selector_frontier = [&](const LiveDynamicSelector& selector) {
+    const auto add_selector_frontier = [&](const LiveDynamicCompiledSelector& selector) {
         if (selector.candidates.empty() || selector.grid_resolution <= 0) {
             return;
         }
@@ -3437,10 +3435,10 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     };
 
     const std::uint64_t stage_c_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    for (const LiveDynamicSelector& selector : live_dynamic_boundary_selectors_) {
+        for (const LiveDynamicCompiledSelector& selector : live_dynamic_boundary_selectors_) {
         add_selector_frontier(selector);
     }
-    for (const LiveDynamicSelector& selector : live_dynamic_inherited_selectors_) {
+    for (const LiveDynamicCompiledSelector& selector : live_dynamic_inherited_selectors_) {
         add_selector_frontier(selector);
     }
     if (instrumentation_enabled) {
@@ -3456,7 +3454,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             if (selector_it == selector_lookup.end() || !selector_it->second) {
                 continue;
             }
-            const LiveDynamicSelector& selector = *selector_it->second;
+            const LiveDynamicCompiledSelector& selector = *selector_it->second;
             const int max_radius = std::max(std::max(std::abs(state.min_x - state.center_x), std::abs(state.max_x - state.center_x)),
                                             std::max(std::abs(state.min_z - state.center_z), std::abs(state.max_z - state.center_z)));
             while (state.ring_radius <= max_radius) {
@@ -3570,12 +3568,17 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
 
         const LiveDynamicRoomCacheKey room_key{key.mode, key.grid_resolution, key.grid_x, key.grid_z};
+        const auto selector_it = selector_lookup.find({key.mode, key.grid_resolution, key.spawn_id});
+        const bool require_inherited = selector_it != selector_lookup.end() && selector_it->second &&
+                                       selector_it->second->require_inherited_room_owner;
+        const bool allow_boundary = selector_it != selector_lookup.end() && selector_it->second &&
+                                    selector_it->second->allow_boundary_owner;
         auto room_it = ctx.room_cache.find(room_key);
         if (room_it == ctx.room_cache.end()) {
             const SDL_Point world_point{owner_anchor_world_x, owner_anchor_world_z};
             bool inside_any_room = false;
             Room* owner = nullptr;
-            if (key.mode == LiveDynamicMode::InheritedMap) {
+            if (require_inherited) {
                 owner = room_for_point(world_point, true, inside_any_room);
             } else {
                 (void)room_for_point(world_point, false, inside_any_room);
@@ -3586,13 +3589,13 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             if (owner) {
                 value.owner_name = owner->room_name;
             }
-            if (key.mode == LiveDynamicMode::BoundaryArea) {
+            if (allow_boundary) {
                 value.boundary_allowed = point_in_boundary_area(world_point, inside_any_room);
             }
             room_it = ctx.room_cache.emplace(room_key, std::move(value)).first;
         }
         const LiveDynamicRoomCacheValue& room_value = room_it->second;
-        if (key.mode == LiveDynamicMode::InheritedMap) {
+        if (require_inherited) {
             if (!room_value.has_owner) {
                 ++ctx.rejected_room;
                 return SpawnPointEvalResult::room_rejected;
@@ -3654,7 +3657,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         if (selector_it == selector_lookup.end() || !selector_it->second) {
             continue;
         }
-        const LiveDynamicSelector& selector = *selector_it->second;
+        const LiveDynamicCompiledSelector& selector = *selector_it->second;
         const LiveDynamicCandidate* candidate = pick_candidate(selector, key);
         if (!candidate || candidate->is_null) {
             live_dynamic_null_keys_.insert(key);

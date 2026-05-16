@@ -572,7 +572,7 @@ private:
         std::size_t new_spawn_cap = 0;
         std::size_t total_spawn_cap = 0;
         LiveDynamicQualifiedPointOrder point_order{};
-        std::unordered_map<LiveDynamicSelectorStateKey, const LiveDynamicSelector*, LiveDynamicSelectorStateKeyHash> selector_lookup;
+        std::unordered_map<LiveDynamicSelectorStateKey, const LiveDynamicCompiledSelector*, LiveDynamicSelectorStateKeyHash> selector_lookup;
         std::unordered_map<world::GridKey, bool, world::GridKeyHash> occupancy_cache;
         std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> room_cache;
         std::size_t qualified_this_frame = 0;
@@ -683,6 +683,20 @@ private:
         int jitter_px = 0;
         LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
         std::vector<LiveDynamicCandidate> candidates;
+    };
+    struct LiveDynamicCompiledSelector {
+        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
+        int grid_resolution = 0;
+        int jitter_px = 0;
+        std::string spawn_id;
+        std::size_t spawn_id_hash = 0;
+        std::uint64_t jitter_seed = 0;
+        std::uint64_t candidate_seed = 0;
+        bool require_inherited_room_owner = false;
+        bool allow_boundary_owner = false;
+        std::vector<LiveDynamicCandidate> candidates;
+        std::vector<double> cumulative_candidate_weights;
+        double total_candidate_weight = 0.0;
     };
 
     struct LiveDynamicPointKey {
@@ -845,8 +859,8 @@ private:
         std::string owner_name;
     };
 
-    std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
-    std::vector<LiveDynamicSelector> live_dynamic_inherited_selectors_;
+    std::vector<LiveDynamicCompiledSelector> live_dynamic_boundary_selectors_;
+    std::vector<LiveDynamicCompiledSelector> live_dynamic_inherited_selectors_;
     std::unordered_map<Asset*, LiveDynamicPointKey> live_dynamic_asset_keys_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_spawned_keys_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_null_keys_;

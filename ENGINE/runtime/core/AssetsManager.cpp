@@ -3200,10 +3200,6 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             static_cast<std::int64_t>(std::numeric_limits<int>::max())));
         return jittered;
     };
-    auto owner_anchor_world_point = [](const LiveDynamicPointKey& key) {
-        return vibble::grid::global_grid().index_to_world(key.grid_x, key.grid_z, key.grid_resolution);
-    };
-
     auto pick_candidate = [&](const LiveDynamicSelector& selector,
                               const LiveDynamicPointKey& key) -> const LiveDynamicCandidate* {
         double total_weight = 0.0;

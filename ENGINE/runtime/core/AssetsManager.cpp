@@ -3200,6 +3200,9 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             static_cast<std::int64_t>(std::numeric_limits<int>::max())));
         return jittered;
     };
+    auto owner_anchor_world_point = [](const LiveDynamicPointKey& key) {
+        return vibble::grid::global_grid().index_to_world(key.grid_x, key.grid_z, key.grid_resolution);
+    };
     auto pick_candidate = [&](const LiveDynamicSelector& selector,
                               const LiveDynamicPointKey& key) -> const LiveDynamicCandidate* {
         double total_weight = 0.0;
@@ -3472,6 +3475,66 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                     it = live_dynamic_null_keys_.erase(it);
                 } else {
                     ++it;
+                }
+            }
+
+            const auto key_outside_current_selector_scan = [&](const LiveDynamicPointKey& key) {
+                if (key.mode != selector.mode ||
+                    key.grid_resolution != resolution ||
+                    key.spawn_id != selector.spawn_id) {
+                    return false;
+                }
+                if (key.grid_x < scan_min_x || key.grid_x > scan_max_x ||
+                    key.grid_z < scan_min_z || key.grid_z > scan_max_z) {
+                    return true;
+                }
+                const SDL_Point owner_anchor = owner_anchor_world_point(key);
+                return !in_world_bounds(owner_anchor.x,
+                                        owner_anchor.y,
+                                        spawn_min_world_x,
+                                        spawn_max_world_x,
+                                        spawn_min_world_z,
+                                        spawn_max_world_z);
+            };
+
+            for (auto it = live_dynamic_qualification_queue_.begin();
+                 it != live_dynamic_qualification_queue_.end();) {
+                if (key_outside_current_selector_scan(it->point_key)) {
+                    live_dynamic_pending_qualification_keys_.erase(it->point_key);
+                    it = live_dynamic_qualification_queue_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            for (auto it = live_dynamic_spawn_queue_.begin();
+                 it != live_dynamic_spawn_queue_.end();) {
+                if (key_outside_current_selector_scan(it->point_key)) {
+                    live_dynamic_pending_spawn_keys_.erase(it->point_key);
+                    it = live_dynamic_spawn_queue_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            if (!state.frontier_strips.empty()) {
+                for (auto strip_it = state.frontier_strips.begin();
+                     strip_it != state.frontier_strips.end();) {
+                    auto& points = strip_it->ordered_points;
+                    points.erase(
+                        std::remove_if(points.begin(),
+                                       points.end(),
+                                       [&](const LiveDynamicQualifiedPoint& point) {
+                                           return key_outside_current_selector_scan(point.point_key);
+                                       }),
+                        points.end());
+                    if (strip_it->cursor > points.size()) {
+                        strip_it->cursor = points.size();
+                    }
+                    if (points.empty() || strip_it->cursor >= points.size()) {
+                        strip_it = state.frontier_strips.erase(strip_it);
+                    } else {
+                        ++strip_it;
+                    }
                 }
             }
 

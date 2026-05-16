@@ -60,6 +60,15 @@ nlohmann::json make_live_selector(const std::string& spawn_id,
     });
 }
 
+nlohmann::json make_live_selector_with_jitter(const std::string& spawn_id,
+                                              const std::string& asset_name,
+                                              int grid_resolution,
+                                              int jitter_px) {
+    nlohmann::json selector = make_live_selector(spawn_id, asset_name, grid_resolution);
+    selector["jitter"] = jitter_px;
+    return selector;
+}
+
 nlohmann::json make_null_live_selector(const std::string& spawn_id, int grid_resolution) {
     return nlohmann::json::object({
         {"spawn_id", spawn_id},
@@ -450,6 +459,43 @@ TEST_CASE("Live dynamic throttled scans remain deterministic across repeated syn
     CHECK(collect_live_asset_pointers(*assets) == first_ptrs);
 }
 
+TEST_CASE("Live dynamic jittered selectors keep stable ownership across small bounds shifts") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 6}, {"position_jitter_px", 0}})},
+        {"camera_settings",
+         nlohmann::json::object({
+             {"live_dynamic_preload_margin_world_px", 0},
+             {"live_dynamic_despawn_margin_world_px", 0}
+         })},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector_with_jitter("spn-jitter-stable", "normal_asset", 6, 32)})}
+         })}
+    });
+
+    auto assets = make_assets(library, manifest, make_rect_area("Spawn", 2048), make_room_data(true));
+    assets->test_set_live_dynamic_frame_caps(1024, 256);
+    assets->test_reset_live_dynamic_budget_state();
+
+    const world::GridBounds first_bounds = world::GridBounds::from_xywh(-512, -512, 1024, 1024, 0, 6);
+    const world::GridBounds second_bounds = world::GridBounds::from_xywh(-504, -504, 1024, 1024, 0, 6);
+
+    assets->test_sync_live_dynamic_assets_for_bounds(first_bounds);
+    const auto first_ptrs = collect_live_asset_pointers(*assets);
+    REQUIRE_FALSE(first_ptrs.empty());
+
+    assets->test_sync_live_dynamic_assets_for_bounds(second_bounds);
+    const auto second_ptrs = collect_live_asset_pointers(*assets);
+    for (const Asset* ptr : first_ptrs) {
+        CHECK(second_ptrs.find(ptr) != second_ptrs.end());
+    }
+}
+
 TEST_CASE("Live dynamic delta frontier persists and drains without full interior rescans") {
     AssetLibrary library(false);
     library.add_asset("normal_asset", make_asset_metadata());
@@ -486,6 +532,45 @@ TEST_CASE("Live dynamic delta frontier persists and drains without full interior
     for (const Asset* ptr : first_ptrs) {
         CHECK(second_ptrs.find(ptr) != second_ptrs.end());
     }
+}
+
+TEST_CASE("Live dynamic moving bounds do not cause runaway pending queue growth") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 6}, {"position_jitter_px", 0}})},
+        {"camera_settings",
+         nlohmann::json::object({
+             {"live_dynamic_preload_margin_world_px", 0},
+             {"live_dynamic_despawn_margin_world_px", 0}
+         })},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector_with_jitter("spn-moving-bounds", "normal_asset", 6, 32)})}
+         })}
+    });
+
+    auto assets = make_assets(library, manifest, make_rect_area("Spawn", 4096), make_room_data(true));
+    assets->test_set_live_dynamic_frame_caps(96, 24);
+    assets->test_reset_live_dynamic_budget_state();
+
+    const world::GridBounds bounds_a = world::GridBounds::from_xywh(-768, -768, 1536, 1536, 0, 6);
+    const world::GridBounds bounds_b = world::GridBounds::from_xywh(-736, -736, 1536, 1536, 0, 6);
+
+    assets->test_sync_live_dynamic_assets_for_bounds(bounds_a);
+    const std::size_t baseline_pending = assets->test_live_dynamic_pending_point_count();
+    REQUIRE(baseline_pending > 0);
+
+    std::size_t max_pending_seen = baseline_pending;
+    for (int i = 0; i < 8; ++i) {
+        assets->test_sync_live_dynamic_assets_for_bounds((i % 2 == 0) ? bounds_b : bounds_a);
+        max_pending_seen = std::max(max_pending_seen, assets->test_live_dynamic_pending_point_count());
+    }
+
+    CHECK(max_pending_seen <= baseline_pending * 2);
 }
 
 TEST_CASE("Live dynamic near-first traversal prioritizes center over far corners under low spawn cap") {

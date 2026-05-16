@@ -26246,7 +26246,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 9252.0,
+          "bounding_extent": 7748.5,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -26269,7 +26269,7 @@
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 21310.0,
+          "ring_radius": 19806.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -26305,9 +26305,9 @@
             }
           },
           "display_color": [
-            36,
-            185,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26394,9 +26394,9 @@
             }
           },
           "display_color": [
-            31,
-            32,
-            204,
+            242,
+            159,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26453,9 +26453,9 @@
             }
           },
           "display_color": [
-            242,
-            167,
-            85,
+            31,
+            129,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26512,9 +26512,9 @@
             }
           },
           "display_color": [
-            204,
-            31,
-            111,
+            239,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26601,9 +26601,9 @@
             }
           },
           "display_color": [
-            195,
-            36,
-            242,
+            31,
+            32,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26665,9 +26665,9 @@
             }
           },
           "display_color": [
-            51,
-            115,
-            204,
+            199,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -26765,9 +26765,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            221,
+            204,
+            31,
+            119,
             255
           ],
           "edge_smoothness": 101,
@@ -27115,9 +27115,9 @@
             }
           },
           "display_color": [
-            242,
-            242,
-            85,
+            204,
+            113,
+            31,
             255
           ],
           "edge_smoothness": 96,

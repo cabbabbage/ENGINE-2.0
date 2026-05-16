@@ -711,6 +711,8 @@ private:
         LiveDynamicPointKey point_key;
         int grid_x = 0;
         int grid_z = 0;
+        int owner_anchor_world_x = 0;
+        int owner_anchor_world_z = 0;
         int world_x = 0;
         int world_z = 0;
         std::uint64_t dist2 = 0;
@@ -735,6 +737,8 @@ private:
     struct LiveDynamicSpawnTask {
         LiveDynamicSelectorStateKey selector_key;
         LiveDynamicPointKey point_key;
+        int owner_anchor_world_x = 0;
+        int owner_anchor_world_z = 0;
         int world_x = 0;
         int world_z = 0;
         std::uint64_t dist2 = 0;
@@ -820,7 +824,9 @@ private:
                        LiveDynamicSelectorScanState,
                        LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
     std::multiset<LiveDynamicQualifiedPoint, LiveDynamicQualifiedPointOrder> live_dynamic_qualification_queue_;
+    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_qualification_keys_;
     std::multiset<LiveDynamicSpawnTask, LiveDynamicSpawnTaskOrder> live_dynamic_spawn_queue_;
+    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_spawn_keys_;
     int live_dynamic_preload_margin_world_px_ = 192;
     int live_dynamic_despawn_margin_world_px_ = 256;
     std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;

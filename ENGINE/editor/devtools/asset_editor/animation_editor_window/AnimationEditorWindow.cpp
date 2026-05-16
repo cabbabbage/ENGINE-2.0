@@ -2494,26 +2494,93 @@ void AnimationEditorWindow::handle_create_defaults() {
 }
 
 void AnimationEditorWindow::create_animation_via_prompt() {
-    std::optional<std::string> input;
-    if (text_prompt_override_) {
-        input = text_prompt_override_("Create Animation", "Enter new animation identifier", "animation");
-    } else {
-        input = devmode::dialogs::prompt_text(parent_window_, "Create Animation", "Enter new animation identifier", "animation");
+    if (!document_) {
+        set_status_message("Animation document is unavailable.", 180);
+        return;
     }
-    if (!input) return;
-    std::string name = normalize_animation_name(*input);
 
-    if (name.empty()) {
+    auto prompt_name = [&](const std::string& default_value) -> std::optional<std::string> {
+        if (text_prompt_override_) {
+            return text_prompt_override_("Create Animation", "Enter new animation identifier", default_value);
+        }
+        return devmode::dialogs::prompt_text(parent_window_, "Create Animation", "Enter new animation identifier", default_value);
+    };
+
+    std::optional<std::string> input = prompt_name("animation");
+    if (!input) {
         return;
     }
-    if (animation_editor::strings::is_reserved_animation_name(name)) {
-        set_status_message("Animation name '" + name + "' is reserved.", 240);
+
+    for (;;) {
+        std::string name = normalize_animation_name(*input);
+        if (name.empty()) {
+            set_status_message("Animation name is invalid after normalization.", 240);
+            return;
+        }
+        if (animation_editor::strings::is_reserved_animation_name(name)) {
+            set_status_message("Animation name '" + name + "' is reserved.", 240);
+            return;
+        }
+
+        const auto before_ids = document_->animation_ids();
+        const bool conflict =
+            std::find(before_ids.begin(), before_ids.end(), name) != before_ids.end();
+        if (conflict) {
+            std::optional<int> choice;
+            if (choice_prompt_override_) {
+                choice = choice_prompt_override_("Animation Exists",
+                                                 "Animation '" + name + "' already exists.",
+                                                 {0, 1, 2});
+            } else {
+                choice = devmode::dialogs::show_choice(
+                    parent_window_,
+                    "Animation Exists",
+                    "Animation '" + name + "' already exists.",
+                    {
+                        devmode::dialogs::DialogButton{0, "Rename", true, false, false},
+                        devmode::dialogs::DialogButton{1, "Cancel", false, true, false},
+                        devmode::dialogs::DialogButton{2, "Open Existing", false, false, false},
+                    },
+                    devmode::dialogs::MessageIcon::Warning);
+            }
+            if (!choice || *choice == 1) {
+                set_status_message("Create animation cancelled.", 150);
+                return;
+            }
+            if (*choice == 2) {
+                select_animation(std::make_optional(name), false);
+                refresh_panels_after_load();
+                set_status_message("Opened existing animation '" + name + "'.", 240);
+                return;
+            }
+            input = prompt_name(name + "_2");
+            if (!input) {
+                set_status_message("Create animation cancelled.", 150);
+                return;
+            }
+            continue;
+        }
+
+        const auto create_result = document_->create_animation(name);
+        const auto after_ids = document_->animation_ids();
+        const bool inserted =
+            std::find(after_ids.begin(), after_ids.end(), name) != after_ids.end();
+        if (create_result == AnimationDocument::CreateAnimationResult::Created && inserted) {
+            preview_provider_->invalidate_all();
+            select_animation(std::make_optional(name), false);
+            refresh_panels_after_load();
+            set_status_message("Created animation '" + name + "'.", 240);
+        } else if (create_result == AnimationDocument::CreateAnimationResult::AlreadyExists) {
+            set_status_message("Animation '" + name + "' already exists.", 240);
+        } else if (create_result == AnimationDocument::CreateAnimationResult::InvalidName) {
+            set_status_message("Animation name '" + name + "' is invalid.", 240);
+        } else if (create_result == AnimationDocument::CreateAnimationResult::Created && !inserted) {
+            set_status_message("Animation create failed verification for '" + name + "'.", 260);
+        } else {
+            set_status_message("Failed to create animation '" + name + "'.", 240);
+        }
         return;
     }
-    document_->create_animation(name);
-    preview_provider_->invalidate_all();
-    select_animation(std::make_optional(name), false);
-    set_status_message("Created animation '" + name + "'.", 240);
 }
 
 void AnimationEditorWindow::reload_document() {

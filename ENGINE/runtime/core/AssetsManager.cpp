@@ -841,6 +841,8 @@ void Assets::clear_live_dynamic_assets() {
     live_dynamic_spawned_keys_.clear();
     live_dynamic_null_keys_.clear();
     live_dynamic_selector_scan_state_.clear();
+    live_dynamic_qualification_queue_.clear();
+    live_dynamic_spawn_queue_.clear();
     last_live_dynamic_sync_bounds_valid_ = false;
 }
 
@@ -3062,11 +3064,22 @@ bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& wo
         last_live_dynamic_sync_bounds_min_z_ != min_z ||
         last_live_dynamic_sync_bounds_max_z_ != max_z;
 
-    bool pending_selector_work = false;
-    for (const auto& [_, state] : live_dynamic_selector_scan_state_) {
-        if (state.valid && state.pending_cursor < state.pending_points.size()) {
-            pending_selector_work = true;
-            break;
+    bool pending_selector_work = !live_dynamic_qualification_queue_.empty() ||
+                                 !live_dynamic_spawn_queue_.empty();
+    if (!pending_selector_work) {
+        for (const auto& [_, state] : live_dynamic_selector_scan_state_) {
+            if (!state.valid) {
+                continue;
+            }
+            for (const LiveDynamicFrontierStrip& strip : state.frontier_strips) {
+                if (strip.cursor < strip.ordered_points.size()) {
+                    pending_selector_work = true;
+                    break;
+                }
+            }
+            if (pending_selector_work) {
+                break;
+            }
         }
     }
 
@@ -3784,12 +3797,17 @@ void Assets::test_set_live_dynamic_frame_caps(std::size_t scan_cap, std::size_t 
 }
 
 std::size_t Assets::test_live_dynamic_pending_point_count() const {
-    std::size_t total = 0;
+    std::size_t total = live_dynamic_qualification_queue_.size() + live_dynamic_spawn_queue_.size();
     for (const auto& [_, state] : live_dynamic_selector_scan_state_) {
-        if (!state.valid || state.pending_cursor >= state.pending_points.size()) {
+        if (!state.valid) {
             continue;
         }
-        total += state.pending_points.size() - state.pending_cursor;
+        for (const LiveDynamicFrontierStrip& strip : state.frontier_strips) {
+            if (strip.cursor >= strip.ordered_points.size()) {
+                continue;
+            }
+            total += strip.ordered_points.size() - strip.cursor;
+        }
     }
     return total;
 }

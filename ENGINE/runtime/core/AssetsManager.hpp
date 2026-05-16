@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -16,6 +17,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <limits>
+#include <set>
 #include <utility>
 #include <string>
 #include <vector>
@@ -702,15 +704,68 @@ private:
         int max_x = -1;
         int min_z = 0;
         int max_z = -1;
-        int stride = 1;
     };
 
-    struct LiveDynamicPendingPoint {
+    struct LiveDynamicQualifiedPoint {
+        LiveDynamicSelectorStateKey selector_key;
+        LiveDynamicPointKey point_key;
         int grid_x = 0;
         int grid_z = 0;
         int world_x = 0;
         int world_z = 0;
         std::uint64_t dist2 = 0;
+    };
+
+    struct LiveDynamicQualifiedPointOrder {
+        bool operator()(const LiveDynamicQualifiedPoint& a, const LiveDynamicQualifiedPoint& b) const {
+            if (a.dist2 != b.dist2) return a.dist2 < b.dist2;
+            if (a.grid_x != b.grid_x) return a.grid_x < b.grid_x;
+            if (a.grid_z != b.grid_z) return a.grid_z < b.grid_z;
+            if (a.point_key.spawn_id != b.point_key.spawn_id) return a.point_key.spawn_id < b.point_key.spawn_id;
+            if (a.point_key.mode != b.point_key.mode) {
+                return static_cast<int>(a.point_key.mode) < static_cast<int>(b.point_key.mode);
+            }
+            if (a.point_key.grid_resolution != b.point_key.grid_resolution) {
+                return a.point_key.grid_resolution < b.point_key.grid_resolution;
+            }
+            return false;
+        }
+    };
+
+    struct LiveDynamicSpawnTask {
+        LiveDynamicSelectorStateKey selector_key;
+        LiveDynamicPointKey point_key;
+        int world_x = 0;
+        int world_z = 0;
+        std::uint64_t dist2 = 0;
+        std::string owner_name;
+        std::string asset_name;
+        std::shared_ptr<AssetInfo> info;
+    };
+
+    struct LiveDynamicSpawnTaskOrder {
+        bool operator()(const LiveDynamicSpawnTask& a, const LiveDynamicSpawnTask& b) const {
+            if (a.dist2 != b.dist2) return a.dist2 < b.dist2;
+            if (a.point_key.grid_x != b.point_key.grid_x) return a.point_key.grid_x < b.point_key.grid_x;
+            if (a.point_key.grid_z != b.point_key.grid_z) return a.point_key.grid_z < b.point_key.grid_z;
+            if (a.point_key.spawn_id != b.point_key.spawn_id) return a.point_key.spawn_id < b.point_key.spawn_id;
+            if (a.point_key.mode != b.point_key.mode) {
+                return static_cast<int>(a.point_key.mode) < static_cast<int>(b.point_key.mode);
+            }
+            if (a.point_key.grid_resolution != b.point_key.grid_resolution) {
+                return a.point_key.grid_resolution < b.point_key.grid_resolution;
+            }
+            return false;
+        }
+    };
+
+    struct LiveDynamicFrontierStrip {
+        int min_x = 0;
+        int max_x = -1;
+        int min_z = 0;
+        int max_z = -1;
+        std::vector<LiveDynamicQualifiedPoint> ordered_points;
+        std::size_t cursor = 0;
     };
 
     struct LiveDynamicSelectorScanState {
@@ -719,8 +774,41 @@ private:
         int max_x = -1;
         int min_z = 0;
         int max_z = -1;
-        std::vector<LiveDynamicPendingPoint> pending_points;
-        std::size_t pending_cursor = 0;
+        std::deque<LiveDynamicFrontierStrip> frontier_strips;
+    };
+
+    struct LiveDynamicRoomCacheKey {
+        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
+        int grid_resolution = 0;
+        int grid_x = 0;
+        int grid_z = 0;
+
+        bool operator==(const LiveDynamicRoomCacheKey& other) const {
+            return mode == other.mode &&
+                   grid_resolution == other.grid_resolution &&
+                   grid_x == other.grid_x &&
+                   grid_z == other.grid_z;
+        }
+    };
+
+    struct LiveDynamicRoomCacheKeyHash {
+        std::size_t operator()(const LiveDynamicRoomCacheKey& key) const {
+            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<int>{}(key.grid_resolution));
+            mix(std::hash<int>{}(key.grid_x));
+            mix(std::hash<int>{}(key.grid_z));
+            return seed;
+        }
+    };
+
+    struct LiveDynamicRoomCacheValue {
+        bool inside_any_room = false;
+        bool boundary_allowed = false;
+        bool has_owner = false;
+        std::string owner_name;
     };
 
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
@@ -731,6 +819,8 @@ private:
     std::unordered_map<LiveDynamicSelectorStateKey,
                        LiveDynamicSelectorScanState,
                        LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
+    std::multiset<LiveDynamicQualifiedPoint, LiveDynamicQualifiedPointOrder> live_dynamic_qualification_queue_;
+    std::multiset<LiveDynamicSpawnTask, LiveDynamicSpawnTaskOrder> live_dynamic_spawn_queue_;
     int live_dynamic_preload_margin_world_px_ = 192;
     int live_dynamic_despawn_margin_world_px_ = 256;
     std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;

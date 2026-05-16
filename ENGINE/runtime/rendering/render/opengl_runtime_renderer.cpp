@@ -603,13 +603,9 @@ bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
         static_cast<int>(std::lround(std::log2(static_cast<double>(grid_step)))));
     SDL_Point center_world = overlay_context.snapped_floor_xz;
     if (!std::isfinite(overlay_context.exact_floor_xz.x) || !std::isfinite(overlay_context.exact_floor_xz.y)) {
-        const SDL_FPoint center_world_f =
-            camera.screen_to_map(SDL_Point{static_cast<int>(target_width / 2u), static_cast<int>(target_height / 2u)});
-        center_world = grid.snap_to_vertex(
-            SDL_Point{
-                static_cast<int>(std::lround(center_world_f.x)),
-                static_cast<int>(std::lround(center_world_f.y))},
-            overlay_resolution);
+        // No valid cursor-projected floor point available for this frame.
+        // Skip drawing instead of anchoring to a misleading fallback location.
+        return true;
     }
     const SDL_Point center_index = grid.world_to_index(center_world, overlay_resolution);
 
@@ -1297,7 +1293,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     const Assets::DevGridOverlayContext dev_grid_overlay_context = assets_->dev_grid_overlay_context();
     if (assets_->dev_grid_overlay_enabled() &&
-        dev_grid_overlay_context.kind != Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint) {
+        dev_grid_overlay_context.kind == Assets::DevGridOverlayKind::FloorMouseCentered) {
         std::vector<GpuSpriteDrawPacket> floor_grid_overlay_draws{};
         if (!opengl_runtime_renderer_detail::build_dev_floor_grid_overlay_draw_packets(
                 camera,

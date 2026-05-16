@@ -67,7 +67,9 @@ public:
     struct DevGridOverlayContext {
         DevGridOverlayKind kind = DevGridOverlayKind::FloorMouseCentered;
         float target_world_z = 0.0f;
-        SDL_FPoint exact_floor_xz{0.0f, 0.0f};
+        SDL_FPoint exact_floor_xz{
+            std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::quiet_NaN()};
         SDL_Point snapped_floor_xz{0, 0};
         bool has_selected_point_center = false;
     };

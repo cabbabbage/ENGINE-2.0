@@ -3143,10 +3143,14 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
 
     std::vector<Asset*> assets_to_delete;
     assets_to_delete.reserve(live_dynamic_asset_keys_.size());
-    for (const auto& [asset, _] : live_dynamic_asset_keys_) {
+    for (const auto& [asset, key] : live_dynamic_asset_keys_) {
+        const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(
+            key.grid_x,
+            key.grid_z,
+            key.grid_resolution);
         if (!asset || asset->dead ||
-            !in_world_bounds(asset->world_x(),
-                             asset->world_z(),
+            !in_world_bounds(owner_anchor.x,
+                             owner_anchor.y,
                              keep_min_world_x,
                              keep_max_world_x,
                              keep_min_world_z,
@@ -3195,6 +3199,9 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             static_cast<std::int64_t>(std::numeric_limits<int>::min()),
             static_cast<std::int64_t>(std::numeric_limits<int>::max())));
         return jittered;
+    };
+    auto owner_anchor_world_point = [](const LiveDynamicPointKey& key) {
+        return vibble::grid::global_grid().index_to_world(key.grid_x, key.grid_z, key.grid_resolution);
     };
 
     auto pick_candidate = [&](const LiveDynamicSelector& selector,
@@ -3344,13 +3351,13 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
             SDL_Point{scan_bounds.max.world_x(), scan_bounds.max.world_z()}, resolution);
         const int scan_min_x = clamp_i64_to_int(
-            std::min<std::int64_t>(min_index.x, max_index.x) - std::int64_t{1});
+            std::min<std::int64_t>(min_index.x, max_index.x));
         const int scan_max_x = clamp_i64_to_int(
-            std::max<std::int64_t>(min_index.x, max_index.x) + std::int64_t{1});
+            std::max<std::int64_t>(min_index.x, max_index.x));
         const int scan_min_z = clamp_i64_to_int(
-            std::min<std::int64_t>(min_index.y, max_index.y) - std::int64_t{1});
+            std::min<std::int64_t>(min_index.y, max_index.y));
         const int scan_max_z = clamp_i64_to_int(
-            std::max<std::int64_t>(min_index.y, max_index.y) + std::int64_t{1});
+            std::max<std::int64_t>(min_index.y, max_index.y));
         if (scan_min_x > scan_max_x || scan_min_z > scan_max_z) {
             return;
         }
@@ -3407,29 +3414,33 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                         iz,
                         selector.spawn_id};
                     if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
-                        live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
+                        live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end() ||
+                        live_dynamic_pending_qualification_keys_.find(key) != live_dynamic_pending_qualification_keys_.end() ||
+                        live_dynamic_pending_spawn_keys_.find(key) != live_dynamic_pending_spawn_keys_.end()) {
                         continue;
                     }
                     const SDL_Point grid_vertex_world =
                         vibble::grid::global_grid().index_to_world(ix, iz, resolution);
-                    const SDL_Point world_point = jittered_world_point(selector, key, grid_vertex_world);
-                    if (!in_world_bounds(world_point.x,
-                                         world_point.y,
+                    if (!in_world_bounds(grid_vertex_world.x,
+                                         grid_vertex_world.y,
                                          spawn_min_world_x,
                                          spawn_max_world_x,
                                          spawn_min_world_z,
                                          spawn_max_world_z)) {
                         continue;
                     }
+                    const SDL_Point world_point = jittered_world_point(selector, key, grid_vertex_world);
                     const std::int64_t dx =
-                        static_cast<std::int64_t>(world_point.x) - static_cast<std::int64_t>(boundary_center_world.x);
+                        static_cast<std::int64_t>(grid_vertex_world.x) - static_cast<std::int64_t>(boundary_center_world.x);
                     const std::int64_t dz =
-                        static_cast<std::int64_t>(world_point.y) - static_cast<std::int64_t>(boundary_center_world.y);
+                        static_cast<std::int64_t>(grid_vertex_world.y) - static_cast<std::int64_t>(boundary_center_world.y);
                     strip.ordered_points.push_back(LiveDynamicQualifiedPoint{
                         selector_state_key,
                         key,
                         ix,
                         iz,
+                        grid_vertex_world.x,
+                        grid_vertex_world.y,
                         world_point.x,
                         world_point.y,
                         static_cast<std::uint64_t>(dx * dx + dz * dz)});
@@ -3569,10 +3580,16 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
 
         LiveDynamicFrontierStrip& strip = best_state->frontier_strips.front();
-        const LiveDynamicQualifiedPoint next_point = strip.ordered_points[strip.cursor++];
-        live_dynamic_qualification_queue_.insert(next_point);
+        while (strip.cursor < strip.ordered_points.size()) {
+            const LiveDynamicQualifiedPoint next_point = strip.ordered_points[strip.cursor++];
+            if (live_dynamic_pending_qualification_keys_.insert(next_point.point_key).second) {
+                live_dynamic_qualification_queue_.insert(next_point);
+                pop_exhausted_front(*best_state);
+                return true;
+            }
+        }
         pop_exhausted_front(*best_state);
-        return true;
+        return false;
     };
 
     std::unordered_map<world::GridKey, bool, world::GridKeyHash> occupancy_cache;
@@ -3597,6 +3614,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         const auto queue_it = live_dynamic_qualification_queue_.begin();
         const LiveDynamicQualifiedPoint point = *queue_it;
         live_dynamic_qualification_queue_.erase(queue_it);
+        live_dynamic_pending_qualification_keys_.erase(point.point_key);
         ++qualified_this_frame;
 
         const LiveDynamicPointKey& key = point.point_key;
@@ -3604,8 +3622,8 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
             continue;
         }
-        if (!in_world_bounds(point.world_x,
-                             point.world_z,
+        if (!in_world_bounds(point.owner_anchor_world_x,
+                             point.owner_anchor_world_z,
                              spawn_min_world_x,
                              spawn_max_world_x,
                              spawn_min_world_z,
@@ -3614,9 +3632,9 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
 
         const world::GridPoint grid_point = world::GridPoint::make_virtual(
-            point.world_x,
+            point.owner_anchor_world_x,
             0,
-            point.world_z,
+            point.owner_anchor_world_z,
             key.grid_resolution);
         const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
         const auto occupied_it = occupancy_cache.find(occupancy_key);
@@ -3639,7 +3657,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             key.grid_z};
         auto room_it = room_cache.find(room_key);
         if (room_it == room_cache.end()) {
-            const SDL_Point world_point{point.world_x, point.world_z};
+            const SDL_Point world_point{point.owner_anchor_world_x, point.owner_anchor_world_z};
             bool inside_any_room = false;
             Room* owner = nullptr;
             if (key.mode == LiveDynamicMode::InheritedMap) {
@@ -3681,13 +3699,17 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         LiveDynamicSpawnTask task;
         task.selector_key = point.selector_key;
         task.point_key = key;
+        task.owner_anchor_world_x = point.owner_anchor_world_x;
+        task.owner_anchor_world_z = point.owner_anchor_world_z;
         task.world_x = point.world_x;
         task.world_z = point.world_z;
         task.dist2 = point.dist2;
         task.owner_name = (key.mode == LiveDynamicMode::InheritedMap) ? room_value.owner_name : map_id_;
         task.asset_name = candidate->asset_name;
         task.info = candidate->info;
-        live_dynamic_spawn_queue_.insert(std::move(task));
+        if (live_dynamic_pending_spawn_keys_.insert(key).second) {
+            live_dynamic_spawn_queue_.insert(std::move(task));
+        }
     }
 
     while (spawned_this_frame < new_spawn_cap) {
@@ -3704,14 +3726,15 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         const auto queue_it = live_dynamic_spawn_queue_.begin();
         const LiveDynamicSpawnTask task = *queue_it;
         live_dynamic_spawn_queue_.erase(queue_it);
+        live_dynamic_pending_spawn_keys_.erase(task.point_key);
 
         const LiveDynamicPointKey& key = task.point_key;
         if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
             live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
             continue;
         }
-        if (!in_world_bounds(task.world_x,
-                             task.world_z,
+        if (!in_world_bounds(task.owner_anchor_world_x,
+                             task.owner_anchor_world_z,
                              spawn_min_world_x,
                              spawn_max_world_x,
                              spawn_min_world_z,
@@ -3720,9 +3743,9 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
 
         const world::GridPoint grid_point = world::GridPoint::make_virtual(
-            task.world_x,
+            task.owner_anchor_world_x,
             0,
-            task.world_z,
+            task.owner_anchor_world_z,
             key.grid_resolution);
         const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
         const auto occupied_it = occupancy_cache.find(occupancy_key);

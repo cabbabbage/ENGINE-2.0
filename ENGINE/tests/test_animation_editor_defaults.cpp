@@ -386,15 +386,19 @@ TEST_CASE("AnimationEditorWindow delete animation uses injectable SDL confirmati
 
 TEST_CASE("AnimationEditorWindow create defaults button opens modal on mouse down") {
     animation_editor::AnimationEditorWindow window;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
     REQUIRE(window.create_defaults_button_ != nullptr);
-    window.create_defaults_button_->set_rect(SDL_Rect{20, 20, 170, DMButton::height()});
+    const SDL_Rect button_rect = window.create_defaults_button_->rect();
+    REQUIRE(button_rect.w > 0);
+    REQUIRE(button_rect.h > 0);
     window.defaults_modal_visible_ = false;
 
     SDL_Event down{};
     down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
     down.button.button = SDL_BUTTON_LEFT;
-    down.button.x = 30;
-    down.button.y = 30;
+    down.button.x = button_rect.x + 4;
+    down.button.y = button_rect.y + 4;
 
     const bool handled = window.handle_header_event(down);
     CHECK(handled);
@@ -482,11 +486,13 @@ TEST_CASE("AnimationEditorWindow defaults modal guard prevents locked state on i
     CHECK(window.defaults_modal_rect_.w == 0);
     CHECK(window.defaults_modal_rect_.h == 0);
 
-    SDL_Event move{};
-    move.type = SDL_EVENT_MOUSE_MOTION;
-    move.motion.x = button_rect.x + 8;
-    move.motion.y = button_rect.y + 8;
-    CHECK(window.handle_event(move));
+    SDL_Event retry_down{};
+    retry_down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    retry_down.button.button = SDL_BUTTON_LEFT;
+    retry_down.button.x = button_rect.x + 6;
+    retry_down.button.y = button_rect.y + 6;
+    CHECK(window.handle_event(retry_down));
+    CHECK_FALSE(window.defaults_modal_visible_);
 }
 
 TEST_CASE("AnimationEditorWindow add animation button activates on mouse down") {

@@ -1460,6 +1460,17 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         if (animation_editor_window_->handle_event(e)) {
             return true;
         }
+        if (pointer_event || wheel_event) {
+            SDL_Point p = pointer;
+            if (wheel_event) {
+                sdl_mouse_util::GetMouseState(&p.x, &p.y);
+            }
+            if (animation_editor_rect_.w > 0 &&
+                animation_editor_rect_.h > 0 &&
+                SDL_PointInRect(&p, &animation_editor_rect_)) {
+                return true;
+            }
+        }
     }
 
     if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {

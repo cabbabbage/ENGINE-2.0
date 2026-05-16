@@ -20482,6 +20482,15 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
 
     ctx.kind = Assets::DevGridOverlayKind::XYPlaneAtAssetDepth;
     ctx.target_world_z = static_cast<float>(target->world_z());
+    if (has_last_raw_mouse_world_) {
+        const int resolution = current_grid_resolution();
+        const SDL_Point snapped_floor_xz =
+            vibble::grid::global_grid().snap_to_vertex(last_raw_mouse_world_, resolution);
+        ctx.exact_floor_xz = SDL_FPoint{
+            static_cast<float>(last_raw_mouse_world_.x),
+            static_cast<float>(last_raw_mouse_world_.y)};
+        ctx.snapped_floor_xz = snapped_floor_xz;
+    }
 
     if (scroll_preview_floor_overlay_active_) {
         SDL_FPoint selected_world_xz{};

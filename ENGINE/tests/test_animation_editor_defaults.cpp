@@ -13,7 +13,9 @@
 
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationEditorWindow.hpp"
+#include "devtools/asset_editor/animation_editor_window/AnimationInspectorPanel.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationListContextMenu.hpp"
+#include "devtools/asset_editor/animation_editor_window/AnimationListPanel.hpp"
 
 namespace {
 
@@ -690,4 +692,156 @@ TEST_CASE("AnimationEditorWindow create defaults stops on source dependency vali
 
     CHECK(document->animation_ids().empty());
     CHECK_FALSE(fs::exists(root / "left"));
+}
+
+TEST_CASE("AnimationEditorWindow create_animation_via_prompt rejects invalid normalized names") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.configure_list_panel();
+    window.configure_inspector_panel();
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"   "};
+    };
+
+    const auto before_ids = document->animation_ids();
+    window.create_animation_via_prompt();
+    CHECK(document->animation_ids() == before_ids);
+    CHECK(window.status_message_.find("invalid") != std::string::npos);
+}
+
+TEST_CASE("AnimationEditorWindow create_animation_via_prompt rejects reserved names") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.configure_list_panel();
+    window.configure_inspector_panel();
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"loop"};
+    };
+
+    const auto before_ids = document->animation_ids();
+    window.create_animation_via_prompt();
+    CHECK(document->animation_ids() == before_ids);
+    CHECK(window.status_message_.find("reserved") != std::string::npos);
+}
+
+TEST_CASE("AnimationEditorWindow create_animation_via_prompt conflict cancel keeps existing state") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.configure_list_panel();
+    window.configure_inspector_panel();
+    REQUIRE(document->create_animation("idle") == animation_editor::AnimationDocument::CreateAnimationResult::Created);
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"idle"};
+    };
+    window.choice_prompt_override_ = [](const std::string&, const std::string&, const std::vector<int>&) {
+        return std::optional<int>{1};
+    };
+
+    const auto before_ids = document->animation_ids();
+    window.create_animation_via_prompt();
+    CHECK(document->animation_ids() == before_ids);
+    CHECK(window.status_message_.find("cancelled") != std::string::npos);
+}
+
+TEST_CASE("AnimationEditorWindow create_animation_via_prompt conflict open existing selects it") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.configure_list_panel();
+    window.configure_inspector_panel();
+    REQUIRE(document->create_animation("idle") == animation_editor::AnimationDocument::CreateAnimationResult::Created);
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"idle"};
+    };
+    window.choice_prompt_override_ = [](const std::string&, const std::string&, const std::vector<int>&) {
+        return std::optional<int>{2};
+    };
+
+    window.create_animation_via_prompt();
+    REQUIRE(window.selected_animation_id_.has_value());
+    CHECK(*window.selected_animation_id_ == "idle");
+    CHECK(window.inspector_panel_ != nullptr);
+    CHECK(window.inspector_panel_->debug_animation_id() == "idle");
+}
+
+TEST_CASE("AnimationEditorWindow create_animation_via_prompt conflict rename creates and selects renamed id") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.configure_list_panel();
+    window.configure_inspector_panel();
+    REQUIRE(document->create_animation("idle") == animation_editor::AnimationDocument::CreateAnimationResult::Created);
+
+    int prompt_calls = 0;
+    window.text_prompt_override_ = [&prompt_calls](const std::string&, const std::string&, const std::string&) {
+        ++prompt_calls;
+        if (prompt_calls == 1) {
+            return std::optional<std::string>{"idle"};
+        }
+        return std::optional<std::string>{"idle_2"};
+    };
+    window.choice_prompt_override_ = [](const std::string&, const std::string&, const std::vector<int>&) {
+        return std::optional<int>{0};
+    };
+
+    window.create_animation_via_prompt();
+    const auto ids = document->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "idle_2") != ids.end());
+    REQUIRE(window.selected_animation_id_.has_value());
+    CHECK(*window.selected_animation_id_ == "idle_2");
+    REQUIRE(window.list_panel_ != nullptr);
+    REQUIRE(window.inspector_panel_ != nullptr);
+    REQUIRE(window.list_panel_->debug_selected_animation_id().has_value());
+    CHECK(*window.list_panel_->debug_selected_animation_id() == "idle_2");
+    CHECK(window.inspector_panel_->debug_animation_id() == "idle_2");
+}
+
+TEST_CASE("AnimationEditorWindow create_animation_via_prompt successful create syncs selection and inspector immediately") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.configure_list_panel();
+    window.configure_inspector_panel();
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"jump"};
+    };
+
+    window.create_animation_via_prompt();
+
+    const auto ids = document->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "jump") != ids.end());
+    REQUIRE(window.selected_animation_id_.has_value());
+    CHECK(*window.selected_animation_id_ == "jump");
+    REQUIRE(window.list_panel_ != nullptr);
+    REQUIRE(window.inspector_panel_ != nullptr);
+    REQUIRE(window.list_panel_->debug_selected_animation_id().has_value());
+    CHECK(*window.list_panel_->debug_selected_animation_id() == "jump");
+    CHECK(window.inspector_panel_->debug_animation_id() == "jump");
+}
+
+TEST_CASE("AnimationEditorWindow create_animation_via_prompt create result error surfaces status") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    document->set_force_create_error_for_tests(true);
+    window.document_ = document;
+    window.configure_list_panel();
+    window.configure_inspector_panel();
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"error_anim"};
+    };
+
+    window.create_animation_via_prompt();
+    CHECK(window.status_message_.find("Failed to create animation") != std::string::npos);
+    const auto ids = document->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "error_anim") == ids.end());
 }

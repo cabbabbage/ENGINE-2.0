@@ -282,7 +282,7 @@ TEST_CASE("AnimationDocument preserves vertical frame inversion for animation-so
 TEST_CASE("AnimationDocument create_animation emits on_end without loop") {
     animation_editor::AnimationDocument document;
     document.load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, nullptr);
-    document.create_animation("swing");
+    CHECK(document.create_animation("swing") == animation_editor::AnimationDocument::CreateAnimationResult::Created);
 
     const auto payload = document.animation_payload_json("swing");
     REQUIRE(payload.has_value());
@@ -290,6 +290,19 @@ TEST_CASE("AnimationDocument create_animation emits on_end without loop") {
     CHECK(payload->contains("on_end"));
     CHECK((*payload)["on_end"] == "default");
     CHECK_FALSE(payload->contains("loop"));
+}
+
+TEST_CASE("AnimationDocument create_animation reports AlreadyExists InvalidName and Error") {
+    animation_editor::AnimationDocument document;
+    document.load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, nullptr);
+
+    CHECK(document.create_animation("jump") == animation_editor::AnimationDocument::CreateAnimationResult::Created);
+    CHECK(document.create_animation("jump") == animation_editor::AnimationDocument::CreateAnimationResult::AlreadyExists);
+    CHECK(document.create_animation("   ") == animation_editor::AnimationDocument::CreateAnimationResult::InvalidName);
+    CHECK(document.create_animation("loop") == animation_editor::AnimationDocument::CreateAnimationResult::InvalidName);
+
+    document.set_force_create_error_for_tests(true);
+    CHECK(document.create_animation("forced_error") == animation_editor::AnimationDocument::CreateAnimationResult::Error);
 }
 
 TEST_CASE("AnimationDocument canonicalizes animation tags and keeps local derived tags") {
@@ -503,5 +516,179 @@ TEST_CASE("AnimationEditorWindow immediately invalidates full asset cache on str
     CHECK(pending.empty());
 
     std::filesystem::remove_all(cache_dir, ec);
+    std::filesystem::remove_all(asset_dir, ec);
+}
+
+TEST_CASE("AnimationEditorWindow set_info diagnostics branch: manifest snapshot") {
+    const std::string asset_name = "diag_manifest_asset";
+    const std::filesystem::path asset_dir = std::filesystem::temp_directory_path() / "engine_diag_manifest_asset";
+    std::error_code ec;
+    std::filesystem::create_directories(asset_dir, ec);
+
+    const nlohmann::json anim_payload = {
+        {"source", {{"kind", "folder"}, {"path", "idle"}, {"name", ""}}},
+        {"number_of_frames", 1},
+        {"on_end", "default"},
+    };
+    const nlohmann::json asset_manifest = {
+        {"asset_name", asset_name},
+        {"asset_directory", asset_dir.generic_string()},
+        {"animations", {{"idle", anim_payload}}},
+        {"start", "idle"},
+    };
+    const nlohmann::json manifest_raw = {
+        {"assets", {{asset_name, asset_manifest}}},
+        {"maps", nlohmann::json::object()},
+    };
+    const std::filesystem::path manifest_path = std::filesystem::temp_directory_path() / "engine_diag_manifest.json";
+    auto loader = [manifest_raw]() {
+        manifest::ManifestData data;
+        data.raw = manifest_raw;
+        data.assets = manifest_raw.value("assets", nlohmann::json::object());
+        data.maps = manifest_raw.value("maps", nlohmann::json::object());
+        return data;
+    };
+    devmode::core::ManifestStore store(manifest_path, loader);
+
+    animation_editor::AnimationEditorWindow window;
+    window.set_manifest_store(&store);
+    auto info = std::make_shared<AssetInfo>(asset_name, asset_manifest);
+    window.set_info(info);
+
+    REQUIRE(window.selected_animation_id_.has_value());
+    CHECK(*window.selected_animation_id_ == "idle");
+    CHECK(window.document_->animation_ids().size() == 1);
+    CHECK(window.load_diagnostics_.snapshot_source_chosen == "manifest");
+    CHECK(window.load_diagnostics_.manifest_transaction_open_result == "opened");
+    CHECK(window.load_diagnostics_.animation_count_loaded == 1);
+    CHECK_FALSE(window.load_diagnostics_.seeded_default_applied);
+    CHECK(window.load_diagnostics_.parse_failures == 0);
+    CHECK(window.load_diagnostics_.normalization_failures >= 0);
+
+    std::filesystem::remove(manifest_path, ec);
+    std::filesystem::remove_all(asset_dir, ec);
+}
+
+TEST_CASE("AnimationEditorWindow set_info diagnostics captures parse failures from malformed manifest payloads") {
+    const std::string asset_name = "diag_parse_failure_asset";
+    const std::filesystem::path asset_dir = std::filesystem::temp_directory_path() / "engine_diag_parse_failure_asset";
+    std::error_code ec;
+    std::filesystem::create_directories(asset_dir, ec);
+
+    const nlohmann::json malformed_manifest = {
+        {"asset_name", asset_name},
+        {"asset_directory", asset_dir.generic_string()},
+        {"animations", {{"broken", "not_an_object"}}},
+    };
+    const nlohmann::json manifest_raw = {
+        {"assets", {{asset_name, malformed_manifest}}},
+        {"maps", nlohmann::json::object()},
+    };
+    const std::filesystem::path manifest_path = std::filesystem::temp_directory_path() / "engine_diag_parse_failure.json";
+    auto loader = [manifest_raw]() {
+        manifest::ManifestData data;
+        data.raw = manifest_raw;
+        data.assets = manifest_raw.value("assets", nlohmann::json::object());
+        data.maps = manifest_raw.value("maps", nlohmann::json::object());
+        return data;
+    };
+    devmode::core::ManifestStore store(manifest_path, loader);
+
+    animation_editor::AnimationEditorWindow window;
+    window.set_manifest_store(&store);
+    auto info = std::make_shared<AssetInfo>(asset_name, malformed_manifest);
+    window.set_info(info);
+
+    CHECK(window.load_diagnostics_.snapshot_source_chosen == "manifest");
+    CHECK(window.load_diagnostics_.parse_failures >= 1);
+    CHECK(window.load_diagnostics_.animation_count_loaded >= 1);
+
+    std::filesystem::remove(manifest_path, ec);
+    std::filesystem::remove_all(asset_dir, ec);
+}
+
+TEST_CASE("AnimationEditorWindow set_info diagnostics branch: asset metadata snapshot") {
+    const std::string asset_name = "diag_metadata_asset";
+    const std::filesystem::path asset_dir = std::filesystem::temp_directory_path() / "engine_diag_metadata_asset";
+    std::error_code ec;
+    std::filesystem::create_directories(asset_dir, ec);
+
+    const nlohmann::json asset_manifest = {
+        {"asset_name", asset_name},
+        {"asset_directory", asset_dir.generic_string()},
+        {"animations",
+         {{"walk",
+           {{"source", {{"kind", "folder"}, {"path", "walk"}, {"name", ""}}},
+            {"number_of_frames", 2},
+            {"on_end", "default"}}}}},
+        {"start", "walk"},
+    };
+
+    animation_editor::AnimationEditorWindow window;
+    auto info = std::make_shared<AssetInfo>(asset_name, asset_manifest);
+    window.set_info(info);
+
+    REQUIRE(window.selected_animation_id_.has_value());
+    CHECK(*window.selected_animation_id_ == "walk");
+    CHECK(window.document_->animation_ids().size() == 1);
+    CHECK(window.load_diagnostics_.snapshot_source_chosen == "asset_metadata");
+    CHECK(window.load_diagnostics_.manifest_key_resolution_result == "manifest_store_unavailable");
+    CHECK(window.load_diagnostics_.animation_count_loaded == 1);
+    CHECK_FALSE(window.load_diagnostics_.seeded_default_applied);
+}
+
+TEST_CASE("AnimationEditorWindow set_info diagnostics branch: folder snapshot recovery") {
+    const std::string asset_name = "diag_folder_asset";
+    const std::filesystem::path asset_dir = std::filesystem::temp_directory_path() / "engine_diag_folder_asset";
+    std::error_code ec;
+    std::filesystem::remove_all(asset_dir, ec);
+    std::filesystem::create_directories(asset_dir / "run", ec);
+    {
+        std::ofstream frame(asset_dir / "run" / "0.png", std::ios::binary);
+        frame << "PNG";
+    }
+
+    const nlohmann::json asset_manifest = {
+        {"asset_name", asset_name},
+        {"asset_directory", asset_dir.generic_string()},
+    };
+
+    animation_editor::AnimationEditorWindow window;
+    auto info = std::make_shared<AssetInfo>(asset_name, asset_manifest);
+    window.set_info(info);
+
+    const auto ids = window.document_->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "run") != ids.end());
+    REQUIRE(window.selected_animation_id_.has_value());
+    CHECK(window.load_diagnostics_.snapshot_source_chosen == "asset_folders");
+    CHECK(window.load_diagnostics_.animation_count_loaded >= 1);
+    CHECK_FALSE(window.load_diagnostics_.seeded_default_applied);
+
+    std::filesystem::remove_all(asset_dir, ec);
+}
+
+TEST_CASE("AnimationEditorWindow set_info diagnostics branch: default seeding") {
+    const std::string asset_name = "diag_seed_default_asset";
+    const std::filesystem::path asset_dir = std::filesystem::temp_directory_path() / "engine_diag_seed_default_asset";
+    std::error_code ec;
+    std::filesystem::remove_all(asset_dir, ec);
+    std::filesystem::create_directories(asset_dir, ec);
+
+    const nlohmann::json asset_manifest = {
+        {"asset_name", asset_name},
+        {"asset_directory", asset_dir.generic_string()},
+    };
+
+    animation_editor::AnimationEditorWindow window;
+    auto info = std::make_shared<AssetInfo>(asset_name, asset_manifest);
+    window.set_info(info);
+
+    REQUIRE(window.selected_animation_id_.has_value());
+    CHECK(*window.selected_animation_id_ == "default");
+    CHECK(window.document_->animation_ids().size() == 1);
+    CHECK(window.load_diagnostics_.snapshot_source_chosen == "none");
+    CHECK(window.load_diagnostics_.seeded_default_applied);
+    CHECK(window.load_diagnostics_.animation_count_loaded == 1);
+
     std::filesystem::remove_all(asset_dir, ec);
 }

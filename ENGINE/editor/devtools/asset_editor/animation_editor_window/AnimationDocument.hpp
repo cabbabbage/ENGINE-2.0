@@ -70,6 +70,7 @@ class AnimationDocument {
     const LoadReport& last_load_report() const { return last_load_report_; }
     void set_manifest_asset_key_debug(std::string key);
     const std::string& manifest_asset_key_debug() const { return manifest_asset_key_debug_; }
+    void set_force_create_error_for_tests(bool force) { force_create_error_for_tests_ = force; }
 
     void set_on_saved_callback(std::function<void()> callback);
     void set_on_structure_changed_callback(std::function<void(const StructureChangeEvent&)> callback);
@@ -97,6 +98,7 @@ class AnimationDocument {
     mutable nlohmann::json base_data_;
     std::string manifest_asset_key_debug_;
     LoadReport last_load_report_;
+    bool force_create_error_for_tests_ = false;
     std::function<bool(const nlohmann::json&)> persist_callback_;
     std::function<void()> on_saved_callback_;
     std::function<void(const StructureChangeEvent&)> on_structure_changed_callback_;

@@ -17,6 +17,7 @@
 #include "core/runtime_world_context.hpp"
 #include "gameplay/map_generation/generate_rooms.hpp"
 #include "gameplay/map_generation/room.hpp"
+#include "utils/utils/grid.hpp"
 #include "utils/map_grid_settings.hpp"
 
 namespace {
@@ -377,7 +378,7 @@ TEST_CASE("Live dynamic sync handles pathological near-limit bounds without runa
         1);
 
     assets->test_sync_live_dynamic_assets_for_bounds(pathological_bounds);
-    CHECK(live_dynamic_assets(*assets).size() <= 8192);
+    CHECK(live_dynamic_assets(*assets).size() <= 8000);
 }
 
 TEST_CASE("Live dynamic preload and despawn margins are honored independently") {
@@ -447,6 +448,117 @@ TEST_CASE("Live dynamic throttled scans remain deterministic across repeated syn
     assets->test_sync_live_dynamic_assets_for_bounds(large_bounds);
     CHECK(collect_live_positions_named(*assets, "boundary_asset") == first_positions);
     CHECK(collect_live_asset_pointers(*assets) == first_ptrs);
+}
+
+TEST_CASE("Live dynamic delta frontier persists and drains without full interior rescans") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"camera_settings",
+         nlohmann::json::object({
+             {"live_dynamic_preload_margin_world_px", 0},
+             {"live_dynamic_despawn_margin_world_px", 0}
+         })},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector("spn-delta-persist", "normal_asset", 4)})}
+         })}
+    });
+
+    auto assets = make_assets(library, manifest, make_rect_area("Spawn", 512), make_room_data(true));
+    assets->test_set_live_dynamic_frame_caps(128, 32);
+    assets->test_reset_live_dynamic_budget_state();
+
+    const world::GridBounds bounds = world::GridBounds::from_xywh(-128, -128, 256, 256, 0, 4);
+    assets->test_sync_live_dynamic_assets_for_bounds(bounds);
+    const std::size_t pending_after_first = assets->test_live_dynamic_pending_point_count();
+    const auto first_ptrs = collect_live_asset_pointers(*assets);
+    REQUIRE(pending_after_first > 0);
+
+    assets->test_sync_live_dynamic_assets_for_bounds(bounds);
+    const std::size_t pending_after_second = assets->test_live_dynamic_pending_point_count();
+    const auto second_ptrs = collect_live_asset_pointers(*assets);
+    CHECK(pending_after_second < pending_after_first);
+    for (const Asset* ptr : first_ptrs) {
+        CHECK(second_ptrs.find(ptr) != second_ptrs.end());
+    }
+}
+
+TEST_CASE("Live dynamic near-first traversal prioritizes center over far corners under low spawn cap") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"camera_settings",
+         nlohmann::json::object({
+             {"live_dynamic_preload_margin_world_px", 0},
+             {"live_dynamic_despawn_margin_world_px", 0}
+         })},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector("spn-near-first", "normal_asset", 4)})}
+         })}
+    });
+
+    auto assets = make_assets(library, manifest, make_rect_area("Spawn", 512), make_room_data(true));
+    assets->test_set_live_dynamic_frame_caps(2048, 8);
+    assets->test_reset_live_dynamic_budget_state();
+    const world::GridBounds bounds = world::GridBounds::from_xywh(-128, -128, 256, 256, 0, 4);
+
+    assets->test_sync_live_dynamic_assets_for_bounds(bounds);
+    CHECK(count_live_assets_named_at(*assets, "normal_asset", 0, 0) > 0);
+    CHECK(count_live_assets_named_at(*assets, "normal_asset", 128, 128) == 0);
+}
+
+TEST_CASE("Live dynamic adaptive budgets reduce under pressure and recover on cheap frames") {
+    AssetLibrary library(false);
+    library.add_asset("normal_asset", make_asset_metadata());
+
+    nlohmann::json manifest = nlohmann::json::object({
+        {"schema_version", manifest::kMapSchemaVersion},
+        {"map_grid_settings", nlohmann::json::object({{"grid_resolution", 4}, {"position_jitter_px", 0}})},
+        {"camera_settings",
+         nlohmann::json::object({
+             {"live_dynamic_preload_margin_world_px", 0},
+             {"live_dynamic_despawn_margin_world_px", 0}
+         })},
+        {"live_dynamic_spawns",
+         nlohmann::json::object({
+             {"boundary_area_selectors",
+              nlohmann::json::array({make_live_selector("spn-adaptive", "normal_asset", 4)})}
+         })}
+    });
+
+    auto assets = make_assets(library, manifest, make_rect_area("Spawn", 2048), make_room_data(true));
+    assets->test_set_live_dynamic_frame_caps(512, 128);
+    assets->test_reset_live_dynamic_budget_state();
+    assets->test_set_live_dynamic_budget_target_ms(0.1);
+
+    const world::GridBounds heavy_bounds = world::GridBounds::from_xywh(-1024, -1024, 2048, 2048, 0, 4);
+    const std::size_t initial_scan_budget = assets->test_live_dynamic_scan_budget();
+    const std::size_t initial_spawn_budget = assets->test_live_dynamic_spawn_budget();
+    for (int i = 0; i < 5; ++i) {
+        assets->test_sync_live_dynamic_assets_for_bounds(heavy_bounds);
+    }
+    const std::size_t reduced_scan_budget = assets->test_live_dynamic_scan_budget();
+    const std::size_t reduced_spawn_budget = assets->test_live_dynamic_spawn_budget();
+    CHECK(reduced_scan_budget <= initial_scan_budget);
+    CHECK(reduced_spawn_budget <= initial_spawn_budget);
+
+    assets->test_set_live_dynamic_budget_target_ms(10.0);
+    const world::GridBounds light_bounds = world::GridBounds::from_xywh(-8, -8, 16, 16, 0, 4);
+    for (int i = 0; i < 8; ++i) {
+        assets->test_sync_live_dynamic_assets_for_bounds(light_bounds);
+    }
+    CHECK(assets->test_live_dynamic_scan_budget() >= reduced_scan_budget);
+    CHECK(assets->test_live_dynamic_spawn_budget() >= reduced_spawn_budget);
 }
 
 TEST_CASE("Live dynamic sync deletes dynamic assets after they leave render bounds") {

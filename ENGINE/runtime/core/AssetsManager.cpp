@@ -3850,6 +3850,19 @@ std::size_t Assets::test_live_dynamic_spawn_budget() const {
     return adaptive_live_dynamic_new_spawns_per_frame_;
 }
 
+void Assets::test_set_live_dynamic_budget_target_ms(double target_ms) {
+    live_dynamic_sync_budget_target_ms_ = std::max(0.1, target_ms);
+}
+
+void Assets::test_reset_live_dynamic_budget_state() {
+    adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
+        std::max<std::size_t>(1, max_live_dynamic_scan_cells_per_selector_per_frame_);
+    adaptive_live_dynamic_new_spawns_per_frame_ =
+        std::max<std::size_t>(1, max_live_dynamic_new_spawns_per_frame_);
+    live_dynamic_sync_ema_ms_ = 0.0;
+    live_dynamic_sync_ema_initialized_ = false;
+}
+
 int Assets::audio_effect_max_distance_world() const {
     const_cast<Assets*>(this)->update_max_asset_dimensions();
     const float horizontal_padding = std::max(0.0f, max_asset_width_world_ * 1.5f);

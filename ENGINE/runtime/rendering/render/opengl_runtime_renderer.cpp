@@ -598,62 +598,89 @@ bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
 
-    auto [view_min_x, view_min_z, view_max_x, view_max_z] = camera.get_current_view().get_bounds();
-    const float min_view_x = static_cast<float>(std::min(view_min_x, view_max_x));
-    const float max_view_x = static_cast<float>(std::max(view_min_x, view_max_x));
-    const float min_view_z = static_cast<float>(std::min(view_min_z, view_max_z));
-    const float max_view_z = static_cast<float>(std::max(view_min_z, view_max_z));
-    const float world_padding = static_cast<float>(grid_step) * 2.0f;
-    const float depth_padding = std::max(0.0f, camera.current_depth_offset_px()) *
-                                std::max(0.0001f, static_cast<float>(camera.get_scale()));
-    const float min_world_x = min_view_x - world_padding;
-    const float max_world_x = max_view_x + world_padding;
-    const float min_world_z = min_view_z - world_padding - depth_padding * 0.5f;
-    const float max_world_z = max_view_z + world_padding + depth_padding;
-
-    auto clamp_world_int = [](float value) -> int {
-        if (!std::isfinite(value)) {
-            return 0;
-        }
-        const double rounded = static_cast<double>(value);
-        if (rounded > static_cast<double>(std::numeric_limits<int>::max())) {
-            return std::numeric_limits<int>::max();
-        }
-        if (rounded < static_cast<double>(std::numeric_limits<int>::min())) {
-            return std::numeric_limits<int>::min();
-        }
-        return static_cast<int>(rounded);
-    };
-
     vibble::grid::Grid& grid = vibble::grid::global_grid();
     const int overlay_resolution = vibble::grid::clamp_resolution(
         static_cast<int>(std::lround(std::log2(static_cast<double>(grid_step)))));
-    SDL_Point min_index = grid.world_to_index(
-        SDL_Point{clamp_world_int(std::floor(min_world_x)), clamp_world_int(std::floor(min_world_z))},
-        overlay_resolution);
-    SDL_Point max_index = grid.world_to_index(
-        SDL_Point{clamp_world_int(std::ceil(max_world_x)), clamp_world_int(std::ceil(max_world_z))},
-        overlay_resolution);
-    if (min_index.x > max_index.x) std::swap(min_index.x, max_index.x);
-    if (min_index.y > max_index.y) std::swap(min_index.y, max_index.y);
+    SDL_Point center_world = overlay_context.snapped_floor_xz;
+    if (!std::isfinite(overlay_context.exact_floor_xz.x) || !std::isfinite(overlay_context.exact_floor_xz.y)) {
+        const SDL_FPoint center_world_f =
+            camera.screen_to_map(SDL_Point{static_cast<int>(target_width / 2u), static_cast<int>(target_height / 2u)});
+        center_world = grid.snap_to_vertex(
+            SDL_Point{
+                static_cast<int>(std::lround(center_world_f.x)),
+                static_cast<int>(std::lround(center_world_f.y))},
+            overlay_resolution);
+    }
+    const SDL_Point center_index = grid.world_to_index(center_world, overlay_resolution);
 
-    std::uintptr_t sequence = 0u;
-    const std::int64_t estimated_cols =
-        static_cast<std::int64_t>(max_index.x) - static_cast<std::int64_t>(min_index.x) + 1LL;
-    const std::int64_t estimated_rows =
-        static_cast<std::int64_t>(max_index.y) - static_cast<std::int64_t>(min_index.y) + 1LL;
-    if (estimated_cols > 0 && estimated_rows > 0) {
-        const std::int64_t estimated_total = estimated_cols * estimated_rows;
-        out_packets.reserve(static_cast<std::size_t>(
-            std::min<std::int64_t>(estimated_total, static_cast<std::int64_t>(std::numeric_limits<std::uint16_t>::max()))));
+    constexpr int kMaxSamplesPerPass = 32000;
+    int radius_cells = std::clamp(
+        static_cast<int>(std::max(target_width, target_height)) / std::max(4, grid_step),
+        24,
+        320);
+    while (((2 * radius_cells + 1) * (2 * radius_cells + 1)) > kMaxSamplesPerPass &&
+           radius_cells > 12) {
+        --radius_cells;
+    }
+
+    const float radius_cells_f = static_cast<float>(std::max(1, radius_cells));
+    const float radius_cells_sq = radius_cells_f * radius_cells_f;
+    const std::int64_t estimated_total =
+        static_cast<std::int64_t>((radius_cells * 2) + 1) * static_cast<std::int64_t>((radius_cells * 2) + 1);
+    if (estimated_total > 0) {
+        out_packets.reserve(static_cast<std::size_t>(std::min<std::int64_t>(
+            estimated_total * 3LL,
+            static_cast<std::int64_t>(std::numeric_limits<std::uint16_t>::max()))));
     }
 
     constexpr float kGridDotHalfExtentPx = 1.0f;
-    constexpr float kGridDotAlpha = 180.0f / 255.0f;
+    constexpr float kGridDotMaxAlpha = 180.0f / 255.0f;
+    constexpr float kCrosshairHalfLengthPx = 5.0f;
+    constexpr float kCrosshairHalfThicknessPx = 1.0f;
+    std::uintptr_t sequence = 0u;
 
-    for (int grid_z = min_index.y; grid_z <= max_index.y; ++grid_z) {
-        for (int grid_x = min_index.x; grid_x <= max_index.x; ++grid_x) {
-            const SDL_Point world_point = grid.index_to_world(grid_x, grid_z, overlay_resolution);
+    auto emit_overlay_packet = [&](float center_x,
+                                   float center_y,
+                                   float half_extent_x,
+                                   float half_extent_y,
+                                   const SDL_FColor& modulate,
+                                   float camera_depth_key,
+                                   const char* texture_id) {
+        GpuSpriteDrawPacket packet{};
+        packet.source_texture = nullptr;
+        packet.source_asset_name = "<dev-floor-grid-overlay>";
+        packet.source_animation_name = "<dev-floor-grid-overlay>";
+        packet.source_texture_id = texture_id;
+        packet.source_frame_index = -1;
+        packet.source_variant_index = -1;
+        packet.modulate = modulate;
+        packet.projected_foot_y_key = center_y;
+        packet.camera_depth_key = camera_depth_key;
+        packet.stable_sort_id = floor_sort_id(true, sequence++);
+        packet.is_floor_packet = true;
+        packet.depth_layer = 0;
+        fill_quad_packet_vertices(SDL_FPoint{center_x - half_extent_x, center_y - half_extent_y},
+                                  SDL_FPoint{center_x + half_extent_x, center_y - half_extent_y},
+                                  SDL_FPoint{center_x + half_extent_x, center_y + half_extent_y},
+                                  SDL_FPoint{center_x - half_extent_x, center_y + half_extent_y},
+                                  0.0f,
+                                  0.0f,
+                                  1.0f,
+                                  1.0f,
+                                  output_w,
+                                  output_h,
+                                  packet);
+        out_packets.push_back(packet);
+    };
+
+    for (int grid_dz = -radius_cells; grid_dz <= radius_cells; ++grid_dz) {
+        for (int grid_dx = -radius_cells; grid_dx <= radius_cells; ++grid_dx) {
+            const float dist_cells_sq = static_cast<float>(grid_dx * grid_dx + grid_dz * grid_dz);
+            if (dist_cells_sq > radius_cells_sq) {
+                continue;
+            }
+            const SDL_Point world_point =
+                grid.index_to_world(center_index.x + grid_dx, center_index.y + grid_dz, overlay_resolution);
             SDL_FPoint center{};
             if (!camera.project_world_point(SDL_FPoint{static_cast<float>(world_point.x), 0.0f},
                                             static_cast<float>(world_point.y),
@@ -667,21 +694,39 @@ bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
                 continue;
             }
 
-            GpuSpriteDrawPacket packet{};
-            packet.source_texture = nullptr;
-            packet.source_asset_name = "<dev-floor-grid-overlay>";
-            packet.source_animation_name = "<dev-floor-grid-overlay>";
-            packet.source_texture_id = "floor_grid_overlay_screen_dot";
-            packet.source_frame_index = -1;
-            packet.source_variant_index = -1;
-            packet.modulate = SDL_FColor{1.0f, 1.0f, 1.0f, kGridDotAlpha};
-            packet.projected_foot_y_key = center.y;
-            packet.camera_depth_key = static_cast<float>(world_point.y);
-            packet.stable_sort_id = floor_sort_id(true, sequence++);
-            packet.is_floor_packet = true;
-            packet.depth_layer = 0;
-            fill_screen_quad_packet_vertices(center.x, center.y, kGridDotHalfExtentPx, output_w, output_h, packet);
-            out_packets.push_back(packet);
+            const float edge_t = std::clamp(std::sqrt(std::max(0.0f, dist_cells_sq) / radius_cells_sq), 0.0f, 1.0f);
+            const float alpha = (1.0f - edge_t) * kGridDotMaxAlpha;
+            if (alpha <= (1.0f / 255.0f)) {
+                continue;
+            }
+
+            const bool is_cursor_intersection = (grid_dx == 0 && grid_dz == 0);
+            const float camera_depth_key = static_cast<float>(world_point.y);
+            if (is_cursor_intersection) {
+                const SDL_FColor orange{1.0f, 160.0f / 255.0f, 32.0f / 255.0f, std::max(alpha, 220.0f / 255.0f)};
+                emit_overlay_packet(center.x,
+                                    center.y,
+                                    kCrosshairHalfLengthPx,
+                                    kCrosshairHalfThicknessPx,
+                                    orange,
+                                    camera_depth_key,
+                                    "floor_grid_overlay_screen_crosshair_h");
+                emit_overlay_packet(center.x,
+                                    center.y,
+                                    kCrosshairHalfThicknessPx,
+                                    kCrosshairHalfLengthPx,
+                                    orange,
+                                    camera_depth_key,
+                                    "floor_grid_overlay_screen_crosshair_v");
+            } else {
+                emit_overlay_packet(center.x,
+                                    center.y,
+                                    kGridDotHalfExtentPx,
+                                    kGridDotHalfExtentPx,
+                                    SDL_FColor{1.0f, 1.0f, 1.0f, alpha},
+                                    camera_depth_key,
+                                    "floor_grid_overlay_screen_dot");
+            }
         }
     }
 

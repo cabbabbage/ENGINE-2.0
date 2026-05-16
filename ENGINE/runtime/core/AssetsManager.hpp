@@ -325,6 +325,8 @@ public:
     std::size_t test_live_dynamic_pending_point_count() const;
     std::size_t test_live_dynamic_scan_budget() const;
     std::size_t test_live_dynamic_spawn_budget() const;
+    void test_set_live_dynamic_budget_target_ms(double target_ms);
+    void test_reset_live_dynamic_budget_state();
 
 private:
     void save_map_info_json();

@@ -488,3 +488,31 @@ TEST_CASE("AnimationEditorWindow defaults modal guard prevents locked state on i
     move.motion.y = button_rect.y + 8;
     CHECK(window.handle_event(move));
 }
+
+TEST_CASE("AnimationEditorWindow add animation button activates on mouse down") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+
+    REQUIRE(window.add_button_ != nullptr);
+    const SDL_Rect button_rect = window.add_button_->rect();
+    REQUIRE(button_rect.w > 0);
+    REQUIRE(button_rect.h > 0);
+
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"jump"};
+    };
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = button_rect.x + 4;
+    down.button.y = button_rect.y + 4;
+
+    CHECK(window.handle_event(down));
+    const auto ids = document->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "jump") != ids.end());
+}

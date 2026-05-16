@@ -842,7 +842,9 @@ void Assets::clear_live_dynamic_assets() {
     live_dynamic_null_keys_.clear();
     live_dynamic_selector_scan_state_.clear();
     live_dynamic_qualification_queue_.clear();
+    live_dynamic_pending_qualification_keys_.clear();
     live_dynamic_spawn_queue_.clear();
+    live_dynamic_pending_spawn_keys_.clear();
     last_live_dynamic_sync_bounds_valid_ = false;
 }
 

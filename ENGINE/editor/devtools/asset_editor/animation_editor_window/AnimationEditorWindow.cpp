@@ -1355,6 +1355,10 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         return true;
     }
 
+    if (handle_status_event(e)) {
+        return true;
+    }
+
     if (e.type == SDL_EVENT_KEY_DOWN) {
         if (e.key.key == SDLK_ESCAPE) {
             set_visible(false);
@@ -1467,25 +1471,25 @@ void AnimationEditorWindow::set_animation_as_start(const std::string& animation_
 void AnimationEditorWindow::duplicate_animation(const std::string& animation_id) {
     if (!document_) return;
 
-    auto before_ids = document_->animation_ids();
-    document_->create_animation(animation_id);
-    auto after_ids = document_->animation_ids();
-
-    std::optional<std::string> created_id;
-    for (const auto& id : after_ids) {
-        if (std::find(before_ids.begin(), before_ids.end(), id) == before_ids.end()) {
-            created_id = id;
-            break;
-        }
+    std::string base = normalize_animation_name(animation_id);
+    if (base.empty()) {
+        base = "animation";
     }
+    std::string candidate = base;
+    int suffix = 2;
+    auto ids = document_->animation_ids();
+    while (std::find(ids.begin(), ids.end(), candidate) != ids.end()) {
+        candidate = base + "_" + std::to_string(suffix++);
+    }
+    const auto created = document_->create_animation(candidate);
 
-    if (created_id) {
+    if (created == AnimationDocument::CreateAnimationResult::Created) {
         if (auto payload = document_->animation_payload(animation_id)) {
-            document_->replace_animation_payload(*created_id, *payload);
-            preview_provider_->invalidate(*created_id);
+            document_->replace_animation_payload(candidate, *payload);
+            preview_provider_->invalidate(candidate);
         }
-        select_animation(created_id, false);
-        set_status_message("Duplicated animation to '" + *created_id + "'.", 240);
+        select_animation(candidate, false);
+        set_status_message("Duplicated animation to '" + candidate + "'.", 240);
     } else {
         set_status_message("Failed to duplicate animation.", 180);
     }
@@ -1736,6 +1740,52 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
     inspector_background_cache_rect_ = SDL_Rect{inspector_rect_.x, inspector_rect_.y, inspector_rect_.w, inspector_rect_.h};
     inspector_background_dirty_ = false;
     sdl_render::Texture(renderer, cache, nullptr, &inspector_rect_);
+}
+
+bool AnimationEditorWindow::handle_status_event(const SDL_Event& e) {
+    auto inside_status = [&](int x, int y) {
+        SDL_Point p{x, y};
+        return SDL_PointInRect(&p, &status_rect_) != 0;
+    };
+    const bool status_mouse_event =
+        e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP;
+
+    bool handled = false;
+    if (load_details_toggle_button_ && load_details_toggle_button_->handle_event(e)) {
+        handled = true;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            load_details_expanded_ = !load_details_expanded_;
+            layout_dirty_ = true;
+        }
+    }
+    if (load_details_copy_button_ && load_details_copy_button_->handle_event(e)) {
+        handled = true;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            const std::string payload = format_load_diagnostics_json();
+            if (SDL_SetClipboardText(payload.c_str())) {
+                set_status_message("Copied load diagnostics to clipboard.", 180);
+            } else {
+                set_status_message(std::string("Failed to copy diagnostics: ") + SDL_GetError(), 240);
+            }
+        }
+    }
+    if (handled) {
+        return true;
+    }
+
+    if (!status_mouse_event) {
+        return false;
+    }
+    int x = 0;
+    int y = 0;
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        x = e.motion.x;
+        y = e.motion.y;
+    } else {
+        x = e.button.x;
+        y = e.button.y;
+    }
+    return inside_status(x, y);
 }
 
 bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
@@ -2304,7 +2354,11 @@ bool AnimationEditorWindow::ensure_animation_exists(const std::string& animation
         return true;
     }
 
-    document_->create_animation(animation_id);
+    const auto result = document_->create_animation(animation_id);
+    if (result != AnimationDocument::CreateAnimationResult::Created &&
+        result != AnimationDocument::CreateAnimationResult::AlreadyExists) {
+        return false;
+    }
     ids = document_->animation_ids();
     return std::find(ids.begin(), ids.end(), animation_id) != ids.end();
 }
@@ -2538,6 +2592,13 @@ void AnimationEditorWindow::reload_document() {
     configure_list_panel();
     configure_inspector_panel();
     ensure_selection_valid();
+    refresh_panels_after_load();
+    if (document_) {
+        const auto& report = document_->last_load_report();
+        load_diagnostics_.animation_count_loaded = static_cast<int>(document_->animation_ids().size());
+        load_diagnostics_.parse_failures = report.parse_failures;
+        load_diagnostics_.normalization_failures = report.normalization_failures;
+    }
     if (seeded_default) {
         set_status_message("Created default animation.", 240);
     } else {

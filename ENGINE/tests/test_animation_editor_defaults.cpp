@@ -649,6 +649,43 @@ TEST_CASE("AnimationEditorWindow header recovers from invalid defaults modal sta
     CHECK(std::find(ids.begin(), ids.end(), "recovered") != ids.end());
 }
 
+TEST_CASE("AnimationEditorWindow add animation remains clickable after visibility transitions") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+    REQUIRE(window.add_button_ != nullptr);
+    REQUIRE(window.create_defaults_button_ != nullptr);
+    const SDL_Rect add_rect = window.add_button_->rect();
+
+    SDL_Event open_defaults{};
+    open_defaults.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    open_defaults.button.button = SDL_BUTTON_LEFT;
+    open_defaults.button.x = window.create_defaults_button_->rect().x + 3;
+    open_defaults.button.y = window.create_defaults_button_->rect().y + 3;
+    CHECK(window.handle_event(open_defaults));
+    CHECK(window.defaults_modal_visible_);
+
+    window.set_visible(false, false);
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"post_transition_anim"};
+    };
+
+    SDL_Event add_down{};
+    add_down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    add_down.button.button = SDL_BUTTON_LEFT;
+    add_down.button.x = add_rect.x + 4;
+    add_down.button.y = add_rect.y + 4;
+    CHECK(window.handle_event(add_down));
+
+    const auto ids = document->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "post_transition_anim") != ids.end());
+}
+
 TEST_CASE("AnimationEditorWindow create defaults rolls back on copy failure") {
     const fs::path root = make_unique_temp_dir("rollback_copy");
     const fs::path frame0 = root / "base_0.png";

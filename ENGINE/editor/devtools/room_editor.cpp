@@ -3357,7 +3357,7 @@ void RoomEditor::update_ui(const Input& input) {
 
     if (info_ui_ && info_ui_->is_visible()) {
         info_ui_->update(input, screen_w_, screen_h_);
-    } else if (active_modal_ == ActiveModal::AssetInfo &&
+    } else if (is_asset_info_modal_blocking() &&
                suppress_parent_asset_return_frames_ <= 0 &&
                (asset_editor_subview_ == AssetEditorSubview::AssetInfo ||
                 asset_editor_subview_ == AssetEditorSubview::AnimationEditor)) {
@@ -3367,6 +3367,7 @@ void RoomEditor::update_ui(const Input& input) {
             preserve_asset_info_parent_history_on_next_open_ = false;
         }
     }
+    clear_stale_asset_info_modal_state();
 
     process_pending_spawn_group_work();
     if (!pending_paste_selection_spawn_ids_.empty()) {
@@ -3439,7 +3440,7 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         SDL_Point click_point{mx, my};
         Asset* target = selected_assets_.empty() ? nullptr : selected_asset_within_interaction_radius(click_point);
         if (target && !target->spawn_id.empty() && !spawn_group_locked(target->spawn_id)) {
-            if (active_modal_ == ActiveModal::AssetInfo) {
+            if (is_asset_info_modal_blocking()) {
                 pulse_active_modal_header();
                 if (input_) input_->consumeEvent(event);
                 return true;
@@ -5992,7 +5993,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 void RoomEditor::toggle_asset_library() {
     if (!library_ui_) library_ui_ = std::make_unique<AssetLibraryUI>();
     const bool currently_open = library_ui_ && library_ui_->is_visible();
-    if (!currently_open && active_modal_ == ActiveModal::AssetInfo) {
+    if (!currently_open && is_asset_info_modal_blocking()) {
         pulse_active_modal_header();
         return;
     }
@@ -6006,7 +6007,7 @@ void RoomEditor::toggle_asset_library() {
 
 void RoomEditor::open_asset_library() {
     if (!library_ui_) library_ui_ = std::make_unique<AssetLibraryUI>();
-    if (active_modal_ == ActiveModal::AssetInfo && (!library_ui_ || !library_ui_->is_visible())) {
+    if (is_asset_info_modal_blocking() && (!library_ui_ || !library_ui_->is_visible())) {
         pulse_active_modal_header();
         return;
     }
@@ -6227,8 +6228,40 @@ bool RoomEditor::has_active_modal() const {
     return active_modal_ != ActiveModal::None;
 }
 
+bool RoomEditor::is_asset_info_modal_blocking() const {
+    if (active_modal_ != ActiveModal::AssetInfo) {
+        return false;
+    }
+    if (info_ui_ && info_ui_->is_visible()) {
+        return true;
+    }
+    return is_asset_stack_editor_active();
+}
+
+void RoomEditor::clear_stale_asset_info_modal_state() {
+    if (active_modal_ != ActiveModal::AssetInfo) {
+        return;
+    }
+    if (is_asset_info_modal_blocking()) {
+        return;
+    }
+    active_modal_ = ActiveModal::None;
+    pending_animation_editor_close_subview_.reset();
+    asset_info_parent_history_.clear();
+    preserve_asset_info_parent_history_on_next_open_ = false;
+    if (info_ui_) {
+        info_ui_->set_animation_editor_fullscreen_mode(false);
+        info_ui_->close_animation_editor_panel();
+    }
+    if (asset_editor_subview_ == AssetEditorSubview::AnimationEditor) {
+        asset_editor_subview_ = AssetEditorSubview::AssetInfo;
+    }
+    previous_non_animation_subview_ = AssetEditorSubview::AssetInfo;
+    asset_editor_transition_.active = false;
+}
+
 void RoomEditor::pulse_active_modal_header() {
-    if (active_modal_ == ActiveModal::AssetInfo && info_ui_) {
+    if (is_asset_info_modal_blocking() && info_ui_) {
         info_ui_->pulse_header();
     }
 }
@@ -9446,7 +9479,7 @@ void RoomEditor::handle_click(const Input& input) {
     click_buffer_frames_ = std::max(0, click_buffer_frames_ - 1);
 
     const bool asset_info_open =
-        (active_modal_ == ActiveModal::AssetInfo) || (info_ui_ && info_ui_->is_visible());
+        is_asset_info_modal_blocking() || (info_ui_ && info_ui_->is_visible());
     const bool floating_modal_open = DockManager::instance().active_panel() != nullptr;
 
     if (asset_info_open || floating_modal_open) {
@@ -12330,7 +12363,7 @@ void RoomEditor::update_asset_editor_transition() {
 
 bool RoomEditor::asset_editor_tab_scope_active() const {
     return enabled_ && info_ui_ &&
-           (active_modal_ == ActiveModal::AssetInfo || is_asset_stack_editor_active());
+           (is_asset_info_modal_blocking() || is_asset_stack_editor_active());
 }
 
 void RoomEditor::apply_asset_editor_panel_overrides() {
@@ -23374,7 +23407,7 @@ void RoomEditor::handle_delete_shortcut(const Input& input) {
         return;
     }
 
-    if (active_modal_ == ActiveModal::AssetInfo) {
+    if (is_asset_info_modal_blocking()) {
         return;
     }
 
@@ -25076,7 +25109,7 @@ void RoomEditor::open_spawn_group_floating_panel(const std::string& spawn_id, st
     if (spawn_id.empty()) {
         return;
     }
-    if (active_modal_ == ActiveModal::AssetInfo) {
+    if (is_asset_info_modal_blocking()) {
         pulse_active_modal_header();
         return;
     }
@@ -27214,6 +27247,18 @@ bool RoomEditorTestAccess::spawn_membership_allows_room_selection(
     const std::string& spawn_id,
     const std::string& owning_room_name) {
     return editor.spawn_membership_allows_room_selection(spawn_id, owning_room_name);
+}
+
+void RoomEditorTestAccess::set_active_modal_asset_info(RoomEditor& editor, bool active) {
+    editor.active_modal_ = active ? RoomEditor::ActiveModal::AssetInfo : RoomEditor::ActiveModal::None;
+}
+
+bool RoomEditorTestAccess::is_asset_info_modal_blocking_for_tests(const RoomEditor& editor) {
+    return editor.is_asset_info_modal_blocking();
+}
+
+void RoomEditorTestAccess::clear_stale_asset_info_modal_state_for_tests(RoomEditor& editor) {
+    editor.clear_stale_asset_info_modal_state();
 }
 
 bool RoomEditorTestAccess::select_current_room_from_nav(RoomEditor& editor, Room* room) {

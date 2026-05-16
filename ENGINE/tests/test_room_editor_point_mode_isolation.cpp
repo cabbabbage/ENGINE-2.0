@@ -16,6 +16,7 @@
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_payload_utils.hpp"
 #include "devtools/room_box_tools_panel.hpp"
+#include "devtools/asset_info_ui.hpp"
 #include "devtools/dev_controls.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
@@ -805,6 +806,35 @@ TEST_CASE("RoomEditor defers animation-editor closed fallback transition to upda
 
     CHECK_FALSE(RoomEditorTestAccess::has_pending_animation_editor_close_subview(editor));
     CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_animation_editor());
+}
+
+TEST_CASE("RoomEditor clears stale asset-info modal state and restores asset-info subview") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_active_subview(editor, RoomEditorTestAccess::subview_animation_editor());
+    RoomEditorTestAccess::set_active_modal_asset_info(editor, true);
+
+    CHECK_FALSE(RoomEditorTestAccess::is_asset_info_modal_blocking_for_tests(editor));
+
+    RoomEditorTestAccess::clear_stale_asset_info_modal_state_for_tests(editor);
+
+    CHECK_FALSE(editor.has_active_modal());
+    CHECK(RoomEditorTestAccess::active_subview(editor) == RoomEditorTestAccess::subview_asset_info());
+}
+
+TEST_CASE("AssetInfoUI fullscreen without visible animation window does not capture input") {
+    AssetInfoUI ui;
+    ui.open();
+    ui.set_animation_editor_fullscreen_mode(true);
+
+    SDL_Event key{};
+    key.type = SDL_EVENT_KEY_DOWN;
+    key.key.key = SDLK_A;
+    CHECK_FALSE(ui.handle_event(key));
+
+    SDL_Event text{};
+    text.type = SDL_EVENT_TEXT_INPUT;
+    text.text.text = "x";
+    CHECK_FALSE(ui.handle_event(text));
 }
 
 TEST_CASE("RoomEditor opens spawn-group panel only on double left-click for same spawn group") {

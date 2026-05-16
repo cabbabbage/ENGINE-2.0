@@ -1126,10 +1126,16 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
             SDL_Log("AssetInfoUI: failed to configure animation editor for %s: %s", info_ ? info_->name.c_str() : "<null>", ex.what());
             animation_editor_window_->clear_info();
             animation_editor_window_->set_visible(false, false);
+            pending_animation_editor_open_ = false;
+            animation_editor_fullscreen_mode_ = false;
+            animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         } catch (...) {
             SDL_Log("AssetInfoUI: failed to configure animation editor for %s due to unknown error.", info_ ? info_->name.c_str() : "<null>");
             animation_editor_window_->clear_info();
             animation_editor_window_->set_visible(false, false);
+            pending_animation_editor_open_ = false;
+            animation_editor_fullscreen_mode_ = false;
+            animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         }
     }
     for (auto& s : sections_) {
@@ -1158,6 +1164,8 @@ void AssetInfoUI::clear_info() {
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     pending_animation_editor_open_ = false;
+    animation_editor_fullscreen_mode_ = false;
+    animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     if (animation_editor_window_) {
         try {
             animation_editor_window_->clear_info();
@@ -1192,6 +1200,7 @@ void AssetInfoUI::close(bool flush_changes) {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
     animation_editor_fullscreen_mode_ = false;
+    animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     apply_camera_override(false);
     visible_ = false;
     container_.close();
@@ -1220,6 +1229,8 @@ void AssetInfoUI::toggle(){
 void AssetInfoUI::open_animation_editor_panel() {
     if (!animation_editor_window_ || !info_) {
         pending_animation_editor_open_ = false;
+        animation_editor_fullscreen_mode_ = false;
+        animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         return;
     }
 
@@ -1249,6 +1260,9 @@ bool AssetInfoUI::is_animation_editor_open() const {
 }
 
 void AssetInfoUI::set_animation_editor_fullscreen_mode(bool enabled) {
+    if (enabled && (!animation_editor_window_ || !info_)) {
+        enabled = false;
+    }
     if (animation_editor_fullscreen_mode_ == enabled) {
         return;
     }
@@ -1258,6 +1272,7 @@ void AssetInfoUI::set_animation_editor_fullscreen_mode(bool enabled) {
             animation_editor_rect_ = SDL_Rect{0, 0, last_screen_w_, last_screen_h_};
         }
     } else {
+        pending_animation_editor_open_ = false;
         animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     }
     container_.request_layout();
@@ -1409,7 +1424,14 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
 
     if (!visible_) return false;
 
-    if (animation_editor_fullscreen_mode_) {
+    const bool fullscreen_capture_active =
+        animation_editor_fullscreen_mode_ &&
+        animation_editor_window_ &&
+        animation_editor_window_->is_visible() &&
+        animation_editor_rect_.w > 0 &&
+        animation_editor_rect_.h > 0;
+
+    if (animation_editor_fullscreen_mode_ && fullscreen_capture_active) {
         if (animation_editor_window_ && animation_editor_window_->is_visible() &&
             animation_editor_window_->handle_event(e)) {
             return true;
@@ -1516,6 +1538,20 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
         }
     }
 
+    const bool fullscreen_capture_active =
+        animation_editor_fullscreen_mode_ &&
+        animation_editor_window_ &&
+        animation_editor_window_->is_visible() &&
+        animation_editor_rect_.w > 0 &&
+        animation_editor_rect_.h > 0;
+    if (animation_editor_fullscreen_mode_ &&
+        !fullscreen_capture_active &&
+        !pending_animation_editor_open_) {
+        animation_editor_fullscreen_mode_ = false;
+        animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
+        container_.request_layout();
+    }
+
 
     const bool need_high_quality = false;
     if (assets_) {
@@ -1529,7 +1565,7 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
 
     if (!visible_) return;
 
-    if (animation_editor_fullscreen_mode_) {
+    if (animation_editor_fullscreen_mode_ && fullscreen_capture_active) {
         if (save_coordinator_) {
             save_coordinator_->tick();
         }
@@ -1564,13 +1600,21 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     layout_widgets(screen_w, screen_h);
     last_renderer_ = r;
 
-    if (!animation_editor_fullscreen_mode_) {
+    const bool fullscreen_capture_active =
+        animation_editor_fullscreen_mode_ &&
+        animation_editor_window_ &&
+        animation_editor_window_->is_visible() &&
+        animation_editor_rect_.w > 0 &&
+        animation_editor_rect_.h > 0;
+
+    if (!(animation_editor_fullscreen_mode_ && fullscreen_capture_active)) {
         container_.render(r, screen_w, screen_h);
     }
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         animation_editor_window_->render(r);
     }
-    if (animation_editor_fullscreen_mode_) {
+
+    if (animation_editor_fullscreen_mode_ && fullscreen_capture_active) {
         return;
     }
 

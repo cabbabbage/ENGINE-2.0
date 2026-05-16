@@ -518,6 +518,8 @@ private:
     void update_asset_editor_transition();
     void apply_asset_editor_panel_overrides();
     bool asset_editor_tab_scope_active() const;
+    bool is_asset_info_modal_blocking() const;
+    void clear_stale_asset_info_modal_state();
     void toggle_anchor_edit_mode();
     bool enter_anchor_edit_mode(bool light_editor_mode = false);
     void exit_anchor_edit_mode(bool flush_immediately);
@@ -1525,6 +1527,9 @@ struct RoomEditorTestAccess {
     static bool spawn_membership_allows_room_selection(const RoomEditor& editor,
                                                        const std::string& spawn_id,
                                                        const std::string& owning_room_name);
+    static void set_active_modal_asset_info(RoomEditor& editor, bool active);
+    static bool is_asset_info_modal_blocking_for_tests(const RoomEditor& editor);
+    static void clear_stale_asset_info_modal_state_for_tests(RoomEditor& editor);
     static bool select_current_room_from_nav(RoomEditor& editor, Room* room);
     static Room* current_room(const RoomEditor& editor);
     static std::string room_config_header_text(const RoomEditor& editor);

@@ -356,6 +356,14 @@ void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
 
 bool opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor(const GpuSpriteDrawPacket& lhs,
                                                                       const GpuSpriteDrawPacket& rhs) {
+    constexpr std::uintptr_t kSpritePacketSortOffset =
+        std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
+    const bool lhs_sprite = lhs.stable_sort_id >= kSpritePacketSortOffset;
+    const bool rhs_sprite = rhs.stable_sort_id >= kSpritePacketSortOffset;
+    if (lhs_sprite != rhs_sprite) {
+        // Keep floor tiles first and debug/overlay sprites after so overlays are visible.
+        return !lhs_sprite;
+    }
     if (lhs.projected_foot_y_key != rhs.projected_foot_y_key) {
         return lhs.projected_foot_y_key < rhs.projected_foot_y_key;
     }

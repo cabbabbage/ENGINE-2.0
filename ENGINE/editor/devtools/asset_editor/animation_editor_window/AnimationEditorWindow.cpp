@@ -2183,6 +2183,13 @@ bool AnimationEditorWindow::create_or_replace_animation_payload(const std::strin
 }
 
 void AnimationEditorWindow::handle_create_defaults() {
+    enum class DefaultsStageError { None, SourceDependency, CopyFailure, PayloadWriteFailure };
+    struct PlannedDefaultWrite {
+        DefaultAnimationSpec spec;
+        std::filesystem::path folder_path;
+        nlohmann::json payload;
+    };
+
     if (!document_) {
         set_status_message("Animation document is unavailable.", 180);
         return;
@@ -2204,27 +2211,16 @@ void AnimationEditorWindow::handle_create_defaults() {
     if (defaults_base_frame_paths_.empty()) {
         handle_pick_defaults_base_frames();
         if (defaults_base_frame_paths_.empty()) {
-            devmode::dialogs::show_message(parent_window_,
-                                           "Create Defaults",
-                                           "Select at least one base PNG frame before creating default animations.",
-                                           devmode::dialogs::MessageIcon::Warning);
+            devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base PNG frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
             return;
         }
     }
 
     std::vector<std::filesystem::path> base_frames;
-    base_frames.reserve(defaults_base_frame_paths_.size());
-    for (const auto& path : defaults_base_frame_paths_) {
-        if (has_extension_ci(path, ".png")) {
-            base_frames.push_back(path);
-        }
-    }
+    for (const auto& path : defaults_base_frame_paths_) if (has_extension_ci(path, ".png")) base_frames.push_back(path);
     if (base_frames.empty()) {
         set_status_message("Select at least one base PNG frame.", 180);
-        devmode::dialogs::show_message(parent_window_,
-                                       "Create Defaults",
-                                       "Select at least one base PNG frame before creating default animations.",
-                                       devmode::dialogs::MessageIcon::Warning);
+        devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base PNG frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
         return;
     }
     base_frames = normalize_sequence_paths(base_frames);
@@ -2238,180 +2234,64 @@ void AnimationEditorWindow::handle_create_defaults() {
     const int d = *total_movement_per_animation;
     const int frame_count = static_cast<int>(base_frames.size());
     const bool base_faces_right = defaults_base_faces_right();
-    bool ok = true;
-    std::vector<std::string> created_ids;
+    std::vector<std::string> created_ids, newly_created_ids;
+    std::vector<std::filesystem::path> created_folders;
     std::vector<DefaultAnimationSpec> specs;
 
-    auto add_seed = [&](const std::string& id, int dx, int dy, int dz) {
-        specs.push_back(DefaultAnimationSpec{
-            id,
-            dx,
-            dy,
-            dz,
-            {},
-            true,
-            false,
-            false,
-        });
-    };
-
-    auto add_derived = [&](const std::string& id,
-                           const std::string& source_id,
-                           int dx,
-                           int dy,
-                           int dz,
-                           bool invert_frames_horizontal,
-                           bool invert_frames_vertical) {
-        specs.push_back(DefaultAnimationSpec{
-            id,
-            dx,
-            dy,
-            dz,
-            source_id,
-            false,
-            invert_frames_horizontal,
-            invert_frames_vertical,
-        });
-    };
-
+    auto add_seed=[&](const std::string& id,int dx,int dy,int dz){specs.push_back(DefaultAnimationSpec{id,dx,dy,dz,{},true,false,false});};
+    auto add_derived=[&](const std::string& id,const std::string& source_id,int dx,int dy,int dz,bool h,bool v){specs.push_back(DefaultAnimationSpec{id,dx,dy,dz,source_id,false,h,v});};
     const int x_seed_dx = base_faces_right ? d : -d;
     const std::string x_seed_id = base_faces_right ? "right" : "left";
     const std::string x_opposite_id = base_faces_right ? "left" : "right";
     const int x_opposite_dx = -x_seed_dx;
+    if (create_basic) { add_seed(x_seed_id,x_seed_dx,0,0); add_derived(x_opposite_id,x_seed_id,x_opposite_dx,0,0,true,false); add_seed("up",0,0,-d); add_derived("forward","up",0,0,-d,false,false); add_derived("down","up",0,0,d,false,true); add_derived("backward","up",0,0,d,false,true);}    
+    if (create_diagonals) { const std::string seed_id=base_faces_right?"forward_right":"forward_left"; const std::string opposite_forward_id=base_faces_right?"forward_left":"forward_right"; const std::string same_backward_id=base_faces_right?"backward_right":"backward_left"; const std::string opposite_backward_id=base_faces_right?"backward_left":"backward_right"; add_seed(seed_id,x_seed_dx,0,-d); add_derived(opposite_forward_id,seed_id,x_opposite_dx,0,-d,true,false); add_derived(same_backward_id,seed_id,x_seed_dx,0,d,false,true); add_derived(opposite_backward_id,seed_id,x_opposite_dx,0,d,true,true);}    
+    if (create_elevation) { add_seed("elevation_up",0,d,0); add_derived("elevation_down","elevation_up",0,-d,0,false,true);}    
+    if (create_3d_diagonals) { const std::string seed_id=base_faces_right?"up_forward_right":"up_forward_left"; add_seed(seed_id,x_seed_dx,d,-d); const std::array<int,2> y{1,-1},z{-1,1},x{-1,1}; for(int ys:y) for(int zs:z) for(int xs:x){ const int dx=xs*d,dy=ys*d,dz=zs*d; const std::string id=std::string(ys>0?"up":"down")+"_"+(zs<0?"forward":"backward")+"_"+(xs<0?"left":"right"); if(id==seed_id) continue; add_derived(id,seed_id,dx,dy,dz,dx!=x_seed_dx,dy!=d||dz!=-d);} }
 
-    if (create_basic) {
-        add_seed(x_seed_id, x_seed_dx, 0, 0);
-        add_derived(x_opposite_id, x_seed_id, x_opposite_dx, 0, 0, true, false);
-
-        add_seed("up", 0, 0, -d);
-        add_derived("forward", "up", 0, 0, -d, false, false);
-        add_derived("down", "up", 0, 0, d, false, true);
-        add_derived("backward", "up", 0, 0, d, false, true);
-    }
-
-    if (create_diagonals) {
-        const std::string seed_id = base_faces_right ? "forward_right" : "forward_left";
-        const std::string opposite_forward_id = base_faces_right ? "forward_left" : "forward_right";
-        const std::string same_backward_id = base_faces_right ? "backward_right" : "backward_left";
-        const std::string opposite_backward_id = base_faces_right ? "backward_left" : "backward_right";
-        add_seed(seed_id, x_seed_dx, 0, -d);
-        add_derived(opposite_forward_id, seed_id, x_opposite_dx, 0, -d, true, false);
-        add_derived(same_backward_id, seed_id, x_seed_dx, 0, d, false, true);
-        add_derived(opposite_backward_id, seed_id, x_opposite_dx, 0, d, true, true);
-    }
-
-    if (create_elevation) {
-        add_seed("elevation_up", 0, d, 0);
-        add_derived("elevation_down", "elevation_up", 0, -d, 0, false, true);
-    }
-
-    if (create_3d_diagonals) {
-        const std::string seed_id = base_faces_right ? "up_forward_right" : "up_forward_left";
-        add_seed(seed_id, x_seed_dx, d, -d);
-
-        const std::array<int, 2> y_signs{1, -1};
-        const std::array<int, 2> z_signs{-1, 1};
-        const std::array<int, 2> x_signs{-1, 1};
-        for (const int y_sign : y_signs) {
-            for (const int z_sign : z_signs) {
-                for (const int x_sign : x_signs) {
-                    const int target_dx = x_sign * d;
-                    const int target_dy = y_sign * d;
-                    const int target_dz = z_sign * d;
-                    const std::string id =
-                        std::string(y_sign > 0 ? "up" : "down") + "_" +
-                        (z_sign < 0 ? "forward" : "backward") + "_" +
-                        (x_sign < 0 ? "left" : "right");
-                    if (id == seed_id) {
-                        continue;
-                    }
-                    const bool flip_h = target_dx != x_seed_dx;
-                    const bool flip_v = target_dy != d || target_dz != -d;
-                    add_derived(id, seed_id, target_dx, target_dy, target_dz, flip_h, flip_v);
-                }
-            }
-        }
-    }
-
-    auto find_source = [&](const std::string& id) -> const DefaultAnimationSpec* {
-        for (const auto& spec : specs) {
-            if (spec.id == id) {
-                return &spec;
-            }
-        }
-        return nullptr;
-    };
-
-    auto create_file_based = [&](const DefaultAnimationSpec& spec) {
-        if (!ok) return;
-        if (!copy_frames_to_animation_folder(spec.id, base_frames)) {
-            ok = false;
-            return;
-        }
-        nlohmann::json payload = build_file_sourced_movement_payload(
-            spec.id,
-            frame_count,
-            spec.dx,
-            spec.dy,
-            spec.dz,
-            default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
-        if (!create_or_replace_animation_payload(spec.id, payload)) {
-            ok = false;
-            return;
-        }
-        created_ids.push_back(spec.id);
-    };
-
-    auto create_derived = [&](const DefaultAnimationSpec& spec) {
-        if (!ok) return;
-        const DefaultAnimationSpec* source = find_source(spec.source_id);
-        if (!source) {
-            ok = false;
-            return;
-        }
-        nlohmann::json payload = build_derived_movement_payload(
-            spec.id,
-            spec.source_id,
-            frame_count,
-            source->dx != 0 && source->dx != spec.dx,
-            source->dy != 0 && source->dy != spec.dy,
-            source->dz != 0 && source->dz != spec.dz,
-            spec.invert_frames_horizontal,
-            spec.invert_frames_vertical,
-            default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
-        if (!create_or_replace_animation_payload(spec.id, payload)) {
-            ok = false;
-            return;
-        }
-        created_ids.push_back(spec.id);
-    };
-
+    auto find_source=[&](const std::string& id)->const DefaultAnimationSpec*{for(const auto& spec:specs) if(spec.id==id) return &spec; return nullptr;};
+    std::vector<PlannedDefaultWrite> plan; plan.reserve(specs.size());
+    DefaultsStageError error=DefaultsStageError::None;
+    if (defaults_force_source_dependency_failure_) error = DefaultsStageError::SourceDependency;
     for (const auto& spec : specs) {
-        if (spec.folder_sourced) {
-            create_file_based(spec);
-        } else {
-            create_derived(spec);
+        PlannedDefaultWrite write{spec, asset_root_path_ / spec.id, nlohmann::json::object()};
+        if (spec.folder_sourced) write.payload = build_file_sourced_movement_payload(spec.id, frame_count, spec.dx, spec.dy, spec.dz, default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
+        else {
+            const DefaultAnimationSpec* source = find_source(spec.source_id);
+            if (!source) { error = DefaultsStageError::SourceDependency; break; }
+            write.payload = build_derived_movement_payload(spec.id,spec.source_id,frame_count,source->dx!=0&&source->dx!=spec.dx,source->dy!=0&&source->dy!=spec.dy,source->dz!=0&&source->dz!=spec.dz,spec.invert_frames_horizontal,spec.invert_frames_vertical,default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
         }
+        plan.push_back(std::move(write));
+    }
+    for (const auto& write : plan) {
+        if (error != DefaultsStageError::None) break;
+        const bool existed_before = document_->animation_payload(write.spec.id).has_value();
+        if (write.spec.folder_sourced) {
+            const bool copied = defaults_copy_frames_override_ ? defaults_copy_frames_override_(write.spec.id, base_frames) : copy_frames_to_animation_folder(write.spec.id, base_frames);
+            if (!copied) { error = DefaultsStageError::CopyFailure; break; }
+            created_folders.push_back(write.folder_path);
+        }
+        if (defaults_force_payload_write_failure_ || !create_or_replace_animation_payload(write.spec.id, write.payload)) { error = DefaultsStageError::PayloadWriteFailure; break; }
+        if (!existed_before) newly_created_ids.push_back(write.spec.id);
+        created_ids.push_back(write.spec.id);
     }
 
-    if (!ok) {
-        set_status_message("Failed to create one or more default animations.", 240);
+    if (error == DefaultsStageError::None && manifest_store_ && !manifest_asset_key_.empty()) {
+        const bool persisted = defaults_persist_manifest_override_ ? defaults_persist_manifest_override_(nlohmann::json{{"movement_enabled", true}}, false) : persist_manifest_payload(nlohmann::json{{"movement_enabled", true}}, false);
+        if (!persisted) error = DefaultsStageError::PayloadWriteFailure;
+    }
+
+    if (error != DefaultsStageError::None) {
+        for (const auto& id : newly_created_ids) document_->delete_animation(id);
+        for (const auto& folder : created_folders) { std::error_code ec; std::filesystem::remove_all(folder, ec); }
+        if (error == DefaultsStageError::CopyFailure) set_status_message("Create defaults failed while copying source frames. Check source PNGs and write permissions.", 300);
+        else if (error == DefaultsStageError::PayloadWriteFailure) set_status_message("Create defaults failed while writing animation payloads. No partial defaults were kept.", 300);
+        else set_status_message("Create defaults failed: a source dependency was missing.", 300);
         return;
     }
 
-    // Movement defaults are intentional authored movement data.
-    if (manifest_store_ && !manifest_asset_key_.empty()) {
-        (void)persist_manifest_payload(nlohmann::json{{"movement_enabled", true}}, false);
-    }
-
-    if (preview_provider_) {
-        preview_provider_->invalidate_all();
-    }
-    if (!created_ids.empty()) {
-        select_animation(std::optional<std::string>{created_ids.front()}, false);
-    } else {
-        ensure_selection_valid();
-    }
+    if (preview_provider_) preview_provider_->invalidate_all();
+    if (!created_ids.empty()) select_animation(std::optional<std::string>{created_ids.front()}, false); else ensure_selection_valid();
     set_status_message("Created default movement animations.", 300);
     close_defaults_modal();
 }

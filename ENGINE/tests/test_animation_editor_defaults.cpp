@@ -13,6 +13,7 @@
 
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationEditorWindow.hpp"
+#include "devtools/asset_editor/animation_editor_window/AnimationListContextMenu.hpp"
 
 namespace {
 
@@ -596,8 +597,12 @@ TEST_CASE("AnimationEditorWindow header button press is blocked while list conte
     window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
         return std::optional<std::string>{"menu_blocked"};
     };
-    window.list_context_menu_->open(window.bounds_, SDL_Point{add_rect.x + 2, add_rect.y + 2},
-                                    {{.label = "Dummy", .callback = []() {}}});
+    std::vector<animation_editor::AnimationListContextMenu::Option> options;
+    animation_editor::AnimationListContextMenu::Option option;
+    option.label = "Dummy";
+    option.callback = []() {};
+    options.push_back(std::move(option));
+    window.list_context_menu_->open(window.bounds_, SDL_Point{add_rect.x + 2, add_rect.y + 2}, std::move(options));
     REQUIRE(window.list_context_menu_->is_open());
 
     SDL_Event down{};
@@ -640,4 +645,49 @@ TEST_CASE("AnimationEditorWindow header recovers from invalid defaults modal sta
     CHECK_FALSE(window.defaults_modal_visible_);
     const auto ids = document->animation_ids();
     CHECK(std::find(ids.begin(), ids.end(), "recovered") != ids.end());
+}
+
+TEST_CASE("AnimationEditorWindow create defaults rolls back on copy failure") {
+    const fs::path root = make_unique_temp_dir("rollback_copy");
+    const fs::path frame0 = root / "base_0.png";
+    write_dummy_png(frame0);
+    auto document = make_document(root);
+    animation_editor::AnimationEditorWindow window;
+    configure_defaults(window, document, root, {frame0}, 4, true, false, false, false, false);
+    window.defaults_copy_frames_override_ = [](const std::string&, const std::vector<fs::path>&) { return false; };
+
+    window.handle_create_defaults();
+
+    CHECK(std::find(document->animation_ids().begin(), document->animation_ids().end(), "left") == document->animation_ids().end());
+    CHECK_FALSE(fs::exists(root / "left"));
+}
+
+TEST_CASE("AnimationEditorWindow create defaults rolls back on payload write failure") {
+    const fs::path root = make_unique_temp_dir("rollback_payload");
+    const fs::path frame0 = root / "base_0.png";
+    write_dummy_png(frame0);
+    auto document = make_document(root);
+    animation_editor::AnimationEditorWindow window;
+    configure_defaults(window, document, root, {frame0}, 4, true, false, false, false, false);
+    window.defaults_force_payload_write_failure_ = true;
+
+    window.handle_create_defaults();
+
+    CHECK(document->animation_ids().empty());
+    CHECK_FALSE(fs::exists(root / "left"));
+}
+
+TEST_CASE("AnimationEditorWindow create defaults stops on source dependency validation failure") {
+    const fs::path root = make_unique_temp_dir("rollback_source_dep");
+    const fs::path frame0 = root / "base_0.png";
+    write_dummy_png(frame0);
+    auto document = make_document(root);
+    animation_editor::AnimationEditorWindow window;
+    configure_defaults(window, document, root, {frame0}, 4, true, false, false, false, false);
+    window.defaults_force_source_dependency_failure_ = true;
+
+    window.handle_create_defaults();
+
+    CHECK(document->animation_ids().empty());
+    CHECK_FALSE(fs::exists(root / "left"));
 }

@@ -224,8 +224,11 @@ class AnimationEditorWindow {
     std::function<std::vector<std::filesystem::path>()> png_sequence_picker_override_;
     std::function<std::optional<std::string>(const std::string&, const std::string&, const std::string&)> text_prompt_override_;
     std::function<std::optional<int>(const std::string&, const std::string&, const std::vector<int>&)> choice_prompt_override_;
+    std::function<bool(const std::string&, const std::vector<std::filesystem::path>&)> defaults_copy_frames_override_;
+    std::function<bool(const nlohmann::json&, bool)> defaults_persist_manifest_override_;
+    bool defaults_force_source_dependency_failure_ = false;
+    bool defaults_force_payload_write_failure_ = false;
 
 };
 
 }
-

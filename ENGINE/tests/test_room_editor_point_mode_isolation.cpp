@@ -1046,4 +1046,42 @@ TEST_CASE("RoomEditor mode-switch domain checks prevent leakage between hitbox a
     CHECK(RoomEditorTestAccess::mode_owns_attack_domain(editor, RoomEditorTestAccess::mode_attack_box()));
     CHECK_FALSE(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, RoomEditorTestAccess::mode_attack_box()));
 }
+
+TEST_CASE("RoomEditor screen-target solver clamps out-of-bounds seeds to texture limits") {
+    int solved_x = -1;
+    int solved_y = -1;
+    const bool ok = RoomEditorTestAccess::solve_texture_point_for_screen_target_for_tests(
+        5000,
+        -100,
+        SDL_FPoint{5.0f, 8.0f},
+        15,
+        15,
+        false,
+        solved_x,
+        solved_y);
+    REQUIRE(ok);
+    CHECK(solved_x >= 0);
+    CHECK(solved_x <= 15);
+    CHECK(solved_y >= 0);
+    CHECK(solved_y <= 15);
+}
+
+TEST_CASE("RoomEditor screen-target solver recovers when jacobian is singular") {
+    int solved_x = -1;
+    int solved_y = -1;
+    const bool ok = RoomEditorTestAccess::solve_texture_point_for_screen_target_for_tests(
+        9,
+        9,
+        SDL_FPoint{2.0f, 3.0f},
+        10,
+        10,
+        true,
+        solved_x,
+        solved_y);
+    REQUIRE(ok);
+    CHECK(solved_x >= 0);
+    CHECK(solved_x <= 10);
+    CHECK(solved_y >= 0);
+    CHECK(solved_y <= 10);
+}
 #endif

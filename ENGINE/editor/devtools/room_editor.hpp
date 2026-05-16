@@ -1501,6 +1501,14 @@ struct RoomEditorTestAccess {
     static std::uint32_t delete_shortcut_stack_dispatch_count(const RoomEditor& editor);
     static std::uint32_t delete_shortcut_asset_delete_count(const RoomEditor& editor);
     static void reset_delete_shortcut_route_counters(RoomEditor& editor);
+    static bool solve_texture_point_for_screen_target_for_tests(int initial_x,
+                                                                int initial_y,
+                                                                SDL_FPoint desired_screen,
+                                                                int max_x,
+                                                                int max_y,
+                                                                bool singular_jacobian,
+                                                                int& out_x,
+                                                                int& out_y);
     static void set_spawn_id_ownership_cache(RoomEditor& editor,
                                              const std::vector<std::string>& room_spawn_ids,
                                              const std::vector<std::string>& map_boundary_spawn_ids);

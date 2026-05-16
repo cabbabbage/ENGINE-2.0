@@ -593,7 +593,6 @@ bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
     out_packets.clear();
     out_error.clear();
 
-    (void)overlay_context;
     const int grid_step = std::max(1, grid_step_world_px);
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
@@ -1293,7 +1292,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     const Assets::DevGridOverlayContext dev_grid_overlay_context = assets_->dev_grid_overlay_context();
     if (assets_->dev_grid_overlay_enabled() &&
-        dev_grid_overlay_context.kind == Assets::DevGridOverlayKind::FloorMouseCentered) {
+        dev_grid_overlay_context.kind != Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint &&
+        std::isfinite(dev_grid_overlay_context.exact_floor_xz.x) &&
+        std::isfinite(dev_grid_overlay_context.exact_floor_xz.y)) {
         std::vector<GpuSpriteDrawPacket> floor_grid_overlay_draws{};
         if (!opengl_runtime_renderer_detail::build_dev_floor_grid_overlay_draw_packets(
                 camera,

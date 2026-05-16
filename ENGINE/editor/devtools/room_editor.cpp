@@ -1347,6 +1347,8 @@ bool solve_texture_point_for_screen_target(
     int initial_texture_y,
     const SDL_FPoint& desired_screen_px,
     const std::function<bool(int, int, SDL_FPoint&)>& sample_screen_for_texture,
+    int max_texture_x,
+    int max_texture_y,
     int& out_texture_x,
     int& out_texture_y) {
     if (!sample_screen_for_texture ||
@@ -1355,12 +1357,23 @@ bool solve_texture_point_for_screen_target(
         return false;
     }
 
-    int tex_x = std::max(0, initial_texture_x);
-    int tex_y = std::max(0, initial_texture_y);
+    auto clamp_tex_x = [&](int value) {
+        const int non_negative = std::max(0, value);
+        return (max_texture_x >= 0) ? std::clamp(non_negative, 0, max_texture_x) : non_negative;
+    };
+    auto clamp_tex_y = [&](int value) {
+        const int non_negative = std::max(0, value);
+        return (max_texture_y >= 0) ? std::clamp(non_negative, 0, max_texture_y) : non_negative;
+    };
+
+    int tex_x = clamp_tex_x(initial_texture_x);
+    int tex_y = clamp_tex_y(initial_texture_y);
 
     auto distance_sq = [&](int x, int y, float& out_dist_sq) {
         SDL_FPoint projected{};
-        if (!sample_screen_for_texture(std::max(0, x), std::max(0, y), projected)) {
+        const int sample_x = clamp_tex_x(x);
+        const int sample_y = clamp_tex_y(y);
+        if (!sample_screen_for_texture(sample_x, sample_y, projected)) {
             return false;
         }
         const float dx = projected.x - desired_screen_px.x;
@@ -1369,46 +1382,69 @@ bool solve_texture_point_for_screen_target(
         return std::isfinite(out_dist_sq);
     };
 
-    constexpr int kSolveIterations = 14;
-    constexpr float kMaxSolveStepPixels = 192.0f;
-    for (int iter = 0; iter < kSolveIterations; ++iter) {
-        SDL_FPoint base{};
-        SDL_FPoint plus_x{};
-        SDL_FPoint plus_y{};
-        if (!sample_screen_for_texture(tex_x, tex_y, base) ||
-            !sample_screen_for_texture(tex_x + 1, tex_y, plus_x) ||
-            !sample_screen_for_texture(tex_x, tex_y + 1, plus_y)) {
-            break;
-        }
+    auto run_local_jacobian_solve = [&](int start_x, int start_y, int& solved_x, int& solved_y) -> bool {
+        solved_x = clamp_tex_x(start_x);
+        solved_y = clamp_tex_y(start_y);
+        bool sampled_any = false;
+        constexpr int kSolveIterations = 14;
+        constexpr float kMaxSolveStepPixels = 192.0f;
+        for (int iter = 0; iter < kSolveIterations; ++iter) {
+            const int sample_x = clamp_tex_x(solved_x);
+            const int sample_y = clamp_tex_y(solved_y);
+            const int sample_x_plus = clamp_tex_x(sample_x + 1);
+            const int sample_y_plus = clamp_tex_y(sample_y + 1);
 
-        const float j00 = plus_x.x - base.x;
-        const float j01 = plus_y.x - base.x;
-        const float j10 = plus_x.y - base.y;
-        const float j11 = plus_y.y - base.y;
-        const float det = j00 * j11 - j01 * j10;
-        if (std::fabs(det) < 1e-6f) {
-            break;
-        }
+            SDL_FPoint base{};
+            SDL_FPoint plus_x{};
+            SDL_FPoint plus_y{};
+            if (!sample_screen_for_texture(sample_x, sample_y, base) ||
+                !sample_screen_for_texture(sample_x_plus, sample_y, plus_x) ||
+                !sample_screen_for_texture(sample_x, sample_y_plus, plus_y)) {
+                break;
+            }
+            sampled_any = true;
 
-        const float rx = desired_screen_px.x - base.x;
-        const float ry = desired_screen_px.y - base.y;
-        float dx = (rx * j11 - ry * j01) / det;
-        float dy = (ry * j00 - rx * j10) / det;
-        if (!std::isfinite(dx) || !std::isfinite(dy)) {
-            break;
-        }
+            const float j00 = plus_x.x - base.x;
+            const float j01 = plus_y.x - base.x;
+            const float j10 = plus_x.y - base.y;
+            const float j11 = plus_y.y - base.y;
+            const float det = j00 * j11 - j01 * j10;
+            if (std::fabs(det) < 1e-6f) {
+                break;
+            }
 
-        dx = std::clamp(dx, -kMaxSolveStepPixels, kMaxSolveStepPixels);
-        dy = std::clamp(dy, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+            const float rx = desired_screen_px.x - base.x;
+            const float ry = desired_screen_px.y - base.y;
+            float dx = (rx * j11 - ry * j01) / det;
+            float dy = (ry * j00 - rx * j10) / det;
+            if (!std::isfinite(dx) || !std::isfinite(dy)) {
+                break;
+            }
 
-        const int next_x = std::max(0, static_cast<int>(std::lround(static_cast<float>(tex_x) + dx)));
-        const int next_y = std::max(0, static_cast<int>(std::lround(static_cast<float>(tex_y) + dy)));
-        if (next_x == tex_x && next_y == tex_y) {
-            break;
+            dx = std::clamp(dx, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+            dy = std::clamp(dy, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+
+            const int next_x = clamp_tex_x(static_cast<int>(std::lround(static_cast<float>(sample_x) + dx)));
+            const int next_y = clamp_tex_y(static_cast<int>(std::lround(static_cast<float>(sample_y) + dy)));
+            if (next_x == sample_x && next_y == sample_y) {
+                break;
+            }
+            solved_x = next_x;
+            solved_y = next_y;
         }
-        tex_x = next_x;
-        tex_y = next_y;
+        return sampled_any;
+    };
+
+    int solved_x = tex_x;
+    int solved_y = tex_y;
+    bool solved_from_local_jacobian = run_local_jacobian_solve(tex_x, tex_y, solved_x, solved_y);
+    if (!solved_from_local_jacobian) {
+        const int fallback_seed_x = (max_texture_x >= 0) ? (max_texture_x / 2) : clamp_tex_x(initial_texture_x);
+        const int fallback_seed_y = (max_texture_y >= 0) ? (max_texture_y / 2) : clamp_tex_y(initial_texture_y);
+        solved_from_local_jacobian = run_local_jacobian_solve(fallback_seed_x, fallback_seed_y, solved_x, solved_y);
     }
+    tex_x = solved_x;
+    tex_y = solved_y;
 
     int best_x = tex_x;
     int best_y = tex_y;
@@ -1420,8 +1456,8 @@ bool solve_texture_point_for_screen_target(
         }
         if (dist_sq < best_dist_sq) {
             best_dist_sq = dist_sq;
-            best_x = std::max(0, x);
-            best_y = std::max(0, y);
+            best_x = clamp_tex_x(x);
+            best_y = clamp_tex_y(y);
         }
     };
 
@@ -1447,6 +1483,24 @@ bool solve_texture_point_for_screen_target(
             }
             tex_x = best_x;
             tex_y = best_y;
+        }
+    }
+
+    if ((!std::isfinite(best_dist_sq) || best_dist_sq > 9.0f) &&
+        max_texture_x >= 0 &&
+        max_texture_y >= 0) {
+        const int max_dim = std::max(max_texture_x + 1, max_texture_y + 1);
+        int step = std::max(1, max_dim / 24);
+        while (step >= 1) {
+            for (int y = 0; y <= max_texture_y; y += step) {
+                for (int x = 0; x <= max_texture_x; x += step) {
+                    consider(x, y);
+                }
+            }
+            if (step == 1) {
+                break;
+            }
+            step = std::max(1, step / 2);
         }
     }
 
@@ -4608,24 +4662,27 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                             *overlay_target,
                             sample_anchor,
                             anchor_points::GridMaterialization::None);
-                        if (resolved_sample.resolved.missing || !resolved_sample.has_flat_screen_px) {
+                        if (resolved_sample.resolved.missing) {
                             return false;
                         }
-                        out_screen = resolved_sample.flat_screen_px;
+                        if (resolved_sample.has_final_screen_px &&
+                            std::isfinite(resolved_sample.final_screen_px.x) &&
+                            std::isfinite(resolved_sample.final_screen_px.y)) {
+                            out_screen = resolved_sample.final_screen_px;
+                        } else {
+                            out_screen = resolved_sample.screen_px;
+                        }
                         return std::isfinite(out_screen.x) && std::isfinite(out_screen.y);
                     };
 
-                    float mouse_x = 0.0f;
-                    float mouse_y = 0.0f;
-                    if (input_) {
-                        mouse_x = static_cast<float>(input_->getX());
-                        mouse_y = static_cast<float>(input_->getY());
-                    } else {
-                        SDL_GetMouseState(&mouse_x, &mouse_y);
-                    }
+                    const SDL_Point pointer_screen = input_
+                        ? SDL_Point{input_->getX(), input_->getY()}
+                        : (has_last_pointer_screen_
+                            ? last_pointer_screen_
+                            : SDL_Point{screen_w_ / 2, screen_h_ / 2});
                     const SDL_FPoint desired_screen{
-                        static_cast<float>(std::lround(mouse_x)),
-                        static_cast<float>(std::lround(mouse_y))
+                        static_cast<float>(pointer_screen.x),
+                        static_cast<float>(pointer_screen.y)
                     };
 
                     const bool same_target =
@@ -4640,21 +4697,27 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         : frame_h / 2;
                     int solved_x = seed_x;
                     int solved_y = seed_y;
-                    if (!solve_texture_point_for_screen_target(
+                    const bool solved = solve_texture_point_for_screen_target(
                             seed_x,
                             seed_y,
                             desired_screen,
                             sample_screen_for_texture,
+                            frame_w - 1,
+                            frame_h - 1,
                             solved_x,
-                            solved_y)) {
-                        solved_x = seed_x;
-                        solved_y = seed_y;
+                            solved_y);
+                    if (solved) {
+                        xy_overlay_cursor_state_.target_asset = overlay_target;
+                        xy_overlay_cursor_state_.target_world_z = target_world_z;
+                        xy_overlay_cursor_state_.tex_x = solved_x;
+                        xy_overlay_cursor_state_.tex_y = solved_y;
+                        xy_overlay_cursor_state_.valid = true;
+                    } else {
+                        solved_x = frame_w / 2;
+                        solved_y = frame_h / 2;
+                        xy_overlay_cursor_state_.valid = false;
+                        xy_overlay_cursor_state_.target_asset = nullptr;
                     }
-                    xy_overlay_cursor_state_.target_asset = overlay_target;
-                    xy_overlay_cursor_state_.target_world_z = target_world_z;
-                    xy_overlay_cursor_state_.tex_x = solved_x;
-                    xy_overlay_cursor_state_.tex_y = solved_y;
-                    xy_overlay_cursor_state_.valid = true;
 
                     auto snap_tex = [sample_step_px](int value) -> int {
                         return (value / sample_step_px) * sample_step_px;
@@ -27051,6 +27114,35 @@ void RoomEditorTestAccess::reset_delete_shortcut_route_counters(RoomEditor& edit
     editor.test_delete_shortcut_asset_delete_count_ = 0;
 }
 
+bool RoomEditorTestAccess::solve_texture_point_for_screen_target_for_tests(int initial_x,
+                                                                            int initial_y,
+                                                                            SDL_FPoint desired_screen,
+                                                                            int max_x,
+                                                                            int max_y,
+                                                                            bool singular_jacobian,
+                                                                            int& out_x,
+                                                                            int& out_y) {
+    auto sample = [singular_jacobian](int x, int y, SDL_FPoint& out_screen) {
+        if (singular_jacobian) {
+            out_screen = SDL_FPoint{100.0f, 100.0f};
+            return true;
+        }
+        out_screen = SDL_FPoint{
+            static_cast<float>(x),
+            static_cast<float>(y)};
+        return true;
+    };
+    return solve_texture_point_for_screen_target(
+        initial_x,
+        initial_y,
+        desired_screen,
+        sample,
+        max_x,
+        max_y,
+        out_x,
+        out_y);
+}
+
 void RoomEditorTestAccess::set_spawn_id_ownership_cache(
     RoomEditor& editor,
     const std::vector<std::string>& room_spawn_ids,
@@ -27118,3 +27210,4 @@ std::string RoomEditorTestAccess::room_config_header_text(const RoomEditor& edit
     return editor.room_cfg_ui_ ? editor.room_cfg_ui_->current_header_text() : std::string{};
 }
 #endif
+

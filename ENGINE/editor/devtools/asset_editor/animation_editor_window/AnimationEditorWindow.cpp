@@ -1177,6 +1177,46 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     ensure_layout();
 
+    if (defaults_modal_visible_ &&
+        (defaults_modal_rect_.w <= 0 || defaults_modal_rect_.h <= 0)) {
+        close_defaults_modal();
+    }
+
+    if (!defaults_modal_visible_ &&
+        e.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+        e.button.button == SDL_BUTTON_LEFT) {
+        const SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        auto activate_header_button = [&](const std::unique_ptr<DMButton>& button,
+                                          const std::function<void()>& callback) -> bool {
+            if (!button || !callback) {
+                return false;
+            }
+            const SDL_Rect rect = button->rect();
+            if (rect.w <= 0 || rect.h <= 0 || !SDL_PointInRect(&p, &rect)) {
+                return false;
+            }
+            button->cancel_interaction();
+            if (list_context_menu_) {
+                list_context_menu_->close();
+            }
+            callback();
+            return true;
+        };
+
+        if (activate_header_button(add_button_, [this]() { create_animation_via_prompt(); })) {
+            return true;
+        }
+        if (activate_header_button(controller_button_, [this]() { handle_controller_button_click(); })) {
+            return true;
+        }
+        if (activate_header_button(create_defaults_button_, [this]() { open_defaults_modal(); })) {
+            if (create_defaults_button_) {
+                create_defaults_button_->cancel_interaction();
+            }
+            return true;
+        }
+    }
+
     if (defaults_modal_visible_) {
         if (handle_defaults_modal_event(e)) {
             return true;

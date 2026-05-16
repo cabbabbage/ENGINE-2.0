@@ -1354,13 +1354,6 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (auto* active_dd = DMDropdown::active_dropdown()) {
-        if (active_dd->handle_event(e)) {
-            return true;
-        }
-    }
-
-
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
@@ -1368,6 +1361,26 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
     if (pointer_event) {
         pointer.x = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.x : e.button.x;
         pointer.y = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.y : e.button.y;
+    }
+
+    if (visible_ && animation_editor_window_ && animation_editor_window_->is_visible() &&
+        (pointer_event || wheel_event)) {
+        SDL_Point p = pointer;
+        if (wheel_event) {
+            sdl_mouse_util::GetMouseState(&p.x, &p.y);
+        }
+        if (animation_editor_rect_.w > 0 &&
+            animation_editor_rect_.h > 0 &&
+            SDL_PointInRect(&p, &animation_editor_rect_)) {
+            (void)animation_editor_window_->handle_event(e);
+            return true;
+        }
+    }
+
+    if (auto* active_dd = DMDropdown::active_dropdown()) {
+        if (active_dd->handle_event(e)) {
+            return true;
+        }
     }
 
     if (asset_selector_ && asset_selector_->visible()) {

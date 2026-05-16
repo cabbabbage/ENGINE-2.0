@@ -1884,7 +1884,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 8,
           "on_end": "kill",
@@ -1894,7 +1894,8 @@
             "kind": "folder",
             "name": "",
             "path": "attack"
-          }
+          },
+          "tags": []
         },
         "default": {
           "anchor_points": [
@@ -3436,7 +3437,8 @@
             "kind": "animation",
             "name": "default",
             "path": ""
-          }
+          },
+          "tags": []
         },
         "down": {
           "anchor_points": [
@@ -4272,7 +4274,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 16,
           "on_end": "default",
@@ -4282,7 +4284,8 @@
             "kind": "folder",
             "name": "",
             "path": "down"
-          }
+          },
+          "tags": []
         },
         "down_backward_left": {
           "anchor_points": [
@@ -6820,7 +6823,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 16,
           "on_end": "default",
@@ -6830,7 +6833,8 @@
             "kind": "folder",
             "name": "",
             "path": "down_forward_left"
-          }
+          },
+          "tags": []
         },
         "down_forward_right": {
           "anchor_points": [
@@ -8522,7 +8526,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 16,
           "on_end": "loop",
@@ -8532,7 +8536,8 @@
             "kind": "animation",
             "name": "default",
             "path": ""
-          }
+          },
+          "tags": []
         },
         "up": {
           "anchor_points": [
@@ -12790,6 +12795,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -12804,8 +12812,32 @@
       "starting_health": 100,
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
       "update_radius": 0,
-      "weight_kg": 38.0
+      "weight_kg": 38.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "bone": {
       "anchor_point_child_candidates": [],
@@ -26127,14 +26159,14 @@
         "dynamic_renderer_depth_efficiency_depth": 2069.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
         "layer_depth_curve": 68.61000061035156,
-        "layer_depth_interval": 292.0,
+        "layer_depth_interval": 136.0,
         "light_max_cull_depth": 16480.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 16480.0,
+        "max_cull_depth": 7512.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
@@ -26275,7 +26307,7 @@
           "display_color": [
             242,
             85,
-            242,
+            160,
             255
           ],
           "edge_smoothness": 101,
@@ -26362,9 +26394,9 @@
             }
           },
           "display_color": [
-            36,
-            218,
+            85,
             242,
+            143,
             255
           ],
           "edge_smoothness": 4,
@@ -26421,9 +26453,9 @@
             }
           },
           "display_color": [
+            61,
+            238,
             242,
-            85,
-            145,
             255
           ],
           "edge_smoothness": 4,
@@ -26480,9 +26512,9 @@
             }
           },
           "display_color": [
-            213,
-            242,
+            218,
             36,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26569,9 +26601,9 @@
             }
           },
           "display_color": [
-            204,
-            109,
-            31,
+            242,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26635,7 +26667,7 @@
           "display_color": [
             204,
             31,
-            194,
+            114,
             255
           ],
           "edge_smoothness": 70,
@@ -26733,9 +26765,9 @@
             }
           },
           "display_color": [
-            161,
-            85,
             242,
+            102,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27083,9 +27115,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            114,
+            100,
+            242,
+            61,
             255
           ],
           "edge_smoothness": 96,

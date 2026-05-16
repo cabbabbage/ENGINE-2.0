@@ -1177,19 +1177,6 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     ensure_layout();
 
-    if (!defaults_modal_visible_ && create_defaults_button_ &&
-        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
-        e.button.button == SDL_BUTTON_LEFT) {
-        const SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        if (SDL_PointInRect(&p, &create_defaults_button_->rect())) {
-            const bool activated = create_defaults_button_->handle_event(e);
-            if (activated && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                open_defaults_modal();
-            }
-            return true;
-        }
-    }
-
     if (defaults_modal_visible_) {
         if (handle_defaults_modal_event(e)) {
             return true;
@@ -1613,9 +1600,10 @@ bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
         if (activated) {
             // Opening this modal on button-down makes the action resilient to
             // upstream consumers that may swallow the matching mouse-up event.
-            if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 e.button.button == SDL_BUTTON_LEFT) {
                 open_defaults_modal();
+                create_defaults_button_->cancel_interaction();
             }
             consumed = true;
         }
@@ -1661,14 +1649,29 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
 
 void AnimationEditorWindow::open_defaults_modal() {
     ensure_defaults_modal_widgets();
-    defaults_modal_visible_ = true;
     if (list_context_menu_) {
         list_context_menu_->close();
     }
+    defaults_modal_visible_ = true;
     layout_defaults_modal();
 }
 
 void AnimationEditorWindow::close_defaults_modal() {
+    if (create_defaults_button_) {
+        create_defaults_button_->cancel_interaction();
+    }
+    if (defaults_base_frames_button_) {
+        defaults_base_frames_button_->cancel_interaction();
+    }
+    if (defaults_create_button_) {
+        defaults_create_button_->cancel_interaction();
+    }
+    if (defaults_cancel_button_) {
+        defaults_cancel_button_->cancel_interaction();
+    }
+    if (defaults_distance_box_) {
+        defaults_distance_box_->stop_editing();
+    }
     defaults_modal_visible_ = false;
     defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
 }
@@ -1683,6 +1686,17 @@ void AnimationEditorWindow::layout_defaults_modal() {
 
     const int modal_width = std::clamp(bounds_.w - 120, 460, 720);
     const int modal_height = 455;
+    if (bounds_.w <= 0 || bounds_.h <= 0 || bounds_.w < 320 || bounds_.h < 240 ||
+        modal_width <= 0 || modal_height <= 0 || bounds_.h < modal_height + 20) {
+        defaults_modal_visible_ = false;
+        defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+        set_status_message("Unable to open Create Defaults panel in current layout.", 240);
+        if (create_defaults_button_) {
+            create_defaults_button_->cancel_interaction();
+        }
+        return;
+    }
+
     defaults_modal_rect_ = SDL_Rect{
         bounds_.x + std::max(0, (bounds_.w - modal_width) / 2),
         bounds_.y + std::max(0, (bounds_.h - modal_height) / 2),
@@ -1817,10 +1831,15 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
     }
 
     if (pointer_event) {
-        if (SDL_PointInRect(&point, &defaults_modal_rect_)) {
+        const bool inside_modal = SDL_PointInRect(&point, &defaults_modal_rect_);
+        if (inside_modal) {
             return true;
         }
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            close_defaults_modal();
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_WHEEL) {
             return true;
         }
     }

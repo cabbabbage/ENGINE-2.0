@@ -354,6 +354,11 @@ void DMButton::update_preferred_width() {
     preferred_width_ = std::max(size.x + kButtonHorizontalPadding, kButtonHorizontalPadding);
 }
 
+void DMButton::cancel_interaction() {
+    pressed_ = false;
+    hovered_ = false;
+}
+
 bool DMButton::handle_event(const SDL_Event& e) {
     if (tooltip_state_ && DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state_)) {
         return true;

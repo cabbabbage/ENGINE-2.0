@@ -3816,6 +3816,40 @@ void Assets::test_sync_live_dynamic_assets_for_bounds(const world::GridBounds& b
     sync_live_dynamic_assets_to_render_bounds(bounds);
 }
 
+void Assets::test_set_live_dynamic_frame_caps(std::size_t scan_cap, std::size_t spawn_cap) {
+    max_live_dynamic_scan_cells_per_selector_per_frame_ = std::max<std::size_t>(1, scan_cap);
+    max_live_dynamic_new_spawns_per_frame_ = std::max<std::size_t>(1, spawn_cap);
+    min_live_dynamic_scan_cells_per_selector_per_frame_ = 1;
+    min_live_dynamic_new_spawns_per_frame_ = 1;
+    adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
+        std::clamp<std::size_t>(adaptive_live_dynamic_scan_cells_per_selector_per_frame_,
+                                min_live_dynamic_scan_cells_per_selector_per_frame_,
+                                max_live_dynamic_scan_cells_per_selector_per_frame_);
+    adaptive_live_dynamic_new_spawns_per_frame_ =
+        std::clamp<std::size_t>(adaptive_live_dynamic_new_spawns_per_frame_,
+                                min_live_dynamic_new_spawns_per_frame_,
+                                max_live_dynamic_new_spawns_per_frame_);
+}
+
+std::size_t Assets::test_live_dynamic_pending_point_count() const {
+    std::size_t total = 0;
+    for (const auto& [_, state] : live_dynamic_selector_scan_state_) {
+        if (!state.valid || state.pending_cursor >= state.pending_points.size()) {
+            continue;
+        }
+        total += state.pending_points.size() - state.pending_cursor;
+    }
+    return total;
+}
+
+std::size_t Assets::test_live_dynamic_scan_budget() const {
+    return adaptive_live_dynamic_scan_cells_per_selector_per_frame_;
+}
+
+std::size_t Assets::test_live_dynamic_spawn_budget() const {
+    return adaptive_live_dynamic_new_spawns_per_frame_;
+}
+
 int Assets::audio_effect_max_distance_world() const {
     const_cast<Assets*>(this)->update_max_asset_dimensions();
     const float horizontal_padding = std::max(0.0f, max_asset_width_world_ * 1.5f);

@@ -321,6 +321,10 @@ public:
     std::optional<SDL_Point> opengl_postprocess_target_size() const;
 
     void test_sync_live_dynamic_assets_for_bounds(const world::GridBounds& bounds);
+    void test_set_live_dynamic_frame_caps(std::size_t scan_cap, std::size_t spawn_cap);
+    std::size_t test_live_dynamic_pending_point_count() const;
+    std::size_t test_live_dynamic_scan_budget() const;
+    std::size_t test_live_dynamic_spawn_budget() const;
 
 private:
     void save_map_info_json();

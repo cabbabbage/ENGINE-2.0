@@ -3466,10 +3466,108 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         return false;
     };
 
-    std::unordered_map<world::GridKey, bool, world::GridKeyHash> occupancy_cache;
-    std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> room_cache;
+    enum class SpawnPointEvalResult {
+        ok,
+        occupied,
+        out_of_bounds,
+        room_rejected,
+        already_spawned,
+    };
+
+    struct LiveDynamicEvaluationContext {
+        std::unordered_map<world::GridKey, bool, world::GridKeyHash> occupancy_cache;
+        std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> room_cache;
+        std::size_t rejected_occupied = 0;
+        std::size_t rejected_bounds = 0;
+        std::size_t rejected_room = 0;
+        std::size_t rejected_already_spawned = 0;
+    } eval_context;
     std::size_t qualified_this_frame = 0;
     std::size_t spawned_this_frame = 0;
+
+    auto evaluate_spawn_point = [&](const LiveDynamicPointKey& key,
+                                    int owner_anchor_world_x,
+                                    int owner_anchor_world_z,
+                                    LiveDynamicEvaluationContext& ctx,
+                                    std::string* out_owner_name = nullptr) -> SpawnPointEvalResult {
+        if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
+            live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
+            ++ctx.rejected_already_spawned;
+            return SpawnPointEvalResult::already_spawned;
+        }
+        if (!in_world_bounds(owner_anchor_world_x,
+                             owner_anchor_world_z,
+                             spawn_min_world_x,
+                             spawn_max_world_x,
+                             spawn_min_world_z,
+                             spawn_max_world_z)) {
+            ++ctx.rejected_bounds;
+            return SpawnPointEvalResult::out_of_bounds;
+        }
+
+        const world::GridPoint grid_point = world::GridPoint::make_virtual(
+            owner_anchor_world_x,
+            0,
+            owner_anchor_world_z,
+            key.grid_resolution);
+        const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
+        const auto occupied_it = ctx.occupancy_cache.find(occupancy_key);
+        bool occupied = false;
+        if (occupied_it != ctx.occupancy_cache.end()) {
+            occupied = occupied_it->second;
+        } else {
+            const world::GridPoint* existing = world_grid_.find_grid_point(occupancy_key);
+            occupied = existing && !existing->assets_here().empty();
+            ctx.occupancy_cache.emplace(occupancy_key, occupied);
+        }
+        if (occupied) {
+            ++ctx.rejected_occupied;
+            return SpawnPointEvalResult::occupied;
+        }
+
+        const LiveDynamicRoomCacheKey room_key{key.mode, key.grid_resolution, key.grid_x, key.grid_z};
+        auto room_it = ctx.room_cache.find(room_key);
+        if (room_it == ctx.room_cache.end()) {
+            const SDL_Point world_point{owner_anchor_world_x, owner_anchor_world_z};
+            bool inside_any_room = false;
+            Room* owner = nullptr;
+            if (key.mode == LiveDynamicMode::InheritedMap) {
+                owner = room_for_point(world_point, true, inside_any_room);
+            } else {
+                (void)room_for_point(world_point, false, inside_any_room);
+            }
+            LiveDynamicRoomCacheValue value;
+            value.inside_any_room = inside_any_room;
+            value.has_owner = owner != nullptr;
+            if (owner) {
+                value.owner_name = owner->room_name;
+            }
+            if (key.mode == LiveDynamicMode::BoundaryArea) {
+                value.boundary_allowed = point_in_boundary_area(world_point, inside_any_room);
+            }
+            room_it = ctx.room_cache.emplace(room_key, std::move(value)).first;
+        }
+        const LiveDynamicRoomCacheValue& room_value = room_it->second;
+        if (key.mode == LiveDynamicMode::InheritedMap) {
+            if (!room_value.has_owner) {
+                ++ctx.rejected_room;
+                return SpawnPointEvalResult::room_rejected;
+            }
+            if (out_owner_name) {
+                *out_owner_name = room_value.owner_name;
+            }
+        } else {
+            if (!room_value.boundary_allowed) {
+                ++ctx.rejected_room;
+                return SpawnPointEvalResult::room_rejected;
+            }
+            if (out_owner_name) {
+                *out_owner_name = map_id_;
+            }
+        }
+
+        return SpawnPointEvalResult::ok;
+    };
 
     while (qualified_this_frame < scan_cell_cap) {
         if (sync_budget_hit()) {
@@ -3498,70 +3596,12 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         live_dynamic_pending_qualification_keys_.erase(point.point_key);
 
         const LiveDynamicPointKey& key = point.point_key;
-        if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
-            live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
-            continue;
-        }
-        if (!in_world_bounds(point.owner_anchor_world_x,
-                             point.owner_anchor_world_z,
-                             spawn_min_world_x,
-                             spawn_max_world_x,
-                             spawn_min_world_z,
-                             spawn_max_world_z)) {
-            continue;
-        }
-
-        const world::GridPoint grid_point = world::GridPoint::make_virtual(
-            point.owner_anchor_world_x,
-            0,
-            point.owner_anchor_world_z,
-            key.grid_resolution);
-        const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
-        const auto occupied_it = occupancy_cache.find(occupancy_key);
-        bool occupied = false;
-        if (occupied_it != occupancy_cache.end()) {
-            occupied = occupied_it->second;
-        } else {
-            const world::GridPoint* existing = world_grid_.find_grid_point(occupancy_key);
-            occupied = existing && !existing->assets_here().empty();
-            occupancy_cache.emplace(occupancy_key, occupied);
-        }
-        if (occupied) {
-            continue;
-        }
-
-        const LiveDynamicRoomCacheKey room_key{
-            key.mode,
-            key.grid_resolution,
-            key.grid_x,
-            key.grid_z};
-        auto room_it = room_cache.find(room_key);
-        if (room_it == room_cache.end()) {
-            const SDL_Point world_point{point.owner_anchor_world_x, point.owner_anchor_world_z};
-            bool inside_any_room = false;
-            Room* owner = nullptr;
-            if (key.mode == LiveDynamicMode::InheritedMap) {
-                owner = room_for_point(world_point, true, inside_any_room);
-            } else {
-                (void)room_for_point(world_point, false, inside_any_room);
-            }
-            LiveDynamicRoomCacheValue value;
-            value.inside_any_room = inside_any_room;
-            value.has_owner = owner != nullptr;
-            if (owner) {
-                value.owner_name = owner->room_name;
-            }
-            if (key.mode == LiveDynamicMode::BoundaryArea) {
-                value.boundary_allowed = point_in_boundary_area(world_point, inside_any_room);
-            }
-            room_it = room_cache.emplace(room_key, std::move(value)).first;
-        }
-        const LiveDynamicRoomCacheValue& room_value = room_it->second;
-        if (key.mode == LiveDynamicMode::InheritedMap) {
-            if (!room_value.has_owner) {
-                continue;
-            }
-        } else if (!room_value.boundary_allowed) {
+        std::string owner_name;
+        if (evaluate_spawn_point(key,
+                                 point.owner_anchor_world_x,
+                                 point.owner_anchor_world_z,
+                                 eval_context,
+                                 &owner_name) != SpawnPointEvalResult::ok) {
             continue;
         }
 
@@ -3584,7 +3624,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         task.world_x = point.world_x;
         task.world_z = point.world_z;
         task.dist2 = point.dist2;
-        task.owner_name = (key.mode == LiveDynamicMode::InheritedMap) ? room_value.owner_name : map_id_;
+        task.owner_name = owner_name;
         task.asset_name = candidate->asset_name;
         task.info = candidate->info;
         if (live_dynamic_pending_spawn_keys_.insert(key).second) {
@@ -3609,41 +3649,22 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         live_dynamic_pending_spawn_keys_.erase(task.point_key);
 
         const LiveDynamicPointKey& key = task.point_key;
-        if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
-            live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
-            continue;
-        }
-        if (!in_world_bounds(task.owner_anchor_world_x,
-                             task.owner_anchor_world_z,
-                             spawn_min_world_x,
-                             spawn_max_world_x,
-                             spawn_min_world_z,
-                             spawn_max_world_z)) {
-            continue;
-        }
-
-        const world::GridPoint grid_point = world::GridPoint::make_virtual(
-            task.owner_anchor_world_x,
-            0,
-            task.owner_anchor_world_z,
-            key.grid_resolution);
-        const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
-        const auto occupied_it = occupancy_cache.find(occupancy_key);
-        bool occupied = false;
-        if (occupied_it != occupancy_cache.end()) {
-            occupied = occupied_it->second;
-        } else {
-            const world::GridPoint* existing = world_grid_.find_grid_point(occupancy_key);
-            occupied = existing && !existing->assets_here().empty();
-            occupancy_cache.emplace(occupancy_key, occupied);
-        }
-        if (occupied) {
+        if (evaluate_spawn_point(key,
+                                 task.owner_anchor_world_x,
+                                 task.owner_anchor_world_z,
+                                 eval_context) != SpawnPointEvalResult::ok) {
             continue;
         }
 
         if (spawn_live_asset(task)) {
             ++spawned_this_frame;
-            occupancy_cache[occupancy_key] = true;
+            const world::GridPoint grid_point = world::GridPoint::make_virtual(
+                task.owner_anchor_world_x,
+                0,
+                task.owner_anchor_world_z,
+                key.grid_resolution);
+            const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
+            eval_context.occupancy_cache[occupancy_key] = true;
             if (auto state_it = live_dynamic_selector_scan_state_.find(task.selector_key);
                 state_it != live_dynamic_selector_scan_state_.end()) {
                 state_it->second.spawned_cells.insert(task.point_key);

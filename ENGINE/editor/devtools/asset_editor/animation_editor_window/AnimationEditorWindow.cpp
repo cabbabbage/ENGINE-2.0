@@ -1182,41 +1182,6 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         close_defaults_modal();
     }
 
-    if (!defaults_modal_visible_ &&
-        e.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-        e.button.button == SDL_BUTTON_LEFT) {
-        const SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        auto activate_header_button = [&](const std::unique_ptr<DMButton>& button,
-                                          const std::function<void()>& callback) -> bool {
-            if (!button || !callback) {
-                return false;
-            }
-            const SDL_Rect rect = button->rect();
-            if (rect.w <= 0 || rect.h <= 0 || !SDL_PointInRect(&p, &rect)) {
-                return false;
-            }
-            button->cancel_interaction();
-            if (list_context_menu_) {
-                list_context_menu_->close();
-            }
-            callback();
-            return true;
-        };
-
-        if (activate_header_button(add_button_, [this]() { create_animation_via_prompt(); })) {
-            return true;
-        }
-        if (activate_header_button(controller_button_, [this]() { handle_controller_button_click(); })) {
-            return true;
-        }
-        if (activate_header_button(create_defaults_button_, [this]() { open_defaults_modal(); })) {
-            if (create_defaults_button_) {
-                create_defaults_button_->cancel_interaction();
-            }
-            return true;
-        }
-    }
-
     if (defaults_modal_visible_) {
         if (handle_defaults_modal_event(e)) {
             return true;
@@ -1629,35 +1594,35 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
 bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
     bool consumed = false;
     auto handle_button = [&](const std::unique_ptr<DMButton>& button,
+                             const char* button_name,
                              bool activate_on_mouse_down,
                              auto&& callback) {
         if (!button) return;
         bool activated = button->handle_event(e);
         if (!activated) return;
-
-        if (((activate_on_mouse_down && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) ||
+        const bool is_activation_event =
+            ((activate_on_mouse_down && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) ||
              (!activate_on_mouse_down && e.type == SDL_EVENT_MOUSE_BUTTON_UP)) &&
-            e.button.button == SDL_BUTTON_LEFT) {
+            e.button.button == SDL_BUTTON_LEFT;
+        if (is_activation_event) {
+            SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Header button activated: %s (%s).",
+                         button_name,
+                         activate_on_mouse_down ? "down" : "up");
+            set_status_message(std::string("Header: ") + button_name + " activated.", 90);
+            button->cancel_interaction();
             callback();
         }
         consumed = true;
-};
+    };
 
-    handle_button(add_button_, true, [this]() { create_animation_via_prompt(); });
-    handle_button(controller_button_, false, [this]() { handle_controller_button_click(); });
-    if (create_defaults_button_) {
-        const bool activated = create_defaults_button_->handle_event(e);
-        if (activated) {
-            // Opening this modal on button-down makes the action resilient to
-            // upstream consumers that may swallow the matching mouse-up event.
-            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-                e.button.button == SDL_BUTTON_LEFT) {
-                open_defaults_modal();
-                create_defaults_button_->cancel_interaction();
-            }
-            consumed = true;
-        }
-    }
+    // Add Animation explicitly activates on mouse-down.
+    handle_button(add_button_, "Add Animation", true, [this]() { create_animation_via_prompt(); });
+    // Add/Open Controller explicitly activates on mouse-up.
+    handle_button(controller_button_, "Add/Open Controller", false, [this]() { handle_controller_button_click(); });
+    // Create Defaults explicitly activates on mouse-down to remain resilient
+    // when upstream handlers consume the matching mouse-up.
+    handle_button(create_defaults_button_, "Create Defaults", true, [this]() { open_defaults_modal(); });
 
     return consumed;
 }
@@ -3152,7 +3117,6 @@ std::optional<std::filesystem::path> AnimationEditorWindow::pick_audio_file() co
 }
 
 }
-
 
 
 

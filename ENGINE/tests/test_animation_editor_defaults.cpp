@@ -523,6 +523,87 @@ TEST_CASE("AnimationEditorWindow add animation button activates on mouse down") 
     CHECK(std::find(ids.begin(), ids.end(), "jump") != ids.end());
 }
 
+TEST_CASE("AnimationEditorWindow controller button activates on mouse up only") {
+    animation_editor::AnimationEditorWindow window;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+    REQUIRE(window.controller_button_ != nullptr);
+    const SDL_Rect button_rect = window.controller_button_->rect();
+    REQUIRE(button_rect.w > 0);
+    REQUIRE(button_rect.h > 0);
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = button_rect.x + 4;
+    down.button.y = button_rect.y + 4;
+    CHECK(window.handle_event(down));
+    CHECK_FALSE(window.defaults_modal_visible_);
+
+    SDL_Event up{};
+    up.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    up.button.button = SDL_BUTTON_LEFT;
+    up.button.x = button_rect.x + 4;
+    up.button.y = button_rect.y + 4;
+    CHECK(window.handle_event(up));
+}
+
+TEST_CASE("AnimationEditorWindow header button press is blocked while defaults modal is active") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+    REQUIRE(window.add_button_ != nullptr);
+    const SDL_Rect add_rect = window.add_button_->rect();
+
+    window.defaults_modal_visible_ = true;
+    window.defaults_modal_rect_ = SDL_Rect{200, 120, 400, 280};
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"blocked"};
+    };
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = add_rect.x + 4;
+    down.button.y = add_rect.y + 4;
+    CHECK(window.handle_event(down));
+    CHECK(window.defaults_modal_visible_);
+    const auto ids = document->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "blocked") == ids.end());
+}
+
+TEST_CASE("AnimationEditorWindow header button press is blocked while list context menu is open") {
+    animation_editor::AnimationEditorWindow window;
+    auto document = std::make_shared<animation_editor::AnimationDocument>();
+    document->load_from_manifest(nlohmann::json::object(), fs::temp_directory_path(), nullptr);
+    window.document_ = document;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+    REQUIRE(window.add_button_ != nullptr);
+    REQUIRE(window.list_context_menu_ != nullptr);
+
+    const SDL_Rect add_rect = window.add_button_->rect();
+    window.text_prompt_override_ = [](const std::string&, const std::string&, const std::string&) {
+        return std::optional<std::string>{"menu_blocked"};
+    };
+    window.list_context_menu_->open(window.bounds_, SDL_Point{add_rect.x + 2, add_rect.y + 2},
+                                    {{.label = "Dummy", .callback = []() {}}});
+    REQUIRE(window.list_context_menu_->is_open());
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = add_rect.x + 4;
+    down.button.y = add_rect.y + 4;
+    CHECK(window.handle_event(down));
+    CHECK(window.list_context_menu_->is_open());
+    const auto ids = document->animation_ids();
+    CHECK(std::find(ids.begin(), ids.end(), "menu_blocked") == ids.end());
+}
+
 TEST_CASE("AnimationEditorWindow header recovers from invalid defaults modal state") {
     animation_editor::AnimationEditorWindow window;
     auto document = std::make_shared<animation_editor::AnimationDocument>();

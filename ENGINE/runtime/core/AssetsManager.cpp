@@ -174,6 +174,11 @@ std::uint32_t startup_visibility_refresh_interval_frames() {
     return frames;
 }
 
+bool live_dynamic_sync_instrumentation_enabled() {
+    static const bool enabled = env_int_clamped("VIBBLE_LIVE_DYNAMIC_SYNC_DEBUG", 0, 0, 1) != 0;
+    return enabled;
+}
+
 double startup_stage_warning_ms() {
     return env_double_clamped("VIBBLE_STARTUP_STAGE_WARN_MS", 250.0, 10.0, 5000.0);
 }
@@ -3137,14 +3142,47 @@ void Assets::spawn_qualified_tasks(LiveDynamicSyncContext& context, const LiveDy
 void Assets::update_adaptive_budget_metrics(const LiveDynamicSyncContext& context, const LiveDynamicSyncTiming& timing) { (void)context; (void)timing; }
 
 void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds) {
+    const bool instrumentation_enabled = live_dynamic_sync_instrumentation_enabled();
+    const std::uint64_t perf_freq = SDL_GetPerformanceFrequency();
+    auto elapsed_ms = [perf_freq](std::uint64_t start, std::uint64_t end) {
+        if (perf_freq == 0 || end < start) {
+            return 0.0;
+        }
+        return (static_cast<double>(end - start) * 1000.0) / static_cast<double>(perf_freq);
+    };
+    const std::uint64_t sync_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
+    const std::size_t selector_state_size_before = live_dynamic_selector_scan_state_.size();
+    const std::size_t qualification_queue_size_before = live_dynamic_qualification_queue_.size();
+    const std::size_t spawn_queue_size_before = live_dynamic_spawn_queue_.size();
+    const std::size_t spawned_keys_size_before = live_dynamic_spawned_keys_.size();
+    double stage_a_ms = 0.0;
+    double stage_b_ms = 0.0;
+    double stage_c_ms = 0.0;
+    double stage_d_ms = 0.0;
+    double stage_e_ms = 0.0;
+    double stage_f_ms = 0.0;
+
+    const std::uint64_t stage_a_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
     // Stage: A - collect_sync_context(render_bounds)
     LiveDynamicSyncContext context = collect_sync_context(render_bounds);
+    if (instrumentation_enabled) {
+        stage_a_ms = elapsed_ms(stage_a_start, SDL_GetPerformanceCounter());
+    }
     if (!context.valid) {
         clear_live_dynamic_assets();
         return;
     }
+    const std::uint64_t stage_b_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
     // Stage: B - prune_out_of_bounds_dynamic_assets(context)
+    const std::size_t assets_before_prune = live_dynamic_asset_keys_.size();
     prune_out_of_bounds_dynamic_assets(context);
+    const std::size_t assets_after_prune = live_dynamic_asset_keys_.size();
+    const std::size_t despawns_this_frame = assets_before_prune >= assets_after_prune
+        ? (assets_before_prune - assets_after_prune)
+        : 0;
+    if (instrumentation_enabled) {
+        stage_b_ms = elapsed_ms(stage_b_start, SDL_GetPerformanceCounter());
+    }
 
     // Stage: C/D/E/F currently executed in legacy flow below to preserve behavior.
     // TODO: fully migrate legacy body into stage functions without policy changes.
@@ -3398,11 +3436,15 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         state.center_z = center_z;
     };
 
+    const std::uint64_t stage_c_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
     for (const LiveDynamicSelector& selector : live_dynamic_boundary_selectors_) {
         add_selector_frontier(selector);
     }
     for (const LiveDynamicSelector& selector : live_dynamic_inherited_selectors_) {
         add_selector_frontier(selector);
+    }
+    if (instrumentation_enabled) {
+        stage_c_ms = elapsed_ms(stage_c_start, SDL_GetPerformanceCounter());
     }
 
     auto next_selector_point = [&](LiveDynamicQualifiedPoint& out_point) -> bool {
@@ -3482,8 +3524,10 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         std::size_t rejected_room = 0;
         std::size_t rejected_already_spawned = 0;
     } eval_context;
-    std::size_t qualified_this_frame = 0;
-    std::size_t spawned_this_frame = 0;
+    std::size_t points_scanned_this_frame = 0;
+    std::size_t points_qualified_this_frame = 0;
+    std::size_t spawn_attempts_this_frame = 0;
+    std::size_t successful_spawns_this_frame = 0;
 
     auto evaluate_spawn_point = [&](const LiveDynamicPointKey& key,
                                     int owner_anchor_world_x,
@@ -3569,21 +3613,22 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         return SpawnPointEvalResult::ok;
     };
 
-    while (qualified_this_frame < scan_cell_cap) {
+    const std::uint64_t stage_d_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
+    while (points_qualified_this_frame < scan_cell_cap) {
         if (sync_budget_hit()) {
             break;
         }
         if (total_spawn_cap > 0 && live_dynamic_asset_keys_.size() >= total_spawn_cap) {
             break;
         }
-        while (live_dynamic_qualification_queue_.empty() && qualified_this_frame < scan_cell_cap) {
+        while (live_dynamic_qualification_queue_.empty() && points_qualified_this_frame < scan_cell_cap) {
             LiveDynamicQualifiedPoint next_point;
             if (!next_selector_point(next_point)) {
                 break;
             }
             if (live_dynamic_pending_qualification_keys_.insert(next_point.point_key).second) {
                 live_dynamic_qualification_queue_.insert(next_point);
-                ++qualified_this_frame;
+                ++points_scanned_this_frame;
             }
         }
         if (live_dynamic_qualification_queue_.empty()) {
@@ -3629,10 +3674,15 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         task.info = candidate->info;
         if (live_dynamic_pending_spawn_keys_.insert(key).second) {
             live_dynamic_spawn_queue_.insert(std::move(task));
+            ++points_qualified_this_frame;
         }
     }
+    if (instrumentation_enabled) {
+        stage_d_ms = elapsed_ms(stage_d_start, SDL_GetPerformanceCounter());
+    }
 
-    while (spawned_this_frame < new_spawn_cap) {
+    const std::uint64_t stage_e_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
+    while (successful_spawns_this_frame < new_spawn_cap) {
         if (sync_budget_hit()) {
             break;
         }
@@ -3647,6 +3697,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         const LiveDynamicSpawnTask task = *queue_it;
         live_dynamic_spawn_queue_.erase(queue_it);
         live_dynamic_pending_spawn_keys_.erase(task.point_key);
+        ++spawn_attempts_this_frame;
 
         const LiveDynamicPointKey& key = task.point_key;
         if (evaluate_spawn_point(key,
@@ -3657,7 +3708,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
 
         if (spawn_live_asset(task)) {
-            ++spawned_this_frame;
+            ++successful_spawns_this_frame;
             const world::GridPoint grid_point = world::GridPoint::make_virtual(
                 task.owner_anchor_world_x,
                 0,
@@ -3671,19 +3722,22 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             }
         }
     }
+    if (instrumentation_enabled) {
+        stage_e_ms = elapsed_ms(stage_e_start, SDL_GetPerformanceCounter());
+    }
 
     const std::uint64_t perf_end = SDL_GetPerformanceCounter();
-    const std::uint64_t perf_freq = SDL_GetPerformanceFrequency();
     if (perf_freq > 0) {
-        const double elapsed_ms =
+        const std::uint64_t stage_f_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
+        const double frame_elapsed_ms =
             (static_cast<double>(perf_end - perf_start) * 1000.0) / static_cast<double>(perf_freq);
         if (!live_dynamic_sync_ema_initialized_) {
             live_dynamic_sync_ema_initialized_ = true;
-            live_dynamic_sync_ema_ms_ = elapsed_ms;
+            live_dynamic_sync_ema_ms_ = frame_elapsed_ms;
         } else {
             constexpr double kEmaAlpha = 0.2;
             live_dynamic_sync_ema_ms_ =
-                (kEmaAlpha * elapsed_ms) + ((1.0 - kEmaAlpha) * live_dynamic_sync_ema_ms_);
+                (kEmaAlpha * frame_elapsed_ms) + ((1.0 - kEmaAlpha) * live_dynamic_sync_ema_ms_);
         }
 
         const std::size_t min_scan_budget =
@@ -3726,6 +3780,39 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             adaptive_live_dynamic_new_spawns_per_frame_,
             min_spawn_budget,
             max_spawn_budget);
+        if (instrumentation_enabled) {
+            stage_f_ms = elapsed_ms(stage_f_start, SDL_GetPerformanceCounter());
+        }
+    }
+
+    if (instrumentation_enabled) {
+        const std::size_t selector_state_size_after = live_dynamic_selector_scan_state_.size();
+        const std::size_t qualification_queue_size_after = live_dynamic_qualification_queue_.size();
+        const std::size_t spawn_queue_size_after = live_dynamic_spawn_queue_.size();
+        const std::size_t spawned_keys_size_after = live_dynamic_spawned_keys_.size();
+        const double sync_total_ms = elapsed_ms(sync_start, SDL_GetPerformanceCounter());
+        vibble::log::debug(
+            "[RenderGuard] live_dynamic_sync frame=" + std::to_string(frame_id_) +
+            " ms_total=" + std::to_string(sync_total_ms) +
+            " stage_ms={A:" + std::to_string(stage_a_ms) +
+            ",B:" + std::to_string(stage_b_ms) +
+            ",C:" + std::to_string(stage_c_ms) +
+            ",D:" + std::to_string(stage_d_ms) +
+            ",E:" + std::to_string(stage_e_ms) +
+            ",F:" + std::to_string(stage_f_ms) + "}" +
+            " sizes_before={selector_state:" + std::to_string(selector_state_size_before) +
+            ",qualification_queue:" + std::to_string(qualification_queue_size_before) +
+            ",spawn_queue:" + std::to_string(spawn_queue_size_before) +
+            ",spawned_keys:" + std::to_string(spawned_keys_size_before) + "}" +
+            " sizes_after={selector_state:" + std::to_string(selector_state_size_after) +
+            ",qualification_queue:" + std::to_string(qualification_queue_size_after) +
+            ",spawn_queue:" + std::to_string(spawn_queue_size_after) +
+            ",spawned_keys:" + std::to_string(spawned_keys_size_after) + "}" +
+            " counters={points_scanned:" + std::to_string(points_scanned_this_frame) +
+            ",points_qualified:" + std::to_string(points_qualified_this_frame) +
+            ",spawn_attempts:" + std::to_string(spawn_attempts_this_frame) +
+            ",successful_spawns:" + std::to_string(successful_spawns_this_frame) +
+            ",despawns:" + std::to_string(despawns_this_frame) + "}");
     }
 }
 

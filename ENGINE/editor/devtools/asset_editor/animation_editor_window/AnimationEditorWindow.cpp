@@ -1177,6 +1177,19 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     ensure_layout();
 
+    if (!defaults_modal_visible_ && create_defaults_button_ &&
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) &&
+        e.button.button == SDL_BUTTON_LEFT) {
+        const SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        if (SDL_PointInRect(&p, &create_defaults_button_->rect())) {
+            const bool activated = create_defaults_button_->handle_event(e);
+            if (activated && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                open_defaults_modal();
+            }
+            return true;
+        }
+    }
+
     if (defaults_modal_visible_) {
         if (handle_defaults_modal_event(e)) {
             return true;

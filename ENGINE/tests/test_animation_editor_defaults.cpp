@@ -400,3 +400,24 @@ TEST_CASE("AnimationEditorWindow create defaults button opens modal on mouse dow
     CHECK(handled);
     CHECK(window.defaults_modal_visible_);
 }
+
+TEST_CASE("AnimationEditorWindow handle_event opens defaults modal before nested handlers") {
+    animation_editor::AnimationEditorWindow window;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+    REQUIRE(window.create_defaults_button_ != nullptr);
+    const SDL_Rect button_rect = window.create_defaults_button_->rect();
+    REQUIRE(button_rect.w > 0);
+    REQUIRE(button_rect.h > 0);
+    window.defaults_modal_visible_ = false;
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = button_rect.x + 4;
+    down.button.y = button_rect.y + 4;
+
+    const bool handled = window.handle_event(down);
+    CHECK(handled);
+    CHECK(window.defaults_modal_visible_);
+}

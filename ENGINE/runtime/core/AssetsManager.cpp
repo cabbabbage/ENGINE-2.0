@@ -3752,6 +3752,64 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                           " frame_spawn_cap=" + std::to_string(new_spawn_cap) +
                           " total_spawn_cap=" + std::to_string(total_spawn_cap));
     }
+
+    const std::uint64_t perf_end = SDL_GetPerformanceCounter();
+    const std::uint64_t perf_freq = SDL_GetPerformanceFrequency();
+    if (perf_freq > 0) {
+        const double elapsed_ms =
+            (static_cast<double>(perf_end - perf_start) * 1000.0) / static_cast<double>(perf_freq);
+        if (!live_dynamic_sync_ema_initialized_) {
+            live_dynamic_sync_ema_initialized_ = true;
+            live_dynamic_sync_ema_ms_ = elapsed_ms;
+        } else {
+            constexpr double kEmaAlpha = 0.2;
+            live_dynamic_sync_ema_ms_ =
+                (kEmaAlpha * elapsed_ms) + ((1.0 - kEmaAlpha) * live_dynamic_sync_ema_ms_);
+        }
+
+        const std::size_t min_scan_budget =
+            std::max<std::size_t>(1, min_live_dynamic_scan_cells_per_selector_per_frame_);
+        const std::size_t max_scan_budget =
+            std::max<std::size_t>(min_scan_budget, max_live_dynamic_scan_cells_per_selector_per_frame_);
+        const std::size_t min_spawn_budget =
+            std::max<std::size_t>(1, min_live_dynamic_new_spawns_per_frame_);
+        const std::size_t max_spawn_budget =
+            std::max<std::size_t>(min_spawn_budget, max_live_dynamic_new_spawns_per_frame_);
+        const double target_ms = std::max(0.1, live_dynamic_sync_budget_target_ms_);
+
+        auto dec_budget = [](std::size_t current, std::size_t min_value) {
+            const std::size_t reduced = std::max<std::size_t>(
+                min_value,
+                static_cast<std::size_t>(std::floor(static_cast<double>(current) * 0.75)));
+            return std::max(min_value, reduced);
+        };
+        auto inc_budget = [](std::size_t current, std::size_t max_value) {
+            const std::size_t increased = static_cast<std::size_t>(
+                std::ceil(static_cast<double>(current) * 1.15)) + std::size_t{1};
+            return std::min(max_value, std::max(current, increased));
+        };
+
+        if (live_dynamic_sync_ema_ms_ > target_ms * 1.10) {
+            adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
+                dec_budget(adaptive_live_dynamic_scan_cells_per_selector_per_frame_, min_scan_budget);
+            adaptive_live_dynamic_new_spawns_per_frame_ =
+                dec_budget(adaptive_live_dynamic_new_spawns_per_frame_, min_spawn_budget);
+        } else if (live_dynamic_sync_ema_ms_ < target_ms * 0.75) {
+            adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
+                inc_budget(adaptive_live_dynamic_scan_cells_per_selector_per_frame_, max_scan_budget);
+            adaptive_live_dynamic_new_spawns_per_frame_ =
+                inc_budget(adaptive_live_dynamic_new_spawns_per_frame_, max_spawn_budget);
+        }
+
+        adaptive_live_dynamic_scan_cells_per_selector_per_frame_ = std::clamp<std::size_t>(
+            adaptive_live_dynamic_scan_cells_per_selector_per_frame_,
+            min_scan_budget,
+            max_scan_budget);
+        adaptive_live_dynamic_new_spawns_per_frame_ = std::clamp<std::size_t>(
+            adaptive_live_dynamic_new_spawns_per_frame_,
+            min_spawn_budget,
+            max_spawn_budget);
+    }
 }
 
 void Assets::test_sync_live_dynamic_assets_for_bounds(const world::GridBounds& bounds) {

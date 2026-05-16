@@ -662,6 +662,7 @@ private:
         int grid_resolution = 0;
         int jitter_px = 0;
         std::string spawn_id;
+        std::string display_name;
         std::size_t spawn_id_hash = 0;
         std::uint64_t jitter_seed = 0;
         std::uint64_t candidate_seed = 0;

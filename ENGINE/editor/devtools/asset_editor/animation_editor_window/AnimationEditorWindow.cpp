@@ -1527,6 +1527,10 @@ void AnimationEditorWindow::render_header(SDL_Renderer* renderer) const {
         label_x = std::max(label_x, create_defaults_button_->rect().x + create_defaults_button_->rect().w + DMSpacing::small_gap());
     }
     render_label(renderer, title, label_x, header_rect_.y + DMSpacing::small_gap());
+    if (!defaults_modal_open_warning_.empty()) {
+        render_label(renderer, defaults_modal_open_warning_, header_rect_.x + DMSpacing::panel_padding(),
+                     header_rect_.y + DMButton::height() + DMSpacing::small_gap());
+    }
 }
 
 void AnimationEditorWindow::render_status(SDL_Renderer* renderer) const {
@@ -1689,77 +1693,67 @@ void AnimationEditorWindow::close_defaults_modal() {
     }
     defaults_modal_visible_ = false;
     defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+    defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
+    defaults_modal_scroll_offset_ = 0;
+    defaults_modal_scroll_max_ = 0;
 }
+
 
 void AnimationEditorWindow::layout_defaults_modal() {
     if (!defaults_modal_visible_) {
         defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_scroll_offset_ = 0;
+        defaults_modal_scroll_max_ = 0;
         return;
     }
 
     ensure_defaults_modal_widgets();
 
-    const int modal_width = std::clamp(bounds_.w - 120, 460, 720);
-    const int modal_height = 455;
-    if (bounds_.w <= 0 || bounds_.h <= 0 || bounds_.w < 320 || bounds_.h < 240 ||
-        modal_width <= 0 || modal_height <= 0 || bounds_.h < modal_height + 20) {
+    if (bounds_.w <= 0 || bounds_.h <= 0) {
         defaults_modal_visible_ = false;
         defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
-        set_status_message("Unable to open Create Defaults panel in current layout.", 240);
-        if (create_defaults_button_) {
-            create_defaults_button_->cancel_interaction();
-        }
+        defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_open_warning_ = "Create Defaults cannot open while panel bounds are collapsed.";
+        if (create_defaults_button_) create_defaults_button_->cancel_interaction();
         return;
     }
+    defaults_modal_open_warning_.clear();
 
-    defaults_modal_rect_ = SDL_Rect{
-        bounds_.x + std::max(0, (bounds_.w - modal_width) / 2),
-        bounds_.y + std::max(0, (bounds_.h - modal_height) / 2),
-        modal_width,
-        modal_height
-    };
+    const int modal_width = std::clamp(bounds_.w - 120, 320, 720);
+    const int modal_height = std::clamp(455, 180, std::max(180, bounds_.h - 20));
+    defaults_modal_rect_ = SDL_Rect{bounds_.x + std::max(0, (bounds_.w - modal_width) / 2), bounds_.y + std::max(0, (bounds_.h - modal_height) / 2), modal_width, modal_height};
 
     const int padding = DMSpacing::panel_padding();
     const int row_gap = DMSpacing::small_gap();
     const int content_x = defaults_modal_rect_.x + padding;
     const int content_w = std::max(0, defaults_modal_rect_.w - padding * 2);
-    int y = defaults_modal_rect_.y + padding + DMStyles::Label().font_size + row_gap + 6;
+    const int title_y = defaults_modal_rect_.y + padding;
+    const int title_block_h = DMStyles::Label().font_size * 2 + row_gap + 6;
+    const int scroll_top = title_y + title_block_h;
+    const int footer_h = DMButton::height();
+    const int info_h = DMStyles::Label().font_size;
+    const int scroll_bottom = defaults_modal_rect_.y + defaults_modal_rect_.h - padding - footer_h - row_gap - info_h - row_gap;
+    const int scroll_h = std::max(0, scroll_bottom - scroll_top);
+    defaults_modal_scroll_rect_ = SDL_Rect{content_x, scroll_top, content_w, scroll_h};
+    int y = scroll_top - defaults_modal_scroll_offset_;
 
-    if (defaults_basic_movement_checkbox_) {
-        defaults_basic_movement_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_diagonals_checkbox_) {
-        defaults_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_elevation_checkbox_) {
-        defaults_elevation_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_3d_diagonals_checkbox_) {
-        defaults_3d_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_base_faces_right_checkbox_) {
-        defaults_base_faces_right_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_distance_box_) {
-        const int distance_h = defaults_distance_box_->preferred_height(content_w);
-        defaults_distance_box_->set_rect(SDL_Rect{content_x, y, content_w, distance_h});
-        y += distance_h + row_gap;
-    }
-
+    if (defaults_basic_movement_checkbox_) { defaults_basic_movement_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_diagonals_checkbox_) { defaults_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_elevation_checkbox_) { defaults_elevation_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_3d_diagonals_checkbox_) { defaults_3d_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_base_faces_right_checkbox_) { defaults_base_faces_right_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_distance_box_) { const int distance_h = defaults_distance_box_->preferred_height(content_w); defaults_distance_box_->set_rect(SDL_Rect{content_x, y, content_w, distance_h}); y += distance_h + row_gap; }
     if (defaults_base_frames_button_) {
-        if (defaults_base_frame_paths_.empty()) {
-            defaults_base_frames_button_->set_text("Add Base Movement Animation");
-        } else {
-            defaults_base_frames_button_->set_text("Base Frames (" + std::to_string(defaults_base_frame_paths_.size()) + ")");
-        }
+        defaults_base_frames_button_->set_text(defaults_base_frame_paths_.empty() ? "Add Base Movement Animation" : "Base Frames (" + std::to_string(defaults_base_frame_paths_.size()) + ")");
         const int button_w = std::min(content_w, std::max(280, defaults_base_frames_button_->preferred_width() + 24));
         defaults_base_frames_button_->set_rect(SDL_Rect{content_x, y, button_w, DMButton::height()});
+        y += DMButton::height() + row_gap;
     }
+
+    const int content_total_height = (y + defaults_modal_scroll_offset_) - scroll_top;
+    defaults_modal_scroll_max_ = std::max(0, content_total_height - scroll_h);
+    defaults_modal_scroll_offset_ = std::clamp(defaults_modal_scroll_offset_, 0, defaults_modal_scroll_max_);
 
     const int footer_y = defaults_modal_rect_.y + defaults_modal_rect_.h - padding - DMButton::height();
     if (defaults_cancel_button_ && defaults_create_button_) {
@@ -1828,6 +1822,18 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
     if (e.type == SDL_EVENT_TEXT_INPUT) {
         return true;
     }
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && defaults_modal_scroll_rect_.h > 0) {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        SDL_Point mp{mx, my};
+        if (SDL_PointInRect(&mp, &defaults_modal_scroll_rect_) && defaults_modal_scroll_max_ > 0) {
+            const int delta = static_cast<int>(std::lround(e.wheel.y)) * 24;
+            defaults_modal_scroll_offset_ = std::clamp(defaults_modal_scroll_offset_ - delta, 0, defaults_modal_scroll_max_);
+            layout_defaults_modal();
+            return true;
+        }
+    }
 
     SDL_Point point{0, 0};
     bool pointer_event = false;
@@ -1891,6 +1897,7 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
     title_y += DMStyles::Label().font_size + DMSpacing::small_gap();
     render_label(renderer, "Generate canonical [dx, dy, dz] data (per-frame = total / frames).", title_x, title_y);
 
+    SDL_SetRenderClipRect(renderer, &defaults_modal_scroll_rect_);
     if (defaults_basic_movement_checkbox_) defaults_basic_movement_checkbox_->render(renderer);
     if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
     if (defaults_elevation_checkbox_) defaults_elevation_checkbox_->render(renderer);
@@ -1898,6 +1905,7 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
     if (defaults_base_faces_right_checkbox_) defaults_base_faces_right_checkbox_->render(renderer);
     if (defaults_distance_box_) defaults_distance_box_->render(renderer);
     if (defaults_base_frames_button_) defaults_base_frames_button_->render(renderer);
+    SDL_SetRenderClipRect(renderer, nullptr);
     if (defaults_create_button_) defaults_create_button_->render(renderer);
     if (defaults_cancel_button_) defaults_cancel_button_->render(renderer);
 
@@ -3117,6 +3125,4 @@ std::optional<std::filesystem::path> AnimationEditorWindow::pick_audio_file() co
 }
 
 }
-
-
 

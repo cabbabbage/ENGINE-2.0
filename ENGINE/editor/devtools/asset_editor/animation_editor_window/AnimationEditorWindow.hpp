@@ -190,6 +190,10 @@ class AnimationEditorWindow {
     std::unique_ptr<DMButton> defaults_cancel_button_;
     std::vector<std::filesystem::path> defaults_base_frame_paths_;
     SDL_Rect defaults_modal_rect_{0, 0, 0, 0};
+    SDL_Rect defaults_modal_scroll_rect_{0, 0, 0, 0};
+    int defaults_modal_scroll_offset_ = 0;
+    int defaults_modal_scroll_max_ = 0;
+    std::string defaults_modal_open_warning_;
     SDL_Rect header_rect_{0, 0, 0, 0};
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};

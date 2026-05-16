@@ -841,6 +841,7 @@ void Assets::clear_live_dynamic_assets() {
     live_dynamic_spawned_keys_.clear();
     live_dynamic_null_keys_.clear();
     live_dynamic_selector_scan_state_.clear();
+    last_live_dynamic_sync_bounds_valid_ = false;
 }
 
 std::size_t Assets::delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete) {
@@ -3062,44 +3063,39 @@ bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& wo
         return false;
     }
 
-    const int center_x = static_cast<int>((
-        static_cast<std::int64_t>(work_bounds.min.world_x()) +
-        static_cast<std::int64_t>(work_bounds.max.world_x())) / 2);
-    const int center_z = static_cast<int>((
-        static_cast<std::int64_t>(work_bounds.min.world_z()) +
-        static_cast<std::int64_t>(work_bounds.max.world_z())) / 2);
-
-    bool should_sync = force_live_dynamic_sync_next_rebuild_;
-    if (last_live_dynamic_sync_frame_ == std::numeric_limits<std::uint32_t>::max()) {
-        should_sync = true;
+    const int min_x = std::min(work_bounds.min.world_x(), work_bounds.max.world_x());
+    const int max_x = std::max(work_bounds.min.world_x(), work_bounds.max.world_x());
+    const int min_z = std::min(work_bounds.min.world_z(), work_bounds.max.world_z());
+    const int max_z = std::max(work_bounds.min.world_z(), work_bounds.max.world_z());
+    if (min_x > max_x || min_z > max_z) {
+        return false;
     }
 
-    const auto abs_i64 = [](std::int64_t value) -> std::int64_t {
-        return value < 0 ? -value : value;
-    };
-    const std::int64_t dx =
-        abs_i64(static_cast<std::int64_t>(center_x) - static_cast<std::int64_t>(last_live_dynamic_sync_center_world_x_));
-    const std::int64_t dz =
-        abs_i64(static_cast<std::int64_t>(center_z) - static_cast<std::int64_t>(last_live_dynamic_sync_center_world_z_));
-    const std::int64_t movement_threshold = std::max<std::int64_t>(1, live_dynamic_sync_min_camera_delta_world_px_);
-    if (dx >= movement_threshold || dz >= movement_threshold) {
-        should_sync = true;
-    }
+    const bool bounds_changed =
+        !last_live_dynamic_sync_bounds_valid_ ||
+        last_live_dynamic_sync_bounds_min_x_ != min_x ||
+        last_live_dynamic_sync_bounds_max_x_ != max_x ||
+        last_live_dynamic_sync_bounds_min_z_ != min_z ||
+        last_live_dynamic_sync_bounds_max_z_ != max_z;
 
-    if (last_live_dynamic_sync_frame_ != std::numeric_limits<std::uint32_t>::max()) {
-        const std::uint32_t cadence = std::max<std::uint32_t>(1, live_dynamic_sync_min_interval_frames_);
-        if ((frame_id_ - last_live_dynamic_sync_frame_) >= cadence) {
-            should_sync = true;
+    bool pending_selector_work = false;
+    for (const auto& [_, state] : live_dynamic_selector_scan_state_) {
+        if (state.valid && state.pending_cursor < state.pending_points.size()) {
+            pending_selector_work = true;
+            break;
         }
     }
 
+    const bool should_sync = force_live_dynamic_sync_next_rebuild_ || bounds_changed || pending_selector_work;
     if (!should_sync) {
         return false;
     }
 
-    last_live_dynamic_sync_center_world_x_ = center_x;
-    last_live_dynamic_sync_center_world_z_ = center_z;
-    last_live_dynamic_sync_frame_ = frame_id_;
+    last_live_dynamic_sync_bounds_valid_ = true;
+    last_live_dynamic_sync_bounds_min_x_ = min_x;
+    last_live_dynamic_sync_bounds_max_x_ = max_x;
+    last_live_dynamic_sync_bounds_min_z_ = min_z;
+    last_live_dynamic_sync_bounds_max_z_ = max_z;
     force_live_dynamic_sync_next_rebuild_ = false;
     return true;
 }

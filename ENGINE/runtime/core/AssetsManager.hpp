@@ -694,9 +694,15 @@ private:
         int max_x = -1;
         int min_z = 0;
         int max_z = -1;
-        int next_x = 0;
-        int next_z = 0;
         int stride = 1;
+    };
+
+    struct LiveDynamicPendingPoint {
+        int grid_x = 0;
+        int grid_z = 0;
+        int world_x = 0;
+        int world_z = 0;
+        std::uint64_t dist2 = 0;
     };
 
     struct LiveDynamicSelectorScanState {
@@ -705,7 +711,8 @@ private:
         int max_x = -1;
         int min_z = 0;
         int max_z = -1;
-        std::vector<LiveDynamicPendingScanRegion> pending_regions;
+        std::vector<LiveDynamicPendingPoint> pending_points;
+        std::size_t pending_cursor = 0;
     };
 
     std::vector<LiveDynamicSelector> live_dynamic_boundary_selectors_;
@@ -718,15 +725,22 @@ private:
                        LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
     int live_dynamic_preload_margin_world_px_ = 192;
     int live_dynamic_despawn_margin_world_px_ = 256;
-    std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 768;
-    std::size_t max_live_dynamic_new_spawns_per_frame_ = 128;
+    std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
+    std::size_t max_live_dynamic_new_spawns_per_frame_ = 384;
+    std::size_t min_live_dynamic_scan_cells_per_selector_per_frame_ = 256;
+    std::size_t min_live_dynamic_new_spawns_per_frame_ = 64;
+    std::size_t adaptive_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
+    std::size_t adaptive_live_dynamic_new_spawns_per_frame_ = 384;
+    double live_dynamic_sync_budget_target_ms_ = 1.25;
+    double live_dynamic_sync_ema_ms_ = 0.0;
+    bool live_dynamic_sync_ema_initialized_ = false;
     std::size_t max_total_live_dynamic_assets_ = 8000;
     std::uint32_t last_live_dynamic_guard_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
-    int live_dynamic_sync_min_camera_delta_world_px_ = 96;
-    std::uint32_t live_dynamic_sync_min_interval_frames_ = 8;
     bool force_live_dynamic_sync_next_rebuild_ = true;
-    int last_live_dynamic_sync_center_world_x_ = 0;
-    int last_live_dynamic_sync_center_world_z_ = 0;
-    std::uint32_t last_live_dynamic_sync_frame_ = std::numeric_limits<std::uint32_t>::max();
+    bool last_live_dynamic_sync_bounds_valid_ = false;
+    int last_live_dynamic_sync_bounds_min_x_ = 0;
+    int last_live_dynamic_sync_bounds_max_x_ = 0;
+    int last_live_dynamic_sync_bounds_min_z_ = 0;
+    int last_live_dynamic_sync_bounds_max_z_ = 0;
     std::uint32_t last_work_bounds_clamp_warning_frame_ = std::numeric_limits<std::uint32_t>::max();
 };

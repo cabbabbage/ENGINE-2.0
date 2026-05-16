@@ -97,6 +97,7 @@ class AnimationInspectorPanel {
 
     void set_scrub_mode(bool enable);
     void set_scrub_frame(int frame);
+    const std::string& debug_animation_id() const { return animation_id_; }
 
   private:
     void rebuild_widgets();

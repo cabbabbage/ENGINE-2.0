@@ -49,6 +49,16 @@ using DMTextBox = ::DMTextBox;
 
 class AnimationEditorWindow {
   public:
+    struct LoadDiagnostics {
+        std::string manifest_key_resolution_result = "not_attempted";
+        std::string manifest_transaction_open_result = "not_attempted";
+        std::string snapshot_source_chosen = "none";
+        int animation_count_loaded = 0;
+        bool seeded_default_applied = false;
+        int parse_failures = 0;
+        int normalization_failures = 0;
+    };
+
     AnimationEditorWindow();
     ~AnimationEditorWindow();
 
@@ -83,10 +93,12 @@ class AnimationEditorWindow {
   FRAME_EDITOR_ACCESS:
     void handle_document_saved();
     void layout_children();
+    int status_height() const;
     void ensure_layout() const;
     void invalidate_inspector_background_cache();
     void configure_list_panel();
     void configure_inspector_panel();
+    void refresh_panels_after_load();
     void select_animation(const std::optional<std::string>& animation_id, bool from_user);
     void ensure_selection_valid();
     void handle_list_context_menu(const std::string& animation_id, const SDL_Point& location);
@@ -97,9 +109,12 @@ class AnimationEditorWindow {
     void render_background(SDL_Renderer* renderer) const;
     void render_header(SDL_Renderer* renderer) const;
     void render_status(SDL_Renderer* renderer) const;
+    void render_load_diagnostics(SDL_Renderer* renderer) const;
+    std::string format_load_diagnostics_json() const;
     void render_inspector(SDL_Renderer* renderer) const;
     void render_inspector_background(SDL_Renderer* renderer) const;
     bool handle_header_event(const SDL_Event& e);
+    bool handle_status_event(const SDL_Event& e);
     bool handle_defaults_modal_event(const SDL_Event& e);
     void set_status_message(const std::string& message, int frames = 300);
     void render_defaults_modal(SDL_Renderer* renderer) const;
@@ -178,6 +193,8 @@ class AnimationEditorWindow {
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMButton> controller_button_;
     std::unique_ptr<DMButton> create_defaults_button_;
+    std::unique_ptr<DMButton> load_details_toggle_button_;
+    std::unique_ptr<DMButton> load_details_copy_button_;
     bool defaults_modal_visible_ = false;
     std::unique_ptr<DMCheckbox> defaults_diagonals_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
@@ -198,6 +215,9 @@ class AnimationEditorWindow {
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};
     SDL_Rect status_rect_{0, 0, 0, 0};
+    SDL_Rect load_details_rect_{0, 0, 0, 0};
+    bool load_details_expanded_ = false;
+    LoadDiagnostics load_diagnostics_{};
     std::string status_message_;
     int status_timer_frames_ = 0;
     mutable SDL_Texture* inspector_background_cache_ = nullptr;

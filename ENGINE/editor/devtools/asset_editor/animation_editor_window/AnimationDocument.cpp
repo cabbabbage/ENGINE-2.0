@@ -754,6 +754,7 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
     use_nested_container_ = false;
     container_metadata_.clear();
     dirty_ = false;
+    last_load_report_ = {};
 
     nlohmann::json canonical = root.is_object() ? root : nlohmann::json::object();
 
@@ -790,6 +791,8 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
                     if (item.key() == "start" && item.value().is_string()) {
                         std::string value = item.value().get<std::string>();
                         if (!value.empty()) start_animation_ = std::move(value);
+                    } else {
+                        ++last_load_report_.parse_failures;
                     }
                     continue;
                 }
@@ -798,7 +801,7 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
         }
     }
 
-    ensure_document_initialized();
+    ensure_document_initialized(true);
     bump_revision(revision_);
 }
 
@@ -923,12 +926,13 @@ bool AnimationDocument::clear_dirty_if_revision_not_newer(std::uint64_t revision
     return true;
 }
 
-void AnimationDocument::create_animation(const std::string& animation_id) {
-    std::string base = normalize_animation_id(animation_id.empty() ? std::string{"animation"} : animation_id);
-    std::string candidate = base;
-    int suffix = 2;
-    while (animations_.count(candidate) != 0) {
-        candidate = base + "_" + std::to_string(suffix++);
+AnimationDocument::CreateAnimationResult AnimationDocument::create_animation(const std::string& animation_id) {
+    const std::string candidate = normalize_animation_id(animation_id);
+    if (candidate.empty() || animation_editor::strings::is_reserved_animation_name(candidate)) {
+        return CreateAnimationResult::InvalidName;
+    }
+    if (animations_.count(candidate) != 0) {
+        return CreateAnimationResult::AlreadyExists;
     }
 
     nlohmann::json payload = coerce_payload(candidate, nlohmann::json::object({
@@ -938,7 +942,10 @@ void AnimationDocument::create_animation(const std::string& animation_id) {
                                                                     {"name", nullptr},
                                                                 })},
                                                 }));
-    animations_[candidate] = serialize_payload(payload);
+    auto inserted = animations_.emplace(candidate, serialize_payload(payload));
+    if (!inserted.second) {
+        return CreateAnimationResult::Error;
+    }
     if (!start_animation_.has_value() || start_animation_->empty()) {
         start_animation_ = candidate;
     }
@@ -951,6 +958,7 @@ void AnimationDocument::create_animation(const std::string& animation_id) {
             {},
         });
     }
+    return CreateAnimationResult::Created;
 }
 
 void AnimationDocument::delete_animation(const std::string& animation_id) {
@@ -1194,20 +1202,34 @@ std::optional<nlohmann::json> AnimationDocument::animation_payload_json(const st
     return normalize_payload_for_storage(animation_id, *raw_payload);
 }
 
-void AnimationDocument::ensure_document_initialized() {
+void AnimationDocument::ensure_document_initialized(bool track_load_diagnostics) {
     bool mutated = false;
     std::vector<std::string> ids;
     ids.reserve(animations_.size());
 
     for (auto& entry : animations_) {
-        const auto raw_payload = raw_animation_payload_json(entry.first);
+        nlohmann::json parsed_payload = nlohmann::json::object();
+        bool parse_failed = false;
+        if (!entry.second.empty()) {
+            parsed_payload = nlohmann::json::parse(entry.second, nullptr, false);
+            if (parsed_payload.is_discarded() || !parsed_payload.is_object()) {
+                parse_failed = true;
+                parsed_payload = nlohmann::json::object();
+            }
+        }
+        if (parse_failed && track_load_diagnostics) {
+            ++last_load_report_.parse_failures;
+        }
         nlohmann::json normalized = normalize_payload_for_storage(
             entry.first,
-            raw_payload.has_value() ? *raw_payload : nlohmann::json::object());
+            parsed_payload);
         std::string serialized = serialize_payload(normalized);
         if (serialized != entry.second) {
             entry.second = std::move(serialized);
             mutated = true;
+            if (track_load_diagnostics) {
+                ++last_load_report_.normalization_failures;
+            }
         }
         ids.push_back(entry.first);
     }

@@ -608,6 +608,8 @@ AnimationEditorWindow::AnimationEditorWindow() {
     add_button_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 160, DMButton::height());
     controller_button_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 140, DMButton::height());
     create_defaults_button_ = std::make_unique<DMButton>("Create Defaults", &DMStyles::CreateButton(), 170, DMButton::height());
+    load_details_toggle_button_ = std::make_unique<DMButton>("Load Details", &DMStyles::HeaderButton(), 140, DMButton::height());
+    load_details_copy_button_ = std::make_unique<DMButton>("Copy", &DMStyles::HeaderButton(), 90, DMButton::height());
     ensure_defaults_modal_widgets();
     layout_dirty_ = true;
 }
@@ -656,9 +658,36 @@ void AnimationEditorWindow::set_bounds(const SDL_Rect& bounds) {
     layout_children();
 }
 
+int AnimationEditorWindow::status_height() const {
+    const int padding = DMSpacing::panel_padding();
+    int height = DMButton::height() + padding * 2;
+    if (!load_details_expanded_) {
+        return height;
+    }
+
+    const int line_height = DMStyles::Label().font_size + 4;
+    constexpr int kDiagnosticLineCount = 7;
+    height += DMSpacing::small_gap() + kDiagnosticLineCount * line_height + DMSpacing::small_gap();
+    return height;
+}
+
+void AnimationEditorWindow::refresh_panels_after_load() {
+    if (list_panel_) {
+        list_panel_->update();
+        list_panel_->set_selected_animation_id(selected_animation_id_);
+    }
+    if (inspector_panel_) {
+        if (selected_animation_id_) {
+            inspector_panel_->set_animation_id(*selected_animation_id_);
+            inspector_panel_->update();
+        }
+    }
+}
+
 void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     close_manifest_transaction();
     info_ = info;
+    load_diagnostics_ = {};
 
     if (!document_) {
         document_ = std::make_shared<AnimationDocument>();
@@ -699,7 +728,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         document_->set_manifest_asset_key_debug({});
     }
 
-    enum class SnapshotRecoverySource { None, AssetMetadata, AssetFolders, Manifest };
+    enum class SnapshotRecoverySource { None, AssetMetadata, AssetFolders, Manifest, RuntimeAssetMetadata };
     SnapshotRecoverySource recovery_source = SnapshotRecoverySource::None;
 
     auto build_folder_snapshot = [&]() -> nlohmann::json { return snapshot_from_asset_folders(*info, asset_root_path_); };
@@ -718,6 +747,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (manifest_transaction_) {
             using_manifest_store_ = true;
+            load_diagnostics_.manifest_transaction_open_result = "opened";
             if (document_) {
                 document_->set_manifest_asset_key_debug(manifest_asset_key_);
             }
@@ -726,6 +756,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                 std::cerr << "[AnimationEditor] Created manifest entry for '" << info->name << "' as '" << manifest_asset_key_ << "'\n";
             }
         } else {
+            load_diagnostics_.manifest_transaction_open_result = "failed";
             std::cerr << "[AnimationEditor] Failed to open manifest transaction for '" << manifest_asset_key_ << "'\n";
             manifest_asset_key_.clear();
             manifest_transaction_ = {};
@@ -737,15 +768,21 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
 
     if (manifest_store_) {
         if (auto key = resolve_manifest_key(*info)) {
+            load_diagnostics_.manifest_key_resolution_result = "resolved:" + *key;
             attach_manifest_transaction(*key, false);
         } else {
             std::cerr << "[AnimationEditor] Unable to resolve manifest key for '" << info->name << "'\n";
             const std::string fallback_key = manifest_key_fallback(*info);
             if (!fallback_key.empty()) {
+                load_diagnostics_.manifest_key_resolution_result = "fallback:" + fallback_key;
                 attach_manifest_transaction(fallback_key, true);
+            } else {
+                load_diagnostics_.manifest_key_resolution_result = "failed";
             }
         }
     } else {
+        load_diagnostics_.manifest_key_resolution_result = "manifest_store_unavailable";
+        load_diagnostics_.manifest_transaction_open_result = "not_attempted";
         std::cerr << "[AnimationEditor] Manifest store unavailable; animations will not persist for '" << info->name << "'\n";
     }
     if (custom_controller_service_) {
@@ -816,6 +853,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                 nlohmann::json runtime_snapshot = snapshot_from_asset_info(*target_asset_->info);
                 if (has_animation_entries(runtime_snapshot)) {
                     apply_snapshot(runtime_snapshot, SnapshotRecoverySource::AssetMetadata);
+                    recovery_source = SnapshotRecoverySource::RuntimeAssetMetadata;
                     recovered = true;
                     std::cerr << "[AnimationEditor] Fallback to runtime asset info for '" << info->name << "'\n";
                 }
@@ -828,6 +866,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
 
     const bool seeded_default = snapshot_was_empty && recovery_source == SnapshotRecoverySource::None &&
                                 document_ && document_->animation_ids().size() == 1 && document_->animation_ids().front() == "default";
+    load_diagnostics_.seeded_default_applied = seeded_default;
 
     if (seeded_default) {
         orchestrated_save(devmode::core::SaveOrchestrator::Reason::HotReload,
@@ -849,6 +888,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     if (list_panel_) list_panel_->set_document(document_);
     if (inspector_panel_) inspector_panel_->set_document(document_);
     ensure_selection_valid();
+    refresh_panels_after_load();
     update_controller_button_label();
     std::string asset_label = info->name.empty() ? std::string("asset") : info->name;
     const bool has_any_animations = !document_->animation_ids().empty();
@@ -857,12 +897,27 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     } else {
         switch (recovery_source) {
             case SnapshotRecoverySource::AssetMetadata:
+                load_diagnostics_.snapshot_source_chosen = "asset_metadata";
                 set_status_message("Recovered animations from asset metadata for " + asset_label + ".", 300);
                 break;
             case SnapshotRecoverySource::AssetFolders:
+                load_diagnostics_.snapshot_source_chosen = "asset_folders";
                 set_status_message("Recovered animations from asset folders for " + asset_label + ".", 300);
                 break;
+            case SnapshotRecoverySource::Manifest:
+                load_diagnostics_.snapshot_source_chosen = "manifest";
+                if (has_any_animations) {
+                    set_status_message("Loaded " + asset_label, 240);
+                } else {
+                    set_status_message("No animations found for " + asset_label + ".", 240);
+                }
+                break;
+            case SnapshotRecoverySource::RuntimeAssetMetadata:
+                load_diagnostics_.snapshot_source_chosen = "runtime_asset_metadata";
+                set_status_message("Recovered animations from runtime asset metadata for " + asset_label + ".", 300);
+                break;
             default:
+                load_diagnostics_.snapshot_source_chosen = "none";
                 if (has_any_animations) {
                     set_status_message("Loaded " + asset_label, 240);
                 } else {
@@ -871,6 +926,16 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                 break;
         }
     }
+    if (seeded_default) {
+        load_diagnostics_.snapshot_source_chosen = "none";
+    }
+    load_diagnostics_.animation_count_loaded = static_cast<int>(document_->animation_ids().size());
+    if (document_) {
+        const auto& report = document_->last_load_report();
+        load_diagnostics_.parse_failures = report.parse_failures;
+        load_diagnostics_.normalization_failures = report.normalization_failures;
+    }
+    layout_dirty_ = true;
     auto_save_pending_ = false;
     auto_save_timer_frames_ = 0;
 }
@@ -878,6 +943,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
 void AnimationEditorWindow::clear_info() {
     info_.reset();
     asset_root_path_.clear();
+    load_diagnostics_ = {};
     close_manifest_transaction();
     close_defaults_modal();
     document_->load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, {});
@@ -890,6 +956,7 @@ void AnimationEditorWindow::clear_info() {
     configure_list_panel();
     configure_inspector_panel();
     select_animation(std::nullopt, false);
+    refresh_panels_after_load();
     set_status_message("Select an asset to configure animations.", 240);
     auto_save_pending_ = false;
     auto_save_timer_frames_ = 0;
@@ -923,8 +990,40 @@ void AnimationEditorWindow::layout_children() {
     }
 
     const int status_padding = DMSpacing::panel_padding();
-    int status_height = DMStyles::Label().font_size + status_padding * 2;
-    status_rect_ = SDL_Rect{bounds_.x, bounds_.y + bounds_.h - status_height, bounds_.w, status_height};
+    const int status_h = status_height();
+    if (load_details_toggle_button_) {
+        load_details_toggle_button_->set_text(load_details_expanded_ ? "Hide Load Details" : "Load Details");
+    }
+    if (load_details_copy_button_) {
+        load_details_copy_button_->set_text("Copy");
+    }
+    status_rect_ = SDL_Rect{bounds_.x, bounds_.y + bounds_.h - status_h, bounds_.w, status_h};
+    status_rect_.h = status_h;
+
+    const int footer_y = status_rect_.y + status_padding;
+    const int footer_right = status_rect_.x + status_rect_.w - status_padding;
+    int footer_cursor_x = footer_right;
+    if (load_details_copy_button_) {
+        const int w = std::max(load_details_copy_button_->rect().w, load_details_copy_button_->preferred_width() + 20);
+        footer_cursor_x -= w;
+        load_details_copy_button_->set_rect(SDL_Rect{footer_cursor_x, footer_y, w, DMButton::height()});
+        footer_cursor_x -= button_gap;
+    }
+    if (load_details_toggle_button_) {
+        const int w = std::max(load_details_toggle_button_->rect().w, load_details_toggle_button_->preferred_width() + 20);
+        footer_cursor_x -= w;
+        load_details_toggle_button_->set_rect(SDL_Rect{footer_cursor_x, footer_y, w, DMButton::height()});
+    }
+    if (load_details_expanded_) {
+        const int details_y = footer_y + DMButton::height() + DMSpacing::small_gap();
+        const int details_h = std::max(0, status_rect_.y + status_rect_.h - details_y - status_padding);
+        load_details_rect_ = SDL_Rect{status_rect_.x + status_padding,
+                                      details_y,
+                                      std::max(0, status_rect_.w - status_padding * 2),
+                                      details_h};
+    } else {
+        load_details_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
 
     int content_top = header_rect_.y + header_rect_.h + header_gap;
     int content_bottom = status_rect_.y - header_gap;
@@ -1534,12 +1633,56 @@ void AnimationEditorWindow::render_header(SDL_Renderer* renderer) const {
 }
 
 void AnimationEditorWindow::render_status(SDL_Renderer* renderer) const {
-    if (status_message_.empty()) return;
-
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     animation_editor::ui::draw_panel_background(renderer, status_rect_);
+    const int padding = DMSpacing::panel_padding();
+    const int status_text_y = status_rect_.y + padding + std::max(0, (DMButton::height() - DMStyles::Label().font_size) / 2);
+    const std::string message = status_message_.empty() ? std::string{"Ready."} : status_message_;
+    render_label(renderer, message, status_rect_.x + padding, status_text_y);
+    if (load_details_toggle_button_) {
+        load_details_toggle_button_->render(renderer);
+    }
+    if (load_details_copy_button_) {
+        load_details_copy_button_->render(renderer);
+    }
+    if (load_details_expanded_) {
+        render_load_diagnostics(renderer);
+    }
+}
 
-    render_label(renderer, status_message_, status_rect_.x + DMSpacing::panel_padding(), status_rect_.y + DMSpacing::panel_padding());
+void AnimationEditorWindow::render_load_diagnostics(SDL_Renderer* renderer) const {
+    if (!renderer || !load_details_expanded_ || load_details_rect_.w <= 0 || load_details_rect_.h <= 0) {
+        return;
+    }
+    const int line_height = DMStyles::Label().font_size + 4;
+    int y = load_details_rect_.y;
+    const int x = load_details_rect_.x;
+    render_label(renderer, "Manifest Key: " + load_diagnostics_.manifest_key_resolution_result, x, y);
+    y += line_height;
+    render_label(renderer, "Transaction: " + load_diagnostics_.manifest_transaction_open_result, x, y);
+    y += line_height;
+    render_label(renderer, "Snapshot Source: " + load_diagnostics_.snapshot_source_chosen, x, y);
+    y += line_height;
+    render_label(renderer, "Animation Count: " + std::to_string(load_diagnostics_.animation_count_loaded), x, y);
+    y += line_height;
+    render_label(renderer, std::string("Seeded Default: ") + (load_diagnostics_.seeded_default_applied ? "yes" : "no"), x, y);
+    y += line_height;
+    render_label(renderer, "Parse Failures: " + std::to_string(load_diagnostics_.parse_failures), x, y);
+    y += line_height;
+    render_label(renderer, "Normalization Failures: " + std::to_string(load_diagnostics_.normalization_failures), x, y);
+}
+
+std::string AnimationEditorWindow::format_load_diagnostics_json() const {
+    nlohmann::json payload = nlohmann::json::object({
+        {"manifest_key_resolution_result", load_diagnostics_.manifest_key_resolution_result},
+        {"manifest_transaction_open_result", load_diagnostics_.manifest_transaction_open_result},
+        {"snapshot_source_chosen", load_diagnostics_.snapshot_source_chosen},
+        {"animation_count_loaded", load_diagnostics_.animation_count_loaded},
+        {"seeded_default_applied", load_diagnostics_.seeded_default_applied},
+        {"parse_failures", load_diagnostics_.parse_failures},
+        {"normalization_failures", load_diagnostics_.normalization_failures},
+    });
+    return payload.dump(2);
 }
 
 void AnimationEditorWindow::render_inspector(SDL_Renderer* renderer) const {

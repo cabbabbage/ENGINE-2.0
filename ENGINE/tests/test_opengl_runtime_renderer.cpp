@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -101,4 +102,69 @@ TEST_CASE("Floor sort remains independent from XY depth ordering") {
 
     CHECK(packets[0].projected_foot_y_key == doctest::Approx(100.0f));
     CHECK(packets[1].projected_foot_y_key == doctest::Approx(300.0f));
+}
+
+TEST_CASE("Sink clip packet is invariant to camera translation for static asset geometry") {
+    render_projection::ProjectedSpriteFrame frame_a{};
+    frame_a.screen_tl = SDL_FPoint{100.0f, 120.0f};
+    frame_a.screen_tr = SDL_FPoint{180.0f, 120.0f};
+    frame_a.screen_br = SDL_FPoint{180.0f, 220.0f};
+    frame_a.screen_bl = SDL_FPoint{100.0f, 220.0f};
+    frame_a.final_height_px = 100;
+
+    render_projection::ProjectedSpriteFrame frame_b = frame_a;
+    // Simulate camera panning: same sprite shape translated in screen space.
+    frame_b.screen_tl.x += 57.0f; frame_b.screen_tl.y += 33.0f;
+    frame_b.screen_tr.x += 57.0f; frame_b.screen_tr.y += 33.0f;
+    frame_b.screen_br.x += 57.0f; frame_b.screen_br.y += 33.0f;
+    frame_b.screen_bl.x += 57.0f; frame_b.screen_bl.y += 33.0f;
+
+    GpuSpriteDrawPacket packet_a{};
+    GpuSpriteDrawPacket packet_b{};
+    REQUIRE(opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
+        frame_a, 0.0f, 0.0f, 1.0f, 1.0f, -25.0f, 800, 600, packet_a));
+    REQUIRE(opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
+        frame_b, 0.0f, 0.0f, 1.0f, 1.0f, -25.0f, 800, 600, packet_b));
+
+    CHECK(packet_a.vertex_count == packet_b.vertex_count);
+    CHECK(packet_a.index_count == packet_b.index_count);
+    for (int i = 0; i < packet_a.vertex_count; ++i) {
+        CHECK(packet_a.vertices[static_cast<std::size_t>(i)].uv_y ==
+              doctest::Approx(packet_b.vertices[static_cast<std::size_t>(i)].uv_y).epsilon(1e-6));
+    }
+}
+
+TEST_CASE("Sink clip packet burial responds to asset sink offset changes") {
+    render_projection::ProjectedSpriteFrame frame{};
+    frame.screen_tl = SDL_FPoint{100.0f, 120.0f};
+    frame.screen_tr = SDL_FPoint{180.0f, 120.0f};
+    frame.screen_br = SDL_FPoint{180.0f, 220.0f};
+    frame.screen_bl = SDL_FPoint{100.0f, 220.0f};
+    frame.final_height_px = 100;
+
+    GpuSpriteDrawPacket mild_burial{};
+    GpuSpriteDrawPacket deeper_burial{};
+    REQUIRE(opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
+        frame, 0.0f, 0.0f, 1.0f, 1.0f, -10.0f, 800, 600, mild_burial));
+    REQUIRE(opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
+        frame, 0.0f, 0.0f, 1.0f, 1.0f, -30.0f, 800, 600, deeper_burial));
+
+    auto min_max_uv_y = [](const GpuSpriteDrawPacket& packet) {
+        float min_v = 1.0f;
+        float max_v = 0.0f;
+        for (int i = 0; i < packet.vertex_count; ++i) {
+            const float v = packet.vertices[static_cast<std::size_t>(i)].uv_y;
+            min_v = std::min(min_v, v);
+            max_v = std::max(max_v, v);
+        }
+        return std::pair<float, float>{min_v, max_v};
+    };
+
+    const auto [mild_min_v, mild_max_v] = min_max_uv_y(mild_burial);
+    const auto [deep_min_v, deep_max_v] = min_max_uv_y(deeper_burial);
+    CHECK(mild_min_v == doctest::Approx(0.0f).epsilon(1e-6));
+    CHECK(deep_min_v == doctest::Approx(0.0f).epsilon(1e-6));
+    CHECK(deep_max_v < mild_max_v);
+    CHECK(deep_max_v == doctest::Approx(0.7f).epsilon(1e-6));
+    CHECK(mild_max_v == doctest::Approx(0.9f).epsilon(1e-6));
 }

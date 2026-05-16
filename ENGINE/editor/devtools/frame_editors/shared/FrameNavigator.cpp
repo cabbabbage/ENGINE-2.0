@@ -1,5 +1,7 @@
 #include "FrameNavigator.hpp"
 
+#include "devtools/sdl_modal_dialog.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -471,22 +473,7 @@ bool FrameNavigator::confirm_action(const std::string& title, const std::string&
         return on_confirm_(title, message);
     }
 
-    SDL_MessageBoxButtonData buttons[] = {
-        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Yes"},
-        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No"},
-    };
-    SDL_MessageBoxData data{};
-    data.flags = SDL_MESSAGEBOX_WARNING;
-    data.window = nullptr;
-    data.title = title.c_str();
-    data.message = message.c_str();
-    data.numbuttons = 2;
-    data.buttons = buttons;
-    int button_id = 0;
-    if (SDL_ShowMessageBox(&data, &button_id) == 0) {
-        return button_id == 1;
-    }
-    return false;
+    return devmode::dialogs::confirm(parent_window_, title, message, "Yes", "No", false);
 }
 
 void FrameNavigator::handle_apply_next() {

@@ -41,15 +41,6 @@
 #include "core/manifest/manifest_loader.hpp"
 #include "PreviewProvider.hpp"
 #include "string_utils.hpp"
-#include "ui/tinyfiledialogs.h"
-#ifdef _WIN32
-#  ifndef NOMINMAX
-#    define NOMINMAX
-#  endif
-#  include <windows.h>
-#  include <shobjidl.h>
-#  include <shlwapi.h>
-#endif
 #include "utils/input.hpp"
 
 #include "assets/asset/asset_info.hpp"
@@ -60,6 +51,7 @@
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_paths.hpp"
 #include "devtools/dev_mode_utils.hpp"
+#include "devtools/sdl_modal_dialog.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace {
@@ -321,6 +313,75 @@ nlohmann::json build_movement_total(const nlohmann::json& movement) {
     });
 }
 
+struct DefaultAnimationSpec {
+    std::string id;
+    int dx = 0;
+    int dy = 0;
+    int dz = 0;
+    std::string source_id;
+    bool folder_sourced = false;
+    bool invert_frames_horizontal = false;
+    bool invert_frames_vertical = false;
+};
+
+std::vector<std::string> default_direction_tags(const std::string& animation_id,
+                                                int dx,
+                                                int dy,
+                                                int dz) {
+    std::vector<std::string> tags;
+    std::unordered_set<std::string> seen;
+    auto append = [&](std::string tag) {
+        tag = animation_editor::strings::trim_copy(tag);
+        std::transform(tag.begin(), tag.end(), tag.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (!tag.empty() && seen.insert(tag).second) {
+            tags.push_back(std::move(tag));
+        }
+    };
+
+    append("movement");
+    append("directional");
+
+    std::stringstream id_stream(animation_id);
+    std::string part;
+    while (std::getline(id_stream, part, '_')) {
+        append(part);
+    }
+
+    if (dx < 0) {
+        append("left");
+        append("world_x_negative");
+    } else if (dx > 0) {
+        append("right");
+        append("world_x_positive");
+    }
+
+    if (dy < 0) {
+        append("down");
+        append("world_y_negative");
+    } else if (dy > 0) {
+        append("up");
+        append("world_y_positive");
+    }
+
+    if (dz < 0) {
+        append("up");
+        append("forward");
+        append("world_z_negative");
+    } else if (dz > 0) {
+        append("down");
+        append("backward");
+        append("world_z_positive");
+    }
+
+    if (dy != 0) {
+        append("elevation");
+    }
+
+    return tags;
+}
+
 std::string default_audio_subdir() { return "audio"; }
 
 std::string manifest_key_fallback(const AssetInfo& info) {
@@ -547,6 +608,8 @@ AnimationEditorWindow::AnimationEditorWindow() {
     add_button_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 160, DMButton::height());
     controller_button_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 140, DMButton::height());
     create_defaults_button_ = std::make_unique<DMButton>("Create Defaults", &DMStyles::CreateButton(), 170, DMButton::height());
+    load_details_toggle_button_ = std::make_unique<DMButton>("Load Details", &DMStyles::HeaderButton(), 140, DMButton::height());
+    load_details_copy_button_ = std::make_unique<DMButton>("Copy", &DMStyles::HeaderButton(), 90, DMButton::height());
     ensure_defaults_modal_widgets();
     layout_dirty_ = true;
 }
@@ -595,9 +658,36 @@ void AnimationEditorWindow::set_bounds(const SDL_Rect& bounds) {
     layout_children();
 }
 
+int AnimationEditorWindow::status_height() const {
+    const int padding = DMSpacing::panel_padding();
+    int height = DMButton::height() + padding * 2;
+    if (!load_details_expanded_) {
+        return height;
+    }
+
+    const int line_height = DMStyles::Label().font_size + 4;
+    constexpr int kDiagnosticLineCount = 7;
+    height += DMSpacing::small_gap() + kDiagnosticLineCount * line_height + DMSpacing::small_gap();
+    return height;
+}
+
+void AnimationEditorWindow::refresh_panels_after_load() {
+    if (list_panel_) {
+        list_panel_->update();
+        list_panel_->set_selected_animation_id(selected_animation_id_);
+    }
+    if (inspector_panel_) {
+        if (selected_animation_id_) {
+            inspector_panel_->set_animation_id(*selected_animation_id_);
+            inspector_panel_->update();
+        }
+    }
+}
+
 void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     close_manifest_transaction();
     info_ = info;
+    load_diagnostics_ = {};
 
     if (!document_) {
         document_ = std::make_shared<AnimationDocument>();
@@ -638,7 +728,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         document_->set_manifest_asset_key_debug({});
     }
 
-    enum class SnapshotRecoverySource { None, AssetMetadata, AssetFolders, Manifest };
+    enum class SnapshotRecoverySource { None, AssetMetadata, AssetFolders, Manifest, RuntimeAssetMetadata };
     SnapshotRecoverySource recovery_source = SnapshotRecoverySource::None;
 
     auto build_folder_snapshot = [&]() -> nlohmann::json { return snapshot_from_asset_folders(*info, asset_root_path_); };
@@ -657,6 +747,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
         manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
         if (manifest_transaction_) {
             using_manifest_store_ = true;
+            load_diagnostics_.manifest_transaction_open_result = "opened";
             if (document_) {
                 document_->set_manifest_asset_key_debug(manifest_asset_key_);
             }
@@ -665,6 +756,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                 std::cerr << "[AnimationEditor] Created manifest entry for '" << info->name << "' as '" << manifest_asset_key_ << "'\n";
             }
         } else {
+            load_diagnostics_.manifest_transaction_open_result = "failed";
             std::cerr << "[AnimationEditor] Failed to open manifest transaction for '" << manifest_asset_key_ << "'\n";
             manifest_asset_key_.clear();
             manifest_transaction_ = {};
@@ -676,15 +768,21 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
 
     if (manifest_store_) {
         if (auto key = resolve_manifest_key(*info)) {
+            load_diagnostics_.manifest_key_resolution_result = "resolved:" + *key;
             attach_manifest_transaction(*key, false);
         } else {
             std::cerr << "[AnimationEditor] Unable to resolve manifest key for '" << info->name << "'\n";
             const std::string fallback_key = manifest_key_fallback(*info);
             if (!fallback_key.empty()) {
+                load_diagnostics_.manifest_key_resolution_result = "fallback:" + fallback_key;
                 attach_manifest_transaction(fallback_key, true);
+            } else {
+                load_diagnostics_.manifest_key_resolution_result = "failed";
             }
         }
     } else {
+        load_diagnostics_.manifest_key_resolution_result = "manifest_store_unavailable";
+        load_diagnostics_.manifest_transaction_open_result = "not_attempted";
         std::cerr << "[AnimationEditor] Manifest store unavailable; animations will not persist for '" << info->name << "'\n";
     }
     if (custom_controller_service_) {
@@ -755,6 +853,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                 nlohmann::json runtime_snapshot = snapshot_from_asset_info(*target_asset_->info);
                 if (has_animation_entries(runtime_snapshot)) {
                     apply_snapshot(runtime_snapshot, SnapshotRecoverySource::AssetMetadata);
+                    recovery_source = SnapshotRecoverySource::RuntimeAssetMetadata;
                     recovered = true;
                     std::cerr << "[AnimationEditor] Fallback to runtime asset info for '" << info->name << "'\n";
                 }
@@ -767,6 +866,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
 
     const bool seeded_default = snapshot_was_empty && recovery_source == SnapshotRecoverySource::None &&
                                 document_ && document_->animation_ids().size() == 1 && document_->animation_ids().front() == "default";
+    load_diagnostics_.seeded_default_applied = seeded_default;
 
     if (seeded_default) {
         orchestrated_save(devmode::core::SaveOrchestrator::Reason::HotReload,
@@ -788,6 +888,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     if (list_panel_) list_panel_->set_document(document_);
     if (inspector_panel_) inspector_panel_->set_document(document_);
     ensure_selection_valid();
+    refresh_panels_after_load();
     update_controller_button_label();
     std::string asset_label = info->name.empty() ? std::string("asset") : info->name;
     const bool has_any_animations = !document_->animation_ids().empty();
@@ -796,12 +897,27 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     } else {
         switch (recovery_source) {
             case SnapshotRecoverySource::AssetMetadata:
+                load_diagnostics_.snapshot_source_chosen = "asset_metadata";
                 set_status_message("Recovered animations from asset metadata for " + asset_label + ".", 300);
                 break;
             case SnapshotRecoverySource::AssetFolders:
+                load_diagnostics_.snapshot_source_chosen = "asset_folders";
                 set_status_message("Recovered animations from asset folders for " + asset_label + ".", 300);
                 break;
+            case SnapshotRecoverySource::Manifest:
+                load_diagnostics_.snapshot_source_chosen = "manifest";
+                if (has_any_animations) {
+                    set_status_message("Loaded " + asset_label, 240);
+                } else {
+                    set_status_message("No animations found for " + asset_label + ".", 240);
+                }
+                break;
+            case SnapshotRecoverySource::RuntimeAssetMetadata:
+                load_diagnostics_.snapshot_source_chosen = "runtime_asset_metadata";
+                set_status_message("Recovered animations from runtime asset metadata for " + asset_label + ".", 300);
+                break;
             default:
+                load_diagnostics_.snapshot_source_chosen = "none";
                 if (has_any_animations) {
                     set_status_message("Loaded " + asset_label, 240);
                 } else {
@@ -810,6 +926,16 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
                 break;
         }
     }
+    if (seeded_default) {
+        load_diagnostics_.snapshot_source_chosen = "none";
+    }
+    load_diagnostics_.animation_count_loaded = static_cast<int>(document_->animation_ids().size());
+    if (document_) {
+        const auto& report = document_->last_load_report();
+        load_diagnostics_.parse_failures = report.parse_failures;
+        load_diagnostics_.normalization_failures = report.normalization_failures;
+    }
+    layout_dirty_ = true;
     auto_save_pending_ = false;
     auto_save_timer_frames_ = 0;
 }
@@ -817,6 +943,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
 void AnimationEditorWindow::clear_info() {
     info_.reset();
     asset_root_path_.clear();
+    load_diagnostics_ = {};
     close_manifest_transaction();
     close_defaults_modal();
     document_->load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, {});
@@ -829,6 +956,7 @@ void AnimationEditorWindow::clear_info() {
     configure_list_panel();
     configure_inspector_panel();
     select_animation(std::nullopt, false);
+    refresh_panels_after_load();
     set_status_message("Select an asset to configure animations.", 240);
     auto_save_pending_ = false;
     auto_save_timer_frames_ = 0;
@@ -862,8 +990,40 @@ void AnimationEditorWindow::layout_children() {
     }
 
     const int status_padding = DMSpacing::panel_padding();
-    int status_height = DMStyles::Label().font_size + status_padding * 2;
-    status_rect_ = SDL_Rect{bounds_.x, bounds_.y + bounds_.h - status_height, bounds_.w, status_height};
+    const int status_h = status_height();
+    if (load_details_toggle_button_) {
+        load_details_toggle_button_->set_text(load_details_expanded_ ? "Hide Load Details" : "Load Details");
+    }
+    if (load_details_copy_button_) {
+        load_details_copy_button_->set_text("Copy");
+    }
+    status_rect_ = SDL_Rect{bounds_.x, bounds_.y + bounds_.h - status_h, bounds_.w, status_h};
+    status_rect_.h = status_h;
+
+    const int footer_y = status_rect_.y + status_padding;
+    const int footer_right = status_rect_.x + status_rect_.w - status_padding;
+    int footer_cursor_x = footer_right;
+    if (load_details_copy_button_) {
+        const int w = std::max(load_details_copy_button_->rect().w, load_details_copy_button_->preferred_width() + 20);
+        footer_cursor_x -= w;
+        load_details_copy_button_->set_rect(SDL_Rect{footer_cursor_x, footer_y, w, DMButton::height()});
+        footer_cursor_x -= button_gap;
+    }
+    if (load_details_toggle_button_) {
+        const int w = std::max(load_details_toggle_button_->rect().w, load_details_toggle_button_->preferred_width() + 20);
+        footer_cursor_x -= w;
+        load_details_toggle_button_->set_rect(SDL_Rect{footer_cursor_x, footer_y, w, DMButton::height()});
+    }
+    if (load_details_expanded_) {
+        const int details_y = footer_y + DMButton::height() + DMSpacing::small_gap();
+        const int details_h = std::max(0, status_rect_.y + status_rect_.h - details_y - status_padding);
+        load_details_rect_ = SDL_Rect{status_rect_.x + status_padding,
+                                      details_y,
+                                      std::max(0, status_rect_.w - status_padding * 2),
+                                      details_h};
+    } else {
+        load_details_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
 
     int content_top = header_rect_.y + header_rect_.h + header_gap;
     int content_bottom = status_rect_.y - header_gap;
@@ -1116,13 +1276,24 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     ensure_layout();
 
+    if (defaults_modal_visible_ &&
+        (defaults_modal_rect_.w <= 0 || defaults_modal_rect_.h <= 0)) {
+        close_defaults_modal();
+    }
+
     if (defaults_modal_visible_) {
         if (handle_defaults_modal_event(e)) {
             return true;
         }
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
+        if (!defaults_modal_visible_ ||
+            defaults_modal_rect_.w <= 0 ||
+            defaults_modal_rect_.h <= 0) {
+            close_defaults_modal();
+        }
+        if (defaults_modal_visible_ &&
+            (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
             e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_WHEEL ||
-            e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT) {
+            e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT)) {
             return true;
         }
     }
@@ -1184,6 +1355,10 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         return true;
     }
 
+    if (handle_status_event(e)) {
+        return true;
+    }
+
     if (e.type == SDL_EVENT_KEY_DOWN) {
         if (e.key.key == SDLK_ESCAPE) {
             set_visible(false);
@@ -1242,13 +1417,18 @@ std::string AnimationEditorWindow::normalize_animation_name(std::string_view raw
 void AnimationEditorWindow::prompt_rename_animation(const std::string& animation_id) {
     if (!document_) return;
 
-    const char* input = tinyfd_inputBox("Rename Animation", "Enter new animation identifier", animation_id.c_str());
+    std::optional<std::string> input;
+    if (text_prompt_override_) {
+        input = text_prompt_override_("Rename Animation", "Enter new animation identifier", animation_id);
+    } else {
+        input = devmode::dialogs::prompt_text(parent_window_, "Rename Animation", "Enter new animation identifier", animation_id);
+    }
     if (!input) {
         set_status_message("Rename cancelled.", 120);
         return;
     }
 
-    std::string desired = normalize_animation_name(input);
+    std::string desired = normalize_animation_name(*input);
     if (desired.empty()) {
         set_status_message("Animation name cannot be empty.", 180);
         return;
@@ -1291,25 +1471,25 @@ void AnimationEditorWindow::set_animation_as_start(const std::string& animation_
 void AnimationEditorWindow::duplicate_animation(const std::string& animation_id) {
     if (!document_) return;
 
-    auto before_ids = document_->animation_ids();
-    document_->create_animation(animation_id);
-    auto after_ids = document_->animation_ids();
-
-    std::optional<std::string> created_id;
-    for (const auto& id : after_ids) {
-        if (std::find(before_ids.begin(), before_ids.end(), id) == before_ids.end()) {
-            created_id = id;
-            break;
-        }
+    std::string base = normalize_animation_name(animation_id);
+    if (base.empty()) {
+        base = "animation";
     }
+    std::string candidate = base;
+    int suffix = 2;
+    auto ids = document_->animation_ids();
+    while (std::find(ids.begin(), ids.end(), candidate) != ids.end()) {
+        candidate = base + "_" + std::to_string(suffix++);
+    }
+    const auto created = document_->create_animation(candidate);
 
-    if (created_id) {
+    if (created == AnimationDocument::CreateAnimationResult::Created) {
         if (auto payload = document_->animation_payload(animation_id)) {
-            document_->replace_animation_payload(*created_id, *payload);
-            preview_provider_->invalidate(*created_id);
+            document_->replace_animation_payload(candidate, *payload);
+            preview_provider_->invalidate(candidate);
         }
-        select_animation(created_id, false);
-        set_status_message("Duplicated animation to '" + *created_id + "'.", 240);
+        select_animation(candidate, false);
+        set_status_message("Duplicated animation to '" + candidate + "'.", 240);
     } else {
         set_status_message("Failed to duplicate animation.", 180);
     }
@@ -1323,8 +1503,14 @@ void AnimationEditorWindow::delete_animation_with_confirmation(const std::string
     if (!document_) return;
 
     std::string message = "Delete animation '" + animation_id + "'? This cannot be undone.";
-    int result = tinyfd_messageBox("Delete Animation", message.c_str(), "yesno", "warning", 0);
-    if (result != 1) {
+    bool confirmed = false;
+    if (choice_prompt_override_) {
+        auto result = choice_prompt_override_("Delete Animation", message, {0, 1});
+        confirmed = result && *result == 1;
+    } else {
+        confirmed = devmode::dialogs::confirm(parent_window_, "Delete Animation", message, "Delete", "Cancel", true);
+    }
+    if (!confirmed) {
         set_status_message("Deletion cancelled.", 120);
         if (list_context_menu_) {
             list_context_menu_->close();
@@ -1444,15 +1630,63 @@ void AnimationEditorWindow::render_header(SDL_Renderer* renderer) const {
         label_x = std::max(label_x, create_defaults_button_->rect().x + create_defaults_button_->rect().w + DMSpacing::small_gap());
     }
     render_label(renderer, title, label_x, header_rect_.y + DMSpacing::small_gap());
+    if (!defaults_modal_open_warning_.empty()) {
+        render_label(renderer, defaults_modal_open_warning_, header_rect_.x + DMSpacing::panel_padding(),
+                     header_rect_.y + DMButton::height() + DMSpacing::small_gap());
+    }
 }
 
 void AnimationEditorWindow::render_status(SDL_Renderer* renderer) const {
-    if (status_message_.empty()) return;
-
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     animation_editor::ui::draw_panel_background(renderer, status_rect_);
+    const int padding = DMSpacing::panel_padding();
+    const int status_text_y = status_rect_.y + padding + std::max(0, (DMButton::height() - DMStyles::Label().font_size) / 2);
+    const std::string message = status_message_.empty() ? std::string{"Ready."} : status_message_;
+    render_label(renderer, message, status_rect_.x + padding, status_text_y);
+    if (load_details_toggle_button_) {
+        load_details_toggle_button_->render(renderer);
+    }
+    if (load_details_copy_button_) {
+        load_details_copy_button_->render(renderer);
+    }
+    if (load_details_expanded_) {
+        render_load_diagnostics(renderer);
+    }
+}
 
-    render_label(renderer, status_message_, status_rect_.x + DMSpacing::panel_padding(), status_rect_.y + DMSpacing::panel_padding());
+void AnimationEditorWindow::render_load_diagnostics(SDL_Renderer* renderer) const {
+    if (!renderer || !load_details_expanded_ || load_details_rect_.w <= 0 || load_details_rect_.h <= 0) {
+        return;
+    }
+    const int line_height = DMStyles::Label().font_size + 4;
+    int y = load_details_rect_.y;
+    const int x = load_details_rect_.x;
+    render_label(renderer, "Manifest Key: " + load_diagnostics_.manifest_key_resolution_result, x, y);
+    y += line_height;
+    render_label(renderer, "Transaction: " + load_diagnostics_.manifest_transaction_open_result, x, y);
+    y += line_height;
+    render_label(renderer, "Snapshot Source: " + load_diagnostics_.snapshot_source_chosen, x, y);
+    y += line_height;
+    render_label(renderer, "Animation Count: " + std::to_string(load_diagnostics_.animation_count_loaded), x, y);
+    y += line_height;
+    render_label(renderer, std::string("Seeded Default: ") + (load_diagnostics_.seeded_default_applied ? "yes" : "no"), x, y);
+    y += line_height;
+    render_label(renderer, "Parse Failures: " + std::to_string(load_diagnostics_.parse_failures), x, y);
+    y += line_height;
+    render_label(renderer, "Normalization Failures: " + std::to_string(load_diagnostics_.normalization_failures), x, y);
+}
+
+std::string AnimationEditorWindow::format_load_diagnostics_json() const {
+    nlohmann::json payload = nlohmann::json::object({
+        {"manifest_key_resolution_result", load_diagnostics_.manifest_key_resolution_result},
+        {"manifest_transaction_open_result", load_diagnostics_.manifest_transaction_open_result},
+        {"snapshot_source_chosen", load_diagnostics_.snapshot_source_chosen},
+        {"animation_count_loaded", load_diagnostics_.animation_count_loaded},
+        {"seeded_default_applied", load_diagnostics_.seeded_default_applied},
+        {"parse_failures", load_diagnostics_.parse_failures},
+        {"normalization_failures", load_diagnostics_.normalization_failures},
+    });
+    return payload.dump(2);
 }
 
 void AnimationEditorWindow::render_inspector(SDL_Renderer* renderer) const {
@@ -1508,22 +1742,84 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
     sdl_render::Texture(renderer, cache, nullptr, &inspector_rect_);
 }
 
+bool AnimationEditorWindow::handle_status_event(const SDL_Event& e) {
+    auto inside_status = [&](int x, int y) {
+        SDL_Point p{x, y};
+        return SDL_PointInRect(&p, &status_rect_) != 0;
+    };
+    const bool status_mouse_event =
+        e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP;
+
+    bool handled = false;
+    if (load_details_toggle_button_ && load_details_toggle_button_->handle_event(e)) {
+        handled = true;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            load_details_expanded_ = !load_details_expanded_;
+            layout_dirty_ = true;
+        }
+    }
+    if (load_details_copy_button_ && load_details_copy_button_->handle_event(e)) {
+        handled = true;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            const std::string payload = format_load_diagnostics_json();
+            if (SDL_SetClipboardText(payload.c_str())) {
+                set_status_message("Copied load diagnostics to clipboard.", 180);
+            } else {
+                set_status_message(std::string("Failed to copy diagnostics: ") + SDL_GetError(), 240);
+            }
+        }
+    }
+    if (handled) {
+        return true;
+    }
+
+    if (!status_mouse_event) {
+        return false;
+    }
+    int x = 0;
+    int y = 0;
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        x = e.motion.x;
+        y = e.motion.y;
+    } else {
+        x = e.button.x;
+        y = e.button.y;
+    }
+    return inside_status(x, y);
+}
+
 bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
     bool consumed = false;
-    auto handle_button = [&](const std::unique_ptr<DMButton>& button, auto&& callback) {
+    auto handle_button = [&](const std::unique_ptr<DMButton>& button,
+                             const char* button_name,
+                             bool activate_on_mouse_down,
+                             auto&& callback) {
         if (!button) return;
         bool activated = button->handle_event(e);
         if (!activated) return;
-
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        const bool is_activation_event =
+            ((activate_on_mouse_down && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) ||
+             (!activate_on_mouse_down && e.type == SDL_EVENT_MOUSE_BUTTON_UP)) &&
+            e.button.button == SDL_BUTTON_LEFT;
+        if (is_activation_event) {
+            SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Header button activated: %s (%s).",
+                         button_name,
+                         activate_on_mouse_down ? "down" : "up");
+            set_status_message(std::string("Header: ") + button_name + " activated.", 90);
+            button->cancel_interaction();
             callback();
         }
         consumed = true;
-};
+    };
 
-    handle_button(add_button_, [this]() { create_animation_via_prompt(); });
-    handle_button(controller_button_, [this]() { handle_controller_button_click(); });
-    handle_button(create_defaults_button_, [this]() { open_defaults_modal(); });
+    // Add Animation explicitly activates on mouse-down.
+    handle_button(add_button_, "Add Animation", true, [this]() { create_animation_via_prompt(); });
+    // Add/Open Controller explicitly activates on mouse-up.
+    handle_button(controller_button_, "Add/Open Controller", false, [this]() { handle_controller_button_click(); });
+    // Create Defaults explicitly activates on mouse-down to remain resilient
+    // when upstream handlers consume the matching mouse-up.
+    handle_button(create_defaults_button_, "Create Defaults", true, [this]() { open_defaults_modal(); });
 
     return consumed;
 }
@@ -1546,6 +1842,9 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
     if (!defaults_3d_diagonals_checkbox_) {
         defaults_3d_diagonals_checkbox_ = std::make_unique<DMCheckbox>("3D Diagonals (8-Way)", false);
     }
+    if (!defaults_base_faces_right_checkbox_) {
+        defaults_base_faces_right_checkbox_ = std::make_unique<DMCheckbox>("Base Frames Face Right", false);
+    }
     if (!defaults_distance_box_) {
         defaults_distance_box_ = std::make_unique<DMTextBox>("Total movement per animation", "5");
     }
@@ -1562,72 +1861,92 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
 
 void AnimationEditorWindow::open_defaults_modal() {
     ensure_defaults_modal_widgets();
-    defaults_modal_visible_ = true;
     if (list_context_menu_) {
         list_context_menu_->close();
     }
+    defaults_modal_visible_ = true;
     layout_defaults_modal();
 }
 
 void AnimationEditorWindow::close_defaults_modal() {
+    if (create_defaults_button_) {
+        create_defaults_button_->cancel_interaction();
+    }
+    if (defaults_base_frames_button_) {
+        defaults_base_frames_button_->cancel_interaction();
+    }
+    if (defaults_create_button_) {
+        defaults_create_button_->cancel_interaction();
+    }
+    if (defaults_cancel_button_) {
+        defaults_cancel_button_->cancel_interaction();
+    }
+    if (defaults_distance_box_) {
+        defaults_distance_box_->stop_editing();
+    }
     defaults_modal_visible_ = false;
     defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+    defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
+    defaults_modal_scroll_offset_ = 0;
+    defaults_modal_scroll_max_ = 0;
 }
+
 
 void AnimationEditorWindow::layout_defaults_modal() {
     if (!defaults_modal_visible_) {
         defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_scroll_offset_ = 0;
+        defaults_modal_scroll_max_ = 0;
         return;
     }
 
     ensure_defaults_modal_widgets();
 
-    const int modal_width = std::clamp(bounds_.w - 120, 460, 720);
-    const int modal_height = 430;
-    defaults_modal_rect_ = SDL_Rect{
-        bounds_.x + std::max(0, (bounds_.w - modal_width) / 2),
-        bounds_.y + std::max(0, (bounds_.h - modal_height) / 2),
-        modal_width,
-        modal_height
-    };
+    if (bounds_.w <= 0 || bounds_.h <= 0) {
+        defaults_modal_visible_ = false;
+        defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_open_warning_ = "Create Defaults cannot open while panel bounds are collapsed.";
+        if (create_defaults_button_) create_defaults_button_->cancel_interaction();
+        return;
+    }
+    defaults_modal_open_warning_.clear();
+
+    const int modal_width = std::clamp(bounds_.w - 120, 320, 720);
+    const int modal_height = std::clamp(455, 180, std::max(180, bounds_.h - 20));
+    defaults_modal_rect_ = SDL_Rect{bounds_.x + std::max(0, (bounds_.w - modal_width) / 2), bounds_.y + std::max(0, (bounds_.h - modal_height) / 2), modal_width, modal_height};
 
     const int padding = DMSpacing::panel_padding();
     const int row_gap = DMSpacing::small_gap();
     const int content_x = defaults_modal_rect_.x + padding;
     const int content_w = std::max(0, defaults_modal_rect_.w - padding * 2);
-    int y = defaults_modal_rect_.y + padding + DMStyles::Label().font_size + row_gap + 6;
+    const int title_y = defaults_modal_rect_.y + padding;
+    const int title_block_h = DMStyles::Label().font_size * 2 + row_gap + 6;
+    const int scroll_top = title_y + title_block_h;
+    const int footer_h = DMButton::height();
+    const int info_h = DMStyles::Label().font_size;
+    const int scroll_bottom = defaults_modal_rect_.y + defaults_modal_rect_.h - padding - footer_h - row_gap - info_h - row_gap;
+    const int scroll_h = std::max(0, scroll_bottom - scroll_top);
+    defaults_modal_scroll_rect_ = SDL_Rect{content_x, scroll_top, content_w, scroll_h};
+    int y = scroll_top - defaults_modal_scroll_offset_;
 
-    if (defaults_basic_movement_checkbox_) {
-        defaults_basic_movement_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_diagonals_checkbox_) {
-        defaults_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_elevation_checkbox_) {
-        defaults_elevation_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_3d_diagonals_checkbox_) {
-        defaults_3d_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()});
-        y += DMCheckbox::height() + row_gap;
-    }
-    if (defaults_distance_box_) {
-        const int distance_h = defaults_distance_box_->preferred_height(content_w);
-        defaults_distance_box_->set_rect(SDL_Rect{content_x, y, content_w, distance_h});
-        y += distance_h + row_gap;
-    }
-
+    if (defaults_basic_movement_checkbox_) { defaults_basic_movement_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_diagonals_checkbox_) { defaults_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_elevation_checkbox_) { defaults_elevation_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_3d_diagonals_checkbox_) { defaults_3d_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_base_faces_right_checkbox_) { defaults_base_faces_right_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_distance_box_) { const int distance_h = defaults_distance_box_->preferred_height(content_w); defaults_distance_box_->set_rect(SDL_Rect{content_x, y, content_w, distance_h}); y += distance_h + row_gap; }
     if (defaults_base_frames_button_) {
-        if (defaults_base_frame_paths_.empty()) {
-            defaults_base_frames_button_->set_text("Add Base Movement Animation");
-        } else {
-            defaults_base_frames_button_->set_text("Base Frames (" + std::to_string(defaults_base_frame_paths_.size()) + ")");
-        }
+        defaults_base_frames_button_->set_text(defaults_base_frame_paths_.empty() ? "Add Base Movement Animation" : "Base Frames (" + std::to_string(defaults_base_frame_paths_.size()) + ")");
         const int button_w = std::min(content_w, std::max(280, defaults_base_frames_button_->preferred_width() + 24));
         defaults_base_frames_button_->set_rect(SDL_Rect{content_x, y, button_w, DMButton::height()});
+        y += DMButton::height() + row_gap;
     }
+
+    const int content_total_height = (y + defaults_modal_scroll_offset_) - scroll_top;
+    defaults_modal_scroll_max_ = std::max(0, content_total_height - scroll_h);
+    defaults_modal_scroll_offset_ = std::clamp(defaults_modal_scroll_offset_, 0, defaults_modal_scroll_max_);
 
     const int footer_y = defaults_modal_rect_.y + defaults_modal_rect_.h - padding - DMButton::height();
     if (defaults_cancel_button_ && defaults_create_button_) {
@@ -1662,6 +1981,9 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
     if (defaults_3d_diagonals_checkbox_ && defaults_3d_diagonals_checkbox_->handle_event(e)) {
         consumed = true;
     }
+    if (defaults_base_faces_right_checkbox_ && defaults_base_faces_right_checkbox_->handle_event(e)) {
+        consumed = true;
+    }
     if (defaults_distance_box_ && defaults_distance_box_->handle_event(e)) {
         consumed = true;
     }
@@ -1693,6 +2015,18 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
     if (e.type == SDL_EVENT_TEXT_INPUT) {
         return true;
     }
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && defaults_modal_scroll_rect_.h > 0) {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        SDL_Point mp{mx, my};
+        if (SDL_PointInRect(&mp, &defaults_modal_scroll_rect_) && defaults_modal_scroll_max_ > 0) {
+            const int delta = static_cast<int>(std::lround(e.wheel.y)) * 24;
+            defaults_modal_scroll_offset_ = std::clamp(defaults_modal_scroll_offset_ - delta, 0, defaults_modal_scroll_max_);
+            layout_defaults_modal();
+            return true;
+        }
+    }
 
     SDL_Point point{0, 0};
     bool pointer_event = false;
@@ -1711,10 +2045,15 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
     }
 
     if (pointer_event) {
-        if (SDL_PointInRect(&point, &defaults_modal_rect_)) {
+        const bool inside_modal = SDL_PointInRect(&point, &defaults_modal_rect_);
+        if (inside_modal) {
             return true;
         }
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            close_defaults_modal();
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_WHEEL) {
             return true;
         }
     }
@@ -1751,12 +2090,15 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
     title_y += DMStyles::Label().font_size + DMSpacing::small_gap();
     render_label(renderer, "Generate canonical [dx, dy, dz] data (per-frame = total / frames).", title_x, title_y);
 
+    SDL_SetRenderClipRect(renderer, &defaults_modal_scroll_rect_);
     if (defaults_basic_movement_checkbox_) defaults_basic_movement_checkbox_->render(renderer);
     if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
     if (defaults_elevation_checkbox_) defaults_elevation_checkbox_->render(renderer);
     if (defaults_3d_diagonals_checkbox_) defaults_3d_diagonals_checkbox_->render(renderer);
+    if (defaults_base_faces_right_checkbox_) defaults_base_faces_right_checkbox_->render(renderer);
     if (defaults_distance_box_) defaults_distance_box_->render(renderer);
     if (defaults_base_frames_button_) defaults_base_frames_button_->render(renderer);
+    SDL_SetRenderClipRect(renderer, nullptr);
     if (defaults_create_button_) defaults_create_button_->render(renderer);
     if (defaults_cancel_button_) defaults_cancel_button_->render(renderer);
 
@@ -1819,6 +2161,10 @@ std::optional<int> AnimationEditorWindow::parse_defaults_total_movement() const 
         return std::nullopt;
     }
     return value;
+}
+
+bool AnimationEditorWindow::defaults_base_faces_right() const {
+    return defaults_base_faces_right_checkbox_ && defaults_base_faces_right_checkbox_->value();
 }
 
 bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& animation_id,
@@ -1942,7 +2288,8 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
                                                                           int frame_count,
                                                                           int dx,
                                                                           int dy,
-                                                                          int dz) const {
+                                                                          int dz,
+                                                                          const std::vector<std::string>& tags) const {
     const int safe_frames = std::max(frame_count, 1);
     nlohmann::json payload = nlohmann::json::object();
     payload["source"] = nlohmann::json::object({
@@ -1961,16 +2308,19 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
     payload["invert_z"] = false;
     payload["rnd_start"] = false;
     payload["on_end"] = "default";
+    payload["tags"] = tags;
     return payload;
 }
 
 nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::string& animation_id,
                                                                      const std::string& source_animation_id,
                                                                      int frame_count,
-                                                                     int dx,
-                                                                     int dy,
-                                                                     int dz,
-                                                                     bool invert_frames_horizontal) const {
+                                                                     bool invert_x,
+                                                                     bool invert_y,
+                                                                     bool invert_z,
+                                                                     bool invert_frames_horizontal,
+                                                                     bool invert_frames_vertical,
+                                                                     const std::vector<std::string>& tags) const {
     (void)animation_id;
     const int safe_frames = std::max(frame_count, 1);
     nlohmann::json payload = nlohmann::json::object();
@@ -1980,19 +2330,15 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
         {"name", source_animation_id}
     });
     payload["number_of_frames"] = safe_frames;
-    payload["inherit_data"] = false;
-    payload["movement"] = build_movement_sequence(safe_frames, dx, dy, dz);
-    payload["movement_total"] = build_movement_total(payload["movement"]);
-    payload["anchor_points"] = build_empty_geometry_frames(safe_frames);
-    payload["locked"] = false;
+    payload["inherit_data"] = true;
     payload["reverse_source"] = false;
-    payload["invert_x"] = false;
-    payload["invert_y"] = false;
-    payload["invert_z"] = false;
+    payload["invert_x"] = invert_x;
+    payload["invert_y"] = invert_y;
+    payload["invert_z"] = invert_z;
     payload["invert_frames_horizontal"] = invert_frames_horizontal;
-    payload["invert_frames_vertical"] = false;
-    payload["rnd_start"] = false;
+    payload["invert_frames_vertical"] = invert_frames_vertical;
     payload["on_end"] = "default";
+    payload["tags"] = tags;
     payload["derived_modifiers"] = nlohmann::json::object({
         {"reverse", false}
     });
@@ -2008,7 +2354,11 @@ bool AnimationEditorWindow::ensure_animation_exists(const std::string& animation
         return true;
     }
 
-    document_->create_animation(animation_id);
+    const auto result = document_->create_animation(animation_id);
+    if (result != AnimationDocument::CreateAnimationResult::Created &&
+        result != AnimationDocument::CreateAnimationResult::AlreadyExists) {
+        return false;
+    }
     ids = document_->animation_ids();
     return std::find(ids.begin(), ids.end(), animation_id) != ids.end();
 }
@@ -2030,6 +2380,13 @@ bool AnimationEditorWindow::create_or_replace_animation_payload(const std::strin
 }
 
 void AnimationEditorWindow::handle_create_defaults() {
+    enum class DefaultsStageError { None, SourceDependency, CopyFailure, PayloadWriteFailure };
+    struct PlannedDefaultWrite {
+        DefaultAnimationSpec spec;
+        std::filesystem::path folder_path;
+        nlohmann::json payload;
+    };
+
     if (!document_) {
         set_status_message("Animation document is unavailable.", 180);
         return;
@@ -2048,15 +2405,19 @@ void AnimationEditorWindow::handle_create_defaults() {
         return;
     }
 
-    std::vector<std::filesystem::path> base_frames;
-    base_frames.reserve(defaults_base_frame_paths_.size());
-    for (const auto& path : defaults_base_frame_paths_) {
-        if (has_extension_ci(path, ".png")) {
-            base_frames.push_back(path);
+    if (defaults_base_frame_paths_.empty()) {
+        handle_pick_defaults_base_frames();
+        if (defaults_base_frame_paths_.empty()) {
+            devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base PNG frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
+            return;
         }
     }
+
+    std::vector<std::filesystem::path> base_frames;
+    for (const auto& path : defaults_base_frame_paths_) if (has_extension_ci(path, ".png")) base_frames.push_back(path);
     if (base_frames.empty()) {
         set_status_message("Select at least one base PNG frame.", 180);
+        devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base PNG frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
         return;
     }
     base_frames = normalize_sequence_paths(base_frames);
@@ -2069,108 +2430,157 @@ void AnimationEditorWindow::handle_create_defaults() {
 
     const int d = *total_movement_per_animation;
     const int frame_count = static_cast<int>(base_frames.size());
-    bool ok = true;
-    std::vector<std::string> created_ids;
+    const bool base_faces_right = defaults_base_faces_right();
+    std::vector<std::string> created_ids, newly_created_ids;
+    std::vector<std::filesystem::path> created_folders;
+    std::vector<DefaultAnimationSpec> specs;
 
-    auto create_file_based = [&](const std::string& id, int dx, int dy, int dz) {
-        if (!ok) return;
-        if (!copy_frames_to_animation_folder(id, base_frames)) {
-            ok = false;
-            return;
+    auto add_seed=[&](const std::string& id,int dx,int dy,int dz){specs.push_back(DefaultAnimationSpec{id,dx,dy,dz,{},true,false,false});};
+    auto add_derived=[&](const std::string& id,const std::string& source_id,int dx,int dy,int dz,bool h,bool v){specs.push_back(DefaultAnimationSpec{id,dx,dy,dz,source_id,false,h,v});};
+    const int x_seed_dx = base_faces_right ? d : -d;
+    const std::string x_seed_id = base_faces_right ? "right" : "left";
+    const std::string x_opposite_id = base_faces_right ? "left" : "right";
+    const int x_opposite_dx = -x_seed_dx;
+    if (create_basic) { add_seed(x_seed_id,x_seed_dx,0,0); add_derived(x_opposite_id,x_seed_id,x_opposite_dx,0,0,true,false); add_seed("up",0,0,-d); add_derived("forward","up",0,0,-d,false,false); add_derived("down","up",0,0,d,false,true); add_derived("backward","up",0,0,d,false,true);}    
+    if (create_diagonals) { const std::string seed_id=base_faces_right?"forward_right":"forward_left"; const std::string opposite_forward_id=base_faces_right?"forward_left":"forward_right"; const std::string same_backward_id=base_faces_right?"backward_right":"backward_left"; const std::string opposite_backward_id=base_faces_right?"backward_left":"backward_right"; add_seed(seed_id,x_seed_dx,0,-d); add_derived(opposite_forward_id,seed_id,x_opposite_dx,0,-d,true,false); add_derived(same_backward_id,seed_id,x_seed_dx,0,d,false,true); add_derived(opposite_backward_id,seed_id,x_opposite_dx,0,d,true,true);}    
+    if (create_elevation) { add_seed("elevation_up",0,d,0); add_derived("elevation_down","elevation_up",0,-d,0,false,true);}    
+    if (create_3d_diagonals) { const std::string seed_id=base_faces_right?"up_forward_right":"up_forward_left"; add_seed(seed_id,x_seed_dx,d,-d); const std::array<int,2> y{1,-1},z{-1,1},x{-1,1}; for(int ys:y) for(int zs:z) for(int xs:x){ const int dx=xs*d,dy=ys*d,dz=zs*d; const std::string id=std::string(ys>0?"up":"down")+"_"+(zs<0?"forward":"backward")+"_"+(xs<0?"left":"right"); if(id==seed_id) continue; add_derived(id,seed_id,dx,dy,dz,dx!=x_seed_dx,dy!=d||dz!=-d);} }
+
+    auto find_source=[&](const std::string& id)->const DefaultAnimationSpec*{for(const auto& spec:specs) if(spec.id==id) return &spec; return nullptr;};
+    std::vector<PlannedDefaultWrite> plan; plan.reserve(specs.size());
+    DefaultsStageError error=DefaultsStageError::None;
+    if (defaults_force_source_dependency_failure_) error = DefaultsStageError::SourceDependency;
+    for (const auto& spec : specs) {
+        PlannedDefaultWrite write{spec, asset_root_path_ / spec.id, nlohmann::json::object()};
+        if (spec.folder_sourced) write.payload = build_file_sourced_movement_payload(spec.id, frame_count, spec.dx, spec.dy, spec.dz, default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
+        else {
+            const DefaultAnimationSpec* source = find_source(spec.source_id);
+            if (!source) { error = DefaultsStageError::SourceDependency; break; }
+            write.payload = build_derived_movement_payload(spec.id,spec.source_id,frame_count,source->dx!=0&&source->dx!=spec.dx,source->dy!=0&&source->dy!=spec.dy,source->dz!=0&&source->dz!=spec.dz,spec.invert_frames_horizontal,spec.invert_frames_vertical,default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
         }
-        nlohmann::json payload = build_file_sourced_movement_payload(id, frame_count, dx, dy, dz);
-        if (!create_or_replace_animation_payload(id, payload)) {
-            ok = false;
-            return;
+        plan.push_back(std::move(write));
+    }
+    for (const auto& write : plan) {
+        if (error != DefaultsStageError::None) break;
+        const bool existed_before = document_->animation_payload(write.spec.id).has_value();
+        if (write.spec.folder_sourced) {
+            const bool copied = defaults_copy_frames_override_ ? defaults_copy_frames_override_(write.spec.id, base_frames) : copy_frames_to_animation_folder(write.spec.id, base_frames);
+            if (!copied) { error = DefaultsStageError::CopyFailure; break; }
+            created_folders.push_back(write.folder_path);
         }
-        created_ids.push_back(id);
-    };
-
-    auto create_derived = [&](const std::string& id,
-                              const std::string& source,
-                              int dx,
-                              int dy,
-                              int dz,
-                              bool invert_frames_horizontal) {
-        if (!ok) return;
-        nlohmann::json payload =
-            build_derived_movement_payload(id, source, frame_count, dx, dy, dz, invert_frames_horizontal);
-        if (!create_or_replace_animation_payload(id, payload)) {
-            ok = false;
-            return;
-        }
-        created_ids.push_back(id);
-    };
-
-    if (create_basic) {
-        create_file_based("left", -d, 0, 0);
-        create_file_based("right", d, 0, 0);
-        create_file_based("forward", 0, 0, -d);
-        create_file_based("backward", 0, 0, d);
+        if (defaults_force_payload_write_failure_ || !create_or_replace_animation_payload(write.spec.id, write.payload)) { error = DefaultsStageError::PayloadWriteFailure; break; }
+        if (!existed_before) newly_created_ids.push_back(write.spec.id);
+        created_ids.push_back(write.spec.id);
     }
 
-    if (create_diagonals) {
-        create_file_based("forward_left", -d, 0, -d);
-        create_file_based("forward_right", d, 0, -d);
-        create_file_based("backward_left", -d, 0, d);
-        create_file_based("backward_right", d, 0, d);
+    if (error == DefaultsStageError::None && manifest_store_ && !manifest_asset_key_.empty()) {
+        const bool persisted = defaults_persist_manifest_override_ ? defaults_persist_manifest_override_(nlohmann::json{{"movement_enabled", true}}, false) : persist_manifest_payload(nlohmann::json{{"movement_enabled", true}}, false);
+        if (!persisted) error = DefaultsStageError::PayloadWriteFailure;
     }
 
-    if (create_elevation) {
-        create_file_based("up", 0, d, 0);
-        create_file_based("down", 0, -d, 0);
-    }
-
-    if (create_3d_diagonals) {
-        create_file_based("up_forward_left", -d, d, -d);
-        create_derived("up_forward_right", "up_forward_left", d, d, -d, true);
-        create_derived("up_backward_left", "up_forward_left", -d, d, d, false);
-        create_derived("up_backward_right", "up_forward_left", d, d, d, true);
-
-        create_file_based("down_forward_left", -d, -d, -d);
-        create_derived("down_forward_right", "down_forward_left", d, -d, -d, true);
-        create_derived("down_backward_left", "down_forward_left", -d, -d, d, false);
-        create_derived("down_backward_right", "down_forward_left", d, -d, d, true);
-    }
-
-    if (!ok) {
-        set_status_message("Failed to create one or more default animations.", 240);
+    if (error != DefaultsStageError::None) {
+        for (const auto& id : newly_created_ids) document_->delete_animation(id);
+        for (const auto& folder : created_folders) { std::error_code ec; std::filesystem::remove_all(folder, ec); }
+        if (error == DefaultsStageError::CopyFailure) set_status_message("Create defaults failed while copying source frames. Check source PNGs and write permissions.", 300);
+        else if (error == DefaultsStageError::PayloadWriteFailure) set_status_message("Create defaults failed while writing animation payloads. No partial defaults were kept.", 300);
+        else set_status_message("Create defaults failed: a source dependency was missing.", 300);
         return;
     }
 
-    // Movement defaults are intentional authored movement data.
-    if (manifest_store_ && !manifest_asset_key_.empty()) {
-        (void)persist_manifest_payload(nlohmann::json{{"movement_enabled", true}}, false);
-    }
-
-    if (preview_provider_) {
-        preview_provider_->invalidate_all();
-    }
-    if (!created_ids.empty()) {
-        select_animation(std::optional<std::string>{created_ids.front()}, false);
-    } else {
-        ensure_selection_valid();
-    }
+    if (preview_provider_) preview_provider_->invalidate_all();
+    if (!created_ids.empty()) select_animation(std::optional<std::string>{created_ids.front()}, false); else ensure_selection_valid();
     set_status_message("Created default movement animations.", 300);
     close_defaults_modal();
 }
 
 void AnimationEditorWindow::create_animation_via_prompt() {
-    const char* input = tinyfd_inputBox("Create Animation", "Enter new animation identifier", "animation");
-    if (!input) return;
-    std::string name = normalize_animation_name(input);
+    if (!document_) {
+        set_status_message("Animation document is unavailable.", 180);
+        return;
+    }
 
-    if (name.empty()) {
+    auto prompt_name = [&](const std::string& default_value) -> std::optional<std::string> {
+        if (text_prompt_override_) {
+            return text_prompt_override_("Create Animation", "Enter new animation identifier", default_value);
+        }
+        return devmode::dialogs::prompt_text(parent_window_, "Create Animation", "Enter new animation identifier", default_value);
+    };
+
+    std::optional<std::string> input = prompt_name("animation");
+    if (!input) {
         return;
     }
-    if (animation_editor::strings::is_reserved_animation_name(name)) {
-        set_status_message("Animation name '" + name + "' is reserved.", 240);
+
+    for (;;) {
+        std::string name = normalize_animation_name(*input);
+        if (name.empty()) {
+            set_status_message("Animation name is invalid after normalization.", 240);
+            return;
+        }
+        if (animation_editor::strings::is_reserved_animation_name(name)) {
+            set_status_message("Animation name '" + name + "' is reserved.", 240);
+            return;
+        }
+
+        const auto before_ids = document_->animation_ids();
+        const bool conflict =
+            std::find(before_ids.begin(), before_ids.end(), name) != before_ids.end();
+        if (conflict) {
+            std::optional<int> choice;
+            if (choice_prompt_override_) {
+                choice = choice_prompt_override_("Animation Exists",
+                                                 "Animation '" + name + "' already exists.",
+                                                 {0, 1, 2});
+            } else {
+                choice = devmode::dialogs::show_choice(
+                    parent_window_,
+                    "Animation Exists",
+                    "Animation '" + name + "' already exists.",
+                    {
+                        devmode::dialogs::DialogButton{0, "Rename", true, false, false},
+                        devmode::dialogs::DialogButton{1, "Cancel", false, true, false},
+                        devmode::dialogs::DialogButton{2, "Open Existing", false, false, false},
+                    },
+                    devmode::dialogs::MessageIcon::Warning);
+            }
+            if (!choice || *choice == 1) {
+                set_status_message("Create animation cancelled.", 150);
+                return;
+            }
+            if (*choice == 2) {
+                select_animation(std::make_optional(name), false);
+                refresh_panels_after_load();
+                set_status_message("Opened existing animation '" + name + "'.", 240);
+                return;
+            }
+            input = prompt_name(name + "_2");
+            if (!input) {
+                set_status_message("Create animation cancelled.", 150);
+                return;
+            }
+            continue;
+        }
+
+        const auto create_result = document_->create_animation(name);
+        const auto after_ids = document_->animation_ids();
+        const bool inserted =
+            std::find(after_ids.begin(), after_ids.end(), name) != after_ids.end();
+        if (create_result == AnimationDocument::CreateAnimationResult::Created && inserted) {
+            preview_provider_->invalidate_all();
+            select_animation(std::make_optional(name), false);
+            refresh_panels_after_load();
+            set_status_message("Created animation '" + name + "'.", 240);
+        } else if (create_result == AnimationDocument::CreateAnimationResult::AlreadyExists) {
+            set_status_message("Animation '" + name + "' already exists.", 240);
+        } else if (create_result == AnimationDocument::CreateAnimationResult::InvalidName) {
+            set_status_message("Animation name '" + name + "' is invalid.", 240);
+        } else if (create_result == AnimationDocument::CreateAnimationResult::Created && !inserted) {
+            set_status_message("Animation create failed verification for '" + name + "'.", 260);
+        } else {
+            set_status_message("Failed to create animation '" + name + "'.", 240);
+        }
         return;
     }
-    document_->create_animation(name);
-    preview_provider_->invalidate_all();
-    select_animation(std::make_optional(name), false);
-    set_status_message("Created animation '" + name + "'.", 240);
 }
 
 void AnimationEditorWindow::reload_document() {
@@ -2249,6 +2659,13 @@ void AnimationEditorWindow::reload_document() {
     configure_list_panel();
     configure_inspector_panel();
     ensure_selection_valid();
+    refresh_panels_after_load();
+    if (document_) {
+        const auto& report = document_->last_load_report();
+        load_diagnostics_.animation_count_loaded = static_cast<int>(document_->animation_ids().size());
+        load_diagnostics_.parse_failures = report.parse_failures;
+        load_diagnostics_.normalization_failures = report.normalization_failures;
+    }
     if (seeded_default) {
         set_status_message("Created default animation.", 240);
     } else {
@@ -2542,48 +2959,9 @@ std::optional<std::string> AnimationEditorWindow::resolve_manifest_key(const Ass
 }
 
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_folder() const {
-    std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileDialog* pfd = nullptr;
-    std::optional<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Upload Folder");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(pfd->GetResult(&item))) {
-                PWSTR psz = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                    picked = std::filesystem::path(std::wstring(psz));
-                    CoTaskMemFree(psz);
-                }
-                item->Release();
-            }
-        }
-        pfd->Release();
-    }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* result = tinyfd_selectFolderDialog("Select Animation Folder", default_path.empty() ? nullptr : default_path.c_str());
-    if (!result || std::string(result).empty()) {
-        return std::nullopt;
-    }
-    return std::filesystem::path(result);
-#endif
+    return devmode::dialogs::open_folder(parent_window_,
+                                         "Select Animation Folder",
+                                         asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_);
 }
 
 void AnimationEditorWindow::handle_controller_button_click() {
@@ -2798,121 +3176,21 @@ void AnimationEditorWindow::open_controller() {
 }
 
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_gif() const {
-    std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileDialog* pfd = nullptr;
-    std::optional<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_FORCEFILESYSTEM;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Upload GIF");
-        COMDLG_FILTERSPEC filters[] = { {L"GIF Image", L"*.gif"} };
-        pfd->SetFileTypes(1, filters);
-        pfd->SetDefaultExtension(L"gif");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(pfd->GetResult(&item))) {
-                PWSTR psz = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                    picked = std::filesystem::path(std::wstring(psz));
-                    CoTaskMemFree(psz);
-                }
-                item->Release();
-            }
-        }
-        pfd->Release();
-    }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* filters[] = {"*.gif"};
-    const char* result = tinyfd_openFileDialog("Import GIF", default_path.c_str(), 1, filters, "GIF Image", 0);
-    if (!result || std::string(result).empty()) {
-        return std::nullopt;
-    }
-    return std::filesystem::path(result);
-#endif
+    return devmode::dialogs::open_file(parent_window_,
+                                       "Import GIF",
+                                       asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_,
+                                       {devmode::dialogs::FileDialogFilter{"GIF Image", "gif"}});
 }
 
 std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() const {
-    std::string default_path = asset_root_path_.empty() ? std::string{} : asset_root_path_.string();
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileOpenDialog* pfd = nullptr;
-    std::vector<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Upload PNG");
-        COMDLG_FILTERSPEC filters[] = { {L"PNG Images", L"*.png"} };
-        pfd->SetFileTypes(1, filters);
-        pfd->SetDefaultExtension(L"png");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItemArray* items = nullptr;
-            if (SUCCEEDED(pfd->GetResults(&items)) && items) {
-                DWORD count = 0;
-                if (SUCCEEDED(items->GetCount(&count))) {
-                    for (DWORD i = 0; i < count; ++i) {
-                        IShellItem* item = nullptr;
-                        if (!SUCCEEDED(items->GetItemAt(i, &item)) || !item) {
-                            continue;
-                        }
-                        PWSTR psz = nullptr;
-                        if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                            picked.emplace_back(std::wstring(psz));
-                            CoTaskMemFree(psz);
-                        }
-                        item->Release();
-                    }
-                }
-                items->Release();
-            } else {
-                IShellItem* item = nullptr;
-                if (SUCCEEDED(pfd->GetResult(&item)) && item) {
-                    PWSTR psz = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                        picked.emplace_back(std::wstring(psz));
-                        CoTaskMemFree(psz);
-                    }
-                    item->Release();
-                }
-            }
-        }
-        pfd->Release();
+    if (png_sequence_picker_override_) {
+        return png_sequence_picker_override_();
     }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* filters[] = {"*.png"};
-    const char* result = tinyfd_openFileDialog("Upload PNG", default_path.c_str(), 1, filters, "PNG Images", 1);
-    if (!result || std::string(result).empty()) {
-        return {};
-    }
-    return split_paths(result);
-#endif
+    return devmode::dialogs::open_files(parent_window_,
+                                        "Upload PNG",
+                                        asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_,
+                                        {devmode::dialogs::FileDialogFilter{"PNG Images", "png"}},
+                                        true);
 }
 
 std::optional<std::string> AnimationEditorWindow::pick_animation_reference() const {
@@ -2957,9 +3235,14 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
         oss << " - " << id << "\n";
     }
 
-    const char* result = tinyfd_inputBox("Select Animation", oss.str().c_str(), selectable.front().c_str());
+    std::optional<std::string> result;
+    if (text_prompt_override_) {
+        result = text_prompt_override_("Select Animation", oss.str(), selectable.front());
+    } else {
+        result = devmode::dialogs::prompt_text(parent_window_, "Select Animation", oss.str(), selectable.front());
+    }
     if (!result) return std::nullopt;
-    std::string choice = animation_editor::strings::trim_copy(result);
+    std::string choice = animation_editor::strings::trim_copy(*result);
     if (choice.empty()) return std::nullopt;
 
     auto match_it = std::find(selectable.begin(), selectable.end(), choice);
@@ -2977,64 +3260,20 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
 }
 
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_audio_file() const {
-    std::string default_path;
+    std::filesystem::path default_path;
     if (!asset_root_path_.empty()) {
-        default_path = (asset_root_path_ / default_audio_subdir()).string();
+        default_path = asset_root_path_ / default_audio_subdir();
     }
-#ifdef _WIN32
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    IFileDialog* pfd = nullptr;
-    std::optional<std::filesystem::path> picked;
-    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
-        DWORD options = 0;
-        if (SUCCEEDED(pfd->GetOptions(&options))) {
-            options |= FOS_FORCEFILESYSTEM;
-            pfd->SetOptions(options);
-        }
-        pfd->SetTitle(L"Select Audio Clip");
-        COMDLG_FILTERSPEC filters[] = {
-            {L"Audio Files", L"*.wav;*.ogg;*.mp3"},
-            {L"WAV", L"*.wav"},
-            {L"OGG", L"*.ogg"},
-            {L"MP3", L"*.mp3"}
-};
-        pfd->SetFileTypes(4, filters);
-        pfd->SetDefaultExtension(L"wav");
-        if (!default_path.empty()) {
-            IShellItem* psi = nullptr;
-            std::wstring wpath(default_path.begin(), default_path.end());
-            if (SUCCEEDED(SHCreateItemFromParsingName(wpath.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
-                pfd->SetFolder(psi);
-                psi->Release();
-            }
-        }
-        if (SUCCEEDED(pfd->Show(nullptr))) {
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(pfd->GetResult(&item))) {
-                PWSTR psz = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &psz)) && psz) {
-                    picked = std::filesystem::path(std::wstring(psz));
-                    CoTaskMemFree(psz);
-                }
-                item->Release();
-            }
-        }
-        pfd->Release();
-    }
-    if (SUCCEEDED(hr)) CoUninitialize();
-    return picked;
-#else
-    const char* filters[] = {"*.wav", "*.ogg", "*.mp3"};
-    const char* result = tinyfd_openFileDialog("Select Audio Clip", default_path.c_str(), 3, filters, "Audio Files", 0);
-    if (!result || std::string(result).empty()) {
-        return std::nullopt;
-    }
-    return std::filesystem::path(result);
-#endif
+    return devmode::dialogs::open_file(parent_window_,
+                                       "Select Audio Clip",
+                                       default_path,
+                                       {
+                                           devmode::dialogs::FileDialogFilter{"Audio Files", "wav;ogg;mp3"},
+                                           devmode::dialogs::FileDialogFilter{"WAV", "wav"},
+                                           devmode::dialogs::FileDialogFilter{"OGG", "ogg"},
+                                           devmode::dialogs::FileDialogFilter{"MP3", "mp3"},
+                                       });
 }
 
 }
-
-
-
 

@@ -14,7 +14,6 @@ struct MapDescriptor {
 };
 
 class Assets;
-class SceneRenderer;
 class AssetLoader;
 class Input;
 class LoadingScreen;
@@ -46,7 +45,6 @@ protected:
     std::unique_ptr<AssetLoader> loader_;
     std::shared_ptr<RuntimeWorldContext> world_context_;
     std::unique_ptr<Assets> game_assets_;
-    SceneRenderer* scene_            = nullptr;
     std::unique_ptr<Input> input_;
     SDL_Texture* overlay_texture_    = nullptr;
     bool dev_mode_ = false;

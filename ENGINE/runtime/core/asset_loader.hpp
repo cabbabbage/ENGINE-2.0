@@ -65,7 +65,7 @@ class AssetLoader {
     double map_radius_   = 0.0;
     MapGridSettings map_grid_settings_{};
     nlohmann::json map_manifest_json_;
-        nlohmann::json* map_boundary_data_ = nullptr;
+        nlohmann::json* live_dynamic_spawns_data_ = nullptr;
         nlohmann::json* rooms_data_        = nullptr;
         nlohmann::json* trails_data_       = nullptr;
     devmode::core::ManifestStore* manifest_store_ = nullptr;

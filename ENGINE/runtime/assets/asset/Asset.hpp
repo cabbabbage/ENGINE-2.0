@@ -240,6 +240,8 @@ class Asset {
     void clear_grid_id();
     void set_world_z_offset(float z) { if (world_z_offset_ != z) { world_z_offset_ = z; mark_anchors_dirty(); } }
     float world_z_offset() const { return world_z_offset_; }
+    void set_dynamic_spawned_asset(bool dynamic) { dynamic_spawned_asset_ = dynamic; }
+    bool is_dynamic_spawned_asset() const { return dynamic_spawned_asset_; }
     bool set_directional_heading_radians(float radians);
     void clear_directional_heading_radians();
     bool has_directional_heading_radians() const { return directional_heading_valid_; }
@@ -559,6 +561,7 @@ private:
 
     std::optional<TilingInfo> tiling_info_{};
     float size_variation_sample_ = 0.0f;
+    float size_variation_percent_ = 0.0f;
     double base_spawn_tilt_degrees_ = 0.0;
     void ensure_animation_runtime(bool force_recreate);
 
@@ -606,6 +609,7 @@ private:
     bool         anchor_perspective_override_active_ = false;
     float        anchor_perspective_override_scale_ = 1.0f;
     int          anchor_perspective_override_resolution_layer_ = 0;
+    bool         dynamic_spawned_asset_ = false;
     float        directional_heading_radians_ = 0.0f;
     bool         directional_heading_valid_ = false;
     float        directional_target_world_x_ = 0.0f;

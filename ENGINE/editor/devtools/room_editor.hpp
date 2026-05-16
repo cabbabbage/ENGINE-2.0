@@ -74,6 +74,7 @@ public:
     ~RoomEditor();
 
     void set_input(Input* input);
+    void set_parent_window(SDL_Window* window);
     void set_player(Asset* player);
     void set_active_assets(std::vector<Asset*>& actives, std::uint64_t generation);
     void set_screen_dimensions(int width, int height);
@@ -381,6 +382,7 @@ private:
                            SDL_Rect* out_rect = nullptr);
     void clear_room_trail_nav_entries();
     bool handle_room_nav_click(const SDL_Point& screen_pt);
+    bool select_current_room_from_nav(Room* room);
     void pan_camera_to_room(Room* room);
     SDL_Rect label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const;
     SDL_Rect resolve_edge_overlap(SDL_Rect rect, SDL_FPoint desired_center);
@@ -871,6 +873,7 @@ private:
 
 private:
     Assets* assets_ = nullptr;
+    SDL_Window* parent_window_ = nullptr;
     Input* input_ = nullptr;
     std::vector<Asset*>* active_assets_ = nullptr;
     std::uint64_t active_assets_version_ = 0;
@@ -1148,6 +1151,8 @@ private:
         bool valid = false;
     };
     XYOverlayCursorState xy_overlay_cursor_state_{};
+    SDL_Point last_pointer_screen_{0, 0};
+    bool has_last_pointer_screen_ = false;
 
     struct AssetEditorTransitionState {
         bool active = false;
@@ -1404,6 +1409,17 @@ struct RoomEditorTestAccess {
     static bool validate_anchor_candidate_source(const RoomEditor& editor, int source_context);
     static bool validate_floor_candidate_source(const RoomEditor& editor, int source_context);
     static void set_oval_candidate_selection(RoomEditor& editor, bool center_selected, int selected_point_index);
+    static void configure_oval_lock_target_for_tests(RoomEditor& editor,
+                                                     Asset* target_asset,
+                                                     int selected_oval_index,
+                                                     int selected_point_index,
+                                                     float center_world_x,
+                                                     float center_world_y,
+                                                     float center_world_z);
+    static bool resolve_oval_lock_target_for_tests(const RoomEditor& editor,
+                                                   float& out_world_x,
+                                                   float& out_world_z,
+                                                   float& out_heading_radians);
 
     static int active_subview(const RoomEditor& editor);
     static void set_active_subview(RoomEditor& editor, int subview);
@@ -1435,6 +1451,7 @@ struct RoomEditorTestAccess {
     static int current_grid_resolution(const RoomEditor& editor);
     static void resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution);
     static void update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity);
+    static bool spawn_group_is_boundary(const RoomEditor& editor, const std::string& spawn_id);
     static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
     static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);
     static bool should_open_spawn_group_panel_for_click(RoomEditor& editor,
@@ -1484,12 +1501,32 @@ struct RoomEditorTestAccess {
     static std::uint32_t delete_shortcut_stack_dispatch_count(const RoomEditor& editor);
     static std::uint32_t delete_shortcut_asset_delete_count(const RoomEditor& editor);
     static void reset_delete_shortcut_route_counters(RoomEditor& editor);
+    static bool solve_texture_point_for_screen_target_for_tests(int initial_x,
+                                                                int initial_y,
+                                                                SDL_FPoint desired_screen,
+                                                                int max_x,
+                                                                int max_y,
+                                                                bool singular_jacobian,
+                                                                int& out_x,
+                                                                int& out_y);
     static void set_spawn_id_ownership_cache(RoomEditor& editor,
                                              const std::vector<std::string>& room_spawn_ids,
                                              const std::vector<std::string>& map_boundary_spawn_ids);
     static int classify_spawn_group_ownership(const RoomEditor& editor, const std::string& spawn_id);
+    static std::optional<RoomEditor::DynamicBoundaryProxyHit> hit_test_dynamic_boundary_sprite(
+        RoomEditor& editor,
+        SDL_Point screen_point);
+    static std::optional<SDL_FRect> dynamic_boundary_proxy_rect(const RoomEditor& editor,
+                                                                const RoomEditor::DynamicBoundaryProxyKey& key);
+    static std::optional<SDL_FRect> dynamic_boundary_proxy_rect_for_asset(const RoomEditor& editor,
+                                                                          const Asset* asset);
+    static bool open_asset_info_for_dynamic_boundary(RoomEditor& editor,
+                                                      const RoomEditor::DynamicBoundaryProxyHit& hit);
     static bool spawn_membership_allows_room_selection(const RoomEditor& editor,
                                                        const std::string& spawn_id,
                                                        const std::string& owning_room_name);
+    static bool select_current_room_from_nav(RoomEditor& editor, Room* room);
+    static Room* current_room(const RoomEditor& editor);
+    static std::string room_config_header_text(const RoomEditor& editor);
 };
 #endif

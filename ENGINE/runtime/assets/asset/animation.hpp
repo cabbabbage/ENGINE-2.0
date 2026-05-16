@@ -9,7 +9,6 @@
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 #include "animation_frame.hpp"
-#include "rendering/render/render.hpp"
 #include "animation_frame_variant.hpp"
 #include "PointPercentage.hpp"
 

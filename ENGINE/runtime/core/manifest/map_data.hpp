@@ -22,7 +22,7 @@ struct MapData {
     nlohmann::json trails_data = nlohmann::json::object();
     nlohmann::json map_layers = nlohmann::json::array();
     nlohmann::json map_layers_settings = nlohmann::json::object();
-    nlohmann::json map_boundary_data = nlohmann::json::object();
+    nlohmann::json live_dynamic_spawns = nlohmann::json::object();
     nlohmann::json dev_map_settings = nlohmann::json::object();
 
     nlohmann::json extras = nlohmann::json::object();
@@ -54,7 +54,14 @@ struct MapData {
         capture_known("trails_data", data.trails_data, nlohmann::json::object());
         capture_known("map_layers", data.map_layers, nlohmann::json::array());
         capture_known("map_layers_settings", data.map_layers_settings, nlohmann::json::object());
-        capture_known("map_boundary_data", data.map_boundary_data, nlohmann::json::object());
+        capture_known("live_dynamic_spawns", data.live_dynamic_spawns, nlohmann::json::object());
+        if (data.live_dynamic_spawns.empty()) {
+            auto legacy_boundary = entry.find("map_boundary_data");
+            if (legacy_boundary != entry.end() && legacy_boundary->is_object()) {
+                data.live_dynamic_spawns["boundary_area_selectors"] =
+                    legacy_boundary->value("candidate_selectors", nlohmann::json::array());
+            }
+        }
         capture_known("dev_map_settings", data.dev_map_settings, nlohmann::json::object());
 
         data.extras = nlohmann::json::object();
@@ -65,6 +72,7 @@ struct MapData {
                 key == "map_layers" ||
                 key == "map_layers_settings" ||
                 key == "map_boundary_data" ||
+                key == "live_dynamic_spawns" ||
                 key == "map_assets_data" ||  // deprecated: intentionally dropped
                 key == "dev_map_settings" ||
                 key == "schema_version") {
@@ -85,7 +93,7 @@ struct MapData {
         out["trails_data"] = trails_data;
         out["map_layers"] = map_layers;
         out["map_layers_settings"] = map_layers_settings;
-        out["map_boundary_data"] = map_boundary_data;
+        out["live_dynamic_spawns"] = live_dynamic_spawns;
         out["dev_map_settings"] = dev_map_settings;
 
         return out;

@@ -49,6 +49,16 @@ using DMTextBox = ::DMTextBox;
 
 class AnimationEditorWindow {
   public:
+    struct LoadDiagnostics {
+        std::string manifest_key_resolution_result = "not_attempted";
+        std::string manifest_transaction_open_result = "not_attempted";
+        std::string snapshot_source_chosen = "none";
+        int animation_count_loaded = 0;
+        bool seeded_default_applied = false;
+        int parse_failures = 0;
+        int normalization_failures = 0;
+    };
+
     AnimationEditorWindow();
     ~AnimationEditorWindow();
 
@@ -78,14 +88,17 @@ class AnimationEditorWindow {
     void set_assets(Assets* assets) { assets_ = assets; }
     void set_target_asset(Asset* asset) { target_asset_ = asset; }
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
+    void set_parent_window(SDL_Window* window) { parent_window_ = window; }
 
   FRAME_EDITOR_ACCESS:
     void handle_document_saved();
     void layout_children();
+    int status_height() const;
     void ensure_layout() const;
     void invalidate_inspector_background_cache();
     void configure_list_panel();
     void configure_inspector_panel();
+    void refresh_panels_after_load();
     void select_animation(const std::optional<std::string>& animation_id, bool from_user);
     void ensure_selection_valid();
     void handle_list_context_menu(const std::string& animation_id, const SDL_Point& location);
@@ -96,9 +109,12 @@ class AnimationEditorWindow {
     void render_background(SDL_Renderer* renderer) const;
     void render_header(SDL_Renderer* renderer) const;
     void render_status(SDL_Renderer* renderer) const;
+    void render_load_diagnostics(SDL_Renderer* renderer) const;
+    std::string format_load_diagnostics_json() const;
     void render_inspector(SDL_Renderer* renderer) const;
     void render_inspector_background(SDL_Renderer* renderer) const;
     bool handle_header_event(const SDL_Event& e);
+    bool handle_status_event(const SDL_Event& e);
     bool handle_defaults_modal_event(const SDL_Event& e);
     void set_status_message(const std::string& message, int frames = 300);
     void render_defaults_modal(SDL_Renderer* renderer) const;
@@ -111,6 +127,7 @@ class AnimationEditorWindow {
     bool ensure_animation_exists(const std::string& animation_id);
     bool create_or_replace_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
     std::optional<int> parse_defaults_total_movement() const;
+    bool defaults_base_faces_right() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
     bool remove_animation_source_folder(const std::string& animation_id, std::string& error_message);
@@ -119,14 +136,17 @@ class AnimationEditorWindow {
                                                        int frame_count,
                                                        int dx,
                                                        int dy,
-                                                       int dz) const;
+                                                       int dz,
+                                                       const std::vector<std::string>& tags) const;
     nlohmann::json build_derived_movement_payload(const std::string& animation_id,
                                                   const std::string& source_animation_id,
                                                   int frame_count,
-                                                  int dx,
-                                                  int dy,
-                                                  int dz,
-                                                  bool invert_frames_horizontal) const;
+                                                  bool invert_x,
+                                                  bool invert_y,
+                                                  bool invert_z,
+                                                  bool invert_frames_horizontal,
+                                                  bool invert_frames_vertical,
+                                                  const std::vector<std::string>& tags) const;
     void create_animation_via_prompt();
     void reload_document();
     void process_auto_save();
@@ -173,21 +193,31 @@ class AnimationEditorWindow {
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMButton> controller_button_;
     std::unique_ptr<DMButton> create_defaults_button_;
+    std::unique_ptr<DMButton> load_details_toggle_button_;
+    std::unique_ptr<DMButton> load_details_copy_button_;
     bool defaults_modal_visible_ = false;
     std::unique_ptr<DMCheckbox> defaults_diagonals_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_elevation_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_3d_diagonals_checkbox_;
+    std::unique_ptr<DMCheckbox> defaults_base_faces_right_checkbox_;
     std::unique_ptr<DMTextBox> defaults_distance_box_;
     std::unique_ptr<DMButton> defaults_base_frames_button_;
     std::unique_ptr<DMButton> defaults_create_button_;
     std::unique_ptr<DMButton> defaults_cancel_button_;
     std::vector<std::filesystem::path> defaults_base_frame_paths_;
     SDL_Rect defaults_modal_rect_{0, 0, 0, 0};
+    SDL_Rect defaults_modal_scroll_rect_{0, 0, 0, 0};
+    int defaults_modal_scroll_offset_ = 0;
+    int defaults_modal_scroll_max_ = 0;
+    std::string defaults_modal_open_warning_;
     SDL_Rect header_rect_{0, 0, 0, 0};
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};
     SDL_Rect status_rect_{0, 0, 0, 0};
+    SDL_Rect load_details_rect_{0, 0, 0, 0};
+    bool load_details_expanded_ = false;
+    LoadDiagnostics load_diagnostics_{};
     std::string status_message_;
     int status_timer_frames_ = 0;
     mutable SDL_Texture* inspector_background_cache_ = nullptr;
@@ -209,9 +239,16 @@ class AnimationEditorWindow {
 
     Assets* assets_ = nullptr;
     Asset* target_asset_ = nullptr;
+    SDL_Window* parent_window_ = nullptr;
     std::unique_ptr<CustomControllerService> custom_controller_service_;
+    std::function<std::vector<std::filesystem::path>()> png_sequence_picker_override_;
+    std::function<std::optional<std::string>(const std::string&, const std::string&, const std::string&)> text_prompt_override_;
+    std::function<std::optional<int>(const std::string&, const std::string&, const std::vector<int>&)> choice_prompt_override_;
+    std::function<bool(const std::string&, const std::vector<std::filesystem::path>&)> defaults_copy_frames_override_;
+    std::function<bool(const nlohmann::json&, bool)> defaults_persist_manifest_override_;
+    bool defaults_force_source_dependency_failure_ = false;
+    bool defaults_force_payload_write_failure_ = false;
 
 };
 
 }
-

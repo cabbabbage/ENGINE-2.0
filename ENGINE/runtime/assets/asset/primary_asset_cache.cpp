@@ -182,13 +182,124 @@ CacheManager::BundleFrameLayer make_transparent_layer(int width, int height) {
     return layer;
 }
 
+std::uint8_t glyph_row(char ch, int row) {
+    if (row < 0 || row >= 7) {
+        return 0;
+    }
+
+    switch (static_cast<char>(std::toupper(static_cast<unsigned char>(ch)))) {
+    case 'A': {
+        static constexpr std::uint8_t rows[7] = {0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001};
+        return rows[row];
+    }
+    case 'B': {
+        static constexpr std::uint8_t rows[7] = {0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110};
+        return rows[row];
+    }
+    case 'D': {
+        static constexpr std::uint8_t rows[7] = {0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110};
+        return rows[row];
+    }
+    case 'E': {
+        static constexpr std::uint8_t rows[7] = {0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111};
+        return rows[row];
+    }
+    case 'S': {
+        static constexpr std::uint8_t rows[7] = {0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110};
+        return rows[row];
+    }
+    case 'T': {
+        static constexpr std::uint8_t rows[7] = {0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100};
+        return rows[row];
+    }
+    default:
+        return 0;
+    }
+}
+
+int bitmap_text_width(const std::string& text, int scale) {
+    if (text.empty()) {
+        return 0;
+    }
+    return static_cast<int>(text.size()) * 5 * scale +
+           static_cast<int>(text.size() - 1) * scale;
+}
+
+void draw_bitmap_text(SDL_Surface* surface,
+                      const std::string& text,
+                      int x,
+                      int y,
+                      int scale,
+                      Uint32 color) {
+    if (!surface || text.empty() || scale <= 0) {
+        return;
+    }
+
+    int cursor_x = x;
+    for (char ch : text) {
+        if (ch != ' ') {
+            for (int row = 0; row < 7; ++row) {
+                const std::uint8_t bits = glyph_row(ch, row);
+                for (int col = 0; col < 5; ++col) {
+                    if ((bits & (1u << (4 - col))) == 0) {
+                        continue;
+                    }
+                    SDL_Rect rect{cursor_x + col * scale, y + row * scale, scale, scale};
+                    SDL_FillSurfaceRect(surface, &rect, color);
+                }
+            }
+        }
+        cursor_x += 6 * scale;
+    }
+}
+
+CacheManager::BundleFrameLayer make_bad_asset_layer() {
+    constexpr int width = 96;
+    constexpr int height = 48;
+    constexpr int scale = 3;
+
+    SDL_Surface* surface = SDL_CreateSurface(width, height, kRuntimeRgbaPixelFormat);
+    if (!surface) {
+        return make_transparent_layer(1, 1);
+    }
+
+    const SDL_PixelFormatDetails* fmt = SDL_GetPixelFormatDetails(surface->format);
+    SDL_Palette* palette = SDL_GetSurfacePalette(surface);
+    const Uint32 background = fmt ? SDL_MapRGBA(fmt, palette, 255, 0, 255, 255) : 0;
+    const Uint32 border = fmt ? SDL_MapRGBA(fmt, palette, 0, 0, 0, 255) : 0;
+    const Uint32 text = fmt ? SDL_MapRGBA(fmt, palette, 255, 255, 255, 255) : 0;
+
+    SDL_FillSurfaceRect(surface, nullptr, background);
+    SDL_Rect top{0, 0, width, 2};
+    SDL_Rect bottom{0, height - 2, width, 2};
+    SDL_Rect left{0, 0, 2, height};
+    SDL_Rect right{width - 2, 0, 2, height};
+    SDL_FillSurfaceRect(surface, &top, border);
+    SDL_FillSurfaceRect(surface, &bottom, border);
+    SDL_FillSurfaceRect(surface, &left, border);
+    SDL_FillSurfaceRect(surface, &right, border);
+
+    const std::string line1 = "BAD";
+    const std::string line2 = "ASSET";
+    draw_bitmap_text(surface, line1, (width - bitmap_text_width(line1, scale)) / 2, 2, scale, text);
+    draw_bitmap_text(surface, line2, (width - bitmap_text_width(line2, scale)) / 2, 25, scale, text);
+
+    CacheManager::BundleFrameLayer layer = make_layer(surface);
+    SDL_DestroySurface(surface);
+    if (layer.empty()) {
+        return make_transparent_layer(1, 1);
+    }
+    return layer;
+}
+
 CacheManager::BundleFrame make_placeholder_frame(const std::vector<float>& variant_steps) {
     CacheManager::BundleFrame frame;
     frame.variants.reserve(variant_steps.empty() ? 1u : variant_steps.size());
     const std::size_t variant_count = variant_steps.empty() ? 1u : variant_steps.size();
+    const CacheManager::BundleFrameLayer fallback = make_bad_asset_layer();
     for (std::size_t idx = 0; idx < variant_count; ++idx) {
         CacheManager::BundleFrameVariant variant;
-        variant.base = make_transparent_layer(1, 1);
+        variant.base = fallback;
         frame.variants.push_back(std::move(variant));
     }
     return frame;
@@ -772,11 +883,11 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                 if (!allow_placeholder_fallback) {
                     vibble::log::warn("[PrimaryAssetCache] No source frames found for " + info.name +
                                       "::" + bundle_anim.name + " in '" + folder.generic_string() +
-                                      "'; transparent placeholder fallback is disabled, so cache build fails.");
+                                      "'; bad-asset placeholder fallback is disabled, so cache build fails.");
                     return false;
                 }
                 vibble::log::warn("[PrimaryAssetCache] Intentional fallback policy enabled for " + info.name +
-                                  "::" + bundle_anim.name + "; injecting a transparent placeholder frame.");
+                                  "::" + bundle_anim.name + "; injecting a readable BAD ASSET placeholder frame.");
                 bundle_anim.frames.push_back(make_placeholder_frame(bundle_anim.variant_steps));
                 out_data.animations.push_back(std::move(bundle_anim));
                 continue;
@@ -798,16 +909,16 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                     if (!allow_placeholder_fallback) {
                         vibble::log::warn("[PrimaryAssetCache] Missing base frame data for " + info.name +
                                           "::" + bundle_anim.name +
-                                          "; transparent frame fallback is disabled, so cache build fails.");
+                                          "; bad-asset frame fallback is disabled, so cache build fails.");
                         return false;
                     }
                     if (!warned_missing_base_frame) {
                         vibble::log::warn("[PrimaryAssetCache] Intentional fallback policy enabled for " + info.name +
                                           "::" + bundle_anim.name +
-                                          "; injecting transparent fallback for unavailable frame(s).");
+                                          "; injecting BAD ASSET fallback for unavailable frame(s).");
                         warned_missing_base_frame = true;
                     }
-                    base_layer = make_transparent_layer(1, 1);
+                    base_layer = make_bad_asset_layer();
                 }
 
                 for (std::size_t variant_idx = 0; variant_idx < bundle_anim.variant_steps.size(); ++variant_idx) {
@@ -823,7 +934,7 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
                         variant.base = scale_layer(base_layer, step);
                     }
                     if (variant.base.empty()) {
-                        variant.base = make_transparent_layer(1, 1);
+                        variant.base = make_bad_asset_layer();
                     }
                     frame.variants.push_back(std::move(variant));
                 }

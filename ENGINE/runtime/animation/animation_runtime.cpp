@@ -190,6 +190,14 @@ int attack_facing_match_score(const std::vector<std::string>& animation_tags,
     return attack_facing_match_score_impl(animation_tags, animation_id, target_delta_x, deadzone_px);
 }
 
+void force_committed_attack_target(AnimationRuntime& runtime, std::string target_asset_id) {
+    runtime.committed_attack_target_asset_id_ = std::move(target_asset_id);
+    runtime.committed_attack_animation_id_ =
+        runtime.self_ ? runtime.self_->current_animation : std::string{};
+    runtime.committed_attack_last_dispatched_frame_index_ = -1;
+    runtime.committed_attack_last_payload_id_.clear();
+}
+
 }
 
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
@@ -530,6 +538,16 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     target->send_attack(attack);
     committed_attack_last_dispatched_frame_index_ = attack.source_frame_index;
     committed_attack_last_payload_id_ = attack.attack_payload_id;
+}
+
+void AnimationRuntime::refresh_runtime_frame_geometry() {
+    if (!self_) {
+        return;
+    }
+
+    self_->update_anchor_basis_if_needed();
+    self_->refresh_anchor_point_cache_from_frame();
+    self_->refresh_runtime_box_cache_from_frame();
 }
 
 bool AnimationRuntime::committed_attack_execution_active() const {
@@ -910,25 +928,38 @@ void AnimationRuntime::apply_pending_move_3d() {
     }
 }
 
-bool AnimationRuntime::advance(AnimationFrame*& frame) {
+AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(AnimationFrame*& frame, int max_events) {
+    FrameAdvanceReport report{};
     if (!self_ || !self_->info) {
-        return false;
+        report.ok = false;
+        return report;
     }
 
     auto it = self_->info->animations.find(self_->current_animation);
     if (it == self_->info->animations.end()) {
-        return false;
+        report.ok = false;
+        return report;
     }
 
     Animation* anim = &it->second;
     std::size_t path_index = path_index_for(self_->current_animation);
+    auto record_entered_frame = [&](bool cycle_boundary_before_advance) {
+        report.advanced_any = true;
+        report.entered_frames.push_back(FrameAdvanceEvent{
+            frame,
+            self_ ? self_->current_animation : std::string{},
+            path_index,
+            cycle_boundary_before_advance
+        });
+    };
     if (!reverse_mode_applies_to_current_animation()) {
         clear_reverse_playback_state();
     }
     if (!frame) {
         frame = anim->get_first_frame(path_index);
         if (!frame) {
-            return false;
+            report.ok = false;
+            return report;
         }
     }
 
@@ -952,7 +983,7 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     }
     if (should_skip && !has_overriding_plan) {
         self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || lock_on_end_active_;
-        return true;
+        return report;
     }
     if (is_player) {
         self_->static_frame = false;
@@ -969,23 +1000,26 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     }
 
     self_->frame_progress += dt;
-    bool advanced_any = false;
-    while (self_->frame_progress >= frame_interval) {
+    while (self_->frame_progress >= frame_interval &&
+           (max_events < 0 || static_cast<int>(report.entered_frames.size()) < max_events)) {
         self_->frame_progress -= frame_interval;
+        const bool cycle_boundary_before_advance =
+            frame && frame->next == nullptr;
 
         if (reverse_mode_applies_to_current_animation()) {
             if (frame->prev) {
                 frame = frame->prev;
-                advanced_any = true;
+                record_entered_frame(false);
                 continue;
             }
 
             if (reverse_playback_mode_ == ReversePlaybackMode::ReverseUntilStopCurrentAnimation) {
                 frame = last_frame_for(*anim, path_index);
                 if (!frame) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
-                advanced_any = true;
+                record_entered_frame(false);
                 continue;
             }
 
@@ -996,15 +1030,17 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
                           path_index_for(animation_update::detail::kDefaultAnimation));
                 frame = self_->current_frame;
                 if (!frame) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
                 it = self_->info->animations.find(self_->current_animation);
                 if (it == self_->info->animations.end()) {
-                    return false;
+                    report.ok = false;
+                    return report;
                 }
                 anim = &it->second;
                 path_index = path_index_for(self_->current_animation);
-                advanced_any = true;
+                record_entered_frame(cycle_boundary_before_advance);
                 continue;
             }
 
@@ -1013,27 +1049,52 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
 
         if (frame->next) {
             frame = frame->next;
-            advanced_any = true;
+            record_entered_frame(false);
             continue;
         }
 
         const Animation::OnEndDirective directive = anim->on_end_behavior;
         switch (directive) {
         case Animation::OnEndDirective::Loop: {
+            if (current_animation_is_attack() &&
+                committed_attack_target_asset_id_.has_value()) {
+                clear_attack_commitment();
+                switch_to(animation_update::detail::kDefaultAnimation,
+                          path_index_for(animation_update::detail::kDefaultAnimation));
+                if (self_) {
+                    self_->needs_target = true;
+                }
+                frame = self_->current_frame;
+                if (!frame) {
+                    report.ok = false;
+                    return report;
+                }
+                it = self_->info->animations.find(self_->current_animation);
+                if (it == self_->info->animations.end()) {
+                    report.ok = false;
+                    return report;
+                }
+                anim = &it->second;
+                path_index = path_index_for(self_->current_animation);
+                record_entered_frame(cycle_boundary_before_advance);
+                break;
+            }
             frame = anim->get_first_frame(path_index);
             if (!frame) {
-                return false;
+                report.ok = false;
+                return report;
             }
-            advanced_any = true;
+            record_entered_frame(cycle_boundary_before_advance);
             break;
         }
         case Animation::OnEndDirective::Kill:
             self_->Delete();
-            return false;
+            report.ok = false;
+            return report;
         case Animation::OnEndDirective::Lock:
             lock_on_end_active_ = true;
             self_->static_frame = true;
-            return true;
+            return report;
         case Animation::OnEndDirective::Reverse:
             activate_reverse_playback(ReversePlaybackMode::ReverseToDefaultAtStart);
             lock_on_end_active_ = false;
@@ -1051,40 +1112,56 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
             switch_to(resolved, path_index_for(requested));
             frame = self_->current_frame;
             if (!frame) {
-                return false;
+                report.ok = false;
+                return report;
             }
             it = self_->info->animations.find(self_->current_animation);
             if (it == self_->info->animations.end()) {
-                return false;
+                report.ok = false;
+                return report;
             }
             anim = &it->second;
             path_index = path_index_for(self_->current_animation);
-            advanced_any = true;
+            record_entered_frame(cycle_boundary_before_advance);
             break;
         }
         case Animation::OnEndDirective::Default:
-        default:
+        default: {
+            const bool completed_committed_attack =
+                current_animation_is_attack() &&
+                committed_attack_target_asset_id_.has_value();
             switch_to(animation_update::detail::kDefaultAnimation,
                       path_index_for(animation_update::detail::kDefaultAnimation));
+            if (completed_committed_attack && self_) {
+                self_->needs_target = true;
+            }
             frame = self_->current_frame;
             if (!frame) {
-                return false;
+                report.ok = false;
+                return report;
             }
             it = self_->info->animations.find(self_->current_animation);
             if (it == self_->info->animations.end()) {
-                return false;
+                report.ok = false;
+                return report;
             }
             anim = &it->second;
             path_index = path_index_for(self_->current_animation);
-            advanced_any = true;
+            record_entered_frame(cycle_boundary_before_advance);
             break;
         }
+        }
     }
-    if (advanced_any) {
+    if (report.advanced_any) {
         self_->mark_composite_dirty();
         self_->mark_anchors_dirty();
+        refresh_runtime_frame_geometry();
     }
-    return true;
+    return report;
+}
+
+bool AnimationRuntime::advance(AnimationFrame*& frame) {
+    return advance_with_report(frame).ok;
 }
 
 void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_index) {
@@ -1135,6 +1212,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     active_paths_[self_->current_animation] = path_index;
     self_->mark_composite_dirty();
     self_->mark_anchors_dirty();
+    refresh_runtime_frame_geometry();
 }
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {

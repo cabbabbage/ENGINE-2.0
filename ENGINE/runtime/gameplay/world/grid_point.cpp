@@ -4,7 +4,9 @@
 #include "rendering/render/screen_space_math.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
+#include <limits>
 #include <optional>
 
 namespace world {
@@ -25,6 +27,31 @@ namespace {
 
     inline double length(const Vec3& v) {
         return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    }
+
+    float clamp_perspective_scale(const CameraProjectionParams& params, double scale) {
+        if (!std::isfinite(scale) || scale <= 0.0) {
+            scale = 1.0;
+        }
+        const float scale_f = static_cast<float>(scale);
+        if (std::isfinite(params.max_perspective_scale) && params.max_perspective_scale > 0.0f) {
+            return std::clamp(scale_f, 0.0001f, params.max_perspective_scale);
+        }
+        return std::max(0.0001f, scale_f);
+    }
+
+    float invalid_projection_perspective_scale(const CameraProjectionParams& params) {
+        if (std::isfinite(params.max_perspective_scale) && params.max_perspective_scale > 0.0f) {
+            return std::max(0.0001f, params.max_perspective_scale);
+        }
+        return 1.0f;
+    }
+
+    int clamp_i64_to_int(std::int64_t value) {
+        return static_cast<int>(std::clamp<std::int64_t>(
+            value,
+            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
     }
 } // namespace
 
@@ -133,6 +160,11 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         !std::isfinite(distance_sq)) {
         projection_.screen = SDL_FPoint{0.0f, 0.0f};
         projection_.parallax_dx = 0.0f;
+        projection_.vertical_scale = 1.0f;
+        projection_.perspective_scale = invalid_projection_perspective_scale(params);
+        projection_.horizon_fade_alpha = 0.0f;
+        projection_.distance_to_camera = 0.0f;
+        projection_.tilt_radians = static_cast<float>(params.pitch_radians);
         projection_.on_screen = false;
         projection_.screen_data_valid = true;
         return;
@@ -154,6 +186,11 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     if (!std::isfinite(ndc_x) || !std::isfinite(ndc_y)) {
         projection_.screen = SDL_FPoint{0.0f, 0.0f};
         projection_.parallax_dx = 0.0f;
+        projection_.vertical_scale = 1.0f;
+        projection_.perspective_scale = invalid_projection_perspective_scale(params);
+        projection_.horizon_fade_alpha = 0.0f;
+        projection_.distance_to_camera = static_cast<float>(distance);
+        projection_.tilt_radians = static_cast<float>(params.pitch_radians);
         projection_.on_screen = false;
         projection_.screen_data_valid = true;
         return;
@@ -221,9 +258,7 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
         }
     }
 
-    if (!std::isfinite(scale) || scale <= 0.0) {
-        scale = 1.0;
-    }
+    const float bounded_scale = clamp_perspective_scale(params, scale);
     if (!std::isfinite(vert_scale) || vert_scale <= 0.0f) {
         vert_scale = 1.0f;
     }
@@ -248,7 +283,7 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     projection_.screen = SDL_FPoint{static_cast<float>(screen_x), static_cast<float>(screen_y)};
     projection_.parallax_dx = 0.0f;
     projection_.vertical_scale = vert_scale;
-    projection_.perspective_scale = static_cast<float>(std::max(0.0001, scale));
+    projection_.perspective_scale = bounded_scale;
     projection_.horizon_fade_alpha = h_fade;
     projection_.distance_to_camera = static_cast<float>(distance);
     projection_.tilt_radians = static_cast<float>(params.pitch_radians);
@@ -448,8 +483,14 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
 }
 
 GridBounds GridBounds::from_xywh(int x, int z, int w, int h, int world_y, int layer) {
-    const int max_x = x + std::max(0, w - 1);
-    const int max_z = z + std::max(0, h - 1);
+    const std::int64_t max_x64 =
+        static_cast<std::int64_t>(x) +
+        std::max<std::int64_t>(0, static_cast<std::int64_t>(w) - 1);
+    const std::int64_t max_z64 =
+        static_cast<std::int64_t>(z) +
+        std::max<std::int64_t>(0, static_cast<std::int64_t>(h) - 1);
+    const int max_x = clamp_i64_to_int(max_x64);
+    const int max_z = clamp_i64_to_int(max_z64);
     const axis::WorldPos min_pos{x, world_y, z};
     const axis::WorldPos max_pos{max_x, world_y, max_z};
     GridPoint min = GridPoint::make_virtual(min_pos, layer);
@@ -467,9 +508,15 @@ bool GridBounds::contains(const GridPoint& pt) const {
 }
 
 GridBounds GridBounds::expanded(int margin) const {
-    const int m = std::max(0, margin);
-    const axis::WorldPos expanded_min{min.world_x() - m, min.world_y(), min.world_z() - m};
-    const axis::WorldPos expanded_max{max.world_x() + m, max.world_y(), max.world_z() + m};
+    const std::int64_t m = std::max<std::int64_t>(0, margin);
+    const axis::WorldPos expanded_min{
+        clamp_i64_to_int(static_cast<std::int64_t>(min.world_x()) - m),
+        min.world_y(),
+        clamp_i64_to_int(static_cast<std::int64_t>(min.world_z()) - m)};
+    const axis::WorldPos expanded_max{
+        clamp_i64_to_int(static_cast<std::int64_t>(max.world_x()) + m),
+        max.world_y(),
+        clamp_i64_to_int(static_cast<std::int64_t>(max.world_z()) + m)};
     GridPoint new_min = GridPoint::make_virtual(expanded_min, min.resolution_layer());
     GridPoint new_max = GridPoint::make_virtual(expanded_max, max.resolution_layer());
     return GridBounds(new_min, new_max);

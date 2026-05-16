@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
@@ -12,6 +13,7 @@
 #include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_info_ui.hpp"
+#include "devtools/sdl_modal_dialog.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
 #include "devtools/bottom_navigation_panel.hpp"
@@ -109,7 +111,6 @@ constexpr float kShiftEdgePanExponent = 1.5f;
 constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr int kMovementPointPickRadiusPx = 16;
 constexpr int kOvalPointPickRadiusPx = 20;
-constexpr int kOvalCenterPickRadiusPx = 22;
 constexpr int kOvalGuidePickRadiusPx = 16;
 constexpr int kBoxCornerPickRadiusPx = 18;
 constexpr int kFloorBoxCornerPickRadiusPx = 18;
@@ -160,6 +161,83 @@ bool is_integral_weight(double value) {
     }
     const double rounded = std::round(value);
     return std::fabs(value - rounded) < 1e-9;
+}
+
+std::optional<int> read_json_int(const nlohmann::json& obj, const char* key) {
+    if (!obj.is_object() || !obj.contains(key)) {
+        return std::nullopt;
+    }
+    const auto& value = obj.at(key);
+    if (value.is_number_integer()) {
+        return value.get<int>();
+    }
+    if (value.is_number_float()) {
+        return static_cast<int>(std::lround(value.get<double>()));
+    }
+    if (value.is_string()) {
+        try {
+            return std::stoi(value.get<std::string>());
+        } catch (...) {
+        }
+    }
+    return std::nullopt;
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& root,
+                                                                   const char* key,
+                                                                   const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (root.is_object() && root.contains(key)) {
+        return vibble::weighted_range::from_json(root.at(key), fallback);
+    }
+    return fallback;
+}
+
+vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const nlohmann::json& root,
+                                                                         const char* min_key,
+                                                                         const char* max_key,
+                                                                         const vibble::weighted_range::WeightedIntRange& fallback) {
+    if (!root.is_object()) {
+        return fallback;
+    }
+    bool has_min = false;
+    bool has_max = false;
+    std::int64_t min_value = fallback.center;
+    std::int64_t max_value = fallback.center;
+    if (auto value = read_json_int(root, min_key)) {
+        min_value = *value;
+        has_min = true;
+    }
+    if (auto value = read_json_int(root, max_key)) {
+        max_value = *value;
+        has_max = true;
+    }
+    if (!has_min && !has_max) {
+        return fallback;
+    }
+    if (!has_min) {
+        min_value = max_value;
+    }
+    if (!has_max) {
+        max_value = min_value;
+    }
+    return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
+}
+
+std::pair<int, int> range_bounds(const vibble::weighted_range::WeightedIntRange& value) {
+    const std::int64_t min_value = value.center - value.span;
+    const std::int64_t max_value = value.center + value.span;
+    return {
+        static_cast<int>(std::clamp<std::int64_t>(min_value, std::numeric_limits<int>::min(), std::numeric_limits<int>::max())),
+        static_cast<int>(std::clamp<std::int64_t>(max_value, std::numeric_limits<int>::min(), std::numeric_limits<int>::max())),
+    };
+}
+
+int resolve_weighted_dimension(const vibble::weighted_range::WeightedIntRange& value,
+                               std::mt19937& rng) {
+    const std::int64_t resolved = vibble::weighted_range::resolve(value, rng);
+    return static_cast<int>(std::clamp<std::int64_t>(resolved,
+                                                     std::numeric_limits<int>::min(),
+                                                     std::numeric_limits<int>::max()));
 }
 
 bool sanitize_anchor_candidate_entry_for_source(nlohmann::json& candidate_entry,
@@ -1269,6 +1347,8 @@ bool solve_texture_point_for_screen_target(
     int initial_texture_y,
     const SDL_FPoint& desired_screen_px,
     const std::function<bool(int, int, SDL_FPoint&)>& sample_screen_for_texture,
+    int max_texture_x,
+    int max_texture_y,
     int& out_texture_x,
     int& out_texture_y) {
     if (!sample_screen_for_texture ||
@@ -1277,12 +1357,23 @@ bool solve_texture_point_for_screen_target(
         return false;
     }
 
-    int tex_x = std::max(0, initial_texture_x);
-    int tex_y = std::max(0, initial_texture_y);
+    auto clamp_tex_x = [&](int value) {
+        const int non_negative = std::max(0, value);
+        return (max_texture_x >= 0) ? std::clamp(non_negative, 0, max_texture_x) : non_negative;
+    };
+    auto clamp_tex_y = [&](int value) {
+        const int non_negative = std::max(0, value);
+        return (max_texture_y >= 0) ? std::clamp(non_negative, 0, max_texture_y) : non_negative;
+    };
+
+    int tex_x = clamp_tex_x(initial_texture_x);
+    int tex_y = clamp_tex_y(initial_texture_y);
 
     auto distance_sq = [&](int x, int y, float& out_dist_sq) {
         SDL_FPoint projected{};
-        if (!sample_screen_for_texture(std::max(0, x), std::max(0, y), projected)) {
+        const int sample_x = clamp_tex_x(x);
+        const int sample_y = clamp_tex_y(y);
+        if (!sample_screen_for_texture(sample_x, sample_y, projected)) {
             return false;
         }
         const float dx = projected.x - desired_screen_px.x;
@@ -1291,46 +1382,69 @@ bool solve_texture_point_for_screen_target(
         return std::isfinite(out_dist_sq);
     };
 
-    constexpr int kSolveIterations = 14;
-    constexpr float kMaxSolveStepPixels = 192.0f;
-    for (int iter = 0; iter < kSolveIterations; ++iter) {
-        SDL_FPoint base{};
-        SDL_FPoint plus_x{};
-        SDL_FPoint plus_y{};
-        if (!sample_screen_for_texture(tex_x, tex_y, base) ||
-            !sample_screen_for_texture(tex_x + 1, tex_y, plus_x) ||
-            !sample_screen_for_texture(tex_x, tex_y + 1, plus_y)) {
-            break;
-        }
+    auto run_local_jacobian_solve = [&](int start_x, int start_y, int& solved_x, int& solved_y) -> bool {
+        solved_x = clamp_tex_x(start_x);
+        solved_y = clamp_tex_y(start_y);
+        bool sampled_any = false;
+        constexpr int kSolveIterations = 14;
+        constexpr float kMaxSolveStepPixels = 192.0f;
+        for (int iter = 0; iter < kSolveIterations; ++iter) {
+            const int sample_x = clamp_tex_x(solved_x);
+            const int sample_y = clamp_tex_y(solved_y);
+            const int sample_x_plus = clamp_tex_x(sample_x + 1);
+            const int sample_y_plus = clamp_tex_y(sample_y + 1);
 
-        const float j00 = plus_x.x - base.x;
-        const float j01 = plus_y.x - base.x;
-        const float j10 = plus_x.y - base.y;
-        const float j11 = plus_y.y - base.y;
-        const float det = j00 * j11 - j01 * j10;
-        if (std::fabs(det) < 1e-6f) {
-            break;
-        }
+            SDL_FPoint base{};
+            SDL_FPoint plus_x{};
+            SDL_FPoint plus_y{};
+            if (!sample_screen_for_texture(sample_x, sample_y, base) ||
+                !sample_screen_for_texture(sample_x_plus, sample_y, plus_x) ||
+                !sample_screen_for_texture(sample_x, sample_y_plus, plus_y)) {
+                break;
+            }
+            sampled_any = true;
 
-        const float rx = desired_screen_px.x - base.x;
-        const float ry = desired_screen_px.y - base.y;
-        float dx = (rx * j11 - ry * j01) / det;
-        float dy = (ry * j00 - rx * j10) / det;
-        if (!std::isfinite(dx) || !std::isfinite(dy)) {
-            break;
-        }
+            const float j00 = plus_x.x - base.x;
+            const float j01 = plus_y.x - base.x;
+            const float j10 = plus_x.y - base.y;
+            const float j11 = plus_y.y - base.y;
+            const float det = j00 * j11 - j01 * j10;
+            if (std::fabs(det) < 1e-6f) {
+                break;
+            }
 
-        dx = std::clamp(dx, -kMaxSolveStepPixels, kMaxSolveStepPixels);
-        dy = std::clamp(dy, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+            const float rx = desired_screen_px.x - base.x;
+            const float ry = desired_screen_px.y - base.y;
+            float dx = (rx * j11 - ry * j01) / det;
+            float dy = (ry * j00 - rx * j10) / det;
+            if (!std::isfinite(dx) || !std::isfinite(dy)) {
+                break;
+            }
 
-        const int next_x = std::max(0, static_cast<int>(std::lround(static_cast<float>(tex_x) + dx)));
-        const int next_y = std::max(0, static_cast<int>(std::lround(static_cast<float>(tex_y) + dy)));
-        if (next_x == tex_x && next_y == tex_y) {
-            break;
+            dx = std::clamp(dx, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+            dy = std::clamp(dy, -kMaxSolveStepPixels, kMaxSolveStepPixels);
+
+            const int next_x = clamp_tex_x(static_cast<int>(std::lround(static_cast<float>(sample_x) + dx)));
+            const int next_y = clamp_tex_y(static_cast<int>(std::lround(static_cast<float>(sample_y) + dy)));
+            if (next_x == sample_x && next_y == sample_y) {
+                break;
+            }
+            solved_x = next_x;
+            solved_y = next_y;
         }
-        tex_x = next_x;
-        tex_y = next_y;
+        return sampled_any;
+    };
+
+    int solved_x = tex_x;
+    int solved_y = tex_y;
+    bool solved_from_local_jacobian = run_local_jacobian_solve(tex_x, tex_y, solved_x, solved_y);
+    if (!solved_from_local_jacobian) {
+        const int fallback_seed_x = (max_texture_x >= 0) ? (max_texture_x / 2) : clamp_tex_x(initial_texture_x);
+        const int fallback_seed_y = (max_texture_y >= 0) ? (max_texture_y / 2) : clamp_tex_y(initial_texture_y);
+        solved_from_local_jacobian = run_local_jacobian_solve(fallback_seed_x, fallback_seed_y, solved_x, solved_y);
     }
+    tex_x = solved_x;
+    tex_y = solved_y;
 
     int best_x = tex_x;
     int best_y = tex_y;
@@ -1342,8 +1456,8 @@ bool solve_texture_point_for_screen_target(
         }
         if (dist_sq < best_dist_sq) {
             best_dist_sq = dist_sq;
-            best_x = std::max(0, x);
-            best_y = std::max(0, y);
+            best_x = clamp_tex_x(x);
+            best_y = clamp_tex_y(y);
         }
     };
 
@@ -1372,6 +1486,24 @@ bool solve_texture_point_for_screen_target(
         }
     }
 
+    if ((!std::isfinite(best_dist_sq) || best_dist_sq > 9.0f) &&
+        max_texture_x >= 0 &&
+        max_texture_y >= 0) {
+        const int max_dim = std::max(max_texture_x + 1, max_texture_y + 1);
+        int step = std::max(1, max_dim / 24);
+        while (step >= 1) {
+            for (int y = 0; y <= max_texture_y; y += step) {
+                for (int x = 0; x <= max_texture_x; x += step) {
+                    consider(x, y);
+                }
+            }
+            if (step == 1) {
+                break;
+            }
+            step = std::max(1, step / 2);
+        }
+    }
+
     if (!std::isfinite(best_dist_sq)) {
         return false;
     }
@@ -1379,6 +1511,24 @@ bool solve_texture_point_for_screen_target(
     out_texture_x = best_x;
     out_texture_y = best_y;
     return true;
+}
+
+bool solve_texture_point_for_screen_target(
+    int initial_texture_x,
+    int initial_texture_y,
+    const SDL_FPoint& desired_screen_px,
+    const std::function<bool(int, int, SDL_FPoint&)>& sample_screen_for_texture,
+    int& out_texture_x,
+    int& out_texture_y) {
+    return solve_texture_point_for_screen_target(
+        initial_texture_x,
+        initial_texture_y,
+        desired_screen_px,
+        sample_screen_for_texture,
+        -1,
+        -1,
+        out_texture_x,
+        out_texture_y);
 }
 
 bool build_render_object_projection(const WarpedScreenGrid& cam,
@@ -2418,6 +2568,11 @@ bool RoomEditor::spawn_group_is_boundary(const std::string& spawn_id) const {
     if (spawn_id.empty() || !assets_) {
         return false;
     }
+
+    if (classify_spawn_group_ownership(spawn_id) == devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
+        return true;
+    }
+
     for (Asset* asset : assets_->all) {
         if (!asset || asset->dead) {
             continue;
@@ -3227,19 +3382,24 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     int mx = 0;
     int my = 0;
     if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        mx = event.motion.x;
-        my = event.motion.y;
+        mx = static_cast<int>(std::lround(event.motion.x));
+        my = static_cast<int>(std::lround(event.motion.y));
     } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mx = event.button.x;
-        my = event.button.y;
+        mx = static_cast<int>(std::lround(event.button.x));
+        my = static_cast<int>(std::lround(event.button.y));
     } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        sdl_mouse_util::GetMouseState(&mx, &my);
+        mx = static_cast<int>(std::lround(event.wheel.mouse_x));
+        my = static_cast<int>(std::lround(event.wheel.mouse_y));
     }
 
     const bool pointer_event =
         (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
+    if (pointer_based) {
+        last_pointer_screen_ = SDL_Point{mx, my};
+        has_last_pointer_screen_ = true;
+    }
 
     if (pointer_event && (scroll_preview_floor_overlay_active_ || scroll_preview_xy_overlay_active_for_movement_)) {
         scroll_preview_floor_overlay_active_ = false;
@@ -3898,17 +4058,11 @@ void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
     struct LabelInfo {
         Room* room = nullptr;
         SDL_FPoint desired_center{0.0f, 0.0f};
-        float priority = 0.0f;
+        bool is_current_room = false;
     };
 
     std::vector<LabelInfo> render_queue;
     render_queue.reserve(rooms.size());
-
-    const float bounds_center_x =
-        static_cast<float>(active_label_bounds_.x) + static_cast<float>(active_label_bounds_.w) * 0.5f;
-    const float bounds_center_y =
-        static_cast<float>(active_label_bounds_.y) + static_cast<float>(active_label_bounds_.h) * 0.5f;
-    SDL_FPoint screen_center{bounds_center_x, bounds_center_y};
 
     WarpedScreenGrid& view = assets_->getView();
 
@@ -3917,21 +4071,20 @@ void RoomEditor::render_room_trail_nav_buttons(SDL_Renderer* renderer) {
 
         SDL_Point center = room->room_area->get_center();
         SDL_FPoint screen_pt = view.map_to_screen(center);
-        SDL_FPoint desired_center{screen_pt.x,
-                                  screen_pt.y - kLabelVerticalOffset};
-
-        float dx = desired_center.x - screen_center.x;
-        float dy = desired_center.y - screen_center.y;
-        float dist2 = dx * dx + dy * dy;
-
-        render_queue.push_back(LabelInfo{room, desired_center, dist2});
+        SDL_FPoint desired_center{screen_pt.x, screen_pt.y};
+        render_queue.push_back(LabelInfo{room, desired_center, room == current_room_});
     }
 
-    std::sort(render_queue.begin(), render_queue.end(), [](const LabelInfo& a, const LabelInfo& b) {
-        if (a.priority == b.priority) {
-            return a.room < b.room;
+    std::stable_sort(render_queue.begin(), render_queue.end(), [](const LabelInfo& a, const LabelInfo& b) {
+        if (a.is_current_room != b.is_current_room) {
+            return !a.is_current_room && b.is_current_room;
         }
-        return a.priority < b.priority;
+        const std::string a_name = a.room ? a.room->room_name : std::string{};
+        const std::string b_name = b.room ? b.room->room_name : std::string{};
+        if (a_name != b_name) {
+            return a_name < b_name;
+        }
+        return a.room < b.room;
     });
 
     for (const auto& info : render_queue) {
@@ -4042,12 +4195,44 @@ bool RoomEditor::handle_room_nav_click(const SDL_Point& screen_pt) {
             continue;
         }
         if (SDL_PointInRect(&screen_pt, &entry.rect)) {
-            assets_->set_editor_current_room(entry.room);
+            select_current_room_from_nav(entry.room);
             pan_camera_to_room(entry.room);
             return true;
         }
     }
     return false;
+}
+
+void RoomEditor::set_parent_window(SDL_Window* window) {
+    parent_window_ = window;
+    if (info_ui_) {
+        info_ui_->set_parent_window(parent_window_);
+    }
+}
+
+bool RoomEditor::select_current_room_from_nav(Room* room) {
+    if (!room) {
+        return false;
+    }
+
+    if (current_room_ != room) {
+        set_current_room(room);
+    } else if (room_cfg_ui_ && room_cfg_ui_->visible()) {
+        room_config_dock_open_ = true;
+        room_config_panel_visible_ = true;
+        room_cfg_ui_->set_room_metadata_only_mode(false);
+        room_cfg_ui_->open(current_room_);
+    }
+    if (assets_ && assets_->current_room() != room) {
+        assets_->set_editor_current_room(room);
+    }
+    if (room_cfg_ui_ && room_cfg_ui_->visible() && current_room_ == room) {
+        room_config_dock_open_ = true;
+        room_config_panel_visible_ = true;
+        room_cfg_ui_->set_room_metadata_only_mode(false);
+        room_cfg_ui_->open(current_room_);
+    }
+    return current_room_ == room;
 }
 
 void RoomEditor::pan_camera_to_room(Room* room) {
@@ -4089,46 +4274,16 @@ SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint de
     const float min_y = static_cast<float>(bounds.y) + half_h;
     const float max_y = static_cast<float>(bounds.y + bounds.h) - half_h;
 
-    auto clamp_center = [&](const SDL_FPoint& point) {
-        SDL_FPoint clamped = point;
-        clamped.x = std::clamp(clamped.x, min_x, max_x);
-        clamped.y = std::clamp(clamped.y, min_y, max_y);
-        return clamped;
-};
-
-    SDL_FPoint center = clamp_center(desired_center);
-
-    const bool inside = desired_center.x >= min_x && desired_center.x <= max_x &&
-                        desired_center.y >= min_y && desired_center.y <= max_y;
-
-    if (!inside) {
-        SDL_FPoint screen_center{static_cast<float>(bounds.x) + static_cast<float>(bounds.w) * 0.5f,
-                                 static_cast<float>(bounds.y) + static_cast<float>(bounds.h) * 0.5f};
-        const float dx = desired_center.x - screen_center.x;
-        const float dy = desired_center.y - screen_center.y;
-        const float epsilon = 0.0001f;
-
-        if (std::fabs(dx) > epsilon || std::fabs(dy) > epsilon) {
-            float t_min = 1.0f;
-
-            auto update_t = [&](float boundary, float origin, float delta) {
-                if (std::fabs(delta) < epsilon) return;
-                float t = (boundary - origin) / delta;
-                if (t >= 0.0f) {
-                    t_min = std::min(t_min, t);
-                }
-};
-
-            if (dx > 0.0f) update_t(max_x, screen_center.x, dx);
-            else if (dx < 0.0f) update_t(min_x, screen_center.x, dx);
-
-            if (dy > 0.0f) update_t(max_y, screen_center.y, dy);
-            else if (dy < 0.0f) update_t(min_y, screen_center.y, dy);
-
-            center.x = screen_center.x + dx * t_min;
-            center.y = screen_center.y + dy * t_min;
-            center = clamp_center(center);
-        }
+    SDL_FPoint center = desired_center;
+    if (max_x >= min_x) {
+        center.x = std::clamp(center.x, min_x, max_x);
+    } else {
+        center.x = static_cast<float>(bounds.x) + static_cast<float>(bounds.w) * 0.5f;
+    }
+    if (max_y >= min_y) {
+        center.y = std::clamp(center.y, min_y, max_y);
+    } else {
+        center.y = static_cast<float>(bounds.y) + static_cast<float>(bounds.h) * 0.5f;
     }
 
     rect.x = static_cast<int>(std::lround(center.x - half_w));
@@ -4413,20 +4568,63 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         render_room_trail_nav_buttons(renderer);
     }
 
-    if (renderer) {
+    if (renderer && assets_) {
+        const std::vector<Room*>& rooms = assets_->rooms();
+        auto render_room_overlay = [&](Room* room, bool selected, bool dimmed) {
+            if (!room || !room->room_area) {
+                return;
+            }
+
+            SDL_Color base_color = room->display_color();
+            auto style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
+
+            if (geometry_room_is_trail(room)) {
+                style.fill.a = 34;
+                style.outline.a = 170;
+                style.center.a = 180;
+                style.glow.a = 80;
+            } else {
+                style.fill.a = 52;
+                style.outline.a = 190;
+                style.center.a = 200;
+                style.glow.a = 100;
+            }
+
+            if (dimmed) {
+                style.fill.a = static_cast<Uint8>(std::max(18, static_cast<int>(style.fill.a) - 16));
+                style.outline.a = static_cast<Uint8>(std::max(120, static_cast<int>(style.outline.a) - 24));
+                style.center.a = static_cast<Uint8>(std::max(140, static_cast<int>(style.center.a) - 28));
+                style.glow.a = static_cast<Uint8>(std::max(48, static_cast<int>(style.glow.a) - 24));
+            }
+
+            if (selected) {
+                const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
+                style = dm_draw::ResolveRoomBoundsOverlayStyle(accent_hover);
+                SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
+                accent_fill.a = 110;
+                style.fill = accent_fill;
+                style.outline = DMStyles::AccentButton().border;
+                style.center = DMStyles::HighlightColor();
+                style.center.a = 235;
+                SDL_Color accent_glow = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.35f);
+                accent_glow.a = 140;
+                style.glow = accent_glow;
+            }
+
+            dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *room->room_area, style);
+        };
+
+        for (Room* room : rooms) {
+            if (!room || !room->room_area) {
+                continue;
+            }
+            if (room == current_room_) {
+                continue;
+            }
+            render_room_overlay(room, false, true);
+        }
         if (current_room_ && current_room_->room_area) {
-            const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
-            auto style = dm_draw::ResolveRoomBoundsOverlayStyle(accent_hover);
-            SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
-            accent_fill.a = 110;
-            style.fill = accent_fill;
-            style.outline = DMStyles::AccentButton().border;
-            style.center = DMStyles::HighlightColor();
-            style.center.a = 235;
-            SDL_Color accent_glow = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.35f);
-            accent_glow.a = 140;
-            style.glow = accent_glow;
-            dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *current_room_->room_area, style);
+            render_room_overlay(current_room_, true, false);
         }
     }
 
@@ -4482,24 +4680,27 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                             *overlay_target,
                             sample_anchor,
                             anchor_points::GridMaterialization::None);
-                        if (resolved_sample.resolved.missing || !resolved_sample.has_flat_screen_px) {
+                        if (resolved_sample.resolved.missing) {
                             return false;
                         }
-                        out_screen = resolved_sample.flat_screen_px;
+                        if (resolved_sample.has_final_screen_px &&
+                            std::isfinite(resolved_sample.final_screen_px.x) &&
+                            std::isfinite(resolved_sample.final_screen_px.y)) {
+                            out_screen = resolved_sample.final_screen_px;
+                        } else {
+                            out_screen = resolved_sample.screen_px;
+                        }
                         return std::isfinite(out_screen.x) && std::isfinite(out_screen.y);
                     };
 
-                    float mouse_x = 0.0f;
-                    float mouse_y = 0.0f;
-                    if (input_) {
-                        mouse_x = static_cast<float>(input_->getX());
-                        mouse_y = static_cast<float>(input_->getY());
-                    } else {
-                        SDL_GetMouseState(&mouse_x, &mouse_y);
-                    }
+                    const SDL_Point pointer_screen = input_
+                        ? SDL_Point{input_->getX(), input_->getY()}
+                        : (has_last_pointer_screen_
+                            ? last_pointer_screen_
+                            : SDL_Point{screen_w_ / 2, screen_h_ / 2});
                     const SDL_FPoint desired_screen{
-                        static_cast<float>(std::lround(mouse_x)),
-                        static_cast<float>(std::lround(mouse_y))
+                        static_cast<float>(pointer_screen.x),
+                        static_cast<float>(pointer_screen.y)
                     };
 
                     const bool same_target =
@@ -4514,21 +4715,27 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         : frame_h / 2;
                     int solved_x = seed_x;
                     int solved_y = seed_y;
-                    if (!solve_texture_point_for_screen_target(
+                    const bool solved = solve_texture_point_for_screen_target(
                             seed_x,
                             seed_y,
                             desired_screen,
                             sample_screen_for_texture,
+                            frame_w - 1,
+                            frame_h - 1,
                             solved_x,
-                            solved_y)) {
-                        solved_x = seed_x;
-                        solved_y = seed_y;
+                            solved_y);
+                    if (solved) {
+                        xy_overlay_cursor_state_.target_asset = overlay_target;
+                        xy_overlay_cursor_state_.target_world_z = target_world_z;
+                        xy_overlay_cursor_state_.tex_x = solved_x;
+                        xy_overlay_cursor_state_.tex_y = solved_y;
+                        xy_overlay_cursor_state_.valid = true;
+                    } else {
+                        solved_x = frame_w / 2;
+                        solved_y = frame_h / 2;
+                        xy_overlay_cursor_state_.valid = false;
+                        xy_overlay_cursor_state_.target_asset = nullptr;
                     }
-                    xy_overlay_cursor_state_.target_asset = overlay_target;
-                    xy_overlay_cursor_state_.target_world_z = target_world_z;
-                    xy_overlay_cursor_state_.tex_x = solved_x;
-                    xy_overlay_cursor_state_.tex_y = solved_y;
-                    xy_overlay_cursor_state_.valid = true;
 
                     auto snap_tex = [sample_step_px](int value) -> int {
                         return (value / sample_step_px) * sample_step_px;
@@ -4579,6 +4786,88 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                 static_cast<float>(is_cursor_intersection ? kHighlightPointSizePx : kGridPointSizePx)};
                             SDL_RenderFillRect(renderer, &point_rect);
                         }
+                    }
+
+                    SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
+                    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
+                }
+            } else if (overlay_ctx.kind == Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint &&
+                       overlay_ctx.has_selected_point_center) {
+                const SDL_FPoint exact_floor_xz = overlay_ctx.exact_floor_xz;
+                if (std::isfinite(exact_floor_xz.x) && std::isfinite(exact_floor_xz.y)) {
+                    const int resolution = current_grid_resolution();
+                    const int cell = std::max(1, vibble::grid::delta(resolution));
+                    vibble::grid::Grid& grid_service = vibble::grid::global_grid();
+                    constexpr int kMaxSamplesPerPass = 32000;
+
+                    constexpr int kGridPointSizePx = 2;
+                    constexpr int kGridPointHalf = kGridPointSizePx / 2;
+                    constexpr int kHighlightPointSizePx = 4;
+                    constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
+
+                    SDL_BlendMode prev_blend = SDL_BLENDMODE_NONE;
+                    Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
+                    SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
+                    SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+                    int radius_cells = std::clamp(
+                        std::max(screen_w_, screen_h_) / std::max(4, cell),
+                        24,
+                        320);
+                    while (((2 * radius_cells + 1) * (2 * radius_cells + 1)) > kMaxSamplesPerPass &&
+                           radius_cells > 12) {
+                        --radius_cells;
+                    }
+                    const float radius_cells_f = static_cast<float>(std::max(1, radius_cells));
+                    const float radius_cells_sq = radius_cells_f * radius_cells_f;
+
+                    const SDL_Point center_index =
+                        grid_service.world_to_index(overlay_ctx.snapped_floor_xz, resolution);
+                    for (int gz = -radius_cells; gz <= radius_cells; ++gz) {
+                        for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
+                            const float dist_cells_sq = static_cast<float>(gx * gx + gz * gz);
+                            if (dist_cells_sq > radius_cells_sq) {
+                                continue;
+                            }
+
+                            const SDL_Point floor_world =
+                                grid_service.index_to_world(center_index.x + gx, center_index.y + gz, resolution);
+                            const SDL_FPoint floor_world_xz{
+                                static_cast<float>(floor_world.x),
+                                static_cast<float>(floor_world.y)};
+                            SDL_FPoint screen_point{};
+                            if (!project_floor_world_xz_to_screen(cam, floor_world_xz, screen_point)) {
+                                continue;
+                            }
+
+                            const float edge_t =
+                                std::clamp(std::sqrt(std::max(0.0f, dist_cells_sq) / radius_cells_sq), 0.0f, 1.0f);
+                            const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));
+                            SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+
+                            const int px = static_cast<int>(std::lround(screen_point.x));
+                            const int py = static_cast<int>(std::lround(screen_point.y));
+                            const SDL_FRect point_rect{
+                                static_cast<float>(px - kGridPointHalf),
+                                static_cast<float>(py - kGridPointHalf),
+                                static_cast<float>(kGridPointSizePx),
+                                static_cast<float>(kGridPointSizePx)};
+                            SDL_RenderFillRect(renderer, &point_rect);
+                        }
+                    }
+
+                    SDL_FPoint exact_screen_point{};
+                    if (project_floor_world_xz_to_screen(cam, exact_floor_xz, exact_screen_point)) {
+                        SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
+                        const int px = static_cast<int>(std::lround(exact_screen_point.x));
+                        const int py = static_cast<int>(std::lround(exact_screen_point.y));
+                        const SDL_FRect point_rect{
+                            static_cast<float>(px - kHighlightPointHalf),
+                            static_cast<float>(py - kHighlightPointHalf),
+                            static_cast<float>(kHighlightPointSizePx),
+                            static_cast<float>(kHighlightPointSizePx)};
+                        SDL_RenderFillRect(renderer, &point_rect);
                     }
 
                     SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
@@ -4868,27 +5157,13 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             refresh_oval_mode_handles();
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-            if (oval_edit_.has_center_screen_px) {
-                const int cx = static_cast<int>(std::lround(oval_edit_.center_screen_px.x));
-                const int cy = static_cast<int>(std::lround(oval_edit_.center_screen_px.y));
-                SDL_Color center_color{250, 205, 90, 220};
-                if (oval_edit_.center_selected) {
-                    center_color = SDL_Color{255, 255, 255, 255};
-                } else if (oval_edit_.center_hovered) {
-                    center_color = SDL_Color{255, 228, 128, 255};
-                }
-                SDL_SetRenderDrawColor(renderer, center_color.r, center_color.g, center_color.b, center_color.a);
-                SDL_RenderLine(renderer, cx - 8, cy, cx + 8, cy);
-                SDL_RenderLine(renderer, cx, cy - 8, cx, cy + 8);
-                if (oval_edit_.center_hovered || oval_edit_.center_selected) {
-                    SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
-                    SDL_Rect ring{cx - 11, cy - 11, 23, 23};
-                    sdl_render::Rect(renderer, &ring);
-                }
-            }
+            const bool oval_body_highlighted =
+                (oval_edit_.body_hovered || oval_edit_.center_selected) &&
+                oval_edit_.hovered_point_index < 0 &&
+                oval_edit_.selected_point_index < 0;
 
             if (oval_edit_.guide_screen_samples.size() >= 2) {
-                if (oval_edit_.body_hovered && oval_edit_.hovered_point_index < 0) {
+                if (oval_body_highlighted) {
                     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                 } else {
                     SDL_SetRenderDrawColor(renderer, 96, 192, 255, 220);
@@ -4919,7 +5194,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                           });
 
                 if (sorted_handles.size() >= 2) {
-                    if (oval_edit_.body_hovered && oval_edit_.hovered_point_index < 0) {
+                    if (oval_body_highlighted) {
                         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                     } else {
                         SDL_SetRenderDrawColor(renderer, 96, 192, 255, 220);
@@ -4943,7 +5218,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 const bool selected = (handle.point_index == oval_edit_.selected_point_index);
                 const bool hovered = (handle.point_index == oval_edit_.hovered_point_index);
                 if (oval_edit_.has_center_screen_px) {
-                    SDL_SetRenderDrawColor(renderer, 80, 170, 255, 170);
+                    if (oval_body_highlighted) {
+                        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                    } else {
+                        SDL_SetRenderDrawColor(renderer, 80, 170, 255, 170);
+                    }
                     SDL_RenderLine(renderer,
                                    static_cast<int>(std::lround(oval_edit_.center_screen_px.x)),
                                    static_cast<int>(std::lround(oval_edit_.center_screen_px.y)),
@@ -4957,7 +5236,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 if (selected) {
                     color = SDL_Color{255, 255, 255, 255};
                 } else if (hovered) {
-                    color = SDL_Color{255, 220, 120, 255};
+                    color = SDL_Color{255, 255, 255, 255};
                 }
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
                 SDL_Rect point_rect{cx - radius, cy - radius, radius * 2 + 1, radius * 2 + 1};
@@ -5793,6 +6072,7 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
     if (!info_ui_) {
         info_ui_ = std::make_unique<AssetInfoUI>();
         if (info_ui_) {
+            info_ui_->set_parent_window(parent_window_);
             info_ui_->set_save_coordinator(save_coordinator_);
             info_ui_->set_manifest_store(manifest_store_);
             info_ui_->set_on_animation_editor_closed([this]() { this->on_animation_editor_closed(); });
@@ -6182,7 +6462,7 @@ void RoomEditor::open_room_config_for_json_entry(nlohmann::json& room_data, bool
     }
     room_cfg_ui_->set_room_metadata_only_mode(true);
     room_cfg_ui_->set_bounds(room_config_bounds_);
-    room_cfg_ui_->open(room_data, [this, is_trail_context]() {
+    room_cfg_ui_->open(room_data, is_trail_context, [this, is_trail_context]() {
         if (!assets_) {
             return;
         }
@@ -6210,12 +6490,10 @@ void RoomEditor::create_room_from_footer() {
     }
     nlohmann::json& room_entry = map_info["rooms_data"][key];
     room_entry["geometry"] = "Square";
-    room_entry["min_width"] = 1200;
-    room_entry["max_width"] = 1800;
-    room_entry["min_height"] = 1200;
-    room_entry["max_height"] = 1800;
+    room_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800));
+    room_entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800));
     room_entry["edge_smoothness"] = 4;
-    room_entry["curvyness"] = 2;
+    room_entry["curvyness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2));
     room_entry["is_boss"] = false;
     room_entry["inherits_map_assets"] = false;
     room_entry["tags"] = nlohmann::json::array();
@@ -6244,12 +6522,10 @@ void RoomEditor::create_trail_from_footer() {
     trail_entry = nlohmann::json::object();
     trail_entry["name"] = key;
     trail_entry["geometry"] = "Square";
-    trail_entry["min_width"] = 600;
-    trail_entry["max_width"] = 900;
-    trail_entry["min_height"] = 600;
-    trail_entry["max_height"] = 900;
+    trail_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
+    trail_entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
     trail_entry["edge_smoothness"] = 4;
-    trail_entry["curvyness"] = 2;
+    trail_entry["curvyness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2));
     trail_entry["tags"] = nlohmann::json::array();
     trail_entry["anti_tags"] = nlohmann::json::array();
     if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {
@@ -6482,9 +6758,9 @@ void RoomEditor::regenerate_room_from_template(const std::string& template_key) 
             &map_info,
             assets_->manifest_store(),
             {});
-        if (!generated.empty()) {
-            generated_trail_pairs += static_cast<int>(generated.size());
-            for (auto& trail_room : generated) {
+        if (!generated.trail_rooms.empty()) {
+            generated_trail_pairs += static_cast<int>(generated.trail_rooms.size());
+            for (auto& trail_room : generated.trail_rooms) {
                 if (trail_room) {
                     successful_new_trails.push_back(std::move(trail_room));
                 }
@@ -8824,9 +9100,18 @@ RoomEditor::GeometryHandle RoomEditor::hit_test_geometry_handle(Room* room, SDL_
         std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
         return g == "circle";
     }();
-
-    const int min_w = std::max(1, root.value("min_width", 1));
-    const int max_w = std::max(min_w, root.value("max_width", min_w));
+    const auto default_range = vibble::weighted_range::make_legacy_uniform(1, 1);
+    vibble::weighted_range::WeightedIntRange width_range = default_range;
+    if (root.contains("width")) {
+        width_range = read_weighted_range_field(root, "width", default_range);
+    } else if (root.contains("min_width") || root.contains("max_width")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_width", "max_width", default_range);
+    } else if (root.contains("min_radius") || root.contains("max_radius") || root.contains("radius")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_radius", "max_radius", default_range);
+    }
+    auto [min_w, max_w] = range_bounds(width_range);
+    min_w = std::max(1, min_w);
+    max_w = std::max(min_w, max_w);
     const SDL_Point c = room->room_area->get_center();
     const double dx = static_cast<double>(world_point.x - c.x);
     const double dy = static_cast<double>(world_point.y - c.y);
@@ -8849,10 +9134,26 @@ bool RoomEditor::is_point_between_geometry_bounds(Room* room, SDL_Point world_po
         std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
         return g == "circle";
     }();
-    const int min_w = std::max(1, root.value("min_width", 1));
-    int max_w = std::max(min_w, root.value("max_width", min_w));
+    const auto default_range = vibble::weighted_range::make_legacy_uniform(1, 1);
+    vibble::weighted_range::WeightedIntRange width_range = default_range;
+    if (root.contains("width")) {
+        width_range = read_weighted_range_field(root, "width", default_range);
+    } else if (root.contains("min_width") || root.contains("max_width")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_width", "max_width", default_range);
+    } else if (root.contains("min_radius") || root.contains("max_radius") || root.contains("radius")) {
+        width_range = read_weighted_range_legacy_pair(root, "min_radius", "max_radius", default_range);
+    }
+    auto [min_w, max_w] = range_bounds(width_range);
+    min_w = std::max(1, min_w);
+    max_w = std::max(min_w, max_w);
     if (geometry_room_is_trail(room)) {
-        max_w = std::max(max_w, root.value("max_height", max_w));
+        if (root.contains("height")) {
+            const auto height_range = read_weighted_range_field(root, "height", default_range);
+            auto [min_h, max_h] = range_bounds(height_range);
+            max_w = std::max(max_w, std::max(min_h, max_h));
+        } else {
+            max_w = std::max(max_w, root.value("max_height", max_w));
+        }
     }
 
     const SDL_Point c = room->room_area->get_center();
@@ -8884,24 +9185,44 @@ void RoomEditor::mark_geometry_dirty(Room* room) {
 bool RoomEditor::regenerate_geometry(Room* room) {
     if (!room || !room->room_area || !assets_) return false;
     auto& root = room->assets_data();
-    const int min_w = std::max(1, root.value("min_width", 1));
-    const int max_w = std::max(min_w, root.value("max_width", min_w));
-    int chosen = min_w;
-    if (max_w - min_w >= 2) {
-        std::mt19937 rng(std::random_device{}());
-        chosen = std::uniform_int_distribution<int>(min_w + 1, max_w - 1)(rng);
-    } else {
-        chosen = max_w;
+    const auto default_range = vibble::weighted_range::make_legacy_uniform(1, 1);
+    vibble::weighted_range::WeightedIntRange width_range = root.contains("width")
+        ? read_weighted_range_field(root, "width", default_range)
+        : (root.contains("min_width") || root.contains("max_width")
+               ? read_weighted_range_legacy_pair(root, "min_width", "max_width", default_range)
+               : default_range);
+    vibble::weighted_range::WeightedIntRange height_range = root.contains("height")
+        ? read_weighted_range_field(root, "height", width_range)
+        : (root.contains("min_height") || root.contains("max_height")
+               ? read_weighted_range_legacy_pair(root, "min_height", "max_height", width_range)
+               : width_range);
+    if (root.contains("geometry")) {
+        std::string g = root.value("geometry", std::string{"square"});
+        std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (g == "circle") {
+            height_range = width_range;
+        }
     }
+    std::mt19937 rng(std::random_device{}());
+    const int chosen_w = std::max(1, resolve_weighted_dimension(width_range, rng));
+    const int chosen_h = std::max(1, resolve_weighted_dimension(height_range, rng));
 
     const int edge_smoothness = root.value("edge_smoothness", 2);
     std::string geometry = root.value("geometry", std::string{"Square"});
     if (!geometry.empty()) geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
     const SDL_Point center = room->room_area->get_center();
-    const int map_w = std::max(1, std::abs(center.x) * 2 + max_w * 4);
-    const int map_h = std::max(1, std::abs(center.y) * 2 + max_w * 4);
+    const int map_w = std::max(1, std::abs(center.x) * 2 + chosen_w * 4);
+    const int map_h = std::max(1, std::abs(center.y) * 2 + chosen_h * 4);
     try {
-        room->room_area = std::make_unique<Area>(room->room_name, center, chosen, chosen, geometry, edge_smoothness, map_w, map_h, room->room_area->resolution());
+        room->room_area = std::make_unique<Area>(room->room_name,
+                                                 center,
+                                                 chosen_w,
+                                                 chosen_h,
+                                                 geometry,
+                                                 edge_smoothness,
+                                                 map_w,
+                                                 map_h,
+                                                 room->room_area->resolution());
         room->room_area->set_type(room->type);
     } catch (...) {
         return false;
@@ -9433,29 +9754,24 @@ RoomEditor::DeleteConfirmResult RoomEditor::prompt_delete_confirmation(const Del
     body << "Affected: " << summary.affected_count << "\n\n";
     body << "Confirm delete?";
 
-    const SDL_MessageBoxButtonData buttons[] = {
-        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
-        {0, 1, "Delete"},
-        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 2, "Delete + Don't Ask Again"},
-    };
     const std::string title = delete_mode_label(summary.mode) + " Delete Confirmation";
-    const SDL_MessageBoxData msg{
-        SDL_MESSAGEBOX_WARNING,
-        nullptr,
-        title.c_str(),
-        body.str().c_str(),
-        static_cast<int>(sizeof(buttons) / sizeof(buttons[0])),
-        buttons,
-        nullptr,
-    };
-    int pressed = 0;
-    if (SDL_ShowMessageBox(&msg, &pressed) != 0) {
+    const auto pressed = devmode::dialogs::show_choice(
+        parent_window_,
+        title,
+        body.str(),
+        {
+            devmode::dialogs::DialogButton{0, "Cancel", false, true, false},
+            devmode::dialogs::DialogButton{1, "Delete", false, false, true},
+            devmode::dialogs::DialogButton{2, "Delete + Don't Ask Again", true, false, true},
+        },
+        devmode::dialogs::MessageIcon::Warning);
+    if (!pressed) {
         return DeleteConfirmResult::Cancel;
     }
-    if (pressed == 2) {
+    if (*pressed == 2) {
         return DeleteConfirmResult::ConfirmDontAskAgain;
     }
-    if (pressed == 1) {
+    if (*pressed == 1) {
         return DeleteConfirmResult::Confirm;
     }
     return DeleteConfirmResult::Cancel;
@@ -12783,9 +13099,6 @@ bool RoomEditor::resolve_selected_oval_lock_target(float& out_world_x,
     out_heading_radians = 0.0f;
 
     if (!oval_mode_active() || !oval_edit_.target_asset || !oval_edit_.target_asset->info || !oval_edit_.has_center_world) {
-        return false;
-    }
-    if (!selected_oval_mapping_binding_valid()) {
         return false;
     }
 
@@ -17107,16 +17420,7 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
     const bool left_released = input.wasReleased(Input::LEFT);
     const bool right_pressed = input.wasPressed(Input::RIGHT);
     const bool pointer_blocked = is_oval_ui_blocking_point(screen_pt.x, screen_pt.y);
-    bool center_or_guide_hit = false;
-    const auto center_is_hit = [&](SDL_Point point) {
-        if (!oval_edit_.has_center_screen_px) {
-            return false;
-        }
-        const float dx = oval_edit_.center_screen_px.x - static_cast<float>(point.x);
-        const float dy = oval_edit_.center_screen_px.y - static_cast<float>(point.y);
-        const float dist_sq = dx * dx + dy * dy;
-        return dist_sq <= static_cast<float>(kOvalCenterPickRadiusPx * kOvalCenterPickRadiusPx);
-    };
+    bool body_hit = false;
     const auto guide_is_hit = [&](SDL_Point point) {
         if (oval_edit_.guide_screen_samples.size() < 2) {
             return false;
@@ -17152,14 +17456,24 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
     };
 
     if (!pointer_blocked) {
-        oval_edit_.center_hovered = center_is_hit(screen_pt);
         oval_edit_.hovered_point_index =
             find_oval_point_handle_at_point(screen_pt, kOvalPointPickRadiusPx, oval_edit_.selected_point_index);
-        const bool guide_hovered = guide_is_hit(screen_pt);
-        center_or_guide_hit =
-            oval_edit_.center_hovered || (guide_hovered && oval_edit_.hovered_point_index < 0);
-        oval_edit_.body_hovered = center_or_guide_hit;
-        if (left_pressed && center_or_guide_hit) {
+        body_hit = oval_edit_.hovered_point_index < 0 && guide_is_hit(screen_pt);
+        oval_edit_.center_hovered = body_hit;
+        oval_edit_.body_hovered = body_hit;
+
+        if (left_pressed && oval_edit_.hovered_point_index >= 0) {
+            const bool selection_changed =
+                oval_edit_.selected_point_index != oval_edit_.hovered_point_index || oval_edit_.center_selected;
+            oval_edit_.selected_point_index = oval_edit_.hovered_point_index;
+            oval_edit_.center_selected = false;
+            oval_edit_.center_hovered = false;
+            oval_edit_.body_hovered = false;
+            oval_edit_.center_dragging = false;
+            if (selection_changed) {
+                sync_oval_tools_panel();
+            }
+        } else if (left_pressed && body_hit) {
             const bool selection_changed = !oval_edit_.center_selected || oval_edit_.selected_point_index >= 0;
             oval_edit_.center_selected = true;
             oval_edit_.selected_point_index = -1;
@@ -17171,20 +17485,13 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
                 sync_oval_tools_panel();
             }
         } else if (left_pressed &&
-                   oval_edit_.hovered_point_index >= 0 &&
-                   oval_edit_.selected_point_index != oval_edit_.hovered_point_index) {
-            oval_edit_.selected_point_index = oval_edit_.hovered_point_index;
-            oval_edit_.center_selected = false;
-            oval_edit_.center_hovered = false;
-            oval_edit_.center_dragging = false;
-            sync_oval_tools_panel();
-        } else if (left_pressed &&
-                   !center_or_guide_hit &&
+                   !body_hit &&
                    oval_edit_.hovered_point_index < 0 &&
                    (oval_edit_.selected_point_index >= 0 || oval_edit_.center_selected)) {
             oval_edit_.selected_point_index = -1;
             oval_edit_.center_selected = false;
             oval_edit_.center_hovered = false;
+            oval_edit_.body_hovered = false;
             oval_edit_.center_dragging = false;
             sync_oval_tools_panel();
         }
@@ -17196,7 +17503,7 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
 
     if (right_pressed &&
         !pointer_blocked &&
-        center_or_guide_hit &&
+        body_hit &&
         oval_edit_.target_asset &&
         oval_edit_.target_asset->info) {
         const int mapping_index = oval_edit_.selected_oval_index;
@@ -19994,8 +20301,11 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
     }
 
     markers.reserve(256);
-    const int overlay_cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
-    auto add_marker = [&](const SDL_FPoint& floor_world_xz, SDL_Color color, bool emphasized) {
+    auto add_marker = [&](const SDL_FPoint& floor_world_xz,
+                          SDL_Color color,
+                          bool emphasized,
+                          Assets::DevFloorProjectionMarker::Shape shape =
+                              Assets::DevFloorProjectionMarker::Shape::Dot) {
         if (!std::isfinite(floor_world_xz.x) || !std::isfinite(floor_world_xz.y)) {
             return;
         }
@@ -20003,8 +20313,10 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
         marker.floor_world_xz = floor_world_xz;
         marker.color = color;
         marker.color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(color.a), 90, 255));
-        marker.world_half_extent =
-            static_cast<float>(std::max(2, overlay_cell / 2)) * (emphasized ? 1.3f : 1.0f);
+        marker.shape = shape;
+        marker.emphasized = emphasized;
+        marker.pixel_size = std::clamp(emphasized ? 5 : 3, 2, 10);
+        marker.crosshair_radius = std::clamp(emphasized ? 5 : 4, 3, 12);
         markers.push_back(marker);
     };
 
@@ -20025,23 +20337,16 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
             } else if (subdued) {
                 color = SDL_Color{145, 145, 145, 105};
             }
-            add_marker(handle.floor_world_xz, color, selected || hovered);
+            add_marker(handle.floor_world_xz,
+                       color,
+                       selected || hovered,
+                       (selected || hovered) ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                             : Assets::DevFloorProjectionMarker::Shape::Dot);
         }
     }
 
     if (oval_mode_active()) {
         refresh_oval_mode_handles();
-        if (oval_edit_.has_center_world) {
-            SDL_Color center_color{250, 205, 90, 220};
-            if (oval_edit_.center_selected) {
-                center_color = SDL_Color{255, 255, 255, 255};
-            } else if (oval_edit_.center_hovered) {
-                center_color = SDL_Color{255, 228, 128, 255};
-            }
-            add_marker(SDL_FPoint{oval_edit_.center_world_x, oval_edit_.center_world_z},
-                       center_color,
-                       oval_edit_.center_selected || oval_edit_.center_hovered);
-        }
         for (const auto& handle : oval_edit_.handles) {
             if (!handle.has_floor_world_xz) {
                 continue;
@@ -20052,9 +20357,13 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
             if (selected) {
                 color = SDL_Color{255, 255, 255, 255};
             } else if (hovered) {
-                color = SDL_Color{255, 220, 120, 255};
+                color = SDL_Color{255, 255, 255, 255};
             }
-            add_marker(handle.floor_world_xz, color, selected || hovered);
+            add_marker(handle.floor_world_xz,
+                       color,
+                       selected || hovered,
+                       (selected || hovered) ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                             : Assets::DevFloorProjectionMarker::Shape::Dot);
         }
     }
 
@@ -20074,7 +20383,11 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
                 movement_edit_.rel_positions[i].x + static_cast<float>(anchor.x),
                 movement_edit_.rel_positions[i].y + static_cast<float>(anchor.y)
             };
-            add_marker(floor_world_xz, color, selected || hovered);
+            add_marker(floor_world_xz,
+                       color,
+                       selected || hovered,
+                       (selected || hovered) ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                             : Assets::DevFloorProjectionMarker::Shape::Dot);
         }
     }
 
@@ -20107,7 +20420,12 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
                         draw_color = SDL_Color{255, 255, 255, 255};
                     }
                     const auto& wp = volume.world_points[static_cast<std::size_t>(point_index)];
-                    add_marker(SDL_FPoint{wp.x, wp.z}, draw_color, selected_corner_point || hovered_corner_point);
+                    add_marker(SDL_FPoint{wp.x, wp.z},
+                               draw_color,
+                               selected_corner_point || hovered_corner_point,
+                               (selected_corner_point || hovered_corner_point)
+                                   ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                                   : Assets::DevFloorProjectionMarker::Shape::Dot);
                 }
             }
         };
@@ -20192,7 +20510,12 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
                 } else if (point_hovered) {
                     point_color = SDL_Color{255, 240, 176, 255};
                 }
-                add_marker(projection.floor_world_points[point_index], point_color, point_selected || point_hovered);
+                add_marker(projection.floor_world_points[point_index],
+                           point_color,
+                           point_selected || point_hovered,
+                           (point_selected || point_hovered)
+                               ? Assets::DevFloorProjectionMarker::Shape::Crosshair
+                               : Assets::DevFloorProjectionMarker::Shape::Dot);
             }
         }
     }
@@ -20245,22 +20568,29 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
 
     ctx.kind = Assets::DevGridOverlayKind::XYPlaneAtAssetDepth;
     ctx.target_world_z = static_cast<float>(target->world_z());
+    if (has_last_raw_mouse_world_) {
+        const int resolution = current_grid_resolution();
+        const SDL_Point snapped_floor_xz =
+            vibble::grid::global_grid().snap_to_vertex(last_raw_mouse_world_, resolution);
+        ctx.exact_floor_xz = SDL_FPoint{
+            static_cast<float>(last_raw_mouse_world_.x),
+            static_cast<float>(last_raw_mouse_world_.y)};
+        ctx.snapped_floor_xz = snapped_floor_xz;
+    }
 
     if (scroll_preview_floor_overlay_active_) {
         SDL_FPoint selected_world_xz{};
         if (resolve_selected_overlay_point_floor_xz(selected_world_xz)) {
-            const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
-            auto snap_axis = [cell](float value) -> int {
-                const long double ratio = static_cast<long double>(value) / static_cast<long double>(cell);
-                const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
-                return static_cast<int>(std::clamp<long long>(snapped,
-                                                               std::numeric_limits<int>::min(),
-                                                               std::numeric_limits<int>::max()));
-            };
+            const int resolution = current_grid_resolution();
+            const SDL_Point selected_world_point{
+                static_cast<int>(std::lround(selected_world_xz.x)),
+                static_cast<int>(std::lround(selected_world_xz.y))};
+            const SDL_Point snapped_floor_xz =
+                vibble::grid::global_grid().snap_to_vertex(selected_world_point, resolution);
 
             ctx.kind = Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint;
             ctx.exact_floor_xz = selected_world_xz;
-            ctx.snapped_floor_xz = SDL_Point{snap_axis(selected_world_xz.x), snap_axis(selected_world_xz.y)};
+            ctx.snapped_floor_xz = snapped_floor_xz;
             ctx.has_selected_point_center = true;
         }
     }
@@ -25429,8 +25759,8 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     const double old_area_size = old_area_copy ? old_area_copy->get_size() : 0.0;
     const double new_area_size = old_area_size;
 
-    // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem.
-    // No need to spawn static boundary assets when room area shrinks.
+    // Boundary-domain assets stay bound to map boundary spawn data.
+    // The room-resize path should not respawn them as room-local assets.
     (void)old_area_copy;
     (void)new_area_size;
     (void)old_area_size;
@@ -25681,8 +26011,10 @@ void RoomEditor::set_current_room(Room* room, bool lock_room) {
     refresh_spawn_group_config_ui();
     mark_spatial_index_dirty();
 
-    if (room_cfg_ui_ && room_config_dock_open_) {
+    if (room_cfg_ui_ && (room_config_dock_open_ || room_cfg_ui_->visible())) {
         room_editor_trace("[RoomEditor] opening room config UI");
+        room_config_dock_open_ = true;
+        room_config_panel_visible_ = true;
         room_cfg_ui_->set_room_metadata_only_mode(false);
         room_cfg_ui_->open(current_room_);
         refresh_room_config_visibility();
@@ -25832,12 +26164,221 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
 }
 
 std::optional<RoomEditor::DynamicBoundaryProxyHit> RoomEditor::hit_test_dynamic_boundary_sprite(SDL_Point screen_point) const {
-    (void)screen_point;
-    return std::nullopt;
+    if (!assets_) {
+        return std::nullopt;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    auto build_proxy_key = [](const Asset* asset) {
+        DynamicBoundaryProxyKey key{};
+        if (!asset) {
+            return key;
+        }
+        key.spawn_id = asset->spawn_id;
+        key.asset_name = asset->info ? asset->info->name : std::string{};
+        key.boundary_type_index = -1;
+        key.candidate_index = -1;
+        key.world_x = asset->world_x();
+        key.world_z = asset->world_z();
+        return key;
+    };
+
+    auto compute_proxy_rect = [&](Asset* asset, SDL_FRect& out_rect, int& out_screen_y) -> bool {
+        if (!asset || asset->dead) {
+            return false;
+        }
+
+        SDL_Rect bounds{0, 0, 0, 0};
+        int screen_y = 0;
+        bool have_bounds = false;
+
+        auto cache_it = asset_bounds_cache_.find(asset);
+        if (cache_it != asset_bounds_cache_.end()) {
+            bounds = cache_it->second.bounds;
+            screen_y = cache_it->second.screen_y;
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            have_bounds = compute_asset_screen_bounds(cam, asset, bounds, screen_y);
+        }
+        if (!have_bounds) {
+            SDL_Point anchor_screen{0, 0};
+            if (!asset_anchor_screen_position(cam, asset, anchor_screen)) {
+                return false;
+            }
+            const int width = std::max(1, asset->width());
+            const int height = std::max(1, asset->height());
+            bounds = SDL_Rect{
+                anchor_screen.x - (width / 2),
+                anchor_screen.y - height,
+                width,
+                height
+            };
+            screen_y = anchor_screen.y;
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            return false;
+        }
+
+        out_rect = SDL_FRect{
+            static_cast<float>(bounds.x),
+            static_cast<float>(bounds.y),
+            static_cast<float>(bounds.w),
+            static_cast<float>(bounds.h)
+        };
+        out_screen_y = screen_y;
+        return true;
+    };
+
+    const std::vector<Asset*>* source_assets = &assets_->all;
+    if (source_assets->empty()) {
+        return std::nullopt;
+    }
+
+    DynamicBoundaryProxyHit best_hit{};
+    bool have_best = false;
+    int best_dist2 = std::numeric_limits<int>::max();
+    int best_screen_y = std::numeric_limits<int>::max();
+    int best_area = std::numeric_limits<int>::max();
+    int best_bottom = std::numeric_limits<int>::max();
+    int best_top = std::numeric_limits<int>::max();
+
+    for (Asset* asset : *source_assets) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+        if (classify_asset_ownership(asset) != devmode::room_selection_filter::SpawnOwnership::MapBoundary) {
+            continue;
+        }
+
+        SDL_FRect rect{};
+        int screen_y = 0;
+        if (!compute_proxy_rect(asset, rect, screen_y)) {
+            continue;
+        }
+
+        const int left = static_cast<int>(std::floor(rect.x));
+        const int top = static_cast<int>(std::floor(rect.y));
+        const int right = static_cast<int>(std::ceil(rect.x + rect.w));
+        const int bottom = static_cast<int>(std::ceil(rect.y + rect.h));
+        if (right <= left || bottom <= top) {
+            continue;
+        }
+        if (screen_point.x < left || screen_point.x > right ||
+            screen_point.y < top || screen_point.y > bottom) {
+            continue;
+        }
+
+        const int closest_x = std::clamp(screen_point.x, left, right);
+        const int closest_y = std::clamp(screen_point.y, top, bottom);
+        const int dx = closest_x - screen_point.x;
+        const int dy = closest_y - screen_point.y;
+        const int dist2 = dx * dx + dy * dy;
+        const int area = (right - left) * (bottom - top);
+
+        const bool is_better =
+            !have_best ||
+            dist2 < best_dist2 ||
+            (dist2 == best_dist2 && bottom < best_bottom) ||
+            (dist2 == best_dist2 && bottom == best_bottom && top < best_top) ||
+            (dist2 == best_dist2 && bottom == best_bottom && top == best_top && screen_y < best_screen_y) ||
+            (dist2 == best_dist2 && bottom == best_bottom && top == best_top && screen_y == best_screen_y && area < best_area);
+        if (is_better) {
+            best_hit.key = build_proxy_key(asset);
+            best_hit.screen_rect = rect;
+            best_hit.world_z = asset->world_z();
+            have_best = true;
+            best_dist2 = dist2;
+            best_screen_y = screen_y;
+            best_area = area;
+            best_bottom = bottom;
+            best_top = top;
+        }
+    }
+
+    if (!have_best) {
+        return std::nullopt;
+    }
+
+    return best_hit;
 }
 
 std::optional<SDL_FRect> RoomEditor::dynamic_boundary_proxy_rect(const DynamicBoundaryProxyKey& key) const {
-    (void)key;
+    if (!assets_ || !key.valid()) {
+        return std::nullopt;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    auto matches_key = [&key](const Asset* asset) {
+        if (!asset || asset->dead) {
+            return false;
+        }
+        DynamicBoundaryProxyKey asset_key{};
+        asset_key.spawn_id = asset->spawn_id;
+        asset_key.asset_name = asset->info ? asset->info->name : std::string{};
+        asset_key.boundary_type_index = -1;
+        asset_key.candidate_index = -1;
+        asset_key.world_x = asset->world_x();
+        asset_key.world_z = asset->world_z();
+        return asset_key == key;
+    };
+    auto compute_proxy_rect = [&](Asset* asset, SDL_FRect& out_rect) -> bool {
+        if (!asset || asset->dead) {
+            return false;
+        }
+
+        SDL_Rect bounds{0, 0, 0, 0};
+        int screen_y = 0;
+        bool have_bounds = false;
+
+        auto cache_it = asset_bounds_cache_.find(asset);
+        if (cache_it != asset_bounds_cache_.end()) {
+            bounds = cache_it->second.bounds;
+            screen_y = cache_it->second.screen_y;
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            have_bounds = compute_asset_screen_bounds(cam, asset, bounds, screen_y);
+        }
+        if (!have_bounds) {
+            SDL_Point anchor_screen{0, 0};
+            if (!asset_anchor_screen_position(cam, asset, anchor_screen)) {
+                return false;
+            }
+            const int width = std::max(1, asset->width());
+            const int height = std::max(1, asset->height());
+            bounds = SDL_Rect{
+                anchor_screen.x - (width / 2),
+                anchor_screen.y - height,
+                width,
+                height
+            };
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            return false;
+        }
+
+        out_rect = SDL_FRect{
+            static_cast<float>(bounds.x),
+            static_cast<float>(bounds.y),
+            static_cast<float>(bounds.w),
+            static_cast<float>(bounds.h)
+        };
+        return true;
+    };
+
+    for (Asset* asset : assets_->all) {
+        if (!matches_key(asset)) {
+            continue;
+        }
+        SDL_FRect rect{};
+        if (compute_proxy_rect(asset, rect)) {
+            return rect;
+        }
+    }
+
     return std::nullopt;
 }
 
@@ -25847,8 +26388,34 @@ void RoomEditor::clear_dynamic_boundary_proxy_selection() {
 }
 
 bool RoomEditor::open_asset_info_for_dynamic_boundary(const DynamicBoundaryProxyHit& hit) {
-    (void)hit;
-    return false;
+    if (!assets_ || !hit.key.valid()) {
+        return false;
+    }
+
+    Asset* target = nullptr;
+    for (Asset* asset : assets_->all) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+        DynamicBoundaryProxyKey asset_key{};
+        asset_key.spawn_id = asset->spawn_id;
+        asset_key.asset_name = asset->info->name;
+        asset_key.boundary_type_index = -1;
+        asset_key.candidate_index = -1;
+        asset_key.world_x = asset->world_x();
+        asset_key.world_z = asset->world_z();
+        if (asset_key == hit.key) {
+            target = asset;
+            break;
+        }
+    }
+
+    if (!target) {
+        return false;
+    }
+
+    open_asset_info_editor_for_asset(target, false);
+    return true;
 }
 
 void RoomEditor::render_dynamic_boundary_proxy_overlay(SDL_Renderer* renderer) const {
@@ -26200,6 +26767,37 @@ void RoomEditorTestAccess::set_oval_candidate_selection(RoomEditor& editor,
     editor.oval_edit_.selected_point_index = selected_point_index;
 }
 
+void RoomEditorTestAccess::configure_oval_lock_target_for_tests(RoomEditor& editor,
+                                                                Asset* target_asset,
+                                                                int selected_oval_index,
+                                                                int selected_point_index,
+                                                                float center_world_x,
+                                                                float center_world_y,
+                                                                float center_world_z) {
+    editor.editor_mode_ = RoomEditor::EditorMode::OvalAnchorEdit;
+    editor.oval_edit_.target_asset = target_asset;
+    editor.oval_edit_.selected_oval_index = selected_oval_index;
+    editor.oval_edit_.selected_point_index = selected_point_index;
+    editor.oval_edit_.center_selected = false;
+    editor.oval_edit_.center_hovered = false;
+    editor.oval_edit_.body_hovered = false;
+    editor.oval_edit_.center_dragging = false;
+    editor.oval_edit_.center_world_x = center_world_x;
+    editor.oval_edit_.center_world_y = center_world_y;
+    editor.oval_edit_.center_world_z = center_world_z;
+    editor.oval_edit_.has_center_world =
+        std::isfinite(center_world_x) &&
+        std::isfinite(center_world_y) &&
+        std::isfinite(center_world_z);
+}
+
+bool RoomEditorTestAccess::resolve_oval_lock_target_for_tests(const RoomEditor& editor,
+                                                              float& out_world_x,
+                                                              float& out_world_z,
+                                                              float& out_heading_radians) {
+    return editor.resolve_selected_oval_lock_target(out_world_x, out_world_z, out_heading_radians);
+}
+
 int RoomEditorTestAccess::active_subview(const RoomEditor& editor) {
     return static_cast<int>(editor.asset_editor_subview_);
 }
@@ -26318,6 +26916,10 @@ void RoomEditorTestAccess::resnap_spawn_groups_to_overlay_resolution(RoomEditor&
 
 void RoomEditorTestAccess::update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity) {
     editor.update_grid_resolution_for_selection(reinterpret_cast<Asset*>(const_cast<void*>(primary_asset_identity)));
+}
+
+bool RoomEditorTestAccess::spawn_group_is_boundary(const RoomEditor& editor, const std::string& spawn_id) {
+    return editor.spawn_group_is_boundary(spawn_id);
 }
 
 std::uint32_t RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(const RoomEditor& editor) {
@@ -26530,6 +27132,35 @@ void RoomEditorTestAccess::reset_delete_shortcut_route_counters(RoomEditor& edit
     editor.test_delete_shortcut_asset_delete_count_ = 0;
 }
 
+bool RoomEditorTestAccess::solve_texture_point_for_screen_target_for_tests(int initial_x,
+                                                                            int initial_y,
+                                                                            SDL_FPoint desired_screen,
+                                                                            int max_x,
+                                                                            int max_y,
+                                                                            bool singular_jacobian,
+                                                                            int& out_x,
+                                                                            int& out_y) {
+    auto sample = [singular_jacobian](int x, int y, SDL_FPoint& out_screen) {
+        if (singular_jacobian) {
+            out_screen = SDL_FPoint{100.0f, 100.0f};
+            return true;
+        }
+        out_screen = SDL_FPoint{
+            static_cast<float>(x),
+            static_cast<float>(y)};
+        return true;
+    };
+    return solve_texture_point_for_screen_target(
+        initial_x,
+        initial_y,
+        desired_screen,
+        sample,
+        max_x,
+        max_y,
+        out_x,
+        out_y);
+}
+
 void RoomEditorTestAccess::set_spawn_id_ownership_cache(
     RoomEditor& editor,
     const std::vector<std::string>& room_spawn_ids,
@@ -26544,10 +27175,57 @@ int RoomEditorTestAccess::classify_spawn_group_ownership(const RoomEditor& edito
     return static_cast<int>(editor.classify_spawn_group_ownership(spawn_id));
 }
 
+std::optional<RoomEditor::DynamicBoundaryProxyHit> RoomEditorTestAccess::hit_test_dynamic_boundary_sprite(
+    RoomEditor& editor,
+    SDL_Point screen_point) {
+    return editor.hit_test_dynamic_boundary_sprite(screen_point);
+}
+
+std::optional<SDL_FRect> RoomEditorTestAccess::dynamic_boundary_proxy_rect(
+    const RoomEditor& editor,
+    const RoomEditor::DynamicBoundaryProxyKey& key) {
+    return editor.dynamic_boundary_proxy_rect(key);
+}
+
+std::optional<SDL_FRect> RoomEditorTestAccess::dynamic_boundary_proxy_rect_for_asset(
+    const RoomEditor& editor,
+    const Asset* asset) {
+    if (!asset) {
+        return std::nullopt;
+    }
+    RoomEditor::DynamicBoundaryProxyKey key{};
+    key.spawn_id = asset->spawn_id;
+    key.asset_name = asset->info ? asset->info->name : std::string{};
+    key.boundary_type_index = -1;
+    key.candidate_index = -1;
+    key.world_x = asset->world_x();
+    key.world_z = asset->world_z();
+    return editor.dynamic_boundary_proxy_rect(key);
+}
+
+bool RoomEditorTestAccess::open_asset_info_for_dynamic_boundary(
+    RoomEditor& editor,
+    const RoomEditor::DynamicBoundaryProxyHit& hit) {
+    return editor.open_asset_info_for_dynamic_boundary(hit);
+}
+
 bool RoomEditorTestAccess::spawn_membership_allows_room_selection(
     const RoomEditor& editor,
     const std::string& spawn_id,
     const std::string& owning_room_name) {
     return editor.spawn_membership_allows_room_selection(spawn_id, owning_room_name);
 }
+
+bool RoomEditorTestAccess::select_current_room_from_nav(RoomEditor& editor, Room* room) {
+    return editor.select_current_room_from_nav(room);
+}
+
+Room* RoomEditorTestAccess::current_room(const RoomEditor& editor) {
+    return editor.current_room_;
+}
+
+std::string RoomEditorTestAccess::room_config_header_text(const RoomEditor& editor) {
+    return editor.room_cfg_ui_ ? editor.room_cfg_ui_->current_header_text() : std::string{};
+}
 #endif
+

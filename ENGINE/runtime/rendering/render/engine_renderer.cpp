@@ -40,50 +40,40 @@ bool probe_texture_scale_mode(SDL_Renderer* renderer) {
     return ok;
 }
 
-RenderCaps build_caps(SDL_Renderer* renderer, OpenGLRendererType backend_type) {
-    RenderCaps caps{};
-    caps.backend_type = backend_type;
-    caps.is_software = false;
-
+void log_opengl_renderer(SDL_Renderer* renderer) {
+    int max_texture_size = 0;
+    bool vsync_enabled = false;
     if (SDL_PropertiesID props = SDL_GetRendererProperties(renderer)) {
-        caps.max_texture_size = static_cast<int>(
-            SDL_GetNumberProperty(props, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0));
-        caps.vsync_enabled = SDL_GetNumberProperty(props, SDL_PROP_RENDERER_VSYNC_NUMBER, 0) != 0;
+        max_texture_size = static_cast<int>(SDL_GetNumberProperty(props, SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0));
+        vsync_enabled = SDL_GetNumberProperty(props, SDL_PROP_RENDERER_VSYNC_NUMBER, 0) != 0;
     }
 
-    caps.renderer_name = safe_string(SDL_GetRendererName(renderer));
-    caps.supports_render_targets = probe_render_target_support(renderer);
-    caps.supports_texture_scale_modes = probe_texture_scale_mode(renderer);
-    caps.supports_blend_modes = true;
-    return caps;
-}
-
-void log_caps(const RenderCaps& caps) {
     std::ostringstream oss;
     oss << "[EngineRenderer] Renderer=OpenGL"
-        << " name=" << (caps.renderer_name.empty() ? std::string("<unknown>") : caps.renderer_name)
-        << " max_texture_size=" << caps.max_texture_size
-        << " render_targets=" << (caps.supports_render_targets ? "yes" : "no")
-        << " scale_mode=" << (caps.supports_texture_scale_modes ? "yes" : "no")
-        << " vsync=" << (caps.vsync_enabled ? "on" : "off")
-        << " software=" << (caps.is_software ? "yes" : "no");
+        << " name=" << safe_string(SDL_GetRendererName(renderer))
+        << " max_texture_size=" << max_texture_size
+        << " render_targets=" << (probe_render_target_support(renderer) ? "yes" : "no")
+        << " scale_mode=" << (probe_texture_scale_mode(renderer) ? "yes" : "no")
+        << " vsync=" << (vsync_enabled ? "on" : "off");
     vibble::log::info(oss.str());
 }
 
 } // namespace
 
-EngineRenderer::EngineRenderer(SDL_Renderer* renderer, RenderCaps caps, OpenGLQualityTier tier, SDL_Window* window)
-    : renderer_(renderer), window_(window), caps_(std::move(caps)), quality_tier_(tier) {
+EngineRenderer::EngineRenderer(SDL_Renderer* renderer, SDL_Window* window)
+    : renderer_(renderer), window_(window) {
     if (renderer_) {
+        renderer_name_ = safe_string(SDL_GetRendererName(renderer_));
         int vsync = 0;
         if (SDL_GetRenderVSync(renderer_, &vsync)) {
-            caps_.vsync_enabled = vsync != 0;
+            present_mode_name_ = vsync != 0 ? "vsync" : "immediate";
+        } else {
+            present_mode_name_ = "unknown";
         }
-        present_mode_name_ = caps_.vsync_enabled ? "vsync" : "immediate";
     } else {
+        renderer_name_ = "unknown";
         present_mode_name_ = "unknown";
     }
-
 }
 
 EngineRenderer::~EngineRenderer() {
@@ -106,9 +96,8 @@ std::unique_ptr<EngineRenderer> EngineRenderer::Create(SDL_Window* window, bool 
         return nullptr;
     }
 
-    log_caps(attempt.caps);
-    return std::unique_ptr<EngineRenderer>(
-        new EngineRenderer(attempt.renderer, attempt.caps, OpenGLQualityTier::OpenGLFull, window));
+    log_opengl_renderer(attempt.renderer);
+    return std::unique_ptr<EngineRenderer>(new EngineRenderer(attempt.renderer, window));
 }
 
 void EngineRenderer::begin_frame(const SDL_Color& clear_color) {
@@ -131,15 +120,36 @@ void EngineRenderer::present() {
     }
 
     render_diagnostics::note_present_call();
+    static std::uint64_t present_log_count = 0;
+    const std::uint64_t present_index = present_log_count + 1;
+    const bool log_present_guard = present_index <= 8 || (present_index % 120) == 0;
+    if (log_present_guard) {
+        const std::string message = "[RenderGuard] before frame present call=" + std::to_string(present_index);
+        if (present_index <= 8) {
+            vibble::log::info(message);
+        } else {
+            vibble::log::debug(message);
+        }
+    }
     const std::uint64_t perf_frequency = SDL_GetPerformanceFrequency();
     const std::uint64_t present_begin = SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer_);
     const std::uint64_t present_end = SDL_GetPerformanceCounter();
+    ++present_log_count;
 
     const double present_block_ms =
         (perf_frequency > 0 && present_end >= present_begin)
             ? (static_cast<double>(present_end - present_begin) * 1000.0 / static_cast<double>(perf_frequency))
             : 0.0;
+    if (log_present_guard) {
+        const std::string message = "[RenderGuard] after frame present call=" + std::to_string(present_index) +
+                                    " block_ms=" + std::to_string(present_block_ms);
+        if (present_index <= 8) {
+            vibble::log::info(message);
+        } else {
+            vibble::log::debug(message);
+        }
+    }
 
     bool interval_known = false;
     double present_interval_ms = 0.0;
@@ -208,18 +218,9 @@ EngineRenderer::AttemptResult EngineRenderer::try_create_opengl(SDL_Window* wind
 
     SDL_SetDefaultTextureScaleMode(attempt.renderer, SDL_SCALEMODE_LINEAR);
     SDL_SetRenderVSync(attempt.renderer, prefer_vsync ? 1 : 0);
-    attempt.caps = EngineRenderer::build_caps(attempt.renderer, OpenGLRendererType::OpenGL);
-    int vsync = 0;
-    if (SDL_GetRenderVSync(attempt.renderer, &vsync)) {
-        attempt.caps.vsync_enabled = vsync != 0;
-    }
     return attempt;
 }
 
-RenderCaps EngineRenderer::build_caps(SDL_Renderer* renderer, OpenGLRendererType backend_type) {
-    return ::build_caps(renderer, backend_type);
-}
-
-void EngineRenderer::log_caps(const RenderCaps& caps) {
-    ::log_caps(caps);
+void EngineRenderer::log_opengl_renderer(SDL_Renderer* renderer) {
+    ::log_opengl_renderer(renderer);
 }

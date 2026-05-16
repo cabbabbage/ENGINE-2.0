@@ -1,11 +1,13 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_depth_policy.hpp"
+#include "rendering/render/screen_space_math.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -29,6 +31,25 @@ float world_z_from_depth_offset(float depth_offset, float anchor_world_z, float 
 float projected_bottom_edge_length(const render_projection::ProjectedSpriteFrame& frame) {
     return std::hypot(frame.screen_br.x - frame.screen_bl.x,
                       frame.screen_br.y - frame.screen_bl.y);
+}
+
+render_projection::WorldPoint3 camera_space_to_world(
+    const world::CameraProjectionParams& params,
+    double cam_x,
+    double cam_y,
+    double depth) {
+    const double safe_scale = std::max(1e-6, params.meters_scale);
+    const double world_m_x = params.position_x +
+        params.forward_x * depth + params.right_x * cam_x + params.up_x * cam_y;
+    const double world_m_y = params.position_y +
+        params.forward_y * depth + params.right_y * cam_x + params.up_y * cam_y;
+    const double world_m_z = params.position_z +
+        params.forward_z * depth + params.right_z * cam_x + params.up_z * cam_y;
+    return render_projection::WorldPoint3{
+        static_cast<float>(world_m_x / safe_scale + params.anchor_world_x),
+        static_cast<float>(world_m_y / safe_scale + params.anchor_world_y),
+        static_cast<float>(world_m_z / safe_scale + params.anchor_world_z),
+        std::isfinite(world_m_x) && std::isfinite(world_m_y) && std::isfinite(world_m_z)};
 }
 
 SDL_FPoint legacy_anchor_screen_point(const WarpedScreenGrid& grid,
@@ -187,6 +208,88 @@ TEST_CASE("Depth guide world-z conversion maps larger depth toward horizon") {
     REQUIRE(grid.project_world_point(sample_world, near_world_z, near_screen));
     REQUIRE(grid.project_world_point(sample_world, far_world_z, far_screen));
     CHECK(far_screen.y < near_screen.y);
+}
+
+TEST_CASE("WarpedScreenGrid bounds perspective scale before the near camera plane") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const world::CameraProjectionParams params = grid.projection_params();
+    REQUIRE(params.min_perspective_depth > params.near_plane);
+    REQUIRE(std::isfinite(params.max_perspective_scale));
+    REQUIRE(params.max_perspective_scale > 0.0f);
+
+    const double close_depth =
+        std::max(params.near_plane * 2.0, params.min_perspective_depth * 0.25);
+    REQUIRE(close_depth < params.min_perspective_depth);
+    const render_projection::WorldPoint3 close_world =
+        camera_space_to_world(params, 0.0, 0.0, close_depth);
+    REQUIRE(close_world.valid);
+
+    float close_scale = 0.0f;
+    REQUIRE(grid.sample_perspective_scale(
+        SDL_FPoint{close_world.x, close_world.y},
+        close_world.z,
+        close_scale));
+    CHECK(close_scale == doctest::Approx(params.max_perspective_scale).epsilon(1e-5));
+
+    const render_projection::WorldPoint3 behind_near =
+        camera_space_to_world(params, 0.0, 0.0, params.near_plane * 0.5);
+    REQUIRE(behind_near.valid);
+    float invalid_scale = 0.0f;
+    CHECK_FALSE(grid.sample_perspective_scale(
+        SDL_FPoint{behind_near.x, behind_near.y},
+        behind_near.z,
+        invalid_scale));
+}
+
+TEST_CASE("Projected sprite frame stays finite below the lower camera edge") {
+    WarpedScreenGrid grid(1280, 720, make_starting_area());
+
+    const world::CameraProjectionParams params = grid.projection_params();
+    const double lower_edge_y = static_cast<double>(params.screen_height) * 1.4;
+    const auto [ndc_x, ndc_y] = render::screen_space::screen_to_ndc(
+        static_cast<double>(params.screen_width) * 0.5,
+        lower_edge_y,
+        params.screen_width,
+        params.screen_height,
+        params.screen_zoom,
+        params.screen_pan_y_px);
+    REQUIRE(std::isfinite(ndc_x));
+    REQUIRE(std::isfinite(ndc_y));
+
+    const double close_depth =
+        std::max(params.near_plane * 2.0, params.min_perspective_depth * 0.45);
+    const double cam_x = ndc_x * params.tan_half_fov_x * close_depth;
+    const double cam_y = ndc_y * params.tan_half_fov_y * close_depth;
+    const render_projection::WorldPoint3 lower_edge_world =
+        camera_space_to_world(params, cam_x, cam_y, close_depth);
+    REQUIRE(lower_edge_world.valid);
+
+    float perspective_scale = 0.0f;
+    REQUIRE(grid.sample_perspective_scale(
+        SDL_FPoint{lower_edge_world.x, lower_edge_world.y},
+        lower_edge_world.z,
+        perspective_scale));
+    CHECK(perspective_scale <= params.max_perspective_scale * 1.001f);
+
+    render_projection::SpriteProjectionInput projection_input{};
+    projection_input.world_x = lower_edge_world.x;
+    projection_input.world_y = lower_edge_world.y;
+    projection_input.world_z = lower_edge_world.z;
+    projection_input.perspective_scale = perspective_scale;
+    projection_input.frame_width_px = 64;
+    projection_input.frame_height_px = 64;
+    projection_input.final_width_px = 96;
+    projection_input.final_height_px = 96;
+
+    render_projection::ProjectedSpriteFrame frame{};
+    REQUIRE(render_projection::build_projected_sprite_frame(grid, projection_input, frame));
+    REQUIRE(frame.valid);
+
+    const float width = projected_bottom_edge_length(frame);
+    REQUIRE(std::isfinite(width));
+    CHECK(width < static_cast<float>(params.screen_width) * 0.25f);
+    CHECK(width == doctest::Approx(96.0f).epsilon(0.15));
 }
 
 TEST_CASE("Projected sprite frame keeps final width stable across depth with fixed perspective source") {

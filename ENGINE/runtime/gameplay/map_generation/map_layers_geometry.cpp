@@ -8,6 +8,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "utils/weighted_range.hpp"
+
 namespace map_layers {
 
 namespace {
@@ -35,6 +37,50 @@ double extract_dimension(const nlohmann::json& room, const char* key) {
         return it->get<double>();
     }
     return 0.0;
+}
+
+double weighted_dimension_upper_bound(const nlohmann::json& room, const char* key) {
+    if (!room.is_object() || !key) return 0.0;
+    const auto it = room.find(key);
+    if (it == room.end()) return 0.0;
+
+    const auto range = vibble::weighted_range::from_json(
+        *it,
+        vibble::weighted_range::make_flat(0));
+    const double upper = static_cast<double>(range.center) + static_cast<double>(range.span);
+    return std::isfinite(upper) && upper > 0.0 ? upper : 0.0;
+}
+
+double max_dimension_from_legacy_pair(const nlohmann::json& room,
+                                      const char* min_key,
+                                      const char* max_key) {
+    double value = extract_dimension(room, max_key);
+    if (value <= 0.0) {
+        value = extract_dimension(room, min_key);
+    }
+    return value;
+}
+
+double room_dimension_upper_bound(const nlohmann::json& room,
+                                  const char* weighted_key,
+                                  const char* min_key,
+                                  const char* max_key) {
+    double value = weighted_dimension_upper_bound(room, weighted_key);
+    if (value <= 0.0) {
+        value = max_dimension_from_legacy_pair(room, min_key, max_key);
+    }
+    return value;
+}
+
+double legacy_radius_diameter_upper_bound(const nlohmann::json& room) {
+    double radius = extract_dimension(room, "max_radius");
+    if (radius <= 0.0) {
+        radius = extract_dimension(room, "radius");
+    }
+    if (radius <= 0.0) {
+        radius = extract_dimension(room, "min_radius");
+    }
+    return radius > 0.0 ? radius * 2.0 : 0.0;
 }
 
 bool is_circle_geometry(std::string geometry_value) {
@@ -173,17 +219,20 @@ double room_extent_from_rooms_data(const nlohmann::json* rooms_data,
     }
     const auto& room = *room_it;
 
-    double max_width = extract_dimension(room, "max_width");
-    double max_depth = extract_dimension(room, "max_height");
+    double max_width = room_dimension_upper_bound(room, "width", "min_width", "max_width");
+    double max_depth = room_dimension_upper_bound(room, "height", "min_height", "max_height");
     const bool is_circle = is_circle_geometry(room.value("geometry", std::string()));
 
     if (is_circle) {
-        if (max_width <= 0.0) {
-            max_width = extract_dimension(room, "min_width");
+        const double legacy_radius_diameter = legacy_radius_diameter_upper_bound(room);
+        if (legacy_radius_diameter > 0.0 &&
+            weighted_dimension_upper_bound(room, "width") <= 0.0 &&
+            weighted_dimension_upper_bound(room, "height") <= 0.0) {
+            max_width = legacy_radius_diameter;
+            max_depth = legacy_radius_diameter;
         }
-        if (max_depth <= 0.0) {
-            max_depth = extract_dimension(room, "min_height");
-        }
+        max_depth = sanitize_dimension(max_depth, max_width);
+        max_width = sanitize_dimension(max_width, max_depth);
         const double half_width_extent = std::max(0.0, max_width) * 0.5;
         const double half_depth_extent = std::max(0.0, max_depth) * 0.5;
         return std::max({half_width_extent, half_depth_extent, 1.0});

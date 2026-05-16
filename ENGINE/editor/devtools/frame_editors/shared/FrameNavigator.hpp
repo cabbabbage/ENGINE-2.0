@@ -29,6 +29,7 @@ public:
     void set_on_apply_all(std::function<void()> callback);
     void set_on_save_and_exit(std::function<void()> callback);
     void set_confirmation_handler(std::function<bool(const std::string&, const std::string&)> callback);
+    void set_parent_window(SDL_Window* window) { parent_window_ = window; }
     void set_preview_source(std::weak_ptr<animation_editor::PreviewProvider> provider,
                             const std::string& animation_id);
     void set_enabled(bool enabled);
@@ -85,6 +86,7 @@ private:
     std::function<void()> on_apply_all_;
     std::function<void()> on_save_and_exit_;
     std::function<bool(const std::string&, const std::string&)> on_confirm_;
+    SDL_Window* parent_window_ = nullptr;
     std::weak_ptr<animation_editor::PreviewProvider> preview_provider_;
     std::string animation_id_;
 

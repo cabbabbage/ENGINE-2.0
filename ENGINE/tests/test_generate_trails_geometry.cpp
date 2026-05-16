@@ -272,6 +272,57 @@ TEST_CASE("trail layout is rejected when it overlaps an existing trail polygon")
     CHECK_FALSE(ok);
 }
 
+TEST_CASE("self-intersecting trail polygons are rejected") {
+    const std::vector<SDL_Point> bowtie{
+        SDL_Point{0, 0},
+        SDL_Point{200, 200},
+        SDL_Point{0, 200},
+        SDL_Point{200, 0},
+    };
+
+    CHECK_FALSE(trail_generation::debug::polygon_is_clean_for_tests(bowtie, {}));
+}
+
+TEST_CASE("curvy trails cannot create internal boundary loops") {
+    int accepted_layouts = 0;
+    for (std::uint32_t seed = 1; seed <= 32; ++seed) {
+        trail_generation::debug::TrailLayoutDebug layout;
+        const bool ok = trail_generation::debug::build_layout_for_tests(
+            SDL_Point{0, 0},
+            SDL_Point{1600, 420},
+            120,
+            240,
+            10,
+            {},
+            seed,
+            &layout);
+
+        if (ok) {
+            ++accepted_layouts;
+            CHECK(trail_generation::debug::polygon_is_clean_for_tests(layout.polygon, {}));
+        }
+    }
+    CHECK(accepted_layouts > 0);
+}
+
+TEST_CASE("existing trails cannot be crossed by later trails") {
+    Area horizontal("horizontal_trail", make_rect(-220, -40, 440, 80), 3);
+    std::vector<Area> existing{horizontal};
+
+    trail_generation::debug::TrailLayoutDebug layout;
+    const bool ok = trail_generation::debug::build_layout_for_tests(
+        SDL_Point{0, -500},
+        SDL_Point{0, 500},
+        90,
+        90,
+        0,
+        existing,
+        17u,
+        &layout);
+
+    CHECK_FALSE(ok);
+}
+
 TEST_CASE("trail sector contacts with direction 270 and width 50 stay on left half") {
     const SDL_Point center{1200, 1200};
     std::vector<SDL_Point> contacts;
@@ -364,7 +415,7 @@ TEST_CASE("forced trail connections obey room trail connection sectors") {
 
     GenerateTrails generator(trails_data, {});
     generator.set_all_rooms_reference(all_rooms);
-    std::vector<std::unique_ptr<Room>> trails = generator.generate_trails(
+    TrailGenerationResult result = generator.generate_trails(
         {{room_a.get(), room_b.get()}},
         "test_map",
         nullptr,
@@ -373,8 +424,9 @@ TEST_CASE("forced trail connections obey room trail connection sectors") {
         nullptr,
         Room::ManifestWriter{});
 
-    REQUIRE(trails.size() == 1);
-    const Room& trail_room = *trails.front();
+    REQUIRE(result.required_failures.empty());
+    REQUIRE(result.trail_rooms.size() == 1);
+    const Room& trail_room = *result.trail_rooms.front();
     CHECK(trail_respects_room_sector(*room_a, trail_room));
     CHECK(trail_respects_room_sector(*room_b, trail_room));
 }
@@ -396,7 +448,7 @@ TEST_CASE("random planned trail connections obey room trail connection sectors")
 
     GenerateTrails generator(trails_data, {});
     generator.set_all_rooms_reference(all_rooms);
-    std::vector<std::unique_ptr<Room>> trails = generator.generate_trails(
+    TrailGenerationResult result = generator.generate_trails(
         {},
         "test_map",
         nullptr,
@@ -405,8 +457,8 @@ TEST_CASE("random planned trail connections obey room trail connection sectors")
         nullptr,
         Room::ManifestWriter{});
 
-    REQUIRE(trails.size() >= 2);
-    for (const auto& trail_ptr : trails) {
+    REQUIRE(result.trail_rooms.size() >= 2);
+    for (const auto& trail_ptr : result.trail_rooms) {
         REQUIRE(trail_ptr);
         const Room& trail_room = *trail_ptr;
         for (Room* connected : trail_room.connected_rooms) {
@@ -432,7 +484,7 @@ TEST_CASE("trail endpoints include fully contained mouth footprint inside connec
 
     GenerateTrails generator(trails_data, {});
     generator.set_all_rooms_reference(all_rooms);
-    std::vector<std::unique_ptr<Room>> trails = generator.generate_trails(
+    TrailGenerationResult result = generator.generate_trails(
         {{room_a.get(), room_b.get()}},
         "test_map",
         nullptr,
@@ -441,8 +493,9 @@ TEST_CASE("trail endpoints include fully contained mouth footprint inside connec
         nullptr,
         Room::ManifestWriter{});
 
-    REQUIRE(trails.size() == 1);
-    const Room& trail_room = *trails.front();
+    REQUIRE(result.required_failures.empty());
+    REQUIRE(result.trail_rooms.size() == 1);
+    const Room& trail_room = *result.trail_rooms.front();
     CHECK(count_trail_vertices_inside_room(trail_room, *room_a) >= 3);
     CHECK(count_trail_vertices_inside_room(trail_room, *room_b) >= 3);
 }

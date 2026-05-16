@@ -102,3 +102,53 @@ TEST_CASE("cached-only folder animation preload reports missing runtime frames i
     fs::remove_all(fs::path("cache") / asset_name);
     fs::remove_all(asset_root);
 }
+
+TEST_CASE("folder animation preload can use generated bad asset fallback texture") {
+    ScopedSdlRenderer renderer;
+    REQUIRE(renderer.get() != nullptr);
+
+    const std::string asset_name = "empty_bad_asset_fallback_preload_asset";
+    const fs::path asset_root = unique_test_dir("bad_asset_fallback_root");
+    const fs::path empty_animation_folder = asset_root / "default";
+    fs::create_directories(empty_animation_folder);
+    fs::remove_all(fs::path("cache") / asset_name);
+
+    nlohmann::json metadata = {
+        {"asset_name", asset_name},
+        {"asset_directory", asset_root.generic_string()},
+        {"start_animation", "default"},
+        {"scale_variants", nlohmann::json::array({1.0})},
+        {"animations", {
+            {"default", {
+                {"source", {
+                    {"kind", "folder"},
+                    {"path", "default"}
+                }}
+            }}
+        }}
+    };
+
+    AssetInfo info(asset_name, metadata);
+    const auto result = info.loadAnimationsDetailed(renderer.get(), true, true, true);
+
+    CHECK(result.attempted);
+    CHECK(result.ok());
+    CHECK(result.cache_ready);
+    CHECK(result.missing_runtime_frame_animations.empty());
+
+    auto anim_it = info.animations.find("default");
+    REQUIRE(anim_it != info.animations.end());
+    REQUIRE(anim_it->second.cached_frame_count() == 1);
+
+    bool found_texture = false;
+    for (const auto& frame : anim_it->second.cached_frames()) {
+        for (SDL_Texture* texture : frame.textures) {
+            found_texture = found_texture || texture != nullptr;
+        }
+    }
+    CHECK(found_texture);
+    CHECK(anim_it->second.has_frames());
+
+    fs::remove_all(fs::path("cache") / asset_name);
+    fs::remove_all(asset_root);
+}

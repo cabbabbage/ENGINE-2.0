@@ -40,7 +40,7 @@ TEST_CASE("map data manifest roundtrip preserves canonical sections") {
     CHECK(roundtrip.contains("trails_data"));
     CHECK(roundtrip.contains("map_layers"));
     CHECK(roundtrip.contains("map_layers_settings"));
-    CHECK(roundtrip.contains("map_boundary_data"));
+    CHECK(roundtrip.contains("live_dynamic_spawns"));
     CHECK(roundtrip.contains("dev_map_settings"));
 }
 
@@ -54,6 +54,36 @@ TEST_CASE("normalize_map_manifest hard-removes deprecated map_assets_data sectio
         manifest::normalize_map_manifest(map_manifest, "remove_map_assets_case", root);
 
     CHECK_FALSE(normalized.map_manifest.contains("map_assets_data"));
+}
+
+TEST_CASE("normalize_map_manifest canonicalizes live dynamic selectors to boundary_area_selectors only") {
+    nlohmann::json map_manifest = manifest::build_default_map_manifest("live_dynamic_selector_unify_case");
+    map_manifest["schema_version"] = manifest::kMapSchemaVersion;
+    map_manifest["candidate_selectors"] = nlohmann::json::array({
+        nlohmann::json::object({
+            {"spawn_id", "spn-top-level"},
+            {"grid_resolution", 4},
+            {"candidates", nlohmann::json::array({nlohmann::json::object({{"name", "null"}, {"chance", 1}})})}
+        })
+    });
+    map_manifest["live_dynamic_spawns"]["inherited_map_selectors"] = nlohmann::json::array({
+        nlohmann::json::object({
+            {"spawn_id", "spn-legacy-inherited"},
+            {"grid_resolution", 4},
+            {"candidates", nlohmann::json::array({nlohmann::json::object({{"name", "null"}, {"chance", 1}})})}
+        })
+    });
+
+    const std::filesystem::path root = std::filesystem::path("C:/tmp/manifest_normalizer_test");
+    const manifest::MapManifestNormalizationResult normalized =
+        manifest::normalize_map_manifest(map_manifest, "live_dynamic_selector_unify_case", root);
+
+    REQUIRE(normalized.map_manifest.contains("live_dynamic_spawns"));
+    const nlohmann::json& live = normalized.map_manifest["live_dynamic_spawns"];
+    CHECK(live.contains("boundary_area_selectors"));
+    CHECK(live["boundary_area_selectors"].is_array());
+    CHECK_FALSE(live.contains("inherited_map_selectors"));
+    CHECK_FALSE(normalized.map_manifest.contains("candidate_selectors"));
 }
 
 TEST_CASE("normalize_map_manifest self-heals malformed room config entries and migrates legacy radius") {

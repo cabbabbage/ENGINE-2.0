@@ -306,12 +306,15 @@ add_executable(engine_tests
     ENGINE/tests/test_combat_attack_pipeline.cpp
     ENGINE/tests/test_map_data.cpp
     ENGINE/tests/test_map_manifest_normalizer.cpp
+    ENGINE/tests/test_live_dynamic_asset_rendering.cpp
     ENGINE/tests/test_generate_trails_geometry.cpp
+    ENGINE/tests/test_generate_rooms_connectivity.cpp
     ENGINE/tests/test_movement_payload_geometry.cpp
     ENGINE/tests/test_player_direction_intent.cpp
     ENGINE/tests/test_room_anchor_mode_utils.cpp
     ENGINE/tests/test_room_editor_point_mode_isolation.cpp
     ENGINE/tests/test_room_editor_onion_skin_regressions.cpp
+    ENGINE/tests/test_room_configurator_persistence.cpp
     ENGINE/tests/test_room_selection_filter_utils.cpp
     ENGINE/tests/test_spawn_group_codec.cpp
     ENGINE/tests/test_runtime_candidates.cpp
@@ -330,12 +333,13 @@ add_executable(engine_tests
     ENGINE/tests/test_movement_pathing_axis.cpp
     ENGINE/tests/test_dev_mode_animation_policy.cpp
     ENGINE/tests/test_playback_settings_inheritance.cpp
+    ENGINE/tests/test_weighted_range.cpp
     
     ENGINE/tests/test_screen_space_math.cpp
     ENGINE/tests/test_sink_clip.cpp
     ENGINE/tests/test_warped_screen_grid_dimensions.cpp
-    ENGINE/tests/test_opengl_runtime_manifest_selection.cpp
     ENGINE/tests/test_opengl_runtime_renderer.cpp
+    ENGINE/tests/test_render_dof_blur_chain.cpp
     ENGINE/tests/test_shader_package_library.cpp
     ENGINE/tests/test_asset_manifest_enable_flags.cpp
     ENGINE/tests/test_child_asset_runtime.cpp

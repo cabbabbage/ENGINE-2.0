@@ -172,9 +172,15 @@ namespace {
                                                          int screen_width,
                                                          int screen_height);
 
-    float compute_perspective_scale_from_depth(const CameraState& cam,
-                                               double depth_along_forward,
-                                               int screen_width);
+    float compute_raw_perspective_scale_from_depth(const CameraState& cam,
+                                                   double depth_along_forward,
+                                                   int screen_width);
+
+    float clamp_perspective_scale_to_camera_edge(const CameraState& cam, float scale);
+
+    double compute_min_perspective_depth_for_lower_edge(const CameraState& cam,
+                                                        int screen_width,
+                                                        int screen_height);
 
 CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings,
                                        double aspect,
@@ -275,6 +281,14 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
     state.anchor_world_y = 0.0; // עוגן גובה (Y)
     state.anchor_world_z = static_cast<double>(anchor_world.y); // עוגן עומק (Z)
 
+        state.min_perspective_depth = compute_min_perspective_depth_for_lower_edge(
+            state, screen_width, screen_height);
+        state.max_perspective_scale = compute_raw_perspective_scale_from_depth(
+            state, state.min_perspective_depth, screen_width);
+        if (!std::isfinite(state.max_perspective_scale) || state.max_perspective_scale <= 0.0f) {
+            state.max_perspective_scale = 1.0f;
+        }
+
         return state;
     }
 
@@ -305,9 +319,9 @@ struct ProjectionResult {
         return ndc_to_screen_point(cam, ndc_x, ndc_y, screen_width, screen_height);
     }
 
-    float compute_perspective_scale_from_depth(const CameraState& cam,
-                                               double depth_along_forward,
-                                               int screen_width) {
+    float compute_raw_perspective_scale_from_depth(const CameraState& cam,
+                                                   double depth_along_forward,
+                                                   int screen_width) {
         if (!std::isfinite(depth_along_forward) || depth_along_forward <= cam.near_plane) {
             return 1.0f;
         }
@@ -321,6 +335,50 @@ struct ProjectionResult {
         }
         float result = static_cast<float>(scale);
         return result;
+    }
+
+    float clamp_perspective_scale_to_camera_edge(const CameraState& cam, float scale) {
+        if (!std::isfinite(scale) || scale <= 0.0f) {
+            return 1.0f;
+        }
+        if (std::isfinite(cam.max_perspective_scale) && cam.max_perspective_scale > 0.0f) {
+            return std::clamp(scale, 0.0001f, cam.max_perspective_scale);
+        }
+        return std::max(0.0001f, scale);
+    }
+
+    double compute_min_perspective_depth_for_lower_edge(const CameraState& cam,
+                                                        int screen_width,
+                                                        int screen_height) {
+        const double fallback_depth = std::max(cam.near_plane * 4.0, cam.focus_depth);
+        if (!cam.valid || screen_width <= 0 || screen_height <= 0 ||
+            !std::isfinite(cam.position.y) ||
+            !std::isfinite(cam.forward.y) ||
+            !std::isfinite(cam.up.y) ||
+            !std::isfinite(cam.tan_half_fov_y)) {
+            return fallback_depth;
+        }
+
+        const ScreenBounds bounds = expanded_screen_bounds(screen_width, screen_height);
+        const double sample_x =
+            (static_cast<double>(bounds.left) + static_cast<double>(bounds.right)) * 0.5;
+        const auto [ndc_x, ndc_y] = screen_to_ndc_point(
+            cam, sample_x, static_cast<double>(bounds.bottom), screen_width, screen_height);
+        (void)ndc_x;
+        if (!std::isfinite(ndc_y)) {
+            return fallback_depth;
+        }
+
+        const double denom = cam.forward.y + ndc_y * cam.tan_half_fov_y * cam.up.y;
+        if (!std::isfinite(denom) || std::fabs(denom) <= 1e-9) {
+            return fallback_depth;
+        }
+
+        const double depth = -cam.position.y / denom;
+        if (!std::isfinite(depth) || depth <= cam.near_plane) {
+            return fallback_depth;
+        }
+        return std::max(depth, cam.near_plane * 1.25);
     }
 
     SDL_FPoint lerp_point(const SDL_FPoint& a, const SDL_FPoint& b, float t) {
@@ -413,7 +471,7 @@ struct ProjectionResult {
         const double screen_x = screen_pt.x;
         const double screen_y = screen_pt.y;
 
-        float perspective_scale = compute_perspective_scale_from_depth(
+        float perspective_scale = compute_raw_perspective_scale_from_depth(
             cam, depth_along_forward, screen_width);
         float vertical_scale = 1.0f;
 
@@ -465,6 +523,7 @@ struct ProjectionResult {
         if (!std::isfinite(perspective_scale) || perspective_scale <= 0.0f) {
             perspective_scale = 1.0f;
         }
+        perspective_scale = clamp_perspective_scale_to_camera_edge(cam, perspective_scale);
         if (!std::isfinite(vertical_scale) || vertical_scale <= 0.0f) {
             vertical_scale = 1.0f;
         }
@@ -582,6 +641,8 @@ WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
         params.tan_half_fov_y = cam.tan_half_fov_y;
         params.near_plane = cam.near_plane;
         params.far_plane = cam.far_plane;
+        params.min_perspective_depth = cam.min_perspective_depth;
+        params.max_perspective_scale = cam.max_perspective_scale;
         params.screen_zoom = cam.screen_zoom;
         params.screen_pan_y_px = cam.screen_pan_y_px;
         params.horizon_screen_y = cam.horizon_screen_y;
@@ -674,6 +735,7 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
 
     base_view_    = make_rect_area("base_view", start_center, screen_width_, screen_height_, adjusted_start.resolution());
     current_view_ = adjusted_start;
+    display_view_ = adjusted_start;
 
     CameraParams initial_params;
     initial_params.height_px = settings_.base_height_px;
@@ -750,33 +812,14 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     }
     settings_.dynamic_renderer_depth_efficiency_min_density_ratio =
         std::clamp(settings_.dynamic_renderer_depth_efficiency_min_density_ratio, 0.0f, 1.0f);
-    if (!std::isfinite(settings_.near_light_depth_threshold) || settings_.near_light_depth_threshold < 1.0f) {
-        settings_.near_light_depth_threshold = 1.0f;
+    if (!std::isfinite(settings_.layer_depth_interval) || settings_.layer_depth_interval < 1.0f) {
+        settings_.layer_depth_interval = 1.0f;
     }
-    settings_.near_light_depth_threshold = std::min(settings_.near_light_depth_threshold, 100000.0f);
-    if (!std::isfinite(settings_.mid_light_depth_threshold) || settings_.mid_light_depth_threshold < settings_.near_light_depth_threshold) {
-        settings_.mid_light_depth_threshold = settings_.near_light_depth_threshold + 1.0f;
+    settings_.layer_depth_interval = std::min(settings_.layer_depth_interval, 100000.0f);
+    if (!std::isfinite(settings_.layer_depth_curve) || settings_.layer_depth_curve < 0.0f) {
+        settings_.layer_depth_curve = 0.0f;
     }
-    settings_.far_light_depth_threshold = std::max(settings_.mid_light_depth_threshold + 1.0f, settings_.far_light_depth_threshold);
-    if (!std::isfinite(settings_.light_fade_in_seconds) || settings_.light_fade_in_seconds < 0.0f) {
-        settings_.light_fade_in_seconds = 0.0f;
-    }
-    settings_.light_fade_in_seconds = std::min(settings_.light_fade_in_seconds, 5.0f);
-    if (!std::isfinite(settings_.light_fade_out_seconds) || settings_.light_fade_out_seconds < 0.0f) {
-        settings_.light_fade_out_seconds = 0.0f;
-    }
-    settings_.light_fade_out_seconds = std::min(settings_.light_fade_out_seconds, 5.0f);
-    if (!std::isfinite(settings_.light_min_fade_seconds) || settings_.light_min_fade_seconds < 0.0f) {
-        settings_.light_min_fade_seconds = 0.0f;
-    }
-    settings_.light_min_fade_seconds = std::min(settings_.light_min_fade_seconds, 2.0f);
-    settings_.light_fade_in_seconds = std::max(settings_.light_fade_in_seconds, settings_.light_min_fade_seconds);
-    settings_.light_fade_out_seconds = std::max(settings_.light_fade_out_seconds, settings_.light_min_fade_seconds);
-    if (!std::isfinite(settings_.light_distance_fade_start_ratio)) {
-        settings_.light_distance_fade_start_ratio = 0.8f;
-    }
-    settings_.light_distance_fade_start_ratio =
-        std::clamp(settings_.light_distance_fade_start_ratio, 0.0f, 0.999f);
+    settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
     if (!std::isfinite(settings_.blur_px) || settings_.blur_px < 0.0f) {
         settings_.blur_px = 0.0f;
     }
@@ -1263,70 +1306,89 @@ void WarpedScreenGrid::recompute_current_view() {
     runtime_pitch_deg_ = cam.pitch_degrees;
     runtime_depth_offset_px_ = static_cast<float>(cam.reference_depth);
 
-    std::vector<SDL_FPoint> ground_points;
-    ground_points.reserve(6);
-    const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
-    const float safe_h = static_cast<float>(std::max(1, screen_height_));
-    const float near_horizon_sample_y = std::clamp(
-        static_cast<float>(cam.horizon_screen_y) +
-            std::max(kMinNearHorizonSampleOffsetPx, safe_h * kNearHorizonSampleOffsetRatio),
-        virtual_bounds.top,
-        virtual_bounds.bottom);
-    const float mid_x = (virtual_bounds.left + virtual_bounds.right) * 0.5f;
-    const std::array<SDL_FPoint, 6> screen_samples{
-        SDL_FPoint{virtual_bounds.left, near_horizon_sample_y},
-        SDL_FPoint{mid_x, near_horizon_sample_y},
-        SDL_FPoint{virtual_bounds.right, near_horizon_sample_y},
-        SDL_FPoint{virtual_bounds.left, virtual_bounds.bottom},
-        SDL_FPoint{mid_x, virtual_bounds.bottom},
-        SDL_FPoint{virtual_bounds.right, virtual_bounds.bottom}
-    };
-    for (const auto& sample : screen_samples) {
-        const auto [nx, ny] = screen_to_ndc_point(
-            cam,
-            static_cast<double>(sample.x),
-            static_cast<double>(sample.y),
-            screen_width_,
-            screen_height_);
-        auto gp = project_ndc_to_ground(cam, nx, ny);
-        if (gp.has_value()) {
-            ground_points.push_back(*gp);
+    auto build_view_from_screen_bounds = [&](const ScreenBounds& screen_bounds,
+                                             float world_padding,
+                                             const char* view_name) -> Area {
+        std::vector<SDL_FPoint> ground_points;
+        ground_points.reserve(6);
+        const float safe_h = static_cast<float>(std::max(1, screen_height_));
+        const float near_horizon_sample_y = std::clamp(
+            static_cast<float>(cam.horizon_screen_y) +
+                std::max(kMinNearHorizonSampleOffsetPx, safe_h * kNearHorizonSampleOffsetRatio),
+            screen_bounds.top,
+            screen_bounds.bottom);
+        const float mid_x = (screen_bounds.left + screen_bounds.right) * 0.5f;
+        const std::array<SDL_FPoint, 6> screen_samples{
+            SDL_FPoint{screen_bounds.left, near_horizon_sample_y},
+            SDL_FPoint{mid_x, near_horizon_sample_y},
+            SDL_FPoint{screen_bounds.right, near_horizon_sample_y},
+            SDL_FPoint{screen_bounds.left, screen_bounds.bottom},
+            SDL_FPoint{mid_x, screen_bounds.bottom},
+            SDL_FPoint{screen_bounds.right, screen_bounds.bottom}
+        };
+        for (const auto& sample : screen_samples) {
+            const auto [nx, ny] = screen_to_ndc_point(
+                cam,
+                static_cast<double>(sample.x),
+                static_cast<double>(sample.y),
+                screen_width_,
+                screen_height_);
+            auto gp = project_ndc_to_ground(cam, nx, ny);
+            if (gp.has_value()) {
+                ground_points.push_back(*gp);
+            }
         }
-    }
 
-    if (ground_points.empty()) {
+        if (ground_points.empty()) {
+            SDL_Point center{
+                static_cast<int>(std::lround(cam.anchor_world_px.x)),
+                static_cast<int>(std::lround(cam.anchor_world_px.y))
+            };
+            const int view_w =
+                std::max(1, static_cast<int>(std::lround(screen_bounds.right - screen_bounds.left)));
+            const int view_h =
+                std::max(1, static_cast<int>(std::lround(screen_bounds.bottom - screen_bounds.top)));
+            return make_rect_area(view_name, center, view_w, view_h, 0);
+        }
+
+        float minx = ground_points.front().x;
+        float maxx = ground_points.front().x;
+        float miny = ground_points.front().y;
+        float maxy = ground_points.front().y;
+        for (const auto& p : ground_points) {
+            minx = std::min(minx, p.x);
+            maxx = std::max(maxx, p.x);
+            miny = std::min(miny, p.y);
+            maxy = std::max(maxy, p.y);
+        }
+
+        minx -= world_padding;
+        maxx += world_padding;
+        miny -= world_padding;
+        maxy += world_padding;
+
+        const int view_w = std::max(1, static_cast<int>(std::lround(maxx - minx)));
+        const int view_h = std::max(1, static_cast<int>(std::lround(maxy - miny)));
         SDL_Point center{
-            static_cast<int>(std::lround(cam.anchor_world_px.x)), static_cast<int>(std::lround(cam.anchor_world_px.y)) };
-        const int virtual_w = std::max(1, static_cast<int>(std::lround(virtual_bounds.right - virtual_bounds.left)));
-        const int virtual_h = std::max(1, static_cast<int>(std::lround(virtual_bounds.bottom - virtual_bounds.top)));
-        current_view_ = make_rect_area("current_view", center, virtual_w, virtual_h, 0);
-        return;
-    }
-
-    float minx = ground_points.front().x;
-    float maxx = ground_points.front().x;
-    float miny = ground_points.front().y;
-    float maxy = ground_points.front().y;
-    for (const auto& p : ground_points) {
-        minx = std::min(minx, p.x);
-        maxx = std::max(maxx, p.x);
-        miny = std::min(miny, p.y);
-        maxy = std::max(maxy, p.y);
-    }
-
-    const float world_padding = std::max(0.0f, frustum_padding_world_);
-    minx -= world_padding;
-    maxx += world_padding;
-    miny -= world_padding;
-    maxy += world_padding;
-
-    const int cur_w = std::max(1, static_cast<int>(std::lround(maxx - minx)));
-    const int cur_h = std::max(1, static_cast<int>(std::lround(maxy - miny)));
-    SDL_Point center{
-        static_cast<int>(std::lround((minx + maxx) * 0.5f)),
-        static_cast<int>(std::lround((miny + maxy) * 0.5f))
+            static_cast<int>(std::lround((minx + maxx) * 0.5f)),
+            static_cast<int>(std::lround((miny + maxy) * 0.5f))
+        };
+        return make_rect_area(view_name, center, view_w, view_h, 0);
     };
-    current_view_ = make_rect_area("current_view", center, cur_w, cur_h, 0);
+
+    const ScreenBounds strict_screen_bounds{
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, screen_width_)),
+        static_cast<float>(std::max(1, screen_height_))
+    };
+    const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
+
+    display_view_ = build_view_from_screen_bounds(strict_screen_bounds, 0.0f, "display_view");
+    current_view_ = build_view_from_screen_bounds(
+        virtual_bounds,
+        std::max(0.0f, frustum_padding_world_),
+        "current_view");
 }
 
 
@@ -1364,6 +1426,23 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
         return false;
     }
     out = proj.screen;
+    return true;
+}
+
+bool WarpedScreenGrid::sample_perspective_scale(SDL_FPoint world, float world_z, float& out_scale) const {
+    out_scale = 1.0f;
+    const CameraState& cam = camera_state_cached();
+    ProjectionResult proj = project_world_point_internal(cam,
+                                                static_cast<double>(world.x),
+        static_cast<double>(world.y),
+        static_cast<double>(world_z),
+                                                screen_width_,
+                                                screen_height_,
+                                                horizon_fade_for_height(cam.camera_height));
+    if (!proj.valid || !std::isfinite(proj.perspective_scale) || proj.perspective_scale <= 0.0f) {
+        return false;
+    }
+    out_scale = std::max(0.0001f, proj.perspective_scale);
     return true;
 }
 
@@ -1460,18 +1539,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         }
         target = std::clamp(value, min_value, max_value);
     };
-    auto read_float_present = [&](const char* key, float& target, float min_value, float max_value) -> bool {
-        auto it = data.find(key);
-        if (it == data.end() || !it->is_number()) {
-            return false;
-        }
-        const float value = it->get<float>();
-        if (!std::isfinite(value)) {
-            return false;
-        }
-        target = std::clamp(value, min_value, max_value);
-        return true;
-    };
     auto read_bool = [&](const char* key, bool& target) {
         auto it = data.find(key);
         if (it == data.end() || !it->is_boolean()) {
@@ -1497,60 +1564,21 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_float("max_cull_depth", updated.max_cull_depth, 1.0f, 1000000.0f);
     read_float("light_max_cull_depth", updated.light_max_cull_depth, 1.0f, 1000000.0f);
-    const float parsed_max_cull_depth = updated.max_cull_depth;
-    const bool has_efficiency_depth = read_float_present("dynamic_renderer_depth_efficiency_depth",
-                                                         updated.dynamic_renderer_depth_efficiency_depth,
-                                                         0.0f,
-                                                         parsed_max_cull_depth);
-    if (!has_efficiency_depth) {
-        float legacy_ratio = 0.40f;
-        if (read_float_present("dynamic_renderer_depth_efficiency_threshold", legacy_ratio, 0.0f, 1.0f)) {
-            updated.dynamic_renderer_depth_efficiency_depth =
-                std::clamp(legacy_ratio * parsed_max_cull_depth, 0.0f, parsed_max_cull_depth);
-        }
-    }
+    read_float("dynamic_renderer_depth_efficiency_depth",
+               updated.dynamic_renderer_depth_efficiency_depth,
+               0.0f,
+               updated.max_cull_depth);
     read_float("dynamic_renderer_depth_efficiency_min_density_ratio",
                updated.dynamic_renderer_depth_efficiency_min_density_ratio,
                0.0f,
                1.0f);
-    read_float("near_light_depth_threshold", updated.near_light_depth_threshold, 1.0f, 100000.0f);
-    read_float("mid_light_depth_threshold", updated.mid_light_depth_threshold, updated.near_light_depth_threshold + 1.0f, 200000.0f);
-    read_float("far_light_depth_threshold", updated.far_light_depth_threshold, updated.mid_light_depth_threshold + 1.0f, 500000.0f);
-    read_float("near_light_cap", updated.near_light_cap, 0.0f, 256.0f);
-    read_float("mid_light_cap", updated.mid_light_cap, 0.0f, 256.0f);
-    read_float("far_light_cap", updated.far_light_cap, 0.0f, 256.0f);
-    read_float("shadow_quality_budget", updated.shadow_quality_budget, 0.0f, 4.0f);
-    read_float("global_ambient", updated.global_ambient, 0.0f, 1.0f);
-    read_float("global_exposure", updated.global_exposure, 0.1f, 8.0f);
-    if (data.contains("lighting_v2_enabled")) {
-        static bool s_warned_legacy_lighting_v2_toggle = false;
-        if (!s_warned_legacy_lighting_v2_toggle) {
-            SDL_Log("[WarpedScreenGrid] Ignoring obsolete lighting_v2_enabled toggle; Lighting V2 is always active.");
-            s_warned_legacy_lighting_v2_toggle = true;
-        }
-    }
+    read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
+    read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
-    read_bool("light_fade_smoothing_enabled", updated.light_fade_smoothing_enabled);
-    read_float("light_fade_in_seconds", updated.light_fade_in_seconds, 0.0f, 5.0f);
-    read_float("light_fade_out_seconds", updated.light_fade_out_seconds, 0.0f, 5.0f);
-    read_float("light_min_fade_seconds", updated.light_min_fade_seconds, 0.0f, 2.0f);
-    read_float("light_distance_fade_start_ratio", updated.light_distance_fade_start_ratio, 0.0f, 0.999f);
-    read_bool("light_culling_debug_overlay", updated.light_culling_debug_overlay);
-    const bool has_blur_px = read_float_present("blur_px", updated.blur_px, 0.0f, 128.0f);
-    if (!has_blur_px) {
-        read_float("max_blur_px", updated.blur_px, 0.0f, 128.0f);
-    }
-    const bool has_radial_blur_px = read_float_present("radial_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
-    if (!has_radial_blur_px) {
-        read_float("radial_max_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
-    }
+    read_float("blur_px", updated.blur_px, 0.0f, 128.0f);
+    read_float("radial_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
     read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
-        static bool s_warned_legacy_light_multiplier = false;
-    if ((data.contains("front_layer_light_strength_multiplier") || data.contains("behind_layer_light_strength_multiplier")) && !s_warned_legacy_light_multiplier) {
-        SDL_Log("[WarpedScreenGrid] Ignoring obsolete light multiplier settings; using V2 lighting controls instead.");
-        s_warned_legacy_light_multiplier = true;
-    }
-set_realism_settings(updated);
+    set_realism_settings(updated);
 
     transition_settings_.transition_damping = read_transition_float(
         "transition_damping",
@@ -1622,22 +1650,9 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
         settings_.dynamic_renderer_depth_efficiency_depth;
     result["dynamic_renderer_depth_efficiency_min_density_ratio"] =
         settings_.dynamic_renderer_depth_efficiency_min_density_ratio;
-        result["near_light_depth_threshold"] = settings_.near_light_depth_threshold;
-    result["mid_light_depth_threshold"] = settings_.mid_light_depth_threshold;
-    result["far_light_depth_threshold"] = settings_.far_light_depth_threshold;
-    result["near_light_cap"] = settings_.near_light_cap;
-    result["mid_light_cap"] = settings_.mid_light_cap;
-    result["far_light_cap"] = settings_.far_light_cap;
-    result["shadow_quality_budget"] = settings_.shadow_quality_budget;
-    result["global_ambient"] = settings_.global_ambient;
-    result["global_exposure"] = settings_.global_exposure;
+    result["layer_depth_interval"] = settings_.layer_depth_interval;
+    result["layer_depth_curve"] = settings_.layer_depth_curve;
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
-    result["light_fade_smoothing_enabled"] = settings_.light_fade_smoothing_enabled;
-    result["light_fade_in_seconds"] = settings_.light_fade_in_seconds;
-    result["light_fade_out_seconds"] = settings_.light_fade_out_seconds;
-    result["light_min_fade_seconds"] = settings_.light_min_fade_seconds;
-    result["light_distance_fade_start_ratio"] = settings_.light_distance_fade_start_ratio;
-    result["light_culling_debug_overlay"] = settings_.light_culling_debug_overlay;
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;

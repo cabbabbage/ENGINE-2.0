@@ -28,10 +28,15 @@ class Assets;
 class AnimationFrame;
 class Animation;
 class AnimationUpdate;
+class AnimationRuntime;
 
 class PathSanitizer;
 class GetBestPath;
 class MovementPlanExecutor;
+
+namespace animation_runtime::test_hooks {
+void force_committed_attack_target(AnimationRuntime& runtime, std::string target_asset_id);
+}
 
 class AnimationRuntime {
 public:
@@ -80,6 +85,19 @@ public:
     bool maybe_trigger_attack_on_cycle_boundary();
 
 private:
+    struct FrameAdvanceEvent {
+        AnimationFrame* frame = nullptr;
+        std::string animation_id{};
+        std::size_t path_index = 0;
+        bool cycle_boundary_before_advance = false;
+    };
+
+    struct FrameAdvanceReport {
+        bool ok = true;
+        bool advanced_any = false;
+        std::vector<FrameAdvanceEvent> entered_frames{};
+    };
+
     int        effective_grid_resolution(std::optional<int> override_resolution) const;
     SDL_Point  convert_delta_to_world(SDL_Point delta, int resolution) const;
     world::GridPoint bottom_middle(const world::GridPoint& pos) const;
@@ -100,6 +118,7 @@ private:
 
     void       apply_pending_move();
     void       apply_pending_move_3d();
+    FrameAdvanceReport advance_with_report(AnimationFrame*& frame, int max_events = -1);
     void       clear_reverse_playback_state();
     void       activate_reverse_playback(ReversePlaybackMode mode);
     AnimationFrame* last_frame_for(const Animation& anim, std::size_t path_index) const;
@@ -112,10 +131,14 @@ private:
     Asset* resolve_asset_by_stable_id(const std::string& stable_id) const;
     bool current_animation_is_attack() const;
     void dispatch_active_attack_payload();
+    void refresh_runtime_frame_geometry();
     void clear_attack_commitment();
 
 private:
     friend class MovementPlanExecutor;
+    friend void animation_runtime::test_hooks::force_committed_attack_target(
+        AnimationRuntime& runtime,
+        std::string target_asset_id);
 
     Asset*  self_         = nullptr;
     Assets* assets_owner_ = nullptr;

@@ -32,6 +32,8 @@ struct CameraState {
     double tan_half_fov_x = 0.0;
     double near_plane = 0.0;
     double far_plane  = 0.0;
+    double min_perspective_depth = 0.0;
+    float max_perspective_scale = 1.0f;
     double horizon_screen_y = 0.0;
     double meters_scale = 1.0;
     double pitch_radians = 0.0;
@@ -79,24 +81,9 @@ public:
         float light_max_cull_depth         = 32000.0f;
         float dynamic_renderer_depth_efficiency_depth = 2000.0f;
         float dynamic_renderer_depth_efficiency_min_density_ratio = 0.10f;
-        float near_light_depth_threshold = 250.0f;
-        float mid_light_depth_threshold  = 1200.0f;
-        float far_light_depth_threshold  = 4000.0f;
-        float near_light_cap = 12.0f;
-        float mid_light_cap  = 24.0f;
-        float far_light_cap  = 32.0f;
-        float shadow_quality_budget = 1.0f;
-        float global_ambient = 0.08f;
-        float global_exposure = 1.0f;
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
         bool light_radius_overlap_culling_enabled = true;
-        bool light_fade_smoothing_enabled = true;
-        float light_fade_in_seconds = 0.16f;
-        float light_fade_out_seconds = 0.28f;
-        float light_min_fade_seconds = 0.06f;
-        float light_distance_fade_start_ratio = 0.8f;
-        bool light_culling_debug_overlay = false;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;
         bool depth_of_field_enabled         = false;
@@ -205,6 +192,7 @@ public:
     // world.y הוא גובה (Y).
     // world_z נושא עומק (Z) ביחס לעוגן המצלמה.
     bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
+    bool sample_perspective_scale(SDL_FPoint world, float world_z, float& out_scale) const;
     bool build_camera_ray_from_screen(const SDL_FPoint& screen_point,
                                       render_projection::CameraRay& out_ray) const;
     bool screen_to_world_on_depth_plane(const SDL_FPoint& screen_point,
@@ -259,6 +247,7 @@ public:
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
+    const Area& get_display_area() const { return display_view_; }
     world::CameraProjectionParams projection_params() const;
 
     bool is_manual_height_override() const;
@@ -358,6 +347,7 @@ private:
 
     Area base_view_;
     Area current_view_;
+    Area display_view_;
 
     Room* starting_room_ = nullptr;
     double starting_area_ = 0.0;

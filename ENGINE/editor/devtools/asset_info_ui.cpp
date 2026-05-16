@@ -50,7 +50,6 @@
 #include "core/AssetsManager.hpp"
 #include "assets/asset/Asset.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/render.hpp"
 #include "search_assets.hpp"
 #include "draw_utils.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
@@ -119,11 +118,11 @@ class Section_BasicInfo : public DockableCollapsible {
 
     std::unique_ptr<DMDropdown>  dd_type_;
     std::unique_ptr<DMSlider>    s_scale_pct_;
-    std::unique_ptr<DMSlider>    s_size_variation_pct_;
-    std::unique_ptr<DMRangeSlider> rs_tilt_range_deg_;
+    std::unique_ptr<DMWeightedRangeWidget> wr_size_variation_;
+    std::unique_ptr<DMWeightedRangeWidget> wr_tilt_range_;
     std::unique_ptr<DMSlider>    s_weight_kg_;
     std::unique_ptr<DMSlider>    s_bounce_amount_;
-    std::unique_ptr<DMRangeSlider> rs_y_pos_range_;
+    std::unique_ptr<DMWeightedRangeWidget> wr_y_pos_range_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
@@ -132,7 +131,9 @@ class Section_BasicInfo : public DockableCollapsible {
     std::vector<std::string> type_options_;
     AssetInfoUI* ui_ = nullptr;
     void on_scale_slider_value_changed(int new_value);
-    void on_size_variation_slider_value_changed(int new_value);
+    void on_size_variation_range_changed(const vibble::weighted_range::WeightedIntRange& range);
+    void on_tilt_range_changed(const vibble::weighted_range::WeightedIntRange& range);
+    void on_y_position_range_changed(const vibble::weighted_range::WeightedIntRange& range);
 
   protected:
     std::string_view lock_settings_namespace() const override { return "asset_info"; }
@@ -181,9 +182,10 @@ inline void Section_BasicInfo::build() {
     int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
     s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
-    int size_variation_pct = std::clamp(static_cast<int>(std::lround(info_->size_variation_percent)), 0, 20);
-    s_size_variation_pct_ = std::make_unique<DMSlider>("Size Variation (%)", 0, 20, size_variation_pct);
-    s_size_variation_pct_->set_on_value_changed([this](int value) { this->on_size_variation_slider_value_changed(value); });
+    wr_size_variation_ = std::make_unique<DMWeightedRangeWidget>("Size Variation (%)", info_->size_variation_range, 0, 20, false);
+    wr_size_variation_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
+        this->on_size_variation_range_changed(range);
+    });
     int weight_val = std::max(0, static_cast<int>(std::lround(info_->weight_kg)));
     s_weight_kg_ = std::make_unique<DMSlider>("Weight (kg)", 0, 10000, weight_val);
     const int bounce_value = std::clamp(info_->bounce_amount, 0, 100);
@@ -203,27 +205,23 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_scale.get() });
     widgets_.push_back(std::move(w_scale));
 
-    auto w_size_variation = std::make_unique<SliderWidget>(s_size_variation_pct_.get());
+    auto w_size_variation = std::make_unique<WeightedRangeWidget>(wr_size_variation_.get());
     rows.push_back({ w_size_variation.get() });
     widgets_.push_back(std::move(w_size_variation));
 
-    int tilt_min = std::clamp(info_->tilt_range_min_deg, -180, 180);
-    int tilt_max = std::clamp(info_->tilt_range_max_deg, -180, 180);
-    if (tilt_max < tilt_min) {
-        std::swap(tilt_min, tilt_max);
-    }
-    rs_tilt_range_deg_ = std::make_unique<DMRangeSlider>(-180, 180, tilt_min, tilt_max);
-    auto w_tilt = std::make_unique<RangeSliderWidget>(rs_tilt_range_deg_.get());
+    wr_tilt_range_ = std::make_unique<DMWeightedRangeWidget>("Tilt Variation (deg)", info_->tilt_range, -180, 180, true);
+    wr_tilt_range_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
+        this->on_tilt_range_changed(range);
+    });
+    auto w_tilt = std::make_unique<WeightedRangeWidget>(wr_tilt_range_.get());
     rows.push_back({ w_tilt.get() });
     widgets_.push_back(std::move(w_tilt));
 
-    int y_min = std::clamp(info_->y_pos_min, -50, 200);
-    int y_max = std::clamp(info_->y_pos_max, -50, 200);
-    if (y_max < y_min) {
-        std::swap(y_min, y_max);
-    }
-    rs_y_pos_range_ = std::make_unique<DMRangeSlider>(-50, 200, y_min, y_max);
-    auto w_y_pos = std::make_unique<RangeSliderWidget>(rs_y_pos_range_.get());
+    wr_y_pos_range_ = std::make_unique<DMWeightedRangeWidget>("Y Position", info_->y_position_range, -50, 200, false);
+    wr_y_pos_range_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
+        this->on_y_position_range_changed(range);
+    });
+    auto w_y_pos = std::make_unique<WeightedRangeWidget>(wr_y_pos_range_.get());
     rows.push_back({ w_y_pos.get() });
     widgets_.push_back(std::move(w_y_pos));
 
@@ -269,9 +267,9 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (!used) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
-        if (s_size_variation_pct_ && s_size_variation_pct_->handle_event(e)) used = true;
-        if (rs_tilt_range_deg_ && rs_tilt_range_deg_->handle_event(e)) used = true;
-        if (rs_y_pos_range_ && rs_y_pos_range_->handle_event(e)) used = true;
+        if (wr_size_variation_ && wr_size_variation_->handle_event(e)) used = true;
+        if (wr_tilt_range_ && wr_tilt_range_->handle_event(e)) used = true;
+        if (wr_y_pos_range_ && wr_y_pos_range_->handle_event(e)) used = true;
         if (s_weight_kg_ && s_weight_kg_->handle_event(e)) used = true;
         if (s_bounce_amount_ && s_bounce_amount_->handle_event(e)) used = true;
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
@@ -319,24 +317,6 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (s_bounce_amount_ && info_->bounce_amount != s_bounce_amount_->value()) {
         info_->set_bounce_amount(s_bounce_amount_->value());
         changed = true;
-    }
-    if (rs_tilt_range_deg_) {
-        const int slider_min = rs_tilt_range_deg_->min_value();
-        const int slider_max = rs_tilt_range_deg_->max_value();
-        if (info_->tilt_range_min_deg != slider_min || info_->tilt_range_max_deg != slider_max) {
-            info_->set_tilt_range_degrees(slider_min, slider_max);
-            changed = true;
-            render_settings_changed = true;
-        }
-    }
-    if (rs_y_pos_range_) {
-        const int slider_min = rs_y_pos_range_->min_value();
-        const int slider_max = rs_y_pos_range_->max_value();
-        if (info_->y_pos_min != slider_min || info_->y_pos_max != slider_max) {
-            info_->set_y_position_range(slider_min, slider_max);
-            changed = true;
-            render_settings_changed = true;
-        }
     }
     if (c_flipable_ && info_->flipable != c_flipable_->value()) {
         info_->set_flipable(c_flipable_->value());
@@ -459,9 +439,9 @@ inline void Section_BasicInfo::on_scale_slider_value_changed(int new_value) {
     }
 }
 
-inline void Section_BasicInfo::on_size_variation_slider_value_changed(int new_value) {
+inline void Section_BasicInfo::on_size_variation_range_changed(const vibble::weighted_range::WeightedIntRange& range) {
     if (!info_) return;
-    info_->set_size_variation_percentage(static_cast<float>(new_value));
+    info_->set_size_variation_range(range);
     if (ui_) {
         ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
                                    "Size variation",
@@ -470,6 +450,26 @@ inline void Section_BasicInfo::on_size_variation_slider_value_changed(int new_va
                                            ui_->refresh_target_asset_scale();
                                        }
                                    });
+    }
+}
+
+inline void Section_BasicInfo::on_tilt_range_changed(const vibble::weighted_range::WeightedIntRange& range) {
+    if (!info_) return;
+    info_->set_tilt_range(range);
+    if (ui_) {
+        ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                   "Tilt variation",
+                                   []() {});
+    }
+}
+
+inline void Section_BasicInfo::on_y_position_range_changed(const vibble::weighted_range::WeightedIntRange& range) {
+    if (!info_) return;
+    info_->set_y_position_range(range);
+    if (ui_) {
+        ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                   "Y position variation",
+                                   []() {});
     }
 }
 
@@ -789,6 +789,10 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
                 target.erase("size_settings");
                 changed = true;
             }
+            changed |= copy_key("tilt_range");
+            changed |= copy_key("y_position_range");
+            changed |= copy_key("weight_kg");
+            changed |= copy_key("bounce_amount");
             changed |= copy_key("starting_health");
             changed |= copy_key("can_invert");
 
@@ -817,6 +821,7 @@ AssetInfoUI::AssetInfoUI() {
         animation_editor_window_ = std::make_unique<animation_editor::AnimationEditorWindow>();
         if (animation_editor_window_) {
             animation_editor_window_->set_manifest_store(manifest_store_);
+            animation_editor_window_->set_parent_window(parent_window_);
             animation_editor_window_->set_on_document_saved([this]() { this->on_animation_document_saved(); });
             animation_editor_window_->set_on_closed([this]() {
                 if (!animation_editor_fullscreen_mode_) {
@@ -1020,6 +1025,13 @@ void AssetInfoUI::set_assets(Assets* a) {
         apply_camera_override(true);
     }
     validate_target_asset();
+}
+
+void AssetInfoUI::set_parent_window(SDL_Window* window) {
+    parent_window_ = window;
+    if (animation_editor_window_) {
+        animation_editor_window_->set_parent_window(parent_window_);
+    }
 }
 
 void AssetInfoUI::set_manifest_store(devmode::core::ManifestStore* store) {
@@ -1342,13 +1354,6 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (auto* active_dd = DMDropdown::active_dropdown()) {
-        if (active_dd->handle_event(e)) {
-            return true;
-        }
-    }
-
-
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
@@ -1356,6 +1361,26 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
     if (pointer_event) {
         pointer.x = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.x : e.button.x;
         pointer.y = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.y : e.button.y;
+    }
+
+    if (visible_ && animation_editor_window_ && animation_editor_window_->is_visible() &&
+        (pointer_event || wheel_event)) {
+        SDL_Point p = pointer;
+        if (wheel_event) {
+            sdl_mouse_util::GetMouseState(&p.x, &p.y);
+        }
+        if (animation_editor_rect_.w > 0 &&
+            animation_editor_rect_.h > 0 &&
+            SDL_PointInRect(&p, &animation_editor_rect_)) {
+            (void)animation_editor_window_->handle_event(e);
+            return true;
+        }
+    }
+
+    if (auto* active_dd = DMDropdown::active_dropdown()) {
+        if (active_dd->handle_event(e)) {
+            return true;
+        }
     }
 
     if (asset_selector_ && asset_selector_->visible()) {
@@ -1447,6 +1472,17 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         if (animation_editor_window_->handle_event(e)) {
             return true;
+        }
+        if (pointer_event || wheel_event) {
+            SDL_Point p = pointer;
+            if (wheel_event) {
+                sdl_mouse_util::GetMouseState(&p.x, &p.y);
+            }
+            if (animation_editor_rect_.w > 0 &&
+                animation_editor_rect_.h > 0 &&
+                SDL_PointInRect(&p, &animation_editor_rect_)) {
+                return true;
+            }
         }
     }
 

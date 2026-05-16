@@ -13,6 +13,38 @@
 #include <string>
 #include <vector>
 
+struct TrailGenerationCounters {
+    int total_connections = 0;
+    int successful_connections = 0;
+    int failed_connections = 0;
+    int total_asset_attempts = 0;
+    int total_layout_attempts = 0;
+    int total_straight_attempts = 0;
+    int total_curved_attempts = 0;
+    int total_room_rejections = 0;
+    int total_trail_rejections = 0;
+    int total_section_failures = 0;
+    int total_polygon_failures = 0;
+    int total_sector_contact_failures = 0;
+    int total_sector_boundary_failures = 0;
+    int total_route_budget_failures = 0;
+    int total_rooms_considered = 0;
+};
+
+struct TrailConnectionFailure {
+    Room* a = nullptr;
+    Room* b = nullptr;
+    std::string reason;
+};
+
+struct TrailGenerationResult {
+    std::vector<std::unique_ptr<Room>> trail_rooms;
+    std::vector<TrailConnectionFailure> required_failures;
+    std::vector<TrailConnectionFailure> optional_skips;
+    bool all_required_connected = false;
+    TrailGenerationCounters counters;
+};
+
 namespace devmode::core {
 class ManifestStore;
 }
@@ -27,7 +59,7 @@ public:
 
     void set_all_rooms_reference(const std::vector<Room*>& rooms);
 
-    std::vector<std::unique_ptr<Room>> generate_trails(
+    TrailGenerationResult generate_trails(
         const std::vector<std::pair<Room*, Room*>>& room_pairs,
         const std::string& manifest_context,
         AssetLibrary* asset_lib,
@@ -118,5 +150,8 @@ bool build_route_polyline_for_tests(const SDL_Point& start_gate,
                                     const std::vector<std::vector<SDL_Point>>& blocking_room_polygons,
                                     int clearance_px,
                                     std::vector<SDL_Point>* out_points);
+
+bool polygon_is_clean_for_tests(const std::vector<SDL_Point>& polygon,
+                                const std::vector<Area>& existing_trails);
 } // namespace trail_generation::debug
 #endif

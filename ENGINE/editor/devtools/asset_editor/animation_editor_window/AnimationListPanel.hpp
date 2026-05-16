@@ -32,6 +32,7 @@ class AnimationListPanel {
     void update();
     void render(SDL_Renderer* renderer) const;
     bool handle_event(const SDL_Event& e);
+    const std::optional<std::string>& debug_selected_animation_id() const { return selected_animation_id_; }
 
   private:
     void rebuild_rows();

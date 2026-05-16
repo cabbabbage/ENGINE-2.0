@@ -1647,13 +1647,11 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         manifest_entry["min_same_type_distance"] = 0;
         manifest_entry["min_distance_all"] = 0;
         manifest_entry["can_invert"] = false;
-    manifest_entry["tilt_range_min_deg"] = 0;
-    manifest_entry["tilt_range_max_deg"] = 0;
-    manifest_entry["y_pos_min"] = 0;
-    manifest_entry["y_pos_max"] = 0;
+        manifest_entry["tilt_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
+        manifest_entry["y_position_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
         manifest_entry["size_settings"] = {
             {"scale_percentage", 100.0},
-            {"size_variation", 0.0}
+            {"size_variation", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))}
 };
 
         session.data() = manifest_entry;

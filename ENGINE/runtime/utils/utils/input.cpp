@@ -28,6 +28,8 @@ void Input::handleEvent(const SDL_Event& e) {
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP: {
+        x_ = static_cast<int>(std::lround(e.button.x));
+        y_ = static_cast<int>(std::lround(e.button.y));
         bool down = (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
         Button button = to_button(e.button.button);
         if (button != COUNT) {
@@ -44,6 +46,8 @@ void Input::handleEvent(const SDL_Event& e) {
 
     case SDL_EVENT_MOUSE_WHEEL:
         {
+            x_ = static_cast<int>(std::lround(e.wheel.mouse_x));
+            y_ = static_cast<int>(std::lround(e.wheel.mouse_y));
             int wheel_x = e.wheel.integer_x;
             int wheel_y = e.wheel.integer_y;
             if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {

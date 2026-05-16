@@ -47,7 +47,7 @@ TEST_CASE("PlaybackSettingsPanel keeps inherit/invert state for animation-source
 
     CHECK((*payload)["reverse_source"] == false);
     CHECK((*payload)["inherit_data"] == true);
-    CHECK((*payload)["invert_frames_vertical"] == false);
+    CHECK((*payload)["invert_frames_vertical"] == true);
     CHECK((*payload)["invert_x"] == true);
     CHECK((*payload)["invert_y"] == true);
     CHECK((*payload)["invert_z"] == true);

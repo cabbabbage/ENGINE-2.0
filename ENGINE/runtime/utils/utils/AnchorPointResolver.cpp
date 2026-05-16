@@ -568,22 +568,16 @@ bool sample_perspective_scale_at_point(const WarpedScreenGrid& cam,
         return false;
     }
 
-    const SDL_Point sample_world{
-        static_cast<int>(std::lround(world_point.x)),
-        static_cast<int>(std::lround(world_point.y)),
-    };
-    const int sample_world_z = static_cast<int>(std::lround(world_point.z));
-    const WarpedScreenGrid::RenderEffects effects =
-        cam.compute_render_effects(sample_world,
-                                   0.0f,
-                                   0.0f,
-                                   WarpedScreenGrid::RenderSmoothingKey{},
-                                   sample_world_z);
-    if (!std::isfinite(effects.distance_scale) || effects.distance_scale <= 0.0f) {
+    float sampled_scale = 1.0f;
+    if (!cam.sample_perspective_scale(SDL_FPoint{world_point.x, world_point.y},
+                                      world_point.z,
+                                      sampled_scale) ||
+        !std::isfinite(sampled_scale) ||
+        sampled_scale <= 0.0f) {
         return false;
     }
 
-    out_scale = std::max(0.0001f, effects.distance_scale);
+    out_scale = std::max(0.0001f, sampled_scale);
     return true;
 }
 

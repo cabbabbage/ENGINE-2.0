@@ -88,7 +88,8 @@ RuntimeBootstrapResult prepare_runtime_bootstrap(RuntimeBootstrapRequest request
 std::unique_ptr<Assets> create_assets_from_bootstrap(RuntimeBootstrapResult& bootstrap,
                                                      int screen_w,
                                                      int screen_h,
-                                                     SDL_Renderer* renderer) {
+                                                     SDL_Renderer* renderer,
+                                                     SDL_Window* window) {
     if (!bootstrap.loader) {
         throw std::runtime_error("Loader unavailable while creating assets.");
     }
@@ -105,6 +106,7 @@ std::unique_ptr<Assets> create_assets_from_bootstrap(RuntimeBootstrapResult& boo
                                     bootstrap.start_pz,
                                     bootstrap.camera_map_radius,
                                     renderer,
+                                    window,
                                     bootstrap.loader->map_identifier(),
                                     bootstrap.loader->map_manifest(),
                                     bootstrap.loader->content_root(),

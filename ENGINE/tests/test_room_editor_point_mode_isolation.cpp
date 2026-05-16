@@ -1,20 +1,31 @@
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/animation.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "core/AssetsManager.hpp"
+#include "core/runtime_world_context.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_payload_utils.hpp"
 #include "devtools/room_box_tools_panel.hpp"
+#include "devtools/dev_controls.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/room_floor_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
+#include "gameplay/map_generation/room.hpp"
+#include "gameplay/world/world_grid.hpp"
 #include "room_editor_payload_contract_test_helper.hpp"
+#include "utils/area.hpp"
+#include "utils/map_grid_settings.hpp"
+#include "utils/oval_anchor_math.hpp"
 
 namespace {
 
@@ -47,6 +58,104 @@ AssetInfo::OvalAnchorMapping make_basic_oval_mapping(const std::string& asset_na
     return mapping;
 }
 
+std::unique_ptr<Asset> make_boundary_proxy_test_asset(const std::string& asset_name,
+                                                      const std::string& spawn_id,
+                                                      int world_x,
+                                                      int world_z) {
+    auto info = std::make_shared<AssetInfo>(asset_name);
+    info->type = "object";
+    info->original_canvas_width = 64;
+    info->original_canvas_height = 64;
+    Area spawn_area("boundary_proxy_test_area", 0);
+    return std::make_unique<Asset>(info,
+                                   spawn_area,
+                                   SDL_Point{world_x, world_z},
+                                   0,
+                                   spawn_id,
+                                   std::string{},
+                                   0);
+}
+
+std::unique_ptr<Room> make_nav_test_room(const std::string& name) {
+    std::vector<SDL_Point> points{
+        SDL_Point{0, 0},
+        SDL_Point{100, 0},
+        SDL_Point{100, 100},
+        SDL_Point{0, 100},
+    };
+    Area area(name, points, 0);
+    nlohmann::json data = nlohmann::json::object({
+        {"name", name},
+        {"geometry", "Square"},
+        {"width", 100},
+        {"height", 100},
+        {"spawn_groups", nlohmann::json::array()},
+    });
+    auto room = std::make_unique<Room>(
+        Room::Point{0, 0},
+        "room",
+        name,
+        nullptr,
+        "test_map",
+        nullptr,
+        &area,
+        nullptr,
+        MapGridSettings::defaults(),
+        1000.0,
+        "rooms_data",
+        nullptr,
+        nullptr,
+        std::string{},
+        Room::ManifestWriter{},
+        false);
+    room->assets_data() = std::move(data);
+    return room;
+}
+
+struct BoundaryProxyFixture {
+    explicit BoundaryProxyFixture(const std::string& spawn_id)
+        : library(false),
+          world_context(std::make_shared<RuntimeWorldContext>()) {
+        nlohmann::json map_info = nlohmann::json::object({
+            {"map_boundary_data",
+             nlohmann::json::object({
+                 {"spawn_groups",
+                  nlohmann::json::array({
+                      nlohmann::json::object({
+                          {"spawn_id", spawn_id},
+                          {"display_name", "Boundary Spawn"}
+                      })
+                  })}
+             })}
+        });
+        boundary_asset = grid.create_asset_at_point(make_boundary_proxy_test_asset("boundary_proxy_asset",
+                                                                                    spawn_id,
+                                                                                    0,
+                                                                                    80));
+        REQUIRE(boundary_asset != nullptr);
+        boundary_asset->finalize_setup();
+        assets = std::make_unique<Assets>(library,
+                                          nullptr,
+                                          world_context,
+                                          1280,
+                                          720,
+                                          0,
+                                          0,
+                                          0,
+                                          nullptr,
+                                          nullptr,
+                                          "boundary_proxy_test",
+                                          map_info,
+                                          std::string{},
+                                          std::move(grid));
+    }
+
+    AssetLibrary library;
+    std::shared_ptr<RuntimeWorldContext> world_context;
+    world::WorldGrid grid;
+    Asset* boundary_asset = nullptr;
+    std::unique_ptr<Assets> assets;
+};
 void check_unchanged_key_bytes(const nlohmann::json& before,
                                const nlohmann::json& after,
                                const std::vector<std::string>& changed_keys) {
@@ -258,6 +367,36 @@ TEST_CASE("RoomEditor candidate source validation blocks cross-domain contexts")
         editor, RoomEditorTestAccess::candidate_source_anchor_light()));
 }
 
+TEST_CASE("RoomEditor room nav selection updates current room and visible room config") {
+    auto spawn_room = make_nav_test_room("spawn_room");
+    auto clicked_room = make_nav_test_room("clicked_room");
+
+    RoomEditor editor(nullptr, 1280, 720);
+    editor.set_current_room(spawn_room.get());
+    editor.open_room_config();
+    REQUIRE(RoomEditorTestAccess::current_room(editor) == spawn_room.get());
+    CHECK(RoomEditorTestAccess::room_config_header_text(editor) == "Room: spawn_room");
+
+    CHECK(RoomEditorTestAccess::select_current_room_from_nav(editor, clicked_room.get()));
+
+    CHECK(RoomEditorTestAccess::current_room(editor) == clicked_room.get());
+    CHECK(RoomEditorTestAccess::room_config_header_text(editor) == "Room: clicked_room");
+}
+
+TEST_CASE("DevControls preserves dev-selected room when runtime sync reports player room") {
+    auto player_room = make_nav_test_room("baseball");
+    auto clicked_room = make_nav_test_room("clicked_room");
+
+    DevControls controls(nullptr, 1280, 720);
+    controls.set_current_room(player_room.get(), true);
+    controls.set_enabled(true);
+
+    controls.set_current_room(clicked_room.get(), true);
+    controls.set_current_room(player_room.get(), false);
+
+    CHECK(controls.resolve_current_room(player_room.get()) == clicked_room.get());
+}
+
 TEST_CASE("RoomEditor oval candidate source requires explicit center or point selection") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_oval());
@@ -279,6 +418,63 @@ TEST_CASE("RoomEditor oval candidate source requires explicit center or point se
         editor, RoomEditorTestAccess::candidate_source_oval_point()));
     CHECK_FALSE(RoomEditorTestAccess::validate_anchor_candidate_source(
         editor, RoomEditorTestAccess::candidate_source_oval_center()));
+}
+
+TEST_CASE("RoomEditor oval lock target selected point compensates radius offset without requiring selected binding") {
+    RoomEditor editor(nullptr, 1280, 720);
+
+    auto info = std::make_shared<AssetInfo>("oval_owner");
+    info->oval_anchor_mappings.clear();
+
+    AssetInfo::OvalAnchorMapping mapping{};
+    mapping.name = "eyes";
+    mapping.asset_name = "oval_owner";
+    mapping.width_radius_x = 40.0f;
+    mapping.height_radius_z = 20.0f;
+    mapping.radius_offset_degrees = 30.0f;
+    AssetInfo::OvalAnchorPoint point{};
+    point.angle_degrees = 90.0f;
+    point.texture_x = 0;
+    point.texture_y = 0;
+    point.depth_offset = 0.0f;
+    point.rotation_degrees = 0.0f;
+    point.hidden = false;
+    point.resolve_x = true;
+    point.scaling_method = AnchorScalingMethod::Parent;
+    mapping.points.push_back(point);
+    REQUIRE(info->upsert_oval_anchor_mapping(mapping));
+
+    Area spawn_area("oval_lock_target_area", 0);
+    Asset asset(info, spawn_area, SDL_Point{0, 0}, 0);
+    RoomEditorTestAccess::configure_oval_lock_target_for_tests(
+        editor,
+        &asset,
+        0,
+        0,
+        100.0f,
+        0.0f,
+        200.0f);
+
+    float target_world_x = 0.0f;
+    float target_world_z = 0.0f;
+    float heading_radians = 0.0f;
+    REQUIRE(RoomEditorTestAccess::resolve_oval_lock_target_for_tests(
+        editor,
+        target_world_x,
+        target_world_z,
+        heading_radians));
+
+    int expected_offset_x = 0;
+    int expected_offset_z = 0;
+    oval_anchor_math::compute_xz_offsets_from_angle(60.0f,
+                                                    mapping.width_radius_x,
+                                                    mapping.height_radius_z,
+                                                    expected_offset_x,
+                                                    expected_offset_z);
+    CHECK(target_world_x == doctest::Approx(100.0f + static_cast<float>(expected_offset_x)));
+    CHECK(target_world_z == doctest::Approx(200.0f + static_cast<float>(expected_offset_z)));
+    CHECK(heading_radians == doctest::Approx(std::atan2(static_cast<float>(expected_offset_z),
+                                                        static_cast<float>(expected_offset_x))));
 }
 
 TEST_CASE("RoomEditor delete confirmation cancel path produces zero mutation") {
@@ -760,6 +956,18 @@ TEST_CASE("RoomEditor ownership classification keeps room and boundary domains i
           static_cast<int>(devmode::room_selection_filter::SpawnOwnership::Other));
 }
 
+TEST_CASE("RoomEditor boundary spawn groups are recognized even when assets are not typed boundary") {
+    constexpr const char* kBoundarySpawnId = "boundary_spawn";
+    BoundaryProxyFixture fixture(kBoundarySpawnId);
+    REQUIRE(fixture.boundary_asset != nullptr);
+
+    RoomEditor editor(fixture.assets.get(), 1280, 720);
+
+    CHECK(RoomEditorTestAccess::spawn_group_is_boundary(editor, kBoundarySpawnId));
+    CHECK(RoomEditorTestAccess::classify_spawn_group_ownership(editor, kBoundarySpawnId) ==
+          static_cast<int>(devmode::room_selection_filter::SpawnOwnership::MapBoundary));
+}
+
 TEST_CASE("RoomEditor spawn membership gating allows boundary ownership without room containment checks") {
     RoomEditor editor(nullptr, 1280, 720);
     RoomEditorTestAccess::set_spawn_id_ownership_cache(editor, {"room_spawn"}, {"boundary_spawn"});
@@ -837,5 +1045,43 @@ TEST_CASE("RoomEditor mode-switch domain checks prevent leakage between hitbox a
     RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_attack_box());
     CHECK(RoomEditorTestAccess::mode_owns_attack_domain(editor, RoomEditorTestAccess::mode_attack_box()));
     CHECK_FALSE(RoomEditorTestAccess::mode_owns_hitbox_domain(editor, RoomEditorTestAccess::mode_attack_box()));
+}
+
+TEST_CASE("RoomEditor screen-target solver clamps out-of-bounds seeds to texture limits") {
+    int solved_x = -1;
+    int solved_y = -1;
+    const bool ok = RoomEditorTestAccess::solve_texture_point_for_screen_target_for_tests(
+        5000,
+        -100,
+        SDL_FPoint{5.0f, 8.0f},
+        15,
+        15,
+        false,
+        solved_x,
+        solved_y);
+    REQUIRE(ok);
+    CHECK(solved_x >= 0);
+    CHECK(solved_x <= 15);
+    CHECK(solved_y >= 0);
+    CHECK(solved_y <= 15);
+}
+
+TEST_CASE("RoomEditor screen-target solver recovers when jacobian is singular") {
+    int solved_x = -1;
+    int solved_y = -1;
+    const bool ok = RoomEditorTestAccess::solve_texture_point_for_screen_target_for_tests(
+        9,
+        9,
+        SDL_FPoint{2.0f, 3.0f},
+        10,
+        10,
+        true,
+        solved_x,
+        solved_y);
+    REQUIRE(ok);
+    CHECK(solved_x >= 0);
+    CHECK(solved_x <= 10);
+    CHECK(solved_y >= 0);
+    CHECK(solved_y <= 10);
 }
 #endif

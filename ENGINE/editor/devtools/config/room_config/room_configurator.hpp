@@ -22,6 +22,7 @@ class Assets;
 class TagEditorWidget;
 class DropdownWidget;
 class SliderWidget;
+class WeightedRangeWidget;
 class RangeSliderWidget;
 class CheckboxWidget;
 class TextBoxWidget;
@@ -29,6 +30,7 @@ class DockableCollapsible;
 class DMSlider;
 class DMCheckbox;
 class DMTextBox;
+class DMWeightedRangeWidget;
 class DMRangeSlider;
 class DMDropdown;
 class DMButton;
@@ -62,6 +64,7 @@ public:
 
     void open(const nlohmann::json& room_data);
     void open(nlohmann::json& room_data, std::function<void()> on_change = {});
+    void open(nlohmann::json& room_data, bool is_trail_context, std::function<void()> on_change = {});
     void open(Room* room);
 
     void set_manifest_store(class devmode::core::ManifestStore* store);
@@ -185,16 +188,16 @@ private:
     std::unique_ptr<TextBoxWidget> name_widget_;
     std::unique_ptr<DMDropdown> geometry_dropdown_;
     std::unique_ptr<DropdownWidget> geometry_widget_;
-    std::unique_ptr<DMRangeSlider> width_range_slider_;
-    std::unique_ptr<RangeSliderWidget> width_range_widget_;
-    std::unique_ptr<DMRangeSlider> height_range_slider_;
-    std::unique_ptr<RangeSliderWidget> height_range_widget_;
+    std::unique_ptr<DMWeightedRangeWidget> width_range_widget_;
+    std::unique_ptr<WeightedRangeWidget> width_range_control_;
+    std::unique_ptr<DMWeightedRangeWidget> height_range_widget_;
+    std::unique_ptr<WeightedRangeWidget> height_range_control_;
     int width_slider_max_range_ = 0;
     int height_slider_max_range_ = 0;
     std::unique_ptr<DMSlider> edge_slider_;
     std::unique_ptr<SliderWidget> edge_widget_;
-    std::unique_ptr<DMSlider> curvy_slider_;
-    std::unique_ptr<SliderWidget> curvy_widget_;
+    std::unique_ptr<DMWeightedRangeWidget> curvy_range_widget_;
+    std::unique_ptr<WeightedRangeWidget> curvy_widget_;
     std::unique_ptr<Widget> trail_connection_sector_widget_;
     std::unique_ptr<DMNumericStepper> sector_direction_stepper_;
     std::unique_ptr<StepperWidget> sector_direction_widget_;

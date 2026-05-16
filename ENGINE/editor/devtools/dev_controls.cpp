@@ -52,7 +52,6 @@
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
 #include "widgets.hpp"
-#include "rendering/render/render.hpp"
 #include "rendering/render/layer_depth_bins.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
@@ -181,16 +180,8 @@ private:
 constexpr const char* kModeIdRoom = "room";
 constexpr int kPopupOutlineThickness = 1;
 
-int layer_spacing(int layer) {
-    if (layer <= 0) return 1;
-    int result = 1;
-    for (int i = 0; i < layer; ++i) {
-        if (result > std::numeric_limits<int>::max() / 3) {
-            return std::numeric_limits<int>::max();
-        }
-        result *= 3;
-    }
-    return result;
+int grid_world_spacing_for_resolution(int resolution) {
+    return std::max(1, vibble::grid::delta(resolution));
 }
 
 constexpr const char* kGridOverlayEnabledKey = "dev.grid.overlay.enabled";
@@ -905,11 +896,12 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     } else {
         grid_overlay_resolution_r_ = 0;
     }
-    grid_cell_size_px_ = layer_spacing(grid_overlay_resolution_r_);
+    grid_cell_size_px_ = grid_world_spacing_for_resolution(grid_overlay_resolution_r_);
     movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
     anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
+        room_editor_->set_parent_window(parent_window_);
         room_editor_->set_manifest_store(&manifest_store_);
         room_editor_->set_save_coordinator(&save_coordinator_);
         room_editor_->set_save_manager(&save_manager_);
@@ -982,8 +974,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                         std::cerr << "[DevControls] Cannot batch-save map: id empty\n";
                         return false;
                     }
-                    std::cerr << "[DevControls] Serializing rooms (spawn groups included) into map payload for '"
-                              << map_id << "'\n";
                     nlohmann::json payload = assets_->map_info_json();
                     bool ok = save_manager_.persist_map_entry(
                         map_id, std::move(payload), priority, "Map session",
@@ -1039,7 +1029,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             devmode::core::SaveManager::Stage::Cache});
     }
     map_grid_regen_cb_ = [this]() {
-        // Boundary regeneration is no longer driven through SceneRenderer hooks.
+        // Boundary regeneration is no longer driven through renderer hooks.
     };
     map_grid_save_cb_ = [this]() {
         this->mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -1130,6 +1120,13 @@ DevControls::~DevControls() {
     devmode::ui_settings::flush_if_dirty();
     AssetInfo::set_manifest_store_provider({});
     simple_label_cache().clear();
+}
+
+void DevControls::set_parent_window(SDL_Window* window) {
+    parent_window_ = window;
+    if (room_editor_) {
+        room_editor_->set_parent_window(parent_window_);
+    }
 }
 
 devmode::core::ManifestStore& DevControls::manifest_store() {
@@ -1427,15 +1424,6 @@ void DevControls::rebuild_settings_schema() {
 void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
     grid_overlay_enabled_ = enabled;
     persist_dev_bool(kGridOverlayEnabledKey, enabled);
-    if (!enabled) {
-        snap_to_grid_enabled_ = false;
-        persist_dev_bool(kGridSnapEnabledKey, false);
-        other_settings_.set_setting_value(OtherSettingsAndControls::kSnapToGridSettingId, false);
-        if (room_editor_) {
-            room_editor_->set_snap_to_grid_enabled(false);
-            room_editor_->refresh_cursor_snap();
-        }
-    }
     if (update_footer && map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
             footer->set_grid_overlay_enabled(enabled, false);
@@ -1475,7 +1463,7 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
     (void)update_stepper;
     const int clamped = vibble::grid::clamp_resolution(resolution);
     grid_overlay_resolution_r_ = clamped;
-    grid_cell_size_px_ = layer_spacing(clamped);
+    grid_cell_size_px_ = grid_world_spacing_for_resolution(clamped);
     if (user_override) {
         grid_overlay_resolution_user_override_ = true;
         persist_dev_number(kGridOverlayResolutionKey, clamped);
@@ -1904,6 +1892,9 @@ void DevControls::set_screen_dimensions(int width, int height) {
 }
 
 void DevControls::set_current_room(Room* room, bool force_refresh) {
+    if (enabled_ && !force_refresh && dev_selected_room_ && room != dev_selected_room_) {
+        room = dev_selected_room_;
+    }
     const std::string header_label = format_room_header_label(room);
 
     if (!force_refresh && current_room_ == room) {
@@ -2185,8 +2176,6 @@ void DevControls::set_enabled(bool enabled) {
             room_editor_->set_room_trail_nav_visibility(false);
         }
         WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
-        sync_grid_overlay_enabled(false, true);
-        other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, false);
         close_all_floating_panels();
         if (map_editor_ && map_editor_->is_enabled()) {
             map_editor_->exit(true, false);
@@ -3355,13 +3344,11 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     manifest_entry["min_same_type_distance"] = 0;
     manifest_entry["min_distance_all"] = 0;
     manifest_entry["can_invert"] = false;
-    manifest_entry["tilt_range_min_deg"] = 0;
-    manifest_entry["tilt_range_max_deg"] = 0;
-    manifest_entry["y_pos_min"] = 0;
-    manifest_entry["y_pos_max"] = 0;
+    manifest_entry["tilt_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
+    manifest_entry["y_position_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
     manifest_entry["size_settings"] = {
         {"scale_percentage", 100.0},
-        {"size_variation", 0.0}
+        {"size_variation", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))}
     };
 
     auto session = manifest_store_.begin_asset_edit(sanitized, true);
@@ -3859,7 +3846,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     };
 
     const bool show_depth_guides = camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_debug_section_expanded();
-    const bool show_grid_overlay = false; // Grid is now rendered in SceneRenderer
+    const bool show_grid_overlay = false; // Grid is now rendered by the OpenGL runtime renderer.
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
     const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
@@ -4203,6 +4190,7 @@ void DevControls::begin_frame_editor_session(Asset* asset,
                                  std::move(preview),
                                  animation_id,
                                  launch_mode,
+                                 parent_window_,
                                  std::move(on_host_closed),
                                  [this]() {
 
@@ -4515,7 +4503,7 @@ void DevControls::configure_header_button_sets() {
     {
         MapModeUI::HeaderButtonConfig boundary_btn;
         boundary_btn.id = "map_boundary";
-        boundary_btn.label = "Boundary Assets";
+        boundary_btn.label = "Live Dynamic Spawns";
         boundary_btn.active = (boundary_assets_modal_ && boundary_assets_modal_->visible());
         boundary_btn.group = FooterButtonGroup::Panels;
         boundary_btn.style_override = &DMStyles::ListButton();
@@ -5162,7 +5150,7 @@ void DevControls::ensure_boundary_assets_modal_open() {
     if (!boundary_assets_modal_) {
         boundary_assets_modal_ = std::make_unique<BoundarySpawnGroupModal>();
         boundary_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
-        boundary_assets_modal_->set_floating_stack_key("boundary_assets_modal");
+        boundary_assets_modal_->set_floating_stack_key("live_dynamic_spawns_modal");
     } else {
         boundary_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
     }
@@ -5176,7 +5164,7 @@ void DevControls::ensure_boundary_assets_modal_open() {
     auto regen = [this](const nlohmann::json& entry) { this->regenerate_boundary_spawn_group(entry); };
     auto& map_json = assets_->map_info_json();
     SDL_Color color{255, 200, 120, 255};
-    boundary_assets_modal_->open(map_json, "map_boundary_data", "batch_map_boundary", "Boundary", color, save, regen);
+    boundary_assets_modal_->open(map_json, "live_dynamic_spawns", "batch_map_boundary", "Boundary Area", color, save, regen);
 }
 
 void DevControls::open_boundary_assets_modal() {

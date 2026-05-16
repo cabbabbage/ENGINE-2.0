@@ -11,6 +11,8 @@
 #include <SDL3/SDL.h>
 
 #include "rendering/render/opengl_scene_frame_data.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/dof_blur_chain.hpp"
 
 class Assets;
 class Asset;
@@ -46,7 +48,17 @@ bool build_xy_sprite_draw_packets(const WarpedScreenGrid& camera,
                                   std::uint32_t target_height,
                                   std::vector<GpuSpriteDrawPacket>& out_xy_sprite_draws,
                                   std::string& out_error);
+bool build_sink_clipped_sprite_packet(const render_projection::ProjectedSpriteFrame& projected,
+                                      float u0,
+                                      float v0,
+                                      float u1,
+                                      float v1,
+                                      float sink_height_offset_px,
+                                      std::uint32_t target_width,
+                                      std::uint32_t target_height,
+                                      GpuSpriteDrawPacket& out_packet);
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset);
+float far_background_bottom_screen_y(const WarpedScreenGrid& camera, std::uint32_t target_height);
 const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
                                                                bool focus_filter_active,
                                                                const std::vector<Asset*>& active_assets,
@@ -105,6 +117,14 @@ private:
                             std::uint32_t target_width,
                             std::uint32_t target_height,
                             std::string& out_error);
+    bool ensure_depth_layer_targets(const GpuSceneFrameData& frame_data, std::string& out_error);
+    void destroy_depth_layer_targets();
+    bool ensure_far_background_textures();
+    void destroy_far_background_textures();
+    bool render_far_background(const WarpedScreenGrid& camera,
+                               std::uint32_t target_width,
+                               std::uint32_t target_height,
+                               std::string& out_error);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
     SDL_Color update_smoothed_floor_clear_color(SDL_Color target);
@@ -114,14 +134,12 @@ private:
                                              int height,
                                              const std::string& label,
                                              std::string& out_error);
-    static SDL_Texture* create_solid_white_texture(SDL_Renderer* renderer,
-                                                   std::string& out_error);
     static void configure_render_target(SDL_Texture* texture);
     static SDL_FPoint clip_to_screen(float clip_x, float clip_y, float target_width, float target_height);
     static void packet_to_vertices(const GpuSpriteDrawPacket& packet,
                                    std::uint32_t target_width,
                                    std::uint32_t target_height,
-                                   std::array<SDL_Vertex, 6>& out_vertices);
+                                   std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices);
 
     SDL_Renderer* renderer_ = nullptr;
     Assets* assets_ = nullptr;
@@ -139,9 +157,11 @@ private:
     SDL_Texture* floor_target_ = nullptr;
     SDL_Texture* xy_sprite_target_ = nullptr;
     SDL_Texture* composite_target_ = nullptr;
-    SDL_Texture* floor_marker_texture_ = nullptr;
+    SDL_Texture* far_background_sky_texture_ = nullptr;
+    SDL_Texture* far_background_mountains_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
+    dof_blur_chain::Renderer dof_blur_chain_{};
     SDL_Color smoothed_floor_clear_color_{0, 0, 0, 255};
     bool smoothed_floor_color_valid_ = false;
     SDL_Point last_floor_color_player_xz_{0, 0};

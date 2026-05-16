@@ -15,6 +15,13 @@ namespace animation_editor {
 
 class AnimationDocument {
   public:
+    enum class CreateAnimationResult {
+        Created,
+        AlreadyExists,
+        InvalidName,
+        Error,
+    };
+
     enum class StructureChangeKind {
         Created,
         Deleted,
@@ -25,6 +32,11 @@ class AnimationDocument {
         StructureChangeKind kind = StructureChangeKind::Created;
         std::string animation_id;
         std::string previous_animation_id;
+    };
+
+    struct LoadReport {
+        int parse_failures = 0;
+        int normalization_failures = 0;
     };
 
     AnimationDocument();
@@ -39,7 +51,7 @@ class AnimationDocument {
     bool consume_dirty_flag() const;
     bool clear_dirty_if_revision_not_newer(std::uint64_t revision) const;
 
-    void create_animation(const std::string& animation_id);
+    CreateAnimationResult create_animation(const std::string& animation_id);
     void delete_animation(const std::string& animation_id);
 
     std::vector<std::string> animation_ids() const;
@@ -55,8 +67,10 @@ class AnimationDocument {
     const std::filesystem::path& info_path() const { return info_path_; }
     const std::filesystem::path& asset_root() const { return asset_root_; }
     std::uint64_t revision() const { return revision_; }
+    const LoadReport& last_load_report() const { return last_load_report_; }
     void set_manifest_asset_key_debug(std::string key);
     const std::string& manifest_asset_key_debug() const { return manifest_asset_key_debug_; }
+    void set_force_create_error_for_tests(bool force) { force_create_error_for_tests_ = force; }
 
     void set_on_saved_callback(std::function<void()> callback);
     void set_on_structure_changed_callback(std::function<void(const StructureChangeEvent&)> callback);
@@ -68,7 +82,7 @@ class AnimationDocument {
     nlohmann::json normalize_payload_for_storage(const std::string& animation_id,
                                                  const nlohmann::json& payload) const;
     void load_from_json_object(const nlohmann::json& root);
-    void ensure_document_initialized();
+    void ensure_document_initialized(bool track_load_diagnostics = false);
     void rebuild_animation_cache();
     void mark_dirty() const;
 
@@ -83,6 +97,8 @@ class AnimationDocument {
     mutable std::uint64_t revision_ = 1;
     mutable nlohmann::json base_data_;
     std::string manifest_asset_key_debug_;
+    LoadReport last_load_report_;
+    bool force_create_error_for_tests_ = false;
     std::function<bool(const nlohmann::json&)> persist_callback_;
     std::function<void()> on_saved_callback_;
     std::function<void(const StructureChangeEvent&)> on_structure_changed_callback_;

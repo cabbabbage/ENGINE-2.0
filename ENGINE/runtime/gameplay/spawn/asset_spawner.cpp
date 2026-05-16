@@ -497,41 +497,6 @@ void AssetSpawner::spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
         }
 }
 
-std::vector<std::unique_ptr<Asset>> AssetSpawner::spawn_boundary_from_json(const nlohmann::json& boundary_json,
-                                                                          const Area& spawn_area,
-                                                                          const std::string& source_name) {
-        if (boundary_json.is_null() || !boundary_json.is_object()) {
-                return {};
-        }
-        const auto selectors_it = boundary_json.find("candidate_selectors");
-        if (selectors_it == boundary_json.end() || !selectors_it->is_array() || selectors_it->empty()) {
-                return {};
-        }
-
-        nlohmann::json source = nlohmann::json::object();
-        source["spawn_groups"] = *selectors_it;
-        std::vector<nlohmann::json> json_sources{ source };
-
-        group_resolution_map_.clear();
-        try {
-                for (const auto& entry : *selectors_it) {
-                        if (!entry.is_object()) continue;
-                        const std::string sid = entry.value("spawn_id", std::string{});
-                        if (sid.empty()) continue;
-                        int r = entry.value("grid_resolution", 5);
-                        r = vibble::grid::clamp_resolution(r);
-                        group_resolution_map_.insert_or_assign(sid, r);
-                }
-        } catch (...) {
-
-        }
-        AssetSpawnPlanner planner(json_sources, spawn_area, *asset_library_);
-        boundary_mode_ = true;
-        run_spawning(&planner, spawn_area);
-        boundary_mode_ = false;
-        return extract_all_assets();
-}
-
 std::vector<std::unique_ptr<Asset>> AssetSpawner::extract_all_assets() {
 	return std::move(all_);
 }

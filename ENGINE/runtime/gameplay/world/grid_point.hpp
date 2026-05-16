@@ -68,6 +68,10 @@ struct CameraProjectionParams {
     double tan_half_fov_x = 1.0, tan_half_fov_y = 1.0;
     // Clipping planes
     double near_plane = 0.1, far_plane = 10000.0;
+    // Perspective scale is capped at the lower render-overscan edge so points
+    // near the camera plane do not explode to near-plane size.
+    double min_perspective_depth = 0.1;
+    float max_perspective_scale = 1.0f;
     // Zoom and pan
     double screen_zoom = 1.0, screen_pan_y_px = 0.0;
     // Horizon and pitch

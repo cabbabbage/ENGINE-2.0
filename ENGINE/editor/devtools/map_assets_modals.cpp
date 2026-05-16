@@ -966,11 +966,11 @@ private:
         if (!section_->is_object()) {
             *section_ = json::object();
         }
-        auto it = section_->find("candidate_selectors");
+        auto it = section_->find("boundary_area_selectors");
         if (it == section_->end() || !it->is_array()) {
-            (*section_)["candidate_selectors"] = json::array();
+            (*section_)["boundary_area_selectors"] = json::array();
         }
-        return (*section_)["candidate_selectors"];
+        return (*section_)["boundary_area_selectors"];
     }
 
     static int clamp_jitter(int value) {

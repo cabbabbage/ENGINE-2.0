@@ -14,6 +14,7 @@
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
 #include "utils/oval_anchor_math.hpp"
+#include "utils/weighted_range.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <iostream>
@@ -76,23 +77,10 @@ static double sample_spawn_tilt_degrees(const std::shared_ptr<AssetInfo>& info)
                 return 0.0;
         }
 
-        int min_deg = info->tilt_range_min_deg;
-        int max_deg = info->tilt_range_max_deg;
-        if (max_deg < min_deg) {
-                std::swap(min_deg, max_deg);
-        }
-        min_deg = std::clamp(min_deg, -180, 180);
-        max_deg = std::clamp(max_deg, -180, 180);
-        if (max_deg < min_deg) {
-                std::swap(min_deg, max_deg);
-        }
-        if (min_deg == max_deg) {
-                return static_cast<double>(min_deg);
-        }
-
-        std::uniform_int_distribution<int> dist(min_deg, max_deg);
+        const vibble::weighted_range::WeightedIntRange range = info->tilt_range;
         std::lock_guard<std::mutex> lock(asset_rng_mutex());
-        return static_cast<double>(dist(asset_rng()));
+        const std::int64_t resolved = vibble::weighted_range::resolve(range, asset_rng(), -180, 180, true);
+        return static_cast<double>(vibble::weighted_range::normalize_signed_degrees(resolved));
 }
 
 static int sample_spawn_y_position(const std::shared_ptr<AssetInfo>& info)
@@ -100,17 +88,27 @@ static int sample_spawn_y_position(const std::shared_ptr<AssetInfo>& info)
         if (!info) {
                 return 0;
         }
-        int min_y = std::clamp(info->y_pos_min, -50, 200);
-        int max_y = std::clamp(info->y_pos_max, -50, 200);
-        if (max_y < min_y) {
-                std::swap(min_y, max_y);
-        }
-        if (min_y == max_y) {
-                return min_y;
-        }
-        std::uniform_int_distribution<int> dist(min_y, max_y);
+        const vibble::weighted_range::WeightedIntRange range = info->y_position_range;
         std::lock_guard<std::mutex> lock(asset_rng_mutex());
-        return dist(asset_rng());
+        const std::int64_t resolved = vibble::weighted_range::resolve(range, asset_rng());
+        if (resolved < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
+                return std::numeric_limits<int>::min();
+        }
+        if (resolved > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+                return std::numeric_limits<int>::max();
+        }
+        return static_cast<int>(resolved);
+}
+
+static float sample_size_variation_percent(const std::shared_ptr<AssetInfo>& info)
+{
+        if (!info) {
+                return 0.0f;
+        }
+        const vibble::weighted_range::WeightedIntRange range = info->size_variation_range;
+        std::lock_guard<std::mutex> lock(asset_rng_mutex());
+        const std::int64_t resolved = vibble::weighted_range::resolve(range, asset_rng());
+        return static_cast<float>(resolved);
 }
 
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
@@ -472,6 +470,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 
         alpha_smoothing_.reset(hidden ? 0.0f : 1.0f);
         size_variation_sample_ = sample_size_variation_identity();
+        size_variation_percent_ = sample_size_variation_percent(info);
         base_spawn_tilt_degrees_ = sample_spawn_tilt_degrees(info);
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
@@ -558,6 +557,7 @@ Asset::Asset(const Asset& o)
     , spawn_id(o.spawn_id)
     , spawn_method(o.spawn_method)
     , owning_room_name_(o.owning_room_name_)
+    , dynamic_spawned_asset_(o.dynamic_spawned_asset_)
     , controller_(nullptr)
     , tiling_info_(o.tiling_info_)
     , anim_(nullptr)
@@ -589,6 +589,7 @@ Asset::Asset(const Asset& o)
     , directional_target_world_x_(o.directional_target_world_x_)
     , directional_target_world_z_(o.directional_target_world_z_)
     , directional_target_valid_(o.directional_target_valid_)
+    , size_variation_percent_(o.size_variation_percent_)
     , base_spawn_tilt_degrees_(o.base_spawn_tilt_degrees_)
     , sink_burial_tracking_initialized_(o.sink_burial_tracking_initialized_)
     , sink_burial_last_world_x_(o.sink_burial_last_world_x_)
@@ -653,7 +654,9 @@ Asset& Asset::operator=(const Asset& o) {
         assets_              = o.assets_;
         spawn_id             = o.spawn_id;
         spawn_method         = o.spawn_method;
+        dynamic_spawned_asset_ = o.dynamic_spawned_asset_;
         size_variation_sample_ = o.size_variation_sample_;
+        size_variation_percent_ = o.size_variation_percent_;
         owning_room_name_    = o.owning_room_name_;
         controller_.reset();
         children_.clear();
@@ -1031,7 +1034,7 @@ float Asset::runtime_effective_base_scale() const {
         return authored_base;
     }
 
-    float variation = info->size_variation_percent;
+    float variation = size_variation_percent_;
     if (!std::isfinite(variation)) {
         variation = 0.0f;
     }

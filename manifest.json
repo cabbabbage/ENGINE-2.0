@@ -119,11 +119,15 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 36.0
+        "scale_percentage": 66.0,
+        "size_variation": 0.0
       },
       "start": "default",
       "tags": [
@@ -133,11 +137,31 @@
         "small_surface_top"
       ],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "aluminum_pole_transparent_11549833983xjwlyimgun": {
       "anchor_point_child_candidates": [],
@@ -534,6 +558,9 @@
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -545,11 +572,31 @@
       "starting_health": 200,
       "tags": [],
       "tillable": false,
-      "tilt_range_max_deg": 7,
-      "tilt_range_min_deg": -7,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 3,
+        "random": true,
+        "span": 8,
+        "weights": {
+          "center": 0.4906197462692994,
+          "edge": 0.2183058230274431,
+          "falloff": 0.29107443070325745
+        }
+      },
+      "tilt_range_max_deg": 8,
+      "tilt_range_min_deg": -8,
       "weight_kg": 953.0,
-      "y_pos_max": 0,
-      "y_pos_min": -13
+      "y_position_range": {
+        "center": -1,
+        "falloff": 0,
+        "random": true,
+        "span": 1,
+        "weights": {
+          "center": 0.7777777777777778,
+          "edge": 0.0,
+          "falloff": 0.2222222222222222
+        }
+      }
     },
     "baseball_field": {
       "anchor_point_child_candidates": [],
@@ -1837,7 +1884,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 8,
           "on_end": "kill",
@@ -1847,7 +1894,8 @@
             "kind": "folder",
             "name": "",
             "path": "attack"
-          }
+          },
+          "tags": []
         },
         "default": {
           "anchor_points": [
@@ -3389,7 +3437,8 @@
             "kind": "animation",
             "name": "default",
             "path": ""
-          }
+          },
+          "tags": []
         },
         "down": {
           "anchor_points": [
@@ -4225,7 +4274,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 16,
           "on_end": "default",
@@ -4235,7 +4284,8 @@
             "kind": "folder",
             "name": "",
             "path": "down"
-          }
+          },
+          "tags": []
         },
         "down_backward_left": {
           "anchor_points": [
@@ -6773,7 +6823,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 16,
           "on_end": "default",
@@ -6783,7 +6833,8 @@
             "kind": "folder",
             "name": "",
             "path": "down_forward_left"
-          }
+          },
+          "tags": []
         },
         "down_forward_right": {
           "anchor_points": [
@@ -8475,7 +8526,7 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 16,
           "on_end": "loop",
@@ -8485,7 +8536,8 @@
             "kind": "animation",
             "name": "default",
             "path": ""
-          }
+          },
+          "tags": []
         },
         "up": {
           "anchor_points": [
@@ -12743,6 +12795,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
@@ -12757,8 +12812,32 @@
       "starting_health": 100,
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
       "update_radius": 0,
-      "weight_kg": 38.0
+      "weight_kg": 38.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "bone": {
       "anchor_point_child_candidates": [],
@@ -15436,7 +15515,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.5,
+                "depth_offset": -4.999998092651367,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15444,8 +15523,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 917,
-                "texture_y": 734
+                "texture_x": 915,
+                "texture_y": 727
               },
               {
                 "depth_offset": -15.0,
@@ -15661,12 +15740,32 @@
       "start": "default",
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "update_radius": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "clock": {
       "anchor_point_child_candidates": [],
@@ -17825,6 +17924,7 @@
             ]
           ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
@@ -17837,7 +17937,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -17845,10 +17946,14 @@
       "asset_name": "grass_1_fps_2",
       "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -17861,7 +17966,31 @@
         "grass"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "grass_fps_2": {
       "anchor_point_child_candidates": [],
@@ -17921,6 +18050,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -17933,11 +18065,31 @@
         "grass"
       ],
       "tillable": false,
+      "tilt_range": {
+        "center": 1,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 1,
       "tilt_range_min_deg": 1,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": -6
+      "y_position_range": {
+        "center": -3,
+        "falloff": 1,
+        "random": true,
+        "span": 3,
+        "weights": {
+          "center": 0.3333333333333333,
+          "edge": 0.3333333333333333,
+          "falloff": 0.3333333333333333
+        }
+      }
     },
     "grave_1": {
       "anchor_point_child_candidates": [],
@@ -19797,887 +19949,7 @@
     "spider": {
       "anchor_point_child_candidates": [],
       "animations": {
-        "attack_left": {
-          "attack_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 694,
-                    "texture_y": 594
-                  },
-                  {
-                    "texture_x": 947,
-                    "texture_y": 647
-                  },
-                  {
-                    "texture_x": 887,
-                    "texture_y": 932
-                  },
-                  {
-                    "texture_x": 634,
-                    "texture_y": 879
-                  }
-                ],
-                "damage_amount": 100,
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 6,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "attack_box_id",
-                "meta": {
-                  "attack_payload": {
-                    "animation_trigger": "",
-                    "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
-                    "damage_type": "physical",
-                    "element_type": "none",
-                    "hitback_distance": 200.0,
-                    "hitback_enabled": true,
-                    "payload_id": "attack_box_id",
-                    "sound_effect": "",
-                    "status_effects": [],
-                    "stun_frames": 0
-                  }
-                },
-                "name": "attack_box",
-                "payload_id": "attack_box_id",
-                "position": {
-                  "x": 661,
-                  "y": 617
-                },
-                "rotation_degrees": 11.834892272949219,
-                "size": {
-                  "h": 292,
-                  "w": 259
-                },
-                "type": "attack_box"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 720,
-                    "texture_y": 550
-                  },
-                  {
-                    "texture_x": 982,
-                    "texture_y": 648
-                  },
-                  {
-                    "texture_x": 894,
-                    "texture_y": 883
-                  },
-                  {
-                    "texture_x": 632,
-                    "texture_y": 785
-                  }
-                ],
-                "damage_amount": 100,
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 6,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "attack_box_id",
-                "meta": {
-                  "attack_payload": {
-                    "animation_trigger": "",
-                    "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
-                    "damage_type": "physical",
-                    "element_type": "none",
-                    "hitback_distance": 200.0,
-                    "hitback_enabled": true,
-                    "payload_id": "attack_box_id",
-                    "sound_effect": "",
-                    "status_effects": [],
-                    "stun_frames": 0
-                  }
-                },
-                "name": "attack_box",
-                "payload_id": "attack_box_id",
-                "position": {
-                  "x": 667,
-                  "y": 591
-                },
-                "rotation_degrees": 20.6318359375,
-                "size": {
-                  "h": 251,
-                  "w": 280
-                },
-                "type": "attack_box"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 889,
-                    "texture_y": 426
-                  },
-                  {
-                    "texture_x": 1025,
-                    "texture_y": 643
-                  },
-                  {
-                    "texture_x": 737,
-                    "texture_y": 825
-                  },
-                  {
-                    "texture_x": 601,
-                    "texture_y": 608
-                  }
-                ],
-                "damage_amount": 100,
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 6,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "attack_box_id",
-                "meta": {
-                  "attack_payload": {
-                    "animation_trigger": "",
-                    "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
-                    "damage_type": "physical",
-                    "element_type": "none",
-                    "hitback_distance": 200.0,
-                    "hitback_enabled": true,
-                    "payload_id": "attack_box_id",
-                    "sound_effect": "",
-                    "status_effects": [],
-                    "stun_frames": 0
-                  }
-                },
-                "name": "attack_box",
-                "payload_id": "attack_box_id",
-                "position": {
-                  "x": 685,
-                  "y": 455
-                },
-                "rotation_degrees": 57.84983825683594,
-                "size": {
-                  "h": 341,
-                  "w": 256
-                },
-                "type": "attack_box"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 579,
-                    "texture_y": 578
-                  },
-                  {
-                    "texture_x": 776,
-                    "texture_y": 746
-                  },
-                  {
-                    "texture_x": 586,
-                    "texture_y": 968
-                  },
-                  {
-                    "texture_x": 389,
-                    "texture_y": 800
-                  }
-                ],
-                "damage_amount": 100,
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 6,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "attack_box_id",
-                "meta": {
-                  "attack_payload": {
-                    "animation_trigger": "",
-                    "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
-                    "damage_type": "physical",
-                    "element_type": "none",
-                    "hitback_distance": 200.0,
-                    "hitback_enabled": true,
-                    "payload_id": "attack_box_id",
-                    "sound_effect": "",
-                    "status_effects": [],
-                    "stun_frames": 0
-                  }
-                },
-                "name": "attack_box",
-                "payload_id": "attack_box_id",
-                "position": {
-                  "x": 453,
-                  "y": 627
-                },
-                "rotation_degrees": 40.437156677246094,
-                "size": {
-                  "h": 292,
-                  "w": 259
-                },
-                "type": "attack_box"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 600,
-                    "texture_y": 579
-                  },
-                  {
-                    "texture_x": 778,
-                    "texture_y": 767
-                  },
-                  {
-                    "texture_x": 565,
-                    "texture_y": 967
-                  },
-                  {
-                    "texture_x": 387,
-                    "texture_y": 779
-                  }
-                ],
-                "damage_amount": 100,
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 6,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "attack_box_id",
-                "meta": {
-                  "attack_payload": {
-                    "animation_trigger": "",
-                    "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
-                    "damage_type": "physical",
-                    "element_type": "none",
-                    "hitback_distance": 200.0,
-                    "hitback_enabled": true,
-                    "payload_id": "attack_box_id",
-                    "sound_effect": "",
-                    "status_effects": [],
-                    "stun_frames": 0
-                  }
-                },
-                "name": "attack_box",
-                "payload_id": "attack_box_id",
-                "position": {
-                  "x": 453,
-                  "y": 627
-                },
-                "rotation_degrees": 46.65505599975586,
-                "size": {
-                  "h": 292,
-                  "w": 259
-                },
-                "type": "attack_box"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 713,
-                    "texture_y": 548
-                  },
-                  {
-                    "texture_x": 910,
-                    "texture_y": 716
-                  },
-                  {
-                    "texture_x": 720,
-                    "texture_y": 938
-                  },
-                  {
-                    "texture_x": 523,
-                    "texture_y": 770
-                  }
-                ],
-                "damage_amount": 100,
-                "enabled": true,
-                "extrusion_backward": 11,
-                "extrusion_forward": 6,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "attack_box_id",
-                "meta": {
-                  "attack_payload": {
-                    "animation_trigger": "",
-                    "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
-                    "damage_type": "physical",
-                    "element_type": "none",
-                    "hitback_distance": 200.0,
-                    "hitback_enabled": true,
-                    "payload_id": "attack_box_id",
-                    "sound_effect": "",
-                    "status_effects": [],
-                    "stun_frames": 0
-                  }
-                },
-                "name": "attack_box",
-                "payload_id": "attack_box_id",
-                "position": {
-                  "x": 587,
-                  "y": 597
-                },
-                "rotation_degrees": 40.437156677246094,
-                "size": {
-                  "h": 292,
-                  "w": 259
-                },
-                "type": "attack_box"
-              }
-            ]
-          ],
-          "box_schema_version": 1,
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": true,
-          "movement": [
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 6,
-          "on_end": "loop",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "attack_left"
-          },
-          "tags": [
-            "attack",
-            "left"
-          ]
-        },
-        "attack_right": {
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "inherit_data": true,
-          "invert_frames_horizontal": true,
-          "invert_frames_vertical": false,
-          "invert_x": true,
-          "invert_y": false,
-          "invert_z": false,
-          "movement": [
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ],
-            [
-              0,
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 6,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "attack_left",
-            "path": ""
-          },
-          "tags": [
-            "attack",
-            "right"
-          ]
-        },
-        "backward_left": {
-          "anchor_points": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "attack_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 892,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 892,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 677,
-                  "w": 892
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -5,
-              0,
-              12,
-              0.0
-            ],
-            [
-              -5,
-              0,
-              12,
-              0.0
-            ],
-            [
-              -5,
-              0,
-              12,
-              0.0
-            ],
-            [
-              -5,
-              0,
-              12,
-              0.0
-            ],
-            [
-              -21,
-              0,
-              -4,
-              0.0
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": -41,
-            "dy": 0,
-            "dz": 44.0
-          },
-          "number_of_frames": 6,
-          "on_end": "loop",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "backward_left"
-          },
-          "tags": []
-        },
-        "backward_right": {
-          "box_schema_version": 1,
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "inherit_data": true,
-          "invert_frames_horizontal": true,
-          "invert_frames_vertical": false,
-          "invert_x": true,
-          "invert_y": false,
-          "invert_z": false,
-          "number_of_frames": 6,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "backward_left",
-            "path": ""
-          },
-          "tags": []
-        },
         "default": {
-          "anchor_points": [
-            []
-          ],
-          "attack_boxes": [
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -20705,359 +19977,6 @@
             "path": "default"
           },
           "tags": []
-        },
-        "forward_left": {
-          "anchor_points": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "attack_boxes": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            []
-          ],
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 23
-                  },
-                  {
-                    "texture_x": 916,
-                    "texture_y": 677
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 677
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 60,
-                "extrusion_forward": 60,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 23
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 654,
-                  "w": 916
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -7,
-              0,
-              10,
-              0.0
-            ],
-            [
-              -8,
-              0,
-              10,
-              0.0
-            ],
-            [
-              -8,
-              0,
-              9,
-              0.0
-            ],
-            [
-              -9,
-              0,
-              9,
-              0.0
-            ],
-            [
-              -9,
-              0,
-              9,
-              0.0
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": -41,
-            "dy": 0,
-            "dz": 47.0
-          },
-          "number_of_frames": 6,
-          "on_end": "loop",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "forward_left"
-          },
-          "tags": []
-        },
-        "forward_right": {
-          "box_schema_version": 1,
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "inherit_data": true,
-          "invert_frames_horizontal": true,
-          "invert_frames_vertical": false,
-          "invert_x": true,
-          "invert_y": false,
-          "invert_z": false,
-          "number_of_frames": 6,
-          "on_end": "loop",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "forward_left",
-            "path": ""
-          },
-          "tags": []
         }
       },
       "anti_tags": [],
@@ -21065,10 +19984,14 @@
       "asset_name": "spider",
       "asset_type": "enemy",
       "attack_box_enabled": true,
+      "bounce_amount": 0,
       "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "min_distance_all": 0,
       "min_same_type_distance": 513,
       "movement_enabled": true,
@@ -21078,11 +20001,35 @@
         "scale_percentage": 18.0,
         "size_variation": 20.0
       },
-      "start": "forward_left",
+      "start": "default",
       "starting_health": 200,
       "tags": [],
       "tillable": false,
-      "weight_kg": 4.0
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 4.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "stagecoach": {
       "animations": {
@@ -21578,6 +20525,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -21587,14 +20537,35 @@
       },
       "start": "default",
       "tags": [
+        "boundary",
         "tree"
       ],
       "tillable": false,
-      "tilt_range_max_deg": 2,
-      "tilt_range_min_deg": -2,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 6,
+        "random": true,
+        "span": 15,
+        "weights": {
+          "center": 0.5510204081632653,
+          "edge": 0.2142857142857143,
+          "falloff": 0.2346938775510204
+        }
+      },
+      "tilt_range_max_deg": 15,
+      "tilt_range_min_deg": -15,
       "weight_kg": 584.0,
-      "y_pos_max": 0,
-      "y_pos_min": -6
+      "y_position_range": {
+        "center": -3,
+        "falloff": 1,
+        "random": true,
+        "span": 2,
+        "weights": {
+          "center": 0.3934426229508196,
+          "edge": 0.2786885245901639,
+          "falloff": 0.3278688524590164
+        }
+      }
     },
     "tree_darker": {
       "anchor_point_child_candidates": [],
@@ -21645,6 +20616,7 @@
       },
       "start": "default",
       "tags": [
+        "boundary",
         "tree"
       ],
       "tillable": false,
@@ -21721,6 +20693,7 @@
       },
       "start": "default",
       "tags": [
+        "boundary",
         "tree"
       ],
       "tillable": false,
@@ -21869,8 +20842,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               }
             ]
           ],
@@ -22969,8 +21942,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23045,8 +22018,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23121,8 +22094,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23197,8 +22170,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23273,8 +22246,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23349,8 +22322,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23425,8 +22398,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -23501,8 +22474,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -24742,8 +23715,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -24818,8 +23791,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -24894,8 +23867,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -24970,8 +23943,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25046,8 +24019,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25122,8 +24095,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25198,8 +24171,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25274,8 +24247,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 163,
-                "texture_y": 153
+                "texture_x": 180,
+                "texture_y": 198
               },
               {
                 "depth_offset": 0.0,
@@ -25724,6 +24697,9 @@
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [
@@ -25746,6 +24722,18 @@
               "texture_y": 1
             },
             {
+              "angle_degrees": 45.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": -18.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": 0,
+              "texture_y": 2
+            },
+            {
               "angle_degrees": 90.0,
               "anti_tags": [],
               "depth_offset": 0.0,
@@ -25756,6 +24744,18 @@
               "tags": [],
               "texture_x": -21,
               "texture_y": 1
+            },
+            {
+              "angle_degrees": 135.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": -30,
+              "texture_y": 0
             },
             {
               "angle_degrees": 180.0,
@@ -25770,6 +24770,18 @@
               "texture_y": -1
             },
             {
+              "angle_degrees": 225.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 18.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": 0,
+              "texture_y": -2
+            },
+            {
               "angle_degrees": 270.0,
               "anti_tags": [],
               "depth_offset": 0.0,
@@ -25780,6 +24792,18 @@
               "tags": [],
               "texture_x": 21,
               "texture_y": -1
+            },
+            {
+              "angle_degrees": 315.0,
+              "anti_tags": [],
+              "depth_offset": 0.0,
+              "hidden": false,
+              "resolve_x": true,
+              "rotation_degrees": 0.0,
+              "scaling_method": "parent",
+              "tags": [],
+              "texture_x": 30,
+              "texture_y": 0
             }
           ],
           "radius_offset_degrees": 315.0,
@@ -26094,16 +25118,37 @@
         }
       ],
       "size_settings": {
-        "scale_percentage": 28.0
+        "scale_percentage": 28.0,
+        "size_variation": 0.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "vibble_attack_1": {
       "anchor_point_child_candidates": [],
@@ -27106,43 +26151,33 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "blur_px": 1.71999990940094,
-        "boundary_min_visible_screen_ratio": 0.01100000087171793,
+        "blur_px": 0.3400000035762787,
+        "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
         "depth_of_field_enabled": false,
-        "dynamic_renderer_depth_efficiency_depth": 529.0,
-        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.44999998807907104,
-        "far_light_cap": 32.0,
-        "far_light_depth_threshold": 4000.0,
-        "global_ambient": 0.07999999821186066,
-        "global_exposure": 1.0,
-        "light_culling_debug_overlay": false,
-        "light_distance_fade_start_ratio": 0.800000011920929,
-        "light_fade_in_seconds": 0.07999999821186066,
-        "light_fade_out_seconds": 0.14000000059604645,
-        "light_fade_smoothing_enabled": true,
-        "light_max_cull_depth": 15135.0,
-        "light_min_fade_seconds": 0.029999999329447746,
+        "dynamic_renderer_depth_efficiency_depth": 2069.0,
+        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
+        "layer_depth_curve": 68.61000061035156,
+        "layer_depth_interval": 136.0,
+        "light_max_cull_depth": 16480.0,
         "light_radius_overlap_culling_enabled": true,
+        "live_dynamic_despawn_margin_world_px": 256,
+        "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
+        "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 6952.0,
-        "mid_light_cap": 24.0,
-        "mid_light_depth_threshold": 251.0,
+        "max_cull_depth": 7512.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
-        "near_light_cap": 12.0,
-        "near_light_depth_threshold": 250.0,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 6.889999866485596,
+        "radial_blur_px": 0.5,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
-        "shadow_quality_budget": 1.0,
         "transition_damping": 9.0
       },
       "content_root": "content/forrest",
@@ -27159,82 +26194,39 @@
           255
         ]
       },
-      "map_boundary_data": {
-        "candidate_selectors": [
+      "live_dynamic_spawns": {
+        "boundary_area_selectors": [
           {
             "candidates": [
               {
-                "chance": 32,
+                "chance": 24,
                 "name": "null"
               },
               {
-                "chance": 43.2625,
-                "name": "grass_fps_2"
-              },
-              {
-                "chance": 32.2625,
-                "name": "grass_1_fps_2"
-              },
-              {
-                "chance": 139.013125,
+                "chance": 5,
                 "display_name": "#tree",
                 "name": "#tree",
                 "tag": true,
                 "tag_name": "tree"
               },
               {
-                "chance": 3.5506562500000003,
-                "display_name": "#flower",
-                "name": "#flower",
+                "chance": 2.25,
+                "display_name": "#grass",
+                "name": "#grass",
                 "tag": true,
-                "tag_name": "flower"
+                "tag_name": "grass"
               },
               {
-                "chance": 0.5506562500000001,
-                "display_name": "#candle",
-                "name": "#candle",
-                "tag": true,
-                "tag_name": "candle"
-              }
-            ],
-            "display_name": "batch_map_boundary",
-            "enforce_spacing": false,
-            "execution_mode": "batch_grid",
-            "explicit_flip": false,
-            "force_flipped": false,
-            "grid_resolution": 5,
-            "jitter": 86,
-            "locked": false,
-            "max_number": 1,
-            "min_number": 1,
-            "position": "Random",
-            "priority": 0,
-            "resolution": 0,
-            "resolve_geometry_to_room_size": false,
-            "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-forrest-map_boundary"
-          },
-          {
-            "candidates": [
-              {
-                "chance": 9,
-                "name": "null"
-              },
-              {
-                "chance": 0.45,
-                "name": "fog_1"
-              },
-              {
-                "chance": 0.45,
-                "name": "fog_2"
+                "chance": 0.25,
+                "name": "blue_flower"
               }
             ],
             "display_name": "batch_map_boundary",
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 4,
-            "jitter": 0,
+            "grid_resolution": 6,
+            "jitter": 32,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -27242,11 +26234,10 @@
             "resolution": 8,
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-456f5f025984"
+            "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "inherits_map_assets": false,
-        "regen_seed": 2
+        "regen_seed": 1
       },
       "map_grid_settings": {
         "grid_resolution": 6,
@@ -27255,7 +26246,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 11057.23876019687,
+          "bounding_extent": 7748.5,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -27273,12 +26264,12 @@
           ]
         },
         {
-          "bounding_extent": 28284.2712474619,
+          "bounding_extent": 11057.23876019687,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 40342.0,
+          "ring_radius": 19806.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -27302,26 +26293,43 @@
           "camera_height_px": 456,
           "camera_tilt_deg": 37.47359085083008,
           "camera_zoom_percent": 40,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
             204,
             31,
             31,
             255
           ],
-          "edge_smoothness": 2,
+          "edge_smoothness": 101,
           "geometry": "Square",
+          "height": {
+            "center": 12110,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": false,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": true,
           "is_boss": false,
-          "max_height": 40000,
-          "max_width": 40000,
-          "min_height": 500,
-          "min_width": 500,
           "name": "Loot_Room",
           "room_floor_color": [
+            111,
             138,
-            78,
             52
           ],
           "room_tags": [],
@@ -27358,27 +26366,55 @@
             }
           ],
           "trail_connection_sector": {
-            "direction_deg": 0.0,
-            "width_percent": 100
+            "direction_deg": 182.0,
+            "width_percent": 73
+          },
+          "width": {
+            "center": 18504,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         },
         "NewRoom": {
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            126,
-            85,
             242,
+            159,
+            85,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1800,
-          "max_width": 1800,
-          "min_height": 1200,
-          "min_width": 1200,
           "name": "NewRoom",
           "room_floor_color": [
             0,
@@ -27391,25 +26427,53 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
           }
         },
         "NewRoom1": {
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            36,
-            130,
-            242,
+            31,
+            129,
+            204,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1800,
-          "max_width": 1800,
-          "min_height": 1200,
-          "min_width": 1200,
           "name": "NewRoom1",
           "room_floor_color": [
             0,
@@ -27422,25 +26486,53 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
           }
         },
         "NewRoom2": {
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            85,
+            239,
             242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 4,
           "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1800,
-          "max_width": 1800,
-          "min_height": 1200,
-          "min_width": 1200,
           "name": "NewRoom2",
           "room_floor_color": [
             0,
@@ -27483,6 +26575,76 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
+        },
+        "NewRoom3": {
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
+          "display_color": [
+            31,
+            32,
+            204,
+            255
+          ],
+          "edge_smoothness": 4,
+          "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": false,
+          "is_boss": false,
+          "name": "NewRoom3",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [],
+          "spawn_groups": [],
+          "tags": [],
+          "trail_connection_sector": {
+            "direction_deg": 0.0,
+            "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
           }
         },
         "Random_Enemy_Easy": {
@@ -27491,22 +26653,39 @@
           "camera_height_px": 109,
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            37,
-            242,
+            199,
             36,
+            242,
             255
           ],
           "edge_smoothness": 70,
           "geometry": "Circle",
+          "height": {
+            "center": 1362,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1634,
-          "max_width": 1362,
-          "min_height": 1634,
-          "min_width": 1362,
           "name": "Random_Enemy_Easy",
           "room_floor_color": [
             0,
@@ -27555,35 +26734,63 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 1362,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         },
         "baseball": {
-          "camera_center_dx": -5850,
-          "camera_center_dz": -2907,
-          "camera_height_px": 201,
-          "camera_tilt_deg": 30.158403396606445,
-          "camera_zoom_percent": 38,
-          "curvyness": 2,
+          "camera_center_dx": -603,
+          "camera_center_dz": -961,
+          "camera_height_px": 700,
+          "camera_tilt_deg": 18.015430450439453,
+          "camera_zoom_percent": 100,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            181,
-            31,
             204,
+            31,
+            119,
             255
           ],
           "edge_smoothness": 101,
-          "geometry": "Square",
-          "inherit_map_floor_color": true,
-          "inherits_map_assets": true,
+          "geometry": "Circle",
+          "height": {
+            "center": 15497,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
+          "inherit_map_floor_color": false,
+          "inherits_live_dynamic_assets": true,
           "is_boss": false,
-          "max_height": 12110,
-          "max_width": 18504,
-          "min_height": 12110,
-          "min_width": 18504,
           "name": "baseball",
           "room_floor_color": [
-            0,
-            0,
-            0
+            138,
+            97,
+            52
           ],
           "room_tags": [],
           "spawn_groups": [
@@ -27629,15 +26836,15 @@
                 }
               ],
               "display_name": "vibble (Copy)",
-              "dx": -1524,
-              "dz": 1168,
+              "dx": 10,
+              "dz": -186,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
+              "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
               "priority": 1,
@@ -27718,15 +26925,15 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -2580,
-              "dz": 1392,
+              "dx": -2587,
+              "dz": -607,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
+              "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
               "priority": 4,
@@ -27748,15 +26955,15 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -6869,
-              "dz": -2734,
+              "dx": -5252,
+              "dz": -2274,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
+              "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
               "priority": 5,
@@ -27795,11 +27002,52 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-d6eecb87c41e"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -359,
+              "dz": -5223,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 18496,
+              "origional_width": 18504,
+              "position": "Exact",
+              "priority": 7,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-ff9bd67553fd"
             }
           ],
           "trail_connection_sector": {
             "direction_deg": 182.0,
-            "width_percent": 69
+            "width_percent": 74
+          },
+          "width": {
+            "center": 15497,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         },
         "hub_world": {
@@ -27855,22 +27103,39 @@
           "camera_height_px": 1155,
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
-            185,
             204,
+            113,
             31,
             255
           ],
           "edge_smoothness": 96,
           "geometry": "Square",
+          "height": {
+            "center": 6668,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 6668,
-          "max_width": 5715,
-          "min_height": 6668,
-          "min_width": 5715,
           "name": "hub_world",
           "room_floor_color": [
             0,
@@ -28153,6 +27418,17 @@
           "trail_connection_sector": {
             "direction_deg": 180.0,
             "width_percent": 70
+          },
+          "width": {
+            "center": 5715,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         }
       },
@@ -28169,28 +27445,45 @@
       "schema_version": 1,
       "trails_data": {
         "basic": {
-          "camera_center_dx": -3379,
-          "camera_center_dz": 463,
-          "camera_height_px": 1158,
-          "camera_tilt_deg": 63.06760787963867,
-          "camera_zoom_percent": 0,
-          "curvyness": 10,
+          "camera_center_dx": -2702,
+          "camera_center_dz": 1550,
+          "camera_height_px": 1276,
+          "camera_tilt_deg": 71.4345932006836,
+          "camera_zoom_percent": 18,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
             31,
             204,
             73,
             255
           ],
-          "edge_smoothness": 2,
+          "edge_smoothness": 101,
           "geometry": "Square",
+          "height": {
+            "center": 18504,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "inherit_map_floor_color": true,
-          "inherits_map_assets": false,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 1162,
-          "max_width": 1162,
-          "min_height": 1162,
-          "min_width": 1162,
-          "name": "basic",
+          "name": "baseball",
           "room_floor_color": [
             0,
             0,
@@ -28282,7 +27575,18 @@
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-f9db5b023535"
             }
-          ]
+          ],
+          "width": {
+            "center": 18504,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          }
         }
       }
     },
@@ -28295,7 +27599,6 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "behind_layer_light_strength_multiplier": 1.0,
         "blur_px": 12.0,
         "boundary_min_visible_screen_ratio": 0.014999999664723873,
         "camera_height_max_px": 100000,
@@ -28303,17 +27606,11 @@
         "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 2000.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.10000000149011612,
-        "front_layer_light_strength_multiplier": 1.0,
         "layer_depth_curve": 1.0,
         "layer_depth_interval": 250.0,
-        "light_culling_debug_overlay": false,
-        "light_distance_fade_start_ratio": 0.800000011920929,
-        "light_fade_in_seconds": 0.07999999821186066,
-        "light_fade_out_seconds": 0.14000000059604645,
-        "light_fade_smoothing_enabled": true,
         "light_max_cull_depth": 32000.0,
-        "light_min_fade_seconds": 0.029999999329447746,
         "light_radius_overlap_culling_enabled": true,
+        "live_dynamic_min_visible_screen_ratio": 0.014999999664723873,
         "max_camera_velocity": 2200.0,
         "max_cull_depth": 5000.0,
         "min_visible_screen_ratio": 0.009999999776482582,
@@ -28331,6 +27628,11 @@
       },
       "content_root": "content/loot",
       "dev_map_settings": {
+        "default_floor_color": [
+          0,
+          0,
+          0
+        ],
         "map_color": [
           0,
           0,
@@ -28338,8 +27640,8 @@
           255
         ]
       },
-      "map_boundary_data": {
-        "candidate_selectors": [
+      "live_dynamic_spawns": {
+        "boundary_area_selectors": [
           {
             "candidates": [
               {
@@ -28361,8 +27663,7 @@
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-loot-map_boundary"
           }
-        ],
-        "inherits_map_assets": false
+        ]
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -28447,22 +27748,45 @@
           "camera_height_px": 239,
           "camera_tilt_deg": 60.0,
           "camera_zoom_percent": 0,
-          "curvyness": 2,
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 2,
           "geometry": "Circle",
-          "inherits_map_assets": true,
+          "height": {
+            "center": 3000,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
           "is_boss": false,
-          "max_height": 3000,
-          "max_width": 3000,
-          "min_height": 3000,
-          "min_width": 3000,
           "name": "Spawn",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
           "room_tags": [],
           "spawn_groups": [
             {
@@ -28638,6 +27962,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 5,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -28667,6 +27992,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 6,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -28696,6 +28022,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 7,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -28725,6 +28052,7 @@
               "origional_height": 3136,
               "origional_width": 2904,
               "position": "Exact",
+              "priority": 8,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -28735,6 +28063,17 @@
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
+          },
+          "width": {
+            "center": 3000,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
           }
         }
       },
@@ -28751,6 +28090,17 @@
       "schema_version": 1,
       "trails_data": {
         "basic": {
+          "curvyness": {
+            "center": 2,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
+            }
+          },
           "display_color": [
             85,
             242,
@@ -28759,14 +28109,38 @@
           ],
           "edge_smoothness": 2,
           "geometry": "Line",
-          "inherits_map_assets": false,
+          "height": {
+            "center": 600,
+            "falloff": 100,
+            "random": true,
+            "span": 200,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": false,
           "is_boss": false,
-          "max_height": 800,
-          "max_width": 800,
-          "min_height": 400,
-          "min_width": 400,
           "name": "basic",
-          "spawn_groups": []
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "spawn_groups": [],
+          "width": {
+            "center": 600,
+            "falloff": 100,
+            "random": true,
+            "span": 200,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
         }
       }
     },

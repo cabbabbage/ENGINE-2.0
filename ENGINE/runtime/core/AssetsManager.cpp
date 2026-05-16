@@ -3099,67 +3099,71 @@ bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& wo
     return true;
 }
 
-void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds) {
-    const auto clamp_i64_to_int = [](std::int64_t value) {
-        return static_cast<int>(std::clamp<std::int64_t>(
-            value,
-            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
-            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
-    };
-    const auto in_world_bounds = [](int world_x,
-                                    int world_z,
-                                    int min_world_x,
-                                    int max_world_x,
-                                    int min_world_z,
-                                    int max_world_z) {
-        return world_x >= min_world_x &&
-               world_x <= max_world_x &&
-               world_z >= min_world_z &&
-               world_z <= max_world_z;
-    };
-
-    const int render_min_world_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
-    const int render_max_world_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
-    const int render_min_world_z = std::min(render_bounds.min.world_z(), render_bounds.max.world_z());
-    const int render_max_world_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
-    if (render_min_world_x > render_max_world_x || render_min_world_z > render_max_world_z) {
-        clear_live_dynamic_assets();
-        return;
+Assets::LiveDynamicSyncContext Assets::collect_sync_context(const world::GridBounds& render_bounds) {
+    LiveDynamicSyncContext context;
+    context.render_bounds = render_bounds;
+    context.render_min_world_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
+    context.render_max_world_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
+    context.render_min_world_z = std::min(render_bounds.min.world_z(), render_bounds.max.world_z());
+    context.render_max_world_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
+    if (context.render_min_world_x > context.render_max_world_x || context.render_min_world_z > context.render_max_world_z) {
+        return context;
     }
 
     const int preload_margin = std::max(0, live_dynamic_preload_margin_world_px_);
     const int despawn_margin = std::max(preload_margin, live_dynamic_despawn_margin_world_px_);
-    const world::GridBounds spawn_bounds = render_bounds.expanded(preload_margin);
-    const world::GridBounds keep_bounds = render_bounds.expanded(despawn_margin);
+    context.spawn_bounds = render_bounds.expanded(preload_margin);
+    context.keep_bounds = render_bounds.expanded(despawn_margin);
 
-    const int spawn_min_world_x = std::min(spawn_bounds.min.world_x(), spawn_bounds.max.world_x());
-    const int spawn_max_world_x = std::max(spawn_bounds.min.world_x(), spawn_bounds.max.world_x());
-    const int spawn_min_world_z = std::min(spawn_bounds.min.world_z(), spawn_bounds.max.world_z());
-    const int spawn_max_world_z = std::max(spawn_bounds.min.world_z(), spawn_bounds.max.world_z());
-    const int keep_min_world_x = std::min(keep_bounds.min.world_x(), keep_bounds.max.world_x());
-    const int keep_max_world_x = std::max(keep_bounds.min.world_x(), keep_bounds.max.world_x());
-    const int keep_min_world_z = std::min(keep_bounds.min.world_z(), keep_bounds.max.world_z());
-    const int keep_max_world_z = std::max(keep_bounds.min.world_z(), keep_bounds.max.world_z());
+    context.spawn_min_world_x = std::min(context.spawn_bounds.min.world_x(), context.spawn_bounds.max.world_x());
+    context.spawn_max_world_x = std::max(context.spawn_bounds.min.world_x(), context.spawn_bounds.max.world_x());
+    context.spawn_min_world_z = std::min(context.spawn_bounds.min.world_z(), context.spawn_bounds.max.world_z());
+    context.spawn_max_world_z = std::max(context.spawn_bounds.min.world_z(), context.spawn_bounds.max.world_z());
+    context.keep_min_world_x = std::min(context.keep_bounds.min.world_x(), context.keep_bounds.max.world_x());
+    context.keep_max_world_x = std::max(context.keep_bounds.min.world_x(), context.keep_bounds.max.world_x());
+    context.keep_min_world_z = std::min(context.keep_bounds.min.world_z(), context.keep_bounds.max.world_z());
+    context.keep_max_world_z = std::max(context.keep_bounds.min.world_z(), context.keep_bounds.max.world_z());
+    context.scan_cell_cap = std::clamp<std::size_t>(adaptive_live_dynamic_scan_cells_per_selector_per_frame_, std::max<std::size_t>(1, min_live_dynamic_scan_cells_per_selector_per_frame_), std::max<std::size_t>(1, max_live_dynamic_scan_cells_per_selector_per_frame_));
+    context.new_spawn_cap = std::clamp<std::size_t>(adaptive_live_dynamic_new_spawns_per_frame_, std::max<std::size_t>(1, min_live_dynamic_new_spawns_per_frame_), std::max<std::size_t>(1, max_live_dynamic_new_spawns_per_frame_));
+    context.total_spawn_cap = max_total_live_dynamic_assets_;
+    context.boundary_center_world = camera_.get_screen_center();
+    context.selector_lookup.reserve(live_dynamic_boundary_selectors_.size() + live_dynamic_inherited_selectors_.size());
+    context.valid = true;
+    return context;
+}
 
+void Assets::prune_out_of_bounds_dynamic_assets(const LiveDynamicSyncContext& context) {
+    auto in_world_bounds = [](int world_x, int world_z, int min_world_x, int max_world_x, int min_world_z, int max_world_z) {
+        return world_x >= min_world_x && world_x <= max_world_x && world_z >= min_world_z && world_z <= max_world_z;
+    };
     std::vector<Asset*> assets_to_delete;
     assets_to_delete.reserve(live_dynamic_asset_keys_.size());
     for (const auto& [asset, key] : live_dynamic_asset_keys_) {
-        const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(
-            key.grid_x,
-            key.grid_z,
-            key.grid_resolution);
-        if (!asset || asset->dead ||
-            !in_world_bounds(owner_anchor.x,
-                             owner_anchor.y,
-                             keep_min_world_x,
-                             keep_max_world_x,
-                             keep_min_world_z,
-                             keep_max_world_z)) {
+        const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(key.grid_x, key.grid_z, key.grid_resolution);
+        if (!asset || asset->dead || !in_world_bounds(owner_anchor.x, owner_anchor.y, context.keep_min_world_x, context.keep_max_world_x, context.keep_min_world_z, context.keep_max_world_z)) {
             assets_to_delete.push_back(asset);
         }
     }
     (void)delete_live_dynamic_assets_now(assets_to_delete);
+}
 
+void Assets::refresh_selector_frontiers(const LiveDynamicSyncContext& context) { /* Stage C refactor placeholder; behavior preserved in sync function body. */ }
+void Assets::qualify_points(const LiveDynamicSyncContext& context, const LiveDynamicSyncTiming& timing) { (void)context; (void)timing; }
+void Assets::spawn_qualified_tasks(LiveDynamicSyncContext& context, const LiveDynamicSyncTiming& timing) { (void)context; (void)timing; }
+void Assets::update_adaptive_budget_metrics(const LiveDynamicSyncContext& context, const LiveDynamicSyncTiming& timing) { (void)context; (void)timing; }
+
+void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds) {
+    // Stage: A - collect_sync_context(render_bounds)
+    LiveDynamicSyncContext context = collect_sync_context(render_bounds);
+    if (!context.valid) {
+        clear_live_dynamic_assets();
+        return;
+    }
+    // Stage: B - prune_out_of_bounds_dynamic_assets(context)
+    prune_out_of_bounds_dynamic_assets(context);
+
+    // Stage: C/D/E/F currently executed in legacy flow below to preserve behavior.
+    // TODO: fully migrate legacy body into stage functions without policy changes.
     const std::uint64_t perf_start = SDL_GetPerformanceCounter();
     const std::size_t scan_cell_cap = std::clamp<std::size_t>(
         adaptive_live_dynamic_scan_cells_per_selector_per_frame_,

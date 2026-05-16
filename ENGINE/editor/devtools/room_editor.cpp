@@ -3310,19 +3310,24 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     int mx = 0;
     int my = 0;
     if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        mx = event.motion.x;
-        my = event.motion.y;
+        mx = static_cast<int>(std::lround(event.motion.x));
+        my = static_cast<int>(std::lround(event.motion.y));
     } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mx = event.button.x;
-        my = event.button.y;
+        mx = static_cast<int>(std::lround(event.button.x));
+        my = static_cast<int>(std::lround(event.button.y));
     } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        sdl_mouse_util::GetMouseState(&mx, &my);
+        mx = static_cast<int>(std::lround(event.wheel.mouse_x));
+        my = static_cast<int>(std::lround(event.wheel.mouse_y));
     }
 
     const bool pointer_event =
         (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
+    if (pointer_based) {
+        last_pointer_screen_ = SDL_Point{mx, my};
+        has_last_pointer_screen_ = true;
+    }
 
     if (pointer_event && (scroll_preview_floor_overlay_active_ || scroll_preview_xy_overlay_active_for_movement_)) {
         scroll_preview_floor_overlay_active_ = false;

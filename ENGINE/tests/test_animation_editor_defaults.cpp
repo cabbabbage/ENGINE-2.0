@@ -421,3 +421,70 @@ TEST_CASE("AnimationEditorWindow handle_event opens defaults modal before nested
     CHECK(handled);
     CHECK(window.defaults_modal_visible_);
 }
+
+TEST_CASE("AnimationEditorWindow defaults modal closes on outside click and can reopen") {
+    animation_editor::AnimationEditorWindow window;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 900, 700});
+    REQUIRE(window.create_defaults_button_ != nullptr);
+    const SDL_Rect button_rect = window.create_defaults_button_->rect();
+    REQUIRE(button_rect.w > 0);
+    REQUIRE(button_rect.h > 0);
+
+    SDL_Event open_down{};
+    open_down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    open_down.button.button = SDL_BUTTON_LEFT;
+    open_down.button.x = button_rect.x + 4;
+    open_down.button.y = button_rect.y + 4;
+    CHECK(window.handle_event(open_down));
+    CHECK(window.defaults_modal_visible_);
+    CHECK(window.defaults_modal_rect_.w > 0);
+    CHECK(window.defaults_modal_rect_.h > 0);
+
+    SDL_Event outside_down{};
+    outside_down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    outside_down.button.button = SDL_BUTTON_LEFT;
+    outside_down.button.x = window.defaults_modal_rect_.x - 10;
+    outside_down.button.y = window.defaults_modal_rect_.y - 10;
+    CHECK(window.handle_event(outside_down));
+    CHECK_FALSE(window.defaults_modal_visible_);
+    CHECK(window.defaults_modal_rect_.w == 0);
+    CHECK(window.defaults_modal_rect_.h == 0);
+
+    SDL_Event reopen_down{};
+    reopen_down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    reopen_down.button.button = SDL_BUTTON_LEFT;
+    reopen_down.button.x = button_rect.x + 4;
+    reopen_down.button.y = button_rect.y + 4;
+    CHECK(window.handle_event(reopen_down));
+    CHECK(window.defaults_modal_visible_);
+    CHECK(window.defaults_modal_rect_.w > 0);
+    CHECK(window.defaults_modal_rect_.h > 0);
+}
+
+TEST_CASE("AnimationEditorWindow defaults modal guard prevents locked state on invalid bounds") {
+    animation_editor::AnimationEditorWindow window;
+    window.set_visible(true, false);
+    window.set_bounds(SDL_Rect{0, 0, 280, 180});
+    REQUIRE(window.create_defaults_button_ != nullptr);
+    const SDL_Rect button_rect = window.create_defaults_button_->rect();
+    REQUIRE(button_rect.w > 0);
+    REQUIRE(button_rect.h > 0);
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.button = SDL_BUTTON_LEFT;
+    down.button.x = button_rect.x + 4;
+    down.button.y = button_rect.y + 4;
+
+    CHECK(window.handle_event(down));
+    CHECK_FALSE(window.defaults_modal_visible_);
+    CHECK(window.defaults_modal_rect_.w == 0);
+    CHECK(window.defaults_modal_rect_.h == 0);
+
+    SDL_Event move{};
+    move.type = SDL_EVENT_MOUSE_MOTION;
+    move.motion.x = button_rect.x + 8;
+    move.motion.y = button_rect.y + 8;
+    CHECK(window.handle_event(move));
+}

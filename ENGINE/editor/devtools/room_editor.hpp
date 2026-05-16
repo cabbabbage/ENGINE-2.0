@@ -1151,6 +1151,8 @@ private:
         bool valid = false;
     };
     XYOverlayCursorState xy_overlay_cursor_state_{};
+    SDL_Point last_pointer_screen_{0, 0};
+    bool has_last_pointer_screen_ = false;
 
     struct AssetEditorTransitionState {
         bool active = false;

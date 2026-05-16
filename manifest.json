@@ -26273,9 +26273,9 @@
             }
           },
           "display_color": [
-            242,
-            242,
-            85,
+            204,
+            135,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26363,8 +26363,8 @@
           },
           "display_color": [
             204,
-            143,
             31,
+            158,
             255
           ],
           "edge_smoothness": 4,
@@ -26421,9 +26421,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            70,
+            31,
+            96,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26480,9 +26480,9 @@
             }
           },
           "display_color": [
-            185,
-            36,
+            160,
             242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26569,9 +26569,9 @@
             }
           },
           "display_color": [
-            158,
+            36,
             242,
-            85,
+            72,
             255
           ],
           "edge_smoothness": 4,
@@ -26633,8 +26633,8 @@
             }
           },
           "display_color": [
-            36,
-            72,
+            158,
+            85,
             242,
             255
           ],
@@ -26734,7 +26734,7 @@
           },
           "display_color": [
             242,
-            99,
+            179,
             85,
             255
           ],
@@ -26923,15 +26923,15 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -6869,
-              "dz": -2734,
+              "dx": -5252,
+              "dz": -2274,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
+              "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
               "priority": 5,
@@ -27084,8 +27084,8 @@
           },
           "display_color": [
             242,
-            170,
             85,
+            120,
             255
           ],
           "edge_smoothness": 96,

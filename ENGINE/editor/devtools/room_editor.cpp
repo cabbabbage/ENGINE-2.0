@@ -1513,6 +1513,24 @@ bool solve_texture_point_for_screen_target(
     return true;
 }
 
+bool solve_texture_point_for_screen_target(
+    int initial_texture_x,
+    int initial_texture_y,
+    const SDL_FPoint& desired_screen_px,
+    const std::function<bool(int, int, SDL_FPoint&)>& sample_screen_for_texture,
+    int& out_texture_x,
+    int& out_texture_y) {
+    return solve_texture_point_for_screen_target(
+        initial_texture_x,
+        initial_texture_y,
+        desired_screen_px,
+        sample_screen_for_texture,
+        -1,
+        -1,
+        out_texture_x,
+        out_texture_y);
+}
+
 bool build_render_object_projection(const WarpedScreenGrid& cam,
                                     const RenderObject& obj,
                                     float perspective_scale,

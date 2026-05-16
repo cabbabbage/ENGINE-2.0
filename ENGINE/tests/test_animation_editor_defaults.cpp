@@ -466,10 +466,10 @@ TEST_CASE("AnimationEditorWindow defaults modal closes on outside click and can 
     CHECK(window.defaults_modal_rect_.h > 0);
 }
 
-TEST_CASE("AnimationEditorWindow defaults modal guard prevents locked state on invalid bounds") {
+TEST_CASE("AnimationEditorWindow defaults modal adapts in constrained layouts and keeps actions reachable") {
     animation_editor::AnimationEditorWindow window;
     window.set_visible(true, false);
-    window.set_bounds(SDL_Rect{0, 0, 280, 180});
+    window.set_bounds(SDL_Rect{0, 0, 360, 260});
     REQUIRE(window.create_defaults_button_ != nullptr);
     const SDL_Rect button_rect = window.create_defaults_button_->rect();
     REQUIRE(button_rect.w > 0);
@@ -482,17 +482,24 @@ TEST_CASE("AnimationEditorWindow defaults modal guard prevents locked state on i
     down.button.y = button_rect.y + 4;
 
     CHECK(window.handle_event(down));
-    CHECK_FALSE(window.defaults_modal_visible_);
-    CHECK(window.defaults_modal_rect_.w == 0);
-    CHECK(window.defaults_modal_rect_.h == 0);
+    CHECK(window.defaults_modal_visible_);
+    CHECK(window.defaults_modal_rect_.w > 0);
+    CHECK(window.defaults_modal_rect_.h > 0);
+    CHECK(window.defaults_create_button_ != nullptr);
+    CHECK(window.defaults_cancel_button_ != nullptr);
+    CHECK(window.defaults_create_button_->rect().w > 0);
+    CHECK(window.defaults_cancel_button_->rect().w > 0);
 
-    SDL_Event retry_down{};
-    retry_down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
-    retry_down.button.button = SDL_BUTTON_LEFT;
-    retry_down.button.x = button_rect.x + 6;
-    retry_down.button.y = button_rect.y + 6;
-    CHECK(window.handle_event(retry_down));
+    SDL_Event wheel{};
+    wheel.type = SDL_EVENT_MOUSE_WHEEL;
+    wheel.wheel.y = -3.0f;
+    CHECK(window.handle_event(wheel));
+    CHECK(window.defaults_modal_visible_);
+
+    window.set_bounds(SDL_Rect{0, 0, 0, 0});
+    window.open_defaults_modal();
     CHECK_FALSE(window.defaults_modal_visible_);
+    CHECK_FALSE(window.defaults_modal_open_warning_.empty());
 }
 
 TEST_CASE("AnimationEditorWindow add animation button activates on mouse down") {

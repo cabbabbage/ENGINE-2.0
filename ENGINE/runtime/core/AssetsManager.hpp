@@ -739,13 +739,6 @@ private:
         }
     };
 
-    struct LiveDynamicPendingScanRegion {
-        int min_x = 0;
-        int max_x = -1;
-        int min_z = 0;
-        int max_z = -1;
-    };
-
     struct LiveDynamicQualifiedPoint {
         LiveDynamicSelectorStateKey selector_key;
         LiveDynamicPointKey point_key;
@@ -803,22 +796,19 @@ private:
         }
     };
 
-    struct LiveDynamicFrontierStrip {
-        int min_x = 0;
-        int max_x = -1;
-        int min_z = 0;
-        int max_z = -1;
-        std::vector<LiveDynamicQualifiedPoint> ordered_points;
-        std::size_t cursor = 0;
-    };
-
     struct LiveDynamicSelectorScanState {
         bool valid = false;
         int min_x = 0;
         int max_x = -1;
         int min_z = 0;
         int max_z = -1;
-        std::deque<LiveDynamicFrontierStrip> frontier_strips;
+        int center_x = 0;
+        int center_z = 0;
+        int ring_radius = 0;
+        int ring_edge = 0;
+        int edge_offset = 0;
+        std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> seen_cells;
+        std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> spawned_cells;
     };
 
     struct LiveDynamicRoomCacheKey {

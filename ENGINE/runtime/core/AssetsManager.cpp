@@ -2411,6 +2411,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     if (process_removals()) {
         mark_active_assets_dirty();
     }
+    (void)world_grid_.flush_deferred_empty_points(8192);
 }
 
 void Assets::run_visibility_build_stage() {

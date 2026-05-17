@@ -36,11 +36,11 @@
         "grid": {
             "cell_size_px": 128.0,
             "overlay": {
-                "enabled": false,
+                "enabled": true,
                 "r": 7.0
             },
             "snap": {
-                "enabled": true
+                "enabled": false
             }
         },
         "movement": {

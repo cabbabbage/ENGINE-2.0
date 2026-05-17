@@ -1318,6 +1318,13 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
 
     ensure_layout();
     SDL_Texture* target_before = SDL_GetRenderTarget(renderer);
+    const bool clip_enabled_before = SDL_RenderClipEnabled(renderer);
+    SDL_Rect clip_before{0, 0, 0, 0};
+    if (clip_enabled_before) {
+        SDL_GetRenderClipRect(renderer, &clip_before);
+    }
+    SDL_BlendMode blend_before = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(renderer, &blend_before);
 
     render_background(renderer);
     if (list_panel_) list_panel_->render(renderer);
@@ -1340,6 +1347,12 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
                     "[AnimationEditor] Render target changed during render; restoring previous target.");
         SDL_SetRenderTarget(renderer, target_before);
     }
+    if (clip_enabled_before) {
+        SDL_SetRenderClipRect(renderer, &clip_before);
+    } else {
+        SDL_SetRenderClipRect(renderer, nullptr);
+    }
+    SDL_SetRenderDrawBlendMode(renderer, blend_before);
     first_render_completed_ = true;
 }
 

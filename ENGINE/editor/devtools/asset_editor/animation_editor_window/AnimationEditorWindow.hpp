@@ -89,6 +89,10 @@ class AnimationEditorWindow {
     void set_target_asset(Asset* asset) { target_asset_ = asset; }
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
     void set_parent_window(SDL_Window* window) { parent_window_ = window; }
+    bool trigger_add_animation_action();
+    bool trigger_controller_action();
+    bool trigger_create_defaults_action();
+    std::string controller_action_label() const;
 
   FRAME_EDITOR_ACCESS:
     void handle_document_saved();
@@ -107,13 +111,11 @@ class AnimationEditorWindow {
     void duplicate_animation(const std::string& animation_id);
     void delete_animation_with_confirmation(const std::string& animation_id);
     void render_background(SDL_Renderer* renderer) const;
-    void render_header(SDL_Renderer* renderer) const;
     void render_status(SDL_Renderer* renderer) const;
     void render_load_diagnostics(SDL_Renderer* renderer) const;
     std::string format_load_diagnostics_json() const;
     void render_inspector(SDL_Renderer* renderer) const;
     void render_inspector_background(SDL_Renderer* renderer) const;
-    bool handle_header_event(const SDL_Event& e);
     bool handle_status_event(const SDL_Event& e);
     bool handle_defaults_modal_event(const SDL_Event& e);
     void set_status_message(const std::string& message, int frames = 300);
@@ -190,9 +192,6 @@ class AnimationEditorWindow {
     std::unique_ptr<AnimationListPanel> list_panel_;
     std::unique_ptr<AnimationInspectorPanel> inspector_panel_;
     std::unique_ptr<AnimationListContextMenu> list_context_menu_;
-    std::unique_ptr<DMButton> add_button_;
-    std::unique_ptr<DMButton> controller_button_;
-    std::unique_ptr<DMButton> create_defaults_button_;
     std::unique_ptr<DMButton> load_details_toggle_button_;
     std::unique_ptr<DMButton> load_details_copy_button_;
     bool defaults_modal_visible_ = false;
@@ -211,7 +210,6 @@ class AnimationEditorWindow {
     int defaults_modal_scroll_offset_ = 0;
     int defaults_modal_scroll_max_ = 0;
     std::string defaults_modal_open_warning_;
-    SDL_Rect header_rect_{0, 0, 0, 0};
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};
     SDL_Rect status_rect_{0, 0, 0, 0};

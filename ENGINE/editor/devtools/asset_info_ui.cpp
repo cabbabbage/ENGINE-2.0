@@ -838,6 +838,30 @@ AssetInfoUI::AssetInfoUI() {
     if (!duplicate_btn_) {
         duplicate_btn_ = std::make_unique<DMButton>("Duplicate Asset", &DMStyles::FooterToggleButton(), 220, DMButton::height());
     }
+    if (!add_animation_btn_) {
+        add_animation_btn_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 220, DMButton::height());
+    }
+    if (!add_animation_btn_widget_) {
+        add_animation_btn_widget_ = std::make_unique<ButtonWidget>(add_animation_btn_.get(), [this]() {
+            this->request_animation_editor_action(PendingAnimationEditorAction::AddAnimation);
+        });
+    }
+    if (!controller_action_btn_) {
+        controller_action_btn_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 220, DMButton::height());
+    }
+    if (!controller_action_btn_widget_) {
+        controller_action_btn_widget_ = std::make_unique<ButtonWidget>(controller_action_btn_.get(), [this]() {
+            this->request_animation_editor_action(PendingAnimationEditorAction::Controller);
+        });
+    }
+    if (!create_defaults_btn_) {
+        create_defaults_btn_ = std::make_unique<DMButton>("Create Defaults", &DMStyles::CreateButton(), 220, DMButton::height());
+    }
+    if (!create_defaults_btn_widget_) {
+        create_defaults_btn_widget_ = std::make_unique<ButtonWidget>(create_defaults_btn_.get(), [this]() {
+            this->request_animation_editor_action(PendingAnimationEditorAction::CreateDefaults);
+        });
+    }
     if (!duplicate_btn_widget_) {
         duplicate_btn_widget_ = std::make_unique<ButtonWidget>(duplicate_btn_.get(), [this]() {
             if (!info_) return;
@@ -876,6 +900,21 @@ AssetInfoUI::AssetInfoUI() {
             section->set_rect(rect); // keep event hit-testing aligned with current scroll/layout
             y += measured + ctx.gap;
         }
+        if (animation_editor_window_ && controller_action_btn_) {
+            controller_action_btn_->set_text(animation_editor_window_->controller_action_label());
+        }
+        if (add_animation_btn_widget_) {
+            add_animation_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
+            y += DMButton::height() + ctx.gap;
+        }
+        if (controller_action_btn_widget_) {
+            controller_action_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
+            y += DMButton::height() + ctx.gap;
+        }
+        if (create_defaults_btn_widget_) {
+            create_defaults_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
+            y += DMButton::height() + ctx.gap;
+        }
         if (duplicate_btn_widget_) {
             duplicate_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
             y += DMButton::height() + ctx.gap;
@@ -894,6 +933,9 @@ AssetInfoUI::AssetInfoUI() {
             SDL_Rect bounds = (i < section_bounds_.size()) ? section_bounds_[i] : SDL_Rect{0,0,0,0};
             section->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
         }
+        if (add_animation_btn_) add_animation_btn_->render(renderer);
+        if (controller_action_btn_) controller_action_btn_->render(renderer);
+        if (create_defaults_btn_) create_defaults_btn_->render(renderer);
         if (duplicate_btn_) duplicate_btn_->render(renderer);
         if (delete_btn_) delete_btn_->render(renderer);
     });
@@ -978,6 +1020,9 @@ AssetInfoUI::AssetInfoUI() {
                 return true;
             }
         }
+        if (add_animation_btn_widget_ && add_animation_btn_widget_->handle_event(e)) return true;
+        if (controller_action_btn_widget_ && controller_action_btn_widget_->handle_event(e)) return true;
+        if (create_defaults_btn_widget_ && create_defaults_btn_widget_->handle_event(e)) return true;
         if (duplicate_btn_widget_ && duplicate_btn_widget_->handle_event(e)) return true;
         if (delete_btn_widget_ && delete_btn_widget_->handle_event(e)) return true;
         return false;
@@ -1070,6 +1115,7 @@ void AssetInfoUI::clear_panel_bounds_override() {
 
 void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
     info_ = info;
+    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     if (animation_editor_window_) {
@@ -1164,6 +1210,7 @@ void AssetInfoUI::clear_info() {
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     pending_animation_editor_open_ = false;
+    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
     animation_editor_fullscreen_mode_ = false;
     animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     if (animation_editor_window_) {
@@ -1199,6 +1246,7 @@ void AssetInfoUI::open()  {
 void AssetInfoUI::close(bool flush_changes) {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
+    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
     animation_editor_fullscreen_mode_ = false;
     animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     apply_camera_override(false);
@@ -1229,6 +1277,7 @@ void AssetInfoUI::toggle(){
 void AssetInfoUI::open_animation_editor_panel() {
     if (!animation_editor_window_ || !info_) {
         pending_animation_editor_open_ = false;
+        pending_animation_editor_action_ = PendingAnimationEditorAction::None;
         animation_editor_fullscreen_mode_ = false;
         animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         return;
@@ -1248,6 +1297,7 @@ void AssetInfoUI::open_animation_editor_panel() {
 
 void AssetInfoUI::close_animation_editor_panel() {
     pending_animation_editor_open_ = false;
+    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
     if (animation_editor_window_) {
         // Programmatic panel transitions should not invoke the "window closed" callback,
         // which is reserved for explicit user-driven close actions.
@@ -1257,6 +1307,38 @@ void AssetInfoUI::close_animation_editor_panel() {
 
 bool AssetInfoUI::is_animation_editor_open() const {
     return animation_editor_window_ && animation_editor_window_->is_visible();
+}
+
+bool AssetInfoUI::run_animation_editor_action(PendingAnimationEditorAction action) {
+    if (!animation_editor_window_ || !info_) {
+        return false;
+    }
+    if (!animation_editor_window_->is_visible()) {
+        return false;
+    }
+    switch (action) {
+        case PendingAnimationEditorAction::AddAnimation:
+            return animation_editor_window_->trigger_add_animation_action();
+        case PendingAnimationEditorAction::Controller:
+            return animation_editor_window_->trigger_controller_action();
+        case PendingAnimationEditorAction::CreateDefaults:
+            return animation_editor_window_->trigger_create_defaults_action();
+        case PendingAnimationEditorAction::None:
+        default:
+            return false;
+    }
+}
+
+void AssetInfoUI::request_animation_editor_action(PendingAnimationEditorAction action) {
+    if (!animation_editor_window_ || !info_ || action == PendingAnimationEditorAction::None) {
+        return;
+    }
+    if (animation_editor_window_->is_visible() && run_animation_editor_action(action)) {
+        pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+        return;
+    }
+    pending_animation_editor_action_ = action;
+    open_animation_editor_panel();
 }
 
 void AssetInfoUI::set_animation_editor_fullscreen_mode(bool enabled) {
@@ -1532,6 +1614,12 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
             animation_editor_rect_.w > 0 && animation_editor_rect_.h > 0) {
             animation_editor_window_->set_visible(true);
             pending_animation_editor_open_ = false;
+        }
+        if (pending_animation_editor_action_ != PendingAnimationEditorAction::None &&
+            animation_editor_window_->is_visible()) {
+            if (run_animation_editor_action(pending_animation_editor_action_)) {
+                pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+            }
         }
         if (animation_editor_window_->is_visible()) {
             animation_editor_window_->update(input, screen_w, screen_h);

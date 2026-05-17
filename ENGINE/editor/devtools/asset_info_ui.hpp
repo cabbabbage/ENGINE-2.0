@@ -89,6 +89,13 @@ class AssetInfoUI {
                                std::function<void()> on_success = {});
 
   private:
+    enum class PendingAnimationEditorAction {
+        None,
+        AddAnimation,
+        Controller,
+        CreateDefaults,
+    };
+
     enum class RuntimeRefreshScope {
         LocalOnly,
         StructuralWithDependents,
@@ -116,6 +123,8 @@ class AssetInfoUI {
     bool handle_section_focus_event(const SDL_Event& e);
     std::shared_ptr<animation_editor::AnimationDocument> animation_document() const;
     void collapse_all_except(DockableCollapsible* keep);
+    bool run_animation_editor_action(PendingAnimationEditorAction action);
+    void request_animation_editor_action(PendingAnimationEditorAction action);
 
   private:
     bool visible_ = false;
@@ -149,10 +158,17 @@ class AssetInfoUI {
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
+    std::unique_ptr<class DMButton> add_animation_btn_;
+    std::unique_ptr<class ButtonWidget> add_animation_btn_widget_;
+    std::unique_ptr<class DMButton> controller_action_btn_;
+    std::unique_ptr<class ButtonWidget> controller_action_btn_widget_;
+    std::unique_ptr<class DMButton> create_defaults_btn_;
+    std::unique_ptr<class ButtonWidget> create_defaults_btn_widget_;
     std::unique_ptr<class DMButton> duplicate_btn_;
     std::unique_ptr<class ButtonWidget> duplicate_btn_widget_;
     std::unique_ptr<class DMButton> delete_btn_;
     std::unique_ptr<class ButtonWidget> delete_btn_widget_;
+    PendingAnimationEditorAction pending_animation_editor_action_ = PendingAnimationEditorAction::None;
 
     bool showing_duplicate_popup_ = false;
     std::string duplicate_asset_name_;

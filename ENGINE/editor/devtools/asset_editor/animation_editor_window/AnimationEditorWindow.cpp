@@ -606,9 +606,6 @@ AnimationEditorWindow::AnimationEditorWindow() {
     list_context_menu_ = std::make_unique<AnimationListContextMenu>();
     custom_controller_service_ = std::make_unique<CustomControllerService>();
 
-    add_button_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 160, DMButton::height());
-    controller_button_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 140, DMButton::height());
-    create_defaults_button_ = std::make_unique<DMButton>("Create Defaults", &DMStyles::CreateButton(), 170, DMButton::height());
     load_details_toggle_button_ = std::make_unique<DMButton>("Load Details", &DMStyles::HeaderButton(), 140, DMButton::height());
     load_details_copy_button_ = std::make_unique<DMButton>("Copy", &DMStyles::HeaderButton(), 90, DMButton::height());
     ensure_defaults_modal_widgets();
@@ -635,15 +632,6 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
         close_defaults_modal();
         if (list_context_menu_) {
             list_context_menu_->close();
-        }
-        if (add_button_) {
-            add_button_->cancel_interaction();
-        }
-        if (controller_button_) {
-            controller_button_->cancel_interaction();
-        }
-        if (create_defaults_button_) {
-            create_defaults_button_->cancel_interaction();
         }
         if (load_details_toggle_button_) {
             load_details_toggle_button_->cancel_interaction();
@@ -996,27 +984,6 @@ void AnimationEditorWindow::layout_children() {
     const int padding = DMSpacing::panel_padding();
     const int header_gap = DMSpacing::small_gap();
     const int button_gap = DMSpacing::small_gap();
-    const int header_control_height = DMButton::height();
-    const int header_height = header_control_height + header_gap * 2;
-    header_rect_ = SDL_Rect{bounds_.x, bounds_.y, bounds_.w, header_height};
-
-    int y = header_rect_.y + header_gap;
-    int left_x = header_rect_.x + padding;
-
-    if (add_button_) {
-        add_button_->set_rect(SDL_Rect{left_x, y, add_button_->rect().w, DMButton::height()});
-        left_x += add_button_->rect().w + button_gap;
-    }
-
-    if (controller_button_) {
-        controller_button_->set_rect(SDL_Rect{left_x, y, controller_button_->rect().w, DMButton::height()});
-        left_x += controller_button_->rect().w + button_gap;
-    }
-
-    if (create_defaults_button_) {
-        create_defaults_button_->set_rect(SDL_Rect{left_x, y, create_defaults_button_->rect().w, DMButton::height()});
-        left_x += create_defaults_button_->rect().w + button_gap;
-    }
 
     const int status_padding = DMSpacing::panel_padding();
     const int status_h = status_height();
@@ -1054,7 +1021,7 @@ void AnimationEditorWindow::layout_children() {
         load_details_rect_ = SDL_Rect{0, 0, 0, 0};
     }
 
-    int content_top = header_rect_.y + header_rect_.h + header_gap;
+    int content_top = bounds_.y + padding;
     int content_bottom = status_rect_.y - header_gap;
     int content_height = std::max(0, content_bottom - content_top);
     int available_width = std::max(0, bounds_.w - padding * 2);
@@ -1286,7 +1253,6 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     ensure_layout();
 
     render_background(renderer);
-    render_header(renderer);
     if (list_panel_) list_panel_->render(renderer);
     render_inspector(renderer);
     render_status(renderer);
@@ -1391,10 +1357,6 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (handle_header_event(e)) {
-        return true;
-    }
-
     if (list_panel_ && list_panel_->handle_event(e)) {
         return true;
     }
@@ -1441,6 +1403,28 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
     }
 
     return false;
+}
+
+bool AnimationEditorWindow::trigger_add_animation_action() {
+    if (!document_) {
+        return false;
+    }
+    create_animation_via_prompt();
+    return true;
+}
+
+bool AnimationEditorWindow::trigger_controller_action() {
+    handle_controller_button_click();
+    return true;
+}
+
+bool AnimationEditorWindow::trigger_create_defaults_action() {
+    open_defaults_modal();
+    return defaults_modal_visible_;
+}
+
+std::string AnimationEditorWindow::controller_action_label() const {
+    return does_controller_exist() ? "Open Controller" : "Add Controller";
 }
 
 void AnimationEditorWindow::focus_animation(const std::string& animation_id) {
@@ -1640,46 +1624,6 @@ void AnimationEditorWindow::render_background(SDL_Renderer* renderer) const {
     animation_editor::ui::draw_panel_background(renderer, bounds_);
 }
 
-void AnimationEditorWindow::render_header(SDL_Renderer* renderer) const {
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    dm_draw::DrawBeveledRect( renderer, header_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelHeader(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-
-    std::string title = "Animation Editor";
-    if (auto info_ptr = info_.lock()) {
-        std::string name = info_ptr->name;
-        if (name.empty()) {
-            name = asset_root_path_.filename().string();
-        }
-        if (!name.empty()) {
-            title += " - ";
-            title += name;
-        }
-    } else if (!asset_root_path_.empty()) {
-        title += " - ";
-        title += asset_root_path_.filename().string();
-    }
-
-    if (add_button_) add_button_->render(renderer);
-    if (controller_button_) controller_button_->render(renderer);
-    if (create_defaults_button_) create_defaults_button_->render(renderer);
-
-    int label_x = header_rect_.x + DMSpacing::panel_padding();
-    if (add_button_) {
-        label_x = std::max(label_x, add_button_->rect().x + add_button_->rect().w + DMSpacing::small_gap());
-    }
-    if (controller_button_) {
-        label_x = std::max(label_x, controller_button_->rect().x + controller_button_->rect().w + DMSpacing::small_gap());
-    }
-    if (create_defaults_button_) {
-        label_x = std::max(label_x, create_defaults_button_->rect().x + create_defaults_button_->rect().w + DMSpacing::small_gap());
-    }
-    render_label(renderer, title, label_x, header_rect_.y + DMSpacing::small_gap());
-    if (!defaults_modal_open_warning_.empty()) {
-        render_label(renderer, defaults_modal_open_warning_, header_rect_.x + DMSpacing::panel_padding(),
-                     header_rect_.y + DMButton::height() + DMSpacing::small_gap());
-    }
-}
-
 void AnimationEditorWindow::render_status(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     animation_editor::ui::draw_panel_background(renderer, status_rect_);
@@ -1832,42 +1776,6 @@ bool AnimationEditorWindow::handle_status_event(const SDL_Event& e) {
     return inside_status(x, y);
 }
 
-bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
-    bool consumed = false;
-    auto handle_button = [&](const std::unique_ptr<DMButton>& button,
-                             const char* button_name,
-                             bool activate_on_mouse_down,
-                             auto&& callback) {
-        if (!button) return;
-        bool activated = button->handle_event(e);
-        if (!activated) return;
-        const bool is_activation_event =
-            ((activate_on_mouse_down && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) ||
-             (!activate_on_mouse_down && e.type == SDL_EVENT_MOUSE_BUTTON_UP)) &&
-            e.button.button == SDL_BUTTON_LEFT;
-        if (is_activation_event) {
-            SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION,
-                         "[AnimationEditor] Header button activated: %s (%s).",
-                         button_name,
-                         activate_on_mouse_down ? "down" : "up");
-            set_status_message(std::string("Header: ") + button_name + " activated.", 90);
-            button->cancel_interaction();
-            callback();
-        }
-        consumed = true;
-    };
-
-    // Add Animation explicitly activates on mouse-down.
-    handle_button(add_button_, "Add Animation", true, [this]() { create_animation_via_prompt(); });
-    // Add/Open Controller explicitly activates on mouse-up.
-    handle_button(controller_button_, "Add/Open Controller", false, [this]() { handle_controller_button_click(); });
-    // Create Defaults explicitly activates on mouse-down to remain resilient
-    // when upstream handlers consume the matching mouse-up.
-    handle_button(create_defaults_button_, "Create Defaults", true, [this]() { open_defaults_modal(); });
-
-    return consumed;
-}
-
 void AnimationEditorWindow::set_status_message(const std::string& message, int frames) {
     status_message_ = message;
     status_timer_frames_ = std::max(frames, 0);
@@ -1913,9 +1821,6 @@ void AnimationEditorWindow::open_defaults_modal() {
 }
 
 void AnimationEditorWindow::close_defaults_modal() {
-    if (create_defaults_button_) {
-        create_defaults_button_->cancel_interaction();
-    }
     if (defaults_base_frames_button_) {
         defaults_base_frames_button_->cancel_interaction();
     }
@@ -1952,7 +1857,6 @@ void AnimationEditorWindow::layout_defaults_modal() {
         defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
         defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
         defaults_modal_open_warning_ = "Create Defaults cannot open while panel bounds are collapsed.";
-        if (create_defaults_button_) create_defaults_button_->cancel_interaction();
         return;
     }
     defaults_modal_open_warning_.clear();
@@ -2094,10 +1998,6 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
             return true;
         }
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            if (SDL_PointInRect(&point, &header_rect_)) {
-                // Header buttons must not close or trigger through the defaults modal.
-                return true;
-            }
             close_defaults_modal();
             return true;
         }
@@ -3133,12 +3033,8 @@ void AnimationEditorWindow::handle_controller_button_click() {
 }
 
 void AnimationEditorWindow::update_controller_button_label() {
-    if (!controller_button_) return;
-    if (does_controller_exist()) {
-        controller_button_->set_text("Open Controller");
-    } else {
-        controller_button_->set_text("Add Controller");
-    }
+    // No-op: action label is now surfaced through controller_action_label()
+    // and rendered by AssetInfoUI controls.
 }
 
 bool AnimationEditorWindow::does_controller_exist() const {

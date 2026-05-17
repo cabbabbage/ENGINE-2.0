@@ -26305,9 +26305,9 @@
             }
           },
           "display_color": [
-            31,
-            32,
-            204,
+            242,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -26394,8 +26394,8 @@
             }
           },
           "display_color": [
-            147,
             204,
+            143,
             31,
             255
           ],
@@ -26453,9 +26453,9 @@
             }
           },
           "display_color": [
-            31,
-            148,
-            204,
+            134,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26512,9 +26512,9 @@
             }
           },
           "display_color": [
-            242,
-            148,
-            36,
+            31,
+            123,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26601,9 +26601,9 @@
             }
           },
           "display_color": [
+            36,
             242,
-            85,
-            242,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26665,9 +26665,9 @@
             }
           },
           "display_color": [
-            102,
-            242,
+            174,
             85,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -26765,9 +26765,9 @@
             }
           },
           "display_color": [
-            242,
-            61,
-            168,
+            204,
+            31,
+            169,
             255
           ],
           "edge_smoothness": 101,
@@ -26836,16 +26836,16 @@
                 }
               ],
               "display_name": "vibble (Copy)",
-              "dx": 10,
-              "dz": -186,
+              "dx": -31660,
+              "dz": -31664,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 18496,
-              "origional_width": 18504,
+              "origional_height": 15488,
+              "origional_width": 15496,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -26985,20 +26985,20 @@
                 }
               ],
               "display_name": "axe_in_stump",
-              "dx": -551,
-              "dz": 1883,
+              "dx": -31660,
+              "dz": -31664,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
+              "origional_height": 15488,
+              "origional_width": 15496,
               "position": "Exact",
               "priority": 6,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 7,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-d6eecb87c41e"
@@ -27115,8 +27115,8 @@
             }
           },
           "display_color": [
-            61,
-            92,
+            85,
+            86,
             242,
             255
           ],

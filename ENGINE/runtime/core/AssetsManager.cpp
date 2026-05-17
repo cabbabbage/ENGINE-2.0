@@ -937,6 +937,8 @@ std::size_t Assets::delete_live_dynamic_assets_now(const std::vector<Asset*>& as
     }
 
     if (deleted > 0) {
+        live_dynamic_persistent_occupancy_cache_.clear();
+        live_dynamic_persistent_room_cache_.clear();
         mark_grid_dirty();
         mark_active_assets_dirty();
         mark_non_player_update_buffer_dirty();
@@ -3084,6 +3086,7 @@ bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& wo
         clear_live_dynamic_assets();
         last_live_dynamic_sync_bounds_valid_ = false;
         force_live_dynamic_sync_next_rebuild_ = true;
+        live_dynamic_bounds_bucket_changed_ = true;
         return false;
     }
 
@@ -3095,12 +3098,37 @@ bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& wo
         return false;
     }
 
+    const int quantization = std::max(1, live_dynamic_sync_bounds_quantization_px_);
+    const int hysteresis = std::max(0, live_dynamic_sync_bounds_hysteresis_px_);
+    auto floor_to_quantized = [quantization](int value) {
+        const int q = vibble::math::floor_div(value, quantization);
+        return q * quantization;
+    };
+    auto ceil_to_quantized = [quantization, &floor_to_quantized](int value) {
+        if (value == std::numeric_limits<int>::max()) {
+            return value;
+        }
+        return floor_to_quantized(value + quantization - 1);
+    };
+
+    const int quant_min_x = floor_to_quantized(min_x);
+    const int quant_max_x = ceil_to_quantized(max_x);
+    const int quant_min_z = floor_to_quantized(min_z);
+    const int quant_max_z = ceil_to_quantized(max_z);
+
     const bool bounds_changed =
         !last_live_dynamic_sync_bounds_valid_ ||
-        last_live_dynamic_sync_bounds_min_x_ != min_x ||
-        last_live_dynamic_sync_bounds_max_x_ != max_x ||
-        last_live_dynamic_sync_bounds_min_z_ != min_z ||
-        last_live_dynamic_sync_bounds_max_z_ != max_z;
+        quant_min_x < (last_live_dynamic_sync_bounds_min_x_ - hysteresis) ||
+        quant_max_x > (last_live_dynamic_sync_bounds_max_x_ + hysteresis) ||
+        quant_min_z < (last_live_dynamic_sync_bounds_min_z_ - hysteresis) ||
+        quant_max_z > (last_live_dynamic_sync_bounds_max_z_ + hysteresis);
+
+    live_dynamic_bounds_bucket_changed_ = bounds_changed;
+    if (bounds_changed) {
+        ++live_dynamic_quantized_bounds_change_count_;
+        live_dynamic_persistent_occupancy_cache_.clear();
+        live_dynamic_persistent_room_cache_.clear();
+    }
 
     bool pending_selector_work = !live_dynamic_qualification_queue_.empty() ||
                                  !live_dynamic_spawn_queue_.empty();
@@ -3110,11 +3138,13 @@ bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& wo
         return false;
     }
 
-    last_live_dynamic_sync_bounds_valid_ = true;
-    last_live_dynamic_sync_bounds_min_x_ = min_x;
-    last_live_dynamic_sync_bounds_max_x_ = max_x;
-    last_live_dynamic_sync_bounds_min_z_ = min_z;
-    last_live_dynamic_sync_bounds_max_z_ = max_z;
+    if (bounds_changed || !last_live_dynamic_sync_bounds_valid_) {
+        last_live_dynamic_sync_bounds_valid_ = true;
+        last_live_dynamic_sync_bounds_min_x_ = quant_min_x;
+        last_live_dynamic_sync_bounds_max_x_ = quant_max_x;
+        last_live_dynamic_sync_bounds_min_z_ = quant_min_z;
+        last_live_dynamic_sync_bounds_max_z_ = quant_max_z;
+    }
     force_live_dynamic_sync_next_rebuild_ = false;
     return true;
 }
@@ -3210,6 +3240,10 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     const std::size_t despawns_this_frame = assets_before_prune >= assets_after_prune
         ? (assets_before_prune - assets_after_prune)
         : 0;
+    if (despawns_this_frame > 0) {
+        live_dynamic_persistent_occupancy_cache_.clear();
+        live_dynamic_persistent_room_cache_.clear();
+    }
     if (instrumentation_enabled) {
         stage_b_ms = elapsed_ms(stage_b_start, SDL_GetPerformanceCounter());
     }
@@ -3361,7 +3395,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             spawn_area,
             SDL_Point{task.world_x, task.world_z},
             0,
-            std::string("live_dynamic:") + key.spawn_id +
+            std::string("live_dynamic:") + task.selector_spawn_id +
                 ":" + std::to_string(key.grid_resolution) +
                 ":" + std::to_string(key.grid_x) +
                 ":" + std::to_string(key.grid_z),
@@ -3420,7 +3454,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             return;
         }
 
-        const LiveDynamicSelectorStateKey selector_state_key{selector.mode, resolution, selector.spawn_id};
+        const LiveDynamicSelectorStateKey selector_state_key{selector.mode, resolution, selector.selector_id};
         selector_lookup[selector_state_key] = &selector;
         LiveDynamicSelectorScanState& state = live_dynamic_selector_scan_state_[selector_state_key];
 
@@ -3432,11 +3466,11 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
 
         if (scan_bounds_changed) {
             auto in_scan_bounds = [&](const LiveDynamicPointKey& key) {
-                return key.mode == selector.mode && key.grid_resolution == resolution && key.spawn_id == selector.spawn_id &&
+                return key.mode == selector.mode && key.grid_resolution == resolution && key.selector_id == selector.selector_id &&
                        key.grid_x >= scan_min_x && key.grid_x <= scan_max_x && key.grid_z >= scan_min_z && key.grid_z <= scan_max_z;
             };
             for (auto it = live_dynamic_null_keys_.begin(); it != live_dynamic_null_keys_.end();) {
-                if (it->mode == selector.mode && it->grid_resolution == resolution && it->spawn_id == selector.spawn_id && !in_scan_bounds(*it)) {
+                if (it->mode == selector.mode && it->grid_resolution == resolution && it->selector_id == selector.selector_id && !in_scan_bounds(*it)) {
                     it = live_dynamic_null_keys_.erase(it);
                 } else {
                     ++it;
@@ -3448,17 +3482,41 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             for (auto it = state.spawned_cells.begin(); it != state.spawned_cells.end();) {
                 if (!in_scan_bounds(*it)) it = state.spawned_cells.erase(it); else ++it;
             }
-            for (auto it = live_dynamic_qualification_queue_.begin(); it != live_dynamic_qualification_queue_.end();) {
-                if (it->selector_key == selector_state_key && !in_scan_bounds(it->point_key)) {
-                    live_dynamic_pending_qualification_keys_.erase(it->point_key);
-                    it = live_dynamic_qualification_queue_.erase(it);
-                } else ++it;
+            live_dynamic_qualification_queue_.erase(
+                std::remove_if(live_dynamic_qualification_queue_.begin(),
+                               live_dynamic_qualification_queue_.end(),
+                               [&](const LiveDynamicQualifiedPoint& point) {
+                                   if (point.selector_key == selector_state_key && !in_scan_bounds(point.point_key)) {
+                                       live_dynamic_pending_qualification_keys_.erase(point.point_key);
+                                       return true;
+                                   }
+                                   return false;
+                               }),
+                live_dynamic_qualification_queue_.end());
+            live_dynamic_spawn_queue_.erase(
+                std::remove_if(live_dynamic_spawn_queue_.begin(),
+                               live_dynamic_spawn_queue_.end(),
+                               [&](const LiveDynamicSpawnTask& task) {
+                                   if (task.selector_key == selector_state_key && !in_scan_bounds(task.point_key)) {
+                                       live_dynamic_pending_spawn_keys_.erase(task.point_key);
+                                       return true;
+                                   }
+                                   return false;
+                               }),
+                live_dynamic_spawn_queue_.end());
+            if (!live_dynamic_qualification_queue_.empty()) {
+                std::make_heap(live_dynamic_qualification_queue_.begin(),
+                               live_dynamic_qualification_queue_.end(),
+                               [](const LiveDynamicQualifiedPoint& lhs, const LiveDynamicQualifiedPoint& rhs) {
+                                   return LiveDynamicQualifiedPointOrder{}(rhs, lhs);
+                               });
             }
-            for (auto it = live_dynamic_spawn_queue_.begin(); it != live_dynamic_spawn_queue_.end();) {
-                if (it->selector_key == selector_state_key && !in_scan_bounds(it->point_key)) {
-                    live_dynamic_pending_spawn_keys_.erase(it->point_key);
-                    it = live_dynamic_spawn_queue_.erase(it);
-                } else ++it;
+            if (!live_dynamic_spawn_queue_.empty()) {
+                std::make_heap(live_dynamic_spawn_queue_.begin(),
+                               live_dynamic_spawn_queue_.end(),
+                               [](const LiveDynamicSpawnTask& lhs, const LiveDynamicSpawnTask& rhs) {
+                                   return LiveDynamicSpawnTaskOrder{}(rhs, lhs);
+                               });
             }
             state.ring_radius = 0;
             state.ring_edge = 0;
@@ -3520,7 +3578,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                 if (x < state.min_x || x > state.max_x || z < state.min_z || z > state.max_z) {
                     continue;
                 }
-                const LiveDynamicPointKey key{selector.mode, selector_key.grid_resolution, x, z, selector.spawn_id};
+                const LiveDynamicPointKey key{selector.mode, selector_key.grid_resolution, x, z, selector.selector_id};
                 if (!state.seen_cells.insert(key).second) {
                     continue;
                 }
@@ -3555,17 +3613,23 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     };
 
     struct LiveDynamicEvaluationContext {
-        std::unordered_map<world::GridKey, bool, world::GridKeyHash> occupancy_cache;
+        std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash> occupancy_cache;
         std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> room_cache;
         std::size_t rejected_occupied = 0;
         std::size_t rejected_bounds = 0;
         std::size_t rejected_room = 0;
         std::size_t rejected_already_spawned = 0;
-    } eval_context;
+    } eval_context{live_dynamic_persistent_occupancy_cache_, live_dynamic_persistent_room_cache_};
     std::size_t points_scanned_this_frame = 0;
     std::size_t points_qualified_this_frame = 0;
     std::size_t spawn_attempts_this_frame = 0;
     std::size_t successful_spawns_this_frame = 0;
+    auto qualified_heap_cmp = [](const LiveDynamicQualifiedPoint& lhs, const LiveDynamicQualifiedPoint& rhs) {
+        return LiveDynamicQualifiedPointOrder{}(rhs, lhs);
+    };
+    auto spawn_heap_cmp = [](const LiveDynamicSpawnTask& lhs, const LiveDynamicSpawnTask& rhs) {
+        return LiveDynamicSpawnTaskOrder{}(rhs, lhs);
+    };
 
     auto evaluate_spawn_point = [&](const LiveDynamicPointKey& key,
                                     int owner_anchor_world_x,
@@ -3587,20 +3651,16 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             return SpawnPointEvalResult::out_of_bounds;
         }
 
-        const world::GridPoint grid_point = world::GridPoint::make_virtual(
-            owner_anchor_world_x,
-            0,
-            owner_anchor_world_z,
-            key.grid_resolution);
-        const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
+        const LiveDynamicOccupancyKey occupancy_key{key.grid_resolution, key.grid_x, key.grid_z};
         const auto occupied_it = ctx.occupancy_cache.find(occupancy_key);
         bool occupied = false;
         if (occupied_it != ctx.occupancy_cache.end()) {
             occupied = occupied_it->second;
+            ++live_dynamic_occupancy_cache_hits_;
         } else {
-            const world::GridPoint* existing = world_grid_.find_grid_point(occupancy_key);
-            occupied = existing && !existing->assets_here().empty();
+            occupied = world_grid_.is_occupied_at_xz(owner_anchor_world_x, owner_anchor_world_z, key.grid_resolution);
             ctx.occupancy_cache.emplace(occupancy_key, occupied);
+            ++live_dynamic_occupancy_cache_misses_;
         }
         if (occupied) {
             ++ctx.rejected_occupied;
@@ -3608,7 +3668,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         }
 
         const LiveDynamicRoomCacheKey room_key{key.mode, key.grid_resolution, key.grid_x, key.grid_z};
-        const auto selector_it = selector_lookup.find({key.mode, key.grid_resolution, key.spawn_id});
+        const auto selector_it = selector_lookup.find({key.mode, key.grid_resolution, key.selector_id});
         const bool require_inherited = selector_it != selector_lookup.end() && selector_it->second &&
                                        selector_it->second->require_inherited_room_owner;
         const bool allow_boundary = selector_it != selector_lookup.end() && selector_it->second &&
@@ -3670,7 +3730,10 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                 break;
             }
             if (live_dynamic_pending_qualification_keys_.insert(next_point.point_key).second) {
-                live_dynamic_qualification_queue_.insert(next_point);
+                live_dynamic_qualification_queue_.push_back(next_point);
+                std::push_heap(live_dynamic_qualification_queue_.begin(),
+                               live_dynamic_qualification_queue_.end(),
+                               qualified_heap_cmp);
                 ++points_scanned_this_frame;
             }
         }
@@ -3678,9 +3741,11 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             break;
         }
 
-        const auto queue_it = live_dynamic_qualification_queue_.begin();
-        const LiveDynamicQualifiedPoint point = *queue_it;
-        live_dynamic_qualification_queue_.erase(queue_it);
+        std::pop_heap(live_dynamic_qualification_queue_.begin(),
+                      live_dynamic_qualification_queue_.end(),
+                      qualified_heap_cmp);
+        const LiveDynamicQualifiedPoint point = live_dynamic_qualification_queue_.back();
+        live_dynamic_qualification_queue_.pop_back();
         live_dynamic_pending_qualification_keys_.erase(point.point_key);
 
         const LiveDynamicPointKey& key = point.point_key;
@@ -3712,11 +3777,15 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
         task.world_x = point.world_x;
         task.world_z = point.world_z;
         task.dist2 = point.dist2;
+        task.selector_spawn_id = selector.spawn_id;
         task.owner_name = owner_name;
         task.asset_name = candidate->asset_name;
         task.info = candidate->info;
         if (live_dynamic_pending_spawn_keys_.insert(key).second) {
-            live_dynamic_spawn_queue_.insert(std::move(task));
+            live_dynamic_spawn_queue_.push_back(std::move(task));
+            std::push_heap(live_dynamic_spawn_queue_.begin(),
+                           live_dynamic_spawn_queue_.end(),
+                           spawn_heap_cmp);
             ++points_qualified_this_frame;
         }
     }
@@ -3736,9 +3805,11 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             break;
         }
 
-        const auto queue_it = live_dynamic_spawn_queue_.begin();
-        const LiveDynamicSpawnTask task = *queue_it;
-        live_dynamic_spawn_queue_.erase(queue_it);
+        std::pop_heap(live_dynamic_spawn_queue_.begin(),
+                      live_dynamic_spawn_queue_.end(),
+                      spawn_heap_cmp);
+        const LiveDynamicSpawnTask task = live_dynamic_spawn_queue_.back();
+        live_dynamic_spawn_queue_.pop_back();
         live_dynamic_pending_spawn_keys_.erase(task.point_key);
         ++spawn_attempts_this_frame;
 
@@ -3752,12 +3823,7 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
 
         if (spawn_live_asset(task)) {
             ++successful_spawns_this_frame;
-            const world::GridPoint grid_point = world::GridPoint::make_virtual(
-                task.owner_anchor_world_x,
-                0,
-                task.owner_anchor_world_z,
-                key.grid_resolution);
-            const world::GridKey occupancy_key = world_grid_.grid_key_from_world(grid_point, key.grid_resolution);
+            const LiveDynamicOccupancyKey occupancy_key{key.grid_resolution, key.grid_x, key.grid_z};
             eval_context.occupancy_cache[occupancy_key] = true;
             if (auto state_it = live_dynamic_selector_scan_state_.find(task.selector_key);
                 state_it != live_dynamic_selector_scan_state_.end()) {
@@ -3768,6 +3834,9 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
     if (instrumentation_enabled) {
         stage_e_ms = elapsed_ms(stage_e_start, SDL_GetPerformanceCounter());
     }
+
+    live_dynamic_persistent_occupancy_cache_ = std::move(eval_context.occupancy_cache);
+    live_dynamic_persistent_room_cache_ = std::move(eval_context.room_cache);
 
     const std::uint64_t perf_end = SDL_GetPerformanceCounter();
     if (perf_freq > 0) {
@@ -3855,7 +3924,10 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
             ",points_qualified:" + std::to_string(points_qualified_this_frame) +
             ",spawn_attempts:" + std::to_string(spawn_attempts_this_frame) +
             ",successful_spawns:" + std::to_string(successful_spawns_this_frame) +
-            ",despawns:" + std::to_string(despawns_this_frame) + "}");
+            ",despawns:" + std::to_string(despawns_this_frame) +
+            ",quantized_bounds_changes:" + std::to_string(live_dynamic_quantized_bounds_change_count_) +
+            ",occupancy_cache_hits:" + std::to_string(live_dynamic_occupancy_cache_hits_) +
+            ",occupancy_cache_misses:" + std::to_string(live_dynamic_occupancy_cache_misses_) + "}");
     }
 }
 

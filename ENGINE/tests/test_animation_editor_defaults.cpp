@@ -691,13 +691,16 @@ TEST_CASE("AnimationEditorWindow create defaults rolls back on copy failure") {
     const fs::path frame0 = root / "base_0.png";
     write_dummy_png(frame0);
     auto document = make_document(root);
+    const auto ids_before = document->animation_ids();
     animation_editor::AnimationEditorWindow window;
     configure_defaults(window, document, root, {frame0}, 4, true, false, false, false, false);
     window.defaults_copy_frames_override_ = [](const std::string&, const std::vector<fs::path>&) { return false; };
 
     window.handle_create_defaults();
 
-    CHECK(std::find(document->animation_ids().begin(), document->animation_ids().end(), "left") == document->animation_ids().end());
+    const auto ids_after = document->animation_ids();
+    CHECK(ids_after == ids_before);
+    CHECK(std::find(ids_after.begin(), ids_after.end(), "left") == ids_after.end());
     CHECK_FALSE(fs::exists(root / "left"));
 }
 
@@ -706,13 +709,15 @@ TEST_CASE("AnimationEditorWindow create defaults rolls back on payload write fai
     const fs::path frame0 = root / "base_0.png";
     write_dummy_png(frame0);
     auto document = make_document(root);
+    const auto ids_before = document->animation_ids();
     animation_editor::AnimationEditorWindow window;
     configure_defaults(window, document, root, {frame0}, 4, true, false, false, false, false);
     window.defaults_force_payload_write_failure_ = true;
 
     window.handle_create_defaults();
 
-    CHECK(document->animation_ids().empty());
+    const auto ids_after = document->animation_ids();
+    CHECK(ids_after == ids_before);
     CHECK_FALSE(fs::exists(root / "left"));
 }
 
@@ -721,13 +726,15 @@ TEST_CASE("AnimationEditorWindow create defaults stops on source dependency vali
     const fs::path frame0 = root / "base_0.png";
     write_dummy_png(frame0);
     auto document = make_document(root);
+    const auto ids_before = document->animation_ids();
     animation_editor::AnimationEditorWindow window;
     configure_defaults(window, document, root, {frame0}, 4, true, false, false, false, false);
     window.defaults_force_source_dependency_failure_ = true;
 
     window.handle_create_defaults();
 
-    CHECK(document->animation_ids().empty());
+    const auto ids_after = document->animation_ids();
+    CHECK(ids_after == ids_before);
     CHECK_FALSE(fs::exists(root / "left"));
 }
 

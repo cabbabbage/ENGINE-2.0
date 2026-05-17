@@ -23,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <tuple>
 #include <unordered_set>
@@ -623,28 +624,56 @@ AnimationEditorWindow::~AnimationEditorWindow() {
 }
 
 void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
-    const bool notify_closed = (!visible && visible_ && process_close);
-    if (!visible && visible_ && process_close) {
+    const bool was_visible = visible_;
+    const bool becoming_hidden = (!visible && was_visible);
+    const bool becoming_visible = (visible && !was_visible);
+    const bool notify_closed = (becoming_hidden && process_close);
+
+    if (becoming_hidden) {
+        // Always clear transient overlay/interaction state when hiding, even for
+        // programmatic visibility transitions that skip close processing.
         close_defaults_modal();
-
-        if (document_ && document_->consume_dirty_flag()) {
-            auto_save_pending_ = true;
-            auto_save_timer_frames_ = 0;
-        }
-        auto_save_timer_frames_ = 0;
-        process_auto_save();
-
-        if (using_manifest_store_ && manifest_transaction_) {
-
-            nlohmann::json dummy;
-            persist_manifest_payload(dummy, true);
-        }
-
         if (list_context_menu_) {
             list_context_menu_->close();
         }
+        if (add_button_) {
+            add_button_->cancel_interaction();
+        }
+        if (controller_button_) {
+            controller_button_->cancel_interaction();
+        }
+        if (create_defaults_button_) {
+            create_defaults_button_->cancel_interaction();
+        }
+        if (load_details_toggle_button_) {
+            load_details_toggle_button_->cancel_interaction();
+        }
+        if (load_details_copy_button_) {
+            load_details_copy_button_->cancel_interaction();
+        }
+
+        if (process_close) {
+            if (document_ && document_->consume_dirty_flag()) {
+                auto_save_pending_ = true;
+                auto_save_timer_frames_ = 0;
+            }
+            auto_save_timer_frames_ = 0;
+            process_auto_save();
+
+            if (using_manifest_store_ && manifest_transaction_) {
+
+                nlohmann::json dummy;
+                persist_manifest_payload(dummy, true);
+            }
+        }
     }
+
     visible_ = visible;
+    if (becoming_visible) {
+        ensure_layout();
+        ensure_selection_valid();
+        refresh_panels_after_load();
+    }
     if (notify_closed && on_closed_) {
         on_closed_();
     }
@@ -1313,16 +1342,31 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
             return true;
         }
 
+        const bool pointer_or_wheel_event =
+            (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+             e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
+             e.type == SDL_EVENT_MOUSE_MOTION ||
+             e.type == SDL_EVENT_MOUSE_WHEEL);
+
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             SDL_Rect menu_bounds = list_context_menu_->bounds();
             if (!SDL_PointInRect(&p, &menu_bounds)) {
                 list_context_menu_->close();
             }
+            return true;
         }
 
         if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             list_context_menu_->close();
+            return true;
+        }
+
+        if (pointer_or_wheel_event ||
+            e.type == SDL_EVENT_KEY_DOWN ||
+            e.type == SDL_EVENT_TEXT_INPUT) {
+            // While the context menu is open, consume UI input to prevent
+            // single-click close+activate fallthrough into header/list actions.
             return true;
         }
     }
@@ -2050,6 +2094,10 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
             return true;
         }
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (SDL_PointInRect(&point, &header_rect_)) {
+                // Header buttons must not close or trigger through the defaults modal.
+                return true;
+            }
             close_defaults_modal();
             return true;
         }
@@ -2386,6 +2434,11 @@ void AnimationEditorWindow::handle_create_defaults() {
         std::filesystem::path folder_path;
         nlohmann::json payload;
     };
+    struct FolderBackup {
+        std::string animation_id;
+        std::filesystem::path original_path;
+        std::filesystem::path backup_path;
+    };
 
     if (!document_) {
         set_status_message("Animation document is unavailable.", 180);
@@ -2431,8 +2484,14 @@ void AnimationEditorWindow::handle_create_defaults() {
     const int d = *total_movement_per_animation;
     const int frame_count = static_cast<int>(base_frames.size());
     const bool base_faces_right = defaults_base_faces_right();
-    std::vector<std::string> created_ids, newly_created_ids;
+    const std::vector<std::string> ids_before_defaults = document_->animation_ids();
+    const std::unordered_set<std::string> ids_before_defaults_set(
+        ids_before_defaults.begin(), ids_before_defaults.end());
+    std::unordered_map<std::string, nlohmann::json> payload_snapshot_before_defaults;
+    std::vector<std::string> created_ids;
     std::vector<std::filesystem::path> created_folders;
+    std::vector<FolderBackup> source_folder_backups;
+    std::unordered_set<std::string> backed_up_source_folder_ids;
     std::vector<DefaultAnimationSpec> specs;
 
     auto add_seed=[&](const std::string& id,int dx,int dy,int dz){specs.push_back(DefaultAnimationSpec{id,dx,dy,dz,{},true,false,false});};
@@ -2452,6 +2511,14 @@ void AnimationEditorWindow::handle_create_defaults() {
     if (defaults_force_source_dependency_failure_) error = DefaultsStageError::SourceDependency;
     for (const auto& spec : specs) {
         PlannedDefaultWrite write{spec, asset_root_path_ / spec.id, nlohmann::json::object()};
+        if (ids_before_defaults_set.count(spec.id) > 0) {
+            if (payload_snapshot_before_defaults.count(spec.id) == 0) {
+                auto payload = document_->animation_payload_json(spec.id);
+                if (payload.has_value() && payload->is_object()) {
+                    payload_snapshot_before_defaults.emplace(spec.id, std::move(*payload));
+                }
+            }
+        }
         if (spec.folder_sourced) write.payload = build_file_sourced_movement_payload(spec.id, frame_count, spec.dx, spec.dy, spec.dz, default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
         else {
             const DefaultAnimationSpec* source = find_source(spec.source_id);
@@ -2460,16 +2527,75 @@ void AnimationEditorWindow::handle_create_defaults() {
         }
         plan.push_back(std::move(write));
     }
+
+    auto backup_existing_source_folder = [&](const PlannedDefaultWrite& write) -> bool {
+        if (!write.spec.folder_sourced || backed_up_source_folder_ids.count(write.spec.id) > 0) {
+            return true;
+        }
+        std::error_code ec;
+        const bool existed = std::filesystem::exists(write.folder_path, ec);
+        if (ec) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Failed to inspect source folder '%s': %s",
+                         write.folder_path.generic_string().c_str(),
+                         ec.message().c_str());
+            return false;
+        }
+        if (!existed) {
+            return true;
+        }
+
+        std::filesystem::path backup_path;
+        bool found_backup_slot = false;
+        for (int attempt = 0; attempt < 64; ++attempt) {
+            const std::string suffix =
+                ".defaults_backup_" + write.spec.id + "_" +
+                std::to_string(static_cast<long long>(
+                    std::chrono::high_resolution_clock::now().time_since_epoch().count())) +
+                "_" + std::to_string(attempt);
+            backup_path = asset_root_path_ / suffix;
+            std::error_code exists_ec;
+            if (!std::filesystem::exists(backup_path, exists_ec) && !exists_ec) {
+                found_backup_slot = true;
+                break;
+            }
+        }
+
+        if (!found_backup_slot) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Failed to allocate defaults backup folder for '%s'.",
+                         write.spec.id.c_str());
+            return false;
+        }
+
+        std::filesystem::rename(write.folder_path, backup_path, ec);
+        if (ec) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[AnimationEditor] Failed to backup source folder '%s': %s",
+                         write.folder_path.generic_string().c_str(),
+                         ec.message().c_str());
+            return false;
+        }
+
+        source_folder_backups.push_back(FolderBackup{write.spec.id, write.folder_path, backup_path});
+        backed_up_source_folder_ids.insert(write.spec.id);
+        return true;
+    };
+
     for (const auto& write : plan) {
         if (error != DefaultsStageError::None) break;
-        const bool existed_before = document_->animation_payload(write.spec.id).has_value();
         if (write.spec.folder_sourced) {
+            if (!backup_existing_source_folder(write)) {
+                error = DefaultsStageError::CopyFailure;
+                break;
+            }
             const bool copied = defaults_copy_frames_override_ ? defaults_copy_frames_override_(write.spec.id, base_frames) : copy_frames_to_animation_folder(write.spec.id, base_frames);
             if (!copied) { error = DefaultsStageError::CopyFailure; break; }
-            created_folders.push_back(write.folder_path);
+            if (backed_up_source_folder_ids.count(write.spec.id) == 0) {
+                created_folders.push_back(write.folder_path);
+            }
         }
         if (defaults_force_payload_write_failure_ || !create_or_replace_animation_payload(write.spec.id, write.payload)) { error = DefaultsStageError::PayloadWriteFailure; break; }
-        if (!existed_before) newly_created_ids.push_back(write.spec.id);
         created_ids.push_back(write.spec.id);
     }
 
@@ -2479,12 +2605,46 @@ void AnimationEditorWindow::handle_create_defaults() {
     }
 
     if (error != DefaultsStageError::None) {
-        for (const auto& id : newly_created_ids) document_->delete_animation(id);
+        for (const auto& id : created_ids) {
+            if (ids_before_defaults_set.count(id) == 0) {
+                document_->delete_animation(id);
+            }
+        }
+        for (const auto& [id, payload] : payload_snapshot_before_defaults) {
+            (void)create_or_replace_animation_payload(id, payload);
+        }
         for (const auto& folder : created_folders) { std::error_code ec; std::filesystem::remove_all(folder, ec); }
+        for (auto it = source_folder_backups.rbegin(); it != source_folder_backups.rend(); ++it) {
+            std::error_code ec;
+            if (std::filesystem::exists(it->original_path, ec) && !ec) {
+                ec.clear();
+                std::filesystem::remove_all(it->original_path, ec);
+            }
+            ec.clear();
+            std::filesystem::rename(it->backup_path, it->original_path, ec);
+            if (ec) {
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "[AnimationEditor] Failed to restore source folder backup '%s' -> '%s': %s",
+                            it->backup_path.generic_string().c_str(),
+                            it->original_path.generic_string().c_str(),
+                            ec.message().c_str());
+            }
+        }
         if (error == DefaultsStageError::CopyFailure) set_status_message("Create defaults failed while copying source frames. Check source PNGs and write permissions.", 300);
         else if (error == DefaultsStageError::PayloadWriteFailure) set_status_message("Create defaults failed while writing animation payloads. No partial defaults were kept.", 300);
         else set_status_message("Create defaults failed: a source dependency was missing.", 300);
         return;
+    }
+
+    for (const auto& backup : source_folder_backups) {
+        std::error_code ec;
+        std::filesystem::remove_all(backup.backup_path, ec);
+        if (ec) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[AnimationEditor] Failed to remove source folder backup '%s': %s",
+                        backup.backup_path.generic_string().c_str(),
+                        ec.message().c_str());
+        }
     }
 
     if (preview_provider_) preview_provider_->invalidate_all();

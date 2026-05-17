@@ -630,6 +630,8 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
         // Always clear transient overlay/interaction state when hiding, even for
         // programmatic visibility transitions that skip close processing.
         close_defaults_modal();
+        defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
+        pending_external_action_.clear();
         if (list_context_menu_) {
             list_context_menu_->close();
         }
@@ -682,6 +684,14 @@ void AnimationEditorWindow::set_bounds(const SDL_Rect& bounds) {
     bounds_ = bounds;
     layout_dirty_ = true;
     layout_children();
+}
+
+bool AnimationEditorWindow::is_layout_valid() const {
+    return layout_state_.bounds_valid && layout_state_.list_valid && layout_state_.inspector_valid;
+}
+
+bool AnimationEditorWindow::is_ready_for_action_execution() const {
+    return visible_ && is_layout_valid() && document_;
 }
 
 int AnimationEditorWindow::status_height() const {
@@ -990,9 +1000,18 @@ void AnimationEditorWindow::clear_info() {
 
 void AnimationEditorWindow::layout_children() {
     layout_dirty_ = false;
+    apply_layout_state(compute_layout_state());
+    invalidate_inspector_background_cache();
+    layout_defaults_modal();
+    sync_modal_lifecycle_with_layout();
+}
+
+AnimationEditorWindow::LayoutState AnimationEditorWindow::compute_layout_state() const {
+    LayoutState state{};
     const int padding = DMSpacing::panel_padding();
     const int header_gap = DMSpacing::small_gap();
     const int button_gap = DMSpacing::small_gap();
+    state.bounds_valid = bounds_.w > 0 && bounds_.h > 0;
 
     const int status_padding = DMSpacing::panel_padding();
     const int status_h = status_height();
@@ -1002,11 +1021,12 @@ void AnimationEditorWindow::layout_children() {
     if (load_details_copy_button_) {
         load_details_copy_button_->set_text("Copy");
     }
-    status_rect_ = SDL_Rect{bounds_.x, bounds_.y + bounds_.h - status_h, bounds_.w, status_h};
-    status_rect_.h = status_h;
+    state.status_rect = SDL_Rect{bounds_.x, bounds_.y + bounds_.h - status_h, bounds_.w, status_h};
+    state.status_rect.h = status_h;
+    state.status_valid = state.status_rect.w > 0 && state.status_rect.h > 0;
 
-    const int footer_y = status_rect_.y + status_padding;
-    const int footer_right = status_rect_.x + status_rect_.w - status_padding;
+    const int footer_y = state.status_rect.y + status_padding;
+    const int footer_right = state.status_rect.x + state.status_rect.w - status_padding;
     int footer_cursor_x = footer_right;
     if (load_details_copy_button_) {
         const int w = std::max(load_details_copy_button_->rect().w, load_details_copy_button_->preferred_width() + 20);
@@ -1019,19 +1039,19 @@ void AnimationEditorWindow::layout_children() {
         footer_cursor_x -= w;
         load_details_toggle_button_->set_rect(SDL_Rect{footer_cursor_x, footer_y, w, DMButton::height()});
     }
-    if (load_details_expanded_) {
+    if (load_details_expanded_ && state.status_valid) {
         const int details_y = footer_y + DMButton::height() + DMSpacing::small_gap();
-        const int details_h = std::max(0, status_rect_.y + status_rect_.h - details_y - status_padding);
-        load_details_rect_ = SDL_Rect{status_rect_.x + status_padding,
-                                      details_y,
-                                      std::max(0, status_rect_.w - status_padding * 2),
-                                      details_h};
+        const int details_h = std::max(0, state.status_rect.y + state.status_rect.h - details_y - status_padding);
+        state.load_details_rect = SDL_Rect{state.status_rect.x + status_padding,
+                                           details_y,
+                                           std::max(0, state.status_rect.w - status_padding * 2),
+                                           details_h};
     } else {
-        load_details_rect_ = SDL_Rect{0, 0, 0, 0};
+        state.load_details_rect = SDL_Rect{0, 0, 0, 0};
     }
 
     int content_top = bounds_.y + padding;
-    int content_bottom = status_rect_.y - header_gap;
+    int content_bottom = state.status_rect.y - header_gap;
     int content_height = std::max(0, content_bottom - content_top);
     int available_width = std::max(0, bounds_.w - padding * 2);
     bool stack_vertical = available_width < 640;
@@ -1045,28 +1065,58 @@ void AnimationEditorWindow::layout_children() {
         int list_height = std::max(0, content_height - inspector_height - gap);
         inspector_height = std::max(0, content_height - list_height - gap);
 
-        list_rect_ = SDL_Rect{bounds_.x + padding, content_top, available_width, list_height};
-        inspector_rect_ = SDL_Rect{bounds_.x + padding,
-                                   list_rect_.y + list_rect_.h + gap,
-                                   available_width,
-                                   inspector_height};
+        state.list_rect = SDL_Rect{bounds_.x + padding, content_top, available_width, list_height};
+        state.inspector_rect = SDL_Rect{bounds_.x + padding,
+                                        state.list_rect.y + state.list_rect.h + gap,
+                                        available_width,
+                                        inspector_height};
     } else {
         int sidebar_width = std::clamp(available_width / 3, 260, 420);
         int inspector_gap = DMSpacing::panel_padding();
         if (available_width < sidebar_width + inspector_gap + 320) {
             inspector_gap = DMSpacing::small_gap();
         }
-        list_rect_ = SDL_Rect{bounds_.x + padding, content_top, sidebar_width, content_height};
-        int inspector_x = list_rect_.x + list_rect_.w + inspector_gap;
+        state.list_rect = SDL_Rect{bounds_.x + padding, content_top, sidebar_width, content_height};
+        int inspector_x = state.list_rect.x + state.list_rect.w + inspector_gap;
         int inspector_w = std::max(0, bounds_.x + bounds_.w - padding - inspector_x);
-        inspector_rect_ = SDL_Rect{inspector_x, content_top, inspector_w, content_height};
+        state.inspector_rect = SDL_Rect{inspector_x, content_top, inspector_w, content_height};
     }
+    state.list_valid = state.list_rect.w > 0 && state.list_rect.h > 0;
+    state.inspector_valid = state.inspector_rect.w > 0 && state.inspector_rect.h > 0;
+    return state;
+}
+
+void AnimationEditorWindow::apply_layout_state(const LayoutState& state) {
+    layout_state_ = state;
+    list_rect_ = state.list_rect;
+    inspector_rect_ = state.inspector_rect;
+    status_rect_ = state.status_rect;
+    load_details_rect_ = state.load_details_rect;
     if (list_panel_) list_panel_->set_bounds(list_rect_);
     if (inspector_panel_) inspector_panel_->set_bounds(inspector_rect_);
+}
 
-    invalidate_inspector_background_cache();
-    layout_defaults_modal();
-
+void AnimationEditorWindow::sync_modal_lifecycle_with_layout() {
+    if (!visible_) {
+        defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
+        defaults_modal_visible_ = false;
+        return;
+    }
+    if (defaults_modal_lifecycle_ == ModalLifecycleState::OpenReady && !defaults_modal_bounds_valid()) {
+        defaults_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
+        defaults_modal_visible_ = false;
+        defaults_modal_open_deferred_ = true;
+        set_status_message("Create Defaults waiting for valid editor layout.", 180);
+    } else if (defaults_modal_lifecycle_ == ModalLifecycleState::OpenPendingLayout &&
+               defaults_modal_bounds_valid()) {
+        defaults_modal_lifecycle_ = ModalLifecycleState::OpenReady;
+        defaults_modal_visible_ = true;
+        defaults_modal_open_deferred_ = false;
+        layout_defaults_modal();
+    } else if (defaults_modal_lifecycle_ == ModalLifecycleState::Closing) {
+        defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
+        defaults_modal_visible_ = false;
+    }
 }
 
 void AnimationEditorWindow::invalidate_inspector_background_cache() {
@@ -1222,6 +1272,7 @@ void AnimationEditorWindow::handle_list_context_menu(const std::string& animatio
 
 void AnimationEditorWindow::update(const Input& input, int screen_w, int screen_h) {
     if (!visible_) return;
+    ++frame_counter_;
 
     int mouse_x, mouse_y;
     sdl_mouse_util::GetMouseState(&mouse_x, &mouse_y);
@@ -1235,6 +1286,7 @@ void AnimationEditorWindow::update(const Input& input, int screen_w, int screen_
 
     ensure_layout();
     maybe_retry_deferred_defaults_modal();
+    (void)flush_pending_external_action();
 
     if (task_queue_) task_queue_->update();
     if (list_panel_) list_panel_->update();

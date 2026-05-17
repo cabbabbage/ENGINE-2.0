@@ -908,6 +908,70 @@ TEST_CASE("RoomEditor overlay resolution resnap respects snap toggle") {
     CHECK(RoomEditorTestAccess::snap_spawn_group_to_resolution_call_count(editor) == 0);
 }
 
+TEST_CASE("RoomEditor external panel lock gates asset selection in normal mode") {
+    RoomEditor editor(nullptr, 1280, 720);
+    editor.set_enabled(true);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_normal());
+
+    RoomEditorTestAccess::set_external_asset_selection_blocked(editor, false);
+    CHECK(RoomEditorTestAccess::asset_selection_allowed_now(editor));
+
+    RoomEditorTestAccess::set_external_asset_selection_blocked(editor, true);
+    CHECK_FALSE(RoomEditorTestAccess::asset_selection_allowed_now(editor));
+}
+
+TEST_CASE("RoomEditor point edit modes disable room asset selection interactions") {
+    RoomEditor editor(nullptr, 1280, 720);
+    editor.set_enabled(true);
+    RoomEditorTestAccess::set_external_asset_selection_blocked(editor, false);
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_normal());
+    CHECK(RoomEditorTestAccess::asset_selection_allowed_now(editor));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_anchor());
+    CHECK_FALSE(RoomEditorTestAccess::asset_selection_allowed_now(editor));
+
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_hitbox());
+    CHECK_FALSE(RoomEditorTestAccess::asset_selection_allowed_now(editor));
+}
+
+TEST_CASE("RoomEditor floor grid context keeps mouse-centered floor projection without mode target asset") {
+    BoundaryProxyFixture fixture("grid_overlay_spawn");
+    RoomEditor editor(fixture.assets.get(), 1280, 720);
+    editor.set_enabled(true);
+    RoomEditorTestAccess::set_editor_mode(editor, RoomEditorTestAccess::mode_anchor());
+    RoomEditorTestAccess::set_snap_to_grid_enabled(editor, true);
+    RoomEditorTestAccess::set_overlay_snap_resolution(editor, 5);
+    RoomEditorTestAccess::set_last_raw_mouse_world(editor, SDL_Point{37, 91}, true);
+
+    const Assets::DevGridOverlayContext ctx = editor.dev_grid_overlay_context();
+    const SDL_Point expected_snapped =
+        vibble::grid::global_grid().snap_to_vertex(SDL_Point{37, 91}, RoomEditorTestAccess::current_grid_resolution(editor));
+
+    CHECK(ctx.kind == Assets::DevGridOverlayKind::FloorMouseCentered);
+    CHECK(std::isfinite(ctx.exact_floor_xz.x));
+    CHECK(std::isfinite(ctx.exact_floor_xz.y));
+    CHECK(ctx.exact_floor_xz.x == doctest::Approx(37.0f));
+    CHECK(ctx.exact_floor_xz.y == doctest::Approx(91.0f));
+    CHECK(ctx.snapped_floor_xz.x == expected_snapped.x);
+    CHECK(ctx.snapped_floor_xz.y == expected_snapped.y);
+    CHECK_FALSE(ctx.has_selected_point_center);
+}
+
+TEST_CASE("RoomEditor mouse motion does not clear scroll overlay preview flags") {
+    RoomEditor editor(nullptr, 1280, 720);
+    RoomEditorTestAccess::set_scroll_overlay_preview_flags(editor, true, true);
+
+    SDL_Event motion{};
+    motion.type = SDL_EVENT_MOUSE_MOTION;
+    motion.motion.x = 128.0f;
+    motion.motion.y = 96.0f;
+    editor.handle_sdl_event(motion);
+
+    CHECK(RoomEditorTestAccess::scroll_preview_floor_overlay_active(editor));
+    CHECK(RoomEditorTestAccess::scroll_preview_xy_overlay_active(editor));
+}
+
 TEST_CASE("RoomEditor suppresses release action when pressed selection becomes invalid") {
     RoomEditor editor(nullptr, 1280, 720);
     int asset_a = 1;

@@ -3393,8 +3393,9 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         my = static_cast<int>(std::lround(event.wheel.mouse_y));
     }
 
-    const bool pointer_event =
-        (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION);
+    const bool pointer_button_event =
+        (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP);
+    const bool pointer_event = pointer_button_event || (event.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
     if (pointer_based) {
@@ -3402,7 +3403,8 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         has_last_pointer_screen_ = true;
     }
 
-    if (pointer_event && (scroll_preview_floor_overlay_active_ || scroll_preview_xy_overlay_active_for_movement_)) {
+    if (pointer_button_event &&
+        (scroll_preview_floor_overlay_active_ || scroll_preview_xy_overlay_active_for_movement_)) {
         scroll_preview_floor_overlay_active_ = false;
         scroll_preview_xy_overlay_active_for_movement_ = false;
     } else if (wheel_event) {
@@ -3435,6 +3437,7 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
         event.button.button == SDL_BUTTON_LEFT &&
         event.button.clicks >= 2 &&
+        asset_selection_allowed_now() &&
         !is_room_ui_blocking_point(mx, my) &&
         enabled_) {
         SDL_Point click_point{mx, my};
@@ -7120,6 +7123,75 @@ void RoomEditor::set_pointer_queries_suspended(bool suspended) {
     mark_highlight_dirty();
 }
 
+void RoomEditor::set_external_asset_selection_blocked(bool blocked) {
+    if (external_asset_selection_blocked_ == blocked) {
+        return;
+    }
+    external_asset_selection_blocked_ = blocked;
+    if (!blocked) {
+        return;
+    }
+
+    marquee_selection_.reset();
+    clear_mouse_press_state(true);
+    hovered_anchor_asset_ = nullptr;
+    hovered_dynamic_boundary_proxy_.reset();
+    if (hovered_asset_) {
+        hovered_asset_ = nullptr;
+        mark_highlight_dirty();
+    }
+}
+
+void RoomEditor::refresh_cursor_world_state(const WarpedScreenGrid& cam, SDL_Point screen_pt) {
+    const SDL_FPoint world_f = cam.screen_to_map(screen_pt);
+    if (!std::isfinite(world_f.x) || !std::isfinite(world_f.y)) {
+        has_last_raw_mouse_world_ = false;
+        cursor_snap_resolution_ = 0;
+        return;
+    }
+
+    const SDL_Point world_pt{
+        static_cast<int>(std::lround(world_f.x)),
+        static_cast<int>(std::lround(world_f.y))};
+
+    last_raw_mouse_world_ = world_pt;
+    has_last_raw_mouse_world_ = true;
+    if (!snap_to_grid_enabled_) {
+        cursor_snap_resolution_ = 0;
+        snapped_cursor_world_ = world_pt;
+        return;
+    }
+
+    cursor_snap_resolution_ = current_grid_resolution();
+    snapped_cursor_world_ = snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_);
+}
+
+bool RoomEditor::asset_selection_blocked_by_open_panels() const {
+    if (!enabled_) {
+        return true;
+    }
+    if (external_asset_selection_blocked_ || any_blocking_panel_visible()) {
+        return true;
+    }
+    if (room_cfg_ui_ && room_cfg_ui_->visible()) {
+        return true;
+    }
+    if (spawn_group_panel_ && spawn_group_panel_->is_visible()) {
+        return true;
+    }
+    if (is_asset_library_open() || is_asset_info_editor_open() || has_active_modal() || is_camera_settings_open()) {
+        return true;
+    }
+    return false;
+}
+
+bool RoomEditor::asset_selection_allowed_now() const {
+    if (editor_mode_ != EditorMode::Normal) {
+        return false;
+    }
+    return !asset_selection_blocked_by_open_panels();
+}
+
 void RoomEditor::set_height_scale_factor(double factor) {
     height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
     camera_controls_.set_height_scale_factor(height_scale_factor_);
@@ -7599,14 +7671,15 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         if (!assets_) {
             return;
         }
+        WarpedScreenGrid& cam = assets_->getView();
+        const SDL_Point screen_pt{input_->getX(), input_->getY()};
+        refresh_cursor_world_state(cam, screen_pt);
         if (handle_camera_settings_mouse_controls(input)) {
             return;
         }
 
-        WarpedScreenGrid& cam = assets_->getView();
         const float prev_scale = cam.get_scale();
         const SDL_Point prev_center = cam.get_screen_center();
-        const SDL_Point screen_pt{input_->getX(), input_->getY()};
         const EditorInteractionState interaction_state = current_editor_interaction_state();
         bool pointer_blocks_camera_controls = interaction_state.camera_blocked;
         if (shared_footer_bar_ && shared_footer_bar_->visible() &&
@@ -7670,6 +7743,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         if (camera_pan_just_finished_ && input_) {
             input_->clearClickBuffer();
         }
+        refresh_cursor_world_state(cam, screen_pt);
         return;
     }
 
@@ -7690,6 +7764,10 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         cycle_selection_filter();
     }
 
+    if (assets_) {
+        const SDL_Point screen_pt{input_->getX(), input_->getY()};
+        refresh_cursor_world_state(assets_->getView(), screen_pt);
+    }
     if (handle_camera_settings_mouse_controls(input)) {
         return;
     }
@@ -7739,7 +7817,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         return true;
     };
 
-    if (shift_down) {
+    if (shift_down && asset_selection_allowed_now()) {
         const SDL_Point screen_pt{input_->getX(), input_->getY()};
         bool left_down = input_->isDown(Input::LEFT);
         if (suppress_world_left_click_frames_ > 0) {
@@ -7828,8 +7906,17 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         if (suppress_world_left_click_frames_ > 0) {
             left_down = false;
         }
-        (void)commit_marquee_selection(screen_pt);
+        if (!asset_selection_allowed_now()) {
+            marquee_selection_.reset();
+            clear_mouse_press_state(true);
+        } else {
+            (void)commit_marquee_selection(screen_pt);
+        }
         mouse_press_state_.prev_left_down = left_down;
+        return;
+    }
+
+    if (!assets_) {
         return;
     }
 
@@ -7858,23 +7945,29 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         left_pressed_this_frame = false;
         left_released_this_frame = false;
     }
-    Asset* anchor_hit = shift_down ? hit_test_asset_anchor(screen_pt, kShiftAnchorHoverRadiusPx) : nullptr;
+    const bool selection_allowed = asset_selection_allowed_now();
+    Asset* anchor_hit =
+        (selection_allowed && shift_down) ? hit_test_asset_anchor(screen_pt, kShiftAnchorHoverRadiusPx) : nullptr;
     std::optional<DynamicBoundaryProxyHit> boundary_proxy_hit =
-        shift_down ? hit_test_dynamic_boundary_sprite(screen_pt) : std::nullopt;
+        (selection_allowed && shift_down) ? hit_test_dynamic_boundary_sprite(screen_pt) : std::nullopt;
 
-    Asset* hit_before_pan = hit_test_asset(screen_pt, nullptr);
-    if (!selected_assets_.empty()) {
-        hit_before_pan = selected_asset_within_interaction_radius(screen_pt);
-    } else if (shift_down && anchor_hit) {
-        hit_before_pan = anchor_hit;
-    } else if (shift_down && boundary_proxy_hit) {
-        hit_before_pan = nullptr;
-    } else if (!shift_down) {
-        hit_before_pan = nullptr;
+    Asset* hit_before_pan = nullptr;
+    const bool has_selection = selection_allowed && !selected_assets_.empty();
+    const bool has_boundary_proxy_selection = selection_allowed && selected_dynamic_boundary_proxy_.has_value();
+    if (selection_allowed) {
+        hit_before_pan = hit_test_asset(screen_pt, nullptr);
+        if (!selected_assets_.empty()) {
+            hit_before_pan = selected_asset_within_interaction_radius(screen_pt);
+        } else if (shift_down && anchor_hit) {
+            hit_before_pan = anchor_hit;
+        } else if (shift_down && boundary_proxy_hit) {
+            hit_before_pan = nullptr;
+        } else if (!shift_down) {
+            hit_before_pan = nullptr;
+        }
     }
-    const bool has_selection = !selected_assets_.empty();
-    const bool has_boundary_proxy_selection = selected_dynamic_boundary_proxy_.has_value();
-    const bool selection_interaction_active = shift_down || has_selection || has_boundary_proxy_selection;
+    const bool selection_interaction_active =
+        selection_allowed && (shift_down || has_selection || has_boundary_proxy_selection);
     bool perimeter_handle_blocks_pan = false;
     if (has_selection) {
         for (Asset* asset : selected_assets_) {
@@ -7887,7 +7980,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         }
     }
     const bool selection_blocks_camera_pan =
-        has_selection || any_editor_point_selected();
+        (selection_allowed && has_selection) || any_editor_point_selected();
     const bool pointer_blocks_pan = selection_blocks_camera_pan ||
                                     (!selection_interaction_active && dragging_) ||
                                     (selection_interaction_active && !dragging_ &&
@@ -7933,19 +8026,10 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         input_->clearClickBuffer();
     }
 
-    const SDL_FPoint world_f = cam.screen_to_map(screen_pt);
-    SDL_Point world_pt{ (int)std::lround(world_f.x), (int)std::lround(world_f.y) };
-
-    last_raw_mouse_world_ = world_pt;
-    has_last_raw_mouse_world_ = true;
-
-    cursor_snap_resolution_ = snap_to_grid_enabled_ ? current_grid_resolution() : 0;
-    snapped_cursor_world_ = snap_to_grid_enabled_
-        ? snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_)
-        : world_pt;
+    refresh_cursor_world_state(cam, screen_pt);
 
     perimeter_hover_target_ = PerimeterHandleHover::None;
-    if (!selected_assets_.empty()) {
+    if (selection_allowed && !selected_assets_.empty()) {
         for (Asset* asset : selected_assets_) {
             if (!asset || asset->spawn_method != "Perimeter" || asset->spawn_id.empty()) {
                 continue;
@@ -7964,11 +8048,14 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         geometry_drag_handle_ = GeometryHandle::None;
     }
 
-    Asset* hit = hit_test_asset(screen_pt, nullptr);
-    if (!selected_assets_.empty()) {
-        hit = selected_asset_within_interaction_radius(screen_pt);
-    } else if (shift_down && anchor_hit) {
-        hit = anchor_hit;
+    Asset* hit = nullptr;
+    if (selection_allowed) {
+        hit = hit_test_asset(screen_pt, nullptr);
+        if (!selected_assets_.empty()) {
+            hit = selected_asset_within_interaction_radius(screen_pt);
+        } else if (shift_down && anchor_hit) {
+            hit = anchor_hit;
+        }
     }
 
     auto rebuild_highlight = [this]() {
@@ -7986,7 +8073,16 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         mark_highlight_dirty();
 };
 
-    if (!shift_down && selected_assets_.empty() && !left_down && !dragging_ && !selected_dynamic_boundary_proxy_) {
+    if (!selection_allowed) {
+        marquee_selection_.reset();
+        clear_mouse_press_state(true);
+        hovered_anchor_asset_ = nullptr;
+        hovered_dynamic_boundary_proxy_.reset();
+        if (hovered_asset_) {
+            hovered_asset_ = nullptr;
+            mark_highlight_dirty();
+        }
+    } else if (!shift_down && selected_assets_.empty() && !left_down && !dragging_ && !selected_dynamic_boundary_proxy_) {
         clear_mouse_press_state(false);
         hovered_anchor_asset_ = nullptr;
         hovered_dynamic_boundary_proxy_.reset();
@@ -8146,7 +8242,14 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         clear_mouse_press_state(false);
     }
 
-    if (!dragging_ && selected_assets_.empty() && !selected_dynamic_boundary_proxy_) {
+    if (!selection_allowed) {
+        hovered_anchor_asset_ = nullptr;
+        hovered_dynamic_boundary_proxy_.reset();
+        if (hovered_asset_) {
+            hovered_asset_ = nullptr;
+            mark_highlight_dirty();
+        }
+    } else if (!dragging_ && selected_assets_.empty() && !selected_dynamic_boundary_proxy_) {
         const auto prev_boundary_hover = hovered_dynamic_boundary_proxy_;
         Asset* hover_candidate = shift_down ? (anchor_hit ? anchor_hit : hit) : hit;
         hovered_anchor_asset_ = shift_down ? anchor_hit : nullptr;
@@ -8191,7 +8294,8 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     const bool any_left_activity = left_pressed_this_frame || left_released_this_frame || left_down;
     const bool suppress_click_now = suppress_left_click_frames_ > 0 || camera_pan_just_finished_;
-    if (!dragging_ && !suppress_next_left_click_ && !any_left_activity && !suppress_click_now) {
+    if (selection_allowed &&
+        !dragging_ && !suppress_next_left_click_ && !any_left_activity && !suppress_click_now) {
         handle_click(input);
     }
 
@@ -9403,6 +9507,7 @@ void RoomEditor::handle_click(const Input& input) {
         is_shift_key_down() ||
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) ||
         input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    const bool selection_allowed = asset_selection_allowed_now();
 
     if (input_->wasClicked(Input::RIGHT)) {
         if (rclick_buffer_frames_ > 0) {
@@ -9420,22 +9525,24 @@ void RoomEditor::handle_click(const Input& input) {
         };
 
         Asset* target = nullptr;
-        if (shift_modifier) {
-            if (hovered_asset_ && asset_belongs_to_room(hovered_asset_)) {
-                target = hovered_asset_;
-            }
-            if (!target) {
-                target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
-            }
-            if (!target) {
+        if (selection_allowed) {
+            if (shift_modifier) {
+                if (hovered_asset_ && asset_belongs_to_room(hovered_asset_)) {
+                    target = hovered_asset_;
+                }
+                if (!target) {
+                    target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
+                }
+                if (!target) {
+                    target = hit_test_asset(screen_mouse, nullptr);
+                }
+            } else if (!selected_assets_.empty()) {
+                target = selected_asset_within_interaction_radius(screen_mouse);
+            } else {
                 target = hit_test_asset(screen_mouse, nullptr);
-            }
-        } else if (!selected_assets_.empty()) {
-            target = selected_asset_within_interaction_radius(screen_mouse);
-        } else {
-            target = hit_test_asset(screen_mouse, nullptr);
-            if (!target && shift_modifier) {
-                target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
+                if (!target && shift_modifier) {
+                    target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
+                }
             }
         }
         if (target) {
@@ -9451,9 +9558,11 @@ void RoomEditor::handle_click(const Input& input) {
             return;
         }
 
-        if (auto boundary_hit = hit_test_dynamic_boundary_sprite(screen_mouse)) {
-            open_asset_info_for_dynamic_boundary(*boundary_hit);
-            return;
+        if (selection_allowed) {
+            if (auto boundary_hit = hit_test_dynamic_boundary_sprite(screen_mouse)) {
+                open_asset_info_for_dynamic_boundary(*boundary_hit);
+                return;
+            }
         }
 
         bool inside_room = true;
@@ -9483,6 +9592,9 @@ void RoomEditor::handle_click(const Input& input) {
     const bool floating_modal_open = DockManager::instance().active_panel() != nullptr;
 
     if (asset_info_open || floating_modal_open) {
+        return;
+    }
+    if (!selection_allowed) {
         return;
     }
 
@@ -20562,26 +20674,21 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
         return ctx;
     }
 
-    auto mode_target_asset = [&]() -> Asset* {
-        if (anchor_mode_active() || light_mode_active()) return anchor_edit_.target_asset;
-        if (oval_mode_active()) return oval_edit_.target_asset;
-        if (movement_mode_active()) return movement_edit_.target_asset;
-        if (hitbox_mode_active()) return hitbox_edit_.target_asset;
-        if (attack_box_mode_active()) return attack_box_edit_.target_asset;
-        if (impassable_box_mode_active()) return impassable_box_edit_.target_asset;
-        return nullptr;
-    };
-
-    Asset* target = mode_target_asset();
-    if (!target) {
-        return ctx;
+    if (has_last_raw_mouse_world_) {
+        const int resolution = current_grid_resolution();
+        const SDL_Point snapped_floor_xz =
+            vibble::grid::global_grid().snap_to_vertex(last_raw_mouse_world_, resolution);
+        ctx.exact_floor_xz = SDL_FPoint{
+            static_cast<float>(last_raw_mouse_world_.x),
+            static_cast<float>(last_raw_mouse_world_.y)};
+        ctx.snapped_floor_xz = snapped_floor_xz;
     }
 
     if (movement_mode_active()) {
-        if (!scroll_preview_xy_overlay_active_for_movement_) {
-            return ctx;
-        }
-        if (movement_edit_.rel_positions.empty()) {
+        if (!scroll_preview_xy_overlay_active_for_movement_ ||
+            !movement_edit_.point_selected ||
+            movement_edit_.frame_index <= 0 ||
+            movement_edit_.rel_positions.empty()) {
             return ctx;
         }
         const int index = std::clamp(
@@ -20599,16 +20706,19 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
         return ctx;
     }
 
-    ctx.kind = Assets::DevGridOverlayKind::XYPlaneAtAssetDepth;
-    ctx.target_world_z = static_cast<float>(target->world_z());
-    if (has_last_raw_mouse_world_) {
-        const int resolution = current_grid_resolution();
-        const SDL_Point snapped_floor_xz =
-            vibble::grid::global_grid().snap_to_vertex(last_raw_mouse_world_, resolution);
-        ctx.exact_floor_xz = SDL_FPoint{
-            static_cast<float>(last_raw_mouse_world_.x),
-            static_cast<float>(last_raw_mouse_world_.y)};
-        ctx.snapped_floor_xz = snapped_floor_xz;
+    auto mode_target_asset = [&]() -> Asset* {
+        if (anchor_mode_active() || light_mode_active()) return anchor_edit_.target_asset;
+        if (oval_mode_active()) return oval_edit_.target_asset;
+        if (hitbox_mode_active()) return hitbox_edit_.target_asset;
+        if (attack_box_mode_active()) return attack_box_edit_.target_asset;
+        if (impassable_box_mode_active()) return impassable_box_edit_.target_asset;
+        return nullptr;
+    };
+
+    Asset* target = mode_target_asset();
+    if (target) {
+        ctx.kind = Assets::DevGridOverlayKind::XYPlaneAtAssetDepth;
+        ctx.target_world_z = static_cast<float>(target->world_z());
     }
 
     if (scroll_preview_floor_overlay_active_) {
@@ -26941,6 +27051,35 @@ void RoomEditorTestAccess::set_overlay_snap_resolution(RoomEditor& editor, int r
 
 int RoomEditorTestAccess::current_grid_resolution(const RoomEditor& editor) {
     return editor.current_grid_resolution();
+}
+
+void RoomEditorTestAccess::set_last_raw_mouse_world(RoomEditor& editor, SDL_Point world, bool has_value) {
+    editor.last_raw_mouse_world_ = world;
+    editor.has_last_raw_mouse_world_ = has_value;
+    editor.refresh_cursor_snap();
+}
+
+void RoomEditorTestAccess::set_scroll_overlay_preview_flags(RoomEditor& editor,
+                                                             bool floor_active,
+                                                             bool movement_xy_active) {
+    editor.scroll_preview_floor_overlay_active_ = floor_active;
+    editor.scroll_preview_xy_overlay_active_for_movement_ = movement_xy_active;
+}
+
+bool RoomEditorTestAccess::scroll_preview_floor_overlay_active(const RoomEditor& editor) {
+    return editor.scroll_preview_floor_overlay_active_;
+}
+
+bool RoomEditorTestAccess::scroll_preview_xy_overlay_active(const RoomEditor& editor) {
+    return editor.scroll_preview_xy_overlay_active_for_movement_;
+}
+
+void RoomEditorTestAccess::set_external_asset_selection_blocked(RoomEditor& editor, bool blocked) {
+    editor.set_external_asset_selection_blocked(blocked);
+}
+
+bool RoomEditorTestAccess::asset_selection_allowed_now(const RoomEditor& editor) {
+    return editor.asset_selection_allowed_now();
 }
 
 void RoomEditorTestAccess::resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution) {

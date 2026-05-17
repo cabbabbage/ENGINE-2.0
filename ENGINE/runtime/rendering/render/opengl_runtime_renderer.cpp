@@ -1300,7 +1300,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     const Assets::DevGridOverlayContext dev_grid_overlay_context = assets_->dev_grid_overlay_context();
     if (assets_->dev_grid_overlay_enabled() &&
-        dev_grid_overlay_context.kind != Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.x) &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.y)) {
         std::vector<GpuSpriteDrawPacket> floor_grid_overlay_draws{};

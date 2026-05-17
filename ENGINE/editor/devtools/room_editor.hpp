@@ -155,6 +155,7 @@ public:
     void clear_highlighted_assets();
     void purge_asset(Asset* asset);
     void set_pointer_queries_suspended(bool suspended);
+    void set_external_asset_selection_blocked(bool blocked);
 
     const std::vector<Asset*>& get_selected_assets() const { return selected_assets_; }
     const std::vector<Asset*>& get_highlighted_assets() const { return highlighted_assets_; }
@@ -288,6 +289,9 @@ private:
     static float edge_pan_intensity(int value, int max_value, float threshold_fraction);
     bool handle_camera_settings_mouse_controls(const Input& input);
     bool apply_scroll_size_adjustment(const Input& input);
+    void refresh_cursor_world_state(const WarpedScreenGrid& cam, SDL_Point screen_pt);
+    bool asset_selection_blocked_by_open_panels() const;
+    bool asset_selection_allowed_now() const;
     void apply_asset_scale_live_update(Asset* asset, int scale_percent);
     bool select_asset_or_group(Asset* asset);
     Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
@@ -1193,6 +1197,7 @@ private:
     Asset* hovered_asset_ = nullptr;
     Asset* hovered_anchor_asset_ = nullptr;
     bool pointer_queries_suspended_ = false;
+    bool external_asset_selection_blocked_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
     struct AssetInfoParentHistoryEntry {
@@ -1451,6 +1456,12 @@ struct RoomEditorTestAccess {
     static void set_shared_footer_present(RoomEditor& editor, bool present);
     static void set_overlay_snap_resolution(RoomEditor& editor, int resolution);
     static int current_grid_resolution(const RoomEditor& editor);
+    static void set_last_raw_mouse_world(RoomEditor& editor, SDL_Point world, bool has_value);
+    static void set_scroll_overlay_preview_flags(RoomEditor& editor, bool floor_active, bool movement_xy_active);
+    static bool scroll_preview_floor_overlay_active(const RoomEditor& editor);
+    static bool scroll_preview_xy_overlay_active(const RoomEditor& editor);
+    static void set_external_asset_selection_blocked(RoomEditor& editor, bool blocked);
+    static bool asset_selection_allowed_now(const RoomEditor& editor);
     static void resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution);
     static void update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity);
     static bool spawn_group_is_boundary(const RoomEditor& editor, const std::string& spawn_id);

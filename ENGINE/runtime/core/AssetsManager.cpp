@@ -1374,11 +1374,14 @@ bool Assets::boundary_assets_visible() const {
     if (!dev_controls_ || !dev_controls_->is_enabled()) {
         return true;
     }
-    return dev_controls_->boundary_assets_visible();
+    return true;
 }
 
 bool Assets::live_dynamic_assets_visible() const {
-    return boundary_assets_visible();
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return true;
+    }
+    return dev_controls_->live_dynamic_assets_visible();
 }
 
 bool Assets::dev_grid_overlay_enabled() const {
@@ -3069,6 +3072,12 @@ bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& wo
     if (!allow_live_dynamic_sync) {
         return false;
     }
+    if (!live_dynamic_assets_visible()) {
+        clear_live_dynamic_assets();
+        last_live_dynamic_sync_bounds_valid_ = false;
+        force_live_dynamic_sync_next_rebuild_ = true;
+        return false;
+    }
 
     const int min_x = std::min(work_bounds.min.world_x(), work_bounds.max.world_x());
     const int max_x = std::max(work_bounds.min.world_x(), work_bounds.max.world_x());
@@ -3921,6 +3930,9 @@ void Assets::set_dev_mode(bool mode) {
             dev_frame_initialized_ = false;
             last_camera_state_version_for_dev_ = camera_.camera_state_version();
             last_dev_active_state_version_snapshot_ = dev_active_state_version_;
+            if (!live_dynamic_assets_visible()) {
+                clear_live_dynamic_assets();
+            }
             show_dev_notice("Dev Mode enabled (Ctrl+D to toggle)", 2000);
         } else {
 

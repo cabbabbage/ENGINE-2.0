@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -102,6 +103,27 @@ TEST_CASE("Floor sort remains independent from XY depth ordering") {
 
     CHECK(packets[0].projected_foot_y_key == doctest::Approx(100.0f));
     CHECK(packets[1].projected_foot_y_key == doctest::Approx(300.0f));
+}
+
+TEST_CASE("Floor sort keeps floor tiles ahead of floor overlay sprite packets") {
+    constexpr std::uintptr_t kSpritePacketSortOffset =
+        std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
+
+    GpuSpriteDrawPacket tile{};
+    tile.projected_foot_y_key = 350.0f;
+    tile.camera_depth_key = 999.0f;
+    tile.stable_sort_id = 3u;
+
+    GpuSpriteDrawPacket overlay{};
+    overlay.projected_foot_y_key = 80.0f;
+    overlay.camera_depth_key = 1.0f;
+    overlay.stable_sort_id = kSpritePacketSortOffset + 1u;
+
+    std::vector<GpuSpriteDrawPacket> packets{overlay, tile};
+    std::stable_sort(packets.begin(), packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+
+    CHECK(packets[0].stable_sort_id == tile.stable_sort_id);
+    CHECK(packets[1].stable_sort_id == overlay.stable_sort_id);
 }
 
 TEST_CASE("Sink clip packet is invariant to camera translation for static asset geometry") {

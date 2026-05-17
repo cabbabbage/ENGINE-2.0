@@ -2296,6 +2296,25 @@ void DevControls::update(const Input& input) {
             assets_->show_dev_notice(now_visible ? "Layers panel opened" : "Layers panel closed", 1400);
         }
     }
+    if (room_editor_) {
+        const bool room_editor_active =
+            mode_ == Mode::RoomEditor && room_editor_->is_enabled();
+        const bool camera_open = camera_panel_ && camera_panel_->is_visible();
+        const bool layers_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
+        const bool map_ui_panels_open = map_mode_ui_ && map_mode_ui_->is_any_panel_visible();
+        const bool boundary_open = boundary_assets_modal_ && boundary_assets_modal_->visible();
+        const bool regenerate_open = regenerate_popup_ && regenerate_popup_->visible();
+        const bool external_selection_blocked =
+            !room_editor_active ||
+            camera_open ||
+            layers_open ||
+            misc_options_panel_open_ ||
+            boundary_open ||
+            regenerate_open ||
+            map_ui_panels_open ||
+            is_modal_blocking_panels();
+        room_editor_->set_external_asset_selection_blocked(external_selection_blocked);
+    }
     if (room_editor_ && room_editor_->is_enabled()) {
 
         const bool frame_editing = frame_editor_session_ && frame_editor_session_->is_active();
@@ -4684,6 +4703,19 @@ void DevControls::sync_header_button_states() {
         room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::MapLayers, layers_open);
 
         const bool map_ui_panels_open = map_mode_ui_ && map_mode_ui_->is_any_panel_visible();
+        const bool room_editor_active =
+            enabled_ && mode_ == Mode::RoomEditor && room_editor_->is_enabled();
+        const bool external_selection_blocked =
+            !room_editor_active ||
+            camera_open ||
+            layers_open ||
+            boundary_open ||
+            misc_options_panel_open_ ||
+            (regenerate_popup_ && regenerate_popup_->visible()) ||
+            map_ui_panels_open ||
+            is_modal_blocking_panels();
+        room_editor_->set_external_asset_selection_blocked(external_selection_blocked);
+
         const bool any_modal_open =
             room_config_open ||
             room_editor_->is_asset_info_editor_open() ||
@@ -5440,11 +5472,11 @@ bool DevControls::fog_visible() const {
     return false;
 }
 
-bool DevControls::boundary_assets_visible() const {
+bool DevControls::live_dynamic_assets_visible() const {
     if (!enabled_) {
         return true;
     }
-    return other_settings_.is_type_filter_enabled(std::string(asset_types::boundary));
+    return other_settings_.is_type_filter_enabled("dynamic");
 }
 
 

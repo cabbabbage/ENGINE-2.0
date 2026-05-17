@@ -58,9 +58,16 @@ constexpr float kHeaderUnlockZoneRatio = 0.20f;
 constexpr const char* kSettingsInitializedKey = "dev.asset_filter.initialized";
 constexpr const char* kSettingsCurrentRoomKey = "dev.asset_filter.current_room";
 constexpr const char* kSettingsFiltersExpandedKey = "dev.asset_filter.filters_expanded";
+constexpr const char* kDynamicTypeFilterId = "dynamic";
 
 std::string make_type_setting_key(const std::string& type) {
-    std::string canonical = asset_types::canonicalize(type);
+    std::string canonical = type;
+    std::transform(canonical.begin(), canonical.end(), canonical.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (canonical != kDynamicTypeFilterId) {
+        canonical = asset_types::canonicalize(canonical);
+    }
     std::string key = "dev.asset_filter.types.";
     key += canonical;
     return key;
@@ -361,6 +368,9 @@ void OtherSettingsAndControls::initialize() {
     known_types.reserve(all_types.size());
     for (const std::string& type : all_types) {
         const std::string canonical = asset_types::canonicalize(type);
+        if (canonical == std::string(asset_types::boundary)) {
+            continue;
+        }
         FilterEntry entry;
         entry.id = canonical;
         entry.kind = FilterKind::Type;
@@ -370,6 +380,20 @@ void OtherSettingsAndControls::initialize() {
             checkbox_value = load_type_filter_value(canonical, checkbox_value);
         }
         entry.checkbox = std::make_unique<DMCheckbox>(format_type_label(type), checkbox_value);
+        state_ref.type_filters[canonical] = checkbox_value;
+        known_types.insert(canonical);
+        entries_.push_back(std::move(entry));
+    }
+    {
+        const std::string canonical = kDynamicTypeFilterId;
+        FilterEntry entry;
+        entry.id = canonical;
+        entry.kind = FilterKind::Type;
+        bool checkbox_value = true;
+        if (use_saved_state) {
+            checkbox_value = load_type_filter_value(canonical, checkbox_value);
+        }
+        entry.checkbox = std::make_unique<DMCheckbox>("Dynamic", checkbox_value);
         state_ref.type_filters[canonical] = checkbox_value;
         known_types.insert(canonical);
         entries_.push_back(std::move(entry));
@@ -1102,6 +1126,9 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
     }
     const std::string& type = asset.filter_type_tag();
     if (!type.empty() && !type_filter_enabled(type)) {
+        return false;
+    }
+    if (asset.is_dynamic_spawned_asset() && !type_filter_enabled(kDynamicTypeFilterId)) {
         return false;
     }
     const FilterState& state_ref = state();

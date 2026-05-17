@@ -1284,6 +1284,7 @@ void AssetInfoUI::open_animation_editor_panel() {
     }
 
     pending_animation_editor_open_ = true;
+    SDL_Log("[AssetInfoUI] Opening animation editor panel requested.");
 
     if (last_screen_w_ > 0 && last_screen_h_ > 0) {
         layout_widgets(last_screen_w_, last_screen_h_);
@@ -1291,6 +1292,9 @@ void AssetInfoUI::open_animation_editor_panel() {
             animation_editor_window_->set_bounds(animation_editor_rect_);
             animation_editor_window_->set_visible(true);
             pending_animation_editor_open_ = false;
+            SDL_Log("[AssetInfoUI] Animation editor panel opened with bounds %d x %d.",
+                    animation_editor_rect_.w,
+                    animation_editor_rect_.h);
         }
     }
 }
@@ -1316,12 +1320,22 @@ bool AssetInfoUI::run_animation_editor_action(PendingAnimationEditorAction actio
     if (!animation_editor_window_->is_visible()) {
         return false;
     }
+    const SDL_Rect& editor_bounds = animation_editor_window_->bounds();
+    if (editor_bounds.w <= 0 || editor_bounds.h <= 0) {
+        SDL_Log("[AssetInfoUI] Deferred animation editor action; editor bounds invalid (%d x %d).",
+                editor_bounds.w,
+                editor_bounds.h);
+        return false;
+    }
     switch (action) {
         case PendingAnimationEditorAction::AddAnimation:
+            SDL_Log("[AssetInfoUI] Running animation editor action: AddAnimation");
             return animation_editor_window_->trigger_add_animation_action();
         case PendingAnimationEditorAction::Controller:
+            SDL_Log("[AssetInfoUI] Running animation editor action: Controller");
             return animation_editor_window_->trigger_controller_action();
         case PendingAnimationEditorAction::CreateDefaults:
+            SDL_Log("[AssetInfoUI] Running animation editor action: CreateDefaults");
             return animation_editor_window_->trigger_create_defaults_action();
         case PendingAnimationEditorAction::None:
         default:
@@ -1333,6 +1347,11 @@ void AssetInfoUI::request_animation_editor_action(PendingAnimationEditorAction a
     if (!animation_editor_window_ || !info_ || action == PendingAnimationEditorAction::None) {
         return;
     }
+    const char* action_name = "None";
+    if (action == PendingAnimationEditorAction::AddAnimation) action_name = "AddAnimation";
+    else if (action == PendingAnimationEditorAction::Controller) action_name = "Controller";
+    else if (action == PendingAnimationEditorAction::CreateDefaults) action_name = "CreateDefaults";
+    SDL_Log("[AssetInfoUI] Requested animation editor action: %s", action_name);
     if (animation_editor_window_->is_visible() && run_animation_editor_action(action)) {
         pending_animation_editor_action_ = PendingAnimationEditorAction::None;
         return;

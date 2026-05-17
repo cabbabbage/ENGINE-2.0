@@ -658,9 +658,12 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
 
     visible_ = visible;
     if (becoming_visible) {
+        log_ui_transition("visibility", "opened");
         ensure_layout();
         ensure_selection_valid();
         refresh_panels_after_load();
+    } else if (becoming_hidden) {
+        log_ui_transition("visibility", "closed");
     }
     if (notify_closed && on_closed_) {
         on_closed_();
@@ -670,6 +673,12 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
 void AnimationEditorWindow::toggle_visible() { set_visible(!visible_); }
 
 void AnimationEditorWindow::set_bounds(const SDL_Rect& bounds) {
+    const bool was_valid = bounds_.w > 0 && bounds_.h > 0;
+    const bool now_valid = bounds.w > 0 && bounds.h > 0;
+    if (was_valid != now_valid) {
+        log_ui_transition("bounds",
+                          now_valid ? "became_valid" : "became_invalid");
+    }
     bounds_ = bounds;
     layout_dirty_ = true;
     layout_children();
@@ -1073,6 +1082,8 @@ void AnimationEditorWindow::configure_list_panel() {
     list_panel_->set_document(document_);
     list_panel_->set_preview_provider(preview_provider_);
     list_panel_->set_on_selection_changed([this](const std::optional<std::string>& animation_id) {
+        this->log_ui_transition("list_selection",
+                                animation_id ? ("selected:" + *animation_id) : std::string("selected:<none>"));
         this->select_animation(animation_id, true);
     });
     list_panel_->set_on_context_menu([this](const std::string& animation_id, const SDL_Point& location) {
@@ -1223,6 +1234,7 @@ void AnimationEditorWindow::update(const Input& input, int screen_w, int screen_
     }
 
     ensure_layout();
+    maybe_retry_deferred_defaults_modal();
 
     if (task_queue_) task_queue_->update();
     if (list_panel_) list_panel_->update();
@@ -1261,7 +1273,7 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     }
 
     DMDropdown::render_active_options(renderer);
-    if (defaults_modal_visible_) {
+    if (defaults_modal_actionable()) {
         render_defaults_modal(renderer);
     }
 }
@@ -1271,21 +1283,20 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     ensure_layout();
 
-    if (defaults_modal_visible_ &&
-        (defaults_modal_rect_.w <= 0 || defaults_modal_rect_.h <= 0)) {
+    if (defaults_modal_visible_ && !defaults_modal_actionable()) {
+        log_ui_transition("defaults_modal", "non_actionable_modal_closed");
         close_defaults_modal();
+        defaults_modal_open_deferred_ = true;
     }
 
-    if (defaults_modal_visible_) {
+    if (defaults_modal_actionable()) {
         if (handle_defaults_modal_event(e)) {
             return true;
         }
-        if (!defaults_modal_visible_ ||
-            defaults_modal_rect_.w <= 0 ||
-            defaults_modal_rect_.h <= 0) {
+        if (!defaults_modal_actionable()) {
             close_defaults_modal();
         }
-        if (defaults_modal_visible_ &&
+        if (defaults_modal_actionable() &&
             (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
             e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_WHEEL ||
             e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT)) {
@@ -1337,27 +1348,40 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
+    const bool pointer_or_wheel_event =
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+         e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
+         e.type == SDL_EVENT_MOUSE_MOTION ||
+         e.type == SDL_EVENT_MOUSE_WHEEL);
+    SDL_Point mp{0, 0};
+    bool has_pointer = false;
+    if (pointer_or_wheel_event) {
+        has_pointer = true;
+        if (e.type == SDL_EVENT_MOUSE_MOTION) { mp.x = e.motion.x; mp.y = e.motion.y; }
+        else if (e.type == SDL_EVENT_MOUSE_WHEEL) { sdl_mouse_util::GetMouseState(&mp.x, &mp.y); }
+        else { mp.x = e.button.x; mp.y = e.button.y; }
+    }
+    const bool pointer_in_list = has_pointer && SDL_PointInRect(&mp, &list_rect_);
+    const bool pointer_in_inspector = has_pointer && SDL_PointInRect(&mp, &inspector_rect_);
+
+    if (list_panel_ && pointer_in_list && list_panel_->handle_event(e)) {
+        return true;
+    }
+
     if (inspector_panel_ && selected_animation_id_) {
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
-            e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_WHEEL) {
-            int mx = 0, my = 0;
-            if (e.type == SDL_EVENT_MOUSE_MOTION) { mx = e.motion.x; my = e.motion.y; }
-            else if (e.type == SDL_EVENT_MOUSE_WHEEL) { sdl_mouse_util::GetMouseState(&mx, &my); }
-            else { mx = e.button.x; my = e.button.y; }
-            SDL_Point mp{mx, my};
-            if (SDL_PointInRect(&mp, &inspector_rect_)) {
-
-                (void)inspector_panel_->handle_event(e);
-                return true;
-            }
+        if (pointer_in_inspector && inspector_panel_->handle_event(e)) {
+            return true;
         }
-
-        if (inspector_panel_->handle_event(e)) {
+        if (!has_pointer && inspector_panel_->handle_event(e)) {
             return true;
         }
     }
 
     if (list_panel_ && list_panel_->handle_event(e)) {
+        return true;
+    }
+
+    if (inspector_panel_ && selected_animation_id_ && has_pointer && !pointer_in_list && inspector_panel_->handle_event(e)) {
         return true;
     }
 
@@ -1409,6 +1433,7 @@ bool AnimationEditorWindow::trigger_add_animation_action() {
     if (!document_) {
         return false;
     }
+    log_ui_transition("action", "trigger_add_animation");
     create_animation_via_prompt();
     return true;
 }
@@ -1419,8 +1444,9 @@ bool AnimationEditorWindow::trigger_controller_action() {
 }
 
 bool AnimationEditorWindow::trigger_create_defaults_action() {
+    log_ui_transition("action", "trigger_create_defaults");
     open_defaults_modal();
-    return defaults_modal_visible_;
+    return defaults_modal_actionable();
 }
 
 std::string AnimationEditorWindow::controller_action_label() const {
@@ -1781,6 +1807,10 @@ void AnimationEditorWindow::set_status_message(const std::string& message, int f
     status_timer_frames_ = std::max(frames, 0);
 }
 
+void AnimationEditorWindow::log_ui_transition(const char* tag, const std::string& detail) const {
+    SDL_Log("[AnimationEditor][%s] %s", tag ? tag : "event", detail.c_str());
+}
+
 void AnimationEditorWindow::ensure_defaults_modal_widgets() {
     if (!defaults_diagonals_checkbox_) {
         defaults_diagonals_checkbox_ = std::make_unique<DMCheckbox>("Ground Diagonals", true);
@@ -1811,13 +1841,54 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
     }
 }
 
-void AnimationEditorWindow::open_defaults_modal() {
+bool AnimationEditorWindow::defaults_modal_bounds_valid() const {
+    return bounds_.w > 0 && bounds_.h > 0 && defaults_modal_rect_.w > 0 && defaults_modal_rect_.h > 0;
+}
+
+bool AnimationEditorWindow::defaults_modal_actionable() const {
+    return visible_ && defaults_modal_visible_ && defaults_modal_bounds_valid();
+}
+
+bool AnimationEditorWindow::try_open_defaults_modal(bool from_retry) {
     ensure_defaults_modal_widgets();
     if (list_context_menu_) {
         list_context_menu_->close();
     }
     defaults_modal_visible_ = true;
     layout_defaults_modal();
+    if (defaults_modal_actionable()) {
+        defaults_modal_open_deferred_ = false;
+        log_ui_transition("defaults_modal", from_retry ? "opened_after_retry" : "opened");
+        return true;
+    }
+
+    defaults_modal_open_deferred_ = true;
+    defaults_modal_visible_ = false;
+    if (!from_retry) {
+        if (!defaults_modal_open_warning_.empty()) {
+            set_status_message(defaults_modal_open_warning_, 240);
+        } else {
+            set_status_message("Create Defaults is waiting for valid editor bounds.", 240);
+        }
+    }
+    if (!from_retry) {
+        log_ui_transition("defaults_modal", "deferred_open_initial_failed");
+    }
+    return false;
+}
+
+void AnimationEditorWindow::maybe_retry_deferred_defaults_modal() {
+    if (!defaults_modal_open_deferred_ || defaults_modal_visible_) {
+        return;
+    }
+    if (bounds_.w <= 0 || bounds_.h <= 0) {
+        return;
+    }
+    (void)try_open_defaults_modal(true);
+}
+
+void AnimationEditorWindow::open_defaults_modal() {
+    (void)try_open_defaults_modal(false);
 }
 
 void AnimationEditorWindow::close_defaults_modal() {
@@ -1833,7 +1904,11 @@ void AnimationEditorWindow::close_defaults_modal() {
     if (defaults_distance_box_) {
         defaults_distance_box_->stop_editing();
     }
+    if (defaults_modal_visible_ || defaults_modal_open_deferred_) {
+        log_ui_transition("defaults_modal", "closed");
+    }
     defaults_modal_visible_ = false;
+    defaults_modal_open_deferred_ = false;
     defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
     defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
     defaults_modal_scroll_offset_ = 0;
@@ -1856,6 +1931,7 @@ void AnimationEditorWindow::layout_defaults_modal() {
         defaults_modal_visible_ = false;
         defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
         defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
+        defaults_modal_open_deferred_ = true;
         defaults_modal_open_warning_ = "Create Defaults cannot open while panel bounds are collapsed.";
         return;
     }
@@ -1909,12 +1985,15 @@ void AnimationEditorWindow::layout_defaults_modal() {
 }
 
 bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
-    if (!defaults_modal_visible_) {
+    if (!defaults_modal_actionable()) {
         return false;
     }
 
     ensure_defaults_modal_widgets();
     layout_defaults_modal();
+    if (!defaults_modal_actionable()) {
+        return false;
+    }
 
     bool consumed = false;
     if (defaults_basic_movement_checkbox_ && defaults_basic_movement_checkbox_->handle_event(e)) {
@@ -2010,7 +2089,7 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
 }
 
 void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const {
-    if (!defaults_modal_visible_ || !renderer || defaults_modal_rect_.w <= 0 || defaults_modal_rect_.h <= 0) {
+    if (!renderer || !defaults_modal_actionable()) {
         return;
     }
 

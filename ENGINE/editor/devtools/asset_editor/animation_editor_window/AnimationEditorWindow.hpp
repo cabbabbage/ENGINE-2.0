@@ -122,6 +122,10 @@ class AnimationEditorWindow {
     void render_defaults_modal(SDL_Renderer* renderer) const;
     void layout_defaults_modal();
     void open_defaults_modal();
+    bool try_open_defaults_modal(bool from_retry);
+    bool defaults_modal_bounds_valid() const;
+    bool defaults_modal_actionable() const;
+    void maybe_retry_deferred_defaults_modal();
     void close_defaults_modal();
     void ensure_defaults_modal_widgets();
     void handle_pick_defaults_base_frames();
@@ -179,6 +183,7 @@ class AnimationEditorWindow {
     void open_controller();
     void refresh_inspector_animation_callback();
     std::string normalize_animation_name(std::string_view raw) const;
+    void log_ui_transition(const char* tag, const std::string& detail) const;
 
   FRAME_EDITOR_ACCESS:
     bool visible_ = false;
@@ -210,6 +215,7 @@ class AnimationEditorWindow {
     int defaults_modal_scroll_offset_ = 0;
     int defaults_modal_scroll_max_ = 0;
     std::string defaults_modal_open_warning_;
+    bool defaults_modal_open_deferred_ = false;
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};
     SDL_Rect status_rect_{0, 0, 0, 0};

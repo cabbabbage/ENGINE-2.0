@@ -58,7 +58,6 @@
 #include <functional>
 #include <thread>
 #include <vector>
-#include <unordered_set>
 #include <unordered_map>
 #include <array>
 #include <sstream>
@@ -614,13 +613,23 @@ Assets::Assets(AssetLibrary& library,
     movement_commands_buffer_.reserve(all.size());
     grid_registration_buffer_.clear();
     grid_registration_buffer_.reserve(4);
-    runtime_traversal_state_.clear();
-    runtime_traversal_state_.reserve(all.size());
+    runtime_asset_states_.clear();
+    runtime_asset_states_.reserve(all.size());
+    runtime_asset_state_index_.clear();
+    runtime_asset_state_index_.reserve(all.size());
+    movement_enabled_active_assets_.clear();
+    movement_enabled_active_assets_.reserve(all.size());
+    scratch_previous_active_assets_.clear();
+    scratch_previous_active_assets_.reserve(all.size());
+    frame_collision_query_scratch_.clear();
+    frame_collision_query_scratch_.reserve(256);
     vibble::log::info("[Assets] Constructor: Setting up assets (" + std::to_string(all.size()) + " total)");
     for (Asset* a : all) {
         if (!a) continue;
         a->set_assets(this);
+        register_asset_runtime_state(a);
     }
+    refresh_runtime_membership_indexes();
     vibble::log::info("[Assets] Constructor: Asset finalization complete");
 
     register_pending_static_assets();
@@ -1503,6 +1512,167 @@ const runtime::config::RuntimeGameConfig& Assets::runtime_game_config() const {
     return world_context_ ? world_context_->game_config() : fallback;
 }
 
+void Assets::rebuild_runtime_asset_state_index() {
+    runtime_asset_state_index_.clear();
+    runtime_asset_state_index_.reserve(runtime_asset_states_.size());
+    for (std::size_t i = 0; i < runtime_asset_states_.size(); ++i) {
+        RuntimeAssetState& state = runtime_asset_states_[i];
+        if (!state.asset) {
+            continue;
+        }
+        runtime_asset_state_index_.emplace(state.asset, i);
+    }
+}
+
+std::size_t Assets::find_runtime_asset_state_slot(const Asset* asset) const {
+    if (!asset) {
+        return std::numeric_limits<std::size_t>::max();
+    }
+    const auto it = runtime_asset_state_index_.find(asset);
+    if (it == runtime_asset_state_index_.end()) {
+        return std::numeric_limits<std::size_t>::max();
+    }
+    return it->second;
+}
+
+std::size_t Assets::ensure_runtime_asset_state_slot(Asset* asset) {
+    if (!asset) {
+        return std::numeric_limits<std::size_t>::max();
+    }
+    if (const auto it = runtime_asset_state_index_.find(asset); it != runtime_asset_state_index_.end()) {
+        return it->second;
+    }
+    const std::size_t index = runtime_asset_states_.size();
+    RuntimeAssetState state{};
+    state.asset = asset;
+    runtime_asset_states_.push_back(std::move(state));
+    runtime_asset_state_index_.emplace(asset, index);
+    return index;
+}
+
+void Assets::register_asset_runtime_state(Asset* asset) {
+    if (!asset) {
+        return;
+    }
+    (void)ensure_runtime_asset_state_slot(asset);
+}
+
+void Assets::unregister_asset_runtime_state(Asset* asset) {
+    if (!asset) {
+        return;
+    }
+    const auto it = runtime_asset_state_index_.find(asset);
+    if (it == runtime_asset_state_index_.end()) {
+        return;
+    }
+    const std::size_t removed_index = it->second;
+    const std::size_t last_index = runtime_asset_states_.size() - 1;
+    if (removed_index != last_index) {
+        runtime_asset_states_[removed_index] = std::move(runtime_asset_states_[last_index]);
+        RuntimeAssetState& moved = runtime_asset_states_[removed_index];
+        if (moved.asset) {
+            runtime_asset_state_index_[moved.asset] = removed_index;
+        }
+    }
+    runtime_asset_states_.pop_back();
+    runtime_asset_state_index_.erase(it);
+}
+
+void Assets::rebuild_asset_lookup_indexes() {
+    assets_by_name_.clear();
+    assets_by_stable_id_.clear();
+    all_asset_membership_.clear();
+    assets_by_name_.reserve(all.size());
+    assets_by_stable_id_.reserve(all.size() * 2);
+    all_asset_membership_.reserve(all.size());
+    for (Asset* asset : all) {
+        if (!asset) {
+            continue;
+        }
+        all_asset_membership_.insert(asset);
+        if (asset->info && !asset->info->name.empty()) {
+            assets_by_name_.try_emplace(asset->info->name, asset);
+            assets_by_stable_id_.try_emplace(asset->info->name, asset);
+        }
+        if (!asset->spawn_id.empty()) {
+            assets_by_stable_id_.try_emplace(asset->spawn_id, asset);
+        }
+    }
+}
+
+void Assets::rebuild_reverse_child_index() {
+    reverse_child_index_.clear();
+    reverse_child_index_.reserve(all.size());
+    for (Asset* parent : all) {
+        if (!parent) {
+            continue;
+        }
+        for (Asset* child : parent->children()) {
+            if (!child) {
+                continue;
+            }
+            reverse_child_index_[child].push_back(parent);
+        }
+    }
+}
+
+void Assets::refresh_runtime_membership_indexes() {
+    rebuild_runtime_asset_state_index();
+    for (Asset* asset : all) {
+        register_asset_runtime_state(asset);
+    }
+    rebuild_asset_lookup_indexes();
+    rebuild_reverse_child_index();
+}
+
+void Assets::rebuild_active_derivative_lists(bool force_filter_refresh) {
+    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+    const std::uint64_t current_generation = active_assets_generation_;
+    const std::uint64_t base_filter_version = dev_controls_enabled ? dev_controls_->other_settings_state_version() : 0;
+    const std::uint64_t filter_version = base_filter_version ^ (focus_filter_version_ * 1099511628211ULL);
+
+    if (force_filter_refresh ||
+        filtered_active_assets_source_generation_ != current_generation ||
+        filtered_active_assets_filter_version_ != filter_version ||
+        needs_filtered_active_refresh_) {
+        filtered_active_assets.clear();
+        filtered_active_asset_membership_.clear();
+        filtered_active_assets.reserve(active_assets.size());
+        for (Asset* asset : active_assets) {
+            if (!asset) {
+                continue;
+            }
+            if (dev_controls_enabled) {
+                if (!dev_controls_->passes_asset_filters(asset)) {
+                    continue;
+                }
+                if (!asset_matches_focus_filter(asset)) {
+                    continue;
+                }
+            }
+            filtered_active_assets.push_back(asset);
+            filtered_active_asset_membership_.insert(asset);
+        }
+        if (dev_controls_enabled) {
+            dev_controls_->filter_active_assets(filtered_active_assets);
+        }
+        filtered_active_assets_source_generation_ = current_generation;
+        filtered_active_assets_filter_version_ = filter_version;
+        needs_filtered_active_refresh_ = false;
+    }
+
+    non_player_update_buffer_.clear();
+    non_player_update_buffer_.reserve(active_assets.size());
+    for (Asset* asset : active_assets) {
+        if (!asset || asset == player || asset->dead) {
+            continue;
+        }
+        non_player_update_buffer_.push_back(asset);
+    }
+    non_player_update_buffer_dirty_.store(false, std::memory_order_release);
+    touch_dev_active_state_version();
+}
+
 void Assets::notify_rooms_changed() {
     if (world_context_) {
         world_context_->notify_topology_changed();
@@ -1528,7 +1698,11 @@ void Assets::mark_anchor_basis_dirty(Asset* asset) {
     if (!asset || asset->dead) {
         return;
     }
-    RuntimeTraversalState& state = runtime_traversal_state_[asset];
+    const std::size_t slot = ensure_runtime_asset_state_slot(asset);
+    if (slot == std::numeric_limits<std::size_t>::max()) {
+        return;
+    }
+    RuntimeTraversalState& state = runtime_asset_states_[slot].traversal;
     state.pending_anchor_invalidation_version = next_anchor_invalidation_version();
 }
 
@@ -1538,7 +1712,11 @@ void Assets::mark_anchor_bases_dirty_for_active_assets() {
         if (!asset || asset->dead) {
             return;
         }
-        RuntimeTraversalState& state = runtime_traversal_state_[asset];
+        const std::size_t slot = ensure_runtime_asset_state_slot(asset);
+        if (slot == std::numeric_limits<std::size_t>::max()) {
+            return;
+        }
+        RuntimeTraversalState& state = runtime_asset_states_[slot].traversal;
         state.pending_anchor_invalidation_version = version;
     };
 
@@ -1640,7 +1818,12 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         return;
     }
 
-    RuntimeTraversalState& state = runtime_traversal_state_[asset];
+    const std::size_t slot = ensure_runtime_asset_state_slot(asset);
+    if (slot == std::numeric_limits<std::size_t>::max()) {
+        return;
+    }
+    RuntimeAssetState& runtime_state = runtime_asset_states_[slot];
+    RuntimeTraversalState& state = runtime_state.traversal;
     const bool invalidation_pending =
         state.pending_anchor_invalidation_version != state.processed_anchor_invalidation_version;
     const bool anchor_revision_changed =
@@ -1658,8 +1841,8 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         const Asset::RuntimeImpassableGeometrySignature current_signature =
             asset->runtime_impassable_geometry_signature();
         const bool signature_changed =
-            !state.processed_impassable_signature_initialized ||
-            state.processed_impassable_signature != current_signature;
+            !runtime_state.collision_signature_initialized ||
+            runtime_state.collision_signature != current_signature;
         const bool runtime_geometry_may_have_changed =
             anchor_revision_changed || camera_anchor_state_changed || frame_index_changed;
         if (runtime_geometry_may_have_changed && signature_changed) {
@@ -1670,6 +1853,8 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         state.processed_anchor_revision = asset->anchor_world_revision_;
         state.processed_camera_state_version = camera_state_version;
         state.processed_frame_index = current_frame_index;
+        runtime_state.collision_signature = current_signature;
+        runtime_state.collision_signature_initialized = true;
         state.processed_impassable_signature = current_signature;
         state.processed_impassable_signature_initialized = true;
     }
@@ -2777,9 +2962,8 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     ++non_player_update_visit_epoch_;
     if (non_player_update_visit_epoch_ == 0) {
         non_player_update_visit_epoch_ = 1;
-        for (auto& [asset, state] : runtime_traversal_state_) {
-            (void)asset;
-            state.non_player_update_visit_epoch = 0;
+        for (RuntimeAssetState& state : runtime_asset_states_) {
+            state.traversal.non_player_update_visit_epoch = 0;
         }
     }
     const std::uint32_t current_visit_epoch = non_player_update_visit_epoch_;
@@ -2790,7 +2974,11 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
             continue;
         }
 
-        RuntimeTraversalState& state = runtime_traversal_state_[asset];
+        const std::size_t slot = ensure_runtime_asset_state_slot(asset);
+        if (slot == std::numeric_limits<std::size_t>::max()) {
+            continue;
+        }
+        RuntimeTraversalState& state = runtime_asset_states_[slot].traversal;
         if (state.non_player_update_visit_epoch == current_visit_epoch) {
             continue;
         }
@@ -4486,8 +4674,16 @@ void Assets::register_pending_static_assets() {
 
 void Assets::rebuild_all_assets_from_grid() {
     all.clear();
-    runtime_traversal_state_.clear();
+    runtime_asset_states_.clear();
+    runtime_asset_state_index_.clear();
+    reverse_child_index_.clear();
+    assets_by_name_.clear();
+    assets_by_stable_id_.clear();
+    all_asset_membership_.clear();
     frame_collision_entries_.clear();
+    frame_collision_bounds_.clear();
+    frame_collision_index_.clear();
+    frame_collision_query_seen_epoch_.clear();
     frame_collision_context_dirty_ = true;
     auto collected = world_grid_.all_assets();
     std::sort(collected.begin(), collected.end(),
@@ -4504,6 +4700,7 @@ void Assets::rebuild_all_assets_from_grid() {
     for (Asset* a : collected) {
         if (a) {
             all.push_back(a);
+            register_asset_runtime_state(a);
             AssetDimensionCache cache;
             if (compute_asset_dimension_cache(a, camera_scale, cache)) {
                 asset_dimension_cache_.emplace(a, cache);
@@ -4521,6 +4718,7 @@ void Assets::rebuild_all_assets_from_grid() {
     cached_height_level_ = camera_scale;
     max_asset_dimensions_dirty_ = false;
     finalize_max_asset_dimensions(max_width, max_height);
+    refresh_runtime_membership_indexes();
     if (focus_filter_asset_) {
         mark_focus_filter_closure_dirty();
     }

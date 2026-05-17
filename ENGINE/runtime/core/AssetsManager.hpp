@@ -17,7 +17,6 @@
 #include <cstdint>
 #include <cstddef>
 #include <limits>
-#include <set>
 #include <utility>
 #include <string>
 #include <vector>
@@ -163,7 +162,7 @@ public:
     int max_impassable_query_radius() const;
     void mark_collision_context_dirty() {
         frame_collision_context_dirty_ = true;
-        frame_collision_query_cache_.clear();
+        frame_collision_query_scratch_.clear();
     }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
@@ -353,6 +352,15 @@ private:
     void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
     void log_camera_fog_state(const char* label) const;
+    void rebuild_runtime_asset_state_index();
+    void rebuild_asset_lookup_indexes();
+    void rebuild_reverse_child_index();
+    void register_asset_runtime_state(Asset* asset);
+    void unregister_asset_runtime_state(Asset* asset);
+    std::size_t ensure_runtime_asset_state_slot(Asset* asset);
+    std::size_t find_runtime_asset_state_slot(const Asset* asset) const;
+    void refresh_runtime_membership_indexes();
+    void rebuild_active_derivative_lists(bool force_filter_refresh = false);
 
     friend class Asset;
 
@@ -391,39 +399,12 @@ private:
     bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
-    struct FrameCollisionQueryKey {
-        std::uint64_t context_version = 0;
-        const Asset* self_asset = nullptr;
-        int self_world_x = 0;
-        int self_world_z = 0;
-        int radius = 0;
-
-        bool operator==(const FrameCollisionQueryKey& other) const {
-            return context_version == other.context_version &&
-                   self_asset == other.self_asset &&
-                   self_world_x == other.self_world_x &&
-                   self_world_z == other.self_world_z &&
-                   radius == other.radius;
-        }
-    };
-    struct FrameCollisionQueryKeyHash {
-        std::size_t operator()(const FrameCollisionQueryKey& key) const {
-            std::size_t seed = std::hash<std::uint64_t>{}(key.context_version);
-            auto mix = [&seed](std::size_t value) {
-                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-            };
-            mix(std::hash<const void*>{}(static_cast<const void*>(key.self_asset)));
-            mix(std::hash<int>{}(key.self_world_x));
-            mix(std::hash<int>{}(key.self_world_z));
-            mix(std::hash<int>{}(key.radius));
-            return seed;
-        }
-    };
     mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
-    mutable std::unordered_map<std::uint64_t, std::vector<const FrameCollisionEntry*>> frame_collision_index_;
-    mutable std::unordered_map<FrameCollisionQueryKey,
-                               std::vector<const FrameCollisionEntry*>,
-                               FrameCollisionQueryKeyHash> frame_collision_query_cache_;
+    mutable std::vector<SDL_Rect> frame_collision_bounds_;
+    mutable std::unordered_map<std::uint64_t, std::vector<std::size_t>> frame_collision_index_;
+    mutable std::vector<std::uint32_t> frame_collision_query_seen_epoch_;
+    mutable std::uint32_t frame_collision_query_epoch_ = 1;
+    mutable std::vector<const FrameCollisionEntry*> frame_collision_query_scratch_;
     mutable std::uint64_t frame_collision_context_version_ = 1;
     mutable std::uint32_t frame_collision_context_frame_id_ = 0;
     mutable bool frame_collision_context_dirty_ = true;
@@ -458,6 +439,31 @@ private:
         float width = 0.0f;
         float height = 0.0f;
     };
+    struct RuntimeTraversalState {
+        std::uint64_t pending_anchor_invalidation_version = 0;
+        std::uint64_t processed_anchor_invalidation_version = 0;
+        std::uint64_t processed_anchor_revision = 0;
+        std::uint64_t processed_camera_state_version = 0;
+        int processed_frame_index = std::numeric_limits<int>::min();
+        Asset::RuntimeImpassableGeometrySignature processed_impassable_signature{};
+        bool processed_impassable_signature_initialized = false;
+        std::uint32_t non_player_update_visit_epoch = 0;
+    };
+    struct RuntimeAssetState {
+        Asset* asset = nullptr;
+        AssetDimensionCache dimension_cache{};
+        bool has_dimension_cache = false;
+        RuntimeTraversalState traversal{};
+        std::uint32_t active_seen_epoch = 0;
+        std::uint32_t active_membership_epoch = 0;
+        bool movement_enabled_active = false;
+        std::uint64_t last_scale_camera_version = 0;
+        std::uint64_t last_anchor_revision_for_scale = 0;
+        Asset::RuntimeImpassableGeometrySignature collision_signature{};
+        bool collision_signature_initialized = false;
+        std::vector<FrameCollisionEntry> cached_collision_entries;
+        bool cached_collision_entries_valid = false;
+    };
     struct RuntimeConvergencePassResult {
         bool any_change = false;
         bool needs_repass = false;
@@ -477,20 +483,19 @@ private:
         double pass_ms = 0.0;
         double refresh_ms = 0.0;
     };
+    std::vector<RuntimeAssetState> runtime_asset_states_;
+    std::unordered_map<const Asset*, std::size_t> runtime_asset_state_index_;
+    std::unordered_map<Asset*, std::vector<Asset*>> reverse_child_index_;
+    std::unordered_map<std::string, Asset*> assets_by_name_;
+    std::unordered_map<std::string, Asset*> assets_by_stable_id_;
+    std::unordered_set<const Asset*> all_asset_membership_;
+    std::vector<Asset*> movement_enabled_active_assets_;
+    std::vector<Asset*> scratch_previous_active_assets_;
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
     std::vector<Asset*> asset_dimension_update_queue_;
     std::unordered_set<Asset*> asset_dimension_update_lookup_;
-    struct RuntimeTraversalState {
-        std::uint64_t pending_anchor_invalidation_version = 0;
-        std::uint64_t processed_anchor_invalidation_version = 0;
-        std::uint64_t processed_anchor_revision = 0;
-        std::uint64_t processed_camera_state_version = 0;
-        int processed_frame_index = std::numeric_limits<int>::min();
-        Asset::RuntimeImpassableGeometrySignature processed_impassable_signature{};
-        bool processed_impassable_signature_initialized = false;
-        std::uint32_t non_player_update_visit_epoch = 0;
-    };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
+    std::uint32_t active_rebuild_epoch_ = 1;
     std::uint64_t anchor_invalidation_version_counter_ = 1;
     std::uint32_t last_audio_engine_update_frame_id_ = 0;
     Asset* max_asset_width_holder_ = nullptr;

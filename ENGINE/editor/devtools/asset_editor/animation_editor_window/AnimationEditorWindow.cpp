@@ -1304,16 +1304,6 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (auto* active_dd = DMDropdown::active_dropdown()) {
-        if (active_dd->handle_event(e)) {
-
-            if (inspector_panel_) {
-                inspector_panel_->apply_dropdown_selections();
-            }
-            return true;
-        }
-    }
-
     if (list_context_menu_ && list_context_menu_->is_open()) {
         if (list_context_menu_->handle_event(e)) {
             return true;
@@ -1379,6 +1369,17 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     if (list_panel_ && list_panel_->handle_event(e)) {
         return true;
+    }
+
+    if (!pointer_in_list) {
+        if (auto* active_dd = DMDropdown::active_dropdown()) {
+            if (active_dd->handle_event(e)) {
+                if (inspector_panel_) {
+                    inspector_panel_->apply_dropdown_selections();
+                }
+                return true;
+            }
+        }
     }
 
     if (inspector_panel_ && selected_animation_id_ && has_pointer && !pointer_in_list && inspector_panel_->handle_event(e)) {

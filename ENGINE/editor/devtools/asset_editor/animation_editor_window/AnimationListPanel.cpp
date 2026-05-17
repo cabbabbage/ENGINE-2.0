@@ -348,6 +348,12 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
 
 bool AnimationListPanel::handle_event(const SDL_Event& e) {
     ensure_layout();
+    auto current_mouse_point = []() {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        return SDL_Point{mx, my};
+    };
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         int mx = 0;
@@ -371,7 +377,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p = event_point(e);
+        SDL_Point p = current_mouse_point();
         if (!SDL_PointInRect(&p, &bounds_)) {
             hovered_row_.reset();
             hovered_delete_row_.reset();
@@ -394,12 +400,15 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        SDL_Point p = event_point(e);
+        SDL_Point p = current_mouse_point();
         if (!SDL_PointInRect(&p, &bounds_)) {
             return false;
         }
 
         auto index = row_index_at_point(p);
+        if (!index && hovered_row_) {
+            index = hovered_row_;
+        }
         if (!index) {
             if (e.button.button == SDL_BUTTON_LEFT && selected_animation_id_) {
                 selected_animation_id_.reset();
@@ -429,6 +438,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
                 selected_animation_id_ = animation_id;
                 scroll_selection_into_view();
                 if (on_selection_changed_) {
+                    SDL_Log("[AnimationListPanel] Row clicked; selecting '%s'.", animation_id.c_str());
                     on_selection_changed_(selected_animation_id_);
                 }
             }
@@ -444,7 +454,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        SDL_Point p = event_point(e);
+        SDL_Point p = current_mouse_point();
         if (!SDL_PointInRect(&p, &bounds_)) {
             return false;
         }

@@ -494,7 +494,6 @@ private:
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
     std::vector<Asset*> asset_dimension_update_queue_;
     std::unordered_set<Asset*> asset_dimension_update_lookup_;
-    std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
     std::uint32_t active_rebuild_epoch_ = 1;
     std::uint64_t anchor_invalidation_version_counter_ = 1;
     std::uint32_t last_audio_engine_update_frame_id_ = 0;
@@ -884,12 +883,16 @@ private:
         std::size_t scan_cell_cap = 0;
         std::size_t new_spawn_cap = 0;
         std::size_t total_spawn_cap = 0;
+        std::uint64_t bounds_generation = 0;
         LiveDynamicQualifiedPointOrder point_order{};
         std::unordered_map<LiveDynamicSelectorStateKey, const LiveDynamicCompiledSelector*, LiveDynamicSelectorStateKeyHash> selector_lookup;
-        std::unordered_map<world::GridKey, bool, world::GridKeyHash> occupancy_cache;
-        std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> room_cache;
+        std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash>* persistent_occupancy_cache = nullptr;
+        std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash>* persistent_room_cache = nullptr;
         std::size_t qualified_this_frame = 0;
         std::size_t spawned_this_frame = 0;
+        std::size_t points_scanned_this_frame = 0;
+        std::size_t spawn_attempts_this_frame = 0;
+        std::size_t despawns_this_frame = 0;
         bool valid = false;
     };
 
@@ -923,6 +926,7 @@ private:
     int live_dynamic_sync_bounds_hysteresis_px_ = 32;
     std::size_t live_dynamic_quantized_bounds_change_count_ = 0;
     std::size_t live_dynamic_occupancy_cache_hits_ = 0;
+    std::uint64_t live_dynamic_bounds_generation_ = 1;
     std::size_t live_dynamic_occupancy_cache_misses_ = 0;
     bool live_dynamic_bounds_bucket_changed_ = true;
     std::uint32_t next_live_dynamic_selector_id_ = 1;

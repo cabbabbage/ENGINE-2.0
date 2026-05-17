@@ -33,13 +33,30 @@ class AnimationListPanel {
     void render(SDL_Renderer* renderer) const;
     bool handle_event(const SDL_Event& e);
     const std::optional<std::string>& debug_selected_animation_id() const { return selected_animation_id_; }
+    int debug_row_count() const { return static_cast<int>(display_rows_.size()); }
+    const std::string& debug_last_hit_result() const { return last_hit_result_; }
 
   private:
+    enum class HitTarget {
+        Outside,
+        Empty,
+        Row,
+        Delete,
+    };
+
+    struct HitTestResult {
+        HitTarget target = HitTarget::Outside;
+        std::optional<size_t> row_index;
+        std::string animation_id;
+    };
+
     void rebuild_rows();
     void layout_rows();
     void scroll_selection_into_view();
+    HitTestResult hit_test(const SDL_Point& p) const;
     std::optional<size_t> row_index_at_point(const SDL_Point& p) const;
     void ensure_layout() const;
+    void record_hit_result(const char* phase, const SDL_Point& p, const HitTestResult& hit) const;
 
   private:
     struct DisplayRow {
@@ -73,6 +90,7 @@ class AnimationListPanel {
     mutable bool layout_dirty_ = true;
     ui::ScrollController scroll_controller_;
     std::optional<std::uint64_t> last_document_revision_;
+    mutable std::string last_hit_result_ = "none";
 
     std::unordered_map<std::string, std::string> root_for_id_;
 };

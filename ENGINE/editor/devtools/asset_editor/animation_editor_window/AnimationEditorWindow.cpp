@@ -617,7 +617,6 @@ AnimationEditorWindow::~AnimationEditorWindow() {
         document_->set_on_saved_callback(nullptr);
         document_->set_on_structure_changed_callback(nullptr);
     }
-    invalidate_inspector_background_cache();
 }
 
 void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
@@ -660,6 +659,7 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
 
     visible_ = visible;
     if (becoming_visible) {
+        first_render_completed_ = false;
         log_ui_transition("visibility", "opened");
         ensure_layout();
         ensure_selection_valid();
@@ -675,6 +675,10 @@ void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
 void AnimationEditorWindow::toggle_visible() { set_visible(!visible_); }
 
 void AnimationEditorWindow::set_bounds(const SDL_Rect& bounds) {
+    if (bounds_.x == bounds.x && bounds_.y == bounds.y &&
+        bounds_.w == bounds.w && bounds_.h == bounds.h) {
+        return;
+    }
     const bool was_valid = bounds_.w > 0 && bounds_.h > 0;
     const bool now_valid = bounds.w > 0 && bounds.h > 0;
     if (was_valid != now_valid) {
@@ -682,6 +686,7 @@ void AnimationEditorWindow::set_bounds(const SDL_Rect& bounds) {
                           now_valid ? "became_valid" : "became_invalid");
     }
     bounds_ = bounds;
+    first_render_completed_ = false;
     layout_dirty_ = true;
     layout_children();
 }
@@ -691,7 +696,7 @@ bool AnimationEditorWindow::is_layout_valid() const {
 }
 
 bool AnimationEditorWindow::is_ready_for_action_execution() const {
-    return visible_ && is_layout_valid() && document_;
+    return visible_ && is_layout_valid() && document_ && first_render_completed_;
 }
 
 int AnimationEditorWindow::status_height() const {
@@ -724,6 +729,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     close_manifest_transaction();
     info_ = info;
     pending_external_action_.clear();
+    first_render_completed_ = false;
     load_diagnostics_ = {};
 
     if (!document_) {
@@ -985,6 +991,7 @@ void AnimationEditorWindow::clear_info() {
     close_defaults_modal();
     defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
     pending_external_action_.clear();
+    first_render_completed_ = false;
     document_->load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, {});
     document_->consume_dirty_flag();
     preview_provider_->invalidate_all();
@@ -1004,7 +1011,6 @@ void AnimationEditorWindow::clear_info() {
 void AnimationEditorWindow::layout_children() {
     layout_dirty_ = false;
     apply_layout_state(compute_layout_state());
-    invalidate_inspector_background_cache();
     layout_defaults_modal();
     sync_modal_lifecycle_with_layout();
 }
@@ -1123,11 +1129,9 @@ void AnimationEditorWindow::sync_modal_lifecycle_with_layout() {
 }
 
 void AnimationEditorWindow::invalidate_inspector_background_cache() {
-    if (inspector_background_cache_) {
-        SDL_DestroyTexture(inspector_background_cache_);
-        inspector_background_cache_ = nullptr;
-    }
-    inspector_background_dirty_ = true;
+    // Inspector background caching is intentionally disabled. It previously
+    // changed render targets during UI overlay rendering and could leave later
+    // editor drawing on the wrong target.
 }
 
 void AnimationEditorWindow::configure_list_panel() {
@@ -1179,30 +1183,25 @@ void AnimationEditorWindow::configure_inspector_panel() {
 }
 
 void AnimationEditorWindow::select_animation(const std::optional<std::string>& animation_id, bool from_user) {
-    if (selected_animation_id_ == animation_id) {
-        if (list_panel_) {
-            list_panel_->set_selected_animation_id(selected_animation_id_);
-        }
-        if (inspector_panel_ && selected_animation_id_) {
-            inspector_panel_->set_animation_id(*selected_animation_id_);
-        }
-        return;
-    }
-
+    const bool changed = selected_animation_id_ != animation_id;
     selected_animation_id_ = animation_id;
     if (list_panel_) {
         list_panel_->set_selected_animation_id(selected_animation_id_);
     }
     if (inspector_panel_ && selected_animation_id_) {
         inspector_panel_->set_animation_id(*selected_animation_id_);
+        inspector_panel_->update();
     }
-
 
     if (from_user) {
         if (selected_animation_id_) {
-            set_status_message("Selected animation '" + *selected_animation_id_ + "'.", 150);
+            set_status_message(std::string(changed ? "Selected" : "Activated") +
+                                   " animation '" + *selected_animation_id_ + "'.",
+                               150);
+            log_ui_transition("selection", std::string(changed ? "selected:" : "activated:") + *selected_animation_id_);
         } else {
             set_status_message("No animation selected.", 120);
+            log_ui_transition("selection", "none");
         }
     }
 }
@@ -1318,6 +1317,7 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     if (!visible_ || !renderer) return;
 
     ensure_layout();
+    SDL_Texture* target_before = SDL_GetRenderTarget(renderer);
 
     render_background(renderer);
     if (list_panel_) list_panel_->render(renderer);
@@ -1331,6 +1331,16 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     if (defaults_modal_actionable()) {
         render_defaults_modal(renderer);
     }
+    render_debug_overlay(renderer);
+
+    SDL_Texture* target_after = SDL_GetRenderTarget(renderer);
+    last_debug_render_target_ = (target_before == target_after) ? "unchanged" : "changed";
+    if (target_before != target_after) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] Render target changed during render; restoring previous target.");
+        SDL_SetRenderTarget(renderer, target_before);
+    }
+    first_render_completed_ = true;
 }
 
 bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
@@ -1369,6 +1379,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     // 1) Active actionable modal always wins.
     if (defaults_modal_actionable()) {
+        last_event_route_ = "modal";
         if (handle_defaults_modal_event(e)) {
             return true;
         }
@@ -1379,6 +1390,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     // 2) List context menu owns input while open.
     if (list_context_menu_ && list_context_menu_->is_open()) {
+        last_event_route_ = "list_context_menu";
         if (list_context_menu_->handle_event(e)) {
             return true;
         }
@@ -1401,6 +1413,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     // 3) Route pointer events to list first when pointer is inside list.
     if (list_panel_ && pointer_in_list) {
+        last_event_route_ = "list";
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             log_ui_transition("event_route", "pointer_to_list");
         }
@@ -1415,6 +1428,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
     // 4) Inspector handles pointer events only while pointer is inside inspector.
     if (inspector_panel_ && selected_animation_id_) {
         if (pointer_in_inspector && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            last_event_route_ = "inspector";
             log_ui_transition("event_route", "pointer_to_inspector");
         }
         if (pointer_in_inspector && inspector_panel_->handle_event(e)) {
@@ -1427,11 +1441,13 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     // 5) Non-pointer list events (e.g. keyboard navigation in future).
     if (list_panel_ && !has_pointer && list_panel_->handle_event(e)) {
+        last_event_route_ = "list_non_pointer";
         return true;
     }
 
     if (auto* active_dd = DMDropdown::active_dropdown()) {
         if (active_dd->handle_event(e)) {
+            last_event_route_ = "active_dropdown";
             if (inspector_panel_) {
                 inspector_panel_->apply_dropdown_selections();
             }
@@ -1440,18 +1456,22 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
     }
 
     if (handle_status_event(e)) {
+        last_event_route_ = "status";
         return true;
     }
 
     if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
+        last_event_route_ = "escape";
         set_visible(false);
         return true;
     }
 
     if (pointer_or_wheel_event) {
+        last_event_route_ = pointer_in_window ? "window_empty" : "outside";
         return pointer_in_window;
     }
 
+    last_event_route_ = "ignored";
     return false;
 }
 
@@ -1746,6 +1766,32 @@ void AnimationEditorWindow::render_status(SDL_Renderer* renderer) const {
     }
 }
 
+void AnimationEditorWindow::render_debug_overlay(SDL_Renderer* renderer) const {
+    if (!renderer || bounds_.w <= 0 || bounds_.h <= 0) {
+        return;
+    }
+
+    const int row_count = list_panel_ ? list_panel_->debug_row_count() : 0;
+    const std::string hit = list_panel_ ? list_panel_->debug_last_hit_result() : std::string{"none"};
+    std::ostringstream ss;
+    ss << "AnimEditor debug"
+       << " selected=" << (selected_animation_id_ ? *selected_animation_id_ : std::string{"<none>"})
+       << " count=" << (document_ ? document_->animation_ids().size() : 0)
+       << " rows=" << row_count
+       << " list=" << list_rect_.x << "," << list_rect_.y << " " << list_rect_.w << "x" << list_rect_.h
+       << " inspector=" << inspector_rect_.x << "," << inspector_rect_.y << " " << inspector_rect_.w << "x" << inspector_rect_.h
+       << " route=" << last_event_route_
+       << " hit={" << hit << "}"
+       << " target=" << last_debug_render_target_;
+
+    const int padding = DMSpacing::small_gap();
+    SDL_Rect bg{bounds_.x + padding, bounds_.y + padding, std::max(0, bounds_.w - padding * 2), DMStyles::Label().font_size + padding * 2};
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 190);
+    sdl_render::FillRect(renderer, &bg);
+    render_label(renderer, ss.str(), bg.x + padding, bg.y + padding);
+}
+
 void AnimationEditorWindow::render_load_diagnostics(SDL_Renderer* renderer) const {
     if (!renderer || !load_details_expanded_ || load_details_rect_.w <= 0 || load_details_rect_.h <= 0) {
         return;
@@ -1787,7 +1833,7 @@ void AnimationEditorWindow::render_inspector(SDL_Renderer* renderer) const {
         return;
     }
 
-    render_inspector_background(renderer);
+    animation_editor::ui::draw_panel_background(renderer, inspector_rect_);
 
     if (inspector_panel_ && selected_animation_id_) {
         inspector_panel_->render(renderer);
@@ -1798,40 +1844,6 @@ void AnimationEditorWindow::render_inspector(SDL_Renderer* renderer) const {
     int text_x = inspector_rect_.x + DMSpacing::panel_padding();
     int text_y = inspector_rect_.y + DMSpacing::panel_padding();
     render_label(renderer, message, text_x, text_y);
-}
-
-void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) const {
-    if (!renderer) return;
-    if (inspector_rect_.w <= 0 || inspector_rect_.h <= 0) {
-        return;
-    }
-
-    if (!inspector_background_dirty_ &&
-        inspector_background_cache_ &&
-        inspector_background_cache_rect_.w == inspector_rect_.w &&
-        inspector_background_cache_rect_.h == inspector_rect_.h) {
-        sdl_render::Texture(renderer, inspector_background_cache_, nullptr, &inspector_rect_);
-        return;
-    }
-
-    if (inspector_background_cache_) {
-        SDL_DestroyTexture(inspector_background_cache_);
-        inspector_background_cache_ = nullptr;
-    }
-
-    SDL_Texture* cache = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA8888), SDL_TEXTUREACCESS_TARGET, inspector_rect_.w, inspector_rect_.h);
-    if (!cache) {
-        return;
-    }
-    SDL_SetRenderTarget(renderer, cache);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_Rect local_rect{0, 0, inspector_rect_.w, inspector_rect_.h};
-    animation_editor::ui::draw_panel_background(renderer, local_rect);
-    SDL_SetRenderTarget(renderer, nullptr);
-    inspector_background_cache_ = cache;
-    inspector_background_cache_rect_ = SDL_Rect{inspector_rect_.x, inspector_rect_.y, inspector_rect_.w, inspector_rect_.h};
-    inspector_background_dirty_ = false;
-    sdl_render::Texture(renderer, cache, nullptr, &inspector_rect_);
 }
 
 bool AnimationEditorWindow::handle_status_event(const SDL_Event& e) {

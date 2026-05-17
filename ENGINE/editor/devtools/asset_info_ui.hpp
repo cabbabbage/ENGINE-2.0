@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <cstdint>
 #include <vector>
 #include <filesystem>
 
@@ -96,6 +97,18 @@ class AssetInfoUI {
         CreateDefaults,
     };
 
+    struct PendingAnimationEditorActionRequest {
+        PendingAnimationEditorAction action = PendingAnimationEditorAction::None;
+        std::uint64_t request_revision = 0;
+        std::uint64_t first_seen_frame = 0;
+        bool active() const { return action != PendingAnimationEditorAction::None; }
+        void clear() {
+            action = PendingAnimationEditorAction::None;
+            request_revision = 0;
+            first_seen_frame = 0;
+        }
+    };
+
     enum class RuntimeRefreshScope {
         LocalOnly,
         StructuralWithDependents,
@@ -168,7 +181,9 @@ class AssetInfoUI {
     std::unique_ptr<class ButtonWidget> duplicate_btn_widget_;
     std::unique_ptr<class DMButton> delete_btn_;
     std::unique_ptr<class ButtonWidget> delete_btn_widget_;
-    PendingAnimationEditorAction pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+    PendingAnimationEditorActionRequest pending_animation_editor_action_{};
+    std::uint64_t animation_editor_action_revision_ = 0;
+    std::uint64_t ui_frame_counter_ = 0;
 
     bool showing_duplicate_popup_ = false;
     std::string duplicate_asset_name_;

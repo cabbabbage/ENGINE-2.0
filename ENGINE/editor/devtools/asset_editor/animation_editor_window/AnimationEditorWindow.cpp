@@ -723,6 +723,7 @@ void AnimationEditorWindow::refresh_panels_after_load() {
 void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     close_manifest_transaction();
     info_ = info;
+    pending_external_action_.clear();
     load_diagnostics_ = {};
 
     if (!document_) {
@@ -982,6 +983,8 @@ void AnimationEditorWindow::clear_info() {
     load_diagnostics_ = {};
     close_manifest_transaction();
     close_defaults_modal();
+    defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
+    pending_external_action_.clear();
     document_->load_from_manifest(nlohmann::json::object(), std::filesystem::path{}, {});
     document_->consume_dirty_flag();
     preview_provider_->invalidate_all();
@@ -1398,6 +1401,9 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     // 3) Route pointer events to list first when pointer is inside list.
     if (list_panel_ && pointer_in_list) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            log_ui_transition("event_route", "pointer_to_list");
+        }
         if (list_panel_->handle_event(e)) {
             return true;
         }
@@ -1408,6 +1414,9 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     // 4) Inspector handles pointer events only while pointer is inside inspector.
     if (inspector_panel_ && selected_animation_id_) {
+        if (pointer_in_inspector && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            log_ui_transition("event_route", "pointer_to_inspector");
+        }
         if (pointer_in_inspector && inspector_panel_->handle_event(e)) {
             return true;
         }
@@ -1911,11 +1920,16 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
 }
 
 bool AnimationEditorWindow::defaults_modal_bounds_valid() const {
-    return bounds_.w > 0 && bounds_.h > 0 && defaults_modal_rect_.w > 0 && defaults_modal_rect_.h > 0;
+    return is_layout_valid() &&
+           bounds_.w > 0 && bounds_.h > 0 &&
+           defaults_modal_rect_.w > 0 && defaults_modal_rect_.h > 0;
 }
 
 bool AnimationEditorWindow::defaults_modal_actionable() const {
-    return visible_ && defaults_modal_visible_ && defaults_modal_bounds_valid();
+    return visible_ &&
+           defaults_modal_lifecycle_ == ModalLifecycleState::OpenReady &&
+           defaults_modal_visible_ &&
+           defaults_modal_bounds_valid();
 }
 
 bool AnimationEditorWindow::try_open_defaults_modal(bool from_retry) {
@@ -1923,16 +1937,19 @@ bool AnimationEditorWindow::try_open_defaults_modal(bool from_retry) {
     if (list_context_menu_) {
         list_context_menu_->close();
     }
+    defaults_modal_lifecycle_ = ModalLifecycleState::OpenReady;
     defaults_modal_visible_ = true;
     layout_defaults_modal();
     if (defaults_modal_actionable()) {
         defaults_modal_open_deferred_ = false;
+        defaults_modal_lifecycle_ = ModalLifecycleState::OpenReady;
         log_ui_transition("defaults_modal", from_retry ? "opened_after_retry" : "opened");
         return true;
     }
 
     defaults_modal_open_deferred_ = true;
     defaults_modal_visible_ = false;
+    defaults_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
     if (!from_retry) {
         if (!defaults_modal_open_warning_.empty()) {
             set_status_message(defaults_modal_open_warning_, 240);
@@ -1947,10 +1964,10 @@ bool AnimationEditorWindow::try_open_defaults_modal(bool from_retry) {
 }
 
 void AnimationEditorWindow::maybe_retry_deferred_defaults_modal() {
-    if (!defaults_modal_open_deferred_ || defaults_modal_visible_) {
+    if (!defaults_modal_open_deferred_ && defaults_modal_lifecycle_ != ModalLifecycleState::OpenPendingLayout) {
         return;
     }
-    if (bounds_.w <= 0 || bounds_.h <= 0) {
+    if (!is_layout_valid()) {
         return;
     }
     (void)try_open_defaults_modal(true);
@@ -1973,11 +1990,14 @@ void AnimationEditorWindow::close_defaults_modal() {
     if (defaults_distance_box_) {
         defaults_distance_box_->stop_editing();
     }
-    if (defaults_modal_visible_ || defaults_modal_open_deferred_) {
+    if (defaults_modal_visible_ || defaults_modal_open_deferred_ ||
+        defaults_modal_lifecycle_ == ModalLifecycleState::OpenReady ||
+        defaults_modal_lifecycle_ == ModalLifecycleState::OpenPendingLayout) {
         log_ui_transition("defaults_modal", "closed");
     }
     defaults_modal_visible_ = false;
     defaults_modal_open_deferred_ = false;
+    defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
     defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
     defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
     defaults_modal_scroll_offset_ = 0;
@@ -1986,7 +2006,7 @@ void AnimationEditorWindow::close_defaults_modal() {
 
 
 void AnimationEditorWindow::layout_defaults_modal() {
-    if (!defaults_modal_visible_) {
+    if (defaults_modal_lifecycle_ != ModalLifecycleState::OpenReady || !defaults_modal_visible_) {
         defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
         defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
         defaults_modal_scroll_offset_ = 0;
@@ -1996,11 +2016,12 @@ void AnimationEditorWindow::layout_defaults_modal() {
 
     ensure_defaults_modal_widgets();
 
-    if (bounds_.w <= 0 || bounds_.h <= 0) {
+    if (!is_layout_valid() || bounds_.w <= 0 || bounds_.h <= 0) {
         defaults_modal_visible_ = false;
         defaults_modal_rect_ = SDL_Rect{0, 0, 0, 0};
         defaults_modal_scroll_rect_ = SDL_Rect{0, 0, 0, 0};
         defaults_modal_open_deferred_ = true;
+        defaults_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
         defaults_modal_open_warning_ = "Create Defaults cannot open while panel bounds are collapsed.";
         return;
     }

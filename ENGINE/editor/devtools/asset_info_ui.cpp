@@ -1115,7 +1115,7 @@ void AssetInfoUI::clear_panel_bounds_override() {
 
 void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
     info_ = info;
-    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+    pending_animation_editor_action_.clear();
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     if (animation_editor_window_) {
@@ -1210,7 +1210,7 @@ void AssetInfoUI::clear_info() {
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     pending_animation_editor_open_ = false;
-    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+    pending_animation_editor_action_.clear();
     animation_editor_fullscreen_mode_ = false;
     animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     if (animation_editor_window_) {
@@ -1246,7 +1246,7 @@ void AssetInfoUI::open()  {
 void AssetInfoUI::close(bool flush_changes) {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
-    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+    pending_animation_editor_action_.clear();
     animation_editor_fullscreen_mode_ = false;
     animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     apply_camera_override(false);
@@ -1277,7 +1277,7 @@ void AssetInfoUI::toggle(){
 void AssetInfoUI::open_animation_editor_panel() {
     if (!animation_editor_window_ || !info_) {
         pending_animation_editor_open_ = false;
-        pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+        pending_animation_editor_action_.clear();
         animation_editor_fullscreen_mode_ = false;
         animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         return;
@@ -1301,7 +1301,7 @@ void AssetInfoUI::open_animation_editor_panel() {
 
 void AssetInfoUI::close_animation_editor_panel() {
     pending_animation_editor_open_ = false;
-    pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+    pending_animation_editor_action_.clear();
     if (animation_editor_window_) {
         // Programmatic panel transitions should not invoke the "window closed" callback,
         // which is reserved for explicit user-driven close actions.
@@ -1317,14 +1317,7 @@ bool AssetInfoUI::run_animation_editor_action(PendingAnimationEditorAction actio
     if (!animation_editor_window_ || !info_) {
         return false;
     }
-    if (!animation_editor_window_->is_visible()) {
-        return false;
-    }
-    const SDL_Rect& editor_bounds = animation_editor_window_->bounds();
-    if (editor_bounds.w <= 0 || editor_bounds.h <= 0) {
-        SDL_Log("[AssetInfoUI] Deferred animation editor action; editor bounds invalid (%d x %d).",
-                editor_bounds.w,
-                editor_bounds.h);
+    if (!animation_editor_window_->is_visible() || !animation_editor_window_->is_ready_for_action_execution()) {
         return false;
     }
     switch (action) {
@@ -1353,10 +1346,12 @@ void AssetInfoUI::request_animation_editor_action(PendingAnimationEditorAction a
     else if (action == PendingAnimationEditorAction::CreateDefaults) action_name = "CreateDefaults";
     SDL_Log("[AssetInfoUI] Requested animation editor action: %s", action_name);
     if (animation_editor_window_->is_visible() && run_animation_editor_action(action)) {
-        pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+        pending_animation_editor_action_.clear();
         return;
     }
-    pending_animation_editor_action_ = action;
+    pending_animation_editor_action_.action = action;
+    pending_animation_editor_action_.request_revision = ++animation_editor_action_revision_;
+    pending_animation_editor_action_.first_seen_frame = ui_frame_counter_;
     open_animation_editor_panel();
 }
 
@@ -1622,6 +1617,7 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
 }
 
 void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
+    ++ui_frame_counter_;
     validate_target_asset();
     last_screen_w_ = screen_w;
     last_screen_h_ = screen_h;
@@ -1634,10 +1630,17 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
             animation_editor_window_->set_visible(true);
             pending_animation_editor_open_ = false;
         }
-        if (pending_animation_editor_action_ != PendingAnimationEditorAction::None &&
+        if (pending_animation_editor_action_.active() &&
             animation_editor_window_->is_visible()) {
-            if (run_animation_editor_action(pending_animation_editor_action_)) {
-                pending_animation_editor_action_ = PendingAnimationEditorAction::None;
+            if (run_animation_editor_action(pending_animation_editor_action_.action)) {
+                pending_animation_editor_action_.clear();
+            } else if ((ui_frame_counter_ % 120u) == 0u) {
+                const SDL_Rect& editor_bounds = animation_editor_window_->bounds();
+                SDL_Log("[AssetInfoUI] Animation editor action still pending (rev=%llu, bounds=%dx%d, ready=%d).",
+                        static_cast<unsigned long long>(pending_animation_editor_action_.request_revision),
+                        editor_bounds.w,
+                        editor_bounds.h,
+                        animation_editor_window_->is_ready_for_action_execution() ? 1 : 0);
             }
         }
         if (animation_editor_window_->is_visible()) {

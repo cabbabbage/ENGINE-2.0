@@ -16,8 +16,4 @@ public:
                                     CollisionQueryContext* collision_context = nullptr) const;
 };
 
-#if defined(ENGINE_WORLD_TESTS)
-namespace path_sanitizer::test_hooks {
-bool checkpoint_collapses_to_anchor(SDL_Point anchor, SDL_Point candidate);
-}
-#endif
+

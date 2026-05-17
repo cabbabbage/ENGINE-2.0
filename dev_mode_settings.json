@@ -25,6 +25,7 @@
             "types": {
                 "area": true,
                 "boundary": true,
+                "dynamic": false,
                 "enemy": true,
                 "npc": true,
                 "object": true,

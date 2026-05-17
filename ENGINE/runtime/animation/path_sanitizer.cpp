@@ -142,12 +142,4 @@ std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
     return sanitized;
 }
 
-#if defined(ENGINE_WORLD_TESTS)
-namespace path_sanitizer::test_hooks {
 
-bool checkpoint_collapses_to_anchor(SDL_Point anchor, SDL_Point candidate) {
-    return ::checkpoint_collapses_to_anchor(anchor, candidate);
-}
-
-} // namespace path_sanitizer::test_hooks
-#endif

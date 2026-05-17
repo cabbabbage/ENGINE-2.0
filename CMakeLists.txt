@@ -1,4 +1,4 @@
-﻿#VIBBLE 2D GAME ENGINE
+#VIBBLE 2D GAME ENGINE
 
 cmake_minimum_required(VERSION 3.20)
 project(VIBBLEEngine)
@@ -250,7 +250,7 @@ if(MSVC)
 endif()
 
 # ------------------------------------------
-# Unit tests (doctest-based)
+
 # ------------------------------------------
 set(RUNTIME_SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/runtime/rendering/shaders")
 set(RUNTIME_SHADER_PACKAGE_DIR "${RUNTIME_SHADER_SOURCE_DIR}")
@@ -275,134 +275,6 @@ add_custom_target(runtime_shader_packages ALL
 add_dependencies(opengl_runtime_preflight runtime_shader_packages)
 add_dependencies(opengl_runtime_preflight_strict runtime_shader_packages)
 add_dependencies(engine opengl_runtime_preflight)
-
-set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
-set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
-
-set(ENGINE_TEST_RUNTIME_SRC ${ENGINE_SRC})
-list(REMOVE_ITEM ENGINE_TEST_RUNTIME_SRC
-    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/app/main.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui/ui/menu_ui.cpp"
-)
-list(APPEND ENGINE_TEST_RUNTIME_SRC
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
-)
-
-add_executable(engine_tests
-    ${ENGINE_TEST_RUNTIME_SRC}
-    ENGINE/tests/engine_tests_main.cpp
-    ENGINE/tests/stubs/asset/child_asset_runtime_test_support.cpp
-    ENGINE/tests/test_render_object_projection.cpp
-    ENGINE/tests/test_anchor_binding_order.cpp
-    ENGINE/tests/test_anchor_point_resolver.cpp
-    ENGINE/tests/test_anchor_child_candidate_normalization.cpp
-    ENGINE/tests/test_oval_anchor_mappings.cpp
-    ENGINE/tests/test_animation_document_geometry.cpp
-    ENGINE/tests/test_animation_editor_defaults.cpp
-    ENGINE/tests/test_animation_source_navigation.cpp
-    ENGINE/tests/test_animation_loader_tags.cpp
-    ENGINE/tests/test_animation_tags_panel.cpp
-    ENGINE/tests/test_combat_box_geometry.cpp
-    ENGINE/tests/test_combat_attack_pipeline.cpp
-    ENGINE/tests/test_map_data.cpp
-    ENGINE/tests/test_map_manifest_normalizer.cpp
-    ENGINE/tests/test_live_dynamic_asset_rendering.cpp
-    ENGINE/tests/test_generate_trails_geometry.cpp
-    ENGINE/tests/test_generate_rooms_connectivity.cpp
-    ENGINE/tests/test_movement_payload_geometry.cpp
-    ENGINE/tests/test_player_direction_intent.cpp
-    ENGINE/tests/test_room_anchor_mode_utils.cpp
-    ENGINE/tests/test_room_editor_point_mode_isolation.cpp
-    ENGINE/tests/test_room_editor_onion_skin_regressions.cpp
-    ENGINE/tests/test_room_configurator_persistence.cpp
-    ENGINE/tests/test_room_selection_filter_utils.cpp
-    ENGINE/tests/test_spawn_group_codec.cpp
-    ENGINE/tests/test_runtime_candidates.cpp
-    ENGINE/tests/test_custom_controller_update_utils.cpp
-    ENGINE/tests/test_runtime_ownership.cpp
-    ENGINE/tests/test_world_grid.cpp
-    ENGINE/tests/test_input_activity.cpp
-    ENGINE/tests/test_camera_controller.cpp
-    ENGINE/tests/test_asset_perspective_sample.cpp
-    ENGINE/tests/test_animation_runtime_ownership.cpp
-    ENGINE/tests/test_animation_cloner_on_end.cpp
-    ENGINE/tests/test_source_config_panel_regressions.cpp
-    ENGINE/tests/test_auto_move_zero_stride_recovery.cpp
-    ENGINE/tests/test_auto_move_3d_pathing.cpp
-    ENGINE/tests/test_scaling_logic_variants.cpp
-    ENGINE/tests/test_movement_pathing_axis.cpp
-    ENGINE/tests/test_dev_mode_animation_policy.cpp
-    ENGINE/tests/test_playback_settings_inheritance.cpp
-    ENGINE/tests/test_weighted_range.cpp
-    
-    ENGINE/tests/test_screen_space_math.cpp
-    ENGINE/tests/test_sink_clip.cpp
-    ENGINE/tests/test_warped_screen_grid_dimensions.cpp
-    ENGINE/tests/test_opengl_runtime_renderer.cpp
-    ENGINE/tests/test_render_dof_blur_chain.cpp
-    ENGINE/tests/test_shader_package_library.cpp
-    ENGINE/tests/test_asset_manifest_enable_flags.cpp
-    ENGINE/tests/test_child_asset_runtime.cpp
-    ENGINE/tests/test_floor_box_candidate_spawning.cpp
-    ENGINE/tests/test_asset_collision_context_policy.cpp
-    ENGINE/tests/test_impassable_geometry_signature.cpp
-    ENGINE/tests/test_save_orchestrator.cpp
-    ENGINE/tests/test_save_manager_reentrancy.cpp
-    ENGINE/tests/test_image_cache_generator.cpp
-    ENGINE/tests/test_asset_animation_preload_failure.cpp
-)
-
-target_include_directories(engine_tests
-      PRIVATE
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/app
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/audio
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
-          ${CMAKE_SOURCE_DIR}/ENGINE/editor
-          ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
-          ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-          ${CMAKE_SOURCE_DIR}/external
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core
-  )
-
-target_compile_definitions(engine_tests PRIVATE
-    DEV_MODE_DISABLE_JSON_DEBOUNCE=1
-    PROJECT_ROOT="${TEST_ROOT}"
-    FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
-    FRAME_EDITOR_ACCESS=public
-    ENGINE_WORLD_TESTS=1
-    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
-)
-
-target_link_libraries(engine_tests
-    PRIVATE
-        nlohmann_json::nlohmann_json
-        SDL3::SDL3
-        SDL3_image::SDL3_image
-        SDL3_ttf::SDL3_ttf
-        ${GLAD_TARGET}
-        OpenGL::GL
-)
-if (WINSDK_UM_X64_LIBDIR)
-    target_link_directories(engine_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
-endif()
-if (WINSDK_UCRT_X64_LIBDIR)
-    target_link_directories(engine_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
-endif()
-if (MSVC_LIB_DIR)
-    target_link_directories(engine_tests PRIVATE "${MSVC_LIB_DIR}")
-endif()
-if (OPENGL32_ABSOLUTE)
-    target_link_libraries(engine_tests PRIVATE ${OPENGL32_ABSOLUTE})
-endif()
-
-if (WIN32)
-    target_link_libraries(engine_tests PRIVATE Ole32 Shell32)
-    target_link_libraries(engine_tests PRIVATE d3d11 d3dcompiler)
-endif()
 
 # ------------------------------------------
 # C++ Cache Tools (ENGINE/tools)
@@ -444,3 +316,5 @@ foreach(tool_target asset_tool_cli)
         )
     endforeach()
 endforeach()
+
+

@@ -30,8 +30,6 @@
 - הבקרים מקושרים לפי שם נכס (לדוגמה, הנכס `spider` ממופה ל-`spider_controller`).
 
 ## בדיקות
-- בניית בדיקות: `cmake --build --preset windows-vcpkg-release --target engine_tests`
-- הרצת בדיקות: `ENGINE/engine_tests.exe`
 
 ## רישיון
 

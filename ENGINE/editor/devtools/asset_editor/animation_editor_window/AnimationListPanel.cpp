@@ -348,12 +348,6 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
 
 bool AnimationListPanel::handle_event(const SDL_Event& e) {
     ensure_layout();
-    auto current_mouse_point = []() {
-        int mx = 0;
-        int my = 0;
-        sdl_mouse_util::GetMouseState(&mx, &my);
-        return SDL_Point{mx, my};
-    };
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         int mx = 0;
@@ -377,7 +371,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p = current_mouse_point();
+        SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &bounds_)) {
             hovered_row_.reset();
             hovered_delete_row_.reset();
@@ -400,7 +394,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        SDL_Point p = current_mouse_point();
+        SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &bounds_)) {
             return false;
         }
@@ -454,7 +448,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        SDL_Point p = current_mouse_point();
+        SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &bounds_)) {
             return false;
         }

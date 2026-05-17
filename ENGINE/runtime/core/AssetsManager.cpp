@@ -1198,10 +1198,10 @@ void Assets::rebuild_live_dynamic_selectors() {
                     SDL_Point{expanded_min_x, expanded_min_z}, clamped_resolution);
                 const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
                     SDL_Point{expanded_max_x, expanded_max_z}, clamped_resolution);
-                const int scan_min_x = clamp_i64_to_int(std::min<std::int64_t>(min_index.x, max_index.x));
-                const int scan_max_x = clamp_i64_to_int(std::max<std::int64_t>(min_index.x, max_index.x));
-                const int scan_min_z = clamp_i64_to_int(std::min<std::int64_t>(min_index.y, max_index.y));
-                const int scan_max_z = clamp_i64_to_int(std::max<std::int64_t>(min_index.y, max_index.y));
+                const int scan_min_x = std::min(min_index.x, max_index.x);
+                const int scan_max_x = std::max(min_index.x, max_index.x);
+                const int scan_min_z = std::min(min_index.y, max_index.y);
+                const int scan_max_z = std::max(min_index.y, max_index.y);
                 if (scan_min_x > scan_max_x || scan_min_z > scan_max_z) {
                     continue;
                 }

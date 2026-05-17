@@ -63,6 +63,62 @@ namespace asset_paths = devmode::asset_paths;
 
 constexpr int kAutoSaveDelayFrames = 12;
 
+class ScopedRendererState {
+public:
+    explicit ScopedRendererState(SDL_Renderer* renderer)
+        : renderer_(renderer),
+          target_(renderer ? SDL_GetRenderTarget(renderer) : nullptr),
+          clip_enabled_(renderer ? SDL_RenderClipEnabled(renderer) : false) {
+        if (!renderer_) {
+            return;
+        }
+        if (clip_enabled_) {
+            SDL_GetRenderClipRect(renderer_, &clip_rect_);
+        }
+        SDL_GetRenderDrawBlendMode(renderer_, &blend_mode_);
+    }
+
+    ScopedRendererState(const ScopedRendererState&) = delete;
+    ScopedRendererState& operator=(const ScopedRendererState&) = delete;
+
+    ~ScopedRendererState() {
+        restore(nullptr);
+    }
+
+    void restore(std::string* target_debug) {
+        if (!renderer_ || restored_) {
+            return;
+        }
+
+        SDL_Texture* target_after = SDL_GetRenderTarget(renderer_);
+        const bool target_changed = (target_ != target_after);
+        if (target_debug) {
+            *target_debug = target_changed ? "changed" : "unchanged";
+        }
+        if (target_changed) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[AnimationEditor] Render target changed during render; restoring previous target.");
+            SDL_SetRenderTarget(renderer_, target_);
+        }
+
+        if (clip_enabled_) {
+            SDL_SetRenderClipRect(renderer_, &clip_rect_);
+        } else {
+            SDL_SetRenderClipRect(renderer_, nullptr);
+        }
+        SDL_SetRenderDrawBlendMode(renderer_, blend_mode_);
+        restored_ = true;
+    }
+
+private:
+    SDL_Renderer* renderer_ = nullptr;
+    SDL_Texture* target_ = nullptr;
+    bool clip_enabled_ = false;
+    SDL_Rect clip_rect_{0, 0, 0, 0};
+    SDL_BlendMode blend_mode_ = SDL_BLENDMODE_NONE;
+    bool restored_ = false;
+};
+
 fs::path preferred_asset_folder(const std::string& asset_name) {
     if (asset_name.empty()) {
         return asset_paths::assets_root_path();
@@ -1317,14 +1373,7 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     if (!visible_ || !renderer) return;
 
     ensure_layout();
-    SDL_Texture* target_before = SDL_GetRenderTarget(renderer);
-    const bool clip_enabled_before = SDL_RenderClipEnabled(renderer);
-    SDL_Rect clip_before{0, 0, 0, 0};
-    if (clip_enabled_before) {
-        SDL_GetRenderClipRect(renderer, &clip_before);
-    }
-    SDL_BlendMode blend_before = SDL_BLENDMODE_NONE;
-    SDL_GetRenderDrawBlendMode(renderer, &blend_before);
+    ScopedRendererState renderer_state(renderer);
 
     render_background(renderer);
     if (list_panel_) list_panel_->render(renderer);
@@ -1340,19 +1389,7 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     }
     render_debug_overlay(renderer);
 
-    SDL_Texture* target_after = SDL_GetRenderTarget(renderer);
-    last_debug_render_target_ = (target_before == target_after) ? "unchanged" : "changed";
-    if (target_before != target_after) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AnimationEditor] Render target changed during render; restoring previous target.");
-        SDL_SetRenderTarget(renderer, target_before);
-    }
-    if (clip_enabled_before) {
-        SDL_SetRenderClipRect(renderer, &clip_before);
-    } else {
-        SDL_SetRenderClipRect(renderer, nullptr);
-    }
-    SDL_SetRenderDrawBlendMode(renderer, blend_before);
+    renderer_state.restore(&last_debug_render_target_);
     first_render_completed_ = true;
 }
 

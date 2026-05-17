@@ -1132,7 +1132,9 @@ void Assets::rebuild_live_dynamic_selectors() {
     {
         struct Segment2D { SDL_Point a{}; SDL_Point b{}; };
         std::vector<Segment2D> geometry_segments;
+        std::vector<const Area*> geometry_areas;
         geometry_segments.reserve(2048);
+        geometry_areas.reserve(512);
         int min_world_x = std::numeric_limits<int>::max();
         int min_world_z = std::numeric_limits<int>::max();
         int max_world_x = std::numeric_limits<int>::min();
@@ -1143,6 +1145,7 @@ void Assets::rebuild_live_dynamic_selectors() {
             if (!area) {
                 return;
             }
+            geometry_areas.push_back(area);
             const auto& pts = area->get_points();
             if (pts.size() < 2) {
                 return;
@@ -1209,6 +1212,20 @@ void Assets::rebuild_live_dynamic_selectors() {
                     for (int gz = scan_min_z; gz <= scan_max_z; ++gz) {
                         const SDL_Point world_point =
                             vibble::grid::global_grid().index_to_world(gx, gz, clamped_resolution);
+                        bool inside_any_area = false;
+                        for (const Area* area : geometry_areas) {
+                            if (area && area->contains_point(world_point)) {
+                                inside_any_area = true;
+                                break;
+                            }
+                        }
+                        if (inside_any_area) {
+                            live_dynamic_valid_cells_.insert(
+                                LiveDynamicGridCellKey{LiveDynamicMode::BoundaryArea, clamped_resolution, gx, gz});
+                            live_dynamic_valid_cells_.insert(
+                                LiveDynamicGridCellKey{LiveDynamicMode::InheritedMap, clamped_resolution, gx, gz});
+                            continue;
+                        }
                         double min_dist_sq = std::numeric_limits<double>::infinity();
                         for (const auto& seg : geometry_segments) {
                             min_dist_sq = std::min(min_dist_sq, point_to_segment_distance_sq(world_point, seg.a, seg.b));

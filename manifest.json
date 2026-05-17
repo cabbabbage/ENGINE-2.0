@@ -26748,10 +26748,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -603,
-          "camera_center_dz": -961,
+          "camera_center_dx": -4115,
+          "camera_center_dz": -2164,
           "camera_height_px": 700,
-          "camera_tilt_deg": 18.015430450439453,
+          "camera_tilt_deg": 35.415428161621094,
           "camera_zoom_percent": 100,
           "curvyness": {
             "center": 2,

@@ -708,6 +708,33 @@ private:
         }
     };
 
+    struct LiveDynamicGridCellKey {
+        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
+        int grid_resolution = 0;
+        int grid_x = 0;
+        int grid_z = 0;
+
+        bool operator==(const LiveDynamicGridCellKey& other) const {
+            return mode == other.mode &&
+                   grid_resolution == other.grid_resolution &&
+                   grid_x == other.grid_x &&
+                   grid_z == other.grid_z;
+        }
+    };
+
+    struct LiveDynamicGridCellKeyHash {
+        std::size_t operator()(const LiveDynamicGridCellKey& key) const {
+            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<int>{}(key.grid_resolution));
+            mix(std::hash<int>{}(key.grid_x));
+            mix(std::hash<int>{}(key.grid_z));
+            return seed;
+        }
+    };
+
     struct LiveDynamicSelectorStateKey {
         LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
         int grid_resolution = 0;
@@ -901,6 +928,7 @@ private:
     std::unordered_map<Asset*, LiveDynamicPointKey> live_dynamic_asset_keys_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_spawned_keys_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_null_keys_;
+    std::unordered_set<LiveDynamicGridCellKey, LiveDynamicGridCellKeyHash> live_dynamic_valid_cells_;
     std::unordered_map<LiveDynamicSelectorStateKey,
                        LiveDynamicSelectorScanState,
                        LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
@@ -912,6 +940,7 @@ private:
     std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> live_dynamic_persistent_room_cache_;
     int live_dynamic_preload_margin_world_px_ = 192;
     int live_dynamic_despawn_margin_world_px_ = 256;
+    int live_dynamic_max_spawn_from_room_world_px_ = 128;
     std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
     std::size_t max_live_dynamic_new_spawns_per_frame_ = 384;
     std::size_t min_live_dynamic_scan_cells_per_selector_per_frame_ = 256;

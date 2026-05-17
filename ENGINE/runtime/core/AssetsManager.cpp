@@ -457,6 +457,31 @@ bool live_dynamic_named_area_is_trail(const Room::NamedArea& named_area) {
             live_dynamic_label_is_trail(named_area.name));
 }
 
+double point_to_segment_distance_sq(SDL_Point p, SDL_Point a, SDL_Point b) {
+    const double px = static_cast<double>(p.x);
+    const double py = static_cast<double>(p.y);
+    const double ax = static_cast<double>(a.x);
+    const double ay = static_cast<double>(a.y);
+    const double bx = static_cast<double>(b.x);
+    const double by = static_cast<double>(b.y);
+    const double abx = bx - ax;
+    const double aby = by - ay;
+    const double apx = px - ax;
+    const double apy = py - ay;
+    const double ab_len_sq = abx * abx + aby * aby;
+    if (ab_len_sq <= 1e-9) {
+        const double dx = px - ax;
+        const double dy = py - ay;
+        return dx * dx + dy * dy;
+    }
+    const double t = std::clamp((apx * abx + apy * aby) / ab_len_sq, 0.0, 1.0);
+    const double cx = ax + t * abx;
+    const double cy = ay + t * aby;
+    const double dx = px - cx;
+    const double dy = py - cy;
+    return dx * dx + dy * dy;
+}
+
 bool live_dynamic_info_allowed(const AssetInfo* info, Assets::LiveDynamicMode mode) {
     const bool boundary = live_dynamic_is_boundary_info(info);
     if (mode == Assets::LiveDynamicMode::BoundaryArea) {
@@ -969,6 +994,7 @@ std::size_t Assets::delete_live_dynamic_assets_now(const std::vector<Asset*>& as
 void Assets::rebuild_live_dynamic_selectors() {
     live_dynamic_boundary_selectors_.clear();
     live_dynamic_inherited_selectors_.clear();
+    live_dynamic_valid_cells_.clear();
     next_live_dynamic_selector_id_ = 1;
 
     if (!map_info_json_.is_object()) {
@@ -982,6 +1008,27 @@ void Assets::rebuild_live_dynamic_selectors() {
     }
 
     const auto catalog = library_.all();
+    const auto parse_max_spawn_from_room = [&](const nlohmann::json& live) {
+        constexpr int kDefault = 128;
+        constexpr int kMin = 0;
+        constexpr int kMax = 2000;
+        auto it = live.find("max_spawn_from_room");
+        if (it == live.end() || !it->is_number()) {
+            return kDefault;
+        }
+        int value = kDefault;
+        try {
+            if (it->is_number_integer()) {
+                value = it->get<int>();
+            } else {
+                value = static_cast<int>(std::llround(it->get<double>()));
+            }
+        } catch (...) {
+            value = kDefault;
+        }
+        return std::clamp(value, kMin, kMax);
+    };
+    live_dynamic_max_spawn_from_room_world_px_ = parse_max_spawn_from_room(*live_it);
     const auto append_selector = [&](const nlohmann::json& selector_json,
                                      LiveDynamicMode mode,
                                      std::vector<LiveDynamicCompiledSelector>& out) {
@@ -1080,6 +1127,107 @@ void Assets::rebuild_live_dynamic_selectors() {
     // Both passes read the same authored boundary_area_selectors JSON.
     append_section("boundary_area_selectors", LiveDynamicMode::BoundaryArea, live_dynamic_boundary_selectors_);
     append_section("boundary_area_selectors", LiveDynamicMode::InheritedMap, live_dynamic_inherited_selectors_);
+
+    live_dynamic_valid_cells_.clear();
+    {
+        struct Segment2D { SDL_Point a{}; SDL_Point b{}; };
+        std::vector<Segment2D> geometry_segments;
+        geometry_segments.reserve(2048);
+        int min_world_x = std::numeric_limits<int>::max();
+        int min_world_z = std::numeric_limits<int>::max();
+        int max_world_x = std::numeric_limits<int>::min();
+        int max_world_z = std::numeric_limits<int>::min();
+        bool has_geometry = false;
+
+        const auto append_area_segments = [&](const Area* area) {
+            if (!area) {
+                return;
+            }
+            const auto& pts = area->get_points();
+            if (pts.size() < 2) {
+                return;
+            }
+            has_geometry = true;
+            for (const auto& p : pts) {
+                min_world_x = std::min(min_world_x, p.x);
+                min_world_z = std::min(min_world_z, p.y);
+                max_world_x = std::max(max_world_x, p.x);
+                max_world_z = std::max(max_world_z, p.y);
+            }
+            if (pts.size() == 2) {
+                geometry_segments.push_back(Segment2D{pts[0], pts[1]});
+                return;
+            }
+            for (std::size_t i = 0, j = pts.size() - 1; i < pts.size(); j = i++) {
+                geometry_segments.push_back(Segment2D{pts[j], pts[i]});
+            }
+        };
+
+        for (Room* room : rooms()) {
+            if (!room) {
+                continue;
+            }
+            append_area_segments(room->room_area.get());
+            for (const auto& named_area : room->areas) {
+                if (live_dynamic_named_area_is_trail(named_area)) {
+                    append_area_segments(named_area.area.get());
+                }
+            }
+        }
+
+        std::unordered_set<int> used_resolutions;
+        used_resolutions.reserve(live_dynamic_boundary_selectors_.size() + live_dynamic_inherited_selectors_.size());
+        for (const auto& selector : live_dynamic_boundary_selectors_) {
+            if (selector.grid_resolution >= 0) used_resolutions.insert(vibble::grid::clamp_resolution(selector.grid_resolution));
+        }
+        for (const auto& selector : live_dynamic_inherited_selectors_) {
+            if (selector.grid_resolution >= 0) used_resolutions.insert(vibble::grid::clamp_resolution(selector.grid_resolution));
+        }
+
+        if (has_geometry && !geometry_segments.empty() && !used_resolutions.empty()) {
+            const int threshold = std::max(0, live_dynamic_max_spawn_from_room_world_px_);
+            const double threshold_sq = static_cast<double>(threshold) * static_cast<double>(threshold);
+            const int expanded_min_x = min_world_x - threshold;
+            const int expanded_min_z = min_world_z - threshold;
+            const int expanded_max_x = max_world_x + threshold;
+            const int expanded_max_z = max_world_z + threshold;
+
+            for (int resolution : used_resolutions) {
+                const int clamped_resolution = vibble::grid::clamp_resolution(resolution);
+                const SDL_Point min_index = vibble::grid::global_grid().world_to_index(
+                    SDL_Point{expanded_min_x, expanded_min_z}, clamped_resolution);
+                const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
+                    SDL_Point{expanded_max_x, expanded_max_z}, clamped_resolution);
+                const int scan_min_x = clamp_i64_to_int(std::min<std::int64_t>(min_index.x, max_index.x));
+                const int scan_max_x = clamp_i64_to_int(std::max<std::int64_t>(min_index.x, max_index.x));
+                const int scan_min_z = clamp_i64_to_int(std::min<std::int64_t>(min_index.y, max_index.y));
+                const int scan_max_z = clamp_i64_to_int(std::max<std::int64_t>(min_index.y, max_index.y));
+                if (scan_min_x > scan_max_x || scan_min_z > scan_max_z) {
+                    continue;
+                }
+                for (int gx = scan_min_x; gx <= scan_max_x; ++gx) {
+                    for (int gz = scan_min_z; gz <= scan_max_z; ++gz) {
+                        const SDL_Point world_point =
+                            vibble::grid::global_grid().index_to_world(gx, gz, clamped_resolution);
+                        double min_dist_sq = std::numeric_limits<double>::infinity();
+                        for (const auto& seg : geometry_segments) {
+                            min_dist_sq = std::min(min_dist_sq, point_to_segment_distance_sq(world_point, seg.a, seg.b));
+                            if (min_dist_sq <= threshold_sq) {
+                                break;
+                            }
+                        }
+                        if (min_dist_sq <= threshold_sq) {
+                            live_dynamic_valid_cells_.insert(
+                                LiveDynamicGridCellKey{LiveDynamicMode::BoundaryArea, clamped_resolution, gx, gz});
+                            live_dynamic_valid_cells_.insert(
+                                LiveDynamicGridCellKey{LiveDynamicMode::InheritedMap, clamped_resolution, gx, gz});
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     clear_live_dynamic_assets();
     force_live_dynamic_sync_next_rebuild_ = true;
 }
@@ -3875,6 +4023,10 @@ void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& 
                     continue;
                 }
                 const LiveDynamicPointKey key{selector.mode, selector_key.grid_resolution, x, z, selector.selector_id};
+                const LiveDynamicGridCellKey valid_key{selector.mode, selector_key.grid_resolution, x, z};
+                if (live_dynamic_valid_cells_.find(valid_key) == live_dynamic_valid_cells_.end()) {
+                    continue;
+                }
                 if (!state.seen_cells.insert(key).second) {
                     continue;
                 }

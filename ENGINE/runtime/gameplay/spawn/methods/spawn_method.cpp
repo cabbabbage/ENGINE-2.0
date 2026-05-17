@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <functional>
+#include <iostream>
 #include <random>
 #include <vector>
 
@@ -35,6 +37,43 @@ struct AttemptOptions {
     bool track_spacing = true;
     std::function<void()> on_success{};
 };
+
+bool spawn_resolution_debug_enabled() {
+    static const bool enabled = []() {
+        const char* value = std::getenv("VIBBLE_SPAWN_RESOLUTION_DEBUG");
+        if (!value) {
+            return false;
+        }
+        return value[0] != '\0' && value[0] != '0';
+    }();
+    return enabled;
+}
+
+void maybe_log_spawn_resolution_sample(int resolution,
+                                       SDL_Point chosen_world,
+                                       SDL_Point snapped_world,
+                                       SDL_Point occupancy_world) {
+    if (!spawn_resolution_debug_enabled()) {
+        return;
+    }
+    static int sample_count = 0;
+    if (sample_count >= 32) {
+        return;
+    }
+    ++sample_count;
+    std::cerr << "[SPAWN_RESOLUTION_DEBUG] resolution=" << resolution
+              << " chosen_world=(" << chosen_world.x << "," << chosen_world.y << ")"
+              << " snapped_world=(" << snapped_world.x << "," << snapped_world.y << ")"
+              << " occupancy_world=(" << occupancy_world.x << "," << occupancy_world.y << ")\n";
+}
+
+SDL_Point snap_for_grid_constrained_spawn(SpawnContext& ctx, SDL_Point pos) {
+    const int resolution = ctx.spawn_resolution();
+    if (resolution <= 0) {
+        return pos;
+    }
+    return ctx.grid().snap_to_vertex(pos, resolution);
+}
 
 AttemptResult attempt_spawn(const SpawnInfo& item,
                             const Area& area,
@@ -218,6 +257,8 @@ void spawn_center(const SpawnInfo& item, const Area* area, SpawnContext& ctx) {
         if (auto* vertex = occupancy->nearest_vertex(center)) {
             center = vertex->world;
         }
+    } else {
+        center = snap_for_grid_constrained_spawn(ctx, center);
     }
 
     for (int attempt = 0; attempt < item.quantity; ++attempt) {
@@ -284,6 +325,7 @@ void spawn_perimeter(const SpawnInfo& item, const Area* area, SpawnContext& ctx)
         const int y = circle_center.y + static_cast<int>(std::lround(R * std::sin(angle)));
 
         SDL_Point pos{x, y};
+        pos = snap_for_grid_constrained_spawn(ctx, pos);
         attempt_spawn(item, *area, ctx, pos, AttemptOptions{});
     }
 }
@@ -325,6 +367,8 @@ void spawn_percent(const SpawnInfo& item, const Area* area, SpawnContext& ctx) {
         vibble::grid::Occupancy::Vertex* snapped = ctx.occupancy() ? ctx.occupancy()->nearest_vertex(final_pos) : nullptr;
         if (snapped) {
             final_pos = snapped->world;
+        } else {
+            final_pos = snap_for_grid_constrained_spawn(ctx, final_pos);
         }
 
         AttemptOptions opts{};
@@ -367,22 +411,26 @@ void spawn_random(const SpawnInfo& item, const Area* area, SpawnContext& ctx) {
         ++attempts;
 
         vibble::grid::Occupancy::Vertex* vertex = occupancy ? occupancy->random_vertex_in_area(*spawn_area, ctx.rng()) : nullptr;
-        if (!vertex) {
-            break;
+        SDL_Point chosen_world{0, 0};
+        SDL_Point occupancy_world{0, 0};
+        if (vertex) {
+            chosen_world = vertex->world;
+            occupancy_world = vertex->world;
+        } else {
+            chosen_world = ctx.get_point_within_area(*spawn_area);
+            occupancy_world = chosen_world;
         }
 
-        SDL_Point pos = vertex->world;
-        if (spawn_area && !spawn_area->get_points().empty()) {
-            pos = ctx.get_point_within_area(*spawn_area);
-        }
+        const SDL_Point snapped_world = snap_for_grid_constrained_spawn(ctx, chosen_world);
+        maybe_log_spawn_resolution_sample(ctx.spawn_resolution(), chosen_world, snapped_world, occupancy_world);
 
         AttemptOptions opts{};
         opts.respect_exclusion_zones = true;
         if (occupancy) {
-            opts.on_success = [occupancy, vertex]() { occupancy->set_occupied(vertex, true); };
+            opts.on_success = [occupancy, snapped_world]() { occupancy->set_occupied_at(snapped_world, true); };
         }
 
-        const AttemptResult result = attempt_spawn(item, *spawn_area, ctx, pos, opts);
+        const AttemptResult result = attempt_spawn(item, *spawn_area, ctx, snapped_world, opts);
         if (result == AttemptResult::Spawned ||
             result == AttemptResult::InvalidCandidate ||
             result == AttemptResult::SpawnFailed) {

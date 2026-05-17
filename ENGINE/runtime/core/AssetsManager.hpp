@@ -658,6 +658,7 @@ private:
         std::vector<LiveDynamicCandidate> candidates;
     };
     struct LiveDynamicCompiledSelector {
+        std::uint32_t selector_id = 0;
         LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
         int grid_resolution = 0;
         int jitter_px = 0;
@@ -678,14 +679,14 @@ private:
         int grid_resolution = 0;
         int grid_x = 0;
         int grid_z = 0;
-        std::string spawn_id;
+        std::uint32_t selector_id = 0;
 
         bool operator==(const LiveDynamicPointKey& other) const {
             return mode == other.mode &&
                    grid_resolution == other.grid_resolution &&
                    grid_x == other.grid_x &&
                    grid_z == other.grid_z &&
-                   spawn_id == other.spawn_id;
+                   selector_id == other.selector_id;
         }
     };
 
@@ -698,7 +699,7 @@ private:
             mix(std::hash<int>{}(key.grid_resolution));
             mix(std::hash<int>{}(key.grid_x));
             mix(std::hash<int>{}(key.grid_z));
-            mix(std::hash<std::string>{}(key.spawn_id));
+            mix(std::hash<std::uint32_t>{}(key.selector_id));
             return seed;
         }
     };
@@ -706,12 +707,12 @@ private:
     struct LiveDynamicSelectorStateKey {
         LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
         int grid_resolution = 0;
-        std::string spawn_id;
+        std::uint32_t selector_id = 0;
 
         bool operator==(const LiveDynamicSelectorStateKey& other) const {
             return mode == other.mode &&
                    grid_resolution == other.grid_resolution &&
-                   spawn_id == other.spawn_id;
+                   selector_id == other.selector_id;
         }
     };
 
@@ -722,7 +723,7 @@ private:
                 seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
             };
             mix(std::hash<int>{}(key.grid_resolution));
-            mix(std::hash<std::string>{}(key.spawn_id));
+            mix(std::hash<std::uint32_t>{}(key.selector_id));
             return seed;
         }
     };
@@ -744,7 +745,7 @@ private:
             if (a.dist2 != b.dist2) return a.dist2 < b.dist2;
             if (a.grid_x != b.grid_x) return a.grid_x < b.grid_x;
             if (a.grid_z != b.grid_z) return a.grid_z < b.grid_z;
-            if (a.point_key.spawn_id != b.point_key.spawn_id) return a.point_key.spawn_id < b.point_key.spawn_id;
+            if (a.point_key.selector_id != b.point_key.selector_id) return a.point_key.selector_id < b.point_key.selector_id;
             if (a.point_key.mode != b.point_key.mode) {
                 return static_cast<int>(a.point_key.mode) < static_cast<int>(b.point_key.mode);
             }
@@ -763,6 +764,7 @@ private:
         int world_x = 0;
         int world_z = 0;
         std::uint64_t dist2 = 0;
+        std::string selector_spawn_id;
         std::string owner_name;
         std::string asset_name;
         std::shared_ptr<AssetInfo> info;
@@ -773,7 +775,7 @@ private:
             if (a.dist2 != b.dist2) return a.dist2 < b.dist2;
             if (a.point_key.grid_x != b.point_key.grid_x) return a.point_key.grid_x < b.point_key.grid_x;
             if (a.point_key.grid_z != b.point_key.grid_z) return a.point_key.grid_z < b.point_key.grid_z;
-            if (a.point_key.spawn_id != b.point_key.spawn_id) return a.point_key.spawn_id < b.point_key.spawn_id;
+            if (a.point_key.selector_id != b.point_key.selector_id) return a.point_key.selector_id < b.point_key.selector_id;
             if (a.point_key.mode != b.point_key.mode) {
                 return static_cast<int>(a.point_key.mode) < static_cast<int>(b.point_key.mode);
             }
@@ -833,6 +835,30 @@ private:
         std::string owner_name;
     };
 
+    struct LiveDynamicOccupancyKey {
+        int grid_resolution = 0;
+        int grid_x = 0;
+        int grid_z = 0;
+
+        bool operator==(const LiveDynamicOccupancyKey& other) const {
+            return grid_resolution == other.grid_resolution &&
+                   grid_x == other.grid_x &&
+                   grid_z == other.grid_z;
+        }
+    };
+
+    struct LiveDynamicOccupancyKeyHash {
+        std::size_t operator()(const LiveDynamicOccupancyKey& key) const {
+            std::size_t seed = std::hash<int>{}(key.grid_resolution);
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<int>{}(key.grid_x));
+            mix(std::hash<int>{}(key.grid_z));
+            return seed;
+        }
+    };
+
     struct LiveDynamicSyncContext {
         world::GridBounds render_bounds;
         world::GridBounds spawn_bounds;
@@ -870,10 +896,12 @@ private:
     std::unordered_map<LiveDynamicSelectorStateKey,
                        LiveDynamicSelectorScanState,
                        LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
-    std::multiset<LiveDynamicQualifiedPoint, LiveDynamicQualifiedPointOrder> live_dynamic_qualification_queue_;
+    std::vector<LiveDynamicQualifiedPoint> live_dynamic_qualification_queue_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_qualification_keys_;
-    std::multiset<LiveDynamicSpawnTask, LiveDynamicSpawnTaskOrder> live_dynamic_spawn_queue_;
+    std::vector<LiveDynamicSpawnTask> live_dynamic_spawn_queue_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_spawn_keys_;
+    std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash> live_dynamic_persistent_occupancy_cache_;
+    std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> live_dynamic_persistent_room_cache_;
     int live_dynamic_preload_margin_world_px_ = 192;
     int live_dynamic_despawn_margin_world_px_ = 256;
     std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
@@ -886,6 +914,13 @@ private:
     double live_dynamic_sync_ema_ms_ = 0.0;
     bool live_dynamic_sync_ema_initialized_ = false;
     std::size_t max_total_live_dynamic_assets_ = 8000;
+    int live_dynamic_sync_bounds_quantization_px_ = 64;
+    int live_dynamic_sync_bounds_hysteresis_px_ = 32;
+    std::size_t live_dynamic_quantized_bounds_change_count_ = 0;
+    std::size_t live_dynamic_occupancy_cache_hits_ = 0;
+    std::size_t live_dynamic_occupancy_cache_misses_ = 0;
+    bool live_dynamic_bounds_bucket_changed_ = true;
+    std::uint32_t next_live_dynamic_selector_id_ = 1;
     bool force_live_dynamic_sync_next_rebuild_ = true;
     bool last_live_dynamic_sync_bounds_valid_ = false;
     int last_live_dynamic_sync_bounds_min_x_ = 0;

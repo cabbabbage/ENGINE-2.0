@@ -850,7 +850,12 @@ void Assets::clear_live_dynamic_assets() {
     live_dynamic_pending_qualification_keys_.clear();
     live_dynamic_spawn_queue_.clear();
     live_dynamic_pending_spawn_keys_.clear();
+    live_dynamic_persistent_occupancy_cache_.clear();
+    live_dynamic_persistent_room_cache_.clear();
     last_live_dynamic_sync_bounds_valid_ = false;
+    live_dynamic_bounds_bucket_changed_ = true;
+    live_dynamic_occupancy_cache_hits_ = 0;
+    live_dynamic_occupancy_cache_misses_ = 0;
 }
 
 std::size_t Assets::delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete) {
@@ -944,6 +949,7 @@ std::size_t Assets::delete_live_dynamic_assets_now(const std::vector<Asset*>& as
 void Assets::rebuild_live_dynamic_selectors() {
     live_dynamic_boundary_selectors_.clear();
     live_dynamic_inherited_selectors_.clear();
+    next_live_dynamic_selector_id_ = 1;
 
     if (!map_info_json_.is_object()) {
         clear_live_dynamic_assets();
@@ -972,6 +978,7 @@ void Assets::rebuild_live_dynamic_selectors() {
         }
 
         LiveDynamicCompiledSelector selector;
+        selector.selector_id = next_live_dynamic_selector_id_++;
         selector.mode = mode;
         selector.spawn_id = selector_json.value("spawn_id", std::string{});
         if (selector.spawn_id.empty()) {

@@ -3,8 +3,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "utils/grid.hpp"
@@ -58,6 +60,8 @@ public:
     Asset* remove_asset(Asset* a);
     void unregister_asset(Asset* a);
     void rebuild_chunks();
+    std::size_t flush_deferred_empty_points(std::size_t max_points = std::numeric_limits<std::size_t>::max());
+    bool is_occupied_at_xz(int world_x, int world_z, int resolution_layer) const;
 
     void update_active_chunks(const GridBounds& camera_world, int margin_px);
 
@@ -126,9 +130,35 @@ private:
     void attach_asset_to_grid_point(std::unique_ptr<Asset> owned, GridPoint& point);
     GridPoint& ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent = nullptr, int world_y = 0, int resolution_layer = -1);
     void bind_asset_to_point(Asset* a, GridPoint& point);
+    void mark_point_for_deferred_prune(GridPoint* point);
     void propagate_branch_active(GridPoint* node);
     void propagate_branch_inactive(GridPoint* node);
     void prune_empty_points();
+    struct OccupancyXZKey {
+        int world_x = 0;
+        int world_z = 0;
+        int layer = 0;
+
+        bool operator==(const OccupancyXZKey& other) const noexcept {
+            return world_x == other.world_x &&
+                   world_z == other.world_z &&
+                   layer == other.layer;
+        }
+    };
+    struct OccupancyXZKeyHash {
+        std::size_t operator()(const OccupancyXZKey& key) const noexcept {
+            std::size_t seed = std::hash<int>{}(key.world_x);
+            auto mix = [&seed](std::size_t value) {
+                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
+            };
+            mix(std::hash<int>{}(key.world_z));
+            mix(std::hash<int>{}(key.layer));
+            return seed;
+        }
+    };
+    static OccupancyXZKey occupancy_key_for_point(const GridPoint& point);
+    void increment_xz_occupancy(const GridPoint& point);
+    void decrement_xz_occupancy(const GridPoint& point);
     std::unique_ptr<Asset> extract_from_point(Asset* a, GridPoint& point);
     int distance_for_layer(int layer) const;
     static int power_of_three(int exponent);
@@ -150,6 +180,8 @@ private:
     std::unordered_map<Asset*, GridKey> asset_to_key_;
     std::unordered_map<GridKey, GridId, GridKeyHash> key_to_id_;
     std::vector<GridId> roots_;
+    std::unordered_set<GridId> deferred_empty_point_ids_;
+    std::unordered_map<OccupancyXZKey, std::uint32_t, OccupancyXZKeyHash> occupancy_xz_counts_;
 
     void add_root_id(GridId id);
     void remove_root_id(GridId id);

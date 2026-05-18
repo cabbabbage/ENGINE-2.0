@@ -9,6 +9,7 @@
 #include <functional>
 #include <cstdint>
 #include <optional>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -78,6 +79,34 @@ bool rects_intersect(const SDL_Rect& a, const SDL_Rect& b) {
     SDL_Rect result{};
     return SDL_GetRectIntersection(&a, &b, &result);
 }
+
+class ClipRectGuard {
+  public:
+    explicit ClipRectGuard(SDL_Renderer* renderer) : renderer_(renderer) {
+        if (renderer_) {
+            had_clip_ = SDL_RenderClipEnabled(renderer_);
+            if (had_clip_) {
+                SDL_GetRenderClipRect(renderer_, &previous_clip_);
+            }
+        }
+    }
+
+    ~ClipRectGuard() {
+        if (!renderer_) {
+            return;
+        }
+        if (had_clip_) {
+            SDL_SetRenderClipRect(renderer_, &previous_clip_);
+        } else {
+            SDL_SetRenderClipRect(renderer_, nullptr);
+        }
+    }
+
+  private:
+    SDL_Renderer* renderer_ = nullptr;
+    SDL_Rect previous_clip_{0, 0, 0, 0};
+    bool had_clip_ = false;
+};
 
 int resolve_wheel_delta(const SDL_MouseWheelEvent& wheel) {
     int delta = wheel.integer_y;
@@ -200,6 +229,10 @@ void AnimationListPanel::set_document(std::shared_ptr<AnimationDocument> documen
 }
 
 void AnimationListPanel::set_bounds(const SDL_Rect& bounds) {
+    if (bounds_.x == bounds.x && bounds_.y == bounds.y &&
+        bounds_.w == bounds.w && bounds_.h == bounds.h) {
+        return;
+    }
     bounds_ = bounds;
     scroll_controller_.set_bounds(bounds_);
     layout_dirty_ = true;
@@ -223,7 +256,7 @@ void AnimationListPanel::set_on_selection_changed(
 }
 
 void AnimationListPanel::set_on_context_menu(
-    std::function<void(const std::string&, const SDL_Point&)> callback) {
+    std::function<void(const std::optional<std::string>&, const SDL_Point&)> callback) {
     on_context_menu_ = std::move(callback);
 }
 
@@ -245,6 +278,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
 
     ensure_layout();
 
+    ClipRectGuard clip_guard(renderer);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     ui::draw_panel_background(renderer, bounds_);
 
@@ -343,7 +377,6 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
 
     }
 
-    SDL_SetRenderClipRect(renderer, nullptr);
 }
 
 bool AnimationListPanel::handle_event(const SDL_Event& e) {
@@ -372,72 +405,59 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
 
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p = event_point(e);
-        if (!SDL_PointInRect(&p, &bounds_)) {
+        HitTestResult hit = hit_test(p);
+        record_hit_result("motion", p, hit);
+        if (hit.target == HitTarget::Outside) {
             hovered_row_.reset();
             hovered_delete_row_.reset();
             return false;
         }
-        hovered_row_ = row_index_at_point(p);
+        hovered_row_ = hit.row_index;
         hovered_delete_row_.reset();
-        if (hovered_row_) {
-            const RowGeometry& geometry = row_geometry_.at(*hovered_row_);
-            SDL_Rect delete_rect{geometry.outer.x + geometry.delete_button_rel.x,
-                                 geometry.outer.y + geometry.delete_button_rel.y,
-                                 geometry.delete_button_rel.w,
-                                 geometry.delete_button_rel.h};
-            delete_rect = scroll_controller_.apply(delete_rect);
-            if (SDL_PointInRect(&p, &delete_rect)) {
-                hovered_delete_row_ = *hovered_row_;
-            }
+        if (hit.target == HitTarget::Delete && hit.row_index) {
+            hovered_delete_row_ = *hit.row_index;
         }
         return hovered_row_.has_value() || hovered_delete_row_.has_value();
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         SDL_Point p = event_point(e);
-        if (!SDL_PointInRect(&p, &bounds_)) {
+        HitTestResult hit = hit_test(p);
+        record_hit_result("down", p, hit);
+        if (hit.target == HitTarget::Outside) {
             return false;
         }
 
-        auto index = row_index_at_point(p);
-        if (!index) {
-            if (e.button.button == SDL_BUTTON_LEFT && selected_animation_id_) {
-                selected_animation_id_.reset();
-                if (on_selection_changed_) {
-                    on_selection_changed_(std::nullopt);
-                }
+        if (hit.target == HitTarget::Empty || !hit.row_index) {
+            SDL_Log("[AnimationListPanel] Click hit empty list area; rows=%d bounds=%d,%d %dx%d point=%d,%d",
+                    static_cast<int>(display_rows_.size()), bounds_.x, bounds_.y, bounds_.w, bounds_.h, p.x, p.y);
+            if (e.button.button == SDL_BUTTON_RIGHT && on_context_menu_) {
+                on_context_menu_(std::nullopt, p);
             }
             return true;
         }
 
-        const std::string& animation_id = display_rows_.at(*index).id;
+        const std::string& animation_id = hit.animation_id;
         if (e.button.button == SDL_BUTTON_LEFT) {
-            const RowGeometry& geometry = row_geometry_.at(*index);
-            SDL_Rect delete_rect{geometry.outer.x + geometry.delete_button_rel.x,
-                                 geometry.outer.y + geometry.delete_button_rel.y,
-                                 geometry.delete_button_rel.w,
-                                 geometry.delete_button_rel.h};
-            delete_rect = scroll_controller_.apply(delete_rect);
-            if (SDL_PointInRect(&p, &delete_rect)) {
+            if (hit.target == HitTarget::Delete) {
                 if (on_delete_animation_) {
                     on_delete_animation_(animation_id);
                 }
                 return true;
             }
 
-            if (!selected_animation_id_ || *selected_animation_id_ != animation_id) {
-                selected_animation_id_ = animation_id;
-                scroll_selection_into_view();
-                if (on_selection_changed_) {
-                    on_selection_changed_(selected_animation_id_);
-                }
+            selected_animation_id_ = animation_id;
+            scroll_selection_into_view();
+            if (on_selection_changed_) {
+                SDL_Log("[AnimationListPanel] Row clicked; activating '%s'.", animation_id.c_str());
+                on_selection_changed_(selected_animation_id_);
             }
             return true;
         }
 
         if (e.button.button == SDL_BUTTON_RIGHT) {
             if (on_context_menu_) {
-                on_context_menu_(animation_id, p);
+                on_context_menu_(std::make_optional(animation_id), p);
             }
             return true;
         }
@@ -445,11 +465,12 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         SDL_Point p = event_point(e);
-        if (!SDL_PointInRect(&p, &bounds_)) {
+        HitTestResult hit = hit_test(p);
+        record_hit_result("up", p, hit);
+        if (hit.target == HitTarget::Outside) {
             return false;
         }
-        auto index = row_index_at_point(p);
-        return index.has_value();
+        return hit.target == HitTarget::Row || hit.target == HitTarget::Delete;
     }
 
     return false;
@@ -608,6 +629,8 @@ void AnimationListPanel::rebuild_rows() {
         row_geometry_.clear();
         layout_dirty_ = true;
         hovered_row_.reset();
+        SDL_Log("[AnimationListPanel] Rows rebuilt: count=%d bounds=%d,%d %dx%d",
+                static_cast<int>(display_rows_.size()), bounds_.x, bounds_.y, bounds_.w, bounds_.h);
     }
 
     if (selected_animation_id_) {
@@ -713,6 +736,60 @@ std::optional<size_t> AnimationListPanel::row_index_at_point(const SDL_Point& p)
         }
     }
     return std::nullopt;
+}
+
+AnimationListPanel::HitTestResult AnimationListPanel::hit_test(const SDL_Point& p) const {
+    HitTestResult result{};
+    if (!SDL_PointInRect(&p, &bounds_)) {
+        result.target = HitTarget::Outside;
+        return result;
+    }
+
+    for (size_t i = 0; i < row_geometry_.size(); ++i) {
+        SDL_Rect row_rect = scroll_controller_.apply(row_geometry_[i].outer);
+        if (!SDL_PointInRect(&p, &row_rect)) {
+            continue;
+        }
+        result.target = HitTarget::Row;
+        result.row_index = i;
+        result.animation_id = display_rows_.at(i).id;
+
+        const RowGeometry& geometry = row_geometry_[i];
+        SDL_Rect delete_rect{geometry.outer.x + geometry.delete_button_rel.x,
+                             geometry.outer.y + geometry.delete_button_rel.y,
+                             geometry.delete_button_rel.w,
+                             geometry.delete_button_rel.h};
+        delete_rect = scroll_controller_.apply(delete_rect);
+        if (SDL_PointInRect(&p, &delete_rect)) {
+            result.target = HitTarget::Delete;
+        }
+        return result;
+    }
+
+    result.target = HitTarget::Empty;
+    return result;
+}
+
+void AnimationListPanel::record_hit_result(const char* phase, const SDL_Point& p, const HitTestResult& hit) const {
+    const char* target = "outside";
+    switch (hit.target) {
+        case HitTarget::Outside: target = "outside"; break;
+        case HitTarget::Empty: target = "empty"; break;
+        case HitTarget::Row: target = "row"; break;
+        case HitTarget::Delete: target = "delete"; break;
+    }
+
+    std::ostringstream ss;
+    ss << (phase ? phase : "event")
+       << " target=" << target
+       << " point=" << p.x << "," << p.y
+       << " rows=" << display_rows_.size()
+       << " bounds=" << bounds_.x << "," << bounds_.y << " " << bounds_.w << "x" << bounds_.h;
+    if (hit.row_index) {
+        ss << " row=" << *hit.row_index << " id=" << hit.animation_id;
+    }
+    last_hit_result_ = ss.str();
+    SDL_Log("[AnimationListPanel] %s", last_hit_result_.c_str());
 }
 
 void AnimationListPanel::ensure_layout() const {

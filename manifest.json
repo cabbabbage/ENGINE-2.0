@@ -13231,11 +13231,16 @@
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": true,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -13246,20 +13251,44 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": false,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 60.0
+        "scale_percentage": 60.0,
+        "size_variation": 0.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "brian": {
       "anchor_point_child_candidates": [],
@@ -19949,6 +19978,35 @@
     "spider": {
       "anchor_point_child_candidates": [],
       "animations": {
+        "animatione": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "animatione"
+          },
+          "tags": []
+        },
         "default": {
           "invert_x": false,
           "invert_y": false,
@@ -19975,6 +20033,35 @@
             "kind": "folder",
             "name": "",
             "path": "default"
+          },
+          "tags": []
+        },
+        "left": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "left"
           },
           "tags": []
         }
@@ -26237,7 +26324,8 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "regen_seed": 1
+        "max_spawn_from_room": 128,
+        "regen_seed": 2
       },
       "map_grid_settings": {
         "grid_resolution": 6,
@@ -26305,9 +26393,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            31,
+            36,
+            242,
+            129,
             255
           ],
           "edge_smoothness": 101,
@@ -26394,9 +26482,9 @@
             }
           },
           "display_color": [
-            31,
-            32,
-            204,
+            242,
+            127,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26453,9 +26541,9 @@
             }
           },
           "display_color": [
-            242,
-            127,
-            85,
+            44,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26512,9 +26600,9 @@
             }
           },
           "display_color": [
-            189,
-            36,
             242,
+            36,
+            131,
             255
           ],
           "edge_smoothness": 4,
@@ -26601,9 +26689,9 @@
             }
           },
           "display_color": [
-            99,
+            36,
             242,
-            85,
+            216,
             255
           ],
           "edge_smoothness": 4,
@@ -26665,9 +26753,9 @@
             }
           },
           "display_color": [
-            31,
-            115,
             204,
+            179,
+            31,
             255
           ],
           "edge_smoothness": 70,
@@ -26748,10 +26836,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -603,
-          "camera_center_dz": -961,
+          "camera_center_dx": -4115,
+          "camera_center_dz": -2164,
           "camera_height_px": 700,
-          "camera_tilt_deg": 18.015430450439453,
+          "camera_tilt_deg": 35.415428161621094,
           "camera_zoom_percent": 100,
           "curvyness": {
             "center": 2,
@@ -26765,9 +26853,9 @@
             }
           },
           "display_color": [
+            104,
+            85,
             242,
-            241,
-            36,
             255
           ],
           "edge_smoothness": 101,
@@ -26836,16 +26924,16 @@
                 }
               ],
               "display_name": "vibble (Copy)",
-              "dx": 10,
-              "dz": -186,
+              "dx": -2337,
+              "dz": -1963,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 18496,
-              "origional_width": 18504,
+              "origional_height": 15488,
+              "origional_width": 15496,
               "position": "Exact",
               "priority": 1,
               "quantity": 1,
@@ -26925,16 +27013,16 @@
                 }
               ],
               "display_name": "city_hall_background",
-              "dx": -2587,
-              "dz": -607,
+              "dx": -1849,
+              "dz": -2745,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 18496,
-              "origional_width": 18504,
+              "origional_height": 15488,
+              "origional_width": 15496,
               "position": "Exact",
               "priority": 4,
               "quantity": 1,
@@ -26955,16 +27043,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -5252,
-              "dz": -2274,
+              "dx": -5116,
+              "dz": 1050,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 18496,
-              "origional_width": 18504,
+              "origional_height": 15488,
+              "origional_width": 15496,
               "position": "Exact",
               "priority": 5,
               "quantity": 1,
@@ -26985,20 +27073,20 @@
                 }
               ],
               "display_name": "axe_in_stump",
-              "dx": -551,
-              "dz": 1883,
+              "dx": -31660,
+              "dz": -31664,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 12112,
-              "origional_width": 18504,
+              "origional_height": 15488,
+              "origional_width": 15496,
               "position": "Exact",
               "priority": 6,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 7,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-d6eecb87c41e"
@@ -27032,6 +27120,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-ff9bd67553fd"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -3229,
+              "dz": -3233,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 15488,
+              "origional_width": 15496,
+              "position": "Exact",
+              "priority": 8,
+              "quantity": 1,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-23687fb6e8ed"
             }
           ],
           "trail_connection_sector": {
@@ -27116,7 +27234,7 @@
           },
           "display_color": [
             204,
-            99,
+            102,
             31,
             255
           ],

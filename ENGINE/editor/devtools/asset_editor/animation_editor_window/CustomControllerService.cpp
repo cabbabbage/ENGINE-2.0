@@ -56,7 +56,12 @@ void CustomControllerService::set_asset_root(const std::filesystem::path& asset_
     }
 
     if (normalized.empty()) {
-        throw std::runtime_error("Asset root path is empty");
+        asset_root_.clear();
+        engine_root_.clear();
+        controller_dir_.clear();
+        controller_factory_cpp_.clear();
+        asset_name_.clear();
+        return;
     }
 
     asset_root_ = normalized.lexically_normal();
@@ -68,7 +73,9 @@ void CustomControllerService::set_asset_root(const std::filesystem::path& asset_
 
     engine_root_ = resolve_engine_root(asset_root_);
     if (engine_root_.empty()) {
-        throw std::runtime_error("Unable to locate ENGINE directory from " + asset_root_.string());
+        controller_dir_.clear();
+        controller_factory_cpp_.clear();
+        return;
     }
 
     controller_dir_ = engine_root_ / "runtime" / "animation" / "controllers" / "custom_controllers";
@@ -86,6 +93,9 @@ void CustomControllerService::set_manifest_asset_key(std::string asset_key) {
 void CustomControllerService::create_new_controller(const std::string& controller_name) {
     if (asset_root_.empty()) {
         throw std::runtime_error("Asset root has not been configured");
+    }
+    if (engine_root_.empty() || controller_dir_.empty() || controller_factory_cpp_.empty()) {
+        throw std::runtime_error("Unable to locate ENGINE directory from asset root " + asset_root_.string());
     }
 
     std::string base_name = normalized_controller_name(controller_name);
@@ -111,7 +121,7 @@ void CustomControllerService::create_new_controller(const std::string& controlle
 }
 
 void CustomControllerService::open_existing_controller(const std::string& controller_name) {
-    if (controller_dir_.empty()) {
+    if (asset_root_.empty() || engine_root_.empty() || controller_dir_.empty()) {
         throw std::runtime_error("Asset root has not been configured");
     }
 
@@ -144,6 +154,9 @@ void CustomControllerService::register_controller_with_animation(const std::stri
                                                                  const std::string& animation_id) {
     if (asset_root_.empty()) {
         throw std::runtime_error("Asset root has not been configured");
+    }
+    if (engine_root_.empty() || controller_dir_.empty()) {
+        throw std::runtime_error("Unable to locate ENGINE directory from asset root " + asset_root_.string());
     }
 
     std::string base_name = normalized_controller_name(controller_name);

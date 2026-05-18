@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,20 @@ using DMTextBox = ::DMTextBox;
 
 class AnimationEditorWindow {
   public:
+    enum class ExternalActionType {
+        None,
+        AddAnimation,
+        Controller,
+        CreateDefaults,
+    };
+
+    enum class ModalLifecycleState {
+        Closed,
+        OpenPendingLayout,
+        OpenReady,
+        Closing,
+    };
+
     struct LoadDiagnostics {
         std::string manifest_key_resolution_result = "not_attempted";
         std::string manifest_transaction_open_result = "not_attempted";
@@ -89,10 +104,48 @@ class AnimationEditorWindow {
     void set_target_asset(Asset* asset) { target_asset_ = asset; }
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
     void set_parent_window(SDL_Window* window) { parent_window_ = window; }
+    bool trigger_add_animation_action();
+    bool trigger_controller_action();
+    bool trigger_create_defaults_action();
+    std::string controller_action_label() const;
+    bool is_layout_valid() const;
+    bool is_ready_for_action_execution() const;
 
   FRAME_EDITOR_ACCESS:
+    struct LayoutState {
+        SDL_Rect list_rect{0, 0, 0, 0};
+        SDL_Rect inspector_rect{0, 0, 0, 0};
+        SDL_Rect status_rect{0, 0, 0, 0};
+        SDL_Rect load_details_rect{0, 0, 0, 0};
+        bool bounds_valid = false;
+        bool list_valid = false;
+        bool inspector_valid = false;
+        bool status_valid = false;
+    };
+
+    struct PendingExternalAction {
+        ExternalActionType type = ExternalActionType::None;
+        std::uint64_t request_revision = 0;
+        std::uint64_t first_seen_frame = 0;
+
+        bool active() const { return type != ExternalActionType::None; }
+        void clear() {
+            type = ExternalActionType::None;
+            request_revision = 0;
+            first_seen_frame = 0;
+        }
+    };
+
+    struct SourceFrameImportOutcome {
+        bool success = false;
+        int frames_written = 0;
+        std::string message;
+    };
+
     void handle_document_saved();
     void layout_children();
+    LayoutState compute_layout_state() const;
+    void apply_layout_state(const LayoutState& state);
     int status_height() const;
     void ensure_layout() const;
     void invalidate_inspector_background_cache();
@@ -101,25 +154,38 @@ class AnimationEditorWindow {
     void refresh_panels_after_load();
     void select_animation(const std::optional<std::string>& animation_id, bool from_user);
     void ensure_selection_valid();
-    void handle_list_context_menu(const std::string& animation_id, const SDL_Point& location);
+    void handle_list_context_menu(const std::optional<std::string>& animation_id, const SDL_Point& location);
     void prompt_rename_animation(const std::string& animation_id);
     void set_animation_as_start(const std::string& animation_id);
     void duplicate_animation(const std::string& animation_id);
     void delete_animation_with_confirmation(const std::string& animation_id);
     void render_background(SDL_Renderer* renderer) const;
-    void render_header(SDL_Renderer* renderer) const;
     void render_status(SDL_Renderer* renderer) const;
+    void render_debug_overlay(SDL_Renderer* renderer) const;
     void render_load_diagnostics(SDL_Renderer* renderer) const;
     std::string format_load_diagnostics_json() const;
     void render_inspector(SDL_Renderer* renderer) const;
-    void render_inspector_background(SDL_Renderer* renderer) const;
-    bool handle_header_event(const SDL_Event& e);
     bool handle_status_event(const SDL_Event& e);
+    bool handle_create_animation_modal_event(const SDL_Event& e);
     bool handle_defaults_modal_event(const SDL_Event& e);
     void set_status_message(const std::string& message, int frames = 300);
+    void render_create_animation_modal(SDL_Renderer* renderer) const;
     void render_defaults_modal(SDL_Renderer* renderer) const;
+    void layout_create_animation_modal();
     void layout_defaults_modal();
+    void open_create_animation_modal();
+    bool try_open_create_animation_modal(bool from_retry);
+    bool create_animation_modal_bounds_valid() const;
+    bool create_animation_modal_actionable() const;
+    void maybe_retry_deferred_create_animation_modal();
+    void close_create_animation_modal();
+    void ensure_create_animation_modal_widgets();
+    void handle_create_animation_modal_submit();
     void open_defaults_modal();
+    bool try_open_defaults_modal(bool from_retry);
+    bool defaults_modal_bounds_valid() const;
+    bool defaults_modal_actionable() const;
+    void maybe_retry_deferred_defaults_modal();
     void close_defaults_modal();
     void ensure_defaults_modal_widgets();
     void handle_pick_defaults_base_frames();
@@ -130,6 +196,9 @@ class AnimationEditorWindow {
     bool defaults_base_faces_right() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
+    SourceFrameImportOutcome import_source_frames_for_animation(
+        const std::string& animation_id,
+        const std::vector<std::filesystem::path>& frames);
     bool remove_animation_source_folder(const std::string& animation_id, std::string& error_message);
     bool invalidate_asset_cache_now(std::string& error_message);
     nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id,
@@ -177,6 +246,11 @@ class AnimationEditorWindow {
     void open_controller();
     void refresh_inspector_animation_callback();
     std::string normalize_animation_name(std::string_view raw) const;
+    void log_ui_transition(const char* tag, const std::string& detail) const;
+    void sync_modal_lifecycle_with_layout();
+    void queue_external_action(ExternalActionType type);
+    bool execute_external_action(ExternalActionType type);
+    bool flush_pending_external_action();
 
   FRAME_EDITOR_ACCESS:
     bool visible_ = false;
@@ -190,12 +264,18 @@ class AnimationEditorWindow {
     std::unique_ptr<AnimationListPanel> list_panel_;
     std::unique_ptr<AnimationInspectorPanel> inspector_panel_;
     std::unique_ptr<AnimationListContextMenu> list_context_menu_;
-    std::unique_ptr<DMButton> add_button_;
-    std::unique_ptr<DMButton> controller_button_;
-    std::unique_ptr<DMButton> create_defaults_button_;
     std::unique_ptr<DMButton> load_details_toggle_button_;
     std::unique_ptr<DMButton> load_details_copy_button_;
+    bool create_animation_modal_visible_ = false;
+    ModalLifecycleState create_animation_modal_lifecycle_ = ModalLifecycleState::Closed;
+    std::unique_ptr<DMTextBox> create_animation_name_box_;
+    std::unique_ptr<DMButton> create_animation_create_button_;
+    std::unique_ptr<DMButton> create_animation_cancel_button_;
+    SDL_Rect create_animation_modal_rect_{0, 0, 0, 0};
+    std::string create_animation_modal_warning_;
+    bool create_animation_modal_open_deferred_ = false;
     bool defaults_modal_visible_ = false;
+    ModalLifecycleState defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
     std::unique_ptr<DMCheckbox> defaults_diagonals_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_elevation_checkbox_;
@@ -211,7 +291,7 @@ class AnimationEditorWindow {
     int defaults_modal_scroll_offset_ = 0;
     int defaults_modal_scroll_max_ = 0;
     std::string defaults_modal_open_warning_;
-    SDL_Rect header_rect_{0, 0, 0, 0};
+    bool defaults_modal_open_deferred_ = false;
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};
     SDL_Rect status_rect_{0, 0, 0, 0};
@@ -220,11 +300,15 @@ class AnimationEditorWindow {
     LoadDiagnostics load_diagnostics_{};
     std::string status_message_;
     int status_timer_frames_ = 0;
-    mutable SDL_Texture* inspector_background_cache_ = nullptr;
-    mutable SDL_Rect inspector_background_cache_rect_{0, 0, 0, 0};
-    mutable bool inspector_background_dirty_ = true;
     std::optional<std::string> selected_animation_id_;
     mutable bool layout_dirty_ = true;
+    LayoutState layout_state_{};
+    PendingExternalAction pending_external_action_{};
+    std::uint64_t next_external_action_revision_ = 0;
+    std::uint64_t frame_counter_ = 0;
+    mutable bool first_render_completed_ = false;
+    mutable std::string last_event_route_ = "none";
+    mutable std::string last_debug_render_target_ = "unknown";
     bool auto_save_pending_ = false;
     int auto_save_timer_frames_ = 0;
     std::function<void()> on_document_saved_;

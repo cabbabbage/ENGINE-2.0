@@ -149,7 +149,6 @@ SDL_Point room_fallback_point(const Room& room) {
     return SDL_Point{0, 0};
 }
 
-#if !defined(ENGINE_WORLD_TESTS)
 const Room* resolve_orbit_room(const ControllerGameContext& context) {
     if (!context.assets) {
         return nullptr;
@@ -286,7 +285,6 @@ FlyOrbitTargetSnapshot resolve_fly_orbit_target(const ControllerGameContext& con
 
     return snapshot;
 }
-#endif
 
 } // namespace
 
@@ -401,7 +399,6 @@ ControllerGameContext build_controller_game_context(Asset* self,
         return context;
     }
 
-#if !defined(ENGINE_WORLD_TESTS)
     if (shared_available) {
         context.frame_id = context.shared->frame_id();
         context.delta_seconds = context.shared->delta_seconds();
@@ -433,9 +430,9 @@ ControllerGameContext build_controller_game_context(Asset* self,
     context.fly_orbit_point.world_xz = resolved.world_xz;
     context.fly_orbit_point.world_y = resolved.world_y;
     context.fly_orbit_point.grid_resolution = resolved.grid_resolution;
-#endif
 
     return context;
 }
 
 } // namespace animation_update::custom_controllers
+

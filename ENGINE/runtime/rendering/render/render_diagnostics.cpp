@@ -103,6 +103,7 @@ void begin_frame() {
     g_frame_stats.cpu_light_gather_ms = 0.0;
     g_frame_stats.cpu_light_mask_generation_ms = 0.0;
     g_frame_stats.draw_submission_cpu_ms = 0.0;
+    g_frame_stats.ui_overlay_prepare_ms = 0.0;
     g_frame_stats.present_block_ms = g_has_present_sample ? g_last_present_block_ms : 0.0;
     g_frame_stats.present_interval_ms = g_has_present_sample ? g_last_present_interval_ms : 0.0;
     g_frame_stats.present_interval_known = g_has_present_sample && g_last_present_interval_known;
@@ -139,6 +140,9 @@ void begin_frame() {
     g_frame_stats.packets_per_depth_layer.clear();
     g_frame_stats.blur_strength_per_layer.clear();
     g_frame_stats.composite_layers_submitted.clear();
+    g_frame_stats.render_stage_timings.clear();
+    g_frame_stats.ui_overlay_active = false;
+    g_frame_stats.ui_overlay_redrawn = false;
     g_frame_stats.submit_succeeded = false;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
@@ -199,6 +203,12 @@ void add_cpu_light_mask_generation_ms(double elapsed_ms_value) {
 
 void add_draw_submission_ms(double elapsed_ms_value) {
     g_frame_stats.draw_submission_cpu_ms += std::max(0.0, elapsed_ms_value);
+}
+
+void set_ui_overlay_stats(bool active, bool redrawn, double prepare_ms) {
+    g_frame_stats.ui_overlay_active = active;
+    g_frame_stats.ui_overlay_redrawn = redrawn;
+    g_frame_stats.ui_overlay_prepare_ms = std::max(0.0, prepare_ms);
 }
 
 void set_present_pacing(double present_block_ms_value,
@@ -285,6 +295,7 @@ void set_blur_pass_count(std::uint32_t count) { g_frame_stats.blur_pass_count = 
 void set_packets_per_depth_layer(const std::string& summary) { g_frame_stats.packets_per_depth_layer = summary; }
 void set_blur_strength_per_layer(const std::string& summary) { g_frame_stats.blur_strength_per_layer = summary; }
 void set_composite_layers_submitted(const std::string& summary) { g_frame_stats.composite_layers_submitted = summary; }
+void set_render_stage_timings(const std::string& summary) { g_frame_stats.render_stage_timings = summary; }
 void add_skipped_texture_count(std::uint32_t count) { g_frame_stats.skipped_texture_count += count; }
 void set_failed_texture_names(const std::string& names) { g_frame_stats.failed_texture_names = names; }
 void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }

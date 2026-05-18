@@ -47,7 +47,8 @@ bool build_xy_sprite_draw_packets(const WarpedScreenGrid& camera,
                                   std::uint32_t target_width,
                                   std::uint32_t target_height,
                                   std::vector<GpuSpriteDrawPacket>& out_xy_sprite_draws,
-                                  std::string& out_error);
+                                  std::string& out_error,
+                                  const std::vector<double>* cached_depth_edges = nullptr);
 bool build_sink_clipped_sprite_packet(const render_projection::ProjectedSpriteFrame& projected,
                                       float u0,
                                       float v0,
@@ -57,7 +58,9 @@ bool build_sink_clipped_sprite_packet(const render_projection::ProjectedSpriteFr
                                       std::uint32_t target_width,
                                       std::uint32_t target_height,
                                       GpuSpriteDrawPacket& out_packet);
-int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset);
+int classify_depth_layer_for_asset(const WarpedScreenGrid& camera,
+                                   const Asset& asset,
+                                   const std::vector<double>* cached_depth_edges = nullptr);
 float far_background_bottom_screen_y(const WarpedScreenGrid& camera, std::uint32_t target_height);
 const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
                                                                bool focus_filter_active,
@@ -82,7 +85,11 @@ public:
 
     void set_output_dimensions(int screen_width, int screen_height);
 
-    bool render_frame(std::string& out_error, SDL_Texture* ui_overlay_texture = nullptr);
+    bool render_frame(std::string& out_error,
+                      SDL_Texture* ui_overlay_texture = nullptr,
+                      double ui_overlay_prepare_ms = 0.0,
+                      bool ui_overlay_active = false,
+                      bool ui_overlay_redrawn = false);
     std::optional<SDL_Point> scene_target_size() const;
 
     bool ready() const { return renderer_ != nullptr; }

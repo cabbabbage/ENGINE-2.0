@@ -2,7 +2,6 @@
 - Describe the problem and the implemented fix.
 
 ## Validation
-- [ ] Unit/integration tests updated and passing locally.
 - [ ] Manual editor workflow verified for touched modes/panels.
 
 ## Room Editor UI Consistency Gate

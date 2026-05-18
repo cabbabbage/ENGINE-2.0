@@ -4,6 +4,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <cstdint>
 #include <vector>
 #include <filesystem>
 
@@ -89,6 +90,23 @@ class AssetInfoUI {
                                std::function<void()> on_success = {});
 
   private:
+    enum class PendingAnimationEditorAction {
+        None,
+        Controller,
+    };
+
+    struct PendingAnimationEditorActionRequest {
+        PendingAnimationEditorAction action = PendingAnimationEditorAction::None;
+        std::uint64_t request_revision = 0;
+        std::uint64_t first_seen_frame = 0;
+        bool active() const { return action != PendingAnimationEditorAction::None; }
+        void clear() {
+            action = PendingAnimationEditorAction::None;
+            request_revision = 0;
+            first_seen_frame = 0;
+        }
+    };
+
     enum class RuntimeRefreshScope {
         LocalOnly,
         StructuralWithDependents,
@@ -116,6 +134,8 @@ class AssetInfoUI {
     bool handle_section_focus_event(const SDL_Event& e);
     std::shared_ptr<animation_editor::AnimationDocument> animation_document() const;
     void collapse_all_except(DockableCollapsible* keep);
+    bool run_animation_editor_action(PendingAnimationEditorAction action);
+    void request_animation_editor_action(PendingAnimationEditorAction action);
 
   private:
     bool visible_ = false;
@@ -149,10 +169,15 @@ class AssetInfoUI {
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
+    std::unique_ptr<class DMButton> controller_action_btn_;
+    std::unique_ptr<class ButtonWidget> controller_action_btn_widget_;
     std::unique_ptr<class DMButton> duplicate_btn_;
     std::unique_ptr<class ButtonWidget> duplicate_btn_widget_;
     std::unique_ptr<class DMButton> delete_btn_;
     std::unique_ptr<class ButtonWidget> delete_btn_widget_;
+    PendingAnimationEditorActionRequest pending_animation_editor_action_{};
+    std::uint64_t animation_editor_action_revision_ = 0;
+    std::uint64_t ui_frame_counter_ = 0;
 
     bool showing_duplicate_popup_ = false;
     std::string duplicate_asset_name_;

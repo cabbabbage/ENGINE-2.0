@@ -838,6 +838,14 @@ AssetInfoUI::AssetInfoUI() {
     if (!duplicate_btn_) {
         duplicate_btn_ = std::make_unique<DMButton>("Duplicate Asset", &DMStyles::FooterToggleButton(), 220, DMButton::height());
     }
+    if (!controller_action_btn_) {
+        controller_action_btn_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 220, DMButton::height());
+    }
+    if (!controller_action_btn_widget_) {
+        controller_action_btn_widget_ = std::make_unique<ButtonWidget>(controller_action_btn_.get(), [this]() {
+            this->request_animation_editor_action(PendingAnimationEditorAction::Controller);
+        });
+    }
     if (!duplicate_btn_widget_) {
         duplicate_btn_widget_ = std::make_unique<ButtonWidget>(duplicate_btn_.get(), [this]() {
             if (!info_) return;
@@ -876,6 +884,13 @@ AssetInfoUI::AssetInfoUI() {
             section->set_rect(rect); // keep event hit-testing aligned with current scroll/layout
             y += measured + ctx.gap;
         }
+        if (animation_editor_window_ && controller_action_btn_) {
+            controller_action_btn_->set_text(animation_editor_window_->controller_action_label());
+        }
+        if (controller_action_btn_widget_) {
+            controller_action_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
+            y += DMButton::height() + ctx.gap;
+        }
         if (duplicate_btn_widget_) {
             duplicate_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
             y += DMButton::height() + ctx.gap;
@@ -894,6 +909,7 @@ AssetInfoUI::AssetInfoUI() {
             SDL_Rect bounds = (i < section_bounds_.size()) ? section_bounds_[i] : SDL_Rect{0,0,0,0};
             section->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
         }
+        if (controller_action_btn_) controller_action_btn_->render(renderer);
         if (duplicate_btn_) duplicate_btn_->render(renderer);
         if (delete_btn_) delete_btn_->render(renderer);
     });
@@ -978,6 +994,7 @@ AssetInfoUI::AssetInfoUI() {
                 return true;
             }
         }
+        if (controller_action_btn_widget_ && controller_action_btn_widget_->handle_event(e)) return true;
         if (duplicate_btn_widget_ && duplicate_btn_widget_->handle_event(e)) return true;
         if (delete_btn_widget_ && delete_btn_widget_->handle_event(e)) return true;
         return false;
@@ -1070,6 +1087,7 @@ void AssetInfoUI::clear_panel_bounds_override() {
 
 void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
     info_ = info;
+    pending_animation_editor_action_.clear();
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     if (animation_editor_window_) {
@@ -1126,10 +1144,16 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
             SDL_Log("AssetInfoUI: failed to configure animation editor for %s: %s", info_ ? info_->name.c_str() : "<null>", ex.what());
             animation_editor_window_->clear_info();
             animation_editor_window_->set_visible(false, false);
+            pending_animation_editor_open_ = false;
+            animation_editor_fullscreen_mode_ = false;
+            animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         } catch (...) {
             SDL_Log("AssetInfoUI: failed to configure animation editor for %s due to unknown error.", info_ ? info_->name.c_str() : "<null>");
             animation_editor_window_->clear_info();
             animation_editor_window_->set_visible(false, false);
+            pending_animation_editor_open_ = false;
+            animation_editor_fullscreen_mode_ = false;
+            animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         }
     }
     for (auto& s : sections_) {
@@ -1158,6 +1182,9 @@ void AssetInfoUI::clear_info() {
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     pending_animation_editor_open_ = false;
+    pending_animation_editor_action_.clear();
+    animation_editor_fullscreen_mode_ = false;
+    animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     if (animation_editor_window_) {
         try {
             animation_editor_window_->clear_info();
@@ -1191,7 +1218,9 @@ void AssetInfoUI::open()  {
 void AssetInfoUI::close(bool flush_changes) {
     if (!visible_) return;
     pending_animation_editor_open_ = false;
+    pending_animation_editor_action_.clear();
     animation_editor_fullscreen_mode_ = false;
+    animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     apply_camera_override(false);
     visible_ = false;
     container_.close();
@@ -1220,10 +1249,14 @@ void AssetInfoUI::toggle(){
 void AssetInfoUI::open_animation_editor_panel() {
     if (!animation_editor_window_ || !info_) {
         pending_animation_editor_open_ = false;
+        pending_animation_editor_action_.clear();
+        animation_editor_fullscreen_mode_ = false;
+        animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
         return;
     }
 
     pending_animation_editor_open_ = true;
+    SDL_Log("[AssetInfoUI] Opening animation editor panel requested.");
 
     if (last_screen_w_ > 0 && last_screen_h_ > 0) {
         layout_widgets(last_screen_w_, last_screen_h_);
@@ -1231,12 +1264,16 @@ void AssetInfoUI::open_animation_editor_panel() {
             animation_editor_window_->set_bounds(animation_editor_rect_);
             animation_editor_window_->set_visible(true);
             pending_animation_editor_open_ = false;
+            SDL_Log("[AssetInfoUI] Animation editor panel opened with bounds %d x %d.",
+                    animation_editor_rect_.w,
+                    animation_editor_rect_.h);
         }
     }
 }
 
 void AssetInfoUI::close_animation_editor_panel() {
     pending_animation_editor_open_ = false;
+    pending_animation_editor_action_.clear();
     if (animation_editor_window_) {
         // Programmatic panel transitions should not invoke the "window closed" callback,
         // which is reserved for explicit user-driven close actions.
@@ -1248,7 +1285,44 @@ bool AssetInfoUI::is_animation_editor_open() const {
     return animation_editor_window_ && animation_editor_window_->is_visible();
 }
 
+bool AssetInfoUI::run_animation_editor_action(PendingAnimationEditorAction action) {
+    if (!animation_editor_window_ || !info_) {
+        return false;
+    }
+    if (!animation_editor_window_->is_visible() || !animation_editor_window_->is_ready_for_action_execution()) {
+        return false;
+    }
+    switch (action) {
+        case PendingAnimationEditorAction::Controller:
+            SDL_Log("[AssetInfoUI] Running animation editor action: Controller");
+            return animation_editor_window_->trigger_controller_action();
+        case PendingAnimationEditorAction::None:
+        default:
+            return false;
+    }
+}
+
+void AssetInfoUI::request_animation_editor_action(PendingAnimationEditorAction action) {
+    if (!animation_editor_window_ || !info_ || action == PendingAnimationEditorAction::None) {
+        return;
+    }
+    const char* action_name = "None";
+    if (action == PendingAnimationEditorAction::Controller) action_name = "Controller";
+    SDL_Log("[AssetInfoUI] Requested animation editor action: %s", action_name);
+    if (animation_editor_window_->is_visible() && run_animation_editor_action(action)) {
+        pending_animation_editor_action_.clear();
+        return;
+    }
+    pending_animation_editor_action_.action = action;
+    pending_animation_editor_action_.request_revision = ++animation_editor_action_revision_;
+    pending_animation_editor_action_.first_seen_frame = ui_frame_counter_;
+    open_animation_editor_panel();
+}
+
 void AssetInfoUI::set_animation_editor_fullscreen_mode(bool enabled) {
+    if (enabled && (!animation_editor_window_ || !info_)) {
+        enabled = false;
+    }
     if (animation_editor_fullscreen_mode_ == enabled) {
         return;
     }
@@ -1258,6 +1332,7 @@ void AssetInfoUI::set_animation_editor_fullscreen_mode(bool enabled) {
             animation_editor_rect_ = SDL_Rect{0, 0, last_screen_w_, last_screen_h_};
         }
     } else {
+        pending_animation_editor_open_ = false;
         animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
     }
     container_.request_layout();
@@ -1409,7 +1484,14 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
 
     if (!visible_) return false;
 
-    if (animation_editor_fullscreen_mode_) {
+    const bool fullscreen_capture_active =
+        animation_editor_fullscreen_mode_ &&
+        animation_editor_window_ &&
+        animation_editor_window_->is_visible() &&
+        animation_editor_rect_.w > 0 &&
+        animation_editor_rect_.h > 0;
+
+    if (animation_editor_fullscreen_mode_ && fullscreen_capture_active) {
         if (animation_editor_window_ && animation_editor_window_->is_visible() &&
             animation_editor_window_->handle_event(e)) {
             return true;
@@ -1499,6 +1581,7 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
 }
 
 void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
+    ++ui_frame_counter_;
     validate_target_asset();
     last_screen_w_ = screen_w;
     last_screen_h_ = screen_h;
@@ -1511,9 +1594,36 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
             animation_editor_window_->set_visible(true);
             pending_animation_editor_open_ = false;
         }
+        if (pending_animation_editor_action_.active() &&
+            animation_editor_window_->is_visible()) {
+            if (run_animation_editor_action(pending_animation_editor_action_.action)) {
+                pending_animation_editor_action_.clear();
+            } else if ((ui_frame_counter_ % 120u) == 0u) {
+                const SDL_Rect& editor_bounds = animation_editor_window_->bounds();
+                SDL_Log("[AssetInfoUI] Animation editor action still pending (rev=%llu, bounds=%dx%d, ready=%d).",
+                        static_cast<unsigned long long>(pending_animation_editor_action_.request_revision),
+                        editor_bounds.w,
+                        editor_bounds.h,
+                        animation_editor_window_->is_ready_for_action_execution() ? 1 : 0);
+            }
+        }
         if (animation_editor_window_->is_visible()) {
             animation_editor_window_->update(input, screen_w, screen_h);
         }
+    }
+
+    const bool fullscreen_capture_active =
+        animation_editor_fullscreen_mode_ &&
+        animation_editor_window_ &&
+        animation_editor_window_->is_visible() &&
+        animation_editor_rect_.w > 0 &&
+        animation_editor_rect_.h > 0;
+    if (animation_editor_fullscreen_mode_ &&
+        !fullscreen_capture_active &&
+        !pending_animation_editor_open_) {
+        animation_editor_fullscreen_mode_ = false;
+        animation_editor_rect_ = SDL_Rect{0, 0, 0, 0};
+        container_.request_layout();
     }
 
 
@@ -1529,7 +1639,7 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
 
     if (!visible_) return;
 
-    if (animation_editor_fullscreen_mode_) {
+    if (animation_editor_fullscreen_mode_ && fullscreen_capture_active) {
         if (save_coordinator_) {
             save_coordinator_->tick();
         }
@@ -1564,13 +1674,21 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     layout_widgets(screen_w, screen_h);
     last_renderer_ = r;
 
-    if (!animation_editor_fullscreen_mode_) {
+    const bool fullscreen_capture_active =
+        animation_editor_fullscreen_mode_ &&
+        animation_editor_window_ &&
+        animation_editor_window_->is_visible() &&
+        animation_editor_rect_.w > 0 &&
+        animation_editor_rect_.h > 0;
+
+    if (!(animation_editor_fullscreen_mode_ && fullscreen_capture_active)) {
         container_.render(r, screen_w, screen_h);
     }
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         animation_editor_window_->render(r);
     }
-    if (animation_editor_fullscreen_mode_) {
+
+    if (animation_editor_fullscreen_mode_ && fullscreen_capture_active) {
         return;
     }
 

@@ -155,6 +155,7 @@ public:
     void clear_highlighted_assets();
     void purge_asset(Asset* asset);
     void set_pointer_queries_suspended(bool suspended);
+    void set_external_asset_selection_blocked(bool blocked);
 
     const std::vector<Asset*>& get_selected_assets() const { return selected_assets_; }
     const std::vector<Asset*>& get_highlighted_assets() const { return highlighted_assets_; }
@@ -288,6 +289,9 @@ private:
     static float edge_pan_intensity(int value, int max_value, float threshold_fraction);
     bool handle_camera_settings_mouse_controls(const Input& input);
     bool apply_scroll_size_adjustment(const Input& input);
+    void refresh_cursor_world_state(const WarpedScreenGrid& cam, SDL_Point screen_pt);
+    bool asset_selection_blocked_by_open_panels() const;
+    bool asset_selection_allowed_now() const;
     void apply_asset_scale_live_update(Asset* asset, int scale_percent);
     bool select_asset_or_group(Asset* asset);
     Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
@@ -518,6 +522,8 @@ private:
     void update_asset_editor_transition();
     void apply_asset_editor_panel_overrides();
     bool asset_editor_tab_scope_active() const;
+    bool is_asset_info_modal_blocking() const;
+    void clear_stale_asset_info_modal_state();
     void toggle_anchor_edit_mode();
     bool enter_anchor_edit_mode(bool light_editor_mode = false);
     void exit_anchor_edit_mode(bool flush_immediately);
@@ -1191,6 +1197,7 @@ private:
     Asset* hovered_asset_ = nullptr;
     Asset* hovered_anchor_asset_ = nullptr;
     bool pointer_queries_suspended_ = false;
+    bool external_asset_selection_blocked_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
     struct AssetInfoParentHistoryEntry {
@@ -1363,13 +1370,6 @@ private:
     std::shared_ptr<AssetInfo> last_selected_from_library_;
 
     friend class DevControls;
-#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
-    std::uint32_t test_snap_spawn_group_to_resolution_call_count_ = 0;
-    std::uint32_t test_respawn_spawn_group_call_count_ = 0;
-    std::uint32_t test_delete_shortcut_stack_dispatch_count_ = 0;
-    std::uint32_t test_delete_shortcut_asset_delete_count_ = 0;
-    friend struct RoomEditorTestAccess;
-#endif
 
     static constexpr int kSpatialCellSize = 256;
 
@@ -1384,149 +1384,4 @@ private:
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };
 
-#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
-struct RoomEditorTestAccess {
-    static int subview_asset_info();
-    static int subview_animation_editor();
-    static int subview_anchor();
-    static int mode_normal();
-    static int mode_anchor();
-    static int mode_light();
-    static int mode_oval();
-    static int mode_floor_box();
-    static int mode_movement();
-    static int mode_hitbox();
-    static int mode_attack_box();
-    static int candidate_source_anchor_non_light();
-    static int candidate_source_anchor_light();
-    static int candidate_source_oval_point();
-    static int candidate_source_oval_center();
-    static int candidate_source_floor_box();
-    static bool mode_owns_hitbox_domain(const RoomEditor& editor, int mode);
-    static bool mode_owns_attack_domain(const RoomEditor& editor, int mode);
-    static bool mode_owns_movement_domain(const RoomEditor& editor, int mode);
-    static bool mode_owns_oval_domain(const RoomEditor& editor, int mode);
-    static bool validate_anchor_candidate_source(const RoomEditor& editor, int source_context);
-    static bool validate_floor_candidate_source(const RoomEditor& editor, int source_context);
-    static void set_oval_candidate_selection(RoomEditor& editor, bool center_selected, int selected_point_index);
-    static void configure_oval_lock_target_for_tests(RoomEditor& editor,
-                                                     Asset* target_asset,
-                                                     int selected_oval_index,
-                                                     int selected_point_index,
-                                                     float center_world_x,
-                                                     float center_world_y,
-                                                     float center_world_z);
-    static bool resolve_oval_lock_target_for_tests(const RoomEditor& editor,
-                                                   float& out_world_x,
-                                                   float& out_world_z,
-                                                   float& out_heading_radians);
 
-    static int active_subview(const RoomEditor& editor);
-    static void set_active_subview(RoomEditor& editor, int subview);
-    static void set_subview_change_in_progress(RoomEditor& editor, bool in_progress);
-    static void set_editor_mode(RoomEditor& editor, int mode);
-    static void set_hitbox_dragging_extrusion(RoomEditor& editor, bool dragging);
-    static void set_attack_box_dragging_extrusion(RoomEditor& editor, bool dragging);
-    static bool editor_interaction_is_dragging(const RoomEditor& editor);
-    static bool editor_interaction_camera_blocked(const RoomEditor& editor);
-    static int resolve_extrusion_drag_value(bool dragging_back_side,
-                                            int axis_offset_px,
-                                            float start_half_separation,
-                                            int start_forward,
-                                            int start_backward);
-
-    static bool has_pending_subview_request(const RoomEditor& editor);
-    static int pending_subview(const RoomEditor& editor);
-    static bool pending_subview_animate(const RoomEditor& editor);
-    static bool has_pending_animation_editor_close_subview(const RoomEditor& editor);
-    static int pending_animation_editor_close_subview(const RoomEditor& editor);
-
-    static void request_subview(RoomEditor& editor, int subview, bool animate);
-    static void drain_pending_subview_request(RoomEditor& editor);
-    static void process_pending_animation_editor_close(RoomEditor& editor);
-    static void invoke_on_animation_editor_closed(RoomEditor& editor);
-    static void set_snap_to_grid_enabled(RoomEditor& editor, bool enabled);
-    static void set_shared_footer_present(RoomEditor& editor, bool present);
-    static void set_overlay_snap_resolution(RoomEditor& editor, int resolution);
-    static int current_grid_resolution(const RoomEditor& editor);
-    static void resnap_spawn_groups_to_overlay_resolution(RoomEditor& editor, int resolution);
-    static void update_grid_resolution_for_selection(RoomEditor& editor, const void* primary_asset_identity);
-    static bool spawn_group_is_boundary(const RoomEditor& editor, const std::string& spawn_id);
-    static std::uint32_t snap_spawn_group_to_resolution_call_count(const RoomEditor& editor);
-    static void reset_snap_spawn_group_to_resolution_call_count(RoomEditor& editor);
-    static bool should_open_spawn_group_panel_for_click(RoomEditor& editor,
-                                                        const std::string& spawn_id,
-                                                        bool has_spawn_group,
-                                                        std::uint32_t click_time_ms);
-    static void reset_click_tracking(RoomEditor& editor);
-    static bool consume_pressed_asset_release(RoomEditor& editor,
-                                              std::uint32_t click_time_ms,
-                                              std::string& out_spawn_id);
-    static void set_active_asset_identities(RoomEditor& editor, const std::vector<const void*>& identities);
-    static void set_mouse_press_state(RoomEditor& editor,
-                                      const void* asset_identity,
-                                      const std::string& spawn_id,
-                                      bool has_spawn_group,
-                                      bool was_dragged);
-    static void clear_mouse_press_state(RoomEditor& editor, bool reset_click_tracking);
-    static int drag_mode_for_spawn_method(const std::string& method, bool ctrl_modifier);
-    static void set_spawn_group_callback_in_progress(RoomEditor& editor, bool in_progress);
-    static bool spawn_group_callback_in_progress(const RoomEditor& editor);
-    static void set_delete_confirm_callback_for_tests(RoomEditor& editor, int confirm_result);
-    static bool execute_delete_confirmation_flow(RoomEditor& editor,
-                                                 int mode,
-                                                 bool validate_before_confirm,
-                                                 bool validate_after_confirm,
-                                                 int affected_count,
-                                                 int& out_apply_calls);
-    static bool execute_delete_confirmation_with_transient_ui_drift(RoomEditor& editor,
-                                                                    int mode,
-                                                                    bool snapshot_target_exists,
-                                                                    int affected_count,
-                                                                    int& out_apply_calls);
-    static bool delete_confirmation_disabled_for_mode(const RoomEditor& editor, int mode);
-    static int delete_persist_priority_for_tests();
-    static bool delete_persist_flush_now_for_tests();
-    static void enqueue_spawn_group_work(RoomEditor& editor,
-                                         const std::string& spawn_id,
-                                         bool needs_respawn,
-                                         bool needs_panel_refresh,
-                                         bool needs_room_config_reopen,
-                                         bool needs_selection_resync);
-    static std::size_t pending_spawn_group_work_size(const RoomEditor& editor);
-    static void process_pending_spawn_group_work(RoomEditor& editor);
-    static std::uint32_t respawn_spawn_group_call_count(const RoomEditor& editor);
-    static void reset_respawn_spawn_group_call_count(RoomEditor& editor);
-    static void invoke_delete_shortcut(RoomEditor& editor, bool delete_pressed, bool escape_pressed);
-    static std::uint32_t delete_shortcut_stack_dispatch_count(const RoomEditor& editor);
-    static std::uint32_t delete_shortcut_asset_delete_count(const RoomEditor& editor);
-    static void reset_delete_shortcut_route_counters(RoomEditor& editor);
-    static bool solve_texture_point_for_screen_target_for_tests(int initial_x,
-                                                                int initial_y,
-                                                                SDL_FPoint desired_screen,
-                                                                int max_x,
-                                                                int max_y,
-                                                                bool singular_jacobian,
-                                                                int& out_x,
-                                                                int& out_y);
-    static void set_spawn_id_ownership_cache(RoomEditor& editor,
-                                             const std::vector<std::string>& room_spawn_ids,
-                                             const std::vector<std::string>& map_boundary_spawn_ids);
-    static int classify_spawn_group_ownership(const RoomEditor& editor, const std::string& spawn_id);
-    static std::optional<RoomEditor::DynamicBoundaryProxyHit> hit_test_dynamic_boundary_sprite(
-        RoomEditor& editor,
-        SDL_Point screen_point);
-    static std::optional<SDL_FRect> dynamic_boundary_proxy_rect(const RoomEditor& editor,
-                                                                const RoomEditor::DynamicBoundaryProxyKey& key);
-    static std::optional<SDL_FRect> dynamic_boundary_proxy_rect_for_asset(const RoomEditor& editor,
-                                                                          const Asset* asset);
-    static bool open_asset_info_for_dynamic_boundary(RoomEditor& editor,
-                                                      const RoomEditor::DynamicBoundaryProxyHit& hit);
-    static bool spawn_membership_allows_room_selection(const RoomEditor& editor,
-                                                       const std::string& spawn_id,
-                                                       const std::string& owning_room_name);
-    static bool select_current_room_from_nav(RoomEditor& editor, Room* room);
-    static Room* current_room(const RoomEditor& editor);
-    static std::string room_config_header_text(const RoomEditor& editor);
-};
-#endif

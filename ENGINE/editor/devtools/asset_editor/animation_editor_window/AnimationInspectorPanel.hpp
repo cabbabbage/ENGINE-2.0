@@ -57,6 +57,7 @@ class AnimationInspectorPanel {
     using AnimationPicker = std::function<std::optional<std::string>()>;
     using StatusCallback = std::function<void(const std::string&)>;
     using SourceChangedCallback = std::function<void(const SourceConfigPanel::SourceChangeEvent&)>;
+    using FrameImportHandler = SourceConfigPanel::FrameImportHandler;
     using FrameEditCallback = std::function<void(const std::string&)>;
     using FrameModeEditCallback = std::function<void(const std::string&, FrameEditorLaunchMode)>;
     using AudioFilePicker = std::function<std::optional<std::filesystem::path>()>;
@@ -74,6 +75,7 @@ class AnimationInspectorPanel {
     void set_source_animation_picker(AnimationPicker picker);
     void set_source_gif_picker(PathPicker picker);
     void set_source_png_sequence_picker(MultiPathPicker picker);
+    void set_source_frame_import_handler(FrameImportHandler handler);
     void set_source_status_callback(StatusCallback callback);
     void set_source_changed_callback(SourceChangedCallback callback);
     void set_frame_edit_callback(FrameEditCallback callback);
@@ -203,6 +205,7 @@ class AnimationInspectorPanel {
     AnimationPicker animation_picker_;
     PathPicker gif_picker_;
     MultiPathPicker png_sequence_picker_;
+    FrameImportHandler frame_import_handler_;
     StatusCallback status_callback_;
     SourceChangedCallback source_changed_callback_;
     FrameEditCallback frame_edit_callback_;

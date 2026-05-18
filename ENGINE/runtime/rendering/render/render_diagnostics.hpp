@@ -21,6 +21,7 @@ struct RenderFrameStats {
     double cpu_light_gather_ms = 0.0;
     double cpu_light_mask_generation_ms = 0.0;
     double draw_submission_cpu_ms = 0.0;
+    double ui_overlay_prepare_ms = 0.0;
     double present_block_ms = 0.0;
     double present_interval_ms = 0.0;
     bool present_interval_known = false;
@@ -60,6 +61,9 @@ struct RenderFrameStats {
     std::string packets_per_depth_layer;
     std::string blur_strength_per_layer;
     std::string composite_layers_submitted;
+    std::string render_stage_timings;
+    bool ui_overlay_active = false;
+    bool ui_overlay_redrawn = false;
     bool submit_succeeded = false;
 };
 
@@ -81,6 +85,7 @@ void add_render_target_switch_count(std::uint32_t count = 1);
 void add_cpu_light_gather_ms(double elapsed_ms);
 void add_cpu_light_mask_generation_ms(double elapsed_ms);
 void add_draw_submission_ms(double elapsed_ms);
+void set_ui_overlay_stats(bool active, bool redrawn, double prepare_ms);
 void set_present_pacing(double present_block_ms,
                         double present_interval_ms,
                         bool interval_known);
@@ -112,6 +117,7 @@ void set_blur_pass_count(std::uint32_t count);
 void set_packets_per_depth_layer(const std::string& summary);
 void set_blur_strength_per_layer(const std::string& summary);
 void set_composite_layers_submitted(const std::string& summary);
+void set_render_stage_timings(const std::string& summary);
 void add_skipped_texture_count(std::uint32_t count = 1);
 void set_failed_texture_names(const std::string& names);
 void set_submit_result(bool succeeded);

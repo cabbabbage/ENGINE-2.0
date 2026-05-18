@@ -214,7 +214,6 @@ std::unique_ptr<Asset> WorldGrid::extract_asset(Asset* a) {
         remove_from_chunk(a, chunk);
     }
     residency_.erase(a);
-    prune_empty_points();
     return owned;
 }
 
@@ -254,8 +253,6 @@ Asset* WorldGrid::remove_asset(Asset* a) {
         residency_.erase(it);
     }
 
-    prune_empty_points();
-
     return a;
 }
 
@@ -287,6 +284,7 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     }
     std::unique_ptr<Asset> owned = std::move(*it);
     point.occupants.erase(it);
+    decrement_xz_occupancy(point);
     point.invalidate_screen_data();
     if (clear_mapping) {
         asset_to_key_.erase(a);
@@ -302,6 +300,7 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     }
     if (had_assets_before && !has_after) {
         propagate_branch_inactive(&point);
+        mark_point_for_deferred_prune(&point);
     }
     return owned;
 }
@@ -314,6 +313,7 @@ void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, GridPoi
     const bool had_assets_before = point.has_assets_or_active_children();
     point.occupants.push_back(std::move(owned));
     bind_asset_to_point(target, point);
+    increment_xz_occupancy(point);
     point.invalidate_screen_data();
     SDL_assert(!point.occupants.empty());
     SDL_assert(point.has_assets_or_active_children());
@@ -367,6 +367,9 @@ GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, 
     GridPoint& point = it->second;
     if (inserted && parent == nullptr) {
         add_root_id(id);
+    }
+    if (inserted) {
+        deferred_empty_point_ids_.erase(id);
     }
     key_to_id_[canonical_key] = id;
     return point;
@@ -632,6 +635,37 @@ void WorldGrid::bind_asset_to_point(Asset* a, GridPoint& point) {
     a->clear_grid_id();
 }
 
+WorldGrid::OccupancyXZKey WorldGrid::occupancy_key_for_point(const GridPoint& point) {
+    return OccupancyXZKey{point.world_x(), point.world_z(), point.resolution_layer()};
+}
+
+void WorldGrid::increment_xz_occupancy(const GridPoint& point) {
+    const OccupancyXZKey key = occupancy_key_for_point(point);
+    auto [it, inserted] = occupancy_xz_counts_.try_emplace(key, 0u);
+    (void)inserted;
+    ++it->second;
+}
+
+void WorldGrid::decrement_xz_occupancy(const GridPoint& point) {
+    const OccupancyXZKey key = occupancy_key_for_point(point);
+    auto it = occupancy_xz_counts_.find(key);
+    if (it == occupancy_xz_counts_.end()) {
+        return;
+    }
+    if (it->second <= 1u) {
+        occupancy_xz_counts_.erase(it);
+    } else {
+        --it->second;
+    }
+}
+
+void WorldGrid::mark_point_for_deferred_prune(GridPoint* point) {
+    if (!point || point->id == 0) {
+        return;
+    }
+    deferred_empty_point_ids_.insert(point->id);
+}
+
 void WorldGrid::prune_empty_points() {
     for (auto it = points_.begin(); it != points_.end(); ) {
         if (!it->second.has_assets_or_active_children()) {
@@ -639,11 +673,45 @@ void WorldGrid::prune_empty_points() {
             GridKey key{gp.world_x(), gp.world_y(), gp.world_z(), gp.resolution_layer()};
             key_to_id_.erase(key);
             remove_root_id(it->first);
+            deferred_empty_point_ids_.erase(it->first);
             it = points_.erase(it);
         } else {
             ++it;
         }
     }
+}
+
+std::size_t WorldGrid::flush_deferred_empty_points(std::size_t max_points) {
+    if (deferred_empty_point_ids_.empty() || max_points == 0) {
+        return 0;
+    }
+
+    std::size_t pruned = 0;
+    for (auto it = deferred_empty_point_ids_.begin();
+         it != deferred_empty_point_ids_.end() && pruned < max_points;) {
+        const GridId id = *it;
+        auto point_it = points_.find(id);
+        if (point_it == points_.end() || point_it->second.has_assets_or_active_children()) {
+            it = deferred_empty_point_ids_.erase(it);
+            continue;
+        }
+
+        GridPoint& gp = point_it->second;
+        GridKey key{gp.world_x(), gp.world_y(), gp.world_z(), gp.resolution_layer()};
+        key_to_id_.erase(key);
+        remove_root_id(id);
+        points_.erase(point_it);
+        it = deferred_empty_point_ids_.erase(it);
+        ++pruned;
+    }
+
+    return pruned;
+}
+
+bool WorldGrid::is_occupied_at_xz(int world_x, int world_z, int resolution_layer) const {
+    const OccupancyXZKey key{world_x, world_z, resolution_layer};
+    auto it = occupancy_xz_counts_.find(key);
+    return it != occupancy_xz_counts_.end() && it->second > 0;
 }
 
 void WorldGrid::add_root_id(GridId id) {
@@ -680,7 +748,6 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
             remove_asset_from_point(raw, *existing_point);
         }
         asset_to_key_.erase(existing_key_it);
-        prune_empty_points();
     }
 
     const int i = vibble::math::floor_div(world_pos.world_x() - origin_.world_x(), chunk_step);
@@ -887,8 +954,6 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     } else {
         debug_assert_residency_integrity(a);
     }
-    prune_empty_points();
-
     if (point_changed) {
         a->mark_composite_dirty();
         a->mark_mesh_dirty();
@@ -915,6 +980,8 @@ void WorldGrid::rebuild_chunks() {
     points_.clear();
     residency_.clear();
     asset_to_key_.clear();
+    deferred_empty_point_ids_.clear();
+    occupancy_xz_counts_.clear();
     roots_.clear();
     chunks_.reset();
     invalidate_active_cache();

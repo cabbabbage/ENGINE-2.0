@@ -927,9 +927,6 @@ bool AnimationDocument::clear_dirty_if_revision_not_newer(std::uint64_t revision
 }
 
 AnimationDocument::CreateAnimationResult AnimationDocument::create_animation(const std::string& animation_id) {
-    if (force_create_error_for_tests_) {
-        return CreateAnimationResult::Error;
-    }
     const std::string candidate = normalize_animation_id(animation_id);
     if (candidate.empty() || animation_editor::strings::is_reserved_animation_name(candidate)) {
         return CreateAnimationResult::InvalidName;
@@ -1296,3 +1293,4 @@ double AnimationDocument::scale_percentage() const {
 }
 
 }
+

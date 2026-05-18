@@ -917,6 +917,9 @@ protected:
 
 private:
     static constexpr int kMaxBoundaryJitter = 500;
+    static constexpr int kMaxSpawnFromRoomMin = 0;
+    static constexpr int kMaxSpawnFromRoomMax = 2000;
+    static constexpr int kMaxSpawnFromRoomDefault = 128;
 
     struct GroupWidgets {
         std::string spawn_id{};
@@ -973,6 +976,37 @@ private:
         return (*section_)["boundary_area_selectors"];
     }
 
+    int current_max_spawn_from_room() const {
+        if (!section_ || !section_->is_object()) {
+            return kMaxSpawnFromRoomDefault;
+        }
+        auto it = section_->find("max_spawn_from_room");
+        if (it == section_->end() || !it->is_number()) {
+            return kMaxSpawnFromRoomDefault;
+        }
+        int value = kMaxSpawnFromRoomDefault;
+        try {
+            if (it->is_number_integer()) {
+                value = it->get<int>();
+            } else {
+                value = static_cast<int>(std::lround(it->get<double>()));
+            }
+        } catch (...) {
+            value = kMaxSpawnFromRoomDefault;
+        }
+        return std::clamp(value, kMaxSpawnFromRoomMin, kMaxSpawnFromRoomMax);
+    }
+
+    void set_max_spawn_from_room(int value) {
+        if (!section_) return;
+        if (!section_->is_object()) {
+            *section_ = json::object();
+        }
+        const int clamped = std::clamp(value, kMaxSpawnFromRoomMin, kMaxSpawnFromRoomMax);
+        (*section_)["max_spawn_from_room"] = clamped;
+        notify_save(false);
+    }
+
     static int clamp_jitter(int value) {
         if (!std::isfinite(static_cast<double>(value))) return 0;
         return std::clamp(value, 0, kMaxBoundaryJitter);
@@ -1012,6 +1046,17 @@ private:
     bool sanitize_groups() {
         if (!section_) return false;
         bool changed = false;
+        if (!section_->is_object()) {
+            *section_ = json::object();
+            changed = true;
+        }
+        const int max_spawn_from_room = current_max_spawn_from_room();
+        if (!section_->contains("max_spawn_from_room") ||
+            !(*section_)["max_spawn_from_room"].is_number_integer() ||
+            (*section_)["max_spawn_from_room"].get<int>() != max_spawn_from_room) {
+            (*section_)["max_spawn_from_room"] = max_spawn_from_room;
+            changed = true;
+        }
         auto& selectors = ensure_candidate_selectors();
         if (!selectors.is_array()) {
             selectors = json::array();
@@ -1097,6 +1142,27 @@ private:
 
         if (add_button_widget_) {
             rows.push_back({add_button_widget_.get()});
+        }
+
+        const int max_spawn_from_room = current_max_spawn_from_room();
+        if (!max_spawn_from_room_stepper_) {
+            max_spawn_from_room_stepper_ = std::make_unique<DMNumericStepper>(
+                "max_spawn_from_room",
+                kMaxSpawnFromRoomMin,
+                kMaxSpawnFromRoomMax,
+                max_spawn_from_room);
+            max_spawn_from_room_stepper_->set_step(1);
+            max_spawn_from_room_stepper_->set_on_change([this](int value) {
+                this->set_max_spawn_from_room(value);
+            });
+            max_spawn_from_room_widget_ =
+                std::make_unique<StepperWidget>(max_spawn_from_room_stepper_.get());
+        }
+        if (max_spawn_from_room_stepper_) {
+            max_spawn_from_room_stepper_->set_value(max_spawn_from_room);
+        }
+        if (max_spawn_from_room_widget_) {
+            rows.push_back({max_spawn_from_room_widget_.get()});
         }
 
         auto search_extras = std::make_shared<std::vector<SearchAssets::Result>>(build_candidate_search_extra_results());
@@ -1440,6 +1506,8 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
+    std::unique_ptr<DMNumericStepper> max_spawn_from_room_stepper_{};
+    std::unique_ptr<StepperWidget> max_spawn_from_room_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
     int pie_callback_depth_ = 0;
     bool pending_rebuild_ = false;

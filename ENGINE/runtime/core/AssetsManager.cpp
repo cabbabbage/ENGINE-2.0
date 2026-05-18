@@ -4379,6 +4379,32 @@ void Assets::test_reset_live_dynamic_budget_state() {
     live_dynamic_sync_ema_initialized_ = false;
 }
 
+void Assets::test_apply_live_dynamic_budget_sample_ms(double frame_elapsed_ms) {
+    apply_live_dynamic_budget_sample(std::max(0.0, frame_elapsed_ms), std::max(0.1, live_dynamic_sync_budget_target_ms_));
+}
+
+Assets::LiveDynamicSyncSnapshot Assets::test_live_dynamic_snapshot() const {
+    LiveDynamicSyncSnapshot snapshot;
+    snapshot.selector_state = live_dynamic_selector_scan_state_.size();
+    snapshot.pending_qualification = live_dynamic_qualification_queue_.size();
+    snapshot.pending_spawn = live_dynamic_spawn_queue_.size();
+    snapshot.spawned_keys = live_dynamic_spawned_keys_.size();
+    snapshot.null_keys = live_dynamic_null_keys_.size();
+    snapshot.points_scanned = live_dynamic_last_points_scanned_;
+    snapshot.points_qualified = live_dynamic_last_points_qualified_;
+    snapshot.spawn_attempts = live_dynamic_last_spawn_attempts_;
+    snapshot.successful_spawns = live_dynamic_last_successful_spawns_;
+    snapshot.despawns = live_dynamic_last_despawns_;
+    snapshot.occupancy_cache_size = live_dynamic_persistent_occupancy_cache_.size();
+    snapshot.room_cache_size = live_dynamic_persistent_room_cache_.size();
+    snapshot.occupancy_cache_hits = live_dynamic_occupancy_cache_hits_;
+    snapshot.occupancy_cache_misses = live_dynamic_occupancy_cache_misses_;
+    snapshot.scan_budget = adaptive_live_dynamic_scan_cells_per_selector_per_frame_;
+    snapshot.spawn_budget = adaptive_live_dynamic_new_spawns_per_frame_;
+    snapshot.sync_ema_ms = live_dynamic_sync_ema_ms_;
+    return snapshot;
+}
+
 int Assets::audio_effect_max_distance_world() const {
     const_cast<Assets*>(this)->update_max_asset_dimensions();
     const float horizontal_padding = std::max(0.0f, max_asset_width_world_ * 1.5f);

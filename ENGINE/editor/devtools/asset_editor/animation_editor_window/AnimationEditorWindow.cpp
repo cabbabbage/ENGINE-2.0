@@ -2003,6 +2003,306 @@ void AnimationEditorWindow::log_ui_transition(const char* tag, const std::string
     SDL_Log("[AnimationEditor][%s] %s", tag ? tag : "event", detail.c_str());
 }
 
+void AnimationEditorWindow::ensure_create_animation_modal_widgets() {
+    if (!create_animation_name_box_) {
+        create_animation_name_box_ = std::make_unique<DMTextBox>("Animation id", "animation");
+    }
+    if (!create_animation_create_button_) {
+        create_animation_create_button_ = std::make_unique<DMButton>("Create", &DMStyles::CreateButton(), 120, DMButton::height());
+    }
+    if (!create_animation_cancel_button_) {
+        create_animation_cancel_button_ = std::make_unique<DMButton>("Cancel", &DMStyles::HeaderButton(), 120, DMButton::height());
+    }
+}
+
+bool AnimationEditorWindow::create_animation_modal_bounds_valid() const {
+    return is_layout_valid() &&
+           bounds_.w > 0 && bounds_.h > 0 &&
+           create_animation_modal_rect_.w > 0 && create_animation_modal_rect_.h > 0;
+}
+
+bool AnimationEditorWindow::create_animation_modal_actionable() const {
+    return visible_ &&
+           create_animation_modal_lifecycle_ == ModalLifecycleState::OpenReady &&
+           create_animation_modal_visible_ &&
+           create_animation_modal_bounds_valid();
+}
+
+bool AnimationEditorWindow::try_open_create_animation_modal(bool from_retry) {
+    ensure_create_animation_modal_widgets();
+    if (list_context_menu_) {
+        list_context_menu_->close();
+    }
+    close_defaults_modal();
+    if (create_animation_name_box_ && !from_retry) {
+        create_animation_name_box_->set_value("animation");
+        create_animation_name_box_->start_editing();
+    }
+    create_animation_modal_lifecycle_ = ModalLifecycleState::OpenReady;
+    create_animation_modal_visible_ = true;
+    layout_create_animation_modal();
+    if (create_animation_modal_actionable()) {
+        create_animation_modal_open_deferred_ = false;
+        create_animation_modal_lifecycle_ = ModalLifecycleState::OpenReady;
+        log_ui_transition("create_animation_modal", from_retry ? "opened_after_retry" : "opened");
+        return true;
+    }
+
+    create_animation_modal_open_deferred_ = true;
+    create_animation_modal_visible_ = false;
+    create_animation_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
+    if (!from_retry) {
+        if (!create_animation_modal_warning_.empty()) {
+            set_status_message(create_animation_modal_warning_, 240);
+        } else {
+            set_status_message("Create Animation is waiting for valid editor bounds.", 240);
+        }
+        log_ui_transition("create_animation_modal", "deferred_open_initial_failed");
+    }
+    return false;
+}
+
+void AnimationEditorWindow::maybe_retry_deferred_create_animation_modal() {
+    if (!create_animation_modal_open_deferred_ &&
+        create_animation_modal_lifecycle_ != ModalLifecycleState::OpenPendingLayout) {
+        return;
+    }
+    if (!is_layout_valid()) {
+        return;
+    }
+    (void)try_open_create_animation_modal(true);
+}
+
+void AnimationEditorWindow::open_create_animation_modal() {
+    (void)try_open_create_animation_modal(false);
+}
+
+void AnimationEditorWindow::close_create_animation_modal() {
+    if (create_animation_create_button_) {
+        create_animation_create_button_->cancel_interaction();
+    }
+    if (create_animation_cancel_button_) {
+        create_animation_cancel_button_->cancel_interaction();
+    }
+    if (create_animation_name_box_) {
+        create_animation_name_box_->stop_editing();
+    }
+    if (create_animation_modal_visible_ || create_animation_modal_open_deferred_ ||
+        create_animation_modal_lifecycle_ == ModalLifecycleState::OpenReady ||
+        create_animation_modal_lifecycle_ == ModalLifecycleState::OpenPendingLayout) {
+        log_ui_transition("create_animation_modal", "closed");
+    }
+    create_animation_modal_visible_ = false;
+    create_animation_modal_open_deferred_ = false;
+    create_animation_modal_lifecycle_ = ModalLifecycleState::Closed;
+    create_animation_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+    create_animation_modal_warning_.clear();
+}
+
+void AnimationEditorWindow::layout_create_animation_modal() {
+    if (create_animation_modal_lifecycle_ != ModalLifecycleState::OpenReady || !create_animation_modal_visible_) {
+        create_animation_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+        return;
+    }
+
+    ensure_create_animation_modal_widgets();
+    if (!is_layout_valid() || bounds_.w <= 0 || bounds_.h <= 0) {
+        create_animation_modal_visible_ = false;
+        create_animation_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+        create_animation_modal_open_deferred_ = true;
+        create_animation_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
+        create_animation_modal_warning_ = "Create Animation cannot open while panel bounds are collapsed.";
+        return;
+    }
+    create_animation_modal_warning_.clear();
+
+    const int modal_width = std::clamp(bounds_.w - 120, 320, 520);
+    const int padding = DMSpacing::panel_padding();
+    const int row_gap = DMSpacing::small_gap();
+    const int input_h = create_animation_name_box_ ? create_animation_name_box_->preferred_height(modal_width - padding * 2) : DMTextBox::height();
+    const int modal_height = padding * 3 + DMStyles::Label().font_size * 2 + row_gap * 2 + input_h + DMButton::height();
+    create_animation_modal_rect_ = SDL_Rect{
+        bounds_.x + std::max(0, (bounds_.w - modal_width) / 2),
+        bounds_.y + std::max(0, (bounds_.h - modal_height) / 2),
+        modal_width,
+        modal_height,
+    };
+
+    const int content_x = create_animation_modal_rect_.x + padding;
+    const int content_w = std::max(0, create_animation_modal_rect_.w - padding * 2);
+    int y = create_animation_modal_rect_.y + padding + DMStyles::Label().font_size * 2 + row_gap * 2;
+    if (create_animation_name_box_) {
+        create_animation_name_box_->set_rect(SDL_Rect{content_x, y, content_w, input_h});
+    }
+
+    const int footer_y = create_animation_modal_rect_.y + create_animation_modal_rect_.h - padding - DMButton::height();
+    if (create_animation_cancel_button_ && create_animation_create_button_) {
+        const int button_gap = DMSpacing::small_gap();
+        const int cancel_w = 120;
+        const int create_w = 130;
+        const int create_x = create_animation_modal_rect_.x + create_animation_modal_rect_.w - padding - create_w;
+        const int cancel_x = create_x - button_gap - cancel_w;
+        create_animation_cancel_button_->set_rect(SDL_Rect{cancel_x, footer_y, cancel_w, DMButton::height()});
+        create_animation_create_button_->set_rect(SDL_Rect{create_x, footer_y, create_w, DMButton::height()});
+    }
+}
+
+void AnimationEditorWindow::handle_create_animation_modal_submit() {
+    if (!document_ || !create_animation_name_box_) {
+        set_status_message("Animation document is unavailable.", 180);
+        return;
+    }
+
+    const std::string name = normalize_animation_name(create_animation_name_box_->value());
+    if (name.empty()) {
+        set_status_message("Animation name is invalid after normalization.", 240);
+        return;
+    }
+    if (animation_editor::strings::is_reserved_animation_name(name)) {
+        set_status_message("Animation name '" + name + "' is reserved.", 240);
+        return;
+    }
+
+    const auto before_ids = document_->animation_ids();
+    if (std::find(before_ids.begin(), before_ids.end(), name) != before_ids.end()) {
+        select_animation(std::make_optional(name), false);
+        refresh_panels_after_load();
+        set_status_message("Animation '" + name + "' already exists; selected existing animation.", 240);
+        return;
+    }
+
+    const auto create_result = document_->create_animation(name);
+    const auto after_ids = document_->animation_ids();
+    const bool inserted = std::find(after_ids.begin(), after_ids.end(), name) != after_ids.end();
+    if (create_result == AnimationDocument::CreateAnimationResult::Created && inserted) {
+        if (preview_provider_) {
+            preview_provider_->invalidate_all();
+        }
+        select_animation(std::make_optional(name), false);
+        refresh_panels_after_load();
+        close_create_animation_modal();
+        set_status_message("Created animation '" + name + "'.", 240);
+    } else if (create_result == AnimationDocument::CreateAnimationResult::AlreadyExists) {
+        set_status_message("Animation '" + name + "' already exists.", 240);
+    } else if (create_result == AnimationDocument::CreateAnimationResult::InvalidName) {
+        set_status_message("Animation name '" + name + "' is invalid.", 240);
+    } else if (create_result == AnimationDocument::CreateAnimationResult::Created && !inserted) {
+        set_status_message("Animation create failed verification for '" + name + "'.", 260);
+    } else {
+        set_status_message("Failed to create animation '" + name + "'.", 240);
+    }
+}
+
+bool AnimationEditorWindow::handle_create_animation_modal_event(const SDL_Event& e) {
+    if (!create_animation_modal_actionable()) {
+        return false;
+    }
+
+    ensure_create_animation_modal_widgets();
+    layout_create_animation_modal();
+    if (!create_animation_modal_actionable()) {
+        return false;
+    }
+
+    bool consumed = false;
+    if (create_animation_name_box_ && create_animation_name_box_->handle_event(e)) {
+        consumed = true;
+    }
+
+    auto handle_button = [&](const std::unique_ptr<DMButton>& button, auto&& callback) {
+        if (!button) return;
+        if (!button->handle_event(e)) return;
+        consumed = true;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            callback();
+        }
+    };
+
+    handle_button(create_animation_create_button_, [this]() { handle_create_animation_modal_submit(); });
+    handle_button(create_animation_cancel_button_, [this]() { close_create_animation_modal(); });
+
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        if (e.key.key == SDLK_ESCAPE) {
+            close_create_animation_modal();
+            return true;
+        }
+        if (e.key.key == SDLK_RETURN) {
+            handle_create_animation_modal_submit();
+            return true;
+        }
+        return true;
+    }
+    if (e.type == SDL_EVENT_TEXT_INPUT) {
+        return true;
+    }
+
+    SDL_Point point{0, 0};
+    bool pointer_event = false;
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        point = SDL_Point{static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
+        pointer_event = true;
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        point = SDL_Point{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+        pointer_event = true;
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        int mx = 0;
+        int my = 0;
+        sdl_mouse_util::GetMouseState(&mx, &my);
+        point = SDL_Point{mx, my};
+        pointer_event = true;
+    }
+
+    if (pointer_event) {
+        const bool inside_modal = SDL_PointInRect(&point, &create_animation_modal_rect_);
+        if (inside_modal) {
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            close_create_animation_modal();
+            return true;
+        }
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_WHEEL) {
+            return true;
+        }
+    }
+
+    return consumed;
+}
+
+void AnimationEditorWindow::render_create_animation_modal(SDL_Renderer* renderer) const {
+    if (!renderer || !create_animation_modal_actionable()) {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 150);
+    SDL_Rect scrim = bounds_;
+    sdl_render::FillRect(renderer, &scrim);
+
+    dm_draw::DrawBeveledRect(renderer,
+                             create_animation_modal_rect_,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    dm_draw::DrawRoundedOutline(renderer, create_animation_modal_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
+
+    const int padding = DMSpacing::panel_padding();
+    const int title_x = create_animation_modal_rect_.x + padding;
+    int title_y = create_animation_modal_rect_.y + padding;
+    render_label(renderer, "Create Animation", title_x, title_y);
+    title_y += DMStyles::Label().font_size + DMSpacing::small_gap();
+    render_label(renderer, "Enter a unique animation id.", title_x, title_y);
+
+    if (create_animation_name_box_) create_animation_name_box_->render(renderer);
+    if (create_animation_create_button_) create_animation_create_button_->render(renderer);
+    if (create_animation_cancel_button_) create_animation_cancel_button_->render(renderer);
+}
+
 void AnimationEditorWindow::ensure_defaults_modal_widgets() {
     if (!defaults_diagonals_checkbox_) {
         defaults_diagonals_checkbox_ = std::make_unique<DMCheckbox>("Ground Diagonals", true);
@@ -2051,6 +2351,7 @@ bool AnimationEditorWindow::try_open_defaults_modal(bool from_retry) {
     if (list_context_menu_) {
         list_context_menu_->close();
     }
+    close_create_animation_modal();
     defaults_modal_lifecycle_ = ModalLifecycleState::OpenReady;
     defaults_modal_visible_ = true;
     layout_defaults_modal();

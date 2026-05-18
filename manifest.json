@@ -20035,6 +20035,35 @@
             "path": "default"
           },
           "tags": []
+        },
+        "left": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "left"
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -26283,7 +26312,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 7,
+            "grid_resolution": 6,
             "jitter": 32,
             "locked": false,
             "max_number": 1,
@@ -26364,9 +26393,9 @@
             }
           },
           "display_color": [
-            135,
-            242,
-            85,
+            31,
+            57,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -26453,9 +26482,9 @@
             }
           },
           "display_color": [
-            31,
-            32,
             204,
+            31,
+            141,
             255
           ],
           "edge_smoothness": 4,
@@ -26512,9 +26541,9 @@
             }
           },
           "display_color": [
-            242,
-            118,
             36,
+            242,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26571,9 +26600,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            238,
+            204,
+            143,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26660,9 +26689,9 @@
             }
           },
           "display_color": [
-            183,
-            31,
-            204,
+            36,
+            242,
+            40,
             255
           ],
           "edge_smoothness": 4,
@@ -26724,9 +26753,9 @@
             }
           },
           "display_color": [
-            36,
             242,
-            103,
+            85,
+            105,
             255
           ],
           "edge_smoothness": 70,
@@ -26824,9 +26853,9 @@
             }
           },
           "display_color": [
-            242,
+            89,
             85,
-            165,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -26895,8 +26924,8 @@
                 }
               ],
               "display_name": "vibble (Copy)",
-              "dx": -31660,
-              "dz": -31664,
+              "dx": -2337,
+              "dz": -1963,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27204,9 +27233,9 @@
             }
           },
           "display_color": [
-            104,
-            204,
-            31,
+            85,
+            242,
+            148,
             255
           ],
           "edge_smoothness": 96,

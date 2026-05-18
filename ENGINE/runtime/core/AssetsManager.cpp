@@ -2957,14 +2957,25 @@ void Assets::render_runtime_frame() {
         }
     };
     if (should_render) {
+        const Uint64 overlay_begin = SDL_GetPerformanceCounter();
         SDL_Texture* ui_overlay = prepare_runtime_ui_overlay_texture();
+        const Uint64 overlay_end = SDL_GetPerformanceCounter();
+        const double ui_overlay_prepare_ms =
+            (perf_counter_frequency_ > 0.0 && overlay_end > overlay_begin)
+                ? (static_cast<double>(overlay_end - overlay_begin) * 1000.0 / perf_counter_frequency_)
+                : 0.0;
+        const bool ui_overlay_active = has_runtime_ui_overlay_content(SDL_GetTicks());
         render_guard_log("[RenderGuard] before renderer submission frame=" + std::to_string(frame_id_) +
                          " path=opengl ui_overlay=" + (ui_overlay ? std::string("true") : std::string("false")) +
                          " active=" + std::to_string(active_assets.size()) +
                          " live_dynamic_assets=" + std::to_string(live_dynamic_asset_keys_.size()));
 
         std::string frame_error;
-        if (!opengl_renderer_->render_frame(frame_error, ui_overlay)) {
+        if (!opengl_renderer_->render_frame(frame_error,
+                                            ui_overlay,
+                                            ui_overlay_prepare_ms,
+                                            ui_overlay_active,
+                                            runtime_ui_overlay_redrawn_last_prepare_)) {
             render_diagnostics::set_renderer_runtime_info("opengl", "failed", "fatal");
             render_diagnostics::set_submit_result(false);
             const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
@@ -3110,9 +3121,15 @@ void Assets::update(const Input& input)
                           " dynamic_spawn_budget=" + std::to_string(adaptive_live_dynamic_new_spawns_per_frame_) +
                           " dynamic_sync_ema_ms=" + std::to_string(live_dynamic_sync_ema_ms_) +
                           " draw_submission_ms=" + std::to_string(stats.draw_submission_cpu_ms) +
+                          " ui_overlay_ms=" + std::to_string(stats.ui_overlay_prepare_ms) +
+                          " ui_overlay_active=" + (stats.ui_overlay_active ? std::string("true") : "false") +
+                          " ui_overlay_redrawn=" + (stats.ui_overlay_redrawn ? std::string("true") : "false") +
+                          " render_passes=" + std::to_string(stats.render_pass_count) +
+                          " target_switches=" + std::to_string(stats.render_target_switch_count) +
                           " draw_calls=" + std::to_string(stats.draw_call_count) +
                           " floor_packets=" + std::to_string(stats.floor_packet_count) +
-                          " xy_packets=" + std::to_string(stats.xy_sprite_packet_count));
+                          " xy_packets=" + std::to_string(stats.xy_sprite_packet_count) +
+                          " render_stages='" + stats.render_stage_timings + "'");
     }
 
     finalize_dev_frame_state();
@@ -5415,11 +5432,43 @@ void Assets::destroy_runtime_ui_overlay_texture() {
     runtime_ui_overlay_texture_ = nullptr;
     runtime_ui_overlay_width_ = 0;
     runtime_ui_overlay_height_ = 0;
+    runtime_ui_overlay_redrawn_last_prepare_ = false;
+}
+
+bool Assets::has_runtime_ui_overlay_content(Uint32 now_ticks) const {
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        return true;
+    }
+    if (task_editor_ && task_editor_->is_open()) {
+        return true;
+    }
+    if (!culled_debug_rects_.empty()) {
+        return true;
+    }
+    if (asset_boundary_box_display_enabled_) {
+        return true;
+    }
+    if (popup_manager_.has_active_content()) {
+        return true;
+    }
+    if (screenshot_capture_pending_) {
+        return true;
+    }
+    if (screenshot_create_task_button_active(now_ticks)) {
+        return true;
+    }
+    return false;
 }
 
 SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
+    runtime_ui_overlay_redrawn_last_prepare_ = false;
     SDL_Renderer* active_renderer = renderer();
     if (!active_renderer || screen_width <= 0 || screen_height <= 0) {
+        return nullptr;
+    }
+
+    const Uint32 now = SDL_GetTicks();
+    if (!has_runtime_ui_overlay_content(now)) {
         return nullptr;
     }
 
@@ -5453,11 +5502,7 @@ SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
     SDL_SetRenderTarget(active_renderer, previous_target);
 
     render_overlays(active_renderer, runtime_ui_overlay_texture_);
-    if (!SDL_FlushRenderer(active_renderer)) {
-        vibble::log::warn("[Assets] SDL_FlushRenderer failed after UI overlay target render: " +
-                          std::string(SDL_GetError()));
-        return nullptr;
-    }
+    runtime_ui_overlay_redrawn_last_prepare_ = true;
     return runtime_ui_overlay_texture_;
 }
 

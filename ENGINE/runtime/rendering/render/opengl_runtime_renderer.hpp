@@ -85,7 +85,11 @@ public:
 
     void set_output_dimensions(int screen_width, int screen_height);
 
-    bool render_frame(std::string& out_error, SDL_Texture* ui_overlay_texture = nullptr);
+    bool render_frame(std::string& out_error,
+                      SDL_Texture* ui_overlay_texture = nullptr,
+                      double ui_overlay_prepare_ms = 0.0,
+                      bool ui_overlay_active = false,
+                      bool ui_overlay_redrawn = false);
     std::optional<SDL_Point> scene_target_size() const;
 
     bool ready() const { return renderer_ != nullptr; }

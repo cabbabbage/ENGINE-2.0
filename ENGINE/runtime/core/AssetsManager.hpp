@@ -636,6 +636,7 @@ private:
     void refresh_filtered_active_assets_if_needed();
     void render_runtime_frame();
     SDL_Texture* prepare_runtime_ui_overlay_texture();
+    bool has_runtime_ui_overlay_content(Uint32 now_ticks) const;
     void destroy_runtime_ui_overlay_texture();
     void finalize_dev_frame_state();
     void mark_anchor_basis_dirty(Asset* asset);
@@ -691,6 +692,7 @@ private:
     SDL_Texture* runtime_ui_overlay_texture_ = nullptr;
     int runtime_ui_overlay_width_ = 0;
     int runtime_ui_overlay_height_ = 0;
+    bool runtime_ui_overlay_redrawn_last_prepare_ = false;
     runtime::context::GameRuntimeContext game_context_{};
 
     struct LiveDynamicCandidate {

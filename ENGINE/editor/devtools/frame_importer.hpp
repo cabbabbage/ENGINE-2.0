@@ -11,6 +11,8 @@ struct FrameImportResult {
     int frames_written = 0;
     std::string error_message;
     std::vector<std::string> warnings;
+    std::filesystem::path output_directory;
+    std::string failed_stage;
 
     bool success() const { return frames_written > 0 && error_message.empty(); }
 };
@@ -26,5 +28,7 @@ FrameImportResult import_frames_to_directory(const std::vector<std::filesystem::
 
 FrameImportResult import_gif_to_directory(const std::filesystem::path& gif_path,
                                           const std::filesystem::path& output_dir);
+
+void cleanup_stale_import_folders(const std::filesystem::path& asset_root);
 
 } // namespace devmode::frame_importer

@@ -1611,10 +1611,32 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
     return flush_batch();
 }
 
-bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui_overlay_texture) {
+bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
+                                         SDL_Texture* ui_overlay_texture,
+                                         double ui_overlay_prepare_ms,
+                                         bool ui_overlay_active,
+                                         bool ui_overlay_redrawn) {
     out_error.clear();
     render_diagnostics::begin_frame();
     render_diagnostics::set_texture_memory_usage(render_diagnostics::tracked_texture_bytes(), false);
+    render_diagnostics::set_ui_overlay_stats(ui_overlay_active, ui_overlay_redrawn, ui_overlay_prepare_ms);
+
+    const std::uint64_t frame_submit_begin = SDL_GetPerformanceCounter();
+    const std::uint64_t perf_frequency = SDL_GetPerformanceFrequency();
+    auto elapsed_ms = [perf_frequency](std::uint64_t begin, std::uint64_t end) -> double {
+        if (perf_frequency == 0 || end <= begin) {
+            return 0.0;
+        }
+        return static_cast<double>(end - begin) * 1000.0 / static_cast<double>(perf_frequency);
+    };
+    double frame_build_ms = 0.0;
+    double ensure_targets_ms = 0.0;
+    double floor_pass_ms = 0.0;
+    double xy_pass_ms = 0.0;
+    double dof_pass_ms = 0.0;
+    double composite_pass_ms = 0.0;
+    double ui_overlay_ms = 0.0;
+    double backbuffer_ms = 0.0;
 
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         out_error = "OpenGL runtime renderer is not ready.";
@@ -1658,6 +1680,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
     }
 
     GpuSceneFrameData frame_data{};
+    const std::uint64_t frame_build_begin = SDL_GetPerformanceCounter();
     if (!build_gpu_scene_frame_data(static_cast<std::uint32_t>(effective_target->x),
                                     static_cast<std::uint32_t>(effective_target->y),
                                     frame_data,
@@ -1666,6 +1689,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
         render_diagnostics::end_frame();
         return false;
     }
+    frame_build_ms = elapsed_ms(frame_build_begin, SDL_GetPerformanceCounter());
 
     if (ui_overlay_texture) {
         frame_data.ui_overlay_texture = ui_overlay_texture;
@@ -1715,10 +1739,12 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error, SDL_Texture* ui
                               0.0f,
                               static_cast<float>(frame_to_render->target_width),
                               static_cast<float>(frame_to_render->target_height)};
+    const std::uint64_t ensure_targets_begin = SDL_GetPerformanceCounter();
     if (!ensure_render_targets(*frame_to_render, out_error)) {
         render_diagnostics::end_frame();
         return false;
     }
+    ensure_targets_ms = elapsed_ms(ensure_targets_begin, SDL_GetPerformanceCounter());
 
     auto bind_target = [&](SDL_Texture* target, const SDL_Color& clear_color) -> bool {
         if (!render_diagnostics::set_render_target(renderer_, target)) {

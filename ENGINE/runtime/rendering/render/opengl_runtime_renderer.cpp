@@ -590,7 +590,9 @@ bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
         }
     }
 
-    std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+    if (!std::is_sorted(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor)) {
+        std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+    }
     return true;
 }
 
@@ -736,7 +738,9 @@ bool build_dev_floor_grid_overlay_draw_packets(const WarpedScreenGrid& camera,
         }
     }
 
-    std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+    if (!std::is_sorted(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor)) {
+        std::stable_sort(out_packets.begin(), out_packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+    }
     return true;
 }
 
@@ -849,7 +853,9 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         out_xy_sprite_draws.push_back(packet);
     }
 
-    std::stable_sort(out_xy_sprite_draws.begin(), out_xy_sprite_draws.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
+    if (!std::is_sorted(out_xy_sprite_draws.begin(), out_xy_sprite_draws.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
+        std::stable_sort(out_xy_sprite_draws.begin(), out_xy_sprite_draws.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
+    }
     return true;
 }
 
@@ -1328,9 +1334,13 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             out_data.floor_draws.insert(out_data.floor_draws.end(),
                                         std::make_move_iterator(floor_grid_overlay_draws.begin()),
                                         std::make_move_iterator(floor_grid_overlay_draws.end()));
-            std::stable_sort(out_data.floor_draws.begin(),
-                             out_data.floor_draws.end(),
-                             opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+            if (!std::is_sorted(out_data.floor_draws.begin(),
+                                out_data.floor_draws.end(),
+                                opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor)) {
+                std::stable_sort(out_data.floor_draws.begin(),
+                                 out_data.floor_draws.end(),
+                                 opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+            }
         }
     }
 
@@ -1348,9 +1358,13 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         out_data.floor_draws.insert(out_data.floor_draws.end(),
                                     std::make_move_iterator(floor_marker_draws.begin()),
                                     std::make_move_iterator(floor_marker_draws.end()));
-        std::stable_sort(out_data.floor_draws.begin(),
-                         out_data.floor_draws.end(),
-                         opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+        if (!std::is_sorted(out_data.floor_draws.begin(),
+                            out_data.floor_draws.end(),
+                            opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor)) {
+            std::stable_sort(out_data.floor_draws.begin(),
+                             out_data.floor_draws.end(),
+                             opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor);
+        }
     }
 
     if (!opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
@@ -1398,7 +1412,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             GpuDepthLayerDrawPackets layer{};
             layer.depth_layer = layer_id;
             layer.packets = std::move(depth_xy_sprite_packets[layer_id]);
-            std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
+            if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
+                std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
+            }
             const float blur_distance = max_layer_distance > 0
                 ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) / static_cast<float>(max_layer_distance)
                 : 0.0f;
@@ -1759,25 +1775,17 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         SDL_RenderClear(renderer_);
         return true;
     };
-
-    if (!bind_target(floor_target_, floor_clear_color)) {
-        render_diagnostics::end_frame();
-        return false;
-    }
-    if (!render_far_background(assets_->getView(),
-                               frame_to_render->target_width,
-                               frame_to_render->target_height,
-                               out_error)) {
-        render_diagnostics::end_frame();
-        return false;
-    }
-    if (!render_packet_batch(frame_to_render->floor_draws,
-                             frame_to_render->target_width,
-                             frame_to_render->target_height,
-                             out_error)) {
-        render_diagnostics::end_frame();
-        return false;
-    }
+    auto bind_target_no_clear = [&](SDL_Texture* target) -> bool {
+        if (!render_diagnostics::set_render_target(renderer_, target)) {
+            out_error = std::string("Failed to bind ") + (target ? "render target" : "backbuffer") +
+                        ": " + safe_string(SDL_GetError());
+            return false;
+        }
+        SDL_SetRenderViewport(renderer_, nullptr);
+        SDL_SetRenderClipRect(renderer_, nullptr);
+        SDL_SetRenderScale(renderer_, 1.0f, 1.0f);
+        return true;
+    };
 
     const SDL_Color transparent_clear{0, 0, 0, 0};
     const auto& camera_settings = assets_->getView().get_settings();
@@ -1789,6 +1797,28 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     bool dof_composited = false;
 
     if (dof_active) {
+        const std::uint64_t floor_begin = SDL_GetPerformanceCounter();
+        if (!bind_target(floor_target_, floor_clear_color)) {
+            render_diagnostics::end_frame();
+            return false;
+        }
+        if (!render_far_background(assets_->getView(),
+                                   frame_to_render->target_width,
+                                   frame_to_render->target_height,
+                                   out_error)) {
+            render_diagnostics::end_frame();
+            return false;
+        }
+        if (!render_packet_batch(frame_to_render->floor_draws,
+                                 frame_to_render->target_width,
+                                 frame_to_render->target_height,
+                                 out_error)) {
+            render_diagnostics::end_frame();
+            return false;
+        }
+        floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
+
+        const std::uint64_t dof_begin = SDL_GetPerformanceCounter();
         if (!ensure_depth_layer_targets(*frame_to_render, out_error)) {
             render_diagnostics::end_frame();
             return false;
@@ -1851,17 +1881,37 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             vibble::log::warn("[OpenGLRuntimeRenderer] DoF blur chain failed; falling back to non-DoF XY sprite composite for this frame.");
             render_diagnostics::set_blur_pass_count(0);
         }
+        dof_pass_ms += elapsed_ms(dof_begin, SDL_GetPerformanceCounter());
     } else {
         destroy_depth_layer_targets();
         render_diagnostics::set_blur_pass_count(0);
     }
 
     if (!dof_composited) {
-        if (!bind_target(xy_sprite_target_, transparent_clear)) {
+        if (!bind_target(composite_target_, floor_clear_color)) {
             render_diagnostics::end_frame();
             return false;
         }
 
+        const std::uint64_t floor_begin = SDL_GetPerformanceCounter();
+        if (!render_far_background(assets_->getView(),
+                                   frame_to_render->target_width,
+                                   frame_to_render->target_height,
+                                   out_error)) {
+            render_diagnostics::end_frame();
+            return false;
+        }
+        if (!frame_to_render->floor_draws.empty() &&
+            !render_packet_batch(frame_to_render->floor_draws,
+                                 frame_to_render->target_width,
+                                 frame_to_render->target_height,
+                                 out_error)) {
+            render_diagnostics::end_frame();
+            return false;
+        }
+        floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
+
+        const std::uint64_t xy_begin = SDL_GetPerformanceCounter();
         if (!frame_to_render->xy_sprite_draws.empty() &&
             !render_packet_batch(frame_to_render->xy_sprite_draws,
                                  frame_to_render->target_width,
@@ -1870,42 +1920,22 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             render_diagnostics::end_frame();
             return false;
         }
-
-        if (!bind_target(composite_target_, transparent_clear)) {
-            render_diagnostics::end_frame();
-            return false;
-        }
-
-        const SDL_FRect floor_full_rect{0.0f,
-                                        0.0f,
-                                        static_cast<float>(frame_to_render->target_width),
-                                        static_cast<float>(frame_to_render->target_height)};
-        if (floor_target_) {
-            if (!render_diagnostics::render_texture(renderer_, floor_target_, nullptr, &floor_full_rect)) {
-                out_error = "Failed to composite floor pass target: " + safe_string(SDL_GetError());
-                render_diagnostics::end_frame();
-                return false;
-            }
-        }
-        if (xy_sprite_target_) {
-            if (!render_diagnostics::render_texture(renderer_, xy_sprite_target_, nullptr, &floor_full_rect)) {
-                out_error = "Failed to composite XY sprite pass target: " + safe_string(SDL_GetError());
-                render_diagnostics::end_frame();
-                return false;
-            }
-        }
-        render_diagnostics::set_composite_layers_submitted("floor_pass->xy_sprite_pass->ui_overlay");
+        xy_pass_ms += elapsed_ms(xy_begin, SDL_GetPerformanceCounter());
+        render_diagnostics::set_composite_layers_submitted("direct_scene->ui_overlay");
     }
 
     if (frame_to_render->ui_overlay_texture) {
+        const std::uint64_t ui_begin = SDL_GetPerformanceCounter();
         if (!render_diagnostics::render_texture(renderer_, frame_to_render->ui_overlay_texture, nullptr, &full_rect)) {
             out_error = "Failed to composite UI overlay texture: " + safe_string(SDL_GetError());
             render_diagnostics::end_frame();
             return false;
         }
+        ui_overlay_ms += elapsed_ms(ui_begin, SDL_GetPerformanceCounter());
     }
 
-    if (!bind_target(nullptr, floor_clear_color)) {
+    const std::uint64_t backbuffer_begin = SDL_GetPerformanceCounter();
+    if (!bind_target_no_clear(nullptr)) {
         render_diagnostics::end_frame();
         return false;
     }
@@ -1914,7 +1944,22 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         render_diagnostics::end_frame();
         return false;
     }
+    backbuffer_ms = elapsed_ms(backbuffer_begin, SDL_GetPerformanceCounter());
 
+    const double submit_ms = elapsed_ms(frame_submit_begin, SDL_GetPerformanceCounter());
+    render_diagnostics::add_draw_submission_ms(submit_ms);
+    std::ostringstream stage_summary;
+    stage_summary << "frame_build=" << frame_build_ms
+                  << " ensure_targets=" << ensure_targets_ms
+                  << " floor=" << floor_pass_ms
+                  << " xy=" << xy_pass_ms
+                  << " dof=" << dof_pass_ms
+                  << " composite=" << composite_pass_ms
+                  << " ui_prepare=" << ui_overlay_prepare_ms
+                  << " ui_copy=" << ui_overlay_ms
+                  << " backbuffer=" << backbuffer_ms
+                  << " submit=" << submit_ms;
+    render_diagnostics::set_render_stage_timings(stage_summary.str());
     render_diagnostics::set_submit_result(true);
 
     if (!hold_incomplete_scene_frame &&

@@ -272,6 +272,11 @@ void AnimationInspectorPanel::set_source_png_sequence_picker(MultiPathPicker pic
     apply_dependencies();
 }
 
+void AnimationInspectorPanel::set_source_frame_import_handler(FrameImportHandler handler) {
+    frame_import_handler_ = std::move(handler);
+    apply_dependencies();
+}
+
 void AnimationInspectorPanel::set_source_status_callback(StatusCallback callback) {
     status_callback_ = std::move(callback);
     apply_dependencies();
@@ -1151,6 +1156,7 @@ void AnimationInspectorPanel::apply_dependencies() {
         source_config_->set_animation_picker(animation_picker_);
         source_config_->set_gif_picker(gif_picker_);
         source_config_->set_png_sequence_picker(png_sequence_picker_);
+        source_config_->set_frame_import_handler(frame_import_handler_);
         source_config_->set_status_callback(status_callback_);
 
         source_config_->set_on_source_changed([this](const SourceConfigPanel::SourceChangeEvent& event) {

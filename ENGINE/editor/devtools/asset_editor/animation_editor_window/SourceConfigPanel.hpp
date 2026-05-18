@@ -48,6 +48,12 @@ class SourceConfigPanel {
         SourceChangeReason reason = SourceChangeReason::SourceModeChanged;
     };
 
+    struct FrameImportResult {
+        bool success = false;
+        int frames_written = 0;
+        std::string message;
+    };
+
     void set_document(std::shared_ptr<AnimationDocument> document);
     void set_override_preview_provider(std::shared_ptr<PreviewProvider> provider);
     void set_animation_id(const std::string& animation_id);
@@ -57,11 +63,14 @@ class SourceConfigPanel {
     using PathPicker = std::function<std::optional<std::filesystem::path>()>;
     using MultiPathPicker = std::function<std::vector<std::filesystem::path>()>;
     using AnimationPicker = std::function<std::optional<std::string>()>;
+    using FrameImportHandler = std::function<FrameImportResult(const std::string&,
+                                                               const std::vector<std::filesystem::path>&)>;
 
     void set_folder_picker(PathPicker picker);
     void set_animation_picker(AnimationPicker picker);
     void set_gif_picker(PathPicker picker);
     void set_png_sequence_picker(MultiPathPicker picker);
+    void set_frame_import_handler(FrameImportHandler handler);
     void set_status_callback(std::function<void(const std::string&)> callback);
 
     void set_on_source_changed(std::function<void(const SourceChangeEvent&)> callback) {
@@ -135,6 +144,7 @@ class SourceConfigPanel {
     AnimationPicker animation_picker_;
     PathPicker gif_picker_;
     MultiPathPicker png_sequence_picker_;
+    FrameImportHandler frame_import_handler_;
 
     mutable bool payload_loaded_ = false;
     mutable bool reloading_ = false;

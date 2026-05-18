@@ -113,6 +113,10 @@ void SourceConfigPanel::set_gif_picker(PathPicker picker) { gif_picker_ = std::m
 
 void SourceConfigPanel::set_png_sequence_picker(MultiPathPicker picker) { png_sequence_picker_ = std::move(picker); }
 
+void SourceConfigPanel::set_frame_import_handler(FrameImportHandler handler) {
+    frame_import_handler_ = std::move(handler);
+}
+
 void SourceConfigPanel::set_status_callback(std::function<void(const std::string&)> callback) {
     status_callback_ = std::move(callback);
 }
@@ -944,23 +948,25 @@ void SourceConfigPanel::import_from_folder() {
         return;
     }
 
-    const std::filesystem::path out_dir = animation_output_directory();
-    auto import_result = devmode::frame_importer::import_frames_to_directory(files, out_dir);
-    if (!import_result.success()) {
-        const std::string message = import_result.error_message.empty()
+    if (!frame_import_handler_) {
+        update_status("Frame importer not configured");
+        return;
+    }
+
+    auto import_result = frame_import_handler_(animation_id_, files);
+    if (!import_result.success) {
+        const std::string message = import_result.message.empty()
             ? std::string{"No frames were imported"}
-            : import_result.error_message;
+            : import_result.message;
         SDL_Log("SourceConfigPanel[%s]: folder import failed: %s", animation_id_.c_str(), message.c_str());
         update_status("Import failed: " + message);
         return;
     }
 
-    SourceConfig config;
-    config.kind = "folder";
-    config.path = animation_id_;
-    config.name.reset();
-    apply_source_config(config);
-    update_status("Imported " + std::to_string(import_result.frames_written) + " frames from folder");
+    reload_from_document();
+    update_status(import_result.message.empty()
+                      ? "Imported " + std::to_string(import_result.frames_written) + " frames from folder"
+                      : import_result.message);
     if (on_source_changed_) {
         on_source_changed_(SourceChangeEvent{
             animation_id_,
@@ -1028,23 +1034,25 @@ void SourceConfigPanel::import_from_gif() {
         return;
     }
 
-    const std::filesystem::path out_dir = animation_output_directory();
-    auto import_result = devmode::frame_importer::import_gif_to_directory(*file, out_dir);
-    if (!import_result.success()) {
-        const std::string message = import_result.error_message.empty()
+    if (!frame_import_handler_) {
+        update_status("Frame importer not configured");
+        return;
+    }
+
+    auto import_result = frame_import_handler_(animation_id_, std::vector<std::filesystem::path>{*file});
+    if (!import_result.success) {
+        const std::string message = import_result.message.empty()
             ? std::string{"No GIF frames were imported"}
-            : import_result.error_message;
+            : import_result.message;
         SDL_Log("SourceConfigPanel[%s]: GIF import failed: %s", animation_id_.c_str(), message.c_str());
         update_status("Import failed: " + message);
         return;
     }
 
-    SourceConfig config;
-    config.kind = "folder";
-    config.path = animation_id_;
-    config.name.reset();
-    apply_source_config(config);
-    update_status("Imported " + std::to_string(import_result.frames_written) + " GIF frames");
+    reload_from_document();
+    update_status(import_result.message.empty()
+                      ? "Imported " + std::to_string(import_result.frames_written) + " GIF frames"
+                      : import_result.message);
     if (on_source_changed_) {
         on_source_changed_(SourceChangeEvent{
             animation_id_,
@@ -1076,23 +1084,25 @@ void SourceConfigPanel::import_from_png_sequence() {
         return;
     }
 
-    const std::filesystem::path out_dir = animation_output_directory();
-    auto import_result = devmode::frame_importer::import_frames_to_directory(normalize_sequence(filtered), out_dir);
-    if (!import_result.success()) {
-        const std::string message = import_result.error_message.empty()
+    if (!frame_import_handler_) {
+        update_status("Frame importer not configured");
+        return;
+    }
+
+    auto import_result = frame_import_handler_(animation_id_, normalize_sequence(filtered));
+    if (!import_result.success) {
+        const std::string message = import_result.message.empty()
             ? std::string{"No frames were imported"}
-            : import_result.error_message;
+            : import_result.message;
         SDL_Log("SourceConfigPanel[%s]: image sequence import failed: %s", animation_id_.c_str(), message.c_str());
         update_status("Import failed: " + message);
         return;
     }
 
-    SourceConfig config;
-    config.kind = "folder";
-    config.path = animation_id_;
-    config.name.reset();
-    apply_source_config(config);
-    update_status("Imported " + std::to_string(import_result.frames_written) + " image frames");
+    reload_from_document();
+    update_status(import_result.message.empty()
+                      ? "Imported " + std::to_string(import_result.frames_written) + " image frames"
+                      : import_result.message);
     if (on_source_changed_) {
         on_source_changed_(SourceChangeEvent{
             animation_id_,

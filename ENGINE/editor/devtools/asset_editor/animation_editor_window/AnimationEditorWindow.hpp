@@ -136,6 +136,12 @@ class AnimationEditorWindow {
         }
     };
 
+    struct SourceFrameImportOutcome {
+        bool success = false;
+        int frames_written = 0;
+        std::string message;
+    };
+
     void handle_document_saved();
     void layout_children();
     LayoutState compute_layout_state() const;
@@ -190,6 +196,9 @@ class AnimationEditorWindow {
     bool defaults_base_faces_right() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
+    SourceFrameImportOutcome import_source_frames_for_animation(
+        const std::string& animation_id,
+        const std::vector<std::filesystem::path>& frames);
     bool remove_animation_source_folder(const std::string& animation_id, std::string& error_message);
     bool invalidate_asset_cache_now(std::string& error_message);
     nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id,

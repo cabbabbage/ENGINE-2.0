@@ -1044,7 +1044,9 @@ void AnimationEditorWindow::clear_info() {
     asset_root_path_.clear();
     load_diagnostics_ = {};
     close_manifest_transaction();
+    close_create_animation_modal();
     close_defaults_modal();
+    create_animation_modal_lifecycle_ = ModalLifecycleState::Closed;
     defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
     pending_external_action_.clear();
     first_render_completed_ = false;
@@ -1067,6 +1069,7 @@ void AnimationEditorWindow::clear_info() {
 void AnimationEditorWindow::layout_children() {
     layout_dirty_ = false;
     apply_layout_state(compute_layout_state());
+    layout_create_animation_modal();
     layout_defaults_modal();
     sync_modal_lifecycle_with_layout();
 }
@@ -1163,9 +1166,26 @@ void AnimationEditorWindow::apply_layout_state(const LayoutState& state) {
 
 void AnimationEditorWindow::sync_modal_lifecycle_with_layout() {
     if (!visible_) {
+        create_animation_modal_lifecycle_ = ModalLifecycleState::Closed;
+        create_animation_modal_visible_ = false;
         defaults_modal_lifecycle_ = ModalLifecycleState::Closed;
         defaults_modal_visible_ = false;
         return;
+    }
+    if (create_animation_modal_lifecycle_ == ModalLifecycleState::OpenReady && !create_animation_modal_bounds_valid()) {
+        create_animation_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
+        create_animation_modal_visible_ = false;
+        create_animation_modal_open_deferred_ = true;
+        set_status_message("Create Animation waiting for valid editor layout.", 180);
+    } else if (create_animation_modal_lifecycle_ == ModalLifecycleState::OpenPendingLayout &&
+               create_animation_modal_bounds_valid()) {
+        create_animation_modal_lifecycle_ = ModalLifecycleState::OpenReady;
+        create_animation_modal_visible_ = true;
+        create_animation_modal_open_deferred_ = false;
+        layout_create_animation_modal();
+    } else if (create_animation_modal_lifecycle_ == ModalLifecycleState::Closing) {
+        create_animation_modal_lifecycle_ = ModalLifecycleState::Closed;
+        create_animation_modal_visible_ = false;
     }
     if (defaults_modal_lifecycle_ == ModalLifecycleState::OpenReady && !defaults_modal_bounds_valid()) {
         defaults_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
@@ -1199,7 +1219,7 @@ void AnimationEditorWindow::configure_list_panel() {
                                 animation_id ? ("selected:" + *animation_id) : std::string("selected:<none>"));
         this->select_animation(animation_id, true);
     });
-    list_panel_->set_on_context_menu([this](const std::string& animation_id, const SDL_Point& location) {
+    list_panel_->set_on_context_menu([this](const std::optional<std::string>& animation_id, const SDL_Point& location) {
         this->handle_list_context_menu(animation_id, location);
     });
     list_panel_->set_on_delete_animation([this](const std::string& animation_id) {
@@ -1297,7 +1317,7 @@ void AnimationEditorWindow::ensure_selection_valid() {
     select_animation(candidate, false);
 }
 
-void AnimationEditorWindow::handle_list_context_menu(const std::string& animation_id, const SDL_Point& location) {
+void AnimationEditorWindow::handle_list_context_menu(const std::optional<std::string>& animation_id, const SDL_Point& location) {
     if (!document_) {
         return;
     }
@@ -1305,27 +1325,39 @@ void AnimationEditorWindow::handle_list_context_menu(const std::string& animatio
         list_context_menu_ = std::make_unique<AnimationListContextMenu>();
     }
 
-    select_animation(std::make_optional(animation_id), false);
     std::vector<AnimationListContextMenu::Option> options;
     options.push_back(AnimationListContextMenu::Option{
-        "Rename...",
-        [this, animation_id]() { this->prompt_rename_animation(animation_id); },
+        "Create New Animation",
+        [this]() { this->open_create_animation_modal(); },
     });
     options.push_back(AnimationListContextMenu::Option{
-        "Set as start",
-        [this, animation_id]() { this->set_animation_as_start(animation_id); },
-    });
-    options.push_back(AnimationListContextMenu::Option{
-        "Duplicate",
-        [this, animation_id]() { this->duplicate_animation(animation_id); },
-    });
-    options.push_back(AnimationListContextMenu::Option{
-        "Delete",
-        [this, animation_id]() { this->delete_animation_with_confirmation(animation_id); },
+        "Create Default Animations",
+        [this]() { this->open_defaults_modal(); },
     });
 
+    if (animation_id) {
+        select_animation(animation_id, false);
+        const std::string row_id = *animation_id;
+        options.push_back(AnimationListContextMenu::Option{
+            "Rename...",
+            [this, row_id]() { this->prompt_rename_animation(row_id); },
+        });
+        options.push_back(AnimationListContextMenu::Option{
+            "Set as start",
+            [this, row_id]() { this->set_animation_as_start(row_id); },
+        });
+        options.push_back(AnimationListContextMenu::Option{
+            "Duplicate",
+            [this, row_id]() { this->duplicate_animation(row_id); },
+        });
+        options.push_back(AnimationListContextMenu::Option{
+            "Delete",
+            [this, row_id]() { this->delete_animation_with_confirmation(row_id); },
+        });
+    }
+
     list_context_menu_->open(bounds_, location, std::move(options));
-    set_status_message("Context menu for '" + animation_id + "'.", 90);
+    set_status_message(animation_id ? ("Context menu for '" + *animation_id + "'.") : "Animation list actions.", 90);
 }
 
 void AnimationEditorWindow::update(const Input& input, int screen_w, int screen_h) {
@@ -1343,6 +1375,7 @@ void AnimationEditorWindow::update(const Input& input, int screen_w, int screen_
     }
 
     ensure_layout();
+    maybe_retry_deferred_create_animation_modal();
     maybe_retry_deferred_defaults_modal();
     (void)flush_pending_external_action();
 
@@ -1384,6 +1417,9 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     }
 
     DMDropdown::render_active_options(renderer);
+    if (create_animation_modal_actionable()) {
+        render_create_animation_modal(renderer);
+    }
     if (defaults_modal_actionable()) {
         render_defaults_modal(renderer);
     }
@@ -1398,6 +1434,11 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
 
     ensure_layout();
 
+    if (create_animation_modal_lifecycle_ == ModalLifecycleState::OpenReady && !create_animation_modal_bounds_valid()) {
+        create_animation_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
+        create_animation_modal_visible_ = false;
+        create_animation_modal_open_deferred_ = true;
+    }
     if (defaults_modal_lifecycle_ == ModalLifecycleState::OpenReady && !defaults_modal_bounds_valid()) {
         defaults_modal_lifecycle_ = ModalLifecycleState::OpenPendingLayout;
         defaults_modal_visible_ = false;
@@ -1427,7 +1468,18 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
     const bool pointer_in_inspector = has_pointer && SDL_PointInRect(&mp, &inspector_rect_);
     const bool pointer_in_window = has_pointer && SDL_PointInRect(&mp, &bounds_);
 
-    // 1) Active actionable modal always wins.
+    // 1) Active actionable create-animation modal always wins.
+    if (create_animation_modal_actionable()) {
+        last_event_route_ = "create_animation_modal";
+        if (handle_create_animation_modal_event(e)) {
+            return true;
+        }
+        if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT || pointer_or_wheel_event) {
+            return true;
+        }
+    }
+
+    // 2) Active actionable defaults modal wins after create-animation modal.
     if (defaults_modal_actionable()) {
         last_event_route_ = "modal";
         if (handle_defaults_modal_event(e)) {
@@ -1438,7 +1490,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
-    // 2) List context menu owns input while open.
+    // 3) List context menu owns input while open.
     if (list_context_menu_ && list_context_menu_->is_open()) {
         last_event_route_ = "list_context_menu";
         if (list_context_menu_->handle_event(e)) {
@@ -1461,7 +1513,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
-    // 3) Route pointer events to list first when pointer is inside list.
+    // 4) Route pointer events to list first when pointer is inside list.
     if (list_panel_ && pointer_in_list) {
         last_event_route_ = "list";
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -1475,7 +1527,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
-    // 4) Inspector handles pointer events only while pointer is inside inspector.
+    // 5) Inspector handles pointer events only while pointer is inside inspector.
     if (inspector_panel_ && selected_animation_id_) {
         if (pointer_in_inspector && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             last_event_route_ = "inspector";
@@ -1489,7 +1541,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
-    // 5) Non-pointer list events (e.g. keyboard navigation in future).
+    // 6) Non-pointer list events (e.g. keyboard navigation in future).
     if (list_panel_ && !has_pointer && list_panel_->handle_event(e)) {
         last_event_route_ = "list_non_pointer";
         return true;

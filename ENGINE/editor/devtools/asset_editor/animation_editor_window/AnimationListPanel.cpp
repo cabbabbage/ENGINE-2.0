@@ -256,7 +256,7 @@ void AnimationListPanel::set_on_selection_changed(
 }
 
 void AnimationListPanel::set_on_context_menu(
-    std::function<void(const std::string&, const SDL_Point&)> callback) {
+    std::function<void(const std::optional<std::string>&, const SDL_Point&)> callback) {
     on_context_menu_ = std::move(callback);
 }
 
@@ -431,6 +431,9 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         if (hit.target == HitTarget::Empty || !hit.row_index) {
             SDL_Log("[AnimationListPanel] Click hit empty list area; rows=%d bounds=%d,%d %dx%d point=%d,%d",
                     static_cast<int>(display_rows_.size()), bounds_.x, bounds_.y, bounds_.w, bounds_.h, p.x, p.y);
+            if (e.button.button == SDL_BUTTON_RIGHT && on_context_menu_) {
+                on_context_menu_(std::nullopt, p);
+            }
             return true;
         }
 
@@ -454,7 +457,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
 
         if (e.button.button == SDL_BUTTON_RIGHT) {
             if (on_context_menu_) {
-                on_context_menu_(animation_id, p);
+                on_context_menu_(std::make_optional(animation_id), p);
             }
             return true;
         }

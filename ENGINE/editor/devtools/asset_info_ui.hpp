@@ -92,9 +92,7 @@ class AssetInfoUI {
   private:
     enum class PendingAnimationEditorAction {
         None,
-        AddAnimation,
         Controller,
-        CreateDefaults,
     };
 
     struct PendingAnimationEditorActionRequest {
@@ -171,12 +169,8 @@ class AssetInfoUI {
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
-    std::unique_ptr<class DMButton> add_animation_btn_;
-    std::unique_ptr<class ButtonWidget> add_animation_btn_widget_;
     std::unique_ptr<class DMButton> controller_action_btn_;
     std::unique_ptr<class ButtonWidget> controller_action_btn_widget_;
-    std::unique_ptr<class DMButton> create_defaults_btn_;
-    std::unique_ptr<class ButtonWidget> create_defaults_btn_widget_;
     std::unique_ptr<class DMButton> duplicate_btn_;
     std::unique_ptr<class ButtonWidget> duplicate_btn_widget_;
     std::unique_ptr<class DMButton> delete_btn_;

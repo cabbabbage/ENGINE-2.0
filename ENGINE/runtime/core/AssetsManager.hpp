@@ -330,6 +330,27 @@ public:
     std::size_t test_live_dynamic_spawn_budget() const;
     void test_set_live_dynamic_budget_target_ms(double target_ms);
     void test_reset_live_dynamic_budget_state();
+    void test_apply_live_dynamic_budget_sample_ms(double frame_elapsed_ms);
+    struct LiveDynamicSyncSnapshot {
+        std::size_t selector_state = 0;
+        std::size_t pending_qualification = 0;
+        std::size_t pending_spawn = 0;
+        std::size_t spawned_keys = 0;
+        std::size_t null_keys = 0;
+        std::size_t points_scanned = 0;
+        std::size_t points_qualified = 0;
+        std::size_t spawn_attempts = 0;
+        std::size_t successful_spawns = 0;
+        std::size_t despawns = 0;
+        std::size_t occupancy_cache_size = 0;
+        std::size_t room_cache_size = 0;
+        std::size_t occupancy_cache_hits = 0;
+        std::size_t occupancy_cache_misses = 0;
+        std::size_t scan_budget = 0;
+        std::size_t spawn_budget = 0;
+        double sync_ema_ms = 0.0;
+    };
+    LiveDynamicSyncSnapshot test_live_dynamic_snapshot() const;
 
 private:
     void save_map_info_json();
@@ -555,13 +576,39 @@ private:
         std::uint64_t perf_freq = 0;
         double target_ms = 0.1;
     };
+    struct LiveDynamicCandidate;
+    struct LiveDynamicCompiledSelector;
+    struct LiveDynamicPointKey;
+    struct LiveDynamicSpawnTask;
     struct LiveDynamicSyncContext;
     LiveDynamicSyncContext collect_sync_context(const world::GridBounds& render_bounds);
     void prune_out_of_bounds_dynamic_assets(const LiveDynamicSyncContext& context);
-    void refresh_selector_frontiers(const LiveDynamicSyncContext& context);
-    void qualify_points(const LiveDynamicSyncContext& context, const LiveDynamicSyncTiming& timing);
-    void spawn_qualified_tasks(LiveDynamicSyncContext& context, const LiveDynamicSyncTiming& timing);
-    void update_adaptive_budget_metrics(const LiveDynamicSyncContext& context, const LiveDynamicSyncTiming& timing);
+    void refresh_selector_frontiers(LiveDynamicSyncContext& context);
+    void qualify_points(LiveDynamicSyncContext& context);
+    void spawn_qualified_tasks(LiveDynamicSyncContext& context);
+    void update_adaptive_budget_metrics(LiveDynamicSyncContext& context);
+    void apply_live_dynamic_budget_sample(double frame_elapsed_ms, double target_ms);
+    bool live_dynamic_sync_budget_hit(const LiveDynamicSyncContext& context) const;
+    bool live_dynamic_in_world_bounds(int world_x,
+                                      int world_z,
+                                      int min_world_x,
+                                      int max_world_x,
+                                      int min_world_z,
+                                      int max_world_z) const;
+    const LiveDynamicCandidate* pick_live_dynamic_candidate(const LiveDynamicCompiledSelector& selector,
+                                                            const LiveDynamicPointKey& key) const;
+    SDL_Point live_dynamic_jittered_world_point(const LiveDynamicCompiledSelector& selector,
+                                                const LiveDynamicPointKey& key,
+                                                SDL_Point base_point) const;
+    bool room_contains_live_dynamic_area(const Room* room, SDL_Point point) const;
+    Room* room_for_live_dynamic_point(SDL_Point point, bool require_inherited, bool& inside_any_room);
+    bool point_in_live_dynamic_boundary_area(SDL_Point point, bool inside_any_room, SDL_Point boundary_center_world) const;
+    bool evaluate_live_dynamic_spawn_point(LiveDynamicSyncContext& context,
+                                           const LiveDynamicPointKey& key,
+                                           int owner_anchor_world_x,
+                                           int owner_anchor_world_z,
+                                           std::string* out_owner_name = nullptr);
+    bool spawn_live_dynamic_asset(const LiveDynamicSpawnTask& task);
     world::GridBounds runtime_work_bounds_from_render_bounds(const world::GridBounds& render_bounds);
     bool should_run_live_dynamic_sync_for_bounds(const world::GridBounds& work_bounds, bool allow_live_dynamic_sync);
     void clear_live_dynamic_assets();
@@ -911,15 +958,32 @@ private:
         std::size_t new_spawn_cap = 0;
         std::size_t total_spawn_cap = 0;
         std::uint64_t bounds_generation = 0;
+        std::uint64_t sync_start = 0;
+        std::uint64_t perf_start = 0;
         LiveDynamicQualifiedPointOrder point_order{};
         std::unordered_map<LiveDynamicSelectorStateKey, const LiveDynamicCompiledSelector*, LiveDynamicSelectorStateKeyHash> selector_lookup;
-        std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash>* persistent_occupancy_cache = nullptr;
-        std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash>* persistent_room_cache = nullptr;
+        std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash> occupancy_cache;
+        std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> room_cache;
+        LiveDynamicSyncTiming timing{};
+        std::size_t selector_state_size_before = 0;
+        std::size_t qualification_queue_size_before = 0;
+        std::size_t spawn_queue_size_before = 0;
+        std::size_t spawned_keys_size_before = 0;
         std::size_t qualified_this_frame = 0;
         std::size_t spawned_this_frame = 0;
         std::size_t points_scanned_this_frame = 0;
         std::size_t spawn_attempts_this_frame = 0;
+        std::size_t rejected_occupied = 0;
+        std::size_t rejected_bounds = 0;
+        std::size_t rejected_room = 0;
+        std::size_t rejected_already_spawned = 0;
         std::size_t despawns_this_frame = 0;
+        double stage_a_ms = 0.0;
+        double stage_b_ms = 0.0;
+        double stage_c_ms = 0.0;
+        double stage_d_ms = 0.0;
+        double stage_e_ms = 0.0;
+        double stage_f_ms = 0.0;
         bool valid = false;
     };
 
@@ -965,4 +1029,9 @@ private:
     int last_live_dynamic_sync_bounds_max_x_ = 0;
     int last_live_dynamic_sync_bounds_min_z_ = 0;
     int last_live_dynamic_sync_bounds_max_z_ = 0;
+    std::size_t live_dynamic_last_points_scanned_ = 0;
+    std::size_t live_dynamic_last_points_qualified_ = 0;
+    std::size_t live_dynamic_last_spawn_attempts_ = 0;
+    std::size_t live_dynamic_last_successful_spawns_ = 0;
+    std::size_t live_dynamic_last_despawns_ = 0;
 };

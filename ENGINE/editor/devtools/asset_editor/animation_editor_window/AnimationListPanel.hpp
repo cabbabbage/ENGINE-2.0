@@ -26,7 +26,7 @@ class AnimationListPanel {
     void set_preview_provider(std::shared_ptr<PreviewProvider> provider);
     void set_selected_animation_id(const std::optional<std::string>& animation_id);
     void set_on_selection_changed(std::function<void(const std::optional<std::string>&)> callback);
-    void set_on_context_menu(std::function<void(const std::string&, const SDL_Point&)> callback);
+    void set_on_context_menu(std::function<void(const std::optional<std::string>&, const SDL_Point&)> callback);
     void set_on_delete_animation(std::function<void(const std::string&)> callback);
 
     void update();
@@ -80,7 +80,7 @@ class AnimationListPanel {
     std::optional<std::string> start_animation_id_;
     std::shared_ptr<PreviewProvider> preview_provider_;
     std::function<void(const std::optional<std::string>&)> on_selection_changed_;
-    std::function<void(const std::string&, const SDL_Point&)> on_context_menu_;
+    std::function<void(const std::optional<std::string>&, const SDL_Point&)> on_context_menu_;
     std::function<void(const std::string&)> on_delete_animation_;
     std::optional<std::string> selected_animation_id_;
     std::optional<size_t> hovered_row_;

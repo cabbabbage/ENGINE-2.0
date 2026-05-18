@@ -26242,7 +26242,7 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 2069.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
         "layer_depth_curve": 68.61000061035156,
@@ -26270,9 +26270,9 @@
       "content_root": "content/forrest",
       "dev_map_settings": {
         "default_floor_color": [
-          83,
-          138,
-          52
+          125,
+          198,
+          84
         ],
         "map_color": [
           0,
@@ -26286,7 +26286,7 @@
           {
             "candidates": [
               {
-                "chance": 24,
+                "chance": 40,
                 "name": "null"
               },
               {
@@ -26324,11 +26324,11 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "max_spawn_from_room": 128,
+        "max_spawn_from_room": 250,
         "regen_seed": 2
       },
       "map_grid_settings": {
-        "grid_resolution": 6,
+        "grid_resolution": 8,
         "position_jitter_px": 0,
         "tile_step_px": 0
       },
@@ -26395,7 +26395,7 @@
           "display_color": [
             36,
             242,
-            129,
+            240,
             255
           ],
           "edge_smoothness": 101,
@@ -26482,9 +26482,9 @@
             }
           },
           "display_color": [
-            242,
-            127,
-            85,
+            140,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26541,9 +26541,9 @@
             }
           },
           "display_color": [
-            44,
-            204,
             31,
+            204,
+            37,
             255
           ],
           "edge_smoothness": 4,
@@ -26601,8 +26601,8 @@
           },
           "display_color": [
             242,
-            36,
-            131,
+            117,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26689,9 +26689,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            216,
+            71,
+            178,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26753,9 +26753,9 @@
             }
           },
           "display_color": [
-            204,
-            179,
-            31,
+            242,
+            36,
+            103,
             255
           ],
           "edge_smoothness": 70,
@@ -26836,10 +26836,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -4115,
-          "camera_center_dz": -2164,
+          "camera_center_dx": -1596,
+          "camera_center_dz": -5885,
           "camera_height_px": 700,
-          "camera_tilt_deg": 35.415428161621094,
+          "camera_tilt_deg": 17.815427780151367,
           "camera_zoom_percent": 100,
           "curvyness": {
             "center": 2,
@@ -26853,9 +26853,9 @@
             }
           },
           "display_color": [
-            104,
-            85,
-            242,
+            204,
+            160,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27233,9 +27233,9 @@
             }
           },
           "display_color": [
-            204,
-            102,
-            31,
+            168,
+            79,
+            224,
             255
           ],
           "edge_smoothness": 96,

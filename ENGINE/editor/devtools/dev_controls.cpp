@@ -42,6 +42,7 @@
 #include "DockManager.hpp"
 #include "devtools/dev_footer_bar.hpp"
 #include "devtools/camera_ui.hpp"
+#include "devtools/frame_importer.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/sdl_pointer_utils.hpp"
 #include "devtools/dev_ui_settings.hpp"
@@ -328,7 +329,7 @@ bool has_any_extension_ci(const std::filesystem::path& path, std::initializer_li
 }
 
 bool is_supported_image_file(const std::filesystem::path& path) {
-    return has_any_extension_ci(path, {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"});
+    return devmode::frame_importer::is_supported_image_file(path);
 }
 
 std::vector<std::filesystem::path> collect_existing_drop_items(const std::vector<std::filesystem::path>& raw_items) {
@@ -346,29 +347,7 @@ std::vector<std::filesystem::path> collect_existing_drop_items(const std::vector
 }
 
 std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) {
-    std::vector<std::filesystem::path> normalized = files;
-
-    auto numeric_key = [](const std::filesystem::path& p) {
-        std::string stem = p.stem().string();
-        try {
-            return std::make_tuple(0, std::stoi(stem), vibble::strings::to_lower_copy(stem));
-        } catch (...) {
-            std::smatch match;
-            static const std::regex kNumber{"(\\d+)", std::regex::icase};
-            if (std::regex_search(stem, match, kNumber)) {
-                try {
-                    return std::make_tuple(0, std::stoi(match.str(1)), vibble::strings::to_lower_copy(stem));
-                } catch (...) {
-                }
-            }
-        }
-        return std::make_tuple(1, 0, vibble::strings::to_lower_copy(stem));
-    };
-
-    std::sort(normalized.begin(), normalized.end(), [&](const auto& lhs, const auto& rhs) {
-        return numeric_key(lhs) < numeric_key(rhs);
-    });
-    return normalized;
+    return devmode::frame_importer::normalize_sequence(files);
 }
 
 struct DropValidationResult {
@@ -477,14 +456,10 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
             result.valid = true;
             return result;
         }
-        if (has_extension_ci(only, ".png")) {
+        if (is_supported_image_file(only)) {
             result.kind = DropKind::SinglePng;
             result.files = {only};
             result.valid = true;
-            return result;
-        }
-        if (is_supported_image_file(only)) {
-            result.reason = "Only PNG or GIF files are accepted";
             return result;
         }
         result.reason = "Unsupported file type";
@@ -2794,14 +2769,14 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
             req.folder = validation.folder;
             req.drop_screen = drop_point_from_event(event);
             if (req.kind == DropContentKind::MultiImages) {
-                bool all_png = !req.files.empty();
+                bool all_images = !req.files.empty();
                 for (const auto& p : req.files) {
-                    if (!has_extension_ci(p, ".png")) {
-                        all_png = false;
+                    if (!is_supported_image_file(p)) {
+                        all_images = false;
                         break;
                     }
                 }
-                if (all_png) {
+                if (all_images) {
                     open_drop_choice_modal(req);
                 } else {
                     open_drop_modal(req);
@@ -3092,7 +3067,7 @@ void DevControls::render_drop_choice_modal(SDL_Renderer* renderer) {
                              DMStyles::HighlightIntensity(),
                              DMStyles::ShadowIntensity());
     DrawLabelText(renderer,
-                  "Import dropped PNG files",
+                  "Import dropped image files",
                   drop_choice_modal_.modal_rect.x + 16,
                   drop_choice_modal_.modal_rect.y + 8,
                   DMStyles::Label());
@@ -3237,100 +3212,32 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         return false;
     }
 
-    int frames_written = 0;
-    auto copy_sequence = [&](const std::vector<std::filesystem::path>& seq_files) {
-        for (size_t i = 0; i < seq_files.size(); ++i) {
-            std::filesystem::path dst = default_dir / (std::to_string(i) + ".png");
-            try {
-                const std::filesystem::path& src = seq_files[i];
-                bool wrote = false;
-                if (has_extension_ci(src, ".png")) {
-                    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing);
-                    wrote = true;
-                } else {
-                    int w = 0;
-                    int h = 0;
-                    int comp = 0;
-                    stbi_uc* pixels = stbi_load(src.string().c_str(), &w, &h, &comp, STBI_rgb_alpha);
-                    if (pixels && w > 0 && h > 0) {
-                        wrote = stbi_write_png(dst.string().c_str(), w, h, STBI_rgb_alpha, pixels, w * STBI_rgb_alpha) != 0;
-                    }
-                    if (pixels) {
-                        stbi_image_free(pixels);
-                    }
-                }
-                if (wrote) {
-                    ++frames_written;
-                } else {
-                    SDL_Log("[DevControls] Failed to convert/copy frame %s -> %s",
-                            src.string().c_str(), dst.string().c_str());
-                }
-            } catch (const std::exception& ex) {
-                SDL_Log("[DevControls] Failed to copy %s -> %s: %s",
-                        seq_files[i].string().c_str(), dst.string().c_str(), ex.what());
-            }
-        }
-    };
-
+    devmode::frame_importer::FrameImportResult import_result;
     switch (validation.kind) {
     case DropContentKind::SinglePng:
     case DropContentKind::MultiImages:
     case DropContentKind::PngFolder:
-        copy_sequence(validation.files);
+        import_result = devmode::frame_importer::import_frames_to_directory(validation.files, default_dir);
         break;
     case DropContentKind::Gif: {
         const std::filesystem::path gif_path = !validation.files.empty() ? validation.files.front() : std::filesystem::path{};
-        std::vector<unsigned char> bytes;
-        try {
-            std::ifstream in(gif_path, std::ios::binary);
-            in.unsetf(std::ios::skipws);
-            bytes.insert(bytes.begin(), std::istream_iterator<unsigned char>(in), std::istream_iterator<unsigned char>());
-        } catch (...) {
-            bytes.clear();
-        }
-        if (bytes.empty()) {
-            error_out = "Failed to read GIF file.";
-            cleanup_on_failure();
-            return false;
-        }
-        int x = 0, y = 0, z = 0, comp = 0;
-        int* delays = nullptr;
-        stbi_uc* data = stbi_load_gif_from_memory(bytes.data(), static_cast<int>(bytes.size()), &delays, &x, &y, &z, &comp, STBI_rgb_alpha);
-        if (!data || x <= 0 || y <= 0 || z <= 0) {
-            if (data) stbi_image_free(data);
-            if (delays) stbi_image_free(delays);
-            error_out = "Failed to decode GIF frames.";
-            cleanup_on_failure();
-            return false;
-        }
-        const int channels = 4;
-        const int stride = x * channels;
-        for (int i = 0; i < z; ++i) {
-            std::filesystem::path dst = default_dir / (std::to_string(i) + ".png");
-            const stbi_uc* frame = data + static_cast<std::size_t>(i) * static_cast<std::size_t>(x) * static_cast<std::size_t>(y) * channels;
-            int ok = 0;
-            try {
-                ok = stbi_write_png(dst.string().c_str(), x, y, channels, frame, stride);
-            } catch (...) {
-                ok = 0;
-            }
-            if (ok) {
-                ++frames_written;
-            }
-        }
-        stbi_image_free(data);
-        if (delays) stbi_image_free(delays);
+        import_result = devmode::frame_importer::import_gif_to_directory(gif_path, default_dir);
         break;
     }
     default:
         break;
     }
 
-    if (frames_written <= 0) {
-        error_out = "No frames were imported.";
+    for (const auto& warning : import_result.warnings) {
+        SDL_Log("[DevControls] Frame import warning for '%s': %s", sanitized.c_str(), warning.c_str());
+    }
+
+    if (!import_result.success()) {
+        error_out = import_result.error_message.empty() ? "No frames were imported." : import_result.error_message;
         cleanup_on_failure();
         return false;
     }
+    const int frames_written = import_result.frames_written;
 
     nlohmann::json default_anim = {
         {"on_end", "default"},

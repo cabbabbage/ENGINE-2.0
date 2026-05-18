@@ -46,6 +46,7 @@
 
 #include "assets/asset/asset_info.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/frame_importer.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/widgets.hpp"
@@ -2659,12 +2660,13 @@ void AnimationEditorWindow::handle_pick_defaults_base_frames() {
     std::vector<std::filesystem::path> filtered;
     filtered.reserve(picked.size());
     for (const auto& path : picked) {
-        if (has_extension_ci(path, ".png")) {
+        if (devmode::frame_importer::is_supported_image_file(path) &&
+            !devmode::frame_importer::is_gif_file(path)) {
             filtered.push_back(path);
         }
     }
     if (filtered.empty()) {
-        set_status_message("No PNG frames selected.", 180);
+        set_status_message("No supported image frames selected.", 180);
         return;
     }
 
@@ -2706,49 +2708,25 @@ bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& a
     }
 
     std::filesystem::path output_dir = asset_root_path_ / animation_id;
-    std::error_code ec;
-    std::filesystem::create_directories(output_dir, ec);
-    if (ec) {
+    auto result = devmode::frame_importer::import_frames_to_directory(frames, output_dir);
+    if (!result.success()) {
+        const std::string message = result.error_message.empty()
+            ? std::string{"No frames were imported."}
+            : result.error_message;
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "[AnimationEditor] Failed to prepare output folder '%s': %s",
+                     "[AnimationEditor] Failed to import frames into '%s': %s",
                      output_dir.generic_string().c_str(),
-                     ec.message().c_str());
+                     message.c_str());
         return false;
     }
 
-    for (const auto& entry : std::filesystem::directory_iterator(output_dir, ec)) {
-        if (ec) break;
-        if (!entry.is_regular_file()) continue;
-        if (!has_extension_ci(entry.path(), ".png")) continue;
-        std::error_code remove_ec;
-        std::filesystem::remove(entry.path(), remove_ec);
+    for (const auto& warning : result.warnings) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor] Frame import warning for '%s': %s",
+                    animation_id.c_str(),
+                    warning.c_str());
     }
-    ec.clear();
-
-    int copied = 0;
-    for (const auto& source : frames) {
-        if (!std::filesystem::exists(source, ec) || !std::filesystem::is_regular_file(source, ec)) {
-            ec.clear();
-            continue;
-        }
-        if (!has_extension_ci(source, ".png")) {
-            continue;
-        }
-        std::filesystem::path destination = output_dir / (std::to_string(copied) + ".png");
-        std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing, ec);
-        if (!ec) {
-            ++copied;
-        } else {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "[AnimationEditor] Failed to copy '%s' -> '%s': %s",
-                        source.generic_string().c_str(),
-                        destination.generic_string().c_str(),
-                        ec.message().c_str());
-            ec.clear();
-        }
-    }
-
-    return copied > 0;
+    return true;
 }
 
 bool AnimationEditorWindow::remove_animation_source_folder(const std::string& animation_id,
@@ -2945,16 +2923,21 @@ void AnimationEditorWindow::handle_create_defaults() {
     if (defaults_base_frame_paths_.empty()) {
         handle_pick_defaults_base_frames();
         if (defaults_base_frame_paths_.empty()) {
-            devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base PNG frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
+            devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base image frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
             return;
         }
     }
 
     std::vector<std::filesystem::path> base_frames;
-    for (const auto& path : defaults_base_frame_paths_) if (has_extension_ci(path, ".png")) base_frames.push_back(path);
+    for (const auto& path : defaults_base_frame_paths_) {
+        if (devmode::frame_importer::is_supported_image_file(path) &&
+            !devmode::frame_importer::is_gif_file(path)) {
+            base_frames.push_back(path);
+        }
+    }
     if (base_frames.empty()) {
-        set_status_message("Select at least one base PNG frame.", 180);
-        devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base PNG frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
+        set_status_message("Select at least one base image frame.", 180);
+        devmode::dialogs::show_message(parent_window_, "Create Defaults", "Select at least one base image frame before creating default animations.", devmode::dialogs::MessageIcon::Warning);
         return;
     }
     base_frames = normalize_sequence_paths(base_frames);
@@ -3114,7 +3097,7 @@ void AnimationEditorWindow::handle_create_defaults() {
                             ec.message().c_str());
             }
         }
-        if (error == DefaultsStageError::CopyFailure) set_status_message("Create defaults failed while copying source frames. Check source PNGs and write permissions.", 300);
+        if (error == DefaultsStageError::CopyFailure) set_status_message("Create defaults failed while importing source frames. Check source images and write permissions.", 300);
         else if (error == DefaultsStageError::PayloadWriteFailure) set_status_message("Create defaults failed while writing animation payloads. No partial defaults were kept.", 300);
         else set_status_message("Create defaults failed: a source dependency was missing.", 300);
         return;
@@ -3827,9 +3810,9 @@ std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() co
         return png_sequence_picker_override_();
     }
     return devmode::dialogs::open_files(parent_window_,
-                                        "Upload PNG",
+                                        "Upload Images",
                                         asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_,
-                                        {devmode::dialogs::FileDialogFilter{"PNG Images", "png"}},
+                                        {devmode::dialogs::FileDialogFilter{"Image Files", "png;jpg;jpeg;bmp;webp;gif"}},
                                         true);
 }
 

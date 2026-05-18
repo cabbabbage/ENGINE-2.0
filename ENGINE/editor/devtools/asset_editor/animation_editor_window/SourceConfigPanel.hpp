@@ -107,9 +107,8 @@ class SourceConfigPanel {
     std::filesystem::path animation_output_directory() const;
     bool prepare_output_directory(std::filesystem::path* out_dir) const;
     bool clean_output_frames() const;
-    std::vector<std::filesystem::path> collect_png_files(const std::filesystem::path& folder) const;
+    std::vector<std::filesystem::path> collect_image_files(const std::filesystem::path& folder) const;
     std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) const;
-    void copy_sequence_to_output(const std::vector<std::filesystem::path>& files, const std::filesystem::path& out_dir) const;
     void layout_controls();
     void update_status(const std::string& message) const;
     void refresh_animation_options();

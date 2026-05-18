@@ -396,7 +396,9 @@ bool info_is_xy_sprite_pass_eligible(bool tillable) {
     return !tillable;
 }
 
-int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& asset) {
+int classify_depth_layer_for_asset(const WarpedScreenGrid& camera,
+                                   const Asset& asset,
+                                   const std::vector<double>* cached_depth_edges) {
     const auto& settings = camera.get_settings();
     const double signed_distance = compute_asset_camera_depth_key(camera, asset);
     const double distance = std::fabs(signed_distance);
@@ -407,8 +409,9 @@ int classify_depth_layer_for_asset(const WarpedScreenGrid& camera, const Asset& 
     const double interval = std::max(1.0, static_cast<double>(settings.layer_depth_interval));
     const double curve = std::max(0.0, static_cast<double>(settings.layer_depth_curve));
     const double effective_max_depth = std::max(interval, static_cast<double>(settings.max_cull_depth));
-    const std::vector<double> edges =
-        render_depth::build_background_depth_edges(effective_max_depth, interval, curve);
+    const std::vector<double> local_edges =
+        cached_depth_edges ? std::vector<double>{} : render_depth::build_background_depth_edges(effective_max_depth, interval, curve);
+    const std::vector<double>& edges = cached_depth_edges ? *cached_depth_edges : local_edges;
 
     std::size_t bin_index = 0;
     for (std::size_t i = 1; i < edges.size(); ++i) {
@@ -745,7 +748,8 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
     std::uint32_t target_width,
     std::uint32_t target_height,
     std::vector<GpuSpriteDrawPacket>& out_xy_sprite_draws,
-    std::string& out_error) {
+    std::string& out_error,
+    const std::vector<double>* cached_depth_edges) {
     out_xy_sprite_draws.clear();
     out_xy_sprite_draws.reserve(visible_assets.size());
     out_error.clear();
@@ -824,7 +828,10 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         packet.camera_depth_key = static_cast<float>(camera_depth_key);
         packet.stable_sort_id = xy_sequence++;
         packet.is_floor_packet = false;
-        packet.depth_layer = opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *asset);
+        packet.depth_layer = opengl_runtime_renderer_detail::classify_depth_layer_for_asset(
+            camera,
+            *asset,
+            cached_depth_edges);
         const bool packet_geometry_valid = object.sink_clip_enabled
             ? opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(projected,
                                                                                 u0,
@@ -1259,12 +1266,16 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             filtered_active_assets,
             used_active_fallback);
     const WarpedScreenGrid& camera = assets_->getView();
+    const auto& camera_settings = camera.get_settings();
+    const double depth_interval = std::max(1.0, static_cast<double>(camera_settings.layer_depth_interval));
+    const double depth_curve = std::max(0.0, static_cast<double>(camera_settings.layer_depth_curve));
+    const double effective_max_depth = std::max(depth_interval, static_cast<double>(camera_settings.max_cull_depth));
+    const std::vector<double> frame_depth_edges =
+        render_depth::build_background_depth_edges(effective_max_depth, depth_interval, depth_curve);
     const std::size_t traversal_count = camera.visible_traversal_entries().size();
     out_data.focus_depth_layer = assets_->player
-        ? opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *assets_->player)
+        ? opengl_runtime_renderer_detail::classify_depth_layer_for_asset(camera, *assets_->player, &frame_depth_edges)
         : 0;
-
-    std::vector<Asset*> render_assets = selected_visible_assets;
 
     out_data.target_width = target_width;
     out_data.target_height = target_height;
@@ -1273,7 +1284,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     out_data.filtered_active_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         filtered_active_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.selected_asset_count = static_cast<std::uint32_t>(std::min<std::size_t>(
-        render_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+        selected_visible_assets.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.visible_traversal_count = static_cast<std::uint32_t>(std::min<std::size_t>(
         traversal_count, static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.dev_mode = assets_->is_dev_mode();
@@ -1344,11 +1355,12 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     if (!opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
             camera,
-            render_assets,
+            selected_visible_assets,
             target_width,
             target_height,
             out_data.xy_sprite_draws,
-            out_error)) {
+            out_error,
+            &frame_depth_edges)) {
         return false;
     }
 
@@ -1358,7 +1370,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         out_data.xy_sprite_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
 
     out_data.depth_layers.clear();
-    const auto& camera_settings = assets_->getView().get_settings();
     const bool dof_requested = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
                                                        camera_settings.blur_px,
                                                        camera_settings.radial_blur_px);

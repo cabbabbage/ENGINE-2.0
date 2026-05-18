@@ -23,14 +23,12 @@
 
 #include "AsyncTaskQueue.hpp"
 #include "dm_styles.hpp"
+#include "devtools/frame_importer.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/widgets.hpp"
 #include "string_utils.hpp"
 #include "utils/string_utils.hpp"
 #include "assets/asset/animation.hpp"
-
-#include "utils/stb_image.h"
-#include "utils/stb_image_write.h"
 
 namespace animation_editor {
 
@@ -680,12 +678,12 @@ bool SourceConfigPanel::clean_output_frames() const {
     }
 }
 
-std::vector<std::filesystem::path> SourceConfigPanel::collect_png_files(const std::filesystem::path& folder) const {
+std::vector<std::filesystem::path> SourceConfigPanel::collect_image_files(const std::filesystem::path& folder) const {
     std::vector<std::filesystem::path> files;
     try {
         for (const auto& entry : std::filesystem::directory_iterator(folder)) {
             if (!entry.is_regular_file()) continue;
-            if (has_extension_ci(entry.path(), ".png")) {
+            if (devmode::frame_importer::is_supported_image_file(entry.path())) {
                 files.push_back(entry.path());
             }
         }
@@ -719,22 +717,6 @@ std::vector<std::filesystem::path> SourceConfigPanel::normalize_sequence(const s
         return numeric_key(lhs) < numeric_key(rhs);
     });
     return normalized;
-}
-
-void SourceConfigPanel::copy_sequence_to_output(const std::vector<std::filesystem::path>& files,
-                                                const std::filesystem::path& out_dir) const {
-    std::vector<std::filesystem::path> copied;
-    copied.reserve(files.size());
-    for (size_t i = 0; i < files.size(); ++i) {
-        std::filesystem::path dst = out_dir / (std::to_string(i) + ".png");
-        try {
-            std::filesystem::copy_file(files[i], dst, std::filesystem::copy_options::overwrite_existing);
-            copied.push_back(dst);
-        } catch (const std::exception& ex) {
-            SDL_Log("SourceConfigPanel: failed copying %s -> %s: %s", files[i].string().c_str(), dst.string().c_str(), ex.what());
-        }
-    }
-
 }
 
 void SourceConfigPanel::layout_controls() {
@@ -796,7 +778,7 @@ void SourceConfigPanel::layout_controls() {
         animation_dropdown_.reset();
         pick_animation_button_.reset();
 
-        const std::array<const char*, 3> labels = {"Upload GIF", "Upload Folder", "Upload PNG Sequence"};
+        const std::array<const char*, 3> labels = {"Upload GIF", "Upload Folder", "Upload Image Sequence"};
         const std::array<const DMButtonStyle*, 3> styles = {&DMStyles::AccentButton(), &DMStyles::HeaderButton(), &DMStyles::HeaderButton()};
 
         for (size_t i = 0; i < frame_buttons_.size(); ++i) {
@@ -956,23 +938,29 @@ void SourceConfigPanel::import_from_folder() {
         return;
     }
 
-    std::vector<std::filesystem::path> files = normalize_sequence(collect_png_files(*folder));
+    std::vector<std::filesystem::path> files = normalize_sequence(collect_image_files(*folder));
     if (files.empty()) {
-        update_status("No PNG files found in folder");
+        update_status("No supported image files found in folder");
         return;
     }
 
-    std::filesystem::path out_dir;
-    if (!prepare_output_directory(&out_dir)) return;
-
-    copy_sequence_to_output(files, out_dir);
+    const std::filesystem::path out_dir = animation_output_directory();
+    auto import_result = devmode::frame_importer::import_frames_to_directory(files, out_dir);
+    if (!import_result.success()) {
+        const std::string message = import_result.error_message.empty()
+            ? std::string{"No frames were imported"}
+            : import_result.error_message;
+        SDL_Log("SourceConfigPanel[%s]: folder import failed: %s", animation_id_.c_str(), message.c_str());
+        update_status("Import failed: " + message);
+        return;
+    }
 
     SourceConfig config;
     config.kind = "folder";
     config.path = animation_id_;
     config.name.reset();
     apply_source_config(config);
-    update_status("Imported frames from folder");
+    update_status("Imported " + std::to_string(import_result.frames_written) + " frames from folder");
     if (on_source_changed_) {
         on_source_changed_(SourceChangeEvent{
             animation_id_,
@@ -1040,77 +1028,23 @@ void SourceConfigPanel::import_from_gif() {
         return;
     }
 
-    std::vector<unsigned char> bytes;
-    try {
-        std::ifstream in(*file, std::ios::binary);
-        if (!in) {
-            update_status("Failed to open GIF file");
-            return;
-        }
-        in.seekg(0, std::ios::end);
-        std::streamsize sz = in.tellg();
-        in.seekg(0, std::ios::beg);
-        if (sz <= 0) {
-            update_status("GIF file is empty");
-            return;
-        }
-        bytes.resize(static_cast<size_t>(sz));
-        if (!in.read(reinterpret_cast<char*>(bytes.data()), sz)) {
-            update_status("Failed reading GIF file");
-            return;
-        }
-    } catch (const std::exception& ex) {
-        SDL_Log("SourceConfigPanel: failed reading GIF %s: %s", file->string().c_str(), ex.what());
-        update_status("Failed reading GIF");
+    const std::filesystem::path out_dir = animation_output_directory();
+    auto import_result = devmode::frame_importer::import_gif_to_directory(*file, out_dir);
+    if (!import_result.success()) {
+        const std::string message = import_result.error_message.empty()
+            ? std::string{"No GIF frames were imported"}
+            : import_result.error_message;
+        SDL_Log("SourceConfigPanel[%s]: GIF import failed: %s", animation_id_.c_str(), message.c_str());
+        update_status("Import failed: " + message);
         return;
     }
-
-    int x = 0, y = 0, z = 0, comp = 0;
-    int* delays = nullptr;
-    stbi_uc* data = stbi_load_gif_from_memory(bytes.data(), static_cast<int>(bytes.size()), &delays, &x, &y, &z, &comp, STBI_rgb_alpha);
-    if (!data || x <= 0 || y <= 0 || z <= 0) {
-        if (data) stbi_image_free(data);
-        if (delays) stbi_image_free(delays);
-        update_status("Failed to decode GIF frames");
-        return;
-    }
-
-    std::filesystem::path out_dir;
-    if (!prepare_output_directory(&out_dir)) {
-        stbi_image_free(data);
-        if (delays) stbi_image_free(delays);
-        return;
-    }
-
-    const int channels = 4;
-    const int stride = x * channels;
-    std::vector<std::filesystem::path> written;
-    written.reserve(static_cast<size_t>(z));
-    for (int i = 0; i < z; ++i) {
-        std::filesystem::path dst = out_dir / (std::to_string(i) + ".png");
-        const stbi_uc* frame = data + static_cast<size_t>(i) * static_cast<size_t>(x) * static_cast<size_t>(y) * channels;
-        int ok = 0;
-        try {
-            ok = stbi_write_png(dst.string().c_str(), x, y, channels, frame, stride);
-        } catch (...) {
-            ok = 0;
-        }
-        if (ok) {
-            written.push_back(dst);
-        } else {
-            SDL_Log("SourceConfigPanel: failed writing frame %d to %s", i, dst.string().c_str());
-        }
-    }
-
-    stbi_image_free(data);
-    if (delays) stbi_image_free(delays);
 
     SourceConfig config;
     config.kind = "folder";
     config.path = animation_id_;
     config.name.reset();
     apply_source_config(config);
-    update_status("Imported GIF frames");
+    update_status("Imported " + std::to_string(import_result.frames_written) + " GIF frames");
     if (on_source_changed_) {
         on_source_changed_(SourceChangeEvent{
             animation_id_,
@@ -1133,26 +1067,32 @@ void SourceConfigPanel::import_from_png_sequence() {
     std::vector<std::filesystem::path> filtered;
     filtered.reserve(files.size());
     for (const auto& file : files) {
-        if (has_extension_ci(file, ".png")) {
+        if (devmode::frame_importer::is_supported_image_file(file)) {
             filtered.push_back(file);
         }
     }
     if (filtered.empty()) {
-        update_status("No PNG files selected");
+        update_status("No supported image files selected");
         return;
     }
 
-    std::filesystem::path out_dir;
-    if (!prepare_output_directory(&out_dir)) return;
-
-    copy_sequence_to_output(normalize_sequence(filtered), out_dir);
+    const std::filesystem::path out_dir = animation_output_directory();
+    auto import_result = devmode::frame_importer::import_frames_to_directory(normalize_sequence(filtered), out_dir);
+    if (!import_result.success()) {
+        const std::string message = import_result.error_message.empty()
+            ? std::string{"No frames were imported"}
+            : import_result.error_message;
+        SDL_Log("SourceConfigPanel[%s]: image sequence import failed: %s", animation_id_.c_str(), message.c_str());
+        update_status("Import failed: " + message);
+        return;
+    }
 
     SourceConfig config;
     config.kind = "folder";
     config.path = animation_id_;
     config.name.reset();
     apply_source_config(config);
-    update_status("Imported PNG sequence");
+    update_status("Imported " + std::to_string(import_result.frames_written) + " image frames");
     if (on_source_changed_) {
         on_source_changed_(SourceChangeEvent{
             animation_id_,

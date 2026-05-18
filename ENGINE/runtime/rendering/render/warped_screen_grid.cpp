@@ -7,6 +7,7 @@
 #include "core/find_current_room.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "gameplay/world/chunk.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/screen_space_math.hpp"
 
@@ -21,6 +22,7 @@
 #include <string>
 #include <limits>
 #include <optional>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 template <typename T>
@@ -1802,15 +1804,68 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     const int min_world_z = std::numeric_limits<int>::min();
     const int max_world_z = static_cast<int>(std::ceil(
         cam_state.anchor_world_z + static_cast<double>(settings_.light_max_cull_depth)));
-    std::vector<world::GridPoint*> grid_points = world_grid.query_region(
-        world_bounds,
-        0,
-        world_grid.max_resolution_layers(),
-        min_world_z,
-        max_world_z,
-        /*skip_inactive_branches=*/true,
-        /*include_empty_nodes=*/false,
-        &region_metrics);
+    const int min_bound_x = std::min(world_bounds.min.world_x(), world_bounds.max.world_x());
+    const int max_bound_x = std::max(world_bounds.min.world_x(), world_bounds.max.world_x());
+    const int min_bound_z = std::min(world_bounds.min.world_z(), world_bounds.max.world_z());
+    const int max_bound_z = std::max(world_bounds.min.world_z(), world_bounds.max.world_z());
+
+    std::vector<world::GridPoint*> grid_points;
+    const std::vector<world::Chunk*>& active_chunks = world_grid.active_chunks();
+    if (!active_chunks.empty()) {
+        std::size_t estimated_assets = 0;
+        for (const world::Chunk* chunk : active_chunks) {
+            if (chunk) {
+                estimated_assets += chunk->assets.size();
+            }
+        }
+        grid_points.reserve(estimated_assets);
+        std::unordered_set<world::GridPoint*> seen_points;
+        seen_points.reserve(estimated_assets);
+        for (const world::Chunk* chunk : active_chunks) {
+            if (!chunk) {
+                continue;
+            }
+            for (Asset* asset : chunk->assets) {
+                if (!asset || asset->dead) {
+                    continue;
+                }
+                world::GridPoint* point = world_grid.point_for_asset(asset);
+                if (!point || !point->has_assets_or_active_children()) {
+                    continue;
+                }
+                if (point->resolution_layer() < 0 ||
+                    point->resolution_layer() > world_grid.max_resolution_layers()) {
+                    continue;
+                }
+                if (point->world_z() < min_world_z || point->world_z() > max_world_z) {
+                    continue;
+                }
+                if (point->world_x() < min_bound_x || point->world_x() > max_bound_x ||
+                    point->world_z() < min_bound_z || point->world_z() > max_bound_z) {
+                    continue;
+                }
+                if (point->occupants.empty()) {
+                    continue;
+                }
+                if (seen_points.insert(point).second) {
+                    grid_points.push_back(point);
+                }
+            }
+        }
+        region_metrics.nodes_visited = static_cast<std::uint32_t>(
+            std::min<std::size_t>(seen_points.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+    }
+    if (grid_points.empty()) {
+        grid_points = world_grid.query_region(
+            world_bounds,
+            0,
+            world_grid.max_resolution_layers(),
+            min_world_z,
+            max_world_z,
+            /*skip_inactive_branches=*/true,
+            /*include_empty_nodes=*/false,
+            &region_metrics);
+    }
     last_nodes_visited_ = region_metrics.nodes_visited;
     last_branches_skipped_ = region_metrics.branches_skipped;
     warped_points_.reserve(grid_points.size());

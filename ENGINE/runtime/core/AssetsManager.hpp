@@ -582,7 +582,7 @@ private:
     struct LiveDynamicSpawnTask;
     struct LiveDynamicSyncContext;
     LiveDynamicSyncContext collect_sync_context(const world::GridBounds& render_bounds);
-    void prune_out_of_bounds_dynamic_assets(const LiveDynamicSyncContext& context);
+    void prune_out_of_bounds_dynamic_assets(LiveDynamicSyncContext& context);
     void refresh_selector_frontiers(LiveDynamicSyncContext& context);
     void qualify_points(LiveDynamicSyncContext& context);
     void spawn_qualified_tasks(LiveDynamicSyncContext& context);
@@ -971,7 +971,9 @@ private:
         std::size_t spawned_keys_size_before = 0;
         std::size_t qualified_this_frame = 0;
         std::size_t spawned_this_frame = 0;
+        std::size_t cells_visited_this_frame = 0;
         std::size_t points_scanned_this_frame = 0;
+        std::size_t spawn_tasks_processed_this_frame = 0;
         std::size_t spawn_attempts_this_frame = 0;
         std::size_t rejected_occupied = 0;
         std::size_t rejected_bounds = 0;
@@ -1000,6 +1002,8 @@ private:
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_qualification_keys_;
     std::vector<LiveDynamicSpawnTask> live_dynamic_spawn_queue_;
     std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_spawn_keys_;
+    std::vector<Asset*> live_dynamic_pending_prune_assets_;
+    std::unordered_set<Asset*> live_dynamic_pending_prune_lookup_;
     std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash> live_dynamic_persistent_occupancy_cache_;
     std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> live_dynamic_persistent_room_cache_;
     int live_dynamic_preload_margin_world_px_ = 192;
@@ -1007,6 +1011,7 @@ private:
     int live_dynamic_max_spawn_from_room_world_px_ = 128;
     std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
     std::size_t max_live_dynamic_new_spawns_per_frame_ = 384;
+    std::size_t max_live_dynamic_prunes_per_frame_ = 256;
     std::size_t min_live_dynamic_scan_cells_per_selector_per_frame_ = 256;
     std::size_t min_live_dynamic_new_spawns_per_frame_ = 64;
     std::size_t adaptive_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
@@ -1015,8 +1020,8 @@ private:
     double live_dynamic_sync_ema_ms_ = 0.0;
     bool live_dynamic_sync_ema_initialized_ = false;
     std::size_t max_total_live_dynamic_assets_ = 8000;
-    int live_dynamic_sync_bounds_quantization_px_ = 64;
-    int live_dynamic_sync_bounds_hysteresis_px_ = 32;
+    int live_dynamic_sync_bounds_quantization_px_ = 256;
+    int live_dynamic_sync_bounds_hysteresis_px_ = 128;
     std::size_t live_dynamic_quantized_bounds_change_count_ = 0;
     std::size_t live_dynamic_occupancy_cache_hits_ = 0;
     std::uint64_t live_dynamic_bounds_generation_ = 1;

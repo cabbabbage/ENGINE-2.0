@@ -1408,10 +1408,10 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                                                                    camera_settings.blur_px,
                                                                    camera_settings.radial_blur_px);
     constexpr std::size_t kDofPacketBudget = 420;
-    constexpr std::uint32_t kDofActiveAssetBudget = 900;
+    constexpr std::uint32_t kDofEmittedAssetBudget = 900;
     const bool dof_requested = dof_requested_by_settings &&
         out_data.xy_sprite_draws.size() <= kDofPacketBudget &&
-        out_data.selected_asset_count <= kDofActiveAssetBudget;
+        out_data.xy_sprite_draw_count <= kDofEmittedAssetBudget;
     if (dof_requested) {
         constexpr int kDofFarNearBucketRadius = 2;
         const auto bucket_depth_layer =
@@ -2117,4 +2117,3 @@ SDL_Color OpenGLRuntimeRenderer::update_smoothed_floor_clear_color(SDL_Color tar
     smoothed_floor_clear_color_.a = 255;
     return smoothed_floor_clear_color_;
 }
-

@@ -15,6 +15,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -40,6 +41,54 @@ namespace {
     constexpr float  kMinNearHorizonSampleOffsetPx = 8.0f;
     constexpr float  kCameraMovementSpeedEpsilon = 1.0f;
     constexpr float  kLookAheadTimeSeconds = 0.12f;
+
+    std::uint64_t stable_dynamic_asset_hash(const Asset& asset) {
+        if (!asset.spawn_id.empty()) {
+            return static_cast<std::uint64_t>(std::hash<std::string>{}(asset.spawn_id));
+        }
+        if (asset.info && !asset.info->name.empty()) {
+            std::uint64_t hash = static_cast<std::uint64_t>(std::hash<std::string>{}(asset.info->name));
+            hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_x())) * 0x9e3779b185ebca87ull;
+            hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_z())) * 0xc2b2ae3d27d4eb4full;
+            return hash;
+        }
+        return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&asset));
+    }
+
+    bool keep_dynamic_asset_for_visibility(const WarpedScreenGrid::RealismSettings& settings,
+                                           const Asset& asset,
+                                           double depth_distance) {
+        if (!asset.is_dynamic_spawned_asset()) {
+            return true;
+        }
+        if (!std::isfinite(depth_distance)) {
+            return false;
+        }
+        const double efficiency_depth = std::max(
+            0.0,
+            std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)
+                ? static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth)
+                : 0.0);
+        if (efficiency_depth <= 0.0 || depth_distance <= efficiency_depth) {
+            return true;
+        }
+
+        const double max_depth = std::max(efficiency_depth + 1.0,
+                                          static_cast<double>(settings.max_cull_depth));
+        const double t = std::clamp((depth_distance - efficiency_depth) /
+                                    std::max(1.0, max_depth - efficiency_depth),
+                                    0.0,
+                                    1.0);
+        const double configured_min = std::clamp(
+            static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
+            0.0,
+            1.0);
+        const double min_ratio = std::min(configured_min, 0.045);
+        const double keep_ratio = min_ratio + (1.0 - min_ratio) * (1.0 - t) * (1.0 - t) * 0.45;
+        constexpr double kHashScale = 1.0 / 10000.0;
+        const double sample = static_cast<double>(stable_dynamic_asset_hash(asset) % 10000u) * kHashScale;
+        return sample <= keep_ratio;
+    }
 
     static inline Area make_rect_area(const std::string& name, SDL_Point center, int w, int h, int resolution) {
         const int left   = center.x - (w / 2);
@@ -2189,6 +2238,13 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
 
             asset_to_point_[owned.get()] = gp;
+            const double asset_depth_distance = std::fabs(render_depth::depth_from_anchor(
+                anchor_depth,
+                static_cast<double>(owned->world_z()),
+                owned->render_depth_bias()));
+            if (!keep_dynamic_asset_for_visibility(settings_, *owned, asset_depth_distance)) {
+                continue;
+            }
             const AssetVisibilityResult visibility = evaluate_asset_visibility(owned.get(), gp, base_world_z);
             if (visibility.reason_flags != 0) {
                 visibility_reason_flags_[owned.get()] = visibility.reason_flags;

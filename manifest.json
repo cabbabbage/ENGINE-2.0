@@ -26325,7 +26325,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 6,
+            "grid_resolution": 7,
             "jitter": 32,
             "locked": false,
             "max_number": 1,
@@ -26338,7 +26338,7 @@
           }
         ],
         "max_spawn_from_room": 250,
-        "regen_seed": 2
+        "regen_seed": 3
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -26406,9 +26406,9 @@
             }
           },
           "display_color": [
+            242,
             85,
             242,
-            153,
             255
           ],
           "edge_smoothness": 101,
@@ -26495,9 +26495,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            242,
+            31,
+            204,
+            75,
             255
           ],
           "edge_smoothness": 4,
@@ -26554,9 +26554,9 @@
             }
           },
           "display_color": [
-            31,
             204,
-            88,
+            71,
+            146,
             255
           ],
           "edge_smoothness": 4,
@@ -26613,9 +26613,9 @@
             }
           },
           "display_color": [
-            183,
-            85,
-            242,
+            31,
+            68,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26702,9 +26702,9 @@
             }
           },
           "display_color": [
-            31,
-            45,
             204,
+            107,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26766,9 +26766,9 @@
             }
           },
           "display_color": [
-            204,
-            71,
-            121,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -26866,9 +26866,9 @@
             }
           },
           "display_color": [
-            170,
-            242,
+            163,
             85,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27246,9 +27246,9 @@
             }
           },
           "display_color": [
-            204,
-            109,
-            31,
+            85,
+            242,
+            115,
             255
           ],
           "edge_smoothness": 96,

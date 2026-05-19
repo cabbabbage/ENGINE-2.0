@@ -2911,6 +2911,62 @@ world::GridBounds Assets::runtime_work_bounds_from_render_bounds(const world::Gr
                                         render_bounds.min.resolution_layer());
 }
 
+world::GridBounds Assets::live_dynamic_work_bounds_from_render_bounds(const world::GridBounds& render_bounds) const {
+    const auto clamp_i64_to_int = [](std::int64_t value) {
+        return static_cast<int>(std::clamp<std::int64_t>(
+            value,
+            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
+    };
+
+    const auto& settings = camera_.get_settings();
+    const int despawn_margin = std::max(0, dynamic_spawn_despawn_margin_world_px_);
+    const double dynamic_depth = std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)
+        ? static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth)
+        : 1200.0;
+    const int unclamped_radius = static_cast<int>(std::lround(dynamic_depth)) + despawn_margin;
+    constexpr int kMinDynamicWorkRadiusWorldPx = 700;
+    constexpr int kMaxDynamicWorkRadiusWorldPx = 2600;
+    const int work_radius = std::clamp(unclamped_radius,
+                                       kMinDynamicWorkRadiusWorldPx,
+                                       kMaxDynamicWorkRadiusWorldPx);
+
+    const SDL_Point camera_center = camera_.get_screen_center();
+    const int clamp_min_x = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.x) - work_radius);
+    const int clamp_max_x = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.x) + work_radius);
+    const int clamp_min_z = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.y) - work_radius);
+    const int clamp_max_z = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.y) + work_radius);
+
+    const int render_min_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
+    const int render_max_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
+    const int render_min_z = std::min(render_bounds.min.world_z(), render_bounds.max.world_z());
+    const int render_max_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
+
+    const int bounded_min_x = std::max(render_min_x, clamp_min_x);
+    const int bounded_max_x = std::min(render_max_x, clamp_max_x);
+    const int bounded_min_z = std::max(render_min_z, clamp_min_z);
+    const int bounded_max_z = std::min(render_max_z, clamp_max_z);
+
+    if (bounded_min_x <= bounded_max_x && bounded_min_z <= bounded_max_z) {
+        return world::GridBounds::from_min_max(
+            world::GridPoint::make_virtual(bounded_min_x,
+                                           render_bounds.min.world_y(),
+                                           bounded_min_z,
+                                           render_bounds.min.resolution_layer()),
+            world::GridPoint::make_virtual(bounded_max_x,
+                                           render_bounds.max.world_y(),
+                                           bounded_max_z,
+                                           render_bounds.max.resolution_layer()));
+    }
+
+    return world::GridBounds::from_xywh(clamp_min_x,
+                                        clamp_min_z,
+                                        std::max(1, work_radius * 2 + 1),
+                                        std::max(1, work_radius * 2 + 1),
+                                        render_bounds.min.world_y(),
+                                        render_bounds.min.resolution_layer());
+}
+
 int Assets::audio_effect_max_distance_world() const {
     const_cast<Assets*>(this)->update_max_asset_dimensions();
     const float horizontal_padding = std::max(0.0f, max_asset_width_world_ * 1.5f);
@@ -3389,7 +3445,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
     const world::GridBounds render_bounds = screen_world_rect();
     const world::GridBounds work_bounds = runtime_work_bounds_from_render_bounds(render_bounds);
     if (allow_live_dynamic_sync && dynamic_spawn_runtime_) {
-        dynamic_spawn_runtime_->sync(work_bounds);
+        dynamic_spawn_runtime_->sync(live_dynamic_work_bounds_from_render_bounds(render_bounds));
     }
     world_grid_.update_active_chunks(work_bounds, 0);
     camera_.rebuild_grid(world_grid_,

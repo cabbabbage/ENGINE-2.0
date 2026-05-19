@@ -132,17 +132,18 @@ bool should_emit_dynamic_asset_sprite(const WarpedScreenGrid& camera, const Asse
         return true;
     }
 
-    const double min_ratio = std::clamp(
+    const double configured_min = std::clamp(
         static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
         0.0,
         1.0);
+    const double min_ratio = std::min(configured_min, 0.045);
     if (min_ratio >= 0.999) {
         return true;
     }
 
     const double range = std::max(1.0, max_depth - efficiency_depth);
     const double t = std::clamp((depth - efficiency_depth) / range, 0.0, 1.0);
-    const double keep_ratio = min_ratio + (1.0 - min_ratio) * (1.0 - t) * (1.0 - t);
+    const double keep_ratio = min_ratio + (1.0 - min_ratio) * (1.0 - t) * (1.0 - t) * 0.45;
     const std::uint64_t hash = stable_asset_render_hash(asset);
     constexpr double kHashScale = 1.0 / 10000.0;
     const double sample = static_cast<double>(hash % 10000u) * kHashScale;
@@ -1403,9 +1404,14 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         out_data.xy_sprite_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
 
     out_data.depth_layers.clear();
-    const bool dof_requested = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
-                                                       camera_settings.blur_px,
-                                                       camera_settings.radial_blur_px);
+    const bool dof_requested_by_settings = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
+                                                                   camera_settings.blur_px,
+                                                                   camera_settings.radial_blur_px);
+    constexpr std::size_t kDofPacketBudget = 420;
+    constexpr std::uint32_t kDofActiveAssetBudget = 900;
+    const bool dof_requested = dof_requested_by_settings &&
+        out_data.xy_sprite_draws.size() <= kDofPacketBudget &&
+        out_data.selected_asset_count <= kDofActiveAssetBudget;
     if (dof_requested) {
         constexpr int kDofFarNearBucketRadius = 2;
         const auto bucket_depth_layer =

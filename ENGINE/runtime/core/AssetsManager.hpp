@@ -543,6 +543,7 @@ private:
     void rebuild_all_assets_from_grid();
     void rebuild_active_from_screen_grid();
     world::GridBounds runtime_work_bounds_from_render_bounds(const world::GridBounds& render_bounds);
+    world::GridBounds live_dynamic_work_bounds_from_render_bounds(const world::GridBounds& render_bounds) const;
 
     std::vector<Asset*> moving_assets_for_grid_;
     std::vector<Asset*> pending_static_grid_registration_;

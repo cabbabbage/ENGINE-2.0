@@ -195,19 +195,30 @@ void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, i
 
     {
         std::lock_guard<std::mutex> lock(state->mutex);
-        if (!filelist || count <= 0) {
-            state->done = true;
-        } else {
+        int parsed_count = 0;
+        if (!filelist) {
+            // Fast cancel path: SDL reports cancellation via null list.
+        } else if (count > 0) {
             const char* first_path = filelist[0];
             SDL_Log("[SDLModalDialog] file_dialog_callback first path: %s", (first_path && *first_path) ? first_path : "<empty>");
             for (int i = 0; i < count; ++i) {
                 const char* path = filelist[i];
                 if (path && *path) {
                     state->paths.emplace_back(path);
+                    ++parsed_count;
                 }
             }
-            state->done = true;
+        } else {
+            for (int i = 0; filelist[i] != nullptr; ++i) {
+                const char* path = filelist[i];
+                if (path && *path) {
+                    state->paths.emplace_back(path);
+                    ++parsed_count;
+                }
+            }
         }
+        SDL_Log("[SDLModalDialog] file_dialog_callback parsed paths: raw_count=%d parsed_count=%d", count, parsed_count);
+        state->done = true;
     }
     state->cv.notify_one();
 }

@@ -69,6 +69,9 @@ struct RenderFrameStats {
     std::uint32_t projection_calls_saved_early = 0;
     std::uint32_t assets_stageA_reject = 0;
     std::uint32_t assets_stageC_entered = 0;
+    std::uint32_t projection_recompute_budget = 0;
+    std::uint32_t projection_points_deferred = 0;
+    std::uint32_t projection_points_updated = 0;
 };
 
 namespace render_diagnostics {
@@ -128,7 +131,10 @@ void set_submit_result(bool succeeded);
 void set_visibility_projection_stats(std::uint32_t projection_calls_total,
                                     std::uint32_t projection_calls_saved_early,
                                     std::uint32_t assets_stageA_reject,
-                                    std::uint32_t assets_stageC_entered);
+                                    std::uint32_t assets_stageC_entered,
+                                    std::uint32_t projection_recompute_budget,
+                                    std::uint32_t projection_points_deferred,
+                                    std::uint32_t projection_points_updated);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

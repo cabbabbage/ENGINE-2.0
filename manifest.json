@@ -26337,7 +26337,7 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "max_spawn_from_room": 250,
+        "max_spawn_from_room": 324,
         "regen_seed": 3
       },
       "map_grid_settings": {
@@ -26406,9 +26406,9 @@
             }
           },
           "display_color": [
-            36,
-            173,
-            242,
+            65,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -26495,9 +26495,9 @@
             }
           },
           "display_color": [
-            31,
-            32,
-            204,
+            141,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26556,7 +26556,7 @@
           "display_color": [
             242,
             85,
-            158,
+            160,
             255
           ],
           "edge_smoothness": 4,
@@ -26613,9 +26613,9 @@
             }
           },
           "display_color": [
-            204,
-            99,
-            31,
+            36,
+            110,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26702,9 +26702,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            238,
+            204,
+            96,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26768,7 +26768,7 @@
           "display_color": [
             31,
             204,
-            97,
+            102,
             255
           ],
           "edge_smoothness": 70,
@@ -26866,9 +26866,9 @@
             }
           },
           "display_color": [
-            170,
-            31,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -27246,9 +27246,9 @@
             }
           },
           "display_color": [
-            51,
-            106,
-            204,
+            85,
+            166,
+            242,
             255
           ],
           "edge_smoothness": 96,

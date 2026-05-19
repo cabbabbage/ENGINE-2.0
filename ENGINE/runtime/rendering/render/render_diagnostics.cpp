@@ -298,6 +298,16 @@ void set_composite_layers_submitted(const std::string& summary) { g_frame_stats.
 void set_render_stage_timings(const std::string& summary) { g_frame_stats.render_stage_timings = summary; }
 void add_skipped_texture_count(std::uint32_t count) { g_frame_stats.skipped_texture_count += count; }
 void set_failed_texture_names(const std::string& names) { g_frame_stats.failed_texture_names = names; }
+
+void set_visibility_projection_stats(std::uint32_t projection_calls_total,
+                                    std::uint32_t projection_calls_saved_early,
+                                    std::uint32_t assets_stageA_reject,
+                                    std::uint32_t assets_stageC_entered) {
+    g_frame_stats.projection_calls_total = projection_calls_total;
+    g_frame_stats.projection_calls_saved_early = projection_calls_saved_early;
+    g_frame_stats.assets_stageA_reject = assets_stageA_reject;
+    g_frame_stats.assets_stageC_entered = assets_stageC_entered;
+}
 void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }
 
 void note_texture_created(SDL_Texture* texture) {

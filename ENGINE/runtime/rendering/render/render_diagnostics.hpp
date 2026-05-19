@@ -65,6 +65,10 @@ struct RenderFrameStats {
     bool ui_overlay_active = false;
     bool ui_overlay_redrawn = false;
     bool submit_succeeded = false;
+    std::uint32_t projection_calls_total = 0;
+    std::uint32_t projection_calls_saved_early = 0;
+    std::uint32_t assets_stageA_reject = 0;
+    std::uint32_t assets_stageC_entered = 0;
 };
 
 namespace render_diagnostics {
@@ -121,6 +125,10 @@ void set_render_stage_timings(const std::string& summary);
 void add_skipped_texture_count(std::uint32_t count = 1);
 void set_failed_texture_names(const std::string& names);
 void set_submit_result(bool succeeded);
+void set_visibility_projection_stats(std::uint32_t projection_calls_total,
+                                    std::uint32_t projection_calls_saved_early,
+                                    std::uint32_t assets_stageA_reject,
+                                    std::uint32_t assets_stageC_entered);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

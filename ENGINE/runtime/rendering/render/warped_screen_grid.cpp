@@ -10,6 +10,7 @@
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/screen_space_math.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1942,6 +1943,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         last_min_world_z_ = 0;
         last_max_world_z_ = 0;
         last_depth_culled_ = 0;
+    projection_calls_total_ = 0;
+    projection_calls_saved_early_ = 0;
+    assets_stageA_reject_ = 0;
+    assets_stageC_entered_ = 0;
         rebuild_grid_bounds();
         return;
     }
@@ -2014,6 +2019,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         bool had_any_projection_success = false;
         auto try_project = [&](double world_x, double world_y, double world_z, SDL_FPoint& out) -> bool {
             had_any_projection_sample = true;
+            ++projection_calls_total_;
             if (!project_screen_point(world_x, world_y, world_z, out)) {
                 return false;
             }
@@ -2105,7 +2111,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
         }
 
-        if (asset->current_frame) {
+        if (asset->current_frame && settings_.light_radius_overlap_culling_enabled && !result.visible) {
             for (const DisplacedAssetAnchorPoint& frame_anchor : asset->current_frame->anchor_points) {
                 if (!frame_anchor.is_valid() || !frame_anchor.has_light_data || frame_anchor.hidden) {
                     continue;
@@ -2326,6 +2332,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         last_min_world_z_ = 0;
         last_max_world_z_ = 0;
     }
+
+    render_diagnostics::set_visibility_projection_stats(projection_calls_total_,
+                                                     projection_calls_saved_early_,
+                                                     assets_stageA_reject_,
+                                                     assets_stageC_entered_);
 
     rebuild_grid_bounds();
     bounds_.left   = cull_bounds.left;

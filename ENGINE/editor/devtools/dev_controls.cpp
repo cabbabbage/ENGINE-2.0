@@ -42,6 +42,7 @@
 #include "DockManager.hpp"
 #include "devtools/dev_footer_bar.hpp"
 #include "devtools/camera_ui.hpp"
+#include "devtools/animation_frame_import_service.hpp"
 #include "devtools/frame_importer.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/sdl_pointer_utils.hpp"
@@ -63,16 +64,9 @@
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/map_generation/room.hpp"
-#include "gameplay/spawn/asset_spawn_planner.hpp"
-#include "gameplay/spawn/asset_spawner.hpp"
-#include "gameplay/spawn/check.hpp"
-#include "gameplay/spawn/methods/spawn_method.hpp"
-#include "gameplay/spawn/spacing_util.hpp"
 #include "utils/map_grid_settings.hpp"
-#include "gameplay/spawn/spawn_context.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
-#include "utils/grid_occupancy.hpp"
 #include "utils/input.hpp"
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
@@ -3193,112 +3187,26 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         return false;
     }
 
-    const std::filesystem::path asset_dir = devmode::asset_paths::asset_folder_path(sanitized);
-    if (std::filesystem::exists(asset_dir)) {
-        error_out = "Asset folder already exists on disk.";
-        return false;
-    }
-    const std::filesystem::path default_dir = asset_dir / "default";
-
-    auto cleanup_on_failure = [&]() {
-        std::error_code ec;
-        std::filesystem::remove_all(asset_dir, ec);
-    };
-
-    try {
-        std::filesystem::create_directories(default_dir);
-    } catch (const std::exception& ex) {
-        error_out = std::string("Failed to create asset folder: ") + ex.what();
-        return false;
-    }
-
-    devmode::frame_importer::FrameImportResult import_result;
-    switch (validation.kind) {
-    case DropContentKind::SinglePng:
-    case DropContentKind::MultiImages:
-    case DropContentKind::PngFolder:
-        import_result = devmode::frame_importer::import_frames_to_directory(validation.files, default_dir);
-        break;
-    case DropContentKind::Gif: {
-        const std::filesystem::path gif_path = !validation.files.empty() ? validation.files.front() : std::filesystem::path{};
-        import_result = devmode::frame_importer::import_gif_to_directory(gif_path, default_dir);
-        break;
-    }
-    default:
-        break;
-    }
+    devmode::animation_import::CreateAssetRequest import_request;
+    import_request.asset_name = sanitized;
+    import_request.input_paths = validation.files;
+    import_request.manifest_store = &manifest_store_;
+    import_request.assets = assets_;
+    devmode::animation_import::ImportResult import_result =
+        devmode::animation_import::create_asset_from_frames(import_request);
 
     for (const auto& warning : import_result.warnings) {
         SDL_Log("[DevControls] Frame import warning for '%s': %s", sanitized.c_str(), warning.c_str());
     }
 
-    if (!import_result.success()) {
-        error_out = import_result.error_message.empty() ? "No frames were imported." : import_result.error_message;
-        cleanup_on_failure();
+    if (!import_result.success) {
+        error_out = import_result.message.empty() ? "No frames were imported." : import_result.message;
         return false;
     }
-    const int frames_written = import_result.frames_written;
-
-    nlohmann::json default_anim = {
-        {"on_end", "default"},
-        {"locked", false},
-        {"reverse_source", false},
-        {"invert_x", false},
-        {"invert_y", false},
-        {"invert_z", false},
-        {"rnd_start", false},
-        {"source", nlohmann::json{{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
-        {"number_of_frames", frames_written}
-    };
-
-    nlohmann::json manifest_entry = {
-        {"asset_name", sanitized},
-        {"asset_type", "Object"},
-        {"movement_enabled", false},
-        {"attack_box_enabled", false},
-        {"hitbox_enabled", false},
-        {"floor_boxes_enabled", false},
-        {"animations", nlohmann::json{{"default", default_anim}}},
-        {"start", "default"},
-        {"asset_directory", asset_dir.lexically_normal().generic_string()}
-    };
-    manifest_entry["tags"] = nlohmann::json::array();
-    manifest_entry["anti_tags"] = nlohmann::json::array();
-    manifest_entry["neighbor_search_distance"] = 500;
-    manifest_entry["render_radius"] = 0;
-    manifest_entry["update_radius"] = 0;
-    manifest_entry["min_same_type_distance"] = 0;
-    manifest_entry["min_distance_all"] = 0;
-    manifest_entry["can_invert"] = false;
-    manifest_entry["tilt_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
-    manifest_entry["y_position_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
-    manifest_entry["size_settings"] = {
-        {"scale_percentage", 100.0},
-        {"size_variation", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))}
-    };
-
-    auto session = manifest_store_.begin_asset_edit(sanitized, true);
-    if (!session || !session.is_new_asset()) {
-        error_out = "Manifest entry already exists.";
-        cleanup_on_failure();
-        return false;
-    }
-    session.data() = manifest_entry;
-    if (!session.commit()) {
-        error_out = "Failed to write manifest entry.";
-        cleanup_on_failure();
-        return false;
-    }
-    manifest_store_.flush();
 
     std::shared_ptr<AssetInfo> info;
     if (assets_) {
-        auto& lib = assets_->library();
-        lib.add_asset(sanitized, manifest_entry);
-        if (SDL_Renderer* r = assets_->renderer()) {
-            lib.ensureAnimationsLoadedFor(r, std::unordered_set<std::string>{sanitized});
-        }
-        info = lib.get(sanitized);
+        info = assets_->library().get(sanitized);
     }
 
     if (open_editor_and_spawn && assets_ && info) {
@@ -4880,158 +4788,6 @@ void DevControls::integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& 
     assets_->initialize_active_assets(center_point);
     assets_->refresh_active_asset_lists();
     refresh_active_asset_filters();
-}
-
-void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
-    if (!assets_ || !entry.is_object()) {
-        return;
-    }
-    const std::string spawn_id = entry.value("spawn_id", std::string{});
-    if (spawn_id.empty()) {
-        return;
-    }
-
-    remove_spawn_group_assets(spawn_id);
-
-    const auto& asset_info_library = assets_->library().all();
-    std::vector<std::unique_ptr<Asset>> spawned;
-    Check checker(false);
-    std::mt19937 rng(std::random_device{}());
-
-    const auto& rooms = assets_->rooms();
-    SpawnMethod spawn_method;
-
-    for (Room* room : rooms) {
-        if (!room || !room->room_area) {
-            continue;
-        }
-        nlohmann::json& room_json = room->assets_data();
-        if (!room_json.is_object()) {
-            continue;
-        }
-        if (!room_json.value("inherits_map_assets", false)) {
-            continue;
-        }
-
-        nlohmann::json root = nlohmann::json::object();
-        root["spawn_groups"] = nlohmann::json::array();
-        root["spawn_groups"].push_back(entry);
-        std::vector<nlohmann::json> sources{root};
-        AssetSpawnPlanner planner(sources, *room->room_area, assets_->library());
-
-        MapGridSettings grid_settings = room->map_grid_settings();
-
-        int resolution = std::max(0, grid_settings.grid_resolution);
-        try {
-            if (entry.contains("grid_resolution")) {
-                resolution = std::max(5, entry.value("grid_resolution", resolution));
-            }
-        } catch (...) {
-
-        }
-        resolution = vibble::grid::clamp_resolution(resolution);
-        vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-        vibble::grid::Occupancy occupancy(*room->room_area, resolution, grid_service);
-        checker.begin_session(grid_service, resolution);
-        std::vector<Area> exclusion;
-        SpawnContext ctx(rng, checker, exclusion, asset_info_library, spawned, &assets_->library(), grid_service, &occupancy);
-        ctx.set_map_grid_settings(grid_settings);
-        ctx.set_spawn_resolution(resolution);
-        std::vector<const Area*> trail_areas;
-        auto add_trail_area = [&trail_areas](const Area* candidate, const std::string& type) {
-            if (!candidate) return;
-            std::string lowered = type;
-            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::tolower(ch));
-            });
-            if (lowered == "trail") {
-                trail_areas.push_back(candidate);
-            }
-};
-        if (room) {
-            if (room->room_area) {
-                add_trail_area(room->room_area.get(), room->room_area->get_type());
-            }
-            for (const auto& named : room->areas) {
-                add_trail_area(named.area.get(), named.type);
-            }
-        }
-        ctx.set_trail_areas(std::move(trail_areas));
-
-        const auto& queue = planner.get_spawn_queue();
-        const vibble::spawn::RuntimeCandidates::AssetCatalogView spawn_catalog{&ctx.info_library(), false};
-        ctx.set_spacing_filter(collect_spacing_asset_names(queue, spawn_catalog));
-        const Area* area_ptr = room->room_area.get();
-        for (const auto& info : queue) {
-            if (info.name == "batch_map_assets") {
-                auto vertices = occupancy.vertices_in_area(*area_ptr);
-                if (vertices.empty()) {
-                    continue;
-                }
-
-                std::shuffle(vertices.begin(), vertices.end(), ctx.rng());
-
-                for (auto* vertex : vertices) {
-                    if (!vertex) continue;
-                    SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
-                    bool placed = false;
-                    std::unordered_set<int> attempted_entries;
-                    const size_t max_candidate_attempts = info.candidates.entries().size();
-                    const bool enforce_spacing = info.check_min_spacing;
-                    for (size_t attempt = 0; attempt < max_candidate_attempts; ++attempt) {
-                        const auto candidate = info.select_candidate_excluding(
-                            ctx.rng(), spawn_catalog, attempted_entries);
-                        if (!candidate) {
-                            break;
-                        }
-                        if (candidate->entry_index >= 0) {
-                            attempted_entries.insert(candidate->entry_index);
-                        }
-                        if (candidate->is_null || !candidate->info) {
-                            occupancy.set_occupied(vertex, true);
-                            placed = true;
-                            break;
-                        }
-                        if (ctx.checker().check(candidate->info,
-                                                spawn_pos,
-                                                ctx.exclusion_zones(),
-                                                ctx.all_assets(),
-                                                true,
-                                                enforce_spacing,
-                                                false,
-                                                false,
-                                                5)) {
-                            continue;
-                        }
-                        auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
-                                                      candidate->info,
-                                                      *area_ptr,
-                                                      spawn_pos,
-                                                      0,
-                                                      info.spawn_id,
-                                                      info.position);
-                        if (!result) {
-                            continue;
-                        }
-                        const bool track_spacing = ctx.track_spacing_for(result->info, enforce_spacing);
-                        ctx.checker().register_asset(result, enforce_spacing, track_spacing);
-                        occupancy.set_occupied(vertex, true);
-                        placed = true;
-                        break;
-                    }
-                    if (!placed) {
-                        occupancy.set_occupied(vertex, true);
-                    }
-                }
-
-                continue;
-            }
-            spawn_method.spawn(info, area_ptr, ctx);
-        }
-        checker.reset_session();
-    }
-
-    integrate_spawned_assets(spawned);
 }
 
 void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {

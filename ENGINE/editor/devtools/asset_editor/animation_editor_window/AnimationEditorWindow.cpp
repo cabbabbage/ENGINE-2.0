@@ -46,6 +46,7 @@
 
 #include "assets/asset/asset_info.hpp"
 #include "devtools/animation_runtime_refresh.hpp"
+#include "devtools/animation_frame_import_service.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/frame_importer.hpp"
 #include "devtools/dm_styles.hpp"
@@ -2714,15 +2715,16 @@ bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& a
         return false;
     }
 
-    std::filesystem::path output_dir = asset_root_path_ / animation_id;
-    auto result = devmode::frame_importer::import_frames_to_directory(frames, output_dir);
-    if (!result.success()) {
-        const std::string message = result.error_message.empty()
+    auto result = devmode::animation_import::import_frames_to_animation_folder(asset_root_path_,
+                                                                              animation_id,
+                                                                              frames);
+    if (!result.success) {
+        const std::string message = result.message.empty()
             ? std::string{"No frames were imported."}
-            : result.error_message;
+            : result.message;
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                      "[AnimationEditor] Failed to import frames into '%s': %s",
-                     output_dir.generic_string().c_str(),
+                     (asset_root_path_ / animation_id).generic_string().c_str(),
                      message.c_str());
         return false;
     }
@@ -2840,9 +2842,11 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
         }
     };
 
-    devmode::frame_importer::FrameImportResult import_result;
+    devmode::animation_import::ImportResult import_result;
     try {
-        import_result = devmode::frame_importer::import_frames_to_directory(frames, output_dir);
+        import_result = devmode::animation_import::import_frames_to_animation_folder(asset_root_path_,
+                                                                                    animation_id,
+                                                                                    frames);
     } catch (const std::exception& ex) {
         restore_folder_backup();
         return fail(std::string("Frame import threw exception: ") + ex.what());
@@ -2851,15 +2855,12 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
         return fail("Frame import threw an unknown exception.");
     }
 
-    if (!import_result.success()) {
+    if (!import_result.success) {
         restore_folder_backup();
-        const std::string stage = import_result.failed_stage.empty()
-            ? std::string{"unknown"}
-            : import_result.failed_stage;
-        const std::string detail = import_result.error_message.empty()
+        const std::string detail = import_result.message.empty()
             ? std::string{"No frames were imported."}
-            : import_result.error_message;
-        return fail("Import failed during " + stage + ": " + detail);
+            : import_result.message;
+        return fail(detail);
     }
 
     for (const auto& warning : import_result.warnings) {
@@ -2878,11 +2879,9 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
     if (!payload.is_object()) {
         payload = nlohmann::json::object();
     }
-    payload["source"] = nlohmann::json::object({
-        {"kind", "folder"},
-        {"path", animation_id},
-        {"name", ""}
-    });
+    const nlohmann::json folder_payload =
+        devmode::animation_import::build_folder_animation_payload(animation_id, import_result.frames_written);
+    payload["source"] = folder_payload["source"];
     payload["number_of_frames"] = import_result.frames_written;
     if (!payload.contains("on_end")) {
         payload["on_end"] = "default";
@@ -2924,35 +2923,37 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
         preview_provider_->invalidate(animation_id);
         preview_provider_->invalidate_all();
     }
-    std::string cache_error;
-    if (!invalidate_asset_cache_now(cache_error) && !cache_error.empty()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AnimationEditor][frame_import] %s",
-                    cache_error.c_str());
-    }
-
-    bool runtime_reloaded = true;
-    std::shared_ptr<AssetInfo> info_ptr = info_.lock();
-    if (info_ptr) {
-        runtime_reloaded = info_ptr->reload_animations_from_disk();
-        if (runtime_reloaded && assets_ && assets_->renderer()) {
-            info_ptr->loadAnimations(assets_->renderer(), true, false);
-            devmode::refresh_loaded_animation_instances(assets_, info_ptr);
-        } else if (runtime_reloaded && assets_) {
-            assets_->mark_active_assets_dirty();
+    std::string runtime_asset_key = manifest_asset_key_;
+    if (runtime_asset_key.empty()) {
+        if (auto info_ptr = info_.lock()) {
+            runtime_asset_key = info_ptr->name;
         }
+    }
+    devmode::animation_import::ImportResult runtime_result =
+        devmode::animation_import::reload_and_verify_runtime(assets_,
+                                                             runtime_asset_key,
+                                                             animation_id,
+                                                             import_result.frames_written);
+    if (!runtime_result.success) {
+        restore_payload();
+        restore_folder_backup();
+        (void)orchestrated_save(devmode::core::SaveOrchestrator::Reason::StateChange,
+                                document_id,
+                                [this]() { return document_->save_to_file_checked(true); });
+        std::string ignored_cache_error;
+        (void)devmode::animation_import::delete_asset_cache(runtime_asset_key, ignored_cache_error);
+        return fail(runtime_result.message.empty()
+                        ? std::string{"Runtime verification failed after importing frames."}
+                        : runtime_result.message);
+    }
+    if (auto info_ptr = info_.lock()) {
+        devmode::refresh_loaded_animation_instances(assets_, info_ptr);
     }
 
     outcome.success = true;
     outcome.frames_written = import_result.frames_written;
     outcome.message = "Imported " + std::to_string(import_result.frames_written) +
                       " frame(s) to " + output_dir.generic_string();
-    if (!runtime_reloaded) {
-        outcome.message += " (saved, but runtime reload failed; reopen the asset if preview is stale)";
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "[AnimationEditor][frame_import] runtime reload failed after successful import animation='%s'",
-                     animation_id.c_str());
-    }
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "[AnimationEditor][frame_import] success animation='%s' written=%d target='%s'",
                 animation_id.c_str(),
@@ -3122,7 +3123,7 @@ bool AnimationEditorWindow::create_or_replace_animation_payload(const std::strin
 }
 
 void AnimationEditorWindow::handle_create_defaults() {
-    enum class DefaultsStageError { None, SourceDependency, CopyFailure, PayloadWriteFailure };
+    enum class DefaultsStageError { None, SourceDependency, CopyFailure, PayloadWriteFailure, RuntimeVerificationFailure };
     struct PlannedDefaultWrite {
         DefaultAnimationSpec spec;
         std::filesystem::path folder_path;
@@ -3303,6 +3304,45 @@ void AnimationEditorWindow::handle_create_defaults() {
         if (!persisted) error = DefaultsStageError::PayloadWriteFailure;
     }
 
+    if (error == DefaultsStageError::None && assets_) {
+        std::string runtime_asset_key = manifest_asset_key_;
+        if (runtime_asset_key.empty()) {
+            if (auto info_ptr = info_.lock()) {
+                runtime_asset_key = info_ptr->name;
+            }
+        }
+        bool loaded_runtime = false;
+        for (const auto& write : plan) {
+            if (!write.spec.folder_sourced) {
+                continue;
+            }
+            if (!loaded_runtime) {
+                auto runtime = devmode::animation_import::reload_and_verify_runtime(assets_,
+                                                                                    runtime_asset_key,
+                                                                                    write.spec.id,
+                                                                                    frame_count);
+                if (!runtime.success) {
+                    error = DefaultsStageError::RuntimeVerificationFailure;
+                    break;
+                }
+                loaded_runtime = true;
+            } else {
+                std::string verify_error;
+                if (!devmode::animation_import::verify_runtime_textures(assets_->library().get(runtime_asset_key),
+                                                                        write.spec.id,
+                                                                        frame_count,
+                                                                        verify_error)) {
+                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                                 "[AnimationEditor] Defaults runtime verification failed for '%s': %s",
+                                 write.spec.id.c_str(),
+                                 verify_error.c_str());
+                    error = DefaultsStageError::RuntimeVerificationFailure;
+                    break;
+                }
+            }
+        }
+    }
+
     if (error != DefaultsStageError::None) {
         for (const auto& id : created_ids) {
             if (ids_before_defaults_set.count(id) == 0) {
@@ -3329,8 +3369,22 @@ void AnimationEditorWindow::handle_create_defaults() {
                             ec.message().c_str());
             }
         }
+        if (document_) {
+            (void)orchestrated_save(devmode::core::SaveOrchestrator::Reason::StateChange,
+                                    manifest_asset_key_.empty() ? std::string("animation-editor") : manifest_asset_key_,
+                                    [this]() { return document_->save_to_file_checked(true); });
+        }
+        std::string runtime_asset_key = manifest_asset_key_;
+        if (runtime_asset_key.empty()) {
+            if (auto info_ptr = info_.lock()) {
+                runtime_asset_key = info_ptr->name;
+            }
+        }
+        std::string ignored_cache_error;
+        (void)devmode::animation_import::delete_asset_cache(runtime_asset_key, ignored_cache_error);
         if (error == DefaultsStageError::CopyFailure) set_status_message("Create defaults failed while importing source frames. Check source images and write permissions.", 300);
         else if (error == DefaultsStageError::PayloadWriteFailure) set_status_message("Create defaults failed while writing animation payloads. No partial defaults were kept.", 300);
+        else if (error == DefaultsStageError::RuntimeVerificationFailure) set_status_message("Create defaults failed while loading imported textures. No partial defaults were kept.", 300);
         else set_status_message("Create defaults failed: a source dependency was missing.", 300);
         return;
     }

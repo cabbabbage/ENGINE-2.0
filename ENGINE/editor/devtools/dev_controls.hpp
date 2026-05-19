@@ -348,7 +348,6 @@ private:
     int map_radius_or_default() const;
     void remove_spawn_group_assets(const std::string& spawn_id);
     void integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned);
-    void regenerate_map_spawn_group(const nlohmann::json& entry);
     void regenerate_boundary_spawn_group(const nlohmann::json& boundary_data);
     
     void ensure_boundary_assets_modal_open();

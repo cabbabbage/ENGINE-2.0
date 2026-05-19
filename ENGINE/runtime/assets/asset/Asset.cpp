@@ -2221,6 +2221,10 @@ std::vector<animation_update::Attack> Asset::process_pending_attacks() {
 }
 
 void Asset::mark_anchors_dirty() {
+        ++anchor_lookup_invalidation_generation_;
+        if (anchor_lookup_invalidation_generation_ == 0) {
+                ++anchor_lookup_invalidation_generation_;
+        }
         for (auto& handle : anchor_handles_) {
                 handle.dirty = true;
         }
@@ -2239,6 +2243,7 @@ void Asset::invalidate_anchor_registry() {
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
+        anchor_lookup_cache_.clear();
         mark_anchors_dirty();
 }
 
@@ -2440,6 +2445,15 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
 std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                                                anchor_points::GridMaterialization grid_policy,
                                                AnchorResolveMode resolve_mode) {
+        auto& cache_entry = anchor_lookup_cache_[name];
+        if (cache_entry.invalidation_generation != anchor_lookup_invalidation_generation_) {
+                cache_entry.state = AnchorLookupTriState::Unknown;
+                cache_entry.invalidation_generation = anchor_lookup_invalidation_generation_;
+        }
+        if (resolve_mode == AnchorResolveMode::Cached &&
+            cache_entry.state == AnchorLookupTriState::Unresolved) {
+                return std::nullopt;
+        }
         if (!anchors_initialized_) {
                 initialize_anchor_registry_from_animations();
         }
@@ -2475,6 +2489,7 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                 }
         }
         if (resolved_index >= anchor_handles_.size() || resolved_index >= anchor_points_.size()) {
+                cache_entry.state = AnchorLookupTriState::Unresolved;
                 return std::nullopt;
         }
 
@@ -2632,6 +2647,7 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                         if (resolved_index < anchor_points_.size()) {
                                 anchor_points_[resolved_index] = resolved;
                         }
+                        cache_entry.state = AnchorLookupTriState::Resolved;
                         return resolved;
                 }
         }
@@ -2640,7 +2656,18 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                                                            grid_policy,
                                                            frame_anchor,
                                                            resolve_mode);
+        cache_entry.state = resolved.exists ? AnchorLookupTriState::Resolved : AnchorLookupTriState::Unresolved;
         return resolved;
+}
+
+bool Asset::is_anchor_cached_unresolved(const std::string& name) const {
+        auto it = anchor_lookup_cache_.find(name);
+        if (it == anchor_lookup_cache_.end()) {
+                return false;
+        }
+        const AnchorLookupCacheEntry& entry = it->second;
+        return entry.invalidation_generation == anchor_lookup_invalidation_generation_ &&
+               entry.state == AnchorLookupTriState::Unresolved;
 }
 
 

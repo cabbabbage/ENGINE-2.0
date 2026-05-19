@@ -1449,7 +1449,6 @@ void AnimationEditorWindow::render(SDL_Renderer* renderer) const {
     if (defaults_modal_actionable()) {
         render_defaults_modal(renderer);
     }
-    render_debug_overlay(renderer);
 
     renderer_state.restore(&last_debug_render_target_);
     first_render_completed_ = true;

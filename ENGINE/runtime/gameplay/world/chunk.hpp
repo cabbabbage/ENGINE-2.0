@@ -23,6 +23,7 @@ struct Chunk {
     GridBounds world_bounds = GridBounds::from_xywh(0, 0, 0, 0);
 
     std::vector<Asset*> assets;
+    std::vector<GridId> resident_point_ids;
     std::uint64_t       occlusion_revision = 0;
     std::uint64_t       tile_texture_revision = 0;
 

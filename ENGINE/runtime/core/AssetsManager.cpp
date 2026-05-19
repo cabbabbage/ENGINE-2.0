@@ -4648,7 +4648,9 @@ void Assets::rebuild_active_from_screen_grid() {
                           " camera_state=" + std::to_string(camera_.camera_state_version()) +
                           " depth_culled=" + std::to_string(camera_.last_depth_culled()) +
                           " nodes=" + std::to_string(camera_.last_nodes_visited()) +
-                          " branches_skipped=" + std::to_string(camera_.last_branches_skipped()));
+                          " branches_skipped=" + std::to_string(camera_.last_branches_skipped()) +
+                          " active_chunk_points_scanned=" + std::to_string(camera_.last_active_chunk_points_scanned()) +
+                          " asset_to_point_lookups_avoided=" + std::to_string(camera_.last_asset_to_point_lookups_avoided()));
     }
     if (traversal_empty &&
         active_assets.empty() &&

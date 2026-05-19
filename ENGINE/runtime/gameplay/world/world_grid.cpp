@@ -284,6 +284,13 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     }
     std::unique_ptr<Asset> owned = std::move(*it);
     point.occupants.erase(it);
+    if (point.occupants.empty() && point.chunk) {
+        auto& resident_ids = point.chunk->resident_point_ids;
+        resident_ids.erase(std::remove(resident_ids.begin(), resident_ids.end(), point.id), resident_ids.end());
+#ifndef NDEBUG
+        SDL_assert(std::find(resident_ids.begin(), resident_ids.end(), point.id) == resident_ids.end());
+#endif
+    }
     decrement_xz_occupancy(point);
     point.invalidate_screen_data();
     if (clear_mapping) {
@@ -311,6 +318,15 @@ void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, GridPoi
         return;
     }
     const bool had_assets_before = point.has_assets_or_active_children();
+    if (point.occupants.empty() && point.chunk) {
+        auto& resident_ids = point.chunk->resident_point_ids;
+        if (std::find(resident_ids.begin(), resident_ids.end(), point.id) == resident_ids.end()) {
+            resident_ids.push_back(point.id);
+        }
+#ifndef NDEBUG
+        SDL_assert(std::find(resident_ids.begin(), resident_ids.end(), point.id) != resident_ids.end());
+#endif
+    }
     point.occupants.push_back(std::move(owned));
     bind_asset_to_point(target, point);
     increment_xz_occupancy(point);

@@ -369,6 +369,8 @@ struct GridPoint {
     std::vector<std::unique_ptr<Asset>> occupants;
     int children_with_assets = 0;       // Count of direct children marked active (assets or active sub-branches).
     std::uint8_t active_child_mask = 0; // Branch activity bits for quick traversal across ±X/±Y/±Z.
+    bool empty_resolved = false;
+    std::uint64_t empty_resolved_revision = 0;
 
 private:
     static constexpr std::uint8_t child_bit(ChildDirection dir) {

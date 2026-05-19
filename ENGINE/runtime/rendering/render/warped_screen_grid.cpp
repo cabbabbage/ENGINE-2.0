@@ -24,6 +24,9 @@
 #include <string>
 #include <limits>
 #include <optional>
+#include <deque>
+#include <cstdlib>
+#include <sstream>
 #include <nlohmann/json.hpp>
 
 template <typename T>
@@ -41,6 +44,18 @@ namespace {
     constexpr float  kMinNearHorizonSampleOffsetPx = 8.0f;
     constexpr float  kCameraMovementSpeedEpsilon = 1.0f;
     constexpr float  kLookAheadTimeSeconds = 0.12f;
+
+    bool render_profiler_enabled() {
+        static const bool enabled = [](){ const char* e=std::getenv("ENGINE_RENDER_GRID_PROFILER"); return e && std::string(e)!="0"; }();
+        return enabled;
+    }
+    double render_profiler_spike_ms() {
+        static const double threshold = [](){ const char* e=std::getenv("ENGINE_RENDER_GRID_SPIKE_MS"); return e ? std::max(0.0, std::atof(e)) : 16.0; }();
+        return threshold;
+    }
+    struct RollingCosts { std::deque<double> values; };
+    RollingCosts& rolling_costs(){ static RollingCosts r; return r; }
+    double percentile(const std::deque<double>& v, double p){ if(v.empty()) return 0.0; std::vector<double> t(v.begin(),v.end()); std::sort(t.begin(),t.end()); size_t idx=std::min(t.size()-1, static_cast<size_t>(std::floor((p/100.0)*(t.size()-1)))); return t[idx]; }
 
     std::uint64_t stable_dynamic_asset_hash(const Asset& asset) {
         if (!asset.spawn_id.empty()) {
@@ -931,7 +946,9 @@ void WarpedScreenGrid::set_screen_dimensions(int screen_width, int screen_height
     bounds_.right = resized_bounds.right;
     bounds_.bottom = resized_bounds.bottom;
     invalidate_camera_cache();
+    const std::uint64_t phase_view_begin = profiler_enabled ? SDL_GetPerformanceCounter() : 0;
     recompute_current_view();
+    phase_view_ms = ms_since(phase_view_begin);
 }
 
 const CameraState& WarpedScreenGrid::camera_state_cached() const {
@@ -1846,9 +1863,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     frame_counter_ = frame_id;
     const std::uint64_t frame_stamp = frame_id;
     clear_grid_state();
+    const bool profiler_enabled = render_profiler_enabled();
+    const std::uint64_t profiler_begin = profiler_enabled ? SDL_GetPerformanceCounter() : 0;
+    const std::uint64_t profiler_freq = profiler_enabled ? SDL_GetPerformanceFrequency() : 0;
+    auto ms_since = [&](std::uint64_t start)->double { if (!profiler_enabled || profiler_freq==0) return 0.0; return (static_cast<double>(SDL_GetPerformanceCounter()-start)*1000.0)/static_cast<double>(profiler_freq); };
+    double phase_view_ms=0, phase_candidate_ms=0, phase_projection_ms=0, phase_visibility_ms=0, phase_traversal_ms=0;
 
     // רענן את אזור התצוגה במרחב העולם לפי פרמטרי המצלמה האחרונים.
+    const std::uint64_t phase_view_begin = profiler_enabled ? SDL_GetPerformanceCounter() : 0;
     recompute_current_view();
+    phase_view_ms = ms_since(phase_view_begin);
 
     int minx, miny, maxx, maxy;
     std::tie(minx, miny, maxx, maxy) = current_view_.get_bounds();
@@ -1935,6 +1959,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             grid_points = &active_chunk_grid_point_scratch_;
         }
     }
+    phase_candidate_ms = ms_since(profiler_enabled ? profiler_begin : 0);
     if (grid_points->empty()) {
         query_grid_points = world_grid.query_region(
             world_bounds,
@@ -2381,6 +2406,34 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         last_max_world_z_ = 0;
     }
 
+    if (profiler_enabled) {
+        const double total_ms = ms_since(profiler_begin);
+        auto& rc = rolling_costs();
+        rc.values.push_back(total_ms);
+        if (rc.values.size() > 240) rc.values.pop_front();
+        const double p50 = percentile(rc.values, 50.0);
+        const double p95 = percentile(rc.values, 95.0);
+        const double p99 = percentile(rc.values, 99.0);
+        phase_traversal_ms = total_ms - (phase_view_ms + phase_candidate_ms + phase_projection_ms + phase_visibility_ms);
+        std::ostringstream ss;
+        ss << "grid:view_ms=" << phase_view_ms
+           << ",candidate_ms=" << phase_candidate_ms
+           << ",projection_ms=" << phase_projection_ms
+           << ",visibility_ms=" << phase_visibility_ms
+           << ",traversal_ms=" << phase_traversal_ms
+           << ",points_scanned=" << grid_points->size()
+           << ",assets_scanned=" << assets_stageC_entered_
+           << ",assets_projected=" << projection_calls_total_
+           << ",anchors_recomputed=" << anchor_visibility_debug_counters_.anchor_force_recompute_calls
+           << ",frame_ms=" << total_ms << ",p50=" << p50 << ",p95=" << p95 << ",p99=" << p99;
+        render_diagnostics::set_render_stage_timings(ss.str());
+        if (total_ms > render_profiler_spike_ms()) {
+            vibble::log::warn("[WarpedScreenGridProfiler] spike frame_ms=" + std::to_string(total_ms) +
+                              " projection_calls=" + std::to_string(projection_calls_total_) +
+                              " assets_stageC=" + std::to_string(assets_stageC_entered_) +
+                              " points=" + std::to_string(grid_points->size()));
+        }
+    }
     render_diagnostics::set_visibility_projection_stats(projection_calls_total_,
                                                      projection_calls_saved_early_,
                                                      assets_stageA_reject_,

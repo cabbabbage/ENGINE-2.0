@@ -210,6 +210,21 @@ namespace {
         return overlap_x && overlap_y;
     }
 
+
+    bool rect_contains_screen_point(const ScreenBounds& bounds,
+                                    float x,
+                                    float y,
+                                    float margin) {
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(margin)) {
+            return false;
+        }
+        const float clamped_margin = std::max(0.0f, margin);
+        return x >= (bounds.left - clamped_margin) &&
+               x <= (bounds.right + clamped_margin) &&
+               y >= (bounds.top - clamped_margin) &&
+               y <= (bounds.bottom + clamped_margin);
+    }
+
     float horizon_fade_for_height(double camera_height) {
         const double safe_height = std::max(1.0, camera_height);
         const double scaled = std::clamp(std::sqrt(safe_height) * 18.0, 60.0, 420.0);
@@ -1947,10 +1962,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     runtime_pitch_rad_ = cam_state.pitch_radians;
     runtime_pitch_deg_ = cam_state.pitch_degrees;
     runtime_depth_offset_px_ = static_cast<float>(cam_state.reference_depth);
-    if (last_projection_cache_invalidation_version_ != camera_state_version_) {
-        world_grid.invalidate_projection_cache();
-        last_projection_cache_invalidation_version_ = camera_state_version_;
-    }
     if (!cam_state.valid) {
         last_min_world_z_ = 0;
         last_max_world_z_ = 0;
@@ -1959,6 +1970,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     projection_calls_saved_early_ = 0;
     assets_stageA_reject_ = 0;
     assets_stageC_entered_ = 0;
+    constexpr std::uint32_t kProjectionBudgetBase = 2048;
+    projection_recompute_budget_ = static_cast<std::uint32_t>(std::min<std::size_t>(grid_points->size(), static_cast<std::size_t>(kProjectionBudgetBase)));
+    projection_points_deferred_ = 0;
+    projection_points_updated_ = 0;
+    std::uint32_t projection_budget_remaining = projection_recompute_budget_;
         rebuild_grid_bounds();
         return;
     }
@@ -2239,15 +2255,35 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             continue;
         }
 
-        const bool needs_projection = gp->needs_projection_update(frame_stamp, camera_state_version_);
+        const auto& projection_cache = gp->projection_cache();
+        const bool camera_mismatch = projection_cache.last_camera_state_version != camera_state_version_;
+        const bool stale_for_frame = projection_cache.screen_data_frame_updated != frame_stamp;
+        bool needs_projection = !projection_cache.screen_data_valid || camera_mismatch || stale_for_frame;
 
         if (needs_projection) {
+            const bool has_cached_screen = projection_cache.screen_data_valid;
+            const bool near_visible_region = has_cached_screen &&
+                rect_contains_screen_point(cull_bounds, projection_cache.screen.x, projection_cache.screen.y, 64.0f);
+            const bool can_defer = has_cached_screen && camera_mismatch && !near_visible_region;
+            if (can_defer && projection_budget_remaining == 0) {
+                ++projection_points_deferred_;
+                needs_projection = false;
+            }
+        }
+
+        if (needs_projection) {
+            if (projection_budget_remaining == 0) {
+                ++projection_points_deferred_;
+                continue;
+            }
             world::CameraProjectionParams params = camera_state_to_projection_params(
                 cam_state, screen_width_, screen_height_, horizon_band);
             params.state_version = camera_state_version_;
 
             gp->project_to_screen(params);
             gp->mark_screen_data_updated(frame_stamp);
+            --projection_budget_remaining;
+            ++projection_points_updated_;
         }
 
         const int z_floor = static_cast<int>(std::floor(base_world_z));
@@ -2348,7 +2384,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     render_diagnostics::set_visibility_projection_stats(projection_calls_total_,
                                                      projection_calls_saved_early_,
                                                      assets_stageA_reject_,
-                                                     assets_stageC_entered_);
+                                                     assets_stageC_entered_,
+                                                     projection_recompute_budget_,
+                                                     projection_points_deferred_,
+                                                     projection_points_updated_);
 
     rebuild_grid_bounds();
     bounds_.left   = cull_bounds.left;

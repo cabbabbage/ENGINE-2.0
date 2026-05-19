@@ -292,6 +292,9 @@ public:
     std::uint32_t projection_calls_saved_early() const { return projection_calls_saved_early_; }
     std::uint32_t assets_stageA_reject() const { return assets_stageA_reject_; }
     std::uint32_t assets_stageC_entered() const { return assets_stageC_entered_; }
+    std::uint32_t projection_recompute_budget() const { return projection_recompute_budget_; }
+    std::uint32_t projection_points_deferred() const { return projection_points_deferred_; }
+    std::uint32_t projection_points_updated() const { return projection_points_updated_; }
     void set_frustum_padding_world(float padding);
     float frustum_padding_world() const { return frustum_padding_world_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
@@ -392,7 +395,6 @@ private:
     std::unordered_map<const Asset*, std::uint8_t> visibility_reason_flags_;
     std::uint64_t frame_counter_ = 0;
     mutable std::uint64_t camera_state_version_ = 0;
-    std::uint64_t last_projection_cache_invalidation_version_ = 0;
     std::uint32_t last_nodes_visited_ = 0;
     std::uint32_t last_branches_skipped_ = 0;
     std::uint32_t last_active_chunk_points_scanned_ = 0;
@@ -402,6 +404,9 @@ private:
     std::uint32_t projection_calls_saved_early_ = 0;
     std::uint32_t assets_stageA_reject_ = 0;
     std::uint32_t assets_stageC_entered_ = 0;
+    std::uint32_t projection_recompute_budget_ = 0;
+    std::uint32_t projection_points_deferred_ = 0;
+    std::uint32_t projection_points_updated_ = 0;
     std::unordered_map<const Asset*, SpriteProjectionCacheEntry> sprite_projection_cache_;
     int last_min_world_z_ = 0;
     int last_max_world_z_ = 0;

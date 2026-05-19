@@ -4460,9 +4460,6 @@ const devmode::core::ManifestStore* Assets::manifest_store() const {
 }
 
 void Assets::notify_spawn_group_config_changed(const nlohmann::json& entry) {
-    if (dynamic_spawn_runtime_) {
-        dynamic_spawn_runtime_->compile_from_map();
-    }
     mark_grid_dirty();
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->notify_spawn_group_config_changed(entry);
@@ -4472,12 +4469,29 @@ void Assets::notify_spawn_group_config_changed(const nlohmann::json& entry) {
 void Assets::notify_spawn_group_removed(const std::string& spawn_id) {
     if (dynamic_spawn_runtime_) {
         dynamic_spawn_runtime_->delete_for_spawn_group(spawn_id);
-        dynamic_spawn_runtime_->compile_from_map();
     }
     mark_grid_dirty();
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->notify_spawn_group_removed(spawn_id);
     }
+}
+
+void Assets::notify_dynamic_spawn_distance_changed() {
+    if (dynamic_spawn_runtime_) {
+        dynamic_spawn_runtime_->refresh_distance_to_edge();
+    }
+    mark_grid_dirty();
+    mark_active_assets_dirty();
+    mark_non_player_update_buffer_dirty();
+}
+
+void Assets::rebuild_dynamic_spawn_runtime_from_map() {
+    if (dynamic_spawn_runtime_) {
+        dynamic_spawn_runtime_->compile_from_map();
+    }
+    mark_grid_dirty();
+    mark_active_assets_dirty();
+    mark_non_player_update_buffer_dirty();
 }
 
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {

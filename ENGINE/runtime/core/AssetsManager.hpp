@@ -227,6 +227,8 @@ public:
     const devmode::core::ManifestStore* manifest_store() const;
     void notify_spawn_group_config_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
+    void notify_dynamic_spawn_distance_changed();
+    void rebuild_dynamic_spawn_runtime_from_map();
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
     void notify_camera_activity(bool active);
 

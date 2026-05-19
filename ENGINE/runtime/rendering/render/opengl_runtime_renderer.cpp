@@ -1338,8 +1338,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                                                        camera_settings.radial_blur_px);
     if (dof_requested) {
         constexpr int kDofFarNearBucketRadius = 2;
-        const auto bucket_depth_layer = [focus = out_data.focus_depth_layer](int layer) {
-            const int delta = std::clamp(layer - focus, -kDofFarNearBucketRadius, kDofFarNearBucketRadius);
+        const auto bucket_depth_layer =
+            [focus = out_data.focus_depth_layer, bucket_radius = kDofFarNearBucketRadius](int layer) {
+            const int delta = std::clamp(layer - focus, -bucket_radius, bucket_radius);
             return focus + delta;
         };
         std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> depth_xy_sprite_packets{};

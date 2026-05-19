@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <unordered_set>
+#include <utility>
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
@@ -183,6 +184,7 @@ void DynamicSpawnRuntime::compile_from_map() {
     next_selector_id_ = 1;
     diagnostics_ = {};
 
+    planned_max_spawn_from_room_px_ = max_spawn_from_room_px();
     parse_selectors();
     build_plan();
     for (const auto& entry : cells_by_chunk_) {
@@ -196,6 +198,7 @@ void DynamicSpawnRuntime::clear() {
     cells_by_chunk_.clear();
     active_chunks_.clear();
     diagnostics_ = {};
+    planned_max_spawn_from_room_px_ = 128;
 }
 
 void DynamicSpawnRuntime::clear_active_instances(bool delete_assets) {
@@ -380,17 +383,148 @@ void DynamicSpawnRuntime::parse_selectors() {
 }
 
 void DynamicSpawnRuntime::build_plan() {
+    cells_by_chunk_.clear();
+    build_plan_into(cells_by_chunk_, planned_max_spawn_from_room_px_);
+}
+
+void DynamicSpawnRuntime::build_plan_into(PlanByChunk& plan, int threshold_px) const {
     const AreaGeometry geometry = collect_area_geometry();
     if (!geometry.valid || selectors_.empty()) {
         return;
     }
     for (const Selector& selector : selectors_) {
-        add_selector_cells(selector, geometry);
+        add_selector_cells(selector, geometry, threshold_px, plan);
     }
 }
 
-void DynamicSpawnRuntime::add_selector_cells(const Selector& selector, const AreaGeometry& geometry) {
-    const int threshold = max_spawn_from_room_px();
+void DynamicSpawnRuntime::refresh_distance_to_edge() {
+    diagnostics_.spawned = 0;
+    diagnostics_.reused = 0;
+    diagnostics_.suspended_this_sync = 0;
+    diagnostics_.sync_ms = 0.0;
+    const std::uint64_t freq = SDL_GetPerformanceFrequency();
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
+
+    if (selectors_.empty()) {
+        diagnostics_.planned_cells = 0;
+        diagnostics_.active = active_.size();
+        diagnostics_.suspended = suspended_.size();
+        return;
+    }
+
+    const int previous_threshold = planned_max_spawn_from_room_px_;
+    const int next_threshold = max_spawn_from_room_px();
+    if (previous_threshold == next_threshold) {
+        std::size_t planned_count = 0;
+        for (const auto& [chunk, cells] : cells_by_chunk_) {
+            (void)chunk;
+            planned_count += cells.size();
+        }
+        diagnostics_.planned_cells = planned_count;
+        diagnostics_.active = active_.size();
+        diagnostics_.suspended = suspended_.size();
+        return;
+    }
+
+    const AreaGeometry geometry = collect_area_geometry();
+    if (!geometry.valid) {
+        clear_active_instances(true);
+        cells_by_chunk_.clear();
+        planned_max_spawn_from_room_px_ = next_threshold;
+        diagnostics_.active = active_.size();
+        diagnostics_.suspended = suspended_.size();
+        return;
+    }
+
+    std::unordered_set<CellKey, CellKeyHash> obsolete_cells;
+    if (next_threshold < previous_threshold) {
+        for (auto& [chunk, cells] : cells_by_chunk_) {
+            (void)chunk;
+            for (const PlannedCell& cell : cells) {
+                const Selector* selector = nullptr;
+                for (const Selector& candidate : selectors_) {
+                    if (candidate.id == cell.key.selector_id && candidate.mode == cell.key.mode) {
+                        selector = &candidate;
+                        break;
+                    }
+                }
+                std::string owner_name;
+                if (!selector ||
+                    !resolve_cell_owner(*selector,
+                                        geometry,
+                                        SDL_Point{cell.owner_anchor_world_x, cell.owner_anchor_world_z},
+                                        next_threshold,
+                                        owner_name)) {
+                    obsolete_cells.insert(cell.key);
+                }
+            }
+        }
+    } else {
+        std::unordered_set<CellKey, CellKeyHash> known_keys;
+        for (const auto& [chunk, cells] : cells_by_chunk_) {
+            (void)chunk;
+            for (const PlannedCell& cell : cells) {
+                known_keys.insert(cell.key);
+            }
+        }
+        for (const Selector& selector : selectors_) {
+            add_selector_cells_in_distance_band(selector,
+                                                geometry,
+                                                previous_threshold,
+                                                next_threshold,
+                                                cells_by_chunk_,
+                                                known_keys);
+        }
+    }
+
+    if (!obsolete_cells.empty()) {
+        for (auto& [chunk, cells] : cells_by_chunk_) {
+            (void)chunk;
+            cells.erase(std::remove_if(cells.begin(), cells.end(), [&](const PlannedCell& cell) {
+                return obsolete_cells.find(cell.key) != obsolete_cells.end();
+            }), cells.end());
+        }
+    }
+
+    std::size_t planned_count = 0;
+    for (const auto& [chunk, cells] : cells_by_chunk_) {
+        (void)chunk;
+        planned_count += cells.size();
+    }
+
+    std::vector<std::pair<CellKey, Asset*>> assets_to_suspend;
+    if (!obsolete_cells.empty()) {
+        for (const auto& [key, asset] : active_) {
+            if (obsolete_cells.find(key) != obsolete_cells.end()) {
+                assets_to_suspend.push_back({key, asset});
+            }
+        }
+    }
+
+    for (const auto& [key, asset] : assets_to_suspend) {
+        suspend_cell(key, asset);
+    }
+
+    planned_max_spawn_from_room_px_ = next_threshold;
+    diagnostics_.planned_cells = planned_count;
+
+    for (const ChunkKey& chunk : active_chunks_) {
+        activate_chunk(chunk);
+    }
+
+    if (freq != 0) {
+        const std::uint64_t end = SDL_GetPerformanceCounter();
+        diagnostics_.sync_ms = static_cast<double>(end - begin) * 1000.0 / static_cast<double>(freq);
+    }
+    diagnostics_.active = active_.size();
+    diagnostics_.suspended = suspended_.size();
+}
+
+void DynamicSpawnRuntime::add_selector_cells(const Selector& selector,
+                                             const AreaGeometry& geometry,
+                                             int threshold_px,
+                                             PlanByChunk& plan) const {
+    const int threshold = std::max(0, threshold_px);
     const int expanded_min_x = geometry.min_x - threshold;
     const int expanded_min_z = geometry.min_z - threshold;
     const int expanded_max_x = geometry.max_x + threshold;
@@ -408,35 +542,91 @@ void DynamicSpawnRuntime::add_selector_cells(const Selector& selector, const Are
     for (int gx = min_gx; gx <= max_gx; ++gx) {
         for (int gz = min_gz; gz <= max_gz; ++gz) {
             const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(gx, gz, resolution);
-            if (!point_near_geometry(owner_anchor, geometry, threshold)) {
+            std::string owner_name;
+            if (!resolve_cell_owner(selector, geometry, owner_anchor, threshold, owner_name)) {
                 continue;
             }
 
-            std::string owner_name;
-            if (selector.mode == Mode::InheritedMap) {
-                Room* owner = inherited_room_for_point(owner_anchor);
-                if (!owner) {
-                    continue;
-                }
-                owner_name = owner->room_name;
-            } else {
-                if (point_inside_any_area(owner_anchor, geometry)) {
-                    continue;
-                }
-                owner_name = assets_.map_id();
-            }
-
             CellKey key{selector.mode, selector.id, resolution, gx, gz};
-            add_planned_cell(selector, key, owner_anchor.x, owner_anchor.y, owner_name);
+            add_planned_cell(selector, key, owner_anchor.x, owner_anchor.y, owner_name, plan);
         }
     }
+}
+
+void DynamicSpawnRuntime::add_selector_cells_in_distance_band(
+    const Selector& selector,
+    const AreaGeometry& geometry,
+    int previous_threshold_px,
+    int next_threshold_px,
+    PlanByChunk& plan,
+    std::unordered_set<CellKey, CellKeyHash>& known_keys) const {
+    const int previous_threshold = std::max(0, previous_threshold_px);
+    const int next_threshold = std::max(previous_threshold, next_threshold_px);
+    const int expanded_min_x = geometry.min_x - next_threshold;
+    const int expanded_min_z = geometry.min_z - next_threshold;
+    const int expanded_max_x = geometry.max_x + next_threshold;
+    const int expanded_max_z = geometry.max_z + next_threshold;
+    const int resolution = vibble::grid::clamp_resolution(selector.grid_resolution);
+    const SDL_Point min_index = vibble::grid::global_grid().world_to_index(
+        SDL_Point{expanded_min_x, expanded_min_z}, resolution);
+    const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
+        SDL_Point{expanded_max_x, expanded_max_z}, resolution);
+    const int min_gx = std::min(min_index.x, max_index.x);
+    const int max_gx = std::max(min_index.x, max_index.x);
+    const int min_gz = std::min(min_index.y, max_index.y);
+    const int max_gz = std::max(min_index.y, max_index.y);
+
+    for (int gx = min_gx; gx <= max_gx; ++gx) {
+        for (int gz = min_gz; gz <= max_gz; ++gz) {
+            CellKey key{selector.mode, selector.id, resolution, gx, gz};
+            if (known_keys.find(key) != known_keys.end()) {
+                continue;
+            }
+            const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(gx, gz, resolution);
+            if (point_near_geometry(owner_anchor, geometry, previous_threshold)) {
+                continue;
+            }
+            std::string owner_name;
+            if (!resolve_cell_owner(selector, geometry, owner_anchor, next_threshold, owner_name)) {
+                continue;
+            }
+            add_planned_cell(selector, key, owner_anchor.x, owner_anchor.y, owner_name, plan);
+            known_keys.insert(key);
+        }
+    }
+}
+
+bool DynamicSpawnRuntime::resolve_cell_owner(const Selector& selector,
+                                             const AreaGeometry& geometry,
+                                             SDL_Point owner_anchor,
+                                             int threshold_px,
+                                             std::string& owner_name) const {
+    if (!point_near_geometry(owner_anchor, geometry, threshold_px)) {
+        return false;
+    }
+
+    if (selector.mode == Mode::InheritedMap) {
+        Room* owner = inherited_room_for_point(owner_anchor);
+        if (!owner) {
+            return false;
+        }
+        owner_name = owner->room_name;
+        return true;
+    }
+
+    if (point_inside_any_area(owner_anchor, geometry)) {
+        return false;
+    }
+    owner_name = assets_.map_id();
+    return true;
 }
 
 void DynamicSpawnRuntime::add_planned_cell(const Selector& selector,
                                            const CellKey& key,
                                            int owner_anchor_world_x,
                                            int owner_anchor_world_z,
-                                           const std::string& owner_name) {
+                                           const std::string& owner_name,
+                                           PlanByChunk& plan) const {
     const Candidate* candidate = pick_candidate(selector, key);
     if (!candidate || candidate->is_null || !candidate->info || candidate->asset_name.empty()) {
         return;
@@ -453,7 +643,7 @@ void DynamicSpawnRuntime::add_planned_cell(const Selector& selector,
     cell.asset_name = candidate->asset_name;
     cell.info = candidate->info;
     cell.chunk = chunk_key_for_world(owner_anchor_world_x, owner_anchor_world_z);
-    cells_by_chunk_[cell.chunk].push_back(std::move(cell));
+    plan[cell.chunk].push_back(std::move(cell));
 }
 
 void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds) {
@@ -570,10 +760,6 @@ std::unique_ptr<Asset> DynamicSpawnRuntime::create_asset_for_cell(const PlannedC
     asset->set_owning_room_name(cell.owner_name);
     asset->set_dynamic_spawned_asset(true);
     asset->finalize_setup();
-    asset->set_provisional_grid_point(cell.world_x,
-                                      asset->world_y(),
-                                      cell.world_z,
-                                      cell.key.grid_resolution);
     return asset;
 }
 

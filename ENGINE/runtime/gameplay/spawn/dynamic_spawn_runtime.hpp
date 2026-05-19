@@ -47,6 +47,7 @@ public:
     DynamicSpawnRuntime& operator=(const DynamicSpawnRuntime&) = delete;
 
     void compile_from_map();
+    void refresh_distance_to_edge();
     void sync(const world::GridBounds& work_bounds);
     void clear();
     void forget_asset(Asset* asset);
@@ -128,6 +129,8 @@ private:
         std::shared_ptr<AssetInfo> info;
     };
 
+    using PlanByChunk = std::unordered_map<ChunkKey, std::vector<PlannedCell>, ChunkKeyHash>;
+
     struct AreaGeometry {
         struct Segment {
             SDL_Point a{};
@@ -146,12 +149,28 @@ private:
     void clear_active_instances(bool delete_assets);
     void parse_selectors();
     void build_plan();
-    void add_selector_cells(const Selector& selector, const AreaGeometry& geometry);
+    void build_plan_into(PlanByChunk& plan, int threshold_px) const;
+    void add_selector_cells(const Selector& selector,
+                            const AreaGeometry& geometry,
+                            int threshold_px,
+                            PlanByChunk& plan) const;
+    void add_selector_cells_in_distance_band(const Selector& selector,
+                                             const AreaGeometry& geometry,
+                                             int previous_threshold_px,
+                                             int next_threshold_px,
+                                             PlanByChunk& plan,
+                                             std::unordered_set<CellKey, CellKeyHash>& known_keys) const;
     void add_planned_cell(const Selector& selector,
                           const CellKey& key,
                           int owner_anchor_world_x,
                           int owner_anchor_world_z,
-                          const std::string& owner_name);
+                          const std::string& owner_name,
+                          PlanByChunk& plan) const;
+    bool resolve_cell_owner(const Selector& selector,
+                            const AreaGeometry& geometry,
+                            SDL_Point owner_anchor,
+                            int threshold_px,
+                            std::string& owner_name) const;
     Asset* activate_cell(const PlannedCell& cell);
     std::unique_ptr<Asset> create_asset_for_cell(const PlannedCell& cell) const;
     void suspend_cell(const CellKey& key, Asset* asset);
@@ -174,13 +193,14 @@ private:
 
     Assets& assets_;
     std::vector<Selector> selectors_;
-    std::unordered_map<ChunkKey, std::vector<PlannedCell>, ChunkKeyHash> cells_by_chunk_;
+    PlanByChunk cells_by_chunk_;
     std::unordered_map<CellKey, Asset*, CellKeyHash> active_;
     std::unordered_map<CellKey, std::unique_ptr<Asset>, CellKeyHash> suspended_;
     std::unordered_map<Asset*, CellKey> asset_to_key_;
     std::unordered_set<ChunkKey, ChunkKeyHash> active_chunks_;
     DynamicSpawnDiagnostics diagnostics_{};
     std::uint32_t next_selector_id_ = 1;
+    int planned_max_spawn_from_room_px_ = 128;
 };
 
 } // namespace dynamic_spawn

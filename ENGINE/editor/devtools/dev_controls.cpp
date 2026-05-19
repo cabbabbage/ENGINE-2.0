@@ -5036,6 +5036,9 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
 
 void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
     (void)entry;
+    if (assets_) {
+        assets_->rebuild_dynamic_spawn_runtime_from_map();
+    }
 }
 
 void DevControls::apply_camera_area_render_flag() {

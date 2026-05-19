@@ -17,6 +17,7 @@
 
 #include "DockableCollapsible.hpp"
 #include "DockManager.hpp"
+#include "core/AssetsManager.hpp"
 #include "dm_styles.hpp"
 #include "tag_library.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
@@ -1005,6 +1006,9 @@ private:
         const int clamped = std::clamp(value, kMaxSpawnFromRoomMin, kMaxSpawnFromRoomMax);
         (*section_)["max_spawn_from_room"] = clamped;
         notify_save(false);
+        if (assets_) {
+            assets_->notify_dynamic_spawn_distance_changed();
+        }
     }
 
     static int clamp_jitter(int value) {
@@ -1217,7 +1221,7 @@ private:
             group.pie_widget->set_assets(assets_);
             group.pie_widget->set_search_extra_results_provider([search_extras]() { return *search_extras; });
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
-            // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
+            // Boundary edits update JSON only; the panel rebuild button applies catalog changes.
             group.pie_widget->set_defer_adjust_until_release(true);
             group.pie_widget->set_on_adjust([this, spawn_id = group.spawn_id](int idx, double delta) {
                 this->adjust_candidate_weight(spawn_id, idx, delta);
@@ -1372,9 +1376,6 @@ private:
                 group.jitter_stepper->set_value(clamped);
                 break;
             }
-        }
-        if (regen_callback_) {
-            regen_callback_(*entry);
         }
     }
 

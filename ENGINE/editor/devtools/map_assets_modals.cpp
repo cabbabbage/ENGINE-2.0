@@ -1149,21 +1149,20 @@ private:
         }
 
         const int max_spawn_from_room = current_max_spawn_from_room();
-        if (!max_spawn_from_room_stepper_) {
-            max_spawn_from_room_stepper_ = std::make_unique<DMNumericStepper>(
-                "max_spawn_from_room",
+        if (!max_spawn_from_room_slider_) {
+            max_spawn_from_room_slider_ = std::make_unique<DMSlider>(
+                "Dynamic Radius Range (px)",
                 kMaxSpawnFromRoomMin,
                 kMaxSpawnFromRoomMax,
                 max_spawn_from_room);
-            max_spawn_from_room_stepper_->set_step(1);
-            max_spawn_from_room_stepper_->set_on_change([this](int value) {
+            max_spawn_from_room_slider_->set_on_value_changed([this](int value) {
                 this->set_max_spawn_from_room(value);
             });
             max_spawn_from_room_widget_ =
-                std::make_unique<StepperWidget>(max_spawn_from_room_stepper_.get());
+                std::make_unique<SliderWidget>(max_spawn_from_room_slider_.get());
         }
-        if (max_spawn_from_room_stepper_) {
-            max_spawn_from_room_stepper_->set_value(max_spawn_from_room);
+        if (max_spawn_from_room_slider_) {
+            max_spawn_from_room_slider_->set_value(max_spawn_from_room);
         }
         if (max_spawn_from_room_widget_) {
             rows.push_back({max_spawn_from_room_widget_.get()});
@@ -1507,8 +1506,8 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
-    std::unique_ptr<DMNumericStepper> max_spawn_from_room_stepper_{};
-    std::unique_ptr<StepperWidget> max_spawn_from_room_widget_{};
+    std::unique_ptr<DMSlider> max_spawn_from_room_slider_{};
+    std::unique_ptr<SliderWidget> max_spawn_from_room_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
     int pie_callback_depth_ = 0;
     bool pending_rebuild_ = false;

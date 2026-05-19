@@ -279,21 +279,12 @@ void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, i
                 }
             }
         } else {
-            state->filelist_was_set = true;
-            for (int i = 0; filelist[i] != nullptr; ++i) {
-                const char* path = filelist[i];
-                if (path && *path) {
-                    const std::filesystem::path normalized = normalize_dialog_path(path);
-                    SDL_Log("[SDLModalDialog] file_dialog_callback path[%d]: raw='%s' normalized='%s'",
-                            i,
-                            path,
-                            normalized.string().c_str());
-                    if (!normalized.empty()) {
-                        state->result.paths.push_back(normalized);
-                        ++parsed_count;
-                    }
-                }
-            }
+            // Some SDL backends report count==0 with a non-null filelist pointer for an
+            // explicit empty selection. Treat this as cancellation and avoid walking a
+            // potentially non-null-terminated list.
+            state->result.status = FileDialogStatus::Cancelled;
+            state->result.error_message.reset();
+            state->result.paths.clear();
         }
         if (state->result.paths.empty()) {
             if (state->filelist_was_set) {

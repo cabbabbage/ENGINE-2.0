@@ -927,51 +927,97 @@ void SourceConfigPanel::commit_animation_dropdown_selection() {
     (void)apply_animation_selection_for_id(expected_animation_id);
 }
 
+bool SourceConfigPanel::validate_picker_path(const std::filesystem::path& path,
+                                             bool expect_directory,
+                                             const char* invalid_selection_message,
+                                             const char* context_label) const {
+    std::error_code ec;
+    const bool exists = std::filesystem::exists(path, ec);
+    if (ec) {
+        SDL_Log("SourceConfigPanel[%s]: %s path exists() failed for '%s': %s",
+                animation_id_.c_str(),
+                context_label,
+                path.string().c_str(),
+                ec.message().c_str());
+        update_status(invalid_selection_message);
+        return false;
+    }
+    if (!exists) {
+        update_status(invalid_selection_message);
+        return false;
+    }
+
+    const bool type_ok = expect_directory ? std::filesystem::is_directory(path, ec)
+                                          : std::filesystem::is_regular_file(path, ec);
+    if (ec) {
+        SDL_Log("SourceConfigPanel[%s]: %s path type check failed for '%s': %s",
+                animation_id_.c_str(),
+                context_label,
+                path.string().c_str(),
+                ec.message().c_str());
+        update_status(invalid_selection_message);
+        return false;
+    }
+    if (!type_ok) {
+        update_status(invalid_selection_message);
+        return false;
+    }
+
+    return true;
+}
+
 void SourceConfigPanel::import_from_folder() {
-    if (!folder_picker_) {
-        update_status("Folder picker not configured");
-        return;
-    }
-    std::optional<std::filesystem::path> folder = folder_picker_();
-    if (!folder.has_value() || folder->empty()) {
-        update_status("Folder selection cancelled");
-        return;
-    }
-    if (!std::filesystem::exists(*folder) || !std::filesystem::is_directory(*folder)) {
+    try {
+        if (!folder_picker_) {
+            update_status("Folder picker not configured");
+            return;
+        }
+        std::optional<std::filesystem::path> folder = folder_picker_();
+        if (!folder.has_value() || folder->empty()) {
+            update_status("Folder selection cancelled");
+            return;
+        }
+        if (!validate_picker_path(*folder, true, "Selected folder is invalid", "folder import")) {
+            return;
+        }
+
+        std::vector<std::filesystem::path> files = normalize_sequence(collect_image_files(*folder));
+        if (files.empty()) {
+            update_status("No supported image files found in folder");
+            return;
+        }
+
+        if (!frame_import_handler_) {
+            update_status("Frame importer not configured");
+            return;
+        }
+
+        auto import_result = frame_import_handler_(animation_id_, files);
+        if (!import_result.success) {
+            const std::string message = import_result.message.empty()
+                ? std::string{"No frames were imported"}
+                : import_result.message;
+            SDL_Log("SourceConfigPanel[%s]: folder import failed: %s", animation_id_.c_str(), message.c_str());
+            update_status("Import failed: " + message);
+            return;
+        }
+
+        reload_from_document();
+        update_status(import_result.message.empty()
+                          ? "Imported " + std::to_string(import_result.frames_written) + " frames from folder"
+                          : import_result.message);
+        if (on_source_changed_) {
+            on_source_changed_(SourceChangeEvent{
+                animation_id_,
+                SourceChangeReason::SourceImagesReplaced,
+            });
+        }
+    } catch (const std::exception& ex) {
+        SDL_Log("SourceConfigPanel[%s]: exception in import_from_folder: %s", animation_id_.c_str(), ex.what());
         update_status("Selected folder is invalid");
-        return;
-    }
-
-    std::vector<std::filesystem::path> files = normalize_sequence(collect_image_files(*folder));
-    if (files.empty()) {
-        update_status("No supported image files found in folder");
-        return;
-    }
-
-    if (!frame_import_handler_) {
-        update_status("Frame importer not configured");
-        return;
-    }
-
-    auto import_result = frame_import_handler_(animation_id_, files);
-    if (!import_result.success) {
-        const std::string message = import_result.message.empty()
-            ? std::string{"No frames were imported"}
-            : import_result.message;
-        SDL_Log("SourceConfigPanel[%s]: folder import failed: %s", animation_id_.c_str(), message.c_str());
-        update_status("Import failed: " + message);
-        return;
-    }
-
-    reload_from_document();
-    update_status(import_result.message.empty()
-                      ? "Imported " + std::to_string(import_result.frames_written) + " frames from folder"
-                      : import_result.message);
-    if (on_source_changed_) {
-        on_source_changed_(SourceChangeEvent{
-            animation_id_,
-            SourceChangeReason::SourceImagesReplaced,
-        });
+    } catch (...) {
+        SDL_Log("SourceConfigPanel[%s]: unknown exception in import_from_folder", animation_id_.c_str());
+        update_status("Selected folder is invalid");
     }
 }
 
@@ -1020,44 +1066,51 @@ void SourceConfigPanel::import_from_animation() {
 }
 
 void SourceConfigPanel::import_from_gif() {
-    if (!gif_picker_) {
-        update_status("GIF picker not configured");
-        return;
-    }
-    std::optional<std::filesystem::path> file = gif_picker_();
-    if (!file.has_value() || file->empty()) {
-        update_status("GIF selection cancelled");
-        return;
-    }
-    if (!std::filesystem::exists(*file) || !std::filesystem::is_regular_file(*file)) {
+    try {
+        if (!gif_picker_) {
+            update_status("GIF picker not configured");
+            return;
+        }
+        std::optional<std::filesystem::path> file = gif_picker_();
+        if (!file.has_value() || file->empty()) {
+            update_status("GIF selection cancelled");
+            return;
+        }
+        if (!validate_picker_path(*file, false, "Selected GIF is invalid", "GIF import")) {
+            return;
+        }
+
+        if (!frame_import_handler_) {
+            update_status("Frame importer not configured");
+            return;
+        }
+
+        auto import_result = frame_import_handler_(animation_id_, std::vector<std::filesystem::path>{*file});
+        if (!import_result.success) {
+            const std::string message = import_result.message.empty()
+                ? std::string{"No GIF frames were imported"}
+                : import_result.message;
+            SDL_Log("SourceConfigPanel[%s]: GIF import failed: %s", animation_id_.c_str(), message.c_str());
+            update_status("Import failed: " + message);
+            return;
+        }
+
+        reload_from_document();
+        update_status(import_result.message.empty()
+                          ? "Imported " + std::to_string(import_result.frames_written) + " GIF frames"
+                          : import_result.message);
+        if (on_source_changed_) {
+            on_source_changed_(SourceChangeEvent{
+                animation_id_,
+                SourceChangeReason::SourceImagesReplaced,
+            });
+        }
+    } catch (const std::exception& ex) {
+        SDL_Log("SourceConfigPanel[%s]: exception in import_from_gif: %s", animation_id_.c_str(), ex.what());
         update_status("Selected GIF is invalid");
-        return;
-    }
-
-    if (!frame_import_handler_) {
-        update_status("Frame importer not configured");
-        return;
-    }
-
-    auto import_result = frame_import_handler_(animation_id_, std::vector<std::filesystem::path>{*file});
-    if (!import_result.success) {
-        const std::string message = import_result.message.empty()
-            ? std::string{"No GIF frames were imported"}
-            : import_result.message;
-        SDL_Log("SourceConfigPanel[%s]: GIF import failed: %s", animation_id_.c_str(), message.c_str());
-        update_status("Import failed: " + message);
-        return;
-    }
-
-    reload_from_document();
-    update_status(import_result.message.empty()
-                      ? "Imported " + std::to_string(import_result.frames_written) + " GIF frames"
-                      : import_result.message);
-    if (on_source_changed_) {
-        on_source_changed_(SourceChangeEvent{
-            animation_id_,
-            SourceChangeReason::SourceImagesReplaced,
-        });
+    } catch (...) {
+        SDL_Log("SourceConfigPanel[%s]: unknown exception in import_from_gif", animation_id_.c_str());
+        update_status("Selected GIF is invalid");
     }
 }
 
@@ -1213,7 +1266,6 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
 }
 
 }
-
 
 
 

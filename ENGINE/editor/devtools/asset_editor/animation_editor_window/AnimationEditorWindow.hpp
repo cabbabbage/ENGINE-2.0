@@ -137,9 +137,18 @@ class AnimationEditorWindow {
     };
 
     struct SourceFrameImportOutcome {
+        enum class FailureStage {
+            None,
+            Copy,
+            Payload,
+            Save,
+            RuntimeVerify
+        };
+
         bool success = false;
         int frames_written = 0;
         std::string message;
+        FailureStage failure_stage = FailureStage::None;
     };
 
     void handle_document_saved();

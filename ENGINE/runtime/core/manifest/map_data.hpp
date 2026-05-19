@@ -55,13 +55,6 @@ struct MapData {
         capture_known("map_layers", data.map_layers, nlohmann::json::array());
         capture_known("map_layers_settings", data.map_layers_settings, nlohmann::json::object());
         capture_known("live_dynamic_spawns", data.live_dynamic_spawns, nlohmann::json::object());
-        if (data.live_dynamic_spawns.empty()) {
-            auto legacy_boundary = entry.find("map_boundary_data");
-            if (legacy_boundary != entry.end() && legacy_boundary->is_object()) {
-                data.live_dynamic_spawns["boundary_area_selectors"] =
-                    legacy_boundary->value("candidate_selectors", nlohmann::json::array());
-            }
-        }
         capture_known("dev_map_settings", data.dev_map_settings, nlohmann::json::object());
 
         data.extras = nlohmann::json::object();

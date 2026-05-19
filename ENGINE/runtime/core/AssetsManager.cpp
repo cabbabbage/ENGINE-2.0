@@ -26,6 +26,7 @@
 #include "rendering/render/opengl_runtime_renderer.hpp"
 #include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/render_depth_policy.hpp"
+#include "gameplay/spawn/dynamic_spawn_runtime.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
@@ -171,11 +172,6 @@ std::uint32_t startup_visibility_refresh_interval_frames() {
     static const std::uint32_t frames = static_cast<std::uint32_t>(
         env_int_clamped("VIBBLE_STARTUP_VISIBILITY_INTERVAL_FRAMES", 2, 1, 64));
     return frames;
-}
-
-bool live_dynamic_sync_instrumentation_enabled() {
-    static const bool enabled = env_int_clamped("VIBBLE_LIVE_DYNAMIC_SYNC_DEBUG", 0, 0, 1) != 0;
-    return enabled;
 }
 
 double runtime_stage_warning_ms() {
@@ -351,149 +347,6 @@ bool vibble_runtime_convergence_trace_enabled() {
     return enabled;
 }
 
-std::uint64_t mix_u64(std::uint64_t seed, std::uint64_t value) {
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-    return seed;
-}
-
-double live_dynamic_unit_interval(std::uint64_t value) {
-    value ^= value >> 33;
-    value *= 0xff51afd7ed558ccdULL;
-    value ^= value >> 33;
-    value *= 0xc4ceb9fe1a85ec53ULL;
-    value ^= value >> 33;
-    return static_cast<double>(value) / static_cast<double>(std::numeric_limits<std::uint64_t>::max());
-}
-
-double live_dynamic_candidate_weight(const nlohmann::json& candidate) {
-    if (candidate.is_object()) {
-        for (const char* key : {"chance", "weight", "probability"}) {
-            auto it = candidate.find(key);
-            if (it != candidate.end() && it->is_number()) {
-                const double value = it->get<double>();
-                return std::isfinite(value) && value > 0.0 ? value : 0.0;
-            }
-        }
-        return 0.0;
-    }
-    if (candidate.is_string() || candidate.is_null()) {
-        return 100.0;
-    }
-    if (candidate.is_number()) {
-        const double value = candidate.get<double>();
-        return std::isfinite(value) && value > 0.0 ? value : 0.0;
-    }
-    return 0.0;
-}
-
-std::string live_dynamic_candidate_name(const nlohmann::json& candidate, bool& is_tag, bool& is_null) {
-    is_tag = false;
-    is_null = candidate.is_null();
-    std::string name;
-    if (candidate.is_object()) {
-        if (candidate.contains("name") && candidate["name"].is_string()) {
-            name = candidate["name"].get<std::string>();
-        } else if (candidate.contains("asset_name") && candidate["asset_name"].is_string()) {
-            name = candidate["asset_name"].get<std::string>();
-        }
-        if (candidate.contains("tag")) {
-            if (candidate["tag"].is_string()) {
-                is_tag = true;
-                name = candidate["tag"].get<std::string>();
-            } else if (candidate["tag"].is_boolean() && candidate["tag"].get<bool>()) {
-                is_tag = true;
-            }
-        }
-        if (candidate.contains("tag_name") && candidate["tag_name"].is_string()) {
-            is_tag = true;
-            name = candidate["tag_name"].get<std::string>();
-        }
-    } else if (candidate.is_string()) {
-        name = candidate.get<std::string>();
-    }
-
-    name.erase(name.begin(), std::find_if(name.begin(), name.end(), [](unsigned char ch) {
-        return std::isspace(ch) == 0;
-    }));
-    name.erase(std::find_if(name.rbegin(), name.rend(), [](unsigned char ch) {
-        return std::isspace(ch) == 0;
-    }).base(), name.end());
-    if (!name.empty() && name.front() == '#') {
-        is_tag = true;
-        name.erase(name.begin());
-    }
-
-    std::string lowered = name;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    if (lowered == "null") {
-        is_null = true;
-    }
-    return name;
-}
-
-bool live_dynamic_is_boundary_info(const AssetInfo* info) {
-    if (!info) {
-        return false;
-    }
-    // Boundary classification for live-dynamic spawning is tag-driven only.
-    // Asset type is intentionally ignored.
-    return info->has_tag("boundary");
-}
-
-bool live_dynamic_label_is_trail(const std::string& value) {
-    if (value.empty()) {
-        return false;
-    }
-    std::string lowered;
-    lowered.reserve(value.size());
-    for (unsigned char ch : value) {
-        lowered.push_back(static_cast<char>(std::tolower(ch)));
-    }
-    return lowered == "trail";
-}
-
-bool live_dynamic_named_area_is_trail(const Room::NamedArea& named_area) {
-    return named_area.area &&
-           (live_dynamic_label_is_trail(named_area.type) ||
-            live_dynamic_label_is_trail(named_area.kind) ||
-            live_dynamic_label_is_trail(named_area.name));
-}
-
-double point_to_segment_distance_sq(SDL_Point p, SDL_Point a, SDL_Point b) {
-    const double px = static_cast<double>(p.x);
-    const double py = static_cast<double>(p.y);
-    const double ax = static_cast<double>(a.x);
-    const double ay = static_cast<double>(a.y);
-    const double bx = static_cast<double>(b.x);
-    const double by = static_cast<double>(b.y);
-    const double abx = bx - ax;
-    const double aby = by - ay;
-    const double apx = px - ax;
-    const double apy = py - ay;
-    const double ab_len_sq = abx * abx + aby * aby;
-    if (ab_len_sq <= 1e-9) {
-        const double dx = px - ax;
-        const double dy = py - ay;
-        return dx * dx + dy * dy;
-    }
-    const double t = std::clamp((apx * abx + apy * aby) / ab_len_sq, 0.0, 1.0);
-    const double cx = ax + t * abx;
-    const double cy = ay + t * aby;
-    const double dx = px - cx;
-    const double dy = py - cy;
-    return dx * dx + dy * dy;
-}
-
-bool live_dynamic_info_allowed(const AssetInfo* info, Assets::LiveDynamicMode mode) {
-    const bool boundary = live_dynamic_is_boundary_info(info);
-    if (mode == Assets::LiveDynamicMode::BoundaryArea) {
-        return boundary;
-    }
-    return !boundary;
-}
-
 std::uint64_t hash_grid_cell(const world::GridCoord& coord) {
     const std::uint64_t ux = static_cast<std::uint32_t>(coord.x);
     const std::uint64_t uz = static_cast<std::uint32_t>(coord.z);
@@ -665,6 +518,9 @@ Assets::Assets(AssetLibrary& library,
 
     update_filtered_active_assets();
 
+    dynamic_spawn_runtime_ = std::make_unique<dynamic_spawn::DynamicSpawnRuntime>(*this);
+    dynamic_spawn_runtime_->compile_from_map();
+
     const std::filesystem::path manifest_root =
         std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()).parent_path());
     task_editor_ = std::make_unique<TaskEditor>(manifest_root);
@@ -820,7 +676,6 @@ void Assets::hydrate_map_info_sections() {
         }
 };
 
-    migrate_live_dynamic_spawn_config();
     ensure_object("live_dynamic_spawns");
     ensure_object("rooms_data");
     ensure_object("trails_data");
@@ -828,447 +683,6 @@ void Assets::hydrate_map_info_sections() {
 
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
-    rebuild_live_dynamic_selectors();
-}
-
-void Assets::migrate_live_dynamic_spawn_config() {
-    if (!map_info_json_.is_object()) {
-        return;
-    }
-    if (!map_info_json_.contains("live_dynamic_spawns") ||
-        !map_info_json_["live_dynamic_spawns"].is_object()) {
-        map_info_json_["live_dynamic_spawns"] = nlohmann::json::object();
-    }
-    nlohmann::json& live = map_info_json_["live_dynamic_spawns"];
-
-    auto selector_empty = [](const nlohmann::json& owner, const char* key) {
-        auto it = owner.find(key);
-        return it == owner.end() || !it->is_array() || it->empty();
-    };
-
-    if (selector_empty(live, "boundary_area_selectors")) {
-        auto legacy = map_info_json_.find("map_boundary_data");
-        if (legacy != map_info_json_.end() && legacy->is_object()) {
-            auto candidates = legacy->find("candidate_selectors");
-            if (candidates != legacy->end() && candidates->is_array()) {
-                live["boundary_area_selectors"] = *candidates;
-            }
-        }
-    }
-    if (map_info_json_.erase("map_boundary_data") > 0) {
-        vibble::log::info("[LiveDynamicSpawn] Migrated map_boundary_data to live_dynamic_spawns.");
-    }
-
-    if (map_info_json_.erase("candidate_selectors") > 0) {
-        vibble::log::info("[LiveDynamicSpawn] Dropped deprecated top-level candidate_selectors.");
-    }
-    // Canonical config uses one shared selector set:
-    // live_dynamic_spawns.boundary_area_selectors.
-    // inherited_map_selectors is deprecated and ignored at runtime.
-    if (live.contains("inherited_map_selectors")) {
-        live.erase("inherited_map_selectors");
-        vibble::log::info("[LiveDynamicSpawn] Dropped deprecated live_dynamic_spawns.inherited_map_selectors.");
-    }
-}
-
-void Assets::clear_live_dynamic_assets() {
-    std::vector<Asset*> assets_to_delete;
-    assets_to_delete.reserve(live_dynamic_asset_keys_.size());
-    for (const auto& [asset, _] : live_dynamic_asset_keys_) {
-        if (asset) {
-            assets_to_delete.push_back(asset);
-        }
-    }
-    (void)delete_live_dynamic_assets_now(assets_to_delete);
-    live_dynamic_asset_keys_.clear();
-    live_dynamic_spawned_keys_.clear();
-    live_dynamic_null_keys_.clear();
-    live_dynamic_selector_scan_state_.clear();
-    live_dynamic_qualification_queue_.clear();
-    live_dynamic_pending_qualification_keys_.clear();
-    live_dynamic_spawn_queue_.clear();
-    live_dynamic_pending_spawn_keys_.clear();
-    live_dynamic_pending_prune_assets_.clear();
-    live_dynamic_pending_prune_lookup_.clear();
-    live_dynamic_persistent_occupancy_cache_.clear();
-    live_dynamic_persistent_room_cache_.clear();
-    last_live_dynamic_sync_bounds_valid_ = false;
-    live_dynamic_bounds_bucket_changed_ = true;
-    live_dynamic_occupancy_cache_hits_ = 0;
-    live_dynamic_occupancy_cache_misses_ = 0;
-}
-
-std::size_t Assets::delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete) {
-    if (assets_to_delete.empty()) {
-        return 0;
-    }
-
-    std::vector<Asset*> unique_assets;
-    unique_assets.reserve(assets_to_delete.size());
-    std::unordered_set<Asset*> seen;
-    seen.reserve(assets_to_delete.size());
-    for (Asset* asset : assets_to_delete) {
-        if (!asset || !asset->is_dynamic_spawned_asset()) {
-            continue;
-        }
-        if (seen.insert(asset).second) {
-            unique_assets.push_back(asset);
-        }
-    }
-    if (unique_assets.empty()) {
-        return 0;
-    }
-
-    for (Asset* asset : unique_assets) {
-        if (asset) {
-            asset->notify_pre_delete();
-        }
-    }
-
-    for (Asset* removed : unique_assets) {
-        if (!removed) {
-            continue;
-        }
-        const auto parent_it = reverse_child_index_.find(removed);
-        if (parent_it == reverse_child_index_.end()) {
-            continue;
-        }
-        for (Asset* parent : parent_it->second) {
-            if (parent && seen.find(parent) == seen.end()) {
-                parent->remove_child(removed);
-            }
-        }
-        reverse_child_index_.erase(parent_it);
-    }
-
-    std::size_t deleted = 0;
-    for (Asset* asset : unique_assets) {
-        if (!asset) {
-            continue;
-        }
-
-        auto key_it = live_dynamic_asset_keys_.find(asset);
-        if (key_it != live_dynamic_asset_keys_.end()) {
-            live_dynamic_persistent_occupancy_cache_.erase(
-                LiveDynamicOccupancyKey{
-                    key_it->second.grid_resolution,
-                    key_it->second.grid_x,
-                    key_it->second.grid_z});
-            live_dynamic_spawned_keys_.erase(key_it->second);
-            live_dynamic_asset_keys_.erase(key_it);
-        }
-
-        if (asset == focus_filter_asset_) {
-            clear_focus_filter();
-        }
-        all_asset_membership_.erase(asset);
-        filtered_active_asset_membership_.erase(asset);
-        if (asset->info && !asset->info->name.empty()) {
-            if (auto it = assets_by_name_.find(asset->info->name);
-                it != assets_by_name_.end() && it->second == asset) {
-                assets_by_name_.erase(it);
-            }
-            if (auto it = assets_by_stable_id_.find(asset->info->name);
-                it != assets_by_stable_id_.end() && it->second == asset) {
-                assets_by_stable_id_.erase(it);
-            }
-        }
-        if (!asset->spawn_id.empty()) {
-            if (auto it = assets_by_stable_id_.find(asset->spawn_id);
-                it != assets_by_stable_id_.end() && it->second == asset) {
-                assets_by_stable_id_.erase(it);
-            }
-        }
-        reverse_child_index_.erase(asset);
-        live_dynamic_pending_prune_lookup_.erase(asset);
-        remove_asset_dimension_cache(asset);
-        unregister_asset_runtime_state(asset);
-        asset->clear_grid_residency_cache();
-        asset->dead = true;
-        asset->active = false;
-        (void)world_grid_.remove_asset(asset);
-        ++deleted;
-    }
-
-    auto erase_dead = [&](std::vector<Asset*>& list) {
-        list.erase(
-            std::remove_if(list.begin(),
-                           list.end(),
-                           [&](Asset* asset) { return !asset || seen.find(asset) != seen.end(); }),
-            list.end());
-    };
-    erase_dead(all);
-    erase_dead(active_assets);
-    erase_dead(filtered_active_assets);
-    erase_dead(non_player_update_buffer_);
-    erase_dead(movement_enabled_active_assets_);
-
-    if (deleted > 0) {
-        mark_grid_dirty();
-        mark_active_assets_dirty();
-        mark_non_player_update_buffer_dirty();
-        needs_filtered_active_refresh_ = true;
-        mark_collision_context_dirty();
-    }
-    return deleted;
-}
-
-void Assets::rebuild_live_dynamic_selectors() {
-    live_dynamic_boundary_selectors_.clear();
-    live_dynamic_inherited_selectors_.clear();
-    live_dynamic_valid_cells_.clear();
-    next_live_dynamic_selector_id_ = 1;
-
-    if (!map_info_json_.is_object()) {
-        clear_live_dynamic_assets();
-        return;
-    }
-    const auto live_it = map_info_json_.find("live_dynamic_spawns");
-    if (live_it == map_info_json_.end() || !live_it->is_object()) {
-        clear_live_dynamic_assets();
-        return;
-    }
-
-    const auto catalog = library_.all();
-    const auto parse_max_spawn_from_room = [&](const nlohmann::json& live) {
-        constexpr int kDefault = 128;
-        constexpr int kMin = 0;
-        constexpr int kMax = 2000;
-        auto it = live.find("max_spawn_from_room");
-        if (it == live.end() || !it->is_number()) {
-            return kDefault;
-        }
-        int value = kDefault;
-        try {
-            if (it->is_number_integer()) {
-                value = it->get<int>();
-            } else {
-                value = static_cast<int>(std::llround(it->get<double>()));
-            }
-        } catch (...) {
-            value = kDefault;
-        }
-        return std::clamp(value, kMin, kMax);
-    };
-    live_dynamic_max_spawn_from_room_world_px_ = parse_max_spawn_from_room(*live_it);
-    const auto append_selector = [&](const nlohmann::json& selector_json,
-                                     LiveDynamicMode mode,
-                                     std::vector<LiveDynamicCompiledSelector>& out) {
-        if (!selector_json.is_object()) {
-            return;
-        }
-        const nlohmann::json* candidates_json = nullptr;
-        auto candidates_it = selector_json.find("candidates");
-        if (candidates_it != selector_json.end() && candidates_it->is_array()) {
-            candidates_json = &(*candidates_it);
-        }
-        if (!candidates_json || candidates_json->empty()) {
-            return;
-        }
-
-        LiveDynamicCompiledSelector selector;
-        selector.selector_id = next_live_dynamic_selector_id_++;
-        selector.mode = mode;
-        selector.spawn_id = selector_json.value("spawn_id", std::string{});
-        if (selector.spawn_id.empty()) {
-            selector.spawn_id = selector_json.value("name", std::string{});
-        }
-        if (selector.spawn_id.empty()) {
-            selector.spawn_id = std::string("live_dynamic_") + std::to_string(out.size() + 1);
-        }
-        selector.display_name = selector_json.value("display_name", selector.spawn_id);
-        const int raw_resolution = selector_json.contains("grid_resolution")
-            ? selector_json.value("grid_resolution", map_grid_settings_.grid_resolution)
-            : selector_json.value("resolution", map_grid_settings_.grid_resolution);
-        selector.grid_resolution = vibble::grid::clamp_resolution(raw_resolution);
-        const int selector_jitter = selector_json.value("jitter", map_grid_settings_.position_jitter_px);
-        selector.jitter_px = std::clamp(selector_jitter, 0, 2048);
-        selector.require_inherited_room_owner = (mode == LiveDynamicMode::InheritedMap);
-        selector.allow_boundary_owner = (mode == LiveDynamicMode::BoundaryArea);
-        selector.spawn_id_hash = std::hash<std::string>{}(selector.spawn_id);
-        selector.jitter_seed = mix_u64(std::hash<std::string>{}(map_id_), selector.spawn_id_hash);
-        selector.candidate_seed = mix_u64(selector.jitter_seed, 0x9e3779b97f4a7c15ULL);
-
-        for (const nlohmann::json& candidate_json : *candidates_json) {
-            const double weight = live_dynamic_candidate_weight(candidate_json);
-            if (weight <= 0.0) {
-                continue;
-            }
-            bool is_tag = false;
-            bool is_null = false;
-            std::string name = live_dynamic_candidate_name(candidate_json, is_tag, is_null);
-            if (is_null || name.empty()) {
-                selector.candidates.push_back(LiveDynamicCandidate{{}, nullptr, weight, true});
-                continue;
-            }
-
-            if (is_tag) {
-                for (const auto& [asset_name, info] : catalog) {
-                    if (!info || !info->has_tag(name) || !live_dynamic_info_allowed(info.get(), mode)) {
-                        continue;
-                    }
-                    selector.candidates.push_back(LiveDynamicCandidate{asset_name, info, weight, false});
-                }
-                continue;
-            }
-
-            std::shared_ptr<AssetInfo> info = library_.get(name);
-            if (!info || !live_dynamic_info_allowed(info.get(), mode)) {
-                continue;
-            }
-            selector.candidates.push_back(LiveDynamicCandidate{name, info, weight, false});
-        }
-
-        if (!selector.candidates.empty()) {
-            selector.cumulative_candidate_weights.reserve(selector.candidates.size());
-            double cumulative = 0.0;
-            for (const LiveDynamicCandidate& candidate : selector.candidates) {
-                if (candidate.weight > 0.0 && std::isfinite(candidate.weight)) {
-                    cumulative += candidate.weight;
-                }
-                selector.cumulative_candidate_weights.push_back(cumulative);
-            }
-            selector.total_candidate_weight = cumulative;
-            out.push_back(std::move(selector));
-        }
-    };
-
-    auto append_section = [&](const char* key, LiveDynamicMode mode, std::vector<LiveDynamicCompiledSelector>& out) {
-        auto section_it = live_it->find(key);
-        if (section_it == live_it->end() || !section_it->is_array()) {
-            return;
-        }
-        for (const nlohmann::json& selector : *section_it) {
-            append_selector(selector, mode, out);
-        }
-    };
-
-    // Shared dataset, mode-specific filtering:
-    // - boundary pass resolves candidates allowed for boundary mode
-    // - inherited pass resolves candidates allowed for room/trail inherited mode
-    // Both passes read the same authored boundary_area_selectors JSON.
-    append_section("boundary_area_selectors", LiveDynamicMode::BoundaryArea, live_dynamic_boundary_selectors_);
-    append_section("boundary_area_selectors", LiveDynamicMode::InheritedMap, live_dynamic_inherited_selectors_);
-
-    live_dynamic_valid_cells_.clear();
-    {
-        struct Segment2D { SDL_Point a{}; SDL_Point b{}; };
-        std::vector<Segment2D> geometry_segments;
-        std::vector<const Area*> geometry_areas;
-        geometry_segments.reserve(2048);
-        geometry_areas.reserve(512);
-        int min_world_x = std::numeric_limits<int>::max();
-        int min_world_z = std::numeric_limits<int>::max();
-        int max_world_x = std::numeric_limits<int>::min();
-        int max_world_z = std::numeric_limits<int>::min();
-        bool has_geometry = false;
-
-        const auto append_area_segments = [&](const Area* area) {
-            if (!area) {
-                return;
-            }
-            geometry_areas.push_back(area);
-            const auto& pts = area->get_points();
-            if (pts.size() < 2) {
-                return;
-            }
-            has_geometry = true;
-            for (const auto& p : pts) {
-                min_world_x = std::min(min_world_x, p.x);
-                min_world_z = std::min(min_world_z, p.y);
-                max_world_x = std::max(max_world_x, p.x);
-                max_world_z = std::max(max_world_z, p.y);
-            }
-            if (pts.size() == 2) {
-                geometry_segments.push_back(Segment2D{pts[0], pts[1]});
-                return;
-            }
-            for (std::size_t i = 0, j = pts.size() - 1; i < pts.size(); j = i++) {
-                geometry_segments.push_back(Segment2D{pts[j], pts[i]});
-            }
-        };
-
-        for (Room* room : rooms()) {
-            if (!room) {
-                continue;
-            }
-            append_area_segments(room->room_area.get());
-            for (const auto& named_area : room->areas) {
-                if (live_dynamic_named_area_is_trail(named_area)) {
-                    append_area_segments(named_area.area.get());
-                }
-            }
-        }
-
-        std::unordered_set<int> used_resolutions;
-        used_resolutions.reserve(live_dynamic_boundary_selectors_.size() + live_dynamic_inherited_selectors_.size());
-        for (const auto& selector : live_dynamic_boundary_selectors_) {
-            if (selector.grid_resolution >= 0) used_resolutions.insert(vibble::grid::clamp_resolution(selector.grid_resolution));
-        }
-        for (const auto& selector : live_dynamic_inherited_selectors_) {
-            if (selector.grid_resolution >= 0) used_resolutions.insert(vibble::grid::clamp_resolution(selector.grid_resolution));
-        }
-
-        if (has_geometry && !geometry_segments.empty() && !used_resolutions.empty()) {
-            const int threshold = std::max(0, live_dynamic_max_spawn_from_room_world_px_);
-            const double threshold_sq = static_cast<double>(threshold) * static_cast<double>(threshold);
-            const int expanded_min_x = min_world_x - threshold;
-            const int expanded_min_z = min_world_z - threshold;
-            const int expanded_max_x = max_world_x + threshold;
-            const int expanded_max_z = max_world_z + threshold;
-
-            for (int resolution : used_resolutions) {
-                const int clamped_resolution = vibble::grid::clamp_resolution(resolution);
-                const SDL_Point min_index = vibble::grid::global_grid().world_to_index(
-                    SDL_Point{expanded_min_x, expanded_min_z}, clamped_resolution);
-                const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
-                    SDL_Point{expanded_max_x, expanded_max_z}, clamped_resolution);
-                const int scan_min_x = std::min(min_index.x, max_index.x);
-                const int scan_max_x = std::max(min_index.x, max_index.x);
-                const int scan_min_z = std::min(min_index.y, max_index.y);
-                const int scan_max_z = std::max(min_index.y, max_index.y);
-                if (scan_min_x > scan_max_x || scan_min_z > scan_max_z) {
-                    continue;
-                }
-                for (int gx = scan_min_x; gx <= scan_max_x; ++gx) {
-                    for (int gz = scan_min_z; gz <= scan_max_z; ++gz) {
-                        const SDL_Point world_point =
-                            vibble::grid::global_grid().index_to_world(gx, gz, clamped_resolution);
-                        bool inside_any_area = false;
-                        for (const Area* area : geometry_areas) {
-                            if (area && area->contains_point(world_point)) {
-                                inside_any_area = true;
-                                break;
-                            }
-                        }
-                        if (inside_any_area) {
-                            live_dynamic_valid_cells_.insert(
-                                LiveDynamicGridCellKey{LiveDynamicMode::BoundaryArea, clamped_resolution, gx, gz});
-                            live_dynamic_valid_cells_.insert(
-                                LiveDynamicGridCellKey{LiveDynamicMode::InheritedMap, clamped_resolution, gx, gz});
-                            continue;
-                        }
-                        double min_dist_sq = std::numeric_limits<double>::infinity();
-                        for (const auto& seg : geometry_segments) {
-                            min_dist_sq = std::min(min_dist_sq, point_to_segment_distance_sq(world_point, seg.a, seg.b));
-                            if (min_dist_sq <= threshold_sq) {
-                                break;
-                            }
-                        }
-                        if (min_dist_sq <= threshold_sq) {
-                            live_dynamic_valid_cells_.insert(
-                                LiveDynamicGridCellKey{LiveDynamicMode::BoundaryArea, clamped_resolution, gx, gz});
-                            live_dynamic_valid_cells_.insert(
-                                LiveDynamicGridCellKey{LiveDynamicMode::InheritedMap, clamped_resolution, gx, gz});
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    clear_live_dynamic_assets();
-    force_live_dynamic_sync_next_rebuild_ = true;
 }
 
 void Assets::load_camera_settings_from_json() {
@@ -1341,11 +755,11 @@ void Assets::load_camera_settings_from_json() {
     const int preload_margin = parse_margin_px(
         camera_settings,
         "live_dynamic_preload_margin_world_px",
-        live_dynamic_preload_margin_world_px_);
+        dynamic_spawn_preload_margin_world_px_);
     int despawn_margin = parse_margin_px(
         camera_settings,
         "live_dynamic_despawn_margin_world_px",
-        live_dynamic_despawn_margin_world_px_);
+        dynamic_spawn_despawn_margin_world_px_);
     if (max_height < min_height) {
         max_height = kDefaultCameraHeightMaxPx;
     }
@@ -1358,8 +772,8 @@ void Assets::load_camera_settings_from_json() {
 
     set_boundary_min_visible_screen_ratio(boundary_ratio);
     set_camera_height_bounds_px(min_height, max_height);
-    live_dynamic_preload_margin_world_px_ = preload_margin;
-    live_dynamic_despawn_margin_world_px_ = despawn_margin;
+    dynamic_spawn_preload_margin_world_px_ = preload_margin;
+    dynamic_spawn_despawn_margin_world_px_ = despawn_margin;
     sync_camera_settings_to_map_info_json();
     apply_camera_runtime_settings();
     camera_view_dirty_ = true;
@@ -1373,8 +787,8 @@ void Assets::write_camera_settings_to_json() {
     camera_settings["live_dynamic_min_visible_screen_ratio"] = boundary_min_visible_screen_ratio_;
     camera_settings["camera_height_min_px"] = camera_height_min_px_;
     camera_settings["camera_height_max_px"] = camera_height_max_px_;
-    camera_settings["live_dynamic_preload_margin_world_px"] = live_dynamic_preload_margin_world_px_;
-    camera_settings["live_dynamic_despawn_margin_world_px"] = live_dynamic_despawn_margin_world_px_;
+    camera_settings["live_dynamic_preload_margin_world_px"] = dynamic_spawn_preload_margin_world_px_;
+    camera_settings["live_dynamic_despawn_margin_world_px"] = dynamic_spawn_despawn_margin_world_px_;
     map_info_json_["camera_settings"] = std::move(camera_settings);
 }
 
@@ -1474,7 +888,6 @@ void Assets::write_runtime_game_config_to_json() {
 void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
     sync_camera_settings_to_map_info_json();
-    force_live_dynamic_sync_next_rebuild_ = true;
     mark_camera_dirty();
     camera_view_dirty_ = true;
 }
@@ -1487,7 +900,6 @@ void Assets::mark_camera_dirty() {
 void Assets::reload_camera_settings() {
     vibble::log::info("[Assets] Reloading camera settings from manifest");
     load_camera_settings_from_json();
-    force_live_dynamic_sync_next_rebuild_ = true;
     mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
     camera_view_dirty_ = true;
     vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
@@ -1507,7 +919,6 @@ void Assets::force_camera_view_refresh() {
     mark_camera_dirty();
     camera_view_dirty_ = true;
     grid_dirty_ = true;
-    force_live_dynamic_sync_next_rebuild_ = true;
 
     camera_.update_camera_height(current_room_, finder_, player, true, last_frame_dt_seconds_, dev_mode);
 
@@ -1596,6 +1007,11 @@ bool Assets::live_dynamic_assets_visible() const {
         return true;
     }
     return dev_controls_->live_dynamic_assets_visible();
+}
+
+const dynamic_spawn::DynamicSpawnDiagnostics& Assets::dynamic_spawn_diagnostics() const {
+    static const dynamic_spawn::DynamicSpawnDiagnostics kEmpty{};
+    return dynamic_spawn_runtime_ ? dynamic_spawn_runtime_->diagnostics() : kEmpty;
 }
 
 bool Assets::dev_grid_overlay_enabled() const {
@@ -1883,6 +1299,10 @@ void Assets::notify_rooms_changed() {
         auto& room_refs = rooms();
         dev_controls_->set_rooms(&room_refs, rooms_generation());
     }
+    if (dynamic_spawn_runtime_) {
+        dynamic_spawn_runtime_->compile_from_map();
+    }
+    mark_grid_dirty();
 }
 
 void Assets::refresh_active_asset_lists() {
@@ -2621,9 +2041,6 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         active_room = dev_controls_->resolve_current_room(detected_room);
     }
     room_changed = (current_room_ != active_room);
-    if (room_changed) {
-        force_live_dynamic_sync_next_rebuild_ = true;
-    }
     current_room_ = active_room;
     game_context_.begin_frame(
         this,
@@ -2965,10 +2382,11 @@ void Assets::render_runtime_frame() {
                 ? (static_cast<double>(overlay_end - overlay_begin) * 1000.0 / perf_counter_frequency_)
                 : 0.0;
         const bool ui_overlay_active = has_runtime_ui_overlay_content(SDL_GetTicks());
+        const auto& dynamic_diag = dynamic_spawn_diagnostics();
         render_guard_log("[RenderGuard] before renderer submission frame=" + std::to_string(frame_id_) +
                          " path=opengl ui_overlay=" + (ui_overlay ? std::string("true") : std::string("false")) +
                          " active=" + std::to_string(active_assets.size()) +
-                         " live_dynamic_assets=" + std::to_string(live_dynamic_asset_keys_.size()));
+                         " dynamic_active=" + std::to_string(dynamic_diag.active));
 
         std::string frame_error;
         if (!opengl_renderer_->render_frame(frame_error,
@@ -3105,6 +2523,7 @@ void Assets::update(const Input& input)
     if (world_ms >= warn_ms || visibility_ms >= warn_ms ||
         runtime_ms >= warn_ms || render_ms >= warn_ms) {
         const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+        const auto& dynamic_diag = dynamic_spawn_diagnostics();
         vibble::log::warn(std::string("[Assets] Slow ") +
                           (startup_active ? "startup" : "runtime") +
                           " frame " + std::to_string(frame_id_) +
@@ -3113,13 +2532,12 @@ void Assets::update(const Input& input)
                           " runtime=" + std::to_string(runtime_ms) +
                           " render=" + std::to_string(render_ms) +
                           " active=" + std::to_string(active_assets.size()) +
-                          " live_dynamic_assets=" + std::to_string(live_dynamic_asset_keys_.size()) +
-                          " pending_dynamic_scan=" + std::to_string(live_dynamic_qualification_queue_.size()) +
-                          " pending_dynamic_spawn=" + std::to_string(live_dynamic_spawn_queue_.size()) +
-                          " pending_dynamic_prune=" + std::to_string(live_dynamic_pending_prune_assets_.size()) +
-                          " dynamic_scan_budget=" + std::to_string(adaptive_live_dynamic_scan_cells_per_selector_per_frame_) +
-                          " dynamic_spawn_budget=" + std::to_string(adaptive_live_dynamic_new_spawns_per_frame_) +
-                          " dynamic_sync_ema_ms=" + std::to_string(live_dynamic_sync_ema_ms_) +
+                          " dynamic_active=" + std::to_string(dynamic_diag.active) +
+                          " dynamic_spawned=" + std::to_string(dynamic_diag.spawned) +
+                          " dynamic_reused=" + std::to_string(dynamic_diag.reused) +
+                          " dynamic_suspended=" + std::to_string(dynamic_diag.suspended) +
+                          " dynamic_sync_ms=" + std::to_string(dynamic_diag.sync_ms) +
+                          " dof_bucket_count=" + std::to_string(stats.active_depth_layer_count) +
                           " draw_submission_ms=" + std::to_string(stats.draw_submission_cpu_ms) +
                           " ui_overlay_ms=" + std::to_string(stats.ui_overlay_prepare_ms) +
                           " ui_overlay_active=" + (stats.ui_overlay_active ? std::string("true") : "false") +
@@ -3453,7 +2871,7 @@ world::GridBounds Assets::runtime_work_bounds_from_render_bounds(const world::Gr
     }
 
     const auto& settings = camera_.get_settings();
-    const int despawn_margin = std::max(0, live_dynamic_despawn_margin_world_px_);
+    const int despawn_margin = std::max(0, dynamic_spawn_despawn_margin_world_px_);
     const int depth_bound = static_cast<int>(std::lround(std::max(
         static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth),
         static_cast<double>(settings.max_cull_depth))));
@@ -3493,1022 +2911,6 @@ world::GridBounds Assets::runtime_work_bounds_from_render_bounds(const world::Gr
                                         render_bounds.min.resolution_layer());
 }
 
-bool Assets::should_run_live_dynamic_sync_for_bounds(const world::GridBounds& work_bounds,
-                                                     bool allow_live_dynamic_sync) {
-    if (!allow_live_dynamic_sync) {
-        return false;
-    }
-    if (!live_dynamic_assets_visible()) {
-        clear_live_dynamic_assets();
-        last_live_dynamic_sync_bounds_valid_ = false;
-        force_live_dynamic_sync_next_rebuild_ = true;
-        live_dynamic_bounds_bucket_changed_ = true;
-        return false;
-    }
-
-    const int min_x = std::min(work_bounds.min.world_x(), work_bounds.max.world_x());
-    const int max_x = std::max(work_bounds.min.world_x(), work_bounds.max.world_x());
-    const int min_z = std::min(work_bounds.min.world_z(), work_bounds.max.world_z());
-    const int max_z = std::max(work_bounds.min.world_z(), work_bounds.max.world_z());
-    if (min_x > max_x || min_z > max_z) {
-        return false;
-    }
-
-    int selector_quantization = std::max(1, live_dynamic_sync_bounds_quantization_px_);
-    auto include_selector_quantization = [&selector_quantization](const LiveDynamicCompiledSelector& selector) {
-        const int resolution = vibble::grid::clamp_resolution(selector.grid_resolution);
-        if (resolution >= 0 && resolution < 30) {
-            selector_quantization = std::max(selector_quantization, (1 << resolution) * 2);
-        }
-    };
-    for (const LiveDynamicCompiledSelector& selector : live_dynamic_boundary_selectors_) {
-        include_selector_quantization(selector);
-    }
-    for (const LiveDynamicCompiledSelector& selector : live_dynamic_inherited_selectors_) {
-        include_selector_quantization(selector);
-    }
-
-    const int quantization = std::max(1, selector_quantization);
-    const int hysteresis = std::max(std::max(0, live_dynamic_sync_bounds_hysteresis_px_), quantization / 2);
-    auto floor_to_quantized = [quantization](int value) {
-        const int q = vibble::math::floor_div(value, quantization);
-        return q * quantization;
-    };
-    auto ceil_to_quantized = [quantization, &floor_to_quantized](int value) {
-        if (value == std::numeric_limits<int>::max()) {
-            return value;
-        }
-        return floor_to_quantized(value + quantization - 1);
-    };
-
-    const int quant_min_x = floor_to_quantized(min_x);
-    const int quant_max_x = ceil_to_quantized(max_x);
-    const int quant_min_z = floor_to_quantized(min_z);
-    const int quant_max_z = ceil_to_quantized(max_z);
-
-    const bool bounds_changed =
-        !last_live_dynamic_sync_bounds_valid_ ||
-        quant_min_x < (last_live_dynamic_sync_bounds_min_x_ - hysteresis) ||
-        quant_max_x > (last_live_dynamic_sync_bounds_max_x_ + hysteresis) ||
-        quant_min_z < (last_live_dynamic_sync_bounds_min_z_ - hysteresis) ||
-        quant_max_z > (last_live_dynamic_sync_bounds_max_z_ + hysteresis);
-
-    live_dynamic_bounds_bucket_changed_ = bounds_changed;
-    if (bounds_changed) {
-        ++live_dynamic_quantized_bounds_change_count_;
-        ++live_dynamic_bounds_generation_;
-        if (live_dynamic_bounds_generation_ == 0) {
-            ++live_dynamic_bounds_generation_;
-        }
-    }
-
-    bool pending_selector_work = !live_dynamic_qualification_queue_.empty() ||
-                                 !live_dynamic_spawn_queue_.empty();
-
-    const bool should_sync = force_live_dynamic_sync_next_rebuild_ || bounds_changed || pending_selector_work;
-    if (!should_sync) {
-        return false;
-    }
-
-    if (bounds_changed || !last_live_dynamic_sync_bounds_valid_) {
-        last_live_dynamic_sync_bounds_valid_ = true;
-        last_live_dynamic_sync_bounds_min_x_ = quant_min_x;
-        last_live_dynamic_sync_bounds_max_x_ = quant_max_x;
-        last_live_dynamic_sync_bounds_min_z_ = quant_min_z;
-        last_live_dynamic_sync_bounds_max_z_ = quant_max_z;
-    }
-    force_live_dynamic_sync_next_rebuild_ = false;
-    return true;
-}
-
-Assets::LiveDynamicSyncContext Assets::collect_sync_context(const world::GridBounds& render_bounds) {
-    const int preload_margin = std::max(0, live_dynamic_preload_margin_world_px_);
-    const int despawn_margin = std::max(preload_margin, live_dynamic_despawn_margin_world_px_);
-    LiveDynamicSyncContext context{
-        render_bounds,
-        render_bounds.expanded(preload_margin),
-        render_bounds.expanded(despawn_margin)};
-    context.render_min_world_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
-    context.render_max_world_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
-    context.render_min_world_z = std::min(render_bounds.min.world_z(), render_bounds.max.world_z());
-    context.render_max_world_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
-    if (context.render_min_world_x > context.render_max_world_x || context.render_min_world_z > context.render_max_world_z) {
-        return context;
-    }
-
-    context.spawn_min_world_x = std::min(context.spawn_bounds.min.world_x(), context.spawn_bounds.max.world_x());
-    context.spawn_max_world_x = std::max(context.spawn_bounds.min.world_x(), context.spawn_bounds.max.world_x());
-    context.spawn_min_world_z = std::min(context.spawn_bounds.min.world_z(), context.spawn_bounds.max.world_z());
-    context.spawn_max_world_z = std::max(context.spawn_bounds.min.world_z(), context.spawn_bounds.max.world_z());
-    context.keep_min_world_x = std::min(context.keep_bounds.min.world_x(), context.keep_bounds.max.world_x());
-    context.keep_max_world_x = std::max(context.keep_bounds.min.world_x(), context.keep_bounds.max.world_x());
-    context.keep_min_world_z = std::min(context.keep_bounds.min.world_z(), context.keep_bounds.max.world_z());
-    context.keep_max_world_z = std::max(context.keep_bounds.min.world_z(), context.keep_bounds.max.world_z());
-    context.scan_cell_cap = std::clamp<std::size_t>(adaptive_live_dynamic_scan_cells_per_selector_per_frame_, std::max<std::size_t>(1, min_live_dynamic_scan_cells_per_selector_per_frame_), std::max<std::size_t>(1, max_live_dynamic_scan_cells_per_selector_per_frame_));
-    context.new_spawn_cap = std::clamp<std::size_t>(adaptive_live_dynamic_new_spawns_per_frame_, std::max<std::size_t>(1, min_live_dynamic_new_spawns_per_frame_), std::max<std::size_t>(1, max_live_dynamic_new_spawns_per_frame_));
-    context.total_spawn_cap = max_total_live_dynamic_assets_;
-    context.boundary_center_world = camera_.get_screen_center();
-    context.bounds_generation = live_dynamic_bounds_generation_;
-    context.selector_lookup.reserve(live_dynamic_boundary_selectors_.size() + live_dynamic_inherited_selectors_.size());
-    context.occupancy_cache = live_dynamic_persistent_occupancy_cache_;
-    context.room_cache = live_dynamic_persistent_room_cache_;
-    context.valid = true;
-    return context;
-}
-
-void Assets::prune_out_of_bounds_dynamic_assets(LiveDynamicSyncContext& context) {
-    auto in_world_bounds = [](int world_x, int world_z, int min_world_x, int max_world_x, int min_world_z, int max_world_z) {
-        return world_x >= min_world_x && world_x <= max_world_x && world_z >= min_world_z && world_z <= max_world_z;
-    };
-    for (const auto& [asset, key] : live_dynamic_asset_keys_) {
-        const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(key.grid_x, key.grid_z, key.grid_resolution);
-        if (!asset || asset->dead || !in_world_bounds(owner_anchor.x, owner_anchor.y, context.keep_min_world_x, context.keep_max_world_x, context.keep_min_world_z, context.keep_max_world_z)) {
-            if (live_dynamic_pending_prune_lookup_.insert(asset).second) {
-                live_dynamic_pending_prune_assets_.push_back(asset);
-            }
-        }
-    }
-
-    if (live_dynamic_pending_prune_assets_.empty()) {
-        return;
-    }
-
-    std::vector<Asset*> assets_to_delete;
-    const std::size_t prune_cap = std::max<std::size_t>(1, max_live_dynamic_prunes_per_frame_);
-    assets_to_delete.reserve(std::min(prune_cap, live_dynamic_pending_prune_assets_.size()));
-    while (!live_dynamic_pending_prune_assets_.empty() && assets_to_delete.size() < prune_cap) {
-        Asset* asset = live_dynamic_pending_prune_assets_.back();
-        live_dynamic_pending_prune_assets_.pop_back();
-        live_dynamic_pending_prune_lookup_.erase(asset);
-        if (!asset || asset->dead || !asset->is_dynamic_spawned_asset()) {
-            continue;
-        }
-        const auto key_it = live_dynamic_asset_keys_.find(asset);
-        if (key_it == live_dynamic_asset_keys_.end()) {
-            continue;
-        }
-        const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(
-            key_it->second.grid_x,
-            key_it->second.grid_z,
-            key_it->second.grid_resolution);
-        if (in_world_bounds(owner_anchor.x,
-                            owner_anchor.y,
-                            context.keep_min_world_x,
-                            context.keep_max_world_x,
-                            context.keep_min_world_z,
-                            context.keep_max_world_z)) {
-            continue;
-        }
-        assets_to_delete.push_back(asset);
-    }
-
-    context.despawns_this_frame = delete_live_dynamic_assets_now(assets_to_delete);
-}
-
-bool Assets::live_dynamic_in_world_bounds(int world_x,
-                                          int world_z,
-                                          int min_world_x,
-                                          int max_world_x,
-                                          int min_world_z,
-                                          int max_world_z) const {
-    return world_x >= min_world_x && world_x <= max_world_x &&
-           world_z >= min_world_z && world_z <= max_world_z;
-}
-
-bool Assets::live_dynamic_sync_budget_hit(const LiveDynamicSyncContext& context) const {
-    if (context.timing.perf_freq == 0) {
-        return false;
-    }
-    const std::uint64_t now = SDL_GetPerformanceCounter();
-    if (now < context.perf_start) {
-        return false;
-    }
-    const double elapsed_ms =
-        (static_cast<double>(now - context.perf_start) * 1000.0) / static_cast<double>(context.timing.perf_freq);
-    return elapsed_ms >= context.timing.target_ms;
-}
-
-SDL_Point Assets::live_dynamic_jittered_world_point(const LiveDynamicCompiledSelector& selector,
-                                                    const LiveDynamicPointKey& key,
-                                                    SDL_Point base_point) const {
-    if (selector.jitter_px <= 0) {
-        return base_point;
-    }
-    std::uint64_t seed = selector.jitter_seed;
-    seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.grid_x)));
-    seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.grid_z)));
-    seed = mix_u64(seed, static_cast<std::uint64_t>(static_cast<int>(key.mode)));
-    const double u0 = live_dynamic_unit_interval(seed);
-    const double u1 = live_dynamic_unit_interval(mix_u64(seed, 0x9e3779b97f4a7c15ULL));
-    const int jitter = selector.jitter_px;
-    SDL_Point jittered = base_point;
-    jittered.x = static_cast<int>(std::clamp<std::int64_t>(
-        static_cast<std::int64_t>(base_point.x) +
-            static_cast<int>(std::lround((u0 * 2.0 - 1.0) * static_cast<double>(jitter))),
-        static_cast<std::int64_t>(std::numeric_limits<int>::min()),
-        static_cast<std::int64_t>(std::numeric_limits<int>::max())));
-    jittered.y = static_cast<int>(std::clamp<std::int64_t>(
-        static_cast<std::int64_t>(base_point.y) +
-            static_cast<int>(std::lround((u1 * 2.0 - 1.0) * static_cast<double>(jitter))),
-        static_cast<std::int64_t>(std::numeric_limits<int>::min()),
-        static_cast<std::int64_t>(std::numeric_limits<int>::max())));
-    return jittered;
-}
-
-const Assets::LiveDynamicCandidate* Assets::pick_live_dynamic_candidate(const LiveDynamicCompiledSelector& selector,
-                                                                        const LiveDynamicPointKey& key) const {
-    if (selector.total_candidate_weight <= 0.0 || selector.candidates.empty()) {
-        return nullptr;
-    }
-    std::uint64_t hash = selector.candidate_seed;
-    hash = mix_u64(hash, selector.spawn_id_hash);
-    hash = mix_u64(hash, static_cast<std::uint64_t>(key.grid_resolution));
-    hash = mix_u64(hash, static_cast<std::uint32_t>(key.grid_x));
-    hash = mix_u64(hash, static_cast<std::uint32_t>(key.grid_z));
-    hash = mix_u64(hash, static_cast<std::uint64_t>(key.mode));
-    const double roll = live_dynamic_unit_interval(hash) * selector.total_candidate_weight;
-    for (std::size_t i = 0; i < selector.cumulative_candidate_weights.size(); ++i) {
-        if (roll < selector.cumulative_candidate_weights[i]) {
-            return &selector.candidates[i];
-        }
-    }
-    return &selector.candidates.back();
-}
-
-bool Assets::room_contains_live_dynamic_area(const Room* room, SDL_Point point) const {
-    if (!room) {
-        return false;
-    }
-    if (room->room_area && room->room_area->contains_point(point)) {
-        return true;
-    }
-    for (const auto& named_area : room->areas) {
-        if (!live_dynamic_named_area_is_trail(named_area) || !named_area.area) {
-            continue;
-        }
-        if (named_area.area->contains_point(point)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-Room* Assets::room_for_live_dynamic_point(SDL_Point point, bool require_inherited, bool& inside_any_room) {
-    inside_any_room = false;
-    for (Room* room : rooms()) {
-        if (!room || !room_contains_live_dynamic_area(room, point)) {
-            continue;
-        }
-        inside_any_room = true;
-        if (!require_inherited || room->inherits_map_assets()) {
-            return room;
-        }
-    }
-    return nullptr;
-}
-
-bool Assets::point_in_live_dynamic_boundary_area(SDL_Point point, bool inside_any_room, SDL_Point boundary_center_world) const {
-    if (inside_any_room || map_radius_world_ <= 0) {
-        return false;
-    }
-    const std::int64_t dx = static_cast<std::int64_t>(point.x) - static_cast<std::int64_t>(boundary_center_world.x);
-    const std::int64_t dz = static_cast<std::int64_t>(point.y) - static_cast<std::int64_t>(boundary_center_world.y);
-    const std::int64_t radius = static_cast<std::int64_t>(map_radius_world_);
-    return dx * dx + dz * dz <= radius * radius;
-}
-
-bool Assets::evaluate_live_dynamic_spawn_point(LiveDynamicSyncContext& context,
-                                               const LiveDynamicPointKey& key,
-                                               int owner_anchor_world_x,
-                                               int owner_anchor_world_z,
-                                               std::string* out_owner_name) {
-    if (live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
-        live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end()) {
-        ++context.rejected_already_spawned;
-        return false;
-    }
-    if (!live_dynamic_in_world_bounds(owner_anchor_world_x,
-                                      owner_anchor_world_z,
-                                      context.spawn_min_world_x,
-                                      context.spawn_max_world_x,
-                                      context.spawn_min_world_z,
-                                      context.spawn_max_world_z)) {
-        ++context.rejected_bounds;
-        return false;
-    }
-
-    const LiveDynamicOccupancyKey occupancy_key{key.grid_resolution, key.grid_x, key.grid_z};
-    auto occupancy_it = context.occupancy_cache.find(occupancy_key);
-    bool occupied = false;
-    if (occupancy_it != context.occupancy_cache.end()) {
-        occupied = occupancy_it->second;
-        ++live_dynamic_occupancy_cache_hits_;
-    } else {
-        occupied = world_grid_.is_occupied_at_xz(owner_anchor_world_x, owner_anchor_world_z, key.grid_resolution);
-        context.occupancy_cache.emplace(occupancy_key, occupied);
-        ++live_dynamic_occupancy_cache_misses_;
-    }
-    if (occupied) {
-        ++context.rejected_occupied;
-        return false;
-    }
-
-    const LiveDynamicRoomCacheKey room_key{key.mode, key.grid_resolution, key.grid_x, key.grid_z};
-    const LiveDynamicSelectorStateKey selector_key{key.mode, key.grid_resolution, key.selector_id};
-    const auto selector_it = context.selector_lookup.find(selector_key);
-    const bool require_inherited = selector_it != context.selector_lookup.end() && selector_it->second &&
-                                   selector_it->second->require_inherited_room_owner;
-    const bool allow_boundary = selector_it != context.selector_lookup.end() && selector_it->second &&
-                                selector_it->second->allow_boundary_owner;
-
-    auto room_it = context.room_cache.find(room_key);
-    if (room_it == context.room_cache.end()) {
-        const SDL_Point world_point{owner_anchor_world_x, owner_anchor_world_z};
-        bool inside_any_room = false;
-        Room* owner = nullptr;
-        if (require_inherited) {
-            owner = room_for_live_dynamic_point(world_point, true, inside_any_room);
-        } else {
-            (void)room_for_live_dynamic_point(world_point, false, inside_any_room);
-        }
-        LiveDynamicRoomCacheValue value;
-        value.inside_any_room = inside_any_room;
-        value.has_owner = owner != nullptr;
-        if (owner) {
-            value.owner_name = owner->room_name;
-        }
-        if (allow_boundary) {
-            value.boundary_allowed = point_in_live_dynamic_boundary_area(world_point, inside_any_room, context.boundary_center_world);
-        }
-        room_it = context.room_cache.emplace(room_key, std::move(value)).first;
-    }
-
-    const LiveDynamicRoomCacheValue& room_value = room_it->second;
-    if (require_inherited) {
-        if (!room_value.has_owner) {
-            ++context.rejected_room;
-            return false;
-        }
-        if (out_owner_name) {
-            *out_owner_name = room_value.owner_name;
-        }
-    } else {
-        if (!room_value.boundary_allowed) {
-            ++context.rejected_room;
-            return false;
-        }
-        if (out_owner_name) {
-            *out_owner_name = map_id_;
-        }
-    }
-    return true;
-}
-
-bool Assets::spawn_live_dynamic_asset(const LiveDynamicSpawnTask& task) {
-    if (!task.info || task.asset_name.empty()) {
-        return false;
-    }
-    const LiveDynamicPointKey& key = task.point_key;
-    Area spawn_area(task.owner_name.empty() ? std::string("live_dynamic") : task.owner_name, key.grid_resolution);
-    auto asset = std::make_unique<Asset>(
-        task.info,
-        spawn_area,
-        SDL_Point{task.world_x, task.world_z},
-        0,
-        std::string("live_dynamic:") + task.selector_spawn_id +
-            ":" + std::to_string(key.grid_resolution) +
-            ":" + std::to_string(key.grid_x) +
-            ":" + std::to_string(key.grid_z),
-        std::string("live_dynamic"),
-        key.grid_resolution);
-    Asset* raw = asset.get();
-    raw->set_assets(this);
-    raw->set_camera(&camera_);
-    raw->set_owning_room_name(task.owner_name);
-    raw->set_dynamic_spawned_asset(true);
-    raw->finalize_setup();
-    const int initialized_world_y = raw->world_y();
-    raw->set_provisional_grid_point(task.world_x, initialized_world_y, task.world_z, key.grid_resolution);
-    raw = world_grid_.create_asset_at_point(std::move(asset), task.world_z, key.grid_resolution);
-    if (!raw) {
-        return false;
-    }
-    if (world::GridPoint* registered_point = world_grid_.point_for_asset(raw)) {
-        raw->cache_grid_residency(*registered_point);
-    }
-    all.push_back(raw);
-    register_asset_runtime_state(raw);
-    all_asset_membership_.insert(raw);
-    if (raw->info && !raw->info->name.empty()) {
-        assets_by_name_.try_emplace(raw->info->name, raw);
-        assets_by_stable_id_.try_emplace(raw->info->name, raw);
-    }
-    if (!raw->spawn_id.empty()) {
-        assets_by_stable_id_.try_emplace(raw->spawn_id, raw);
-    }
-    live_dynamic_asset_keys_.emplace(raw, key);
-    live_dynamic_spawned_keys_.insert(key);
-    queue_asset_dimension_update(raw);
-    mark_anchor_basis_dirty(raw);
-    mark_collision_context_dirty();
-    mark_non_player_update_buffer_dirty();
-    return true;
-}
-
-void Assets::refresh_selector_frontiers(LiveDynamicSyncContext& context) {
-    const auto clamp_i64_to_int = [](std::int64_t value) {
-        return static_cast<int>(std::clamp<std::int64_t>(
-            value,
-            static_cast<std::int64_t>(std::numeric_limits<int>::min()),
-            static_cast<std::int64_t>(std::numeric_limits<int>::max())));
-    };
-    auto qualified_heap_cmp = [](const LiveDynamicQualifiedPoint& lhs, const LiveDynamicQualifiedPoint& rhs) {
-        return LiveDynamicQualifiedPointOrder{}(rhs, lhs);
-    };
-    auto spawn_heap_cmp = [](const LiveDynamicSpawnTask& lhs, const LiveDynamicSpawnTask& rhs) {
-        return LiveDynamicSpawnTaskOrder{}(rhs, lhs);
-    };
-
-    context.selector_lookup.clear();
-    context.selector_lookup.reserve(live_dynamic_boundary_selectors_.size() + live_dynamic_inherited_selectors_.size());
-    const auto add_selector_frontier = [&](const LiveDynamicCompiledSelector& selector) {
-        if (selector.candidates.empty() || selector.grid_resolution <= 0) {
-            return;
-        }
-        const int resolution = vibble::grid::clamp_resolution(selector.grid_resolution);
-        if (resolution < 0 || resolution > vibble::grid::kMaxResolution) {
-            return;
-        }
-        const int jitter_margin = std::max(0, selector.jitter_px);
-        const world::GridBounds scan_bounds = context.spawn_bounds.expanded(jitter_margin);
-        const SDL_Point min_index = vibble::grid::global_grid().world_to_index(
-            SDL_Point{scan_bounds.min.world_x(), scan_bounds.min.world_z()}, resolution);
-        const SDL_Point max_index = vibble::grid::global_grid().world_to_index(
-            SDL_Point{scan_bounds.max.world_x(), scan_bounds.max.world_z()}, resolution);
-        const int scan_min_x = clamp_i64_to_int(std::min<std::int64_t>(min_index.x, max_index.x));
-        const int scan_max_x = clamp_i64_to_int(std::max<std::int64_t>(min_index.x, max_index.x));
-        const int scan_min_z = clamp_i64_to_int(std::min<std::int64_t>(min_index.y, max_index.y));
-        const int scan_max_z = clamp_i64_to_int(std::max<std::int64_t>(min_index.y, max_index.y));
-        if (scan_min_x > scan_max_x || scan_min_z > scan_max_z) {
-            return;
-        }
-
-        const LiveDynamicSelectorStateKey selector_state_key{selector.mode, resolution, selector.selector_id};
-        context.selector_lookup[selector_state_key] = &selector;
-        LiveDynamicSelectorScanState& state = live_dynamic_selector_scan_state_[selector_state_key];
-        const bool scan_bounds_changed = !state.valid || state.min_x != scan_min_x || state.max_x != scan_max_x ||
-                                         state.min_z != scan_min_z || state.max_z != scan_max_z;
-        const SDL_Point center_index = vibble::grid::global_grid().world_to_index(context.boundary_center_world, resolution);
-        const int center_x = clamp_i64_to_int(center_index.x);
-        const int center_z = clamp_i64_to_int(center_index.y);
-
-        if (scan_bounds_changed) {
-            auto in_scan_bounds = [&](const LiveDynamicPointKey& key) {
-                return key.mode == selector.mode &&
-                       key.grid_resolution == resolution &&
-                       key.selector_id == selector.selector_id &&
-                       key.grid_x >= scan_min_x && key.grid_x <= scan_max_x &&
-                       key.grid_z >= scan_min_z && key.grid_z <= scan_max_z;
-            };
-            for (auto it = live_dynamic_null_keys_.begin(); it != live_dynamic_null_keys_.end();) {
-                if (it->mode == selector.mode &&
-                    it->grid_resolution == resolution &&
-                    it->selector_id == selector.selector_id &&
-                    !in_scan_bounds(*it)) {
-                    it = live_dynamic_null_keys_.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            for (auto it = state.seen_cells.begin(); it != state.seen_cells.end();) {
-                if (!in_scan_bounds(*it)) {
-                    it = state.seen_cells.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            for (auto it = state.spawned_cells.begin(); it != state.spawned_cells.end();) {
-                if (!in_scan_bounds(*it)) {
-                    it = state.spawned_cells.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-            live_dynamic_qualification_queue_.erase(
-                std::remove_if(live_dynamic_qualification_queue_.begin(),
-                               live_dynamic_qualification_queue_.end(),
-                               [&](const LiveDynamicQualifiedPoint& point) {
-                                   if (point.selector_key == selector_state_key && !in_scan_bounds(point.point_key)) {
-                                       live_dynamic_pending_qualification_keys_.erase(point.point_key);
-                                       return true;
-                                   }
-                                   return false;
-                               }),
-                live_dynamic_qualification_queue_.end());
-            live_dynamic_spawn_queue_.erase(
-                std::remove_if(live_dynamic_spawn_queue_.begin(),
-                               live_dynamic_spawn_queue_.end(),
-                               [&](const LiveDynamicSpawnTask& task) {
-                                   if (task.selector_key == selector_state_key && !in_scan_bounds(task.point_key)) {
-                                       live_dynamic_pending_spawn_keys_.erase(task.point_key);
-                                       return true;
-                                   }
-                                   return false;
-                               }),
-                live_dynamic_spawn_queue_.end());
-            if (!live_dynamic_qualification_queue_.empty()) {
-                std::make_heap(live_dynamic_qualification_queue_.begin(),
-                               live_dynamic_qualification_queue_.end(),
-                               qualified_heap_cmp);
-            }
-            if (!live_dynamic_spawn_queue_.empty()) {
-                std::make_heap(live_dynamic_spawn_queue_.begin(),
-                               live_dynamic_spawn_queue_.end(),
-                               spawn_heap_cmp);
-            }
-            state.ring_radius = 0;
-            state.ring_edge = 0;
-            state.edge_offset = 0;
-        }
-
-        state.valid = true;
-        state.min_x = scan_min_x;
-        state.max_x = scan_max_x;
-        state.min_z = scan_min_z;
-        state.max_z = scan_max_z;
-        state.center_x = center_x;
-        state.center_z = center_z;
-    };
-
-    for (const LiveDynamicCompiledSelector& selector : live_dynamic_boundary_selectors_) {
-        add_selector_frontier(selector);
-    }
-    for (const LiveDynamicCompiledSelector& selector : live_dynamic_inherited_selectors_) {
-        add_selector_frontier(selector);
-    }
-}
-
-void Assets::qualify_points(LiveDynamicSyncContext& context) {
-    auto qualified_heap_cmp = [](const LiveDynamicQualifiedPoint& lhs, const LiveDynamicQualifiedPoint& rhs) {
-        return LiveDynamicQualifiedPointOrder{}(rhs, lhs);
-    };
-    auto spawn_heap_cmp = [](const LiveDynamicSpawnTask& lhs, const LiveDynamicSpawnTask& rhs) {
-        return LiveDynamicSpawnTaskOrder{}(rhs, lhs);
-    };
-    auto scan_budget_available = [&]() {
-        return context.cells_visited_this_frame < context.scan_cell_cap &&
-               !live_dynamic_sync_budget_hit(context);
-    };
-
-    auto next_selector_point = [&](LiveDynamicQualifiedPoint& out_point) -> bool {
-        for (auto& [selector_key, state] : live_dynamic_selector_scan_state_) {
-            if (!state.valid) {
-                continue;
-            }
-            const auto selector_it = context.selector_lookup.find(selector_key);
-            if (selector_it == context.selector_lookup.end() || !selector_it->second) {
-                continue;
-            }
-            const LiveDynamicCompiledSelector& selector = *selector_it->second;
-            const int max_radius = std::max(std::max(std::abs(state.min_x - state.center_x), std::abs(state.max_x - state.center_x)),
-                                            std::max(std::abs(state.min_z - state.center_z), std::abs(state.max_z - state.center_z)));
-            while (state.ring_radius <= max_radius) {
-                if (!scan_budget_available()) {
-                    return false;
-                }
-                int x = state.center_x;
-                int z = state.center_z;
-                if (state.ring_radius > 0) {
-                    const int side_len = state.ring_radius * 2;
-                    switch (state.ring_edge) {
-                        case 0:
-                            x = state.center_x - state.ring_radius + state.edge_offset;
-                            z = state.center_z - state.ring_radius;
-                            break;
-                        case 1:
-                            x = state.center_x + state.ring_radius;
-                            z = state.center_z - state.ring_radius + state.edge_offset;
-                            break;
-                        case 2:
-                            x = state.center_x + state.ring_radius - state.edge_offset;
-                            z = state.center_z + state.ring_radius;
-                            break;
-                        default:
-                            x = state.center_x - state.ring_radius;
-                            z = state.center_z + state.ring_radius - state.edge_offset;
-                            break;
-                    }
-                    ++state.edge_offset;
-                    if (state.edge_offset > side_len) {
-                        state.edge_offset = 0;
-                        state.ring_edge = (state.ring_edge + 1) % 4;
-                        if (state.ring_edge == 0) {
-                            ++state.ring_radius;
-                        }
-                    }
-                } else {
-                    state.ring_radius = 1;
-                }
-                ++context.cells_visited_this_frame;
-                context.points_scanned_this_frame = context.cells_visited_this_frame;
-                if (x < state.min_x || x > state.max_x || z < state.min_z || z > state.max_z) {
-                    continue;
-                }
-                const LiveDynamicPointKey key{selector.mode, selector_key.grid_resolution, x, z, selector.selector_id};
-                const LiveDynamicGridCellKey valid_key{selector.mode, selector_key.grid_resolution, x, z};
-                if (live_dynamic_valid_cells_.find(valid_key) == live_dynamic_valid_cells_.end()) {
-                    continue;
-                }
-                if (!state.seen_cells.insert(key).second) {
-                    continue;
-                }
-                if (state.spawned_cells.find(key) != state.spawned_cells.end() ||
-                    live_dynamic_spawned_keys_.find(key) != live_dynamic_spawned_keys_.end() ||
-                    live_dynamic_null_keys_.find(key) != live_dynamic_null_keys_.end() ||
-                    live_dynamic_pending_qualification_keys_.find(key) != live_dynamic_pending_qualification_keys_.end() ||
-                    live_dynamic_pending_spawn_keys_.find(key) != live_dynamic_pending_spawn_keys_.end()) {
-                    continue;
-                }
-                const SDL_Point grid_vertex_world = vibble::grid::global_grid().index_to_world(x, z, selector_key.grid_resolution);
-                if (!live_dynamic_in_world_bounds(grid_vertex_world.x,
-                                                  grid_vertex_world.y,
-                                                  context.spawn_min_world_x,
-                                                  context.spawn_max_world_x,
-                                                  context.spawn_min_world_z,
-                                                  context.spawn_max_world_z)) {
-                    continue;
-                }
-                const SDL_Point world_point = live_dynamic_jittered_world_point(selector, key, grid_vertex_world);
-                const std::int64_t dx = static_cast<std::int64_t>(grid_vertex_world.x) - static_cast<std::int64_t>(context.boundary_center_world.x);
-                const std::int64_t dz = static_cast<std::int64_t>(grid_vertex_world.y) - static_cast<std::int64_t>(context.boundary_center_world.y);
-                out_point = LiveDynamicQualifiedPoint{
-                    selector_key,
-                    key,
-                    x,
-                    z,
-                    grid_vertex_world.x,
-                    grid_vertex_world.y,
-                    world_point.x,
-                    world_point.y,
-                    static_cast<std::uint64_t>(dx * dx + dz * dz)};
-                return true;
-            }
-        }
-        return false;
-    };
-
-    while (context.qualified_this_frame < context.scan_cell_cap) {
-        if (live_dynamic_sync_budget_hit(context)) {
-            break;
-        }
-        if (context.total_spawn_cap > 0 && live_dynamic_asset_keys_.size() >= context.total_spawn_cap) {
-            break;
-        }
-        while (live_dynamic_qualification_queue_.empty() &&
-               context.qualified_this_frame < context.scan_cell_cap &&
-               context.cells_visited_this_frame < context.scan_cell_cap) {
-            LiveDynamicQualifiedPoint next_point;
-            if (!next_selector_point(next_point)) {
-                break;
-            }
-            if (live_dynamic_pending_qualification_keys_.insert(next_point.point_key).second) {
-                live_dynamic_qualification_queue_.push_back(next_point);
-                std::push_heap(live_dynamic_qualification_queue_.begin(),
-                               live_dynamic_qualification_queue_.end(),
-                               qualified_heap_cmp);
-            }
-        }
-        if (live_dynamic_qualification_queue_.empty()) {
-            break;
-        }
-        std::pop_heap(live_dynamic_qualification_queue_.begin(),
-                      live_dynamic_qualification_queue_.end(),
-                      qualified_heap_cmp);
-        const LiveDynamicQualifiedPoint point = live_dynamic_qualification_queue_.back();
-        live_dynamic_qualification_queue_.pop_back();
-        live_dynamic_pending_qualification_keys_.erase(point.point_key);
-        ++context.qualified_this_frame;
-
-        std::string owner_name;
-        if (!evaluate_live_dynamic_spawn_point(context,
-                                               point.point_key,
-                                               point.owner_anchor_world_x,
-                                               point.owner_anchor_world_z,
-                                               &owner_name)) {
-            continue;
-        }
-        const auto selector_it = context.selector_lookup.find(point.selector_key);
-        if (selector_it == context.selector_lookup.end() || !selector_it->second) {
-            continue;
-        }
-        const LiveDynamicCompiledSelector& selector = *selector_it->second;
-        const LiveDynamicCandidate* candidate = pick_live_dynamic_candidate(selector, point.point_key);
-        if (!candidate || candidate->is_null) {
-            live_dynamic_null_keys_.insert(point.point_key);
-            continue;
-        }
-
-        LiveDynamicSpawnTask task;
-        task.selector_key = point.selector_key;
-        task.point_key = point.point_key;
-        task.owner_anchor_world_x = point.owner_anchor_world_x;
-        task.owner_anchor_world_z = point.owner_anchor_world_z;
-        task.world_x = point.world_x;
-        task.world_z = point.world_z;
-        task.dist2 = point.dist2;
-        task.selector_spawn_id = selector.spawn_id;
-        task.owner_name = owner_name;
-        task.asset_name = candidate->asset_name;
-        task.info = candidate->info;
-        if (live_dynamic_pending_spawn_keys_.insert(point.point_key).second) {
-            live_dynamic_spawn_queue_.push_back(std::move(task));
-            std::push_heap(live_dynamic_spawn_queue_.begin(),
-                           live_dynamic_spawn_queue_.end(),
-                           spawn_heap_cmp);
-        }
-    }
-}
-
-void Assets::spawn_qualified_tasks(LiveDynamicSyncContext& context) {
-    auto spawn_heap_cmp = [](const LiveDynamicSpawnTask& lhs, const LiveDynamicSpawnTask& rhs) {
-        return LiveDynamicSpawnTaskOrder{}(rhs, lhs);
-    };
-    while (context.spawned_this_frame < context.new_spawn_cap) {
-        if (live_dynamic_sync_budget_hit(context)) {
-            break;
-        }
-        if (context.total_spawn_cap > 0 && live_dynamic_asset_keys_.size() >= context.total_spawn_cap) {
-            break;
-        }
-        if (live_dynamic_spawn_queue_.empty()) {
-            break;
-        }
-
-        std::pop_heap(live_dynamic_spawn_queue_.begin(),
-                      live_dynamic_spawn_queue_.end(),
-                      spawn_heap_cmp);
-        const LiveDynamicSpawnTask task = live_dynamic_spawn_queue_.back();
-        live_dynamic_spawn_queue_.pop_back();
-        live_dynamic_pending_spawn_keys_.erase(task.point_key);
-        ++context.spawn_tasks_processed_this_frame;
-        ++context.spawn_attempts_this_frame;
-
-        if (!evaluate_live_dynamic_spawn_point(context,
-                                               task.point_key,
-                                               task.owner_anchor_world_x,
-                                               task.owner_anchor_world_z)) {
-            continue;
-        }
-        if (!spawn_live_dynamic_asset(task)) {
-            continue;
-        }
-        ++context.spawned_this_frame;
-        const LiveDynamicOccupancyKey occupancy_key{task.point_key.grid_resolution, task.point_key.grid_x, task.point_key.grid_z};
-        context.occupancy_cache[occupancy_key] = true;
-        if (auto state_it = live_dynamic_selector_scan_state_.find(task.selector_key);
-            state_it != live_dynamic_selector_scan_state_.end()) {
-            state_it->second.spawned_cells.insert(task.point_key);
-        }
-    }
-}
-
-void Assets::apply_live_dynamic_budget_sample(double frame_elapsed_ms, double target_ms) {
-    if (!live_dynamic_sync_ema_initialized_) {
-        live_dynamic_sync_ema_initialized_ = true;
-        live_dynamic_sync_ema_ms_ = frame_elapsed_ms;
-    } else {
-        constexpr double kEmaAlpha = 0.2;
-        live_dynamic_sync_ema_ms_ = (kEmaAlpha * frame_elapsed_ms) + ((1.0 - kEmaAlpha) * live_dynamic_sync_ema_ms_);
-    }
-
-    const std::size_t min_scan_budget = std::max<std::size_t>(1, min_live_dynamic_scan_cells_per_selector_per_frame_);
-    const std::size_t max_scan_budget = std::max<std::size_t>(min_scan_budget, max_live_dynamic_scan_cells_per_selector_per_frame_);
-    const std::size_t min_spawn_budget = std::max<std::size_t>(1, min_live_dynamic_new_spawns_per_frame_);
-    const std::size_t max_spawn_budget = std::max<std::size_t>(min_spawn_budget, max_live_dynamic_new_spawns_per_frame_);
-
-    auto dec_budget = [](std::size_t current, std::size_t min_value) {
-        const std::size_t reduced = std::max<std::size_t>(
-            min_value,
-            static_cast<std::size_t>(std::floor(static_cast<double>(current) * 0.60)));
-        return std::max(min_value, reduced);
-    };
-    auto inc_budget = [](std::size_t current, std::size_t max_value) {
-        const std::size_t increased = current + std::max<std::size_t>(1, current / 20);
-        return std::min(max_value, std::max(current, increased));
-    };
-
-    if (live_dynamic_sync_ema_ms_ > target_ms * 1.10) {
-        adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
-            dec_budget(adaptive_live_dynamic_scan_cells_per_selector_per_frame_, min_scan_budget);
-        adaptive_live_dynamic_new_spawns_per_frame_ =
-            dec_budget(adaptive_live_dynamic_new_spawns_per_frame_, min_spawn_budget);
-    } else if (live_dynamic_sync_ema_ms_ < target_ms * 0.75) {
-        adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
-            inc_budget(adaptive_live_dynamic_scan_cells_per_selector_per_frame_, max_scan_budget);
-        adaptive_live_dynamic_new_spawns_per_frame_ =
-            inc_budget(adaptive_live_dynamic_new_spawns_per_frame_, max_spawn_budget);
-    }
-
-    adaptive_live_dynamic_scan_cells_per_selector_per_frame_ = std::clamp<std::size_t>(
-        adaptive_live_dynamic_scan_cells_per_selector_per_frame_,
-        min_scan_budget,
-        max_scan_budget);
-    adaptive_live_dynamic_new_spawns_per_frame_ = std::clamp<std::size_t>(
-        adaptive_live_dynamic_new_spawns_per_frame_,
-        min_spawn_budget,
-        max_spawn_budget);
-}
-
-void Assets::update_adaptive_budget_metrics(LiveDynamicSyncContext& context) {
-    if (context.timing.perf_freq == 0 || context.perf_start == 0) {
-        return;
-    }
-    context.timing.perf_end = SDL_GetPerformanceCounter();
-    if (context.timing.perf_end < context.perf_start) {
-        return;
-    }
-    const double frame_elapsed_ms =
-        (static_cast<double>(context.timing.perf_end - context.perf_start) * 1000.0) /
-        static_cast<double>(context.timing.perf_freq);
-    apply_live_dynamic_budget_sample(frame_elapsed_ms, context.timing.target_ms);
-}
-
-void Assets::sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds) {
-    const bool instrumentation_enabled = live_dynamic_sync_instrumentation_enabled();
-    const std::uint64_t perf_freq = SDL_GetPerformanceFrequency();
-    auto elapsed_ms = [perf_freq](std::uint64_t start, std::uint64_t end) {
-        if (perf_freq == 0 || end < start) {
-            return 0.0;
-        }
-        return (static_cast<double>(end - start) * 1000.0) / static_cast<double>(perf_freq);
-    };
-
-    const std::uint64_t stage_a_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    LiveDynamicSyncContext context = collect_sync_context(render_bounds);
-    context.sync_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    context.selector_state_size_before = live_dynamic_selector_scan_state_.size();
-    context.qualification_queue_size_before = live_dynamic_qualification_queue_.size();
-    context.spawn_queue_size_before = live_dynamic_spawn_queue_.size();
-    context.spawned_keys_size_before = live_dynamic_spawned_keys_.size();
-    context.timing.perf_freq = perf_freq;
-    context.timing.target_ms = std::max(0.1, live_dynamic_sync_budget_target_ms_);
-    if (instrumentation_enabled) {
-        context.stage_a_ms = elapsed_ms(stage_a_start, SDL_GetPerformanceCounter());
-    }
-    if (!context.valid) {
-        clear_live_dynamic_assets();
-        return;
-    }
-
-    const std::uint64_t stage_b_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    prune_out_of_bounds_dynamic_assets(context);
-    if (instrumentation_enabled) {
-        context.stage_b_ms = elapsed_ms(stage_b_start, SDL_GetPerformanceCounter());
-    }
-
-    context.perf_start = SDL_GetPerformanceCounter();
-
-    const std::uint64_t stage_c_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    refresh_selector_frontiers(context);
-    if (instrumentation_enabled) {
-        context.stage_c_ms = elapsed_ms(stage_c_start, SDL_GetPerformanceCounter());
-    }
-
-    const std::uint64_t stage_d_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    qualify_points(context);
-    if (instrumentation_enabled) {
-        context.stage_d_ms = elapsed_ms(stage_d_start, SDL_GetPerformanceCounter());
-    }
-
-    const std::uint64_t stage_e_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    spawn_qualified_tasks(context);
-    if (instrumentation_enabled) {
-        context.stage_e_ms = elapsed_ms(stage_e_start, SDL_GetPerformanceCounter());
-    }
-
-    const std::uint64_t stage_f_start = instrumentation_enabled ? SDL_GetPerformanceCounter() : 0;
-    update_adaptive_budget_metrics(context);
-    if (instrumentation_enabled) {
-        context.stage_f_ms = elapsed_ms(stage_f_start, SDL_GetPerformanceCounter());
-    }
-
-    live_dynamic_persistent_occupancy_cache_ = std::move(context.occupancy_cache);
-    live_dynamic_persistent_room_cache_ = std::move(context.room_cache);
-    live_dynamic_last_points_scanned_ = context.points_scanned_this_frame;
-    live_dynamic_last_points_qualified_ = context.qualified_this_frame;
-    live_dynamic_last_spawn_attempts_ = context.spawn_attempts_this_frame;
-    live_dynamic_last_successful_spawns_ = context.spawned_this_frame;
-    live_dynamic_last_despawns_ = context.despawns_this_frame;
-
-    if (!instrumentation_enabled) {
-        return;
-    }
-    const std::size_t selector_state_size_after = live_dynamic_selector_scan_state_.size();
-    const std::size_t qualification_queue_size_after = live_dynamic_qualification_queue_.size();
-    const std::size_t spawn_queue_size_after = live_dynamic_spawn_queue_.size();
-    const std::size_t spawned_keys_size_after = live_dynamic_spawned_keys_.size();
-    const double sync_total_ms = elapsed_ms(context.sync_start, SDL_GetPerformanceCounter());
-    vibble::log::debug(
-        "[RenderGuard] live_dynamic_sync frame=" + std::to_string(frame_id_) +
-        " ms_total=" + std::to_string(sync_total_ms) +
-        " stage_ms={A:" + std::to_string(context.stage_a_ms) +
-        ",B:" + std::to_string(context.stage_b_ms) +
-        ",C:" + std::to_string(context.stage_c_ms) +
-        ",D:" + std::to_string(context.stage_d_ms) +
-        ",E:" + std::to_string(context.stage_e_ms) +
-        ",F:" + std::to_string(context.stage_f_ms) + "}" +
-        " sizes_before={selector_state:" + std::to_string(context.selector_state_size_before) +
-        ",qualification_queue:" + std::to_string(context.qualification_queue_size_before) +
-        ",spawn_queue:" + std::to_string(context.spawn_queue_size_before) +
-        ",spawned_keys:" + std::to_string(context.spawned_keys_size_before) + "}" +
-        " sizes_after={selector_state:" + std::to_string(selector_state_size_after) +
-        ",qualification_queue:" + std::to_string(qualification_queue_size_after) +
-        ",spawn_queue:" + std::to_string(spawn_queue_size_after) +
-        ",spawned_keys:" + std::to_string(spawned_keys_size_after) + "}" +
-        " counters={cells_visited:" + std::to_string(context.cells_visited_this_frame) +
-        ",points_scanned:" + std::to_string(context.points_scanned_this_frame) +
-        ",points_qualified:" + std::to_string(context.qualified_this_frame) +
-        ",spawn_attempts:" + std::to_string(context.spawn_attempts_this_frame) +
-        ",spawn_tasks_processed:" + std::to_string(context.spawn_tasks_processed_this_frame) +
-        ",successful_spawns:" + std::to_string(context.spawned_this_frame) +
-        ",despawns:" + std::to_string(context.despawns_this_frame) +
-        ",pending_prunes:" + std::to_string(live_dynamic_pending_prune_assets_.size()) +
-        ",quantized_bounds_changes:" + std::to_string(live_dynamic_quantized_bounds_change_count_) +
-        ",occupancy_cache_hits:" + std::to_string(live_dynamic_occupancy_cache_hits_) +
-        ",occupancy_cache_misses:" + std::to_string(live_dynamic_occupancy_cache_misses_) + "}");
-}
-
-void Assets::test_sync_live_dynamic_assets_for_bounds(const world::GridBounds& bounds) {
-    sync_live_dynamic_assets_to_render_bounds(bounds);
-}
-
-void Assets::test_set_live_dynamic_frame_caps(std::size_t scan_cap, std::size_t spawn_cap) {
-    max_live_dynamic_scan_cells_per_selector_per_frame_ = std::max<std::size_t>(1, scan_cap);
-    max_live_dynamic_new_spawns_per_frame_ = std::max<std::size_t>(1, spawn_cap);
-    min_live_dynamic_scan_cells_per_selector_per_frame_ = 1;
-    min_live_dynamic_new_spawns_per_frame_ = 1;
-    adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
-        std::clamp<std::size_t>(adaptive_live_dynamic_scan_cells_per_selector_per_frame_,
-                                min_live_dynamic_scan_cells_per_selector_per_frame_,
-                                max_live_dynamic_scan_cells_per_selector_per_frame_);
-    adaptive_live_dynamic_new_spawns_per_frame_ =
-        std::clamp<std::size_t>(adaptive_live_dynamic_new_spawns_per_frame_,
-                                min_live_dynamic_new_spawns_per_frame_,
-                                max_live_dynamic_new_spawns_per_frame_);
-}
-
-std::size_t Assets::test_live_dynamic_pending_point_count() const {
-    std::size_t total = live_dynamic_qualification_queue_.size() + live_dynamic_spawn_queue_.size();
-    return total;
-}
-
-std::size_t Assets::test_live_dynamic_scan_budget() const {
-    return adaptive_live_dynamic_scan_cells_per_selector_per_frame_;
-}
-
-std::size_t Assets::test_live_dynamic_spawn_budget() const {
-    return adaptive_live_dynamic_new_spawns_per_frame_;
-}
-
-void Assets::test_set_live_dynamic_budget_target_ms(double target_ms) {
-    live_dynamic_sync_budget_target_ms_ = std::max(0.1, target_ms);
-}
-
-void Assets::test_reset_live_dynamic_budget_state() {
-    adaptive_live_dynamic_scan_cells_per_selector_per_frame_ =
-        std::max<std::size_t>(1, max_live_dynamic_scan_cells_per_selector_per_frame_);
-    adaptive_live_dynamic_new_spawns_per_frame_ =
-        std::max<std::size_t>(1, max_live_dynamic_new_spawns_per_frame_);
-    live_dynamic_sync_ema_ms_ = 0.0;
-    live_dynamic_sync_ema_initialized_ = false;
-}
-
-void Assets::test_apply_live_dynamic_budget_sample_ms(double frame_elapsed_ms) {
-    apply_live_dynamic_budget_sample(std::max(0.0, frame_elapsed_ms), std::max(0.1, live_dynamic_sync_budget_target_ms_));
-}
-
-Assets::LiveDynamicSyncSnapshot Assets::test_live_dynamic_snapshot() const {
-    LiveDynamicSyncSnapshot snapshot;
-    snapshot.selector_state = live_dynamic_selector_scan_state_.size();
-    snapshot.pending_qualification = live_dynamic_qualification_queue_.size();
-    snapshot.pending_spawn = live_dynamic_spawn_queue_.size();
-    snapshot.spawned_keys = live_dynamic_spawned_keys_.size();
-    snapshot.null_keys = live_dynamic_null_keys_.size();
-    snapshot.points_scanned = live_dynamic_last_points_scanned_;
-    snapshot.points_qualified = live_dynamic_last_points_qualified_;
-    snapshot.spawn_attempts = live_dynamic_last_spawn_attempts_;
-    snapshot.successful_spawns = live_dynamic_last_successful_spawns_;
-    snapshot.despawns = live_dynamic_last_despawns_;
-    snapshot.occupancy_cache_size = live_dynamic_persistent_occupancy_cache_.size();
-    snapshot.room_cache_size = live_dynamic_persistent_room_cache_.size();
-    snapshot.occupancy_cache_hits = live_dynamic_occupancy_cache_hits_;
-    snapshot.occupancy_cache_misses = live_dynamic_occupancy_cache_misses_;
-    snapshot.scan_budget = adaptive_live_dynamic_scan_cells_per_selector_per_frame_;
-    snapshot.spawn_budget = adaptive_live_dynamic_new_spawns_per_frame_;
-    snapshot.sync_ema_ms = live_dynamic_sync_ema_ms_;
-    return snapshot;
-}
-
 int Assets::audio_effect_max_distance_world() const {
     const_cast<Assets*>(this)->update_max_asset_dimensions();
     const float horizontal_padding = std::max(0.0f, max_asset_width_world_ * 1.5f);
@@ -4543,9 +2945,7 @@ void Assets::set_dev_mode(bool mode) {
             dev_frame_initialized_ = false;
             last_camera_state_version_for_dev_ = camera_.camera_state_version();
             last_dev_active_state_version_snapshot_ = dev_active_state_version_;
-            if (!live_dynamic_assets_visible()) {
-                clear_live_dynamic_assets();
-            }
+            mark_grid_dirty();
             show_dev_notice("Dev Mode enabled (Ctrl+D to toggle)", 2000);
         } else {
 
@@ -4706,11 +3106,6 @@ std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
 
     extracted->set_provisional_grid_point(detached_pos);
     extracted->cache_grid_residency(detached_pos);
-    auto live_key_it = live_dynamic_asset_keys_.find(extracted.get());
-    if (live_key_it != live_dynamic_asset_keys_.end()) {
-        live_dynamic_spawned_keys_.erase(live_key_it->second);
-        live_dynamic_asset_keys_.erase(live_key_it);
-    }
     unregister_asset_runtime_state(extracted.get());
     all_asset_membership_.erase(extracted.get());
     if (extracted->info) {
@@ -4993,8 +3388,8 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
     camera_.recompute_current_view();
     const world::GridBounds render_bounds = screen_world_rect();
     const world::GridBounds work_bounds = runtime_work_bounds_from_render_bounds(render_bounds);
-    if (should_run_live_dynamic_sync_for_bounds(work_bounds, allow_live_dynamic_sync)) {
-        sync_live_dynamic_assets_to_render_bounds(work_bounds);
+    if (allow_live_dynamic_sync && dynamic_spawn_runtime_) {
+        dynamic_spawn_runtime_->sync(work_bounds);
     }
     world_grid_.update_active_chunks(work_bounds, 0);
     camera_.rebuild_grid(world_grid_,
@@ -5280,10 +3675,8 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
         if (!asset || unique_removals.find(asset) == unique_removals.end()) {
             continue;
         }
-        auto live_key_it = live_dynamic_asset_keys_.find(asset);
-        if (live_key_it != live_dynamic_asset_keys_.end()) {
-            live_dynamic_spawned_keys_.erase(live_key_it->second);
-            live_dynamic_asset_keys_.erase(live_key_it);
+        if (dynamic_spawn_runtime_) {
+            dynamic_spawn_runtime_->forget_asset(asset);
         }
         if (asset == focus_filter_asset_) {
             clear_focus_filter();
@@ -5349,7 +3742,8 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
     }
 
     auto batch = begin_world_mutation_batch();
-    std::size_t count = 0;
+    const std::size_t dynamic_count = dynamic_spawn_runtime_ ? dynamic_spawn_runtime_->delete_for_spawn_group(spawn_id) : 0;
+    std::size_t static_count = 0;
     bool removed_tileable_asset = false;
     for (Asset* asset : all) {
         if (!asset || asset->dead || asset == player) {
@@ -5358,22 +3752,22 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
         if (asset->spawn_id == spawn_id) {
             batch.mark_for_deletion(asset);
             removed_tileable_asset = removed_tileable_asset || (asset->info && asset->info->tillable);
-            ++count;
+            ++static_count;
         }
     }
 
-    if (count == 0) {
+    if (dynamic_count == 0 && static_count == 0) {
         return 0;
     }
 
-    if (!batch.commit()) {
+    if (static_count > 0 && !batch.commit()) {
         return 0;
     }
 
     if (removed_tileable_asset) {
         loader_tiles::build_grid_tiles(renderer(), world_grid_, map_grid_settings_, all);
     }
-    return count;
+    return dynamic_count + static_count;
 }
 
 std::size_t Assets::delete_assets_for_spawn_groups(const std::vector<std::string>& spawn_ids) {
@@ -5396,7 +3790,13 @@ std::size_t Assets::delete_assets_for_spawn_groups(const std::vector<std::string
                              filtered_spawn_ids.end());
 
     auto batch = begin_world_mutation_batch();
-    std::size_t count = 0;
+    std::size_t dynamic_count = 0;
+    if (dynamic_spawn_runtime_) {
+        for (const std::string& spawn_id : filtered_spawn_ids) {
+            dynamic_count += dynamic_spawn_runtime_->delete_for_spawn_group(spawn_id);
+        }
+    }
+    std::size_t static_count = 0;
     bool removed_tileable_asset = false;
     for (Asset* asset : all) {
         if (!asset || asset->dead || asset == player) {
@@ -5407,21 +3807,21 @@ std::size_t Assets::delete_assets_for_spawn_groups(const std::vector<std::string
         }
         batch.mark_for_deletion(asset);
         removed_tileable_asset = removed_tileable_asset || (asset->info && asset->info->tillable);
-        ++count;
+        ++static_count;
     }
 
-    if (count == 0) {
+    if (dynamic_count == 0 && static_count == 0) {
         return 0;
     }
 
-    if (!batch.commit()) {
+    if (static_count > 0 && !batch.commit()) {
         return 0;
     }
 
     if (removed_tileable_asset) {
         loader_tiles::build_grid_tiles(renderer(), world_grid_, map_grid_settings_, all);
     }
-    return count;
+    return dynamic_count + static_count;
 }
 
 void Assets::destroy_runtime_ui_overlay_texture() {
@@ -5885,6 +4285,10 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
 
     world_grid_.set_grid_resolution(std::max(0, sanitized.grid_resolution));
 
+    if (dynamic_spawn_runtime_) {
+        dynamic_spawn_runtime_->compile_from_map();
+    }
+
     if (resolution_changed) {
         for (Asset* asset : all) {
             if (!asset) {
@@ -6056,7 +4460,9 @@ const devmode::core::ManifestStore* Assets::manifest_store() const {
 }
 
 void Assets::notify_spawn_group_config_changed(const nlohmann::json& entry) {
-    rebuild_live_dynamic_selectors();
+    if (dynamic_spawn_runtime_) {
+        dynamic_spawn_runtime_->compile_from_map();
+    }
     mark_grid_dirty();
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->notify_spawn_group_config_changed(entry);
@@ -6064,7 +4470,10 @@ void Assets::notify_spawn_group_config_changed(const nlohmann::json& entry) {
 }
 
 void Assets::notify_spawn_group_removed(const std::string& spawn_id) {
-    rebuild_live_dynamic_selectors();
+    if (dynamic_spawn_runtime_) {
+        dynamic_spawn_runtime_->delete_for_spawn_group(spawn_id);
+        dynamic_spawn_runtime_->compile_from_map();
+    }
     mark_grid_dirty();
     if (dev_controls_ && dev_controls_->is_enabled()) {
         dev_controls_->notify_spawn_group_removed(spawn_id);

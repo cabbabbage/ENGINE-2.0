@@ -46,6 +46,10 @@ class PreviewProvider;
 namespace devmode::core {
 class ManifestStore;
 }
+namespace dynamic_spawn {
+class DynamicSpawnRuntime;
+struct DynamicSpawnDiagnostics;
+}
 
 enum class FrameEditorLaunchMode {
     Movement,
@@ -54,11 +58,6 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
-    enum class LiveDynamicMode {
-        BoundaryArea = 0,
-        InheritedMap = 1,
-    };
-
     enum class DevGridOverlayKind {
         FloorMouseCentered,
         XYPlaneAtAssetDepth,
@@ -322,35 +321,7 @@ public:
     WorldMutationBatch begin_world_mutation_batch();
     void set_output_dimensions(int width, int height);
     std::optional<SDL_Point> opengl_postprocess_target_size() const;
-
-    void test_sync_live_dynamic_assets_for_bounds(const world::GridBounds& bounds);
-    void test_set_live_dynamic_frame_caps(std::size_t scan_cap, std::size_t spawn_cap);
-    std::size_t test_live_dynamic_pending_point_count() const;
-    std::size_t test_live_dynamic_scan_budget() const;
-    std::size_t test_live_dynamic_spawn_budget() const;
-    void test_set_live_dynamic_budget_target_ms(double target_ms);
-    void test_reset_live_dynamic_budget_state();
-    void test_apply_live_dynamic_budget_sample_ms(double frame_elapsed_ms);
-    struct LiveDynamicSyncSnapshot {
-        std::size_t selector_state = 0;
-        std::size_t pending_qualification = 0;
-        std::size_t pending_spawn = 0;
-        std::size_t spawned_keys = 0;
-        std::size_t null_keys = 0;
-        std::size_t points_scanned = 0;
-        std::size_t points_qualified = 0;
-        std::size_t spawn_attempts = 0;
-        std::size_t successful_spawns = 0;
-        std::size_t despawns = 0;
-        std::size_t occupancy_cache_size = 0;
-        std::size_t room_cache_size = 0;
-        std::size_t occupancy_cache_hits = 0;
-        std::size_t occupancy_cache_misses = 0;
-        std::size_t scan_budget = 0;
-        std::size_t spawn_budget = 0;
-        double sync_ema_ms = 0.0;
-    };
-    LiveDynamicSyncSnapshot test_live_dynamic_snapshot() const;
+    const dynamic_spawn::DynamicSpawnDiagnostics& dynamic_spawn_diagnostics() const;
 
 private:
     void save_map_info_json();
@@ -384,6 +355,7 @@ private:
     void rebuild_active_derivative_lists(bool force_filter_refresh = false);
 
     friend class Asset;
+    friend class dynamic_spawn::DynamicSpawnRuntime;
 
     CurrentRoomFinder* finder_ = nullptr;
     Input* input = nullptr;
@@ -399,6 +371,7 @@ private:
     SDL_Renderer* renderer_ = nullptr;
     WarpedScreenGrid camera_;
     std::unique_ptr<OpenGLRuntimeRenderer> opengl_renderer_;
+    std::unique_ptr<dynamic_spawn::DynamicSpawnRuntime> dynamic_spawn_runtime_;
     int screen_width;
     int screen_height;
     int delta_x_ = 0;
@@ -567,52 +540,7 @@ private:
     void register_pending_static_assets();
     void rebuild_all_assets_from_grid();
     void rebuild_active_from_screen_grid();
-    void migrate_live_dynamic_spawn_config();
-    void rebuild_live_dynamic_selectors();
-    void sync_live_dynamic_assets_to_render_bounds(const world::GridBounds& render_bounds);
-    struct LiveDynamicSyncTiming {
-        std::uint64_t perf_start = 0;
-        std::uint64_t perf_end = 0;
-        std::uint64_t perf_freq = 0;
-        double target_ms = 0.1;
-    };
-    struct LiveDynamicCandidate;
-    struct LiveDynamicCompiledSelector;
-    struct LiveDynamicPointKey;
-    struct LiveDynamicSpawnTask;
-    struct LiveDynamicSyncContext;
-    LiveDynamicSyncContext collect_sync_context(const world::GridBounds& render_bounds);
-    void prune_out_of_bounds_dynamic_assets(LiveDynamicSyncContext& context);
-    void refresh_selector_frontiers(LiveDynamicSyncContext& context);
-    void qualify_points(LiveDynamicSyncContext& context);
-    void spawn_qualified_tasks(LiveDynamicSyncContext& context);
-    void update_adaptive_budget_metrics(LiveDynamicSyncContext& context);
-    void apply_live_dynamic_budget_sample(double frame_elapsed_ms, double target_ms);
-    bool live_dynamic_sync_budget_hit(const LiveDynamicSyncContext& context) const;
-    bool live_dynamic_in_world_bounds(int world_x,
-                                      int world_z,
-                                      int min_world_x,
-                                      int max_world_x,
-                                      int min_world_z,
-                                      int max_world_z) const;
-    const LiveDynamicCandidate* pick_live_dynamic_candidate(const LiveDynamicCompiledSelector& selector,
-                                                            const LiveDynamicPointKey& key) const;
-    SDL_Point live_dynamic_jittered_world_point(const LiveDynamicCompiledSelector& selector,
-                                                const LiveDynamicPointKey& key,
-                                                SDL_Point base_point) const;
-    bool room_contains_live_dynamic_area(const Room* room, SDL_Point point) const;
-    Room* room_for_live_dynamic_point(SDL_Point point, bool require_inherited, bool& inside_any_room);
-    bool point_in_live_dynamic_boundary_area(SDL_Point point, bool inside_any_room, SDL_Point boundary_center_world) const;
-    bool evaluate_live_dynamic_spawn_point(LiveDynamicSyncContext& context,
-                                           const LiveDynamicPointKey& key,
-                                           int owner_anchor_world_x,
-                                           int owner_anchor_world_z,
-                                           std::string* out_owner_name = nullptr);
-    bool spawn_live_dynamic_asset(const LiveDynamicSpawnTask& task);
     world::GridBounds runtime_work_bounds_from_render_bounds(const world::GridBounds& render_bounds);
-    bool should_run_live_dynamic_sync_for_bounds(const world::GridBounds& work_bounds, bool allow_live_dynamic_sync);
-    void clear_live_dynamic_assets();
-    std::size_t delete_live_dynamic_assets_now(const std::vector<Asset*>& assets_to_delete);
 
     std::vector<Asset*> moving_assets_for_grid_;
     std::vector<Asset*> pending_static_grid_registration_;
@@ -695,350 +623,6 @@ private:
     bool runtime_ui_overlay_redrawn_last_prepare_ = false;
     runtime::context::GameRuntimeContext game_context_{};
 
-    struct LiveDynamicCandidate {
-        std::string asset_name;
-        std::shared_ptr<AssetInfo> info;
-        double weight = 0.0;
-        bool is_null = false;
-    };
-
-    struct LiveDynamicSelector {
-        std::string spawn_id;
-        std::string display_name;
-        int grid_resolution = 0;
-        int jitter_px = 0;
-        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
-        std::vector<LiveDynamicCandidate> candidates;
-    };
-    struct LiveDynamicCompiledSelector {
-        std::uint32_t selector_id = 0;
-        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
-        int grid_resolution = 0;
-        int jitter_px = 0;
-        std::string spawn_id;
-        std::string display_name;
-        std::size_t spawn_id_hash = 0;
-        std::uint64_t jitter_seed = 0;
-        std::uint64_t candidate_seed = 0;
-        bool require_inherited_room_owner = false;
-        bool allow_boundary_owner = false;
-        std::vector<LiveDynamicCandidate> candidates;
-        std::vector<double> cumulative_candidate_weights;
-        double total_candidate_weight = 0.0;
-    };
-
-    struct LiveDynamicPointKey {
-        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
-        int grid_resolution = 0;
-        int grid_x = 0;
-        int grid_z = 0;
-        std::uint32_t selector_id = 0;
-
-        bool operator==(const LiveDynamicPointKey& other) const {
-            return mode == other.mode &&
-                   grid_resolution == other.grid_resolution &&
-                   grid_x == other.grid_x &&
-                   grid_z == other.grid_z &&
-                   selector_id == other.selector_id;
-        }
-    };
-
-    struct LiveDynamicPointKeyHash {
-        std::size_t operator()(const LiveDynamicPointKey& key) const {
-            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
-            auto mix = [&seed](std::size_t value) {
-                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-            };
-            mix(std::hash<int>{}(key.grid_resolution));
-            mix(std::hash<int>{}(key.grid_x));
-            mix(std::hash<int>{}(key.grid_z));
-            mix(std::hash<std::uint32_t>{}(key.selector_id));
-            return seed;
-        }
-    };
-
-    struct LiveDynamicGridCellKey {
-        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
-        int grid_resolution = 0;
-        int grid_x = 0;
-        int grid_z = 0;
-
-        bool operator==(const LiveDynamicGridCellKey& other) const {
-            return mode == other.mode &&
-                   grid_resolution == other.grid_resolution &&
-                   grid_x == other.grid_x &&
-                   grid_z == other.grid_z;
-        }
-    };
-
-    struct LiveDynamicGridCellKeyHash {
-        std::size_t operator()(const LiveDynamicGridCellKey& key) const {
-            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
-            auto mix = [&seed](std::size_t value) {
-                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-            };
-            mix(std::hash<int>{}(key.grid_resolution));
-            mix(std::hash<int>{}(key.grid_x));
-            mix(std::hash<int>{}(key.grid_z));
-            return seed;
-        }
-    };
-
-    struct LiveDynamicSelectorStateKey {
-        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
-        int grid_resolution = 0;
-        std::uint32_t selector_id = 0;
-
-        bool operator==(const LiveDynamicSelectorStateKey& other) const {
-            return mode == other.mode &&
-                   grid_resolution == other.grid_resolution &&
-                   selector_id == other.selector_id;
-        }
-    };
-
-    struct LiveDynamicSelectorStateKeyHash {
-        std::size_t operator()(const LiveDynamicSelectorStateKey& key) const {
-            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
-            auto mix = [&seed](std::size_t value) {
-                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-            };
-            mix(std::hash<int>{}(key.grid_resolution));
-            mix(std::hash<std::uint32_t>{}(key.selector_id));
-            return seed;
-        }
-    };
-
-    struct LiveDynamicQualifiedPoint {
-        LiveDynamicSelectorStateKey selector_key;
-        LiveDynamicPointKey point_key;
-        int grid_x = 0;
-        int grid_z = 0;
-        int owner_anchor_world_x = 0;
-        int owner_anchor_world_z = 0;
-        int world_x = 0;
-        int world_z = 0;
-        std::uint64_t dist2 = 0;
-    };
-
-    struct LiveDynamicQualifiedPointOrder {
-        bool operator()(const LiveDynamicQualifiedPoint& a, const LiveDynamicQualifiedPoint& b) const {
-            if (a.dist2 != b.dist2) return a.dist2 < b.dist2;
-            if (a.grid_x != b.grid_x) return a.grid_x < b.grid_x;
-            if (a.grid_z != b.grid_z) return a.grid_z < b.grid_z;
-            if (a.point_key.selector_id != b.point_key.selector_id) return a.point_key.selector_id < b.point_key.selector_id;
-            if (a.point_key.mode != b.point_key.mode) {
-                return static_cast<int>(a.point_key.mode) < static_cast<int>(b.point_key.mode);
-            }
-            if (a.point_key.grid_resolution != b.point_key.grid_resolution) {
-                return a.point_key.grid_resolution < b.point_key.grid_resolution;
-            }
-            return false;
-        }
-    };
-
-    struct LiveDynamicSpawnTask {
-        LiveDynamicSelectorStateKey selector_key;
-        LiveDynamicPointKey point_key;
-        int owner_anchor_world_x = 0;
-        int owner_anchor_world_z = 0;
-        int world_x = 0;
-        int world_z = 0;
-        std::uint64_t dist2 = 0;
-        std::string selector_spawn_id;
-        std::string owner_name;
-        std::string asset_name;
-        std::shared_ptr<AssetInfo> info;
-    };
-
-    struct LiveDynamicSpawnTaskOrder {
-        bool operator()(const LiveDynamicSpawnTask& a, const LiveDynamicSpawnTask& b) const {
-            if (a.dist2 != b.dist2) return a.dist2 < b.dist2;
-            if (a.point_key.grid_x != b.point_key.grid_x) return a.point_key.grid_x < b.point_key.grid_x;
-            if (a.point_key.grid_z != b.point_key.grid_z) return a.point_key.grid_z < b.point_key.grid_z;
-            if (a.point_key.selector_id != b.point_key.selector_id) return a.point_key.selector_id < b.point_key.selector_id;
-            if (a.point_key.mode != b.point_key.mode) {
-                return static_cast<int>(a.point_key.mode) < static_cast<int>(b.point_key.mode);
-            }
-            if (a.point_key.grid_resolution != b.point_key.grid_resolution) {
-                return a.point_key.grid_resolution < b.point_key.grid_resolution;
-            }
-            return false;
-        }
-    };
-
-    struct LiveDynamicSelectorScanState {
-        bool valid = false;
-        int min_x = 0;
-        int max_x = -1;
-        int min_z = 0;
-        int max_z = -1;
-        int center_x = 0;
-        int center_z = 0;
-        int ring_radius = 0;
-        int ring_edge = 0;
-        int edge_offset = 0;
-        std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> seen_cells;
-        std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> spawned_cells;
-    };
-
-    struct LiveDynamicRoomCacheKey {
-        LiveDynamicMode mode = LiveDynamicMode::BoundaryArea;
-        int grid_resolution = 0;
-        int grid_x = 0;
-        int grid_z = 0;
-
-        bool operator==(const LiveDynamicRoomCacheKey& other) const {
-            return mode == other.mode &&
-                   grid_resolution == other.grid_resolution &&
-                   grid_x == other.grid_x &&
-                   grid_z == other.grid_z;
-        }
-    };
-
-    struct LiveDynamicRoomCacheKeyHash {
-        std::size_t operator()(const LiveDynamicRoomCacheKey& key) const {
-            std::size_t seed = std::hash<int>{}(static_cast<int>(key.mode));
-            auto mix = [&seed](std::size_t value) {
-                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-            };
-            mix(std::hash<int>{}(key.grid_resolution));
-            mix(std::hash<int>{}(key.grid_x));
-            mix(std::hash<int>{}(key.grid_z));
-            return seed;
-        }
-    };
-
-    struct LiveDynamicRoomCacheValue {
-        bool inside_any_room = false;
-        bool boundary_allowed = false;
-        bool has_owner = false;
-        std::string owner_name;
-    };
-
-    struct LiveDynamicOccupancyKey {
-        int grid_resolution = 0;
-        int grid_x = 0;
-        int grid_z = 0;
-
-        bool operator==(const LiveDynamicOccupancyKey& other) const {
-            return grid_resolution == other.grid_resolution &&
-                   grid_x == other.grid_x &&
-                   grid_z == other.grid_z;
-        }
-    };
-
-    struct LiveDynamicOccupancyKeyHash {
-        std::size_t operator()(const LiveDynamicOccupancyKey& key) const {
-            std::size_t seed = std::hash<int>{}(key.grid_resolution);
-            auto mix = [&seed](std::size_t value) {
-                seed ^= value + 0x9e3779b9u + (seed << 6) + (seed >> 2);
-            };
-            mix(std::hash<int>{}(key.grid_x));
-            mix(std::hash<int>{}(key.grid_z));
-            return seed;
-        }
-    };
-
-    struct LiveDynamicSyncContext {
-        world::GridBounds render_bounds;
-        world::GridBounds spawn_bounds;
-        world::GridBounds keep_bounds;
-        int render_min_world_x = 0;
-        int render_max_world_x = -1;
-        int render_min_world_z = 0;
-        int render_max_world_z = -1;
-        int spawn_min_world_x = 0;
-        int spawn_max_world_x = -1;
-        int spawn_min_world_z = 0;
-        int spawn_max_world_z = -1;
-        int keep_min_world_x = 0;
-        int keep_max_world_x = -1;
-        int keep_min_world_z = 0;
-        int keep_max_world_z = -1;
-        SDL_Point boundary_center_world{};
-        std::size_t scan_cell_cap = 0;
-        std::size_t new_spawn_cap = 0;
-        std::size_t total_spawn_cap = 0;
-        std::uint64_t bounds_generation = 0;
-        std::uint64_t sync_start = 0;
-        std::uint64_t perf_start = 0;
-        LiveDynamicQualifiedPointOrder point_order{};
-        std::unordered_map<LiveDynamicSelectorStateKey, const LiveDynamicCompiledSelector*, LiveDynamicSelectorStateKeyHash> selector_lookup;
-        std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash> occupancy_cache;
-        std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> room_cache;
-        LiveDynamicSyncTiming timing{};
-        std::size_t selector_state_size_before = 0;
-        std::size_t qualification_queue_size_before = 0;
-        std::size_t spawn_queue_size_before = 0;
-        std::size_t spawned_keys_size_before = 0;
-        std::size_t qualified_this_frame = 0;
-        std::size_t spawned_this_frame = 0;
-        std::size_t cells_visited_this_frame = 0;
-        std::size_t points_scanned_this_frame = 0;
-        std::size_t spawn_tasks_processed_this_frame = 0;
-        std::size_t spawn_attempts_this_frame = 0;
-        std::size_t rejected_occupied = 0;
-        std::size_t rejected_bounds = 0;
-        std::size_t rejected_room = 0;
-        std::size_t rejected_already_spawned = 0;
-        std::size_t despawns_this_frame = 0;
-        double stage_a_ms = 0.0;
-        double stage_b_ms = 0.0;
-        double stage_c_ms = 0.0;
-        double stage_d_ms = 0.0;
-        double stage_e_ms = 0.0;
-        double stage_f_ms = 0.0;
-        bool valid = false;
-    };
-
-    std::vector<LiveDynamicCompiledSelector> live_dynamic_boundary_selectors_;
-    std::vector<LiveDynamicCompiledSelector> live_dynamic_inherited_selectors_;
-    std::unordered_map<Asset*, LiveDynamicPointKey> live_dynamic_asset_keys_;
-    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_spawned_keys_;
-    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_null_keys_;
-    std::unordered_set<LiveDynamicGridCellKey, LiveDynamicGridCellKeyHash> live_dynamic_valid_cells_;
-    std::unordered_map<LiveDynamicSelectorStateKey,
-                       LiveDynamicSelectorScanState,
-                       LiveDynamicSelectorStateKeyHash> live_dynamic_selector_scan_state_;
-    std::vector<LiveDynamicQualifiedPoint> live_dynamic_qualification_queue_;
-    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_qualification_keys_;
-    std::vector<LiveDynamicSpawnTask> live_dynamic_spawn_queue_;
-    std::unordered_set<LiveDynamicPointKey, LiveDynamicPointKeyHash> live_dynamic_pending_spawn_keys_;
-    std::vector<Asset*> live_dynamic_pending_prune_assets_;
-    std::unordered_set<Asset*> live_dynamic_pending_prune_lookup_;
-    std::unordered_map<LiveDynamicOccupancyKey, bool, LiveDynamicOccupancyKeyHash> live_dynamic_persistent_occupancy_cache_;
-    std::unordered_map<LiveDynamicRoomCacheKey, LiveDynamicRoomCacheValue, LiveDynamicRoomCacheKeyHash> live_dynamic_persistent_room_cache_;
-    int live_dynamic_preload_margin_world_px_ = 192;
-    int live_dynamic_despawn_margin_world_px_ = 256;
-    int live_dynamic_max_spawn_from_room_world_px_ = 128;
-    std::size_t max_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
-    std::size_t max_live_dynamic_new_spawns_per_frame_ = 384;
-    std::size_t max_live_dynamic_prunes_per_frame_ = 256;
-    std::size_t min_live_dynamic_scan_cells_per_selector_per_frame_ = 256;
-    std::size_t min_live_dynamic_new_spawns_per_frame_ = 64;
-    std::size_t adaptive_live_dynamic_scan_cells_per_selector_per_frame_ = 2048;
-    std::size_t adaptive_live_dynamic_new_spawns_per_frame_ = 384;
-    double live_dynamic_sync_budget_target_ms_ = 1.25;
-    double live_dynamic_sync_ema_ms_ = 0.0;
-    bool live_dynamic_sync_ema_initialized_ = false;
-    std::size_t max_total_live_dynamic_assets_ = 8000;
-    int live_dynamic_sync_bounds_quantization_px_ = 256;
-    int live_dynamic_sync_bounds_hysteresis_px_ = 128;
-    std::size_t live_dynamic_quantized_bounds_change_count_ = 0;
-    std::size_t live_dynamic_occupancy_cache_hits_ = 0;
-    std::uint64_t live_dynamic_bounds_generation_ = 1;
-    std::size_t live_dynamic_occupancy_cache_misses_ = 0;
-    bool live_dynamic_bounds_bucket_changed_ = true;
-    std::uint32_t next_live_dynamic_selector_id_ = 1;
-    bool force_live_dynamic_sync_next_rebuild_ = true;
-    bool last_live_dynamic_sync_bounds_valid_ = false;
-    int last_live_dynamic_sync_bounds_min_x_ = 0;
-    int last_live_dynamic_sync_bounds_max_x_ = 0;
-    int last_live_dynamic_sync_bounds_min_z_ = 0;
-    int last_live_dynamic_sync_bounds_max_z_ = 0;
-    std::size_t live_dynamic_last_points_scanned_ = 0;
-    std::size_t live_dynamic_last_points_qualified_ = 0;
-    std::size_t live_dynamic_last_spawn_attempts_ = 0;
-    std::size_t live_dynamic_last_successful_spawns_ = 0;
-    std::size_t live_dynamic_last_despawns_ = 0;
+    int dynamic_spawn_preload_margin_world_px_ = 192;
+    int dynamic_spawn_despawn_margin_world_px_ = 256;
 };

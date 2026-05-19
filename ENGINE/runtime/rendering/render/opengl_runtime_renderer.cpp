@@ -84,53 +84,6 @@ double compute_asset_camera_depth_key(const WarpedScreenGrid& camera, const Asse
     return signed_depth_offset + asset.render_depth_bias();
 }
 
-std::uint64_t mix_hash_u64(std::uint64_t seed, std::uint64_t value) {
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-    return seed;
-}
-
-double hash_unit_interval(std::uint64_t hash) {
-    constexpr double kInv = 1.0 / static_cast<double>(std::numeric_limits<std::uint64_t>::max());
-    return static_cast<double>(hash) * kInv;
-}
-
-bool keep_dynamic_asset_for_depth_efficiency(const WarpedScreenGrid::RealismSettings& settings,
-                                             const Asset& asset,
-                                             double camera_depth_key) {
-    if (asset.info && asset_types::canonicalize(asset.info->type) == asset_types::player) {
-        return true;
-    }
-    if (!asset.is_dynamic_spawned_asset()) {
-        return true;
-    }
-
-    const double depth_start = std::max(0.0, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
-    const double depth_value = std::max(0.0, camera_depth_key);
-    if (depth_value <= depth_start) {
-        return true;
-    }
-
-    const double max_depth = std::max(depth_start + 1.0, static_cast<double>(settings.max_cull_depth));
-    const double t = std::clamp((depth_value - depth_start) / (max_depth - depth_start), 0.0, 1.0);
-    const double min_density = std::clamp(
-        static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
-        0.0,
-        1.0);
-    const double density = std::clamp(1.0 - (1.0 - min_density) * t, min_density, 1.0);
-    if (density >= 1.0) {
-        return true;
-    }
-
-    std::uint64_t hash = std::hash<std::string>{}(asset.spawn_id);
-    hash = mix_hash_u64(hash, std::hash<std::string>{}(asset.info ? asset.info->name : std::string{}));
-    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_x())));
-    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_z())));
-    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.grid_resolution)));
-    hash = mix_hash_u64(hash, static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_y())));
-    const double roll = hash_unit_interval(hash);
-    return roll <= density;
-}
-
 float to_clip_x(float screen_x, float target_width) {
     if (!std::isfinite(screen_x) || !std::isfinite(target_width) || target_width <= 0.0f) {
         return 0.0f;
@@ -760,7 +713,6 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
 
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
-    const auto& camera_settings = camera.get_settings();
     std::uintptr_t xy_sequence = 0u;
 
     for (Asset* asset : visible_assets) {
@@ -782,9 +734,6 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         const float perspective_scale = perspective.scale;
         const float world_z = static_cast<float>(asset->world_z()) + object.world_z_offset;
         const double camera_depth_key = compute_asset_camera_depth_key(camera, *asset);
-        if (!keep_dynamic_asset_for_depth_efficiency(camera_settings, *asset, camera_depth_key)) {
-            continue;
-        }
 
         render_projection::ProjectedSpriteFrame projected{};
         if (!render_projection::build_render_object_projected_frame(camera,
@@ -1388,10 +1337,15 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                                                        camera_settings.blur_px,
                                                        camera_settings.radial_blur_px);
     if (dof_requested) {
+        constexpr int kDofFarNearBucketRadius = 2;
+        const auto bucket_depth_layer = [focus = out_data.focus_depth_layer](int layer) {
+            const int delta = std::clamp(layer - focus, -kDofFarNearBucketRadius, kDofFarNearBucketRadius);
+            return focus + delta;
+        };
         std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> depth_xy_sprite_packets{};
         depth_xy_sprite_packets.reserve(out_data.xy_sprite_draws.size());
         for (const GpuSpriteDrawPacket& packet : out_data.xy_sprite_draws) {
-            depth_xy_sprite_packets[packet.depth_layer].push_back(packet);
+            depth_xy_sprite_packets[bucket_depth_layer(packet.depth_layer)].push_back(packet);
         }
 
         std::vector<int> depth_layer_ids{};
@@ -1404,10 +1358,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         });
 
         out_data.depth_layers.reserve(depth_layer_ids.size());
-        int max_layer_distance = 0;
-        for (int layer_id : depth_layer_ids) {
-            max_layer_distance = std::max(max_layer_distance, std::abs(layer_id - out_data.focus_depth_layer));
-        }
         for (int layer_id : depth_layer_ids) {
             GpuDepthLayerDrawPackets layer{};
             layer.depth_layer = layer_id;
@@ -1415,8 +1365,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
                 std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
             }
-            const float blur_distance = max_layer_distance > 0
-                ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) / static_cast<float>(max_layer_distance)
+            const float blur_distance = kDofFarNearBucketRadius > 0
+                ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) /
+                      static_cast<float>(kDofFarNearBucketRadius)
                 : 0.0f;
             const float blur_strength = std::clamp(
                 static_cast<float>(assets_->getView().get_settings().blur_px) * blur_distance,

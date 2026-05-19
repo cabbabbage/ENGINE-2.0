@@ -118,6 +118,10 @@ class SourceConfigPanel {
     bool clean_output_frames() const;
     std::vector<std::filesystem::path> collect_image_files(const std::filesystem::path& folder) const;
     std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) const;
+    bool validate_picker_path(const std::filesystem::path& path,
+                              bool expect_directory,
+                              const char* invalid_selection_message,
+                              const char* context_label) const;
     void layout_controls();
     void update_status(const std::string& message) const;
     void refresh_animation_options();
@@ -180,4 +184,3 @@ class SourceConfigPanel {
 };
 
 }
-

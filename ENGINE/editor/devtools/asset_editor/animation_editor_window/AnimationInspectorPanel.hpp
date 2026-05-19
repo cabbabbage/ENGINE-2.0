@@ -53,7 +53,7 @@ using DMTextBox = ::DMTextBox;
 class AnimationInspectorPanel {
   public:
     using PathPicker = std::function<std::optional<std::filesystem::path>()>;
-    using MultiPathPicker = std::function<std::vector<std::filesystem::path>()>;
+    using MultiPathPicker = std::function<devmode::dialogs::FileDialogResult()>;
     using AnimationPicker = std::function<std::optional<std::string>()>;
     using StatusCallback = std::function<void(const std::string&)>;
     using SourceChangedCallback = std::function<void(const SourceConfigPanel::SourceChangeEvent&)>;

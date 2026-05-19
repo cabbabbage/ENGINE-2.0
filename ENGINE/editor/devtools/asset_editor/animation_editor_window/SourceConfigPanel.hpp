@@ -13,6 +13,7 @@
 #include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
+#include "devtools/sdl_modal_dialog.hpp"
 
 class DMButton;
 class DMDropdown;
@@ -61,7 +62,7 @@ class SourceConfigPanel {
     void set_task_queue(std::shared_ptr<AsyncTaskQueue> tasks);
 
     using PathPicker = std::function<std::optional<std::filesystem::path>()>;
-    using MultiPathPicker = std::function<std::vector<std::filesystem::path>()>;
+    using MultiPathPicker = std::function<devmode::dialogs::FileDialogResult()>;
     using AnimationPicker = std::function<std::optional<std::string>()>;
     using FrameImportHandler = std::function<FrameImportResult(const std::string&,
                                                                const std::vector<std::filesystem::path>&)>;

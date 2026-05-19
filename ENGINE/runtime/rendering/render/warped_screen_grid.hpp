@@ -9,7 +9,6 @@
 #include <optional>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 #include <memory>
 #include <nlohmann/json.hpp>
 
@@ -284,6 +283,8 @@ public:
     const SDL_Rect& get_cached_world_rect() const { return cached_world_rect_; }
     std::uint32_t last_nodes_visited() const { return last_nodes_visited_; }
     std::uint32_t last_branches_skipped() const { return last_branches_skipped_; }
+    std::uint32_t last_active_chunk_points_scanned() const { return last_active_chunk_points_scanned_; }
+    std::uint32_t last_asset_to_point_lookups_avoided() const { return last_asset_to_point_lookups_avoided_; }
     int last_min_world_z() const { return last_min_world_z_; }
     int last_max_world_z() const { return last_max_world_z_; }
     std::uint32_t last_depth_culled() const { return last_depth_culled_; }
@@ -387,7 +388,6 @@ private:
     std::vector<world::GridPoint*> warped_points_;
     std::vector<VisibleTraversalEntry> visible_traversal_entries_;
     std::vector<world::GridPoint*> active_chunk_grid_point_scratch_;
-    std::unordered_set<world::GridPoint*> active_chunk_seen_point_scratch_;
     std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
     std::unordered_map<const Asset*, std::uint8_t> visibility_reason_flags_;
     std::uint64_t frame_counter_ = 0;
@@ -395,6 +395,8 @@ private:
     std::uint64_t last_projection_cache_invalidation_version_ = 0;
     std::uint32_t last_nodes_visited_ = 0;
     std::uint32_t last_branches_skipped_ = 0;
+    std::uint32_t last_active_chunk_points_scanned_ = 0;
+    std::uint32_t last_asset_to_point_lookups_avoided_ = 0;
     std::uint32_t last_depth_culled_ = 0;
     std::uint32_t projection_calls_total_ = 0;
     std::uint32_t projection_calls_saved_early_ = 0;

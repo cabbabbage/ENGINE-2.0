@@ -24,7 +24,6 @@
 #include <string>
 #include <limits>
 #include <optional>
-#include <unordered_set>
 #include <nlohmann/json.hpp>
 
 template <typename T>
@@ -1862,29 +1861,33 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     std::vector<world::GridPoint*> query_grid_points;
     std::vector<world::GridPoint*>* grid_points = &query_grid_points;
     const std::vector<world::Chunk*>& active_chunks = world_grid.active_chunks();
+    std::uint32_t active_chunk_points_scanned = 0;
+    std::uint32_t asset_to_point_lookups_avoided = 0;
     if (!active_chunks.empty()) {
-        std::size_t estimated_assets = 0;
+        std::size_t estimated_points = 0;
         for (const world::Chunk* chunk : active_chunks) {
             if (chunk) {
-                estimated_assets += chunk->assets.size();
+                estimated_points += chunk->resident_point_ids.size();
+                asset_to_point_lookups_avoided = static_cast<std::uint32_t>(
+                    std::min<std::size_t>(static_cast<std::size_t>(asset_to_point_lookups_avoided) + chunk->assets.size(),
+                                          static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
             }
         }
         active_chunk_grid_point_scratch_.clear();
-        active_chunk_grid_point_scratch_.reserve(estimated_assets);
-        active_chunk_seen_point_scratch_.clear();
-        active_chunk_seen_point_scratch_.reserve(estimated_assets);
+        active_chunk_grid_point_scratch_.reserve(estimated_points);
         for (const world::Chunk* chunk : active_chunks) {
             if (!chunk) {
                 continue;
             }
-            for (Asset* asset : chunk->assets) {
-                if (!asset || asset->dead) {
+            for (world::GridId point_id : chunk->resident_point_ids) {
+                world::GridPoint* point = world_grid.point_for_id(point_id);
+                if (!point) {
                     continue;
                 }
-                world::GridPoint* point = world_grid.point_for_asset(asset);
                 if (!point || !point->has_assets_or_active_children()) {
                     continue;
                 }
+                ++active_chunk_points_scanned;
                 if (point->resolution_layer() < 0 ||
                     point->resolution_layer() > world_grid.max_resolution_layers()) {
                     continue;
@@ -1899,13 +1902,20 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 if (point->occupants.empty()) {
                     continue;
                 }
-                if (active_chunk_seen_point_scratch_.insert(point).second) {
-                    active_chunk_grid_point_scratch_.push_back(point);
+                active_chunk_grid_point_scratch_.push_back(point);
+#ifndef NDEBUG
+                bool has_live_occupant = false;
+                for (const std::unique_ptr<Asset>& occupant : point->occupants) {
+                    if (occupant && !occupant->dead) {
+                        has_live_occupant = true;
+                        break;
+                    }
                 }
+                SDL_assert(has_live_occupant && "Chunk resident point list should only contain points with live occupants.");
+#endif
             }
         }
-        region_metrics.nodes_visited = static_cast<std::uint32_t>(
-            std::min<std::size_t>(active_chunk_seen_point_scratch_.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+        region_metrics.nodes_visited = active_chunk_points_scanned;
         if (!active_chunk_grid_point_scratch_.empty()) {
             grid_points = &active_chunk_grid_point_scratch_;
         }
@@ -1924,6 +1934,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     }
     last_nodes_visited_ = region_metrics.nodes_visited;
     last_branches_skipped_ = region_metrics.branches_skipped;
+    last_active_chunk_points_scanned_ = active_chunk_points_scanned;
+    last_asset_to_point_lookups_avoided_ = asset_to_point_lookups_avoided;
     warped_points_.reserve(grid_points->size());
     visible_traversal_entries_.reserve(grid_points->size() * 2);
 

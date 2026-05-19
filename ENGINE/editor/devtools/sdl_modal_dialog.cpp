@@ -7,6 +7,8 @@
 #include <chrono>
 #include <condition_variable>
 #include <cmath>
+#include <cctype>
+#include <filesystem>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -186,6 +188,62 @@ struct FileDialogState {
     FileDialogResult result;
 };
 
+int hex_value(char ch) {
+    const unsigned char value = static_cast<unsigned char>(ch);
+    if (value >= '0' && value <= '9') {
+        return value - '0';
+    }
+    if (value >= 'a' && value <= 'f') {
+        return 10 + (value - 'a');
+    }
+    if (value >= 'A' && value <= 'F') {
+        return 10 + (value - 'A');
+    }
+    return -1;
+}
+
+std::string decode_percent_escapes(std::string text) {
+    std::string decoded;
+    decoded.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '%' && i + 2 < text.size()) {
+            const int hi = hex_value(text[i + 1]);
+            const int lo = hex_value(text[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                decoded.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+        decoded.push_back(text[i]);
+    }
+    return decoded;
+}
+
+std::filesystem::path normalize_dialog_path(const char* raw_path) {
+    if (!raw_path || !*raw_path) {
+        return {};
+    }
+
+    std::string normalized = raw_path;
+    constexpr std::string_view file_scheme = "file://";
+    if (normalized.rfind(file_scheme.data(), 0) == 0) {
+        normalized.erase(0, file_scheme.size());
+        if (normalized.rfind("localhost/", 0) == 0) {
+            normalized.erase(0, std::string{"localhost"}.size());
+        }
+    }
+    normalized = decode_percent_escapes(std::move(normalized));
+    std::replace(normalized.begin(), normalized.end(), '\\', std::filesystem::path::preferred_separator);
+    std::replace(normalized.begin(), normalized.end(), '/', std::filesystem::path::preferred_separator);
+
+    std::filesystem::path path = std::filesystem::path(normalized).lexically_normal();
+    if (path.is_relative()) {
+        path = std::filesystem::absolute(path);
+    }
+    return path.lexically_normal();
+}
+
 void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int count) {
     auto* state = static_cast<FileDialogState*>(userdata);
     if (!state) {
@@ -208,8 +266,15 @@ void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, i
             for (int i = 0; i < count; ++i) {
                 const char* path = filelist[i];
                 if (path && *path) {
-                    state->result.paths.emplace_back(path);
-                    ++parsed_count;
+                    const std::filesystem::path normalized = normalize_dialog_path(path);
+                    SDL_Log("[SDLModalDialog] file_dialog_callback path[%d]: raw='%s' normalized='%s'",
+                            i,
+                            path,
+                            normalized.string().c_str());
+                    if (!normalized.empty()) {
+                        state->result.paths.push_back(normalized);
+                        ++parsed_count;
+                    }
                 }
             }
         } else {
@@ -217,8 +282,15 @@ void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, i
             for (int i = 0; filelist[i] != nullptr; ++i) {
                 const char* path = filelist[i];
                 if (path && *path) {
-                    state->result.paths.emplace_back(path);
-                    ++parsed_count;
+                    const std::filesystem::path normalized = normalize_dialog_path(path);
+                    SDL_Log("[SDLModalDialog] file_dialog_callback path[%d]: raw='%s' normalized='%s'",
+                            i,
+                            path,
+                            normalized.string().c_str());
+                    if (!normalized.empty()) {
+                        state->result.paths.push_back(normalized);
+                        ++parsed_count;
+                    }
                 }
             }
         }

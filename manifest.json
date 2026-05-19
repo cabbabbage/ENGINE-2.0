@@ -26406,9 +26406,9 @@
             }
           },
           "display_color": [
-            242,
-            242,
-            85,
+            31,
+            32,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -26495,9 +26495,9 @@
             }
           },
           "display_color": [
-            36,
-            153,
+            127,
             242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26554,9 +26554,9 @@
             }
           },
           "display_color": [
-            141,
-            85,
-            242,
+            31,
+            204,
+            146,
             255
           ],
           "edge_smoothness": 4,
@@ -26613,9 +26613,9 @@
             }
           },
           "display_color": [
-            139,
-            242,
             85,
+            126,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26702,9 +26702,9 @@
             }
           },
           "display_color": [
-            190,
-            204,
-            31,
+            141,
+            34,
+            224,
             255
           ],
           "edge_smoothness": 4,
@@ -26766,9 +26766,9 @@
             }
           },
           "display_color": [
-            242,
-            159,
-            85,
+            185,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 70,
@@ -26867,8 +26867,8 @@
           },
           "display_color": [
             242,
+            162,
             85,
-            148,
             255
           ],
           "edge_smoothness": 101,
@@ -27052,36 +27052,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "spider",
-              "dx": -5116,
-              "dz": 1050,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 15488,
-              "origional_width": 15496,
-              "position": "Exact",
-              "priority": 5,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-d6ae7afe99c6"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "axe_in_stump"
                 }
               ],
@@ -27097,7 +27067,7 @@
               "origional_height": 15488,
               "origional_width": 15496,
               "position": "Exact",
-              "priority": 6,
+              "priority": 5,
               "quantity": 1,
               "resolution": 7,
               "resolve_geometry_to_room_size": true,
@@ -27127,42 +27097,12 @@
               "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 7,
+              "priority": 6,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-ff9bd67553fd"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "spider",
-              "dx": -3229,
-              "dz": -3233,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 15488,
-              "origional_width": 15496,
-              "position": "Exact",
-              "priority": 8,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-23687fb6e8ed"
             }
           ],
           "trail_connection_sector": {
@@ -27246,9 +27186,9 @@
             }
           },
           "display_color": [
-            71,
-            94,
-            204,
+            34,
+            185,
+            224,
             255
           ],
           "edge_smoothness": 96,

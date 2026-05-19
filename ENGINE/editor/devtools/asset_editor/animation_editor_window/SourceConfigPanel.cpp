@@ -1149,7 +1149,14 @@ void SourceConfigPanel::import_from_png_sequence() {
     for (const auto& file : files) {
         if (devmode::frame_importer::is_supported_image_file(file)) {
             filtered.push_back(file);
+            continue;
         }
+        const bool exists = std::filesystem::exists(file);
+        const char* reason = exists ? "unsupported extension" : "non-existent path";
+        SDL_Log("SourceConfigPanel[%s]: dropping selected file '%s' (%s)",
+                animation_id_.c_str(),
+                file.string().c_str(),
+                reason);
     }
     if (filtered.empty()) {
         update_status("No supported image files selected");
@@ -1285,5 +1292,4 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
 }
 
 }
-
 

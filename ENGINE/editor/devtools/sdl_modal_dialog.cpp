@@ -185,21 +185,29 @@ struct FileDialogState {
     std::vector<std::filesystem::path> paths;
 };
 
-void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int) {
+void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int count) {
     auto* state = static_cast<FileDialogState*>(userdata);
     if (!state) {
         return;
     }
+
+    SDL_Log("[SDLModalDialog] file_dialog_callback invoked: count=%d filelist=%s", count, filelist ? "set" : "null");
+
     {
         std::lock_guard<std::mutex> lock(state->mutex);
-        if (filelist) {
-            for (const char* const* it = filelist; *it; ++it) {
-                if (*it && **it) {
-                    state->paths.emplace_back(*it);
+        if (!filelist || count <= 0) {
+            state->done = true;
+        } else {
+            const char* first_path = filelist[0];
+            SDL_Log("[SDLModalDialog] file_dialog_callback first path: %s", (first_path && *first_path) ? first_path : "<empty>");
+            for (int i = 0; i < count; ++i) {
+                const char* path = filelist[i];
+                if (path && *path) {
+                    state->paths.emplace_back(path);
                 }
             }
+            state->done = true;
         }
-        state->done = true;
     }
     state->cv.notify_one();
 }

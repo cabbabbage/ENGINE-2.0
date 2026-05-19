@@ -90,16 +90,12 @@ bool refresh_direct_asset_render_cache(Asset* asset, DirectAssetRenderCacheRecor
         return false;
     }
 
+    bool has_src_rect = false;
     int texture_w = 0;
     int texture_h = 0;
-    if (!query_texture_size_direct(base_tex, &texture_w, &texture_h)) {
-        return false;
-    }
-
-    SDL_Rect src_rect{0, 0, texture_w, texture_h};
-    bool has_src_rect = false;
-    int frame_w = texture_w;
-    int frame_h = texture_h;
+    int frame_w = 0;
+    int frame_h = 0;
+    SDL_Rect src_rect{0, 0, 0, 0};
     if (selected_variant) {
         if (selected_variant->source_rect.w > 0 && selected_variant->source_rect.h > 0) {
             frame_w = selected_variant->source_rect.w;
@@ -107,6 +103,26 @@ bool refresh_direct_asset_render_cache(Asset* asset, DirectAssetRenderCacheRecor
             src_rect = selected_variant->source_rect;
         }
         has_src_rect = selected_variant->uses_atlas;
+    }
+
+    if (!has_src_rect && frame_w > 0 && frame_h > 0) {
+        texture_w = frame_w;
+        texture_h = frame_h;
+    } else if (!has_src_rect && asset->cached_w > 0 && asset->cached_h > 0) {
+        texture_w = asset->cached_w;
+        texture_h = asset->cached_h;
+        frame_w = asset->cached_w;
+        frame_h = asset->cached_h;
+        src_rect = SDL_Rect{0, 0, frame_w, frame_h};
+    } else {
+        if (!query_texture_size_direct(base_tex, &texture_w, &texture_h)) {
+            return false;
+        }
+        if (frame_w <= 0 || frame_h <= 0) {
+            frame_w = texture_w;
+            frame_h = texture_h;
+            src_rect = SDL_Rect{0, 0, frame_w, frame_h};
+        }
     }
 
     cache_record.texture = base_tex;

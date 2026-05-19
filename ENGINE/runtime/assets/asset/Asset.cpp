@@ -993,6 +993,7 @@ void Asset::update_scale_values(bool force) {
     hysteresis_state.min_scale = scale_variant_state_.hysteresis_min;
     hysteresis_state.max_scale = scale_variant_state_.hysteresis_max;
 
+    const int previous_variant_index = current_variant_index;
     auto selection = render_pipeline::ScalingLogic::Choose(
         desired_variant_scale,
         steps,
@@ -1002,6 +1003,9 @@ void Asset::update_scale_values(bool force) {
 
     current_nearest_variant_scale = selection.stored_scale;
     current_variant_index = selection.index;
+    if (current_variant_index != previous_variant_index) {
+        refresh_cached_dimensions();
+    }
 
     scale_variant_state_.last_variant_index = selection.index;
     scale_variant_state_.hysteresis_min = selection.hysteresis_min;

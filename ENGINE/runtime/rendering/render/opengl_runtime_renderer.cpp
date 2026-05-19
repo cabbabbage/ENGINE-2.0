@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <numeric>
@@ -82,6 +83,70 @@ double compute_asset_camera_depth_key(const WarpedScreenGrid& camera, const Asse
     // Canonical far-distance scalar in camera-forward space. Higher = farther.
     const double signed_depth_offset = (effective_world_z - focus_world_z) * depth_axis_sign;
     return signed_depth_offset + asset.render_depth_bias();
+}
+
+bool render_packet_metadata_enabled() {
+    static const bool enabled = [] {
+        const char* raw = SDL_getenv("VIBBLE_RENDER_PACKET_METADATA");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const std::string value(raw);
+        return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
+    }();
+    return enabled;
+}
+
+std::uint64_t stable_asset_render_hash(const Asset& asset) {
+    if (!asset.spawn_id.empty()) {
+        return static_cast<std::uint64_t>(std::hash<std::string>{}(asset.spawn_id));
+    }
+    if (asset.info && !asset.info->name.empty()) {
+        std::uint64_t hash = static_cast<std::uint64_t>(std::hash<std::string>{}(asset.info->name));
+        hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_x())) * 0x9e3779b185ebca87ull;
+        hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_z())) * 0xc2b2ae3d27d4eb4full;
+        return hash;
+    }
+    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&asset));
+}
+
+bool should_emit_dynamic_asset_sprite(const WarpedScreenGrid& camera, const Asset& asset) {
+    if (!asset.is_dynamic_spawned_asset()) {
+        return true;
+    }
+
+    const auto& settings = camera.get_settings();
+    const double depth = compute_asset_camera_depth_key(camera, asset);
+    if (!std::isfinite(depth)) {
+        return false;
+    }
+
+    const double max_depth = std::max(1.0, static_cast<double>(settings.max_cull_depth));
+    if (depth > max_depth) {
+        return false;
+    }
+
+    const double efficiency_depth =
+        std::max(0.0, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
+    if (efficiency_depth <= 0.0 || depth <= efficiency_depth) {
+        return true;
+    }
+
+    const double min_ratio = std::clamp(
+        static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
+        0.0,
+        1.0);
+    if (min_ratio >= 0.999) {
+        return true;
+    }
+
+    const double range = std::max(1.0, max_depth - efficiency_depth);
+    const double t = std::clamp((depth - efficiency_depth) / range, 0.0, 1.0);
+    const double keep_ratio = min_ratio + (1.0 - min_ratio) * (1.0 - t) * (1.0 - t);
+    const std::uint64_t hash = stable_asset_render_hash(asset);
+    constexpr double kHashScale = 1.0 / 10000.0;
+    const double sample = static_cast<double>(hash % 10000u) * kHashScale;
+    return sample <= keep_ratio;
 }
 
 float to_clip_x(float screen_x, float target_width) {
@@ -722,6 +787,9 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
         if (!opengl_runtime_renderer_detail::info_is_xy_sprite_pass_eligible(asset->info->tillable)) {
             continue;
         }
+        if (!should_emit_dynamic_asset_sprite(camera, *asset)) {
+            continue;
+        }
 
         emit_floor_pass_tag_ignored_diagnostic(asset);
 
@@ -766,11 +834,13 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
 
         GpuSpriteDrawPacket packet{};
         packet.source_texture = object.texture;
-        packet.source_asset_name = asset->info ? asset->info->name : "<unknown-asset>";
-        packet.source_animation_name = asset ? asset->current_animation : std::string{};
-        packet.source_texture_id = "sdl_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(object.texture));
-        packet.source_frame_index = asset && asset->current_frame ? asset->current_frame->frame_index : -1;
-        packet.source_variant_index = asset ? asset->current_variant_index : -1;
+        if (render_packet_metadata_enabled()) {
+            packet.source_asset_name = asset->info ? asset->info->name : "<unknown-asset>";
+            packet.source_animation_name = asset->current_animation;
+            packet.source_texture_id = "sdl_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(object.texture));
+            packet.source_frame_index = asset->current_frame ? asset->current_frame->frame_index : -1;
+            packet.source_variant_index = asset->current_variant_index;
+        }
         packet.modulate = SDL_FColor{
             static_cast<float>(object.color_mod.r) / 255.0f,
             static_cast<float>(object.color_mod.g) / 255.0f,

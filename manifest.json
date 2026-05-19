@@ -15847,13 +15847,26 @@
       "y_pos_min": 0
     },
     "cropped_output": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
       "asset_directory": "resources/assets/cropped_output",
       "asset_name": "cropped_output",
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
-      "movement_enabled": false
+      "movement_enabled": false,
+      "start": "default"
     },
     "curse_circle": {
       "anchor_point_child_candidates": [],
@@ -26393,9 +26406,9 @@
             }
           },
           "display_color": [
-            242,
-            132,
             85,
+            242,
+            153,
             255
           ],
           "edge_smoothness": 101,
@@ -26482,9 +26495,9 @@
             }
           },
           "display_color": [
-            31,
-            60,
-            204,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26541,9 +26554,9 @@
             }
           },
           "display_color": [
-            186,
-            85,
-            242,
+            31,
+            204,
+            88,
             255
           ],
           "edge_smoothness": 4,
@@ -26600,9 +26613,9 @@
             }
           },
           "display_color": [
-            171,
-            204,
-            71,
+            183,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26690,8 +26703,8 @@
           },
           "display_color": [
             31,
+            45,
             204,
-            78,
             255
           ],
           "edge_smoothness": 4,
@@ -26754,8 +26767,8 @@
           },
           "display_color": [
             204,
-            51,
-            115,
+            71,
+            121,
             255
           ],
           "edge_smoothness": 70,
@@ -26853,9 +26866,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            189,
+            170,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27234,7 +27247,7 @@
           },
           "display_color": [
             204,
-            104,
+            109,
             31,
             255
           ],

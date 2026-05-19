@@ -26337,8 +26337,8 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "max_spawn_from_room": 324,
-        "regen_seed": 3
+        "max_spawn_from_room": 779,
+        "regen_seed": 4
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -26406,9 +26406,9 @@
             }
           },
           "display_color": [
-            65,
-            31,
             204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26495,9 +26495,9 @@
             }
           },
           "display_color": [
-            141,
-            85,
-            242,
+            31,
+            204,
+            146,
             255
           ],
           "edge_smoothness": 4,
@@ -26554,9 +26554,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            160,
+            204,
+            51,
+            137,
             255
           ],
           "edge_smoothness": 4,
@@ -26613,9 +26613,9 @@
             }
           },
           "display_color": [
-            36,
-            110,
-            242,
+            134,
+            31,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26702,9 +26702,9 @@
             }
           },
           "display_color": [
+            172,
             204,
-            96,
-            31,
+            71,
             255
           ],
           "edge_smoothness": 4,
@@ -26766,9 +26766,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            102,
+            34,
+            177,
+            224,
             255
           ],
           "edge_smoothness": 70,
@@ -26866,9 +26866,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            242,
+            204,
+            109,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27246,8 +27246,8 @@
             }
           },
           "display_color": [
+            174,
             85,
-            166,
             242,
             255
           ],

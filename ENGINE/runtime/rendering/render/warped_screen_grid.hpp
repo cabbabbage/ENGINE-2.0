@@ -167,6 +167,11 @@ public:
         world::GridPoint* grid_point = nullptr;
         double depth_from_anchor = 0.0;
     };
+    struct AnchorVisibilityDebugCounters {
+        std::uint64_t anchor_null_cache_hits = 0;
+        std::uint64_t anchor_force_recompute_calls = 0;
+        std::uint64_t anchor_force_recompute_skipped = 0;
+    };
 
     WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
@@ -293,6 +298,7 @@ public:
     std::uint64_t camera_state_version() const;
     std::uint64_t projection_state_version() const { return camera_state_version(); }
     const std::vector<VisibleTraversalEntry>& visible_traversal_entries() const { return visible_traversal_entries_; }
+    const AnchorVisibilityDebugCounters& anchor_visibility_debug_counters() const { return anchor_visibility_debug_counters_; }
     SDL_FPoint WarpedScreenGrid::getAnchorPoint();
     
 private:
@@ -388,6 +394,7 @@ private:
     const Asset* tracked_player_asset_ = nullptr;
     CameraTransitionSettings transition_settings_{};
     CameraTransitionTelemetry transition_telemetry_{};
+    AnchorVisibilityDebugCounters anchor_visibility_debug_counters_{};
     Room* previous_transition_room_ = nullptr;
     SDL_FPoint previous_player_world_{0.0f, 0.0f};
     bool previous_player_world_valid_ = false;

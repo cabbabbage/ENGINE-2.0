@@ -2115,10 +2115,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                     anchor_points::GridMaterialization::None,
                     Asset::AnchorResolveMode::Cached);
                 if (!resolved.has_value() || !resolved->exists) {
-                    resolved = asset->anchor_state(
-                        frame_anchor.name,
-                        anchor_points::GridMaterialization::None,
-                        Asset::AnchorResolveMode::ForceRecompute);
+                    if (asset->is_anchor_cached_unresolved(frame_anchor.name)) {
+                        ++anchor_visibility_debug_counters_.anchor_null_cache_hits;
+                        ++anchor_visibility_debug_counters_.anchor_force_recompute_skipped;
+                    } else {
+                        ++anchor_visibility_debug_counters_.anchor_force_recompute_calls;
+                        resolved = asset->anchor_state(
+                            frame_anchor.name,
+                            anchor_points::GridMaterialization::None,
+                            Asset::AnchorResolveMode::ForceRecompute);
+                    }
                 }
                 if (!resolved.has_value() || !resolved->exists) {
                     continue;

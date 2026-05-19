@@ -500,6 +500,15 @@ class Asset {
         Cached,
         ForceRecompute
     };
+    enum class AnchorLookupTriState : std::uint8_t {
+        Unknown = 0,
+        Resolved = 1,
+        Unresolved = 2
+    };
+    struct AnchorLookupCacheEntry {
+        AnchorLookupTriState state = AnchorLookupTriState::Unknown;
+        std::uint64_t invalidation_generation = 0;
+    };
 
     AnchorPoint* get_anchor_point(const std::string& name);
     std::optional<std::string> anchor_name_for_index(std::size_t index) const;
@@ -522,6 +531,7 @@ class Asset {
     bool update_anchor_basis_if_needed();
     AnchorBasisSignature compute_anchor_basis_signature() const;
     void capture_anchor_basis_snapshot(const AnchorBasisSignature& signature);
+    bool is_anchor_cached_unresolved(const std::string& name) const;
 
 public:
     static void SetFlipOverrideForSpawnId(const std::string& spawn_id, bool enabled, bool flipped);
@@ -631,6 +641,8 @@ private:
     std::vector<AnchorHandle> anchor_handles_;
     std::vector<AnchorPoint> anchor_points_;
     std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
+    std::unordered_map<std::string, AnchorLookupCacheEntry> anchor_lookup_cache_;
+    std::uint64_t anchor_lookup_invalidation_generation_ = 1;
     std::vector<RuntimeBoxVolume> current_hit_box_volumes_;
     std::vector<RuntimeBoxVolume> current_attack_box_volumes_;
     std::vector<RuntimeImpassableShape> current_impassable_shapes_;

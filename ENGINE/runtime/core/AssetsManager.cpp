@@ -4854,15 +4854,7 @@ bool Assets::should_advance_animation_for(const Asset* asset) const {
     }
 
     if (asset->is_dynamic_spawned_asset()) {
-        const auto& settings = camera_.get_settings();
-        const double efficiency_depth =
-            std::max(0.0, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
-        if (efficiency_depth > 0.0) {
-            const double depth_from_focus = dynamic_asset_camera_depth_from_focus_plane(camera_, *asset);
-            if (depth_from_focus > efficiency_depth) {
-                return false;
-            }
-        }
+        return false;
     }
 
     const bool frame_editor_session_active =

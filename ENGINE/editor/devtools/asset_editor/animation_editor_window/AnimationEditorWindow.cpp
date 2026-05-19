@@ -1244,6 +1244,23 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_source_frame_import_handler([this](const std::string& animation_id,
                                                              const std::vector<std::filesystem::path>& frames) {
         SourceFrameImportOutcome outcome = this->import_source_frames_for_animation(animation_id, frames);
+        if (!outcome.success) {
+            auto stage_name = [&]() -> const char* {
+                switch (outcome.failure_stage) {
+                    case SourceFrameImportOutcome::FailureStage::Copy: return "copy";
+                    case SourceFrameImportOutcome::FailureStage::Payload: return "payload";
+                    case SourceFrameImportOutcome::FailureStage::Save: return "save";
+                    case SourceFrameImportOutcome::FailureStage::RuntimeVerify: return "runtime_verify";
+                    case SourceFrameImportOutcome::FailureStage::None:
+                    default: return "unknown";
+                }
+            };
+            if (outcome.message.empty()) {
+                outcome.message = std::string{"Frame import failed at stage: "} + stage_name();
+            } else {
+                outcome.message += " (stage: " + std::string(stage_name()) + ")";
+            }
+        }
         return SourceConfigPanel::FrameImportResult{outcome.success, outcome.frames_written, outcome.message};
     });
     inspector_panel_->set_source_status_callback([this](const std::string& message) { this->set_status_message(message); });
@@ -2711,43 +2728,28 @@ bool AnimationEditorWindow::defaults_base_faces_right() const {
 
 bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& animation_id,
                                                             const std::vector<std::filesystem::path>& frames) {
-    if (asset_root_path_.empty() || animation_id.empty() || frames.empty()) {
-        return false;
-    }
-
-    auto result = devmode::animation_import::import_frames_to_animation_folder(asset_root_path_,
-                                                                              animation_id,
-                                                                              frames);
-    if (!result.success) {
-        const std::string message = result.message.empty()
-            ? std::string{"No frames were imported."}
-            : result.message;
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "[AnimationEditor] Failed to import frames into '%s': %s",
-                     (asset_root_path_ / animation_id).generic_string().c_str(),
-                     message.c_str());
-        return false;
-    }
-
-    for (const auto& warning : result.warnings) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AnimationEditor] Frame import warning for '%s': %s",
-                    animation_id.c_str(),
-                    warning.c_str());
-    }
-    return true;
+    const SourceFrameImportOutcome outcome = import_source_frames_for_animation(animation_id, frames);
+    return outcome.success;
 }
 
+// QA checklist invariants for transactional frame imports:
+// 1) Imported source folder must contain canonical frame filenames: 0..n-1.png
+// 2) Payload source.path + payload number_of_frames must match imported folder state
+// 3) Runtime cache must report the same frame count as payload/source folder
+// 4) Runtime texture presence must be verified for every expected frame
 AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_source_frames_for_animation(
     const std::string& animation_id,
     const std::vector<std::filesystem::path>& frames) {
     SourceFrameImportOutcome outcome;
-    auto fail = [&](const std::string& message) {
+    auto fail = [&](SourceFrameImportOutcome::FailureStage stage, const std::string& message) {
         outcome.success = false;
+        outcome.failure_stage = stage;
         outcome.message = message;
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                     "[AnimationEditor][frame_import] failed animation='%s' target='%s': %s",
+                     "[AnimationEditor][frame_import] failed animation='%s' source_count=%zu stage=%d target='%s': %s",
                      animation_id.c_str(),
+                     frames.size(),
+                     static_cast<int>(stage),
                      asset_root_path_.generic_string().c_str(),
                      message.c_str());
         return outcome;
@@ -2760,22 +2762,22 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
                 asset_root_path_.generic_string().c_str());
 
     if (!document_) {
-        return fail("Animation document is unavailable.");
+        return fail(SourceFrameImportOutcome::FailureStage::Payload, "Animation document is unavailable.");
     }
     if (animation_id.empty()) {
-        return fail("Animation id is empty.");
+        return fail(SourceFrameImportOutcome::FailureStage::Payload, "Animation id is empty.");
     }
     if (frames.empty()) {
-        return fail("No image files were provided.");
+        return fail(SourceFrameImportOutcome::FailureStage::Copy, "No image files were provided.");
     }
     if (asset_root_path_.empty()) {
-        return fail("Asset directory is unavailable.");
+        return fail(SourceFrameImportOutcome::FailureStage::Copy, "Asset directory is unavailable.");
     }
 
     std::error_code ec;
     std::filesystem::create_directories(asset_root_path_, ec);
     if (ec) {
-        return fail("Failed to create asset folder '" + asset_root_path_.generic_string() + "': " + ec.message());
+        return fail(SourceFrameImportOutcome::FailureStage::Copy, "Failed to create asset folder '" + asset_root_path_.generic_string() + "': " + ec.message());
     }
 
     const std::filesystem::path output_dir = asset_root_path_ / animation_id;
@@ -2785,7 +2787,7 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
     std::filesystem::path rollback_backup;
     const bool output_existed = std::filesystem::exists(output_dir, ec);
     if (ec) {
-        return fail("Failed to inspect existing frame folder '" + output_dir.generic_string() + "': " + ec.message());
+        return fail(SourceFrameImportOutcome::FailureStage::Copy, "Failed to inspect existing frame folder '" + output_dir.generic_string() + "': " + ec.message());
     }
     if (output_existed) {
         const auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -2801,11 +2803,11 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
             }
         }
         if (!allocated) {
-            return fail("Failed to allocate rollback backup for '" + output_dir.generic_string() + "'.");
+            return fail(SourceFrameImportOutcome::FailureStage::Copy, "Failed to allocate rollback backup for '" + output_dir.generic_string() + "'.");
         }
         std::filesystem::rename(output_dir, rollback_backup, ec);
         if (ec) {
-            return fail("Failed to backup existing frame folder '" + output_dir.generic_string() + "': " + ec.message());
+            return fail(SourceFrameImportOutcome::FailureStage::Copy, "Failed to backup existing frame folder '" + output_dir.generic_string() + "': " + ec.message());
         }
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "[AnimationEditor][frame_import] backed up '%s' -> '%s'",
@@ -2813,10 +2815,15 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
                     rollback_backup.generic_string().c_str());
     }
 
-    auto restore_folder_backup = [&]() {
+    auto restore_folder_backup = [&](const std::string& rollback_reason) {
         if (rollback_backup.empty()) {
             return;
         }
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor][frame_import] rollback animation='%s' reason='%s' restoring_backup='%s'",
+                    animation_id.c_str(),
+                    rollback_reason.c_str(),
+                    rollback_backup.generic_string().c_str());
         std::error_code restore_ec;
         if (std::filesystem::exists(output_dir, restore_ec) && !restore_ec) {
             std::filesystem::remove_all(output_dir, restore_ec);
@@ -2848,19 +2855,19 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
                                                                                     animation_id,
                                                                                     frames);
     } catch (const std::exception& ex) {
-        restore_folder_backup();
-        return fail(std::string("Frame import threw exception: ") + ex.what());
+        restore_folder_backup("copy_exception");
+        return fail(SourceFrameImportOutcome::FailureStage::Copy, std::string("Frame import threw exception: ") + ex.what());
     } catch (...) {
-        restore_folder_backup();
-        return fail("Frame import threw an unknown exception.");
+        restore_folder_backup("copy_exception_unknown");
+        return fail(SourceFrameImportOutcome::FailureStage::Copy, "Frame import threw an unknown exception.");
     }
 
     if (!import_result.success) {
-        restore_folder_backup();
+        restore_folder_backup("copy_failed");
         const std::string detail = import_result.message.empty()
             ? std::string{"No frames were imported."}
             : import_result.message;
-        return fail(detail);
+        return fail(SourceFrameImportOutcome::FailureStage::Copy, detail);
     }
 
     for (const auto& warning : import_result.warnings) {
@@ -2871,8 +2878,8 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
     }
 
     if (!ensure_animation_exists(animation_id)) {
-        restore_folder_backup();
-        return fail("Failed to create animation payload entry.");
+        restore_folder_backup("payload_create_failed");
+        return fail(SourceFrameImportOutcome::FailureStage::Payload, "Failed to create animation payload entry.");
     }
 
     nlohmann::json payload = previous_payload.value_or(nlohmann::json::object());
@@ -2889,9 +2896,9 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
 
     if (!document_->update_animation_payload(animation_id, payload) &&
         !document_->animation_payload(animation_id).has_value()) {
-        restore_folder_backup();
+        restore_folder_backup("payload_update_failed");
         restore_payload();
-        return fail("Failed to update animation payload.");
+        return fail(SourceFrameImportOutcome::FailureStage::Payload, "Failed to update animation payload.");
     }
 
     const std::string document_id = manifest_asset_key_.empty()
@@ -2902,8 +2909,8 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
                                          [this]() { return document_->save_to_file_checked(true); });
     if (!saved) {
         restore_payload();
-        restore_folder_backup();
-        return fail("Manifest save failed after installing frames; restored previous animation state.");
+        restore_folder_backup("manifest_save_failed");
+        return fail(SourceFrameImportOutcome::FailureStage::Save, "Manifest save failed after installing frames; restored previous animation state.");
     }
 
     if (!rollback_backup.empty()) {
@@ -2936,13 +2943,14 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
                                                              import_result.frames_written);
     if (!runtime_result.success) {
         restore_payload();
-        restore_folder_backup();
+        restore_folder_backup("runtime_verify_failed");
         (void)orchestrated_save(devmode::core::SaveOrchestrator::Reason::StateChange,
                                 document_id,
                                 [this]() { return document_->save_to_file_checked(true); });
         std::string ignored_cache_error;
         (void)devmode::animation_import::delete_asset_cache(runtime_asset_key, ignored_cache_error);
-        return fail(runtime_result.message.empty()
+        return fail(SourceFrameImportOutcome::FailureStage::RuntimeVerify,
+                    runtime_result.message.empty()
                         ? std::string{"Runtime verification failed after importing frames."}
                         : runtime_result.message);
     }
@@ -2951,12 +2959,14 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
     }
 
     outcome.success = true;
+    outcome.failure_stage = SourceFrameImportOutcome::FailureStage::None;
     outcome.frames_written = import_result.frames_written;
     outcome.message = "Imported " + std::to_string(import_result.frames_written) +
                       " frame(s) to " + output_dir.generic_string();
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "[AnimationEditor][frame_import] success animation='%s' written=%d target='%s'",
+                "[AnimationEditor][frame_import] success animation='%s' source_count=%zu written=%d target='%s'",
                 animation_id.c_str(),
+                frames.size(),
                 import_result.frames_written,
                 output_dir.generic_string().c_str());
     return outcome;
@@ -4185,4 +4195,3 @@ std::optional<std::filesystem::path> AnimationEditorWindow::pick_audio_file() co
 }
 
 }
-

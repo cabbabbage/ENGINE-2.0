@@ -946,9 +946,7 @@ void WarpedScreenGrid::set_screen_dimensions(int screen_width, int screen_height
     bounds_.right = resized_bounds.right;
     bounds_.bottom = resized_bounds.bottom;
     invalidate_camera_cache();
-    const std::uint64_t phase_view_begin = profiler_enabled ? SDL_GetPerformanceCounter() : 0;
     recompute_current_view();
-    phase_view_ms = ms_since(phase_view_begin);
 }
 
 const CameraState& WarpedScreenGrid::camera_state_cached() const {
@@ -1987,19 +1985,21 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     runtime_pitch_rad_ = cam_state.pitch_radians;
     runtime_pitch_deg_ = cam_state.pitch_degrees;
     runtime_depth_offset_px_ = static_cast<float>(cam_state.reference_depth);
-    if (!cam_state.valid) {
-        last_min_world_z_ = 0;
-        last_max_world_z_ = 0;
-        last_depth_culled_ = 0;
     projection_calls_total_ = 0;
     projection_calls_saved_early_ = 0;
     assets_stageA_reject_ = 0;
     assets_stageC_entered_ = 0;
     constexpr std::uint32_t kProjectionBudgetBase = 2048;
-    projection_recompute_budget_ = static_cast<std::uint32_t>(std::min<std::size_t>(grid_points->size(), static_cast<std::size_t>(kProjectionBudgetBase)));
+    projection_recompute_budget_ = static_cast<std::uint32_t>(std::min<std::size_t>(
+        grid_points->size(),
+        static_cast<std::size_t>(kProjectionBudgetBase)));
     projection_points_deferred_ = 0;
     projection_points_updated_ = 0;
     std::uint32_t projection_budget_remaining = projection_recompute_budget_;
+    if (!cam_state.valid) {
+        last_min_world_z_ = 0;
+        last_max_world_z_ = 0;
+        last_depth_culled_ = 0;
         rebuild_grid_bounds();
         return;
     }

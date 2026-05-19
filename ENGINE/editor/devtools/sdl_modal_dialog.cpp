@@ -182,7 +182,8 @@ struct FileDialogState {
     std::mutex mutex;
     std::condition_variable cv;
     bool done = false;
-    std::vector<std::filesystem::path> paths;
+    bool filelist_was_set = false;
+    FileDialogResult result;
 };
 
 void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int count) {
@@ -197,25 +198,38 @@ void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, i
         std::lock_guard<std::mutex> lock(state->mutex);
         int parsed_count = 0;
         if (!filelist) {
-            // Fast cancel path: SDL reports cancellation via null list.
+            state->result.status = FileDialogStatus::Cancelled;
+            state->result.error_message.reset();
+            state->result.paths.clear();
         } else if (count > 0) {
+            state->filelist_was_set = true;
             const char* first_path = filelist[0];
             SDL_Log("[SDLModalDialog] file_dialog_callback first path: %s", (first_path && *first_path) ? first_path : "<empty>");
             for (int i = 0; i < count; ++i) {
                 const char* path = filelist[i];
                 if (path && *path) {
-                    state->paths.emplace_back(path);
+                    state->result.paths.emplace_back(path);
                     ++parsed_count;
                 }
             }
         } else {
+            state->filelist_was_set = true;
             for (int i = 0; filelist[i] != nullptr; ++i) {
                 const char* path = filelist[i];
                 if (path && *path) {
-                    state->paths.emplace_back(path);
+                    state->result.paths.emplace_back(path);
                     ++parsed_count;
                 }
             }
+        }
+        if (state->result.paths.empty()) {
+            if (state->filelist_was_set) {
+                state->result.status = FileDialogStatus::MalformedResult;
+                state->result.error_message = "SDL file dialog returned filelist but no usable paths were parsed.";
+            }
+        } else {
+            state->result.status = FileDialogStatus::Selected;
+            state->result.error_message.reset();
         }
         SDL_Log("[SDLModalDialog] file_dialog_callback parsed paths: raw_count=%d parsed_count=%d", count, parsed_count);
         state->done = true;
@@ -223,12 +237,12 @@ void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, i
     state->cv.notify_one();
 }
 
-std::vector<std::filesystem::path> run_file_dialog(SDL_Window* parent,
-                                                   SDL_FileDialogType type,
-                                                   const std::string& title,
-                                                   const std::filesystem::path& default_location,
-                                                   const std::vector<FileDialogFilter>& filters,
-                                                   bool allow_many) {
+FileDialogResult run_file_dialog(SDL_Window* parent,
+                                 SDL_FileDialogType type,
+                                 const std::string& title,
+                                 const std::filesystem::path& default_location,
+                                 const std::vector<FileDialogFilter>& filters,
+                                 bool allow_many) {
     raise_parent(parent);
 
     std::vector<SDL_DialogFileFilter> sdl_filters;
@@ -240,7 +254,10 @@ std::vector<std::filesystem::path> run_file_dialog(SDL_Window* parent,
     FileDialogState state;
     SDL_PropertiesID props = SDL_CreateProperties();
     if (!props) {
-        return {};
+        FileDialogResult result;
+        result.status = FileDialogStatus::DialogError;
+        result.error_message = SDL_GetError();
+        return result;
     }
 
     SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING, title.c_str());
@@ -257,7 +274,9 @@ std::vector<std::filesystem::path> run_file_dialog(SDL_Window* parent,
     }
     SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, allow_many);
 
+    SDL_ClearError();
     SDL_ShowFileDialogWithProperties(type, file_dialog_callback, &state, props);
+    const std::string launch_error = SDL_GetError();
 
     std::unique_lock<std::mutex> lock(state.mutex);
     while (!state.done) {
@@ -266,11 +285,15 @@ std::vector<std::filesystem::path> run_file_dialog(SDL_Window* parent,
         lock.lock();
         state.cv.wait_for(lock, std::chrono::milliseconds(16));
     }
-    std::vector<std::filesystem::path> paths = std::move(state.paths);
+    FileDialogResult result = std::move(state.result);
     lock.unlock();
     SDL_DestroyProperties(props);
     raise_parent(parent);
-    return paths;
+    if (!launch_error.empty() && result.status != FileDialogStatus::Selected) {
+        result.status = FileDialogStatus::DialogError;
+        result.error_message = launch_error;
+    }
+    return result;
 }
 
 }  // namespace
@@ -483,11 +506,11 @@ std::optional<std::string> prompt_text(SDL_Window* parent,
     return input.value();
 }
 
-std::vector<std::filesystem::path> open_files(SDL_Window* parent,
-                                              const std::string& title,
-                                              const std::filesystem::path& default_location,
-                                              const std::vector<FileDialogFilter>& filters,
-                                              bool allow_many) {
+FileDialogResult open_files(SDL_Window* parent,
+                            const std::string& title,
+                            const std::filesystem::path& default_location,
+                            const std::vector<FileDialogFilter>& filters,
+                            bool allow_many) {
     return run_file_dialog(parent, SDL_FILEDIALOG_OPENFILE, title, default_location, filters, allow_many);
 }
 
@@ -495,21 +518,21 @@ std::optional<std::filesystem::path> open_file(SDL_Window* parent,
                                                const std::string& title,
                                                const std::filesystem::path& default_location,
                                                const std::vector<FileDialogFilter>& filters) {
-    auto paths = open_files(parent, title, default_location, filters, false);
-    if (paths.empty()) {
+    auto result = open_files(parent, title, default_location, filters, false);
+    if (result.status != FileDialogStatus::Selected || result.paths.empty()) {
         return std::nullopt;
     }
-    return paths.front();
+    return result.paths.front();
 }
 
 std::optional<std::filesystem::path> open_folder(SDL_Window* parent,
                                                  const std::string& title,
                                                  const std::filesystem::path& default_location) {
-    auto paths = run_file_dialog(parent, SDL_FILEDIALOG_OPENFOLDER, title, default_location, {}, false);
-    if (paths.empty()) {
+    auto result = run_file_dialog(parent, SDL_FILEDIALOG_OPENFOLDER, title, default_location, {}, false);
+    if (result.status != FileDialogStatus::Selected || result.paths.empty()) {
         return std::nullopt;
     }
-    return paths.front();
+    return result.paths.front();
 }
 
 }  // namespace devmode::dialogs

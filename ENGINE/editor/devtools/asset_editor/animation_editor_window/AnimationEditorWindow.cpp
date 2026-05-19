@@ -2676,15 +2676,19 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
 }
 
 void AnimationEditorWindow::handle_pick_defaults_base_frames() {
-    std::vector<std::filesystem::path> picked = pick_png_sequence();
-    if (picked.empty()) {
-        set_status_message("Base frame selection cancelled.", 120);
+    auto pick_result = pick_png_sequence();
+    if (pick_result.status != devmode::dialogs::FileDialogStatus::Selected) {
+        set_status_message("Base frame selection was not completed.", 120);
+        return;
+    }
+    if (pick_result.paths.empty()) {
+        set_status_message("Base frame selection returned no files.", 180);
         return;
     }
 
     std::vector<std::filesystem::path> filtered;
-    filtered.reserve(picked.size());
-    for (const auto& path : picked) {
+    filtered.reserve(pick_result.paths.size());
+    for (const auto& path : pick_result.paths) {
         if (devmode::frame_importer::is_supported_image_file(path) &&
             !devmode::frame_importer::is_gif_file(path)) {
             filtered.push_back(path);
@@ -4101,7 +4105,7 @@ std::optional<std::filesystem::path> AnimationEditorWindow::pick_gif() const {
                                        {devmode::dialogs::FileDialogFilter{"GIF Image", "gif"}});
 }
 
-std::vector<std::filesystem::path> AnimationEditorWindow::pick_png_sequence() const {
+devmode::dialogs::FileDialogResult AnimationEditorWindow::pick_png_sequence() const {
     if (png_sequence_picker_override_) {
         return png_sequence_picker_override_();
     }

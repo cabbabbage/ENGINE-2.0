@@ -12,6 +12,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/core/save_orchestrator.hpp"
+#include "devtools/sdl_modal_dialog.hpp"
 #include "devtools/widgets.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -237,7 +238,7 @@ class AnimationEditorWindow {
 
     std::optional<std::filesystem::path> pick_folder() const;
     std::optional<std::filesystem::path> pick_gif() const;
-    std::vector<std::filesystem::path> pick_png_sequence() const;
+    devmode::dialogs::FileDialogResult pick_png_sequence() const;
     std::optional<std::string> pick_animation_reference() const;
     std::optional<std::filesystem::path> pick_audio_file() const;
 
@@ -334,7 +335,7 @@ class AnimationEditorWindow {
     Asset* target_asset_ = nullptr;
     SDL_Window* parent_window_ = nullptr;
     std::unique_ptr<CustomControllerService> custom_controller_service_;
-    std::function<std::vector<std::filesystem::path>()> png_sequence_picker_override_;
+    std::function<devmode::dialogs::FileDialogResult()> png_sequence_picker_override_;
     std::function<std::optional<std::string>(const std::string&, const std::string&, const std::string&)> text_prompt_override_;
     std::function<std::optional<int>(const std::string&, const std::string&, const std::vector<int>&)> choice_prompt_override_;
     std::function<bool(const std::string&, const std::vector<std::filesystem::path>&)> defaults_copy_frames_override_;

@@ -1119,9 +1119,28 @@ void SourceConfigPanel::import_from_png_sequence() {
         update_status("PNG picker not configured");
         return;
     }
-    std::vector<std::filesystem::path> files = png_sequence_picker_();
+    const auto picker_result = png_sequence_picker_();
+    if (picker_result.status != devmode::dialogs::FileDialogStatus::Selected) {
+        switch (picker_result.status) {
+            case devmode::dialogs::FileDialogStatus::Cancelled:
+                update_status("PNG selection cancelled");
+                break;
+            case devmode::dialogs::FileDialogStatus::DialogError:
+                update_status("PNG picker failed" +
+                              (picker_result.error_message ? ": " + *picker_result.error_message : std::string{}));
+                break;
+            case devmode::dialogs::FileDialogStatus::MalformedResult:
+                update_status("PNG picker returned malformed selection" +
+                              (picker_result.error_message ? ": " + *picker_result.error_message : std::string{}));
+                break;
+            case devmode::dialogs::FileDialogStatus::Selected:
+                break;
+        }
+        return;
+    }
+    const std::vector<std::filesystem::path>& files = picker_result.paths;
     if (files.empty()) {
-        update_status("PNG selection cancelled");
+        update_status("PNG selection returned no files");
         return;
     }
 
@@ -1266,6 +1285,5 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
 }
 
 }
-
 
 

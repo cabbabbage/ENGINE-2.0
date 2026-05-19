@@ -234,8 +234,9 @@ std::filesystem::path normalize_dialog_path(const char* raw_path) {
         }
     }
     normalized = decode_percent_escapes(std::move(normalized));
-    std::replace(normalized.begin(), normalized.end(), '\\', std::filesystem::path::preferred_separator);
-    std::replace(normalized.begin(), normalized.end(), '/', std::filesystem::path::preferred_separator);
+    const char preferred_separator = static_cast<char>(std::filesystem::path::preferred_separator);
+    std::replace(normalized.begin(), normalized.end(), '\\', preferred_separator);
+    std::replace(normalized.begin(), normalized.end(), '/', preferred_separator);
 
     std::filesystem::path path = std::filesystem::path(normalized).lexically_normal();
     if (path.is_relative()) {

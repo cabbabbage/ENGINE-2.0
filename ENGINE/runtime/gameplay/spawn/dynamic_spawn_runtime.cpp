@@ -646,10 +646,13 @@ void DynamicSpawnRuntime::add_planned_cell(const Selector& selector,
     plan[cell.chunk].push_back(std::move(cell));
 }
 
-void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds) {
+void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t max_cells_per_sync, bool movement_throttled) {
     diagnostics_.spawned = 0;
     diagnostics_.reused = 0;
     diagnostics_.suspended_this_sync = 0;
+    diagnostics_.cells_processed_this_frame = 0;
+    diagnostics_.deferred_cells_remaining = 0;
+    diagnostics_.movement_throttling_applied = movement_throttled;
     diagnostics_.sync_ms = 0.0;
     const std::uint64_t freq = SDL_GetPerformanceFrequency();
     const std::uint64_t begin = SDL_GetPerformanceCounter();
@@ -657,6 +660,9 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds) {
     if (!assets_.live_dynamic_assets_visible()) {
         suspend_outside_keep_chunks({});
         active_chunks_.clear();
+        pending_activation_chunks_.clear();
+        pending_activation_set_.clear();
+        chunk_activation_cursor_.clear();
         diagnostics_.active = active_.size();
         diagnostics_.suspended = suspended_.size();
         return;
@@ -667,17 +673,64 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds) {
 
     suspend_outside_keep_chunks(keep_chunks);
 
-    for (const ChunkKey& chunk : spawn_chunks) {
-        if (active_chunks_.insert(chunk).second) {
-            activate_chunk(chunk);
+    std::vector<ChunkKey> ordered_spawn_chunks(spawn_chunks.begin(), spawn_chunks.end());
+    std::sort(ordered_spawn_chunks.begin(), ordered_spawn_chunks.end(), [](const ChunkKey& lhs, const ChunkKey& rhs) {
+        if (lhs.i != rhs.i) return lhs.i < rhs.i;
+        return lhs.j < rhs.j;
+    });
+    for (const ChunkKey& chunk : ordered_spawn_chunks) {
+        if (active_chunks_.find(chunk) != active_chunks_.end() || pending_activation_set_.find(chunk) != pending_activation_set_.end()) {
+            continue;
         }
+        pending_activation_chunks_.push_back(chunk);
+        pending_activation_set_.insert(chunk);
     }
 
     for (auto it = active_chunks_.begin(); it != active_chunks_.end();) {
         if (keep_chunks.find(*it) == keep_chunks.end()) {
+            pending_activation_set_.erase(*it);
+            chunk_activation_cursor_.erase(*it);
             it = active_chunks_.erase(it);
         } else {
             ++it;
+        }
+    }
+
+    std::vector<ChunkKey> retained_pending;
+    retained_pending.reserve(pending_activation_chunks_.size());
+    for (const ChunkKey& chunk : pending_activation_chunks_) {
+        if (keep_chunks.find(chunk) != keep_chunks.end()) {
+            retained_pending.push_back(chunk);
+        } else {
+            pending_activation_set_.erase(chunk);
+            chunk_activation_cursor_.erase(chunk);
+        }
+    }
+    pending_activation_chunks_.swap(retained_pending);
+
+    std::size_t remaining_budget = max_cells_per_sync == 0 ? std::numeric_limits<std::size_t>::max() : max_cells_per_sync;
+    std::vector<ChunkKey> next_pending;
+    next_pending.reserve(pending_activation_chunks_.size());
+    for (const ChunkKey& chunk : pending_activation_chunks_) {
+        if (remaining_budget == 0) {
+            next_pending.push_back(chunk);
+            continue;
+        }
+        diagnostics_.cells_processed_this_frame += activate_chunk_budgeted(chunk, remaining_budget);
+        auto cursor_it = chunk_activation_cursor_.find(chunk);
+        if (cursor_it == chunk_activation_cursor_.end()) {
+            active_chunks_.insert(chunk);
+            pending_activation_set_.erase(chunk);
+        } else {
+            next_pending.push_back(chunk);
+        }
+    }
+    pending_activation_chunks_.swap(next_pending);
+    for (const ChunkKey& chunk : pending_activation_chunks_) {
+        auto cursor_it = chunk_activation_cursor_.find(chunk);
+        auto chunk_it = cells_by_chunk_.find(chunk);
+        if (cursor_it != chunk_activation_cursor_.end() && chunk_it != cells_by_chunk_.end()) {
+            diagnostics_.deferred_cells_remaining += (chunk_it->second.size() - std::min(cursor_it->second, chunk_it->second.size()));
         }
     }
 
@@ -690,11 +743,20 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds) {
 }
 
 void DynamicSpawnRuntime::activate_chunk(const ChunkKey& chunk) {
+    std::size_t unlimited_budget = std::numeric_limits<std::size_t>::max();
+    (void)activate_chunk_budgeted(chunk, unlimited_budget);
+}
+
+std::size_t DynamicSpawnRuntime::activate_chunk_budgeted(const ChunkKey& chunk, std::size_t& remaining_budget) {
     auto it = cells_by_chunk_.find(chunk);
     if (it == cells_by_chunk_.end()) {
-        return;
+        chunk_activation_cursor_.erase(chunk);
+        return 0;
     }
-    for (const PlannedCell& cell : it->second) {
+    std::size_t& cursor = chunk_activation_cursor_[chunk];
+    std::size_t processed = 0;
+    for (; cursor < it->second.size() && remaining_budget > 0; ++cursor, --remaining_budget, ++processed) {
+        const PlannedCell& cell = it->second[cursor];
         if (active_.find(cell.key) != active_.end()) {
             continue;
         }
@@ -705,6 +767,10 @@ void DynamicSpawnRuntime::activate_chunk(const ChunkKey& chunk) {
         }
         (void)activate_cell(cell);
     }
+    if (cursor >= it->second.size()) {
+        chunk_activation_cursor_.erase(chunk);
+    }
+    return processed;
 }
 
 Asset* DynamicSpawnRuntime::activate_cell(const PlannedCell& cell) {

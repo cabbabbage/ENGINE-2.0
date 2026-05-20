@@ -35,6 +35,9 @@ struct DynamicSpawnDiagnostics {
     std::size_t reused = 0;
     std::size_t suspended_this_sync = 0;
     std::size_t deleted = 0;
+    std::size_t cells_processed_this_frame = 0;
+    std::size_t deferred_cells_remaining = 0;
+    bool movement_throttling_applied = false;
     double sync_ms = 0.0;
 };
 
@@ -48,7 +51,7 @@ public:
 
     void compile_from_map();
     void refresh_distance_to_edge();
-    void sync(const world::GridBounds& work_bounds);
+    void sync(const world::GridBounds& work_bounds, std::size_t max_cells_per_sync = 0, bool movement_throttled = false);
     void clear();
     void forget_asset(Asset* asset);
     std::size_t delete_for_spawn_group(const std::string& spawn_id);
@@ -176,6 +179,7 @@ private:
     void suspend_cell(const CellKey& key, Asset* asset);
     void suspend_outside_keep_chunks(const std::unordered_set<ChunkKey, ChunkKeyHash>& keep_chunks);
     void activate_chunk(const ChunkKey& chunk);
+    std::size_t activate_chunk_budgeted(const ChunkKey& chunk, std::size_t& remaining_budget);
     ChunkKey chunk_key_for_world(int world_x, int world_z) const;
     std::unordered_set<ChunkKey, ChunkKeyHash> chunk_keys_for_bounds(const world::GridBounds& bounds) const;
     world::GridBounds expanded_bounds(const world::GridBounds& bounds, int margin_px) const;
@@ -198,6 +202,9 @@ private:
     std::unordered_map<CellKey, std::unique_ptr<Asset>, CellKeyHash> suspended_;
     std::unordered_map<Asset*, CellKey> asset_to_key_;
     std::unordered_set<ChunkKey, ChunkKeyHash> active_chunks_;
+    std::vector<ChunkKey> pending_activation_chunks_;
+    std::unordered_set<ChunkKey, ChunkKeyHash> pending_activation_set_;
+    std::unordered_map<ChunkKey, std::size_t, ChunkKeyHash> chunk_activation_cursor_;
     DynamicSpawnDiagnostics diagnostics_{};
     std::uint32_t next_selector_id_ = 1;
     int planned_max_spawn_from_room_px_ = 128;

@@ -2912,6 +2912,9 @@ void Assets::update(const Input& input)
     frame_stats.set("dynamic_spawn.deleted", static_cast<std::uint64_t>(dynamic_diag.deleted));
     frame_stats.set("dynamic_spawn.suspended_this_sync", static_cast<std::uint64_t>(dynamic_diag.suspended_this_sync));
     frame_stats.set("dynamic_spawn.sync_ms", dynamic_diag.sync_ms);
+    frame_stats.set("dynamic_spawn.cells_processed_this_frame", static_cast<std::uint64_t>(dynamic_diag.cells_processed_this_frame));
+    frame_stats.set("dynamic_spawn.deferred_cells_remaining", static_cast<std::uint64_t>(dynamic_diag.deferred_cells_remaining));
+    frame_stats.set("dynamic_spawn.movement_throttling_applied", dynamic_diag.movement_throttling_applied);
     frame_stats.set("render.active_depth_layer_count", stats.active_depth_layer_count);
     frame_stats.set("render.draw_submission_ms", stats.draw_submission_cpu_ms);
     frame_stats.set("render.ui_overlay_prepare_ms", stats.ui_overlay_prepare_ms);
@@ -3818,7 +3821,18 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
     const world::GridBounds render_bounds = screen_world_rect();
     const world::GridBounds work_bounds = runtime_work_bounds_from_render_bounds(render_bounds);
     if (allow_live_dynamic_sync && dynamic_spawn_runtime_) {
-        dynamic_spawn_runtime_->sync(live_dynamic_work_bounds_from_render_bounds(render_bounds));
+        const auto transition = camera_.camera_transition_telemetry();
+        const bool camera_motion_active =
+            camera_.is_height_animating() ||
+            std::fabs(transition.velocity.x) > 1e-3f ||
+            std::fabs(transition.velocity.y) > 1e-3f;
+        const bool player_motion_active =
+            player && player->anim_runtime_ && player->anim_runtime_->has_active_plan();
+        const bool movement_active = camera_motion_active || player_motion_active;
+        constexpr std::size_t kMotionSyncCellBudget = 48;
+        dynamic_spawn_runtime_->sync(live_dynamic_work_bounds_from_render_bounds(render_bounds),
+                                     movement_active ? kMotionSyncCellBudget : 0,
+                                     movement_active);
     }
     world_grid_.update_active_chunks(work_bounds, 0);
     camera_.rebuild_grid(world_grid_,

@@ -479,6 +479,15 @@ private:
         double pass_ms = 0.0;
         double refresh_ms = 0.0;
     };
+    struct AssetUpdatePhaseFrameStats {
+        std::uint64_t active_set_assets_touched = 0;
+        std::uint64_t world_assets_touched = 0;
+        std::uint64_t world_components_mutated = 0;
+        std::uint64_t runtime_assets_touched = 0;
+        std::uint64_t runtime_components_mutated = 0;
+        std::uint64_t render_handoff_assets_touched = 0;
+        std::uint64_t refreshes_triggered = 0;
+    };
     std::vector<RuntimeAssetState> runtime_asset_states_;
     std::unordered_map<const Asset*, std::size_t> runtime_asset_state_index_;
     std::unordered_map<Asset*, std::vector<Asset*>> reverse_child_index_;
@@ -553,6 +562,9 @@ private:
     std::vector<Asset*> pending_static_grid_registration_;
     std::vector<GridMovementCommand> movement_commands_buffer_;
     std::vector<Asset*> grid_registration_buffer_;
+    std::size_t maintenance_pending_static_cursor_ = 0;
+    bool maintenance_pending_empty_points_ = false;
+    AssetUpdatePhaseFrameStats asset_update_phase_stats_{};
 
     void touch_dev_active_state_version();
 

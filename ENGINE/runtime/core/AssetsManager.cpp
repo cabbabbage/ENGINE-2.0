@@ -2154,6 +2154,8 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     Uint64 empty_points_end = 0;
     std::size_t skipped_static_updates = 0;
     std::size_t full_runtime_updates = 0;
+    std::size_t world_assets_touched = 0;
+    std::size_t world_components_mutated = 0;
     trap_escape_candidates_.clear();
 
     Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
@@ -2186,12 +2188,15 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     player_begin = SDL_GetPerformanceCounter();
     if (player && should_process_asset(player)) {
         player->active = true;
+        ++world_assets_touched;
         if (runtime_updates_enabled) {
             player->update();
             ++full_runtime_updates;
+            ++world_components_mutated;
         } else {
             if (player->info) {
                 player->update_scale_values();
+                ++world_components_mutated;
             }
         }
     }
@@ -2261,12 +2266,14 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
                                                                        asset->world_z(),
                                                                        asset->grid_resolution);
         asset->active = true;
+        ++world_assets_touched;
 
         const bool run_full_runtime_update =
             runtime_updates_enabled && !asset->can_skip_static_runtime_update();
         if (run_full_runtime_update) {
             asset->update();
             ++full_runtime_updates;
+            ++world_components_mutated;
             if (previous_pos.world_x() != asset->world_x() ||
                 previous_pos.world_y() != asset->world_y() ||
                 previous_pos.world_z() != asset->world_z()) {
@@ -2284,6 +2291,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
             }
             if (asset->info) {
                 asset->update_scale_values();
+                ++world_components_mutated;
             }
         }
     }
@@ -2342,14 +2350,24 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     dev_sync_end = SDL_GetPerformanceCounter();
 
     pending_assets_begin = SDL_GetPerformanceCounter();
+    const Uint64 maintenance_begin = SDL_GetPerformanceCounter();
+    const double maintenance_budget_ms = startup_runtime_safety_active(frame_id_) ? 0.35 : 0.75;
     register_pending_static_assets();
+    const double pending_static_ms = runtime_stats::FrameStatsRecorder::elapsed_ms(
+        maintenance_begin, SDL_GetPerformanceCounter());
+    maintenance_pending_static_cursor_ =
+        pending_static_grid_registration_.empty() ? 0 : pending_static_grid_registration_.size();
+    maintenance_pending_empty_points_ = pending_static_ms >= maintenance_budget_ms;
     if (process_removals()) {
         mark_active_assets_dirty();
+        ++world_components_mutated;
     }
     pending_assets_end = SDL_GetPerformanceCounter();
 
     empty_points_begin = SDL_GetPerformanceCounter();
-    (void)world_grid_.flush_deferred_empty_points(8192);
+    if (!maintenance_pending_empty_points_) {
+        (void)world_grid_.flush_deferred_empty_points(4096);
+    }
     empty_points_end = SDL_GetPerformanceCounter();
 
     const Uint64 stage_end = SDL_GetPerformanceCounter();
@@ -2376,9 +2394,14 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         frame_stats.set("assets.world_skipped_static_updates", static_cast<std::uint64_t>(skipped_static_updates));
         frame_stats.set("assets.world_trap_candidates", static_cast<std::uint64_t>(trap_escape_candidates_.size()));
         frame_stats.set("assets.world_active_count", static_cast<std::uint64_t>(active_assets.size()));
+        frame_stats.set("assets.maintenance_budget_ms", maintenance_budget_ms);
+        frame_stats.set("assets.maintenance_pending_static", static_cast<std::uint64_t>(maintenance_pending_static_cursor_));
+        frame_stats.set("assets.maintenance_pending_empty_points", maintenance_pending_empty_points_);
         frame_stats.set("assets.slow_world_update", total_ms >= detail_warn);
         frame_stats.set("assets.slow_world_update_threshold_ms", detail_warn);
     }
+    asset_update_phase_stats_.world_assets_touched = static_cast<std::uint64_t>(world_assets_touched);
+    asset_update_phase_stats_.world_components_mutated = static_cast<std::uint64_t>(world_components_mutated);
 }
 
 void Assets::run_visibility_build_stage() {
@@ -2406,6 +2429,7 @@ void Assets::run_visibility_build_stage() {
                                                       scaling_refresh_needed);
     if (scaling_refresh_needed) {
         refresh_visible_asset_scaling_only();
+        asset_update_phase_stats_.refreshes_triggered += 1;
         visible_scaling_initialized_ = true;
         last_visible_scaling_camera_state_version_ = camera_state;
         last_visible_scaling_active_generation_ = active_assets_generation_;
@@ -2459,6 +2483,8 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
     }
 
     const Uint64 stage_begin = SDL_GetPerformanceCounter();
+    asset_update_phase_stats_.runtime_assets_touched =
+        static_cast<std::uint64_t>(movement_enabled_active_assets_.size());
     RuntimeConvergenceFrameStats stats{};
     bool audio_update_pending = include_audio_update;
     const std::size_t iteration_cap = runtime_convergence_iteration_cap_for_frame(frame_id_);
@@ -2511,6 +2537,7 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
     frame_stats.set("assets.runtime_convergence_pass_ms", stats.pass_ms);
     frame_stats.set("assets.runtime_convergence_refresh_ms", stats.refresh_ms);
     frame_stats.set("assets.runtime_convergence_stage_ms", stats.stage_ms);
+    asset_update_phase_stats_.runtime_components_mutated = static_cast<std::uint64_t>(stats.children_updated);
     frame_stats.set("assets.slow_runtime_effects", stats.stage_ms >= runtime_detail_warning_ms());
     frame_stats.set("assets.slow_runtime_effects_threshold_ms", runtime_detail_warning_ms());
 
@@ -2708,6 +2735,7 @@ void Assets::update(const Input& input)
     frame_stats.set("dev.layout_dirty", false);
     frame_stats.set("dev.active_assets_generation", dev_active_state_version_);
     frame_stats.set("dev.filtered_assets_generation", dev_active_state_version_);
+    asset_update_phase_stats_ = AssetUpdatePhaseFrameStats{};
 
     static bool startup_safety_logged = false;
     if (!startup_safety_logged && startup_runtime_safety_active(frame_id_)) {
@@ -2798,6 +2826,7 @@ void Assets::update(const Input& input)
     // Stage: dev UI refresh.
     const Uint64 filter_begin = SDL_GetPerformanceCounter();
     refresh_filtered_active_assets_if_needed();
+    asset_update_phase_stats_.active_set_assets_touched = static_cast<std::uint64_t>(filtered_active_assets.size());
     const Uint64 filter_end = SDL_GetPerformanceCounter();
     const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
     run_dev_controls_ui_frame(input);
@@ -2805,6 +2834,7 @@ void Assets::update(const Input& input)
 
     // Stage: render.
     const Uint64 render_begin = SDL_GetPerformanceCounter();
+    asset_update_phase_stats_.render_handoff_assets_touched = static_cast<std::uint64_t>(active_assets.size());
     render_runtime_frame();
     const Uint64 render_end = SDL_GetPerformanceCounter();
 
@@ -2821,6 +2851,13 @@ void Assets::update(const Input& input)
     frame_stats.set("assets.world_ms", world_ms);
     frame_stats.set("assets.visibility_ms", visibility_ms);
     frame_stats.set("assets.runtime_effects_ms", runtime_ms);
+    frame_stats.set("assets.phase.active_set_refresh.assets_touched", asset_update_phase_stats_.active_set_assets_touched);
+    frame_stats.set("assets.phase.world_update.assets_touched", asset_update_phase_stats_.world_assets_touched);
+    frame_stats.set("assets.phase.world_update.components_mutated", asset_update_phase_stats_.world_components_mutated);
+    frame_stats.set("assets.phase.runtime_effects.assets_touched", asset_update_phase_stats_.runtime_assets_touched);
+    frame_stats.set("assets.phase.runtime_effects.components_mutated", asset_update_phase_stats_.runtime_components_mutated);
+    frame_stats.set("assets.phase.render_handoff.assets_touched", asset_update_phase_stats_.render_handoff_assets_touched);
+    frame_stats.set("assets.phase.refreshes_triggered", asset_update_phase_stats_.refreshes_triggered);
     frame_stats.set("assets.filtered_refresh_ms", filter_ms);
     frame_stats.set("assets.dev_sync_ms", dev_sync_ms);
     frame_stats.set("assets.render_ms", render_ms);

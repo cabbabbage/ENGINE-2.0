@@ -1024,6 +1024,15 @@ bool OpenGLRuntimeRenderer::initialize(std::string& out_error) {
         out_error = size_error;
         return false;
     }
+
+    GpuSceneFrameData prewarm{};
+    if (const std::optional<SDL_Point> target = render_target_manager_.current_size(); target.has_value()) {
+        prewarm.target_width = static_cast<std::uint32_t>(target->x);
+        prewarm.target_height = static_cast<std::uint32_t>(target->y);
+        std::string prewarm_error;
+        ensure_render_targets(prewarm, prewarm_error);
+        ensure_far_background_textures();
+    }
     return true;
 }
 
@@ -1791,6 +1800,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         return false;
     }
     frame_build_ms = elapsed_ms(frame_build_begin, SDL_GetPerformanceCounter());
+    render_diagnostics::add_draw_submission_packet_build_sort_ms(
+        frame_build_ms,
+        frame_data.floor_draw_count + frame_data.xy_sprite_draw_count);
 
     if (ui_overlay_texture) {
         frame_data.ui_overlay_texture = ui_overlay_texture;
@@ -1846,6 +1858,10 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         return false;
     }
     ensure_targets_ms = elapsed_ms(ensure_targets_begin, SDL_GetPerformanceCounter());
+    render_diagnostics::add_draw_submission_resource_create_ms(
+        ensure_targets_ms,
+        render_diagnostics::current_frame_stats().texture_create_count +
+            render_diagnostics::current_frame_stats().gpu_buffer_create_count);
 
     auto bind_target = [&](SDL_Texture* target, const SDL_Color& clear_color) -> bool {
         if (!render_diagnostics::set_render_target(renderer_, target)) {
@@ -2042,6 +2058,12 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     backbuffer_ms = elapsed_ms(backbuffer_begin, SDL_GetPerformanceCounter());
 
     const double submit_ms = elapsed_ms(frame_submit_begin, SDL_GetPerformanceCounter());
+    const double pipeline_bind_ms = floor_pass_ms + xy_pass_ms + dof_pass_ms + composite_pass_ms + ui_overlay_ms + backbuffer_ms;
+    render_diagnostics::add_draw_submission_pipeline_bind_ms(
+        pipeline_bind_ms,
+        render_diagnostics::current_frame_stats().render_target_switch_count +
+            static_cast<std::uint32_t>(render_diagnostics::current_frame_stats().gpu_pipeline_cache_misses));
+    render_diagnostics::add_draw_submission_submit_present_handoff_ms(backbuffer_ms, 1);
     render_diagnostics::add_draw_submission_ms(submit_ms);
     std::ostringstream stage_summary;
     stage_summary << "frame_build=" << frame_build_ms

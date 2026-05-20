@@ -21,6 +21,14 @@ struct RenderFrameStats {
     double cpu_light_gather_ms = 0.0;
     double cpu_light_mask_generation_ms = 0.0;
     double draw_submission_cpu_ms = 0.0;
+    double draw_submission_packet_build_sort_ms = 0.0;
+    double draw_submission_resource_create_ms = 0.0;
+    double draw_submission_pipeline_bind_ms = 0.0;
+    double draw_submission_submit_present_handoff_ms = 0.0;
+    std::uint32_t draw_submission_packet_build_count = 0;
+    std::uint32_t draw_submission_resource_create_count = 0;
+    std::uint32_t draw_submission_pipeline_bind_count = 0;
+    std::uint32_t draw_submission_submit_handoff_count = 0;
     double ui_overlay_prepare_ms = 0.0;
     double present_block_ms = 0.0;
     double present_interval_ms = 0.0;
@@ -92,6 +100,10 @@ void add_render_target_switch_count(std::uint32_t count = 1);
 void add_cpu_light_gather_ms(double elapsed_ms);
 void add_cpu_light_mask_generation_ms(double elapsed_ms);
 void add_draw_submission_ms(double elapsed_ms);
+void add_draw_submission_packet_build_sort_ms(double elapsed_ms, std::uint32_t packet_count = 0);
+void add_draw_submission_resource_create_ms(double elapsed_ms, std::uint32_t create_count = 0);
+void add_draw_submission_pipeline_bind_ms(double elapsed_ms, std::uint32_t bind_count = 0);
+void add_draw_submission_submit_present_handoff_ms(double elapsed_ms, std::uint32_t handoff_count = 0);
 void set_ui_overlay_stats(bool active, bool redrawn, double prepare_ms);
 void set_present_pacing(double present_block_ms,
                         double present_interval_ms,

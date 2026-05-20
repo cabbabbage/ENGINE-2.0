@@ -103,6 +103,14 @@ void begin_frame() {
     g_frame_stats.cpu_light_gather_ms = 0.0;
     g_frame_stats.cpu_light_mask_generation_ms = 0.0;
     g_frame_stats.draw_submission_cpu_ms = 0.0;
+    g_frame_stats.draw_submission_packet_build_sort_ms = 0.0;
+    g_frame_stats.draw_submission_resource_create_ms = 0.0;
+    g_frame_stats.draw_submission_pipeline_bind_ms = 0.0;
+    g_frame_stats.draw_submission_submit_present_handoff_ms = 0.0;
+    g_frame_stats.draw_submission_packet_build_count = 0;
+    g_frame_stats.draw_submission_resource_create_count = 0;
+    g_frame_stats.draw_submission_pipeline_bind_count = 0;
+    g_frame_stats.draw_submission_submit_handoff_count = 0;
     g_frame_stats.ui_overlay_prepare_ms = 0.0;
     g_frame_stats.present_block_ms = g_has_present_sample ? g_last_present_block_ms : 0.0;
     g_frame_stats.present_interval_ms = g_has_present_sample ? g_last_present_interval_ms : 0.0;
@@ -210,6 +218,27 @@ void add_cpu_light_mask_generation_ms(double elapsed_ms_value) {
 
 void add_draw_submission_ms(double elapsed_ms_value) {
     g_frame_stats.draw_submission_cpu_ms += std::max(0.0, elapsed_ms_value);
+}
+
+
+void add_draw_submission_packet_build_sort_ms(double elapsed_ms_value, std::uint32_t packet_count) {
+    g_frame_stats.draw_submission_packet_build_sort_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_packet_build_count += packet_count;
+}
+
+void add_draw_submission_resource_create_ms(double elapsed_ms_value, std::uint32_t create_count) {
+    g_frame_stats.draw_submission_resource_create_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_resource_create_count += create_count;
+}
+
+void add_draw_submission_pipeline_bind_ms(double elapsed_ms_value, std::uint32_t bind_count) {
+    g_frame_stats.draw_submission_pipeline_bind_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_pipeline_bind_count += bind_count;
+}
+
+void add_draw_submission_submit_present_handoff_ms(double elapsed_ms_value, std::uint32_t handoff_count) {
+    g_frame_stats.draw_submission_submit_present_handoff_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_submit_handoff_count += handoff_count;
 }
 
 void set_ui_overlay_stats(bool active, bool redrawn, double prepare_ms) {

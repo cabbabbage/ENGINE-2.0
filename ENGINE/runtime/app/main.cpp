@@ -663,6 +663,14 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         frame_stats.set("render.frame_cpu_ms", stats.frame_cpu_ms);
         frame_stats.set("render.render_thread_cpu_ms", stats.render_thread_cpu_ms);
         frame_stats.set("render.draw_submission_ms", stats.draw_submission_cpu_ms);
+        frame_stats.set("render.draw_submission_packet_build_sort_ms", stats.draw_submission_packet_build_sort_ms);
+        frame_stats.set("render.draw_submission_resource_create_ms", stats.draw_submission_resource_create_ms);
+        frame_stats.set("render.draw_submission_pipeline_bind_ms", stats.draw_submission_pipeline_bind_ms);
+        frame_stats.set("render.draw_submission_submit_handoff_ms", stats.draw_submission_submit_present_handoff_ms);
+        frame_stats.set("render.draw_submission_packet_build_count", stats.draw_submission_packet_build_count);
+        frame_stats.set("render.draw_submission_resource_create_count", stats.draw_submission_resource_create_count);
+        frame_stats.set("render.draw_submission_pipeline_bind_count", stats.draw_submission_pipeline_bind_count);
+        frame_stats.set("render.draw_submission_submit_handoff_count", stats.draw_submission_submit_handoff_count);
         frame_stats.set("render.present_block_ms", stats.present_block_ms);
         frame_stats.set("render.present_interval_ms", stats.present_interval_known ? stats.present_interval_ms : -1.0);
         frame_stats.set("render.pass_count", stats.render_pass_count);

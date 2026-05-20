@@ -1,10 +1,10 @@
 #include "utils/frame_stats_recorder.hpp"
 
 #include <algorithm>
-#include <charconv>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -17,8 +17,6 @@
 namespace runtime_stats {
 namespace {
 
-constexpr std::size_t kFlushIntervalFrames = 120;
-
 struct FrameSnapshot {
     std::uint64_t frame_id = 0;
     std::unordered_map<std::string, std::string> values;
@@ -27,12 +25,14 @@ struct FrameSnapshot {
 struct RecorderState {
     std::mutex mutex;
     std::filesystem::path output_path;
-    std::vector<FrameSnapshot> frames;
+    std::ofstream output_stream;
     std::vector<std::string> metric_order;
     std::unordered_set<std::string> known_metrics;
     FrameSnapshot current_frame;
     bool started = false;
     bool frame_open = false;
+    bool header_written = false;
+    bool write_failure_reported = false;
 };
 
 RecorderState& state() {
@@ -48,13 +48,215 @@ std::filesystem::path default_output_path() {
 #endif
 }
 
-void remember_metric_locked(RecorderState& s, const std::string& metric) {
-    if (metric.empty()) {
-        return;
-    }
-    if (s.known_metrics.insert(metric).second) {
-        s.metric_order.push_back(metric);
-    }
+std::vector<std::string> default_metric_order() {
+    return {
+        "main.event_count",
+        "main.event_poll_ms",
+        "main.resize_sync_ms",
+        "main.sync_output_ms",
+        "main.assets_update_ms",
+        "main.input_update_ms",
+        "main.idle_pacing_requested_ms",
+        "main.idle_pacing_delay_ms",
+        "main.menu_active",
+        "main.quit_requested",
+        "main.frame_total_ms",
+        "assets.frame_id",
+        "assets.frame_dt_seconds",
+        "assets.idle_frame",
+        "assets.dev_mode",
+        "assets.runtime_updates_enabled",
+        "assets.active_count",
+        "assets.filtered_active_count",
+        "assets.total_count",
+        "assets.world_ms",
+        "assets.visibility_ms",
+        "assets.runtime_effects_ms",
+        "assets.filtered_refresh_ms",
+        "assets.render_ms",
+        "assets.dev_sync_ms",
+        "assets.slow_frame",
+        "assets.slow_frame_threshold_ms",
+        "assets.startup_safety_active",
+        "assets.world_total_ms",
+        "assets.world_player_ms",
+        "assets.world_non_player_ms",
+        "assets.world_movement_flush_ms",
+        "assets.world_camera_ms",
+        "assets.world_max_dimensions_ms",
+        "assets.world_dev_sync_ms",
+        "assets.world_pending_assets_ms",
+        "assets.world_empty_points_ms",
+        "assets.world_full_updates",
+        "assets.world_skipped_static_updates",
+        "assets.world_trap_candidates",
+        "assets.world_active_count",
+        "assets.slow_world_update",
+        "assets.slow_world_update_threshold_ms",
+        "assets.runtime_effects_skipped_startup",
+        "assets.runtime_convergence_trace_enabled",
+        "assets.runtime_convergence_iterations",
+        "assets.runtime_convergence_converged",
+        "assets.runtime_convergence_waves",
+        "assets.runtime_convergence_children_considered",
+        "assets.runtime_convergence_children_updated",
+        "assets.runtime_convergence_traversal_refreshes",
+        "assets.runtime_convergence_pass_ms",
+        "assets.runtime_convergence_refresh_ms",
+        "assets.runtime_convergence_stage_ms",
+        "assets.slow_runtime_effects",
+        "assets.slow_runtime_effects_threshold_ms",
+        "assets.runtime_convergence_cap_reached",
+        "assets.runtime_convergence_iteration_cap",
+        "assets.trap_escape_skipped_startup",
+        "assets.trap_escape_skipped_no_movement_assets",
+        "assets.trap_escape_ms",
+        "assets.trap_escape_processed",
+        "assets.trap_escape_skipped",
+        "assets.trap_escape_queries",
+        "assets.trap_escape_unstuck",
+        "assets.trap_escape_candidates",
+        "assets.slow_trap_escape",
+        "assets.slow_trap_escape_threshold_ms",
+        "assets.render_should_render",
+        "assets.render_suppressed",
+        "assets.render_has_opengl_renderer",
+        "assets.render_ui_overlay_texture",
+        "assets.render_ui_overlay_active",
+        "assets.render_ui_overlay_prepare_ms",
+        "assets.render_active_count",
+        "assets.render_submit_succeeded",
+        "assets.frame_rebuild_requests",
+        "assets.frame_rebuild_executions",
+        "assets.frame_rebuild_coalesced",
+        "assets.slow_runtime_asset_pass",
+        "assets.slow_runtime_asset_name",
+        "assets.slow_runtime_asset_ms",
+        "assets.slow_runtime_asset_geometry_refresh",
+        "assets.slow_runtime_asset_camera_only",
+        "assets.slow_runtime_asset_frame_index",
+        "dynamic_spawn.active",
+        "dynamic_spawn.suspended",
+        "dynamic_spawn.planned_cells",
+        "dynamic_spawn.spawned",
+        "dynamic_spawn.reused",
+        "dynamic_spawn.deleted",
+        "dynamic_spawn.suspended_this_sync",
+        "dynamic_spawn.sync_ms",
+        "audio.update_ms",
+        "camera.projection_w",
+        "camera.projection_h",
+        "camera.visible_left",
+        "camera.visible_top",
+        "camera.visible_right",
+        "camera.visible_bottom",
+        "camera.frustum_min_z",
+        "camera.frustum_max_z",
+        "camera.depth_culled",
+        "camera.nodes_visited",
+        "camera.branches_skipped",
+        "camera.transition_state",
+        "camera.transition_target_x",
+        "camera.transition_target_y",
+        "camera.transition_velocity_x",
+        "camera.transition_velocity_y",
+        "camera.transition_blend_factor",
+        "camera.transition_settle_time_remaining",
+        "render.loop_label",
+        "render.diagnostics_frame",
+        "render.window_w",
+        "render.window_h",
+        "render.window_px_w",
+        "render.window_px_h",
+        "render.output_w",
+        "render.output_h",
+        "render.target_w",
+        "render.target_h",
+        "render.target_is_backbuffer",
+        "render.viewport_x",
+        "render.viewport_y",
+        "render.viewport_w",
+        "render.viewport_h",
+        "render.clip_x",
+        "render.clip_y",
+        "render.clip_w",
+        "render.clip_h",
+        "render.postprocess_target",
+        "render.frame_cpu_ms",
+        "render.render_thread_cpu_ms",
+        "render.draw_submission_ms",
+        "render.present_block_ms",
+        "render.present_interval_ms",
+        "render.present_interval_known",
+        "render.present_calls",
+        "render.pass_count",
+        "render.copy_pass_count",
+        "render.compute_pass_count",
+        "render.draw_calls",
+        "render.target_switches",
+        "render.texture_create_count",
+        "render.texture_destroy_count",
+        "render.gpu_buffer_create_count",
+        "render.gpu_buffer_destroy_count",
+        "render.cpu_light_gather_ms",
+        "render.cpu_light_mask_ms",
+        "render.gpu_light_tiles",
+        "render.gpu_light_naive",
+        "render.gpu_light_tiled",
+        "render.pipeline_cache_hits",
+        "render.pipeline_cache_misses",
+        "render.pipeline_cache_hit_rate",
+        "render.sdl_target_calls",
+        "render.sdl_draw_calls",
+        "render.gpu_failed_frames",
+        "render.renderer_path",
+        "render.backend",
+        "render.present_mode",
+        "render.texture_memory_known",
+        "render.texture_memory_mb",
+        "render.floor_packet_count",
+        "render.xy_sprite_packet_count",
+        "render.active_depth_layer_count",
+        "render.blur_pass_count",
+        "render.skipped_texture_count",
+        "render.failed_texture_names",
+        "render.packets_per_depth_layer",
+        "render.blur_strength_per_layer",
+        "render.composite_layers_submitted",
+        "render.stage_timings",
+        "render.ui_overlay_active",
+        "render.ui_overlay_redrawn",
+        "render.ui_overlay_prepare_ms",
+        "render.submit_succeeded",
+        "render.projection_calls_total",
+        "render.projection_calls_saved_early",
+        "render.assets_stageA_reject",
+        "render.assets_stageC_entered",
+        "render.projection_recompute_budget",
+        "render.projection_points_deferred",
+        "render.projection_points_updated",
+        "render.warn_target_half_output",
+        "render.warn_viewport_y_nonzero",
+        "render.warn_clip_y_nonzero",
+        "render.warn_projection_output_mismatch",
+        "scale_trace.asset_name",
+        "scale_trace.asset_frame_id",
+        "scale_trace.asset_source",
+        "scale_trace.asset_perspective",
+        "scale_trace.asset_base",
+        "scale_trace.asset_scale",
+        "scale_trace.asset_delta",
+        "scale_trace.anchor_asset_name",
+        "scale_trace.anchor_camera_state",
+        "scale_trace.anchor_source",
+        "scale_trace.anchor_resolver",
+        "scale_trace.anchor_render",
+        "scale_trace.anchor_delta",
+        "scale_trace.mode_toggle_mode",
+        "scale_trace.mode_toggle_camera_state",
+        "scale_trace.mode_toggle_active_generation",
+        "extra_metrics",
+    };
 }
 
 std::string escape_csv(const std::string& value) {
@@ -94,9 +296,48 @@ std::string number_to_string(double value) {
     return out.empty() ? std::string{"0"} : out;
 }
 
-void write_csv_locked(RecorderState& s) {
+std::string extra_metrics_for_frame(const FrameSnapshot& frame,
+                                    const std::unordered_set<std::string>& known_metrics) {
+    std::vector<std::string> extras;
+    extras.reserve(frame.values.size());
+    for (const auto& [metric, value] : frame.values) {
+        if (known_metrics.find(metric) == known_metrics.end()) {
+            extras.push_back(metric + "=" + value);
+        }
+    }
+    std::sort(extras.begin(), extras.end());
+    std::ostringstream out;
+    for (std::size_t i = 0; i < extras.size(); ++i) {
+        if (i > 0) {
+            out << ';';
+        }
+        out << extras[i];
+    }
+    return out.str();
+}
+
+void write_frame_row(std::ostream& out,
+                     const FrameSnapshot& frame,
+                     const std::vector<std::string>& metric_order,
+                     const std::unordered_set<std::string>& known_metrics) {
+    out << frame.frame_id;
+    for (const std::string& metric : metric_order) {
+        out << ',';
+        if (metric == "extra_metrics") {
+            out << escape_csv(extra_metrics_for_frame(frame, known_metrics));
+            continue;
+        }
+        const auto it = frame.values.find(metric);
+        if (it != frame.values.end()) {
+            out << escape_csv(it->second);
+        }
+    }
+    out << '\n';
+}
+
+bool prepare_output_parent_locked(RecorderState& s) {
     if (!s.started || s.output_path.empty()) {
-        return;
+        return false;
     }
 
     std::error_code ec;
@@ -105,47 +346,68 @@ void write_csv_locked(RecorderState& s) {
         std::filesystem::create_directories(parent, ec);
         ec.clear();
     }
+    return true;
+}
 
-    const std::filesystem::path tmp_path = s.output_path.string() + ".tmp";
-    {
-        std::ofstream out(tmp_path, std::ios::out | std::ios::trunc);
-        if (!out.good()) {
-            return;
-        }
-
-        out << "metric";
-        for (const FrameSnapshot& frame : s.frames) {
-            out << ",frame_" << frame.frame_id;
-        }
-        out << '\n';
-
-        for (const std::string& metric : s.metric_order) {
-            out << escape_csv(metric);
-            for (const FrameSnapshot& frame : s.frames) {
-                out << ',';
-                const auto it = frame.values.find(metric);
-                if (it != frame.values.end()) {
-                    out << escape_csv(it->second);
-                }
-            }
-            out << '\n';
-        }
+bool report_write_failure_once_locked(RecorderState& s, const char* action) {
+    if (!s.write_failure_reported) {
+        std::cerr << "[FrameStatsRecorder] Failed to " << action
+                  << " runtime stats CSV: " << s.output_path.string() << "\n";
+        s.write_failure_reported = true;
     }
+    return false;
+}
 
-    std::filesystem::rename(tmp_path, s.output_path, ec);
-    if (ec) {
-        ec.clear();
-        std::filesystem::remove(s.output_path, ec);
-        ec.clear();
-        std::filesystem::rename(tmp_path, s.output_path, ec);
+bool write_header_locked(RecorderState& s) {
+    if (!prepare_output_parent_locked(s)) {
+        return false;
     }
+    if (s.output_stream.is_open()) {
+        s.output_stream.close();
+    }
+    s.output_stream.clear();
+    s.output_stream.open(s.output_path, std::ios::out | std::ios::trunc);
+    if (!s.output_stream.good()) {
+        return report_write_failure_once_locked(s, "create");
+    }
+    s.output_stream << "frame_id";
+    for (const std::string& metric : s.metric_order) {
+        s.output_stream << ',' << escape_csv(metric);
+    }
+    s.output_stream << '\n';
+    s.output_stream.flush();
+    if (!s.output_stream.good()) {
+        return report_write_failure_once_locked(s, "write header to");
+    }
+    s.header_written = true;
+    s.write_failure_reported = false;
+    return true;
+}
+
+bool append_frame_locked(RecorderState& s, const FrameSnapshot& frame) {
+    if (!s.header_written && !write_header_locked(s)) {
+        return false;
+    }
+    if (!s.output_stream.is_open()) {
+        s.output_stream.clear();
+        s.output_stream.open(s.output_path, std::ios::out | std::ios::app);
+    }
+    if (!s.output_stream.good()) {
+        return report_write_failure_once_locked(s, "append to");
+    }
+    write_frame_row(s.output_stream, frame, s.metric_order, s.known_metrics);
+    s.output_stream.flush();
+    if (!s.output_stream.good()) {
+        return report_write_failure_once_locked(s, "write row to");
+    }
+    s.write_failure_reported = false;
+    return true;
 }
 
 void set_locked(RecorderState& s, const std::string& metric, std::string value) {
     if (!s.started || !s.frame_open || metric.empty()) {
         return;
     }
-    remember_metric_locked(s, metric);
     s.current_frame.values[metric] = std::move(value);
 }
 
@@ -189,19 +451,20 @@ void FrameStatsRecorder::begin_run(const std::filesystem::path& output_path) {
     RecorderState& s = state();
     std::lock_guard<std::mutex> lock(s.mutex);
     s.output_path = output_path;
-    s.frames.clear();
-    s.metric_order.clear();
+    s.metric_order = default_metric_order();
     s.known_metrics.clear();
+    for (const std::string& metric : s.metric_order) {
+        if (metric != "extra_metrics") {
+            s.known_metrics.insert(metric);
+        }
+    }
     s.current_frame = FrameSnapshot{};
     s.started = true;
     s.frame_open = false;
+    s.header_written = false;
+    s.write_failure_reported = false;
 
-    std::error_code ec;
-    const std::filesystem::path parent = s.output_path.parent_path();
-    if (!parent.empty()) {
-        std::filesystem::create_directories(parent, ec);
-    }
-    std::ofstream clear_file(s.output_path, std::ios::out | std::ios::trunc);
+    write_header_locked(s);
 }
 
 void FrameStatsRecorder::shutdown() {
@@ -212,11 +475,14 @@ void FrameStatsRecorder::shutdown() {
     RecorderState& s = state();
     std::lock_guard<std::mutex> lock(s.mutex);
     if (s.frame_open) {
-        s.frames.push_back(std::move(s.current_frame));
+        append_frame_locked(s, s.current_frame);
         s.current_frame = FrameSnapshot{};
         s.frame_open = false;
     }
-    write_csv_locked(s);
+    if (s.output_stream.is_open()) {
+        s.output_stream.flush();
+        s.output_stream.close();
+    }
     s.started = false;
 }
 
@@ -230,9 +496,20 @@ void FrameStatsRecorder::begin_frame(std::uint64_t frame_id) {
     if (!s.started) {
         s.output_path = default_output_path();
         s.started = true;
+        s.frame_open = false;
+        s.header_written = false;
+        s.write_failure_reported = false;
+        s.metric_order = default_metric_order();
+        s.known_metrics.clear();
+        for (const std::string& metric : s.metric_order) {
+            if (metric != "extra_metrics") {
+                s.known_metrics.insert(metric);
+            }
+        }
+        write_header_locked(s);
     }
     if (s.frame_open) {
-        s.frames.push_back(std::move(s.current_frame));
+        append_frame_locked(s, s.current_frame);
     }
     s.current_frame = FrameSnapshot{};
     s.current_frame.frame_id = frame_id;
@@ -249,12 +526,9 @@ void FrameStatsRecorder::end_frame() {
     if (!s.started || !s.frame_open) {
         return;
     }
-    s.frames.push_back(std::move(s.current_frame));
+    append_frame_locked(s, s.current_frame);
     s.current_frame = FrameSnapshot{};
     s.frame_open = false;
-    if ((s.frames.size() % kFlushIntervalFrames) == 0) {
-        write_csv_locked(s);
-    }
 }
 
 void FrameStatsRecorder::flush() {
@@ -264,7 +538,9 @@ void FrameStatsRecorder::flush() {
 
     RecorderState& s = state();
     std::lock_guard<std::mutex> lock(s.mutex);
-    write_csv_locked(s);
+    if (s.started && !s.header_written) {
+        write_header_locked(s);
+    }
 }
 
 void FrameStatsRecorder::set(const std::string& metric, const std::string& value) {
@@ -310,7 +586,6 @@ void FrameStatsRecorder::add(const std::string& metric, double value) {
     if (!s.started || !s.frame_open) {
         return;
     }
-    remember_metric_locked(s, metric);
     double current = 0.0;
     const auto it = s.current_frame.values.find(metric);
     if (it != s.current_frame.values.end()) {

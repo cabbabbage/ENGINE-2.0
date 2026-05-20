@@ -8,7 +8,11 @@
 #include "AssetsManager.hpp"
 #include "utils/input.hpp"
 #include "utils/log.hpp"
+#include "utils/frame_stats_recorder.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -33,6 +37,25 @@ bool is_resize_or_scale_event(Uint32 event_type) {
                 return true;
         default:
                 return false;
+        }
+}
+
+int env_int_clamped(const char* name, int default_value, int min_value, int max_value) {
+        const int safe_min = std::min(min_value, max_value);
+        const int safe_max = std::max(min_value, max_value);
+        const int safe_default = std::clamp(default_value, safe_min, safe_max);
+        if (!name || !*name) {
+                return safe_default;
+        }
+        const char* raw = std::getenv(name);
+        if (!raw || !*raw) {
+                return safe_default;
+        }
+        try {
+                const int value = std::stoi(raw);
+                return std::clamp(value, safe_min, safe_max);
+        } catch (...) {
+                return safe_default;
         }
 }
 } // namespace
@@ -77,11 +100,22 @@ void MenuUI::game_loop() {
 	SDL_Event e;
         return_to_main_menu_ = false;
         constexpr int EVENT_WAIT_TIMEOUT_MS = 16;
+        std::uint64_t runtime_frame_counter = 0;
+        const int auto_exit_frame_limit =
+                env_int_clamped("VIBBLE_RUNTIME_FRAME_LIMIT", 0, 0, 1000000);
+        if (auto_exit_frame_limit > 0) {
+                vibble::log::info("[MenuUI] Runtime frame limit: " + std::to_string(auto_exit_frame_limit));
+        }
         auto process_event = [&](const SDL_Event& event) {
                 if (renderer && is_resize_or_scale_event(event.type)) {
+                        const Uint64 resize_sync_begin = SDL_GetPerformanceCounter();
                         if (sync_output_dimensions(renderer)) {
                                 rebuildButtons();
                         }
+                        runtime_stats::FrameStatsRecorder::instance().add(
+                                "main.resize_sync_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(resize_sync_begin,
+                                                                              SDL_GetPerformanceCounter()));
                 }
                 handle_global_shortcuts(event);
                 const bool menu_was_active = menu_active_;
@@ -120,20 +154,60 @@ void MenuUI::game_loop() {
                 }
         };
 	while (!quit) {
+                ++runtime_frame_counter;
+                auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+                frame_stats.begin_frame(runtime_frame_counter);
+                struct RuntimeFrameScope {
+                        runtime_stats::FrameStatsRecorder& stats;
+                        bool active = true;
+
+                        explicit RuntimeFrameScope(runtime_stats::FrameStatsRecorder& recorder)
+                            : stats(recorder) {}
+
+                        ~RuntimeFrameScope() {
+                                if (active) {
+                                        stats.end_frame();
+                                }
+                        }
+
+                        void end() {
+                                if (active) {
+                                        stats.end_frame();
+                                        active = false;
+                                }
+                        }
+                } runtime_frame_scope(frame_stats);
+                const Uint64 frame_begin = SDL_GetPerformanceCounter();
+                int event_count = 0;
+                const Uint64 event_begin = SDL_GetPerformanceCounter();
                 if (SDL_WaitEventTimeout(&e, EVENT_WAIT_TIMEOUT_MS)) {
+                        ++event_count;
                         process_event(e);
                         while (SDL_PollEvent(&e)) {
+                                ++event_count;
                                 process_event(e);
                         }
                 }
+                const Uint64 event_end = SDL_GetPerformanceCounter();
+                frame_stats.set("main.event_count", event_count);
+                frame_stats.set("main.event_poll_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin, event_end));
 
+                const Uint64 sync_begin = SDL_GetPerformanceCounter();
                 if (sync_output_dimensions(renderer)) {
                         rebuildButtons();
                 }
+                frame_stats.set("main.sync_output_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin,
+                                                                              SDL_GetPerformanceCounter()));
 
                 const bool should_update = !menu_active_ && game_assets_ && input_;
                 if (should_update) {
+                        const Uint64 assets_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
+                        frame_stats.set("main.assets_update_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(assets_begin,
+                                                                                      SDL_GetPerformanceCounter()));
                 }
                 if (menu_active_) {
                         render();
@@ -151,9 +225,28 @@ void MenuUI::game_loop() {
                 log_render_diagnostics(renderer, "MenuUI");
 
                 if (input_) {
+                        const Uint64 input_begin = SDL_GetPerformanceCounter();
                         input_->update();
+                        frame_stats.set("main.input_update_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(input_begin,
+                                                                                      SDL_GetPerformanceCounter()));
                 }
+                frame_stats.set("main.menu_active", menu_active_);
+                if (auto_exit_frame_limit > 0 &&
+                    runtime_frame_counter >= static_cast<std::uint64_t>(auto_exit_frame_limit)) {
+                        quit = true;
+                }
+                frame_stats.set("main.quit_requested", quit);
+                frame_stats.set("main.frame_total_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(frame_begin,
+                                                                              SDL_GetPerformanceCounter()));
+                runtime_frame_scope.end();
 	}
+        runtime_stats::FrameStatsRecorder::instance().shutdown();
+        if (auto_exit_frame_limit > 0) {
+                vibble::log::info("[MenuUI] Runtime frame limit reached; exiting automation run.");
+                std::exit(0);
+        }
 }
 
 void MenuUI::toggleMenu() {

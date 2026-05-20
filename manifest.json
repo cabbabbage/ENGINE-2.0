@@ -26393,7 +26393,7 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 2069.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
         "layer_depth_curve": 68.61000061035156,
@@ -26544,9 +26544,9 @@
             }
           },
           "display_color": [
-            139,
-            242,
-            85,
+            31,
+            120,
+            204,
             255
           ],
           "edge_smoothness": 101,
@@ -26633,9 +26633,9 @@
             }
           },
           "display_color": [
-            36,
-            114,
             242,
+            36,
+            125,
             255
           ],
           "edge_smoothness": 4,
@@ -26692,9 +26692,9 @@
             }
           },
           "display_color": [
-            181,
-            85,
             242,
+            162,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26751,9 +26751,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            108,
+            154,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26840,9 +26840,9 @@
             }
           },
           "display_color": [
+            41,
             36,
             242,
-            109,
             255
           ],
           "edge_smoothness": 4,
@@ -26904,9 +26904,9 @@
             }
           },
           "display_color": [
-            31,
-            43,
-            204,
+            178,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 70,
@@ -27005,7 +27005,7 @@
           },
           "display_color": [
             85,
-            171,
+            159,
             242,
             255
           ],
@@ -27354,9 +27354,9 @@
             }
           },
           "display_color": [
-            104,
-            204,
-            31,
+            242,
+            85,
+            184,
             255
           ],
           "edge_smoothness": 96,

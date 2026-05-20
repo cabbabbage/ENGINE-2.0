@@ -396,14 +396,39 @@ void MainApp::game_loop() {
         std::uint64_t runtime_frame_counter = 0;
         bool quit = false;
         SDL_Event e;
+        const int auto_exit_frame_limit =
+                env_int_clamped("VIBBLE_RUNTIME_FRAME_LIMIT", 0, 0, 1000000);
 
         vibble::log::info("[MainApp] Game loop started.");
         vibble::log::info("[MainApp] Frame pacing target: " + app::frame_pacing::target_summary());
+        if (auto_exit_frame_limit > 0) {
+                vibble::log::info("[MainApp] Runtime frame limit: " + std::to_string(auto_exit_frame_limit));
+        }
 
         while (!quit) {
                 ++runtime_frame_counter;
                 auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
                 frame_stats.begin_frame(runtime_frame_counter);
+                struct RuntimeFrameScope {
+                        runtime_stats::FrameStatsRecorder& stats;
+                        bool active = true;
+
+                        explicit RuntimeFrameScope(runtime_stats::FrameStatsRecorder& recorder)
+                            : stats(recorder) {}
+
+                        ~RuntimeFrameScope() {
+                                if (active) {
+                                        stats.end_frame();
+                                }
+                        }
+
+                        void end() {
+                                if (active) {
+                                        stats.end_frame();
+                                        active = false;
+                                }
+                        }
+                } runtime_frame_scope(frame_stats);
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 SDL_Renderer* renderer = raw_renderer();
 
@@ -482,12 +507,19 @@ void MainApp::game_loop() {
                         frame_stats.set("main.idle_pacing_delay_ms", 0.0);
                 }
 
+                if (auto_exit_frame_limit > 0 &&
+                    runtime_frame_counter >= static_cast<std::uint64_t>(auto_exit_frame_limit)) {
+                        quit = true;
+                }
+
                 frame_stats.set("main.quit_requested", quit);
                 frame_stats.set("main.frame_total_ms",
                                 runtime_stats::FrameStatsRecorder::elapsed_ms(frame_begin,
                                                                               SDL_GetPerformanceCounter()));
-                frame_stats.end_frame();
+                runtime_frame_scope.end();
         }
+
+        runtime_stats::FrameStatsRecorder::instance().shutdown();
 }
 
 bool MainApp::sync_output_dimensions(SDL_Renderer* renderer) {
@@ -1047,15 +1079,6 @@ int main(int argc, char* argv[]) {
         (void)argv;
         vibble::log::info("[Main] Starting game engine...");
         vibble::log::info("[Main] Startup uses existing asset caches; missing cache entries regenerate on demand.");
-        struct RuntimeStatsSession {
-                RuntimeStatsSession() {
-                        runtime_stats::FrameStatsRecorder::instance().begin_run();
-                }
-                ~RuntimeStatsSession() {
-                        runtime_stats::FrameStatsRecorder::instance().shutdown();
-                }
-        } runtime_stats_session;
-
         const SDL_InitFlags init_flags =
                 static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
         if (!SDL_Init(init_flags)) {

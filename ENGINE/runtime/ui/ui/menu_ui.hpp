@@ -52,7 +52,7 @@ class MenuUI : public MainApp {
     void doQuit();
     void doToggleDevMode();
 
-	private:
+	public:
     struct MenuButton {
     Button     button;
     MenuAction action = MenuAction::NONE;

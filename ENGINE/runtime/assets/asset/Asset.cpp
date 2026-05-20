@@ -2972,6 +2972,9 @@ SDL_FlipMode Asset::effective_render_flip() const {
 }
 
 double Asset::effective_render_angle() const {
+        if (dynamic_spawned_asset_) {
+                return 0.0;
+        }
         const double base_tilt = std::isfinite(base_spawn_tilt_degrees_)
                 ? base_spawn_tilt_degrees_
                 : 0.0;

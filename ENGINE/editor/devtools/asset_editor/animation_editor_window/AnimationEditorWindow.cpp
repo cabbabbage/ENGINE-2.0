@@ -3554,7 +3554,13 @@ void AnimationEditorWindow::handle_create_defaults() {
         }
         if (write.spec.folder_sourced) {
             const bool copied = defaults_copy_frames_override_ ? defaults_copy_frames_override_(write.spec.id, base_frames) : copy_frames_to_animation_folder(write.spec.id, base_frames);
-            if (!copied) { error = DefaultsStageError::CopyFailure; break; }
+            if (!copied) {
+                if (backed_up_source_folder_ids.count(write.spec.id) == 0) {
+                    created_folders.push_back(write.folder_path);
+                }
+                error = DefaultsStageError::CopyFailure;
+                break;
+            }
             if (backed_up_source_folder_ids.count(write.spec.id) == 0) {
                 created_folders.push_back(write.folder_path);
             }

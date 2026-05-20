@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <iterator>
@@ -95,6 +96,44 @@ bool render_packet_metadata_enabled() {
         return value == "1" || value == "true" || value == "TRUE" || value == "on" || value == "ON";
     }();
     return enabled;
+}
+
+int env_int_clamped_renderer(const char* name, int default_value, int min_value, int max_value) {
+    const char* raw = SDL_getenv(name);
+    if (!raw || !*raw) {
+        return default_value;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(raw, &end, 10);
+    if (end == raw) {
+        return default_value;
+    }
+    return std::clamp(static_cast<int>(parsed), min_value, max_value);
+}
+
+double env_double_clamped_renderer(const char* name, double default_value, double min_value, double max_value) {
+    const char* raw = SDL_getenv(name);
+    if (!raw || !*raw) {
+        return default_value;
+    }
+    char* end = nullptr;
+    const double parsed = std::strtod(raw, &end);
+    if (end == raw || !std::isfinite(parsed)) {
+        return default_value;
+    }
+    return std::clamp(parsed, min_value, max_value);
+}
+
+std::uint32_t dof_motion_skip_frames() {
+    static const std::uint32_t frames = static_cast<std::uint32_t>(
+        env_int_clamped_renderer("VIBBLE_DOF_MOTION_SKIP_FRAMES", 4, 0, 60));
+    return frames;
+}
+
+double dof_motion_budget_ms() {
+    static const double budget_ms =
+        env_double_clamped_renderer("VIBBLE_DOF_MOTION_BUDGET_MS", 12.0, 0.0, 1000.0);
+    return budget_ms;
 }
 
 std::uint64_t stable_asset_render_hash(const Asset& asset) {
@@ -1269,7 +1308,8 @@ std::vector<world::Chunk*> OpenGLRuntimeRenderer::runtime_floor_chunks() const {
 bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_width,
                                                        std::uint32_t target_height,
                                                        GpuSceneFrameData& out_data,
-                                                       std::string& out_error) const {
+                                                       std::string& out_error,
+                                                       bool allow_dof_depth_layers) const {
     // Two-pass content contract (must match render_frame merge order):
     // 1. Floor Pass (XZ only): background clear + chunk floor tiles + dev floor projection markers.
     // 2. XY Sprite Pass: non-tiled XY sprite assets only, grouped by depth layer.
@@ -1409,7 +1449,8 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                                                                    camera_settings.radial_blur_px);
     constexpr std::size_t kDofPacketBudget = 420;
     constexpr std::uint32_t kDofEmittedAssetBudget = 900;
-    const bool dof_requested = dof_requested_by_settings &&
+    const bool dof_requested = allow_dof_depth_layers &&
+        dof_requested_by_settings &&
         out_data.xy_sprite_draws.size() <= kDofPacketBudget &&
         out_data.xy_sprite_draw_count <= kDofEmittedAssetBudget;
     if (dof_requested) {
@@ -1723,12 +1764,31 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         consecutive_held_incomplete_scene_frames_ = 0;
     }
 
+    const std::uint64_t current_camera_state_version = assets_->getView().camera_state_version();
+    const bool camera_state_changed =
+        last_dof_camera_state_version_ != 0 &&
+        current_camera_state_version != last_dof_camera_state_version_;
+    last_dof_camera_state_version_ = current_camera_state_version;
+
+    const std::uint32_t configured_dof_skip_frames = dof_motion_skip_frames();
+    const double dof_budget_ms = dof_motion_budget_ms();
+    const bool dof_cost_over_budget = last_dof_path_ms_ <= 0.0 || last_dof_path_ms_ >= dof_budget_ms;
+    if (camera_state_changed && configured_dof_skip_frames > 0 && dof_cost_over_budget) {
+        dof_motion_skip_frames_remaining_ =
+            std::max(dof_motion_skip_frames_remaining_, configured_dof_skip_frames);
+    }
+    const bool dof_suppressed_for_motion = dof_motion_skip_frames_remaining_ > 0;
+    if (dof_suppressed_for_motion) {
+        --dof_motion_skip_frames_remaining_;
+    }
+
     GpuSceneFrameData frame_data{};
     const std::uint64_t frame_build_begin = SDL_GetPerformanceCounter();
     if (!build_gpu_scene_frame_data(static_cast<std::uint32_t>(effective_target->x),
                                     static_cast<std::uint32_t>(effective_target->y),
                                     frame_data,
-                                    out_error)) {
+                                    out_error,
+                                    !dof_suppressed_for_motion)) {
         render_diagnostics::set_submit_result(false);
         render_diagnostics::end_frame();
         return false;
@@ -1817,11 +1877,18 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
 
     const SDL_Color transparent_clear{0, 0, 0, 0};
     const auto& camera_settings = assets_->getView().get_settings();
-    const bool dof_active =
+    const bool dof_requested_by_settings =
         dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
                                 camera_settings.blur_px,
-                                camera_settings.radial_blur_px) &&
+                                camera_settings.radial_blur_px);
+    const bool dof_active =
+        dof_requested_by_settings &&
+        !dof_suppressed_for_motion &&
         !frame_to_render->depth_layers.empty();
+    if (dof_suppressed_for_motion && dof_requested_by_settings) {
+        render_diagnostics::set_active_depth_layer_count(0);
+        render_diagnostics::set_blur_pass_count(0);
+    }
     bool dof_composited = false;
 
     if (dof_active) {
@@ -1910,8 +1977,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             render_diagnostics::set_blur_pass_count(0);
         }
         dof_pass_ms += elapsed_ms(dof_begin, SDL_GetPerformanceCounter());
+        last_dof_path_ms_ = floor_pass_ms + dof_pass_ms;
     } else {
-        destroy_depth_layer_targets();
+        if (!dof_suppressed_for_motion || !dof_requested_by_settings) {
+            destroy_depth_layer_targets();
+        }
         render_diagnostics::set_blur_pass_count(0);
     }
 
@@ -1982,6 +2052,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " floor=" << floor_pass_ms
                   << " xy=" << xy_pass_ms
                   << " dof=" << dof_pass_ms
+                  << " dof_motion_skip=" << (dof_suppressed_for_motion && dof_requested_by_settings ? 1 : 0)
+                  << " dof_last_ms=" << last_dof_path_ms_
                   << " composite=" << composite_pass_ms
                   << " ui_prepare=" << ui_overlay_prepare_ms
                   << " ui_copy=" << ui_overlay_ms

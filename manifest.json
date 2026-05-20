@@ -20049,6 +20049,27 @@
           },
           "tags": []
         },
+        "down": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up",
+            "path": ""
+          },
+          "tags": []
+        },
         "left": {
           "invert_x": false,
           "invert_y": false,
@@ -20058,14 +20079,45 @@
             [
               0,
               0,
-              0
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": -100,
             "dy": 0,
-            "dz": 0
+            "dz": 0.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -20075,6 +20127,92 @@
             "kind": "folder",
             "name": "",
             "path": "left"
+          },
+          "tags": []
+        },
+        "right": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": true,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          },
+          "tags": []
+        },
+        "up": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              0,
+              0,
+              0,
+              0.0
+            ],
+            [
+              4,
+              0,
+              -23,
+              0.0
+            ],
+            [
+              4,
+              0,
+              -23,
+              0.0
+            ],
+            [
+              4,
+              0,
+              -23,
+              0.0
+            ],
+            [
+              4,
+              0,
+              -23,
+              0.0
+            ],
+            [
+              4,
+              0,
+              -23,
+              0.0
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": 20,
+            "dy": 0,
+            "dz": -115.0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
           },
           "tags": []
         }
@@ -26406,9 +26544,9 @@
             }
           },
           "display_color": [
+            78,
+            36,
             242,
-            85,
-            153,
             255
           ],
           "edge_smoothness": 101,
@@ -26495,9 +26633,9 @@
             }
           },
           "display_color": [
-            234,
             36,
             242,
+            113,
             255
           ],
           "edge_smoothness": 4,
@@ -26554,9 +26692,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            97,
+            169,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26614,8 +26752,8 @@
           },
           "display_color": [
             242,
-            159,
             85,
+            95,
             255
           ],
           "edge_smoothness": 4,
@@ -26703,7 +26841,7 @@
           },
           "display_color": [
             85,
-            169,
+            126,
             242,
             255
           ],
@@ -26766,9 +26904,9 @@
             }
           },
           "display_color": [
-            204,
             31,
-            95,
+            84,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -26866,9 +27004,9 @@
             }
           },
           "display_color": [
-            170,
             242,
-            85,
+            61,
+            241,
             255
           ],
           "edge_smoothness": 101,
@@ -27116,8 +27254,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -3229,
-              "dz": -1046,
+              "dx": -3675,
+              "dz": -1951,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27216,9 +27354,9 @@
             }
           },
           "display_color": [
-            96,
-            85,
+            138,
             242,
+            85,
             255
           ],
           "edge_smoothness": 96,

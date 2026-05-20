@@ -119,7 +119,8 @@ private:
     bool build_gpu_scene_frame_data(std::uint32_t target_width,
                                     std::uint32_t target_height,
                                     GpuSceneFrameData& out_data,
-                                    std::string& out_error) const;
+                                    std::string& out_error,
+                                    bool allow_dof_depth_layers = true) const;
     bool render_packet_batch(const std::vector<GpuSpriteDrawPacket>& packets,
                             std::uint32_t target_width,
                             std::uint32_t target_height,
@@ -169,6 +170,9 @@ private:
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
     dof_blur_chain::Renderer dof_blur_chain_{};
+    std::uint64_t last_dof_camera_state_version_ = 0;
+    std::uint32_t dof_motion_skip_frames_remaining_ = 0;
+    double last_dof_path_ms_ = 0.0;
     SDL_Color smoothed_floor_clear_color_{0, 0, 0, 255};
     bool smoothed_floor_color_valid_ = false;
     SDL_Point last_floor_color_player_xz_{0, 0};

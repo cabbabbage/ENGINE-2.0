@@ -179,7 +179,7 @@ double runtime_stage_warning_ms() {
 }
 
 double runtime_detail_warning_ms() {
-    return env_double_clamped("VIBBLE_RUNTIME_DETAIL_WARN_MS", 2.0, 0.1, 5000.0);
+    return env_double_clamped("VIBBLE_RUNTIME_DETAIL_WARN_MS", 8.0, 0.1, 5000.0);
 }
 
 double startup_stage_warning_ms() {
@@ -2112,6 +2112,14 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     Uint64 movement_flush_end = 0;
     Uint64 camera_begin = 0;
     Uint64 camera_end = 0;
+    Uint64 max_dimensions_begin = 0;
+    Uint64 max_dimensions_end = 0;
+    Uint64 dev_sync_begin = 0;
+    Uint64 dev_sync_end = 0;
+    Uint64 pending_assets_begin = 0;
+    Uint64 pending_assets_end = 0;
+    Uint64 empty_points_begin = 0;
+    Uint64 empty_points_end = 0;
     std::size_t skipped_static_updates = 0;
     std::size_t full_runtime_updates = 0;
     trap_escape_candidates_.clear();
@@ -2291,17 +2299,26 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     camera_settings_dirty_ = false;
     camera_end = SDL_GetPerformanceCounter();
 
+    max_dimensions_begin = SDL_GetPerformanceCounter();
     update_max_asset_dimensions();
+    max_dimensions_end = SDL_GetPerformanceCounter();
 
     culled_debug_rects_.clear();
 
+    dev_sync_begin = SDL_GetPerformanceCounter();
     sync_dev_controls_for_frame(input);
+    dev_sync_end = SDL_GetPerformanceCounter();
 
+    pending_assets_begin = SDL_GetPerformanceCounter();
     register_pending_static_assets();
     if (process_removals()) {
         mark_active_assets_dirty();
     }
+    pending_assets_end = SDL_GetPerformanceCounter();
+
+    empty_points_begin = SDL_GetPerformanceCounter();
     (void)world_grid_.flush_deferred_empty_points(8192);
+    empty_points_end = SDL_GetPerformanceCounter();
 
     const Uint64 stage_end = SDL_GetPerformanceCounter();
     if (perf_counter_frequency_ > 0.0 && stage_end > stage_begin) {
@@ -2320,6 +2337,10 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
                               " non_player_ms=" + std::to_string(elapsed_ms(non_player_begin, non_player_end)) +
                               " movement_flush_ms=" + std::to_string(elapsed_ms(movement_flush_begin, movement_flush_end)) +
                               " camera_ms=" + std::to_string(elapsed_ms(camera_begin, camera_end)) +
+                              " max_dimensions_ms=" + std::to_string(elapsed_ms(max_dimensions_begin, max_dimensions_end)) +
+                              " dev_sync_ms=" + std::to_string(elapsed_ms(dev_sync_begin, dev_sync_end)) +
+                              " pending_assets_ms=" + std::to_string(elapsed_ms(pending_assets_begin, pending_assets_end)) +
+                              " empty_points_ms=" + std::to_string(elapsed_ms(empty_points_begin, empty_points_end)) +
                               " full_updates=" + std::to_string(full_runtime_updates) +
                               " skipped_static=" + std::to_string(skipped_static_updates) +
                               " trap_candidates=" + std::to_string(trap_escape_candidates_.size()) +
@@ -2665,8 +2686,8 @@ void Assets::update(const Input& input)
         const auto& dynamic_diag = dynamic_spawn_diagnostics();
         vibble::log::warn(std::string("[Assets] Slow ") +
                           (startup_active ? "startup" : "runtime") +
-                          " frame " + std::to_string(frame_id_) +
-                          "ms world=" + std::to_string(world_ms) +
+                          " frame=" + std::to_string(frame_id_) +
+                          " world_ms=" + std::to_string(world_ms) +
                           " visibility=" + std::to_string(visibility_ms) +
                           " runtime=" + std::to_string(runtime_ms) +
                           " render=" + std::to_string(render_ms) +

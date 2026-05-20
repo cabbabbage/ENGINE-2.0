@@ -413,6 +413,7 @@ struct DefaultAnimationSpec {
     int dz = 0;
     std::string source_id;
     bool folder_sourced = false;
+    bool inherit_data = false;
     bool invert_x = false;
     bool invert_y = false;
     bool invert_z = false;
@@ -2805,8 +2806,51 @@ bool AnimationEditorWindow::defaults_base_faces_right() const {
 
 bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& animation_id,
                                                             const std::vector<std::filesystem::path>& frames) {
-    const SourceFrameImportOutcome outcome = import_source_frames_for_animation(animation_id, frames);
-    return outcome.success;
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "[AnimationEditor][defaults_import] start base_animation='%s' source_count=%zu source_paths=%s asset_root='%s'",
+                animation_id.c_str(),
+                frames.size(),
+                summarize_paths_for_log(frames).c_str(),
+                asset_root_path_.generic_string().c_str());
+
+    devmode::animation_import::ImportResult import_result;
+    try {
+        import_result = devmode::animation_import::import_frames_to_animation_folder(asset_root_path_,
+                                                                                    animation_id,
+                                                                                    frames);
+    } catch (const std::exception& ex) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[AnimationEditor][defaults_import] failed base_animation='%s': %s",
+                     animation_id.c_str(),
+                     ex.what());
+        return false;
+    } catch (...) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[AnimationEditor][defaults_import] failed base_animation='%s': unknown exception",
+                     animation_id.c_str());
+        return false;
+    }
+
+    for (const auto& warning : import_result.warnings) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AnimationEditor][defaults_import] warning base_animation='%s': %s",
+                    animation_id.c_str(),
+                    warning.c_str());
+    }
+    if (!import_result.success) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[AnimationEditor][defaults_import] failed base_animation='%s': %s",
+                     animation_id.c_str(),
+                     import_result.message.c_str());
+        return false;
+    }
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "[AnimationEditor][defaults_import] success base_animation='%s' written=%d output_dir='%s'",
+                animation_id.c_str(),
+                import_result.frames_written,
+                (asset_root_path_ / animation_id).generic_string().c_str());
+    return true;
 }
 
 // QA checklist invariants for transactional frame imports:
@@ -3150,6 +3194,10 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
 nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::string& animation_id,
                                                                      const std::string& source_animation_id,
                                                                      int frame_count,
+                                                                     bool inherit_data,
+                                                                     int dx,
+                                                                     int dy,
+                                                                     int dz,
                                                                      bool invert_x,
                                                                      bool invert_y,
                                                                      bool invert_z,
@@ -3165,11 +3213,11 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
         {"name", source_animation_id}
     });
     payload["number_of_frames"] = safe_frames;
-    payload["inherit_data"] = true;
+    payload["inherit_data"] = inherit_data;
     payload["reverse_source"] = false;
-    payload["invert_x"] = invert_x;
-    payload["invert_y"] = invert_y;
-    payload["invert_z"] = invert_z;
+    payload["invert_x"] = inherit_data && invert_x;
+    payload["invert_y"] = inherit_data && invert_y;
+    payload["invert_z"] = inherit_data && invert_z;
     payload["invert_frames_horizontal"] = invert_frames_horizontal;
     payload["invert_frames_vertical"] = invert_frames_vertical;
     payload["on_end"] = "default";
@@ -3177,6 +3225,10 @@ nlohmann::json AnimationEditorWindow::build_derived_movement_payload(const std::
     payload["derived_modifiers"] = nlohmann::json::object({
         {"reverse", false}
     });
+    if (!inherit_data) {
+        payload["movement"] = build_movement_sequence(safe_frames, dx, dy, dz);
+        payload["movement_total"] = build_movement_total(payload["movement"]);
+    }
     return payload;
 }
 
@@ -3309,6 +3361,7 @@ void AnimationEditorWindow::handle_create_defaults() {
                            int dx,
                            int dy,
                            int dz,
+                           bool inherit_data,
                            bool invert_x,
                            bool invert_y,
                            bool invert_z,
@@ -3321,6 +3374,7 @@ void AnimationEditorWindow::handle_create_defaults() {
         spec.dz = dz;
         spec.source_id = source_id;
         spec.folder_sourced = false;
+        spec.inherit_data = inherit_data;
         spec.invert_x = invert_x;
         spec.invert_y = invert_y;
         spec.invert_z = invert_z;
@@ -3333,31 +3387,48 @@ void AnimationEditorWindow::handle_create_defaults() {
     const std::string x_opposite_id = base_faces_right ? "left" : "right";
     const int x_opposite_dx = -x_seed_dx;
 
+    add_seed(x_seed_id, x_seed_dx, 0, 0);
+    add_derived(x_opposite_id, x_seed_id, x_opposite_dx, 0, 0, true, true, false, false, true, false);
+
+    auto side_source_id = [&](int dx) -> const std::string& {
+        return dx >= 0 ? (base_faces_right ? x_seed_id : x_opposite_id)
+                       : (base_faces_right ? x_opposite_id : x_seed_id);
+    };
+
     if (create_basic) {
-        add_seed(x_seed_id, x_seed_dx, 0, 0);
-        add_derived(x_opposite_id, x_seed_id, x_opposite_dx, 0, 0, true, false, false, true, false);
-        add_seed("up", 0, 0, -d);
-        add_derived("forward", "up", 0, 0, -d, false, false, false, false, false);
-        add_derived("down", "up", 0, 0, d, false, false, true, false, true);
-        add_derived("backward", "up", 0, 0, d, false, false, true, false, true);
+        add_derived("up", x_seed_id, 0, 0, -d, false, false, false, false, false, false);
+        add_derived("forward", "up", 0, 0, -d, false, false, false, false, false, false);
+        add_derived("down", "up", 0, 0, d, false, false, false, false, false, true);
+        add_derived("backward", "up", 0, 0, d, false, false, false, false, false, true);
     }
     if (create_diagonals) {
-        const std::string seed_id = base_faces_right ? "forward_right" : "forward_left";
-        const std::string opposite_forward_id = base_faces_right ? "forward_left" : "forward_right";
-        const std::string same_backward_id = base_faces_right ? "backward_right" : "backward_left";
-        const std::string opposite_backward_id = base_faces_right ? "backward_left" : "backward_right";
-        add_seed(seed_id, x_seed_dx, 0, -d);
-        add_derived(opposite_forward_id, seed_id, x_opposite_dx, 0, -d, true, false, false, true, false);
-        add_derived(same_backward_id, seed_id, x_seed_dx, 0, d, false, false, true, false, true);
-        add_derived(opposite_backward_id, seed_id, x_opposite_dx, 0, d, true, false, true, true, true);
+        const std::array<int, 2> x_signs{-1, 1};
+        const std::array<int, 2> z_signs{-1, 1};
+        for (int z_sign : z_signs) {
+            for (int x_sign : x_signs) {
+                const int dx = x_sign * d;
+                const int dz = z_sign * d;
+                const std::string id = std::string(z_sign < 0 ? "forward" : "backward") + "_" +
+                                       (x_sign < 0 ? "left" : "right");
+                add_derived(id,
+                            side_source_id(dx),
+                            dx,
+                            0,
+                            dz,
+                            false,
+                            false,
+                            false,
+                            false,
+                            false,
+                            z_sign > 0);
+            }
+        }
     }
     if (create_elevation) {
-        add_seed("elevation_up", 0, d, 0);
-        add_derived("elevation_down", "elevation_up", 0, -d, 0, false, true, false, false, true);
+        add_derived("elevation_up", x_seed_id, 0, d, 0, false, false, false, false, false, false);
+        add_derived("elevation_down", "elevation_up", 0, -d, 0, false, false, false, false, false, true);
     }
     if (create_3d_diagonals) {
-        const std::string seed_id = base_faces_right ? "up_forward_right" : "up_forward_left";
-        add_seed(seed_id, x_seed_dx, d, -d);
         const std::array<int, 2> y_signs{1, -1};
         const std::array<int, 2> z_signs{-1, 1};
         const std::array<int, 2> x_signs{-1, 1};
@@ -3370,22 +3441,17 @@ void AnimationEditorWindow::handle_create_defaults() {
                     const std::string id = std::string(y_sign > 0 ? "up" : "down") + "_" +
                                            (z_sign < 0 ? "forward" : "backward") + "_" +
                                            (x_sign < 0 ? "left" : "right");
-                    if (id == seed_id) {
-                        continue;
-                    }
-                    const bool invert_x = dx != x_seed_dx;
-                    const bool invert_y = dy != d;
-                    const bool invert_z = dz != -d;
                     add_derived(id,
-                                seed_id,
+                                side_source_id(dx),
                                 dx,
                                 dy,
                                 dz,
-                                invert_x,
-                                invert_y,
-                                invert_z,
-                                invert_x,
-                                invert_y || invert_z);
+                                false,
+                                false,
+                                false,
+                                false,
+                                false,
+                                y_sign < 0 || z_sign > 0);
                 }
             }
         }
@@ -3412,6 +3478,10 @@ void AnimationEditorWindow::handle_create_defaults() {
             write.payload = build_derived_movement_payload(spec.id,
                                                            spec.source_id,
                                                            frame_count,
+                                                           spec.inherit_data,
+                                                           spec.dx,
+                                                           spec.dy,
+                                                           spec.dz,
                                                            spec.invert_x,
                                                            spec.invert_y,
                                                            spec.invert_z,
@@ -3423,14 +3493,14 @@ void AnimationEditorWindow::handle_create_defaults() {
     }
 
     auto backup_existing_source_folder = [&](const PlannedDefaultWrite& write) -> bool {
-        if (!write.spec.folder_sourced || backed_up_source_folder_ids.count(write.spec.id) > 0) {
+        if (backed_up_source_folder_ids.count(write.spec.id) > 0) {
             return true;
         }
         std::error_code ec;
         const bool existed = std::filesystem::exists(write.folder_path, ec);
         if (ec) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                         "[AnimationEditor] Failed to inspect source folder '%s': %s",
+                         "[AnimationEditor] Failed to inspect defaults folder '%s': %s",
                          write.folder_path.generic_string().c_str(),
                          ec.message().c_str());
             return false;
@@ -3465,7 +3535,7 @@ void AnimationEditorWindow::handle_create_defaults() {
         std::filesystem::rename(write.folder_path, backup_path, ec);
         if (ec) {
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                         "[AnimationEditor] Failed to backup source folder '%s': %s",
+                         "[AnimationEditor] Failed to backup defaults folder '%s': %s",
                          write.folder_path.generic_string().c_str(),
                          ec.message().c_str());
             return false;
@@ -3478,11 +3548,11 @@ void AnimationEditorWindow::handle_create_defaults() {
 
     for (const auto& write : plan) {
         if (error != DefaultsStageError::None) break;
+        if (!backup_existing_source_folder(write)) {
+            error = DefaultsStageError::CopyFailure;
+            break;
+        }
         if (write.spec.folder_sourced) {
-            if (!backup_existing_source_folder(write)) {
-                error = DefaultsStageError::CopyFailure;
-                break;
-            }
             const bool copied = defaults_copy_frames_override_ ? defaults_copy_frames_override_(write.spec.id, base_frames) : copy_frames_to_animation_folder(write.spec.id, base_frames);
             if (!copied) { error = DefaultsStageError::CopyFailure; break; }
             if (backed_up_source_folder_ids.count(write.spec.id) == 0) {
@@ -3498,6 +3568,7 @@ void AnimationEditorWindow::handle_create_defaults() {
         if (!persisted) error = DefaultsStageError::PayloadWriteFailure;
     }
 
+    std::string runtime_refresh_warning;
     if (error == DefaultsStageError::None && assets_) {
         std::string runtime_asset_key = manifest_asset_key_;
         if (runtime_asset_key.empty()) {
@@ -3505,35 +3576,47 @@ void AnimationEditorWindow::handle_create_defaults() {
                 runtime_asset_key = info_ptr->name;
             }
         }
-        bool loaded_runtime = false;
-        for (const auto& write : plan) {
-            if (!write.spec.folder_sourced) {
-                continue;
-            }
-            if (!loaded_runtime) {
-                auto runtime = devmode::animation_import::reload_and_verify_runtime(assets_,
-                                                                                    runtime_asset_key,
-                                                                                    write.spec.id,
-                                                                                    frame_count);
-                if (!runtime.success) {
-                    error = DefaultsStageError::RuntimeVerificationFailure;
-                    break;
+        std::string cache_error;
+        if (!devmode::animation_import::delete_asset_cache(runtime_asset_key, cache_error)) {
+            runtime_refresh_warning = cache_error;
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[AnimationEditor] Defaults created, but cache invalidation failed: %s",
+                        cache_error.c_str());
+        } else if (auto info_ptr = assets_->library().get(runtime_asset_key)) {
+            if (!info_ptr->reload_animations_from_disk()) {
+                runtime_refresh_warning = "runtime metadata reload failed";
+                SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                            "[AnimationEditor] Defaults created, but runtime metadata reload failed for '%s'.",
+                            runtime_asset_key.c_str());
+            } else if (SDL_Renderer* renderer = assets_->renderer()) {
+                auto load_result = info_ptr->loadAnimationsDetailed(renderer, true, false, false);
+                if (!load_result.ok()) {
+                    runtime_refresh_warning = "runtime texture refresh reported existing invalid animation data";
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                                "[AnimationEditor] Defaults created, but runtime refresh reported invalid animation data for '%s'. Existing unrelated folder-sourced animations may be missing frames.",
+                                runtime_asset_key.c_str());
+                } else {
+                    for (const auto& write : plan) {
+                        if (!write.spec.folder_sourced) {
+                            continue;
+                        }
+                        std::string verify_error;
+                        if (!devmode::animation_import::verify_runtime_textures(info_ptr,
+                                                                                write.spec.id,
+                                                                                frame_count,
+                                                                                verify_error)) {
+                            runtime_refresh_warning = verify_error;
+                            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                                        "[AnimationEditor] Defaults created, but runtime verification warned for '%s': %s",
+                                        write.spec.id.c_str(),
+                                        verify_error.c_str());
+                            break;
+                        }
+                    }
                 }
-                loaded_runtime = true;
-            } else {
-                std::string verify_error;
-                if (!devmode::animation_import::verify_runtime_textures(assets_->library().get(runtime_asset_key),
-                                                                        write.spec.id,
-                                                                        frame_count,
-                                                                        verify_error)) {
-                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
-                                 "[AnimationEditor] Defaults runtime verification failed for '%s': %s",
-                                 write.spec.id.c_str(),
-                                 verify_error.c_str());
-                    error = DefaultsStageError::RuntimeVerificationFailure;
-                    break;
-                }
             }
+            devmode::refresh_loaded_animation_instances(assets_, info_ptr);
+            assets_->mark_active_assets_dirty();
         }
     }
 
@@ -3596,10 +3679,13 @@ void AnimationEditorWindow::handle_create_defaults() {
 
     if (preview_provider_) preview_provider_->invalidate_all();
     if (!created_ids.empty()) select_animation(std::optional<std::string>{created_ids.front()}, false); else ensure_selection_valid();
-    set_status_message("Created " + std::to_string(created_ids.size()) +
-                       " default animation(s) from " + std::to_string(frame_count) +
-                       " base frame(s), base direction " + base_direction_label + ".",
-                       300);
+    std::string success_message = "Created " + std::to_string(created_ids.size()) +
+                                  " default animation(s) from " + std::to_string(frame_count) +
+                                  " base frame(s), base direction " + base_direction_label + ".";
+    if (!runtime_refresh_warning.empty()) {
+        success_message += " Runtime refresh warning: " + runtime_refresh_warning + ".";
+    }
+    set_status_message(success_message, 360);
     close_defaults_modal();
 }
 

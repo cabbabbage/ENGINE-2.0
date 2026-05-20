@@ -133,6 +133,18 @@ double dof_motion_budget_ms() {
     return budget_ms;
 }
 
+std::uint32_t creation_budget_count_per_frame() {
+    static const std::uint32_t count = static_cast<std::uint32_t>(
+        env_int_clamped_renderer("VIBBLE_RENDER_MAX_CREATIONS_PER_FRAME", 3, 1, 1024));
+    return count;
+}
+
+double creation_budget_ms_per_frame() {
+    static const double budget_ms =
+        env_double_clamped_renderer("VIBBLE_RENDER_MAX_CREATION_MS_PER_FRAME", 2.5, 0.0, 1000.0);
+    return budget_ms;
+}
+
 std::uint64_t stable_asset_render_hash(const Asset& asset) {
     if (!asset.spawn_id.empty()) {
         return static_cast<std::uint64_t>(std::hash<std::string>{}(asset.spawn_id));
@@ -978,6 +990,8 @@ OpenGLRuntimeRenderer::OpenGLRuntimeRenderer(SDL_Renderer* renderer,
       screen_width_(std::max(1, screen_width)),
       screen_height_(std::max(1, screen_height)),
       dof_blur_chain_(renderer) {
+    creation_budget_config_.max_creations_per_frame = creation_budget_count_per_frame();
+    creation_budget_config_.max_creation_ms_per_frame = creation_budget_ms_per_frame();
     render_target_manager_.set_requested_size(screen_width_, screen_height_);
 }
 
@@ -1045,6 +1059,7 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     destroy_far_background_textures();
     output_target_width_ = 1;
     output_target_height_ = 1;
+    clear_creation_queue();
 }
 
 void OpenGLRuntimeRenderer::destroy_depth_layer_targets() {
@@ -1058,6 +1073,70 @@ void OpenGLRuntimeRenderer::destroy_depth_layer_targets() {
 void OpenGLRuntimeRenderer::destroy_far_background_textures() {
     render_diagnostics::destroy_texture(far_background_sky_texture_);
     render_diagnostics::destroy_texture(far_background_mountains_texture_);
+}
+
+void OpenGLRuntimeRenderer::clear_creation_queue() {
+    deferred_creation_queue_.clear();
+}
+
+bool OpenGLRuntimeRenderer::process_creation_queue(const GpuSceneFrameData& frame_data, std::string& out_error) {
+    const std::uint64_t frame_index = render_diagnostics::current_frame_stats().frame_index;
+    const std::uint32_t queue_start = static_cast<std::uint32_t>(deferred_creation_queue_.size());
+    std::uint32_t attempted = 0, executed = 0, deferred = 0, retried = 0, permanent_failures = 0, max_age = 0;
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
+    const std::uint64_t freq = SDL_GetPerformanceFrequency();
+    auto elapsed_ms = [begin, freq]() {
+        if (freq == 0) return 0.0;
+        return static_cast<double>(SDL_GetPerformanceCounter() - begin) * 1000.0 / static_cast<double>(freq);
+    };
+
+    while (!deferred_creation_queue_.empty()) {
+        if (executed >= creation_budget_config_.max_creations_per_frame ||
+            (creation_budget_config_.max_creation_ms_per_frame > 0.0 &&
+             elapsed_ms() >= creation_budget_config_.max_creation_ms_per_frame)) {
+            break;
+        }
+        DeferredCreationJob job = deferred_creation_queue_.front();
+        deferred_creation_queue_.pop_front();
+        ++attempted;
+        max_age = std::max(max_age, static_cast<std::uint32_t>(frame_index - job.enqueue_frame));
+        bool ok = false;
+        if (job.type == DeferredCreationJob::Type::MainTarget) {
+            SDL_Texture** target = nullptr;
+            if (job.label == "floor") target = &floor_target_;
+            else if (job.label == "xy_sprite") target = &xy_sprite_target_;
+            else if (job.label == "composite") target = &composite_target_;
+            if (target && !*target) {
+                *target = create_render_target(renderer_, static_cast<int>(frame_data.target_width),
+                                               static_cast<int>(frame_data.target_height), job.label, out_error);
+            }
+            ok = (target && *target);
+        } else {
+            SDL_Texture*& target = depth_layer_targets_[job.layer_id];
+            if (!target) {
+                target = create_render_target(renderer_, static_cast<int>(frame_data.target_width),
+                                              static_cast<int>(frame_data.target_height), job.label, out_error);
+            }
+            ok = target != nullptr;
+        }
+        if (!ok) {
+            if (job.retries < creation_budget_config_.max_retry_count) {
+                ++job.retries; ++retried; job.enqueue_frame = frame_index;
+                deferred_creation_queue_.push_back(job);
+            } else {
+                ++permanent_failures;
+                vibble::log::error("[OpenGLRuntimeRenderer] Dropping creation job after retries: " + job.label);
+            }
+            continue;
+        }
+        ++executed;
+    }
+    deferred = static_cast<std::uint32_t>(deferred_creation_queue_.size());
+    render_diagnostics::set_creation_budget_stats(creation_budget_config_.max_creations_per_frame,
+                                                  creation_budget_config_.max_creation_ms_per_frame,
+                                                  attempted, executed, deferred, queue_start, deferred, max_age,
+                                                  retried, permanent_failures);
+    return true;
 }
 
 SDL_Texture* OpenGLRuntimeRenderer::create_render_target(SDL_Renderer* renderer,
@@ -1549,34 +1628,32 @@ bool OpenGLRuntimeRenderer::ensure_render_targets(const GpuSceneFrameData& frame
     }
 
     const bool size_changed = width != output_target_width_ || height != output_target_height_;
-    if (!size_changed && floor_target_ && xy_sprite_target_ && composite_target_) {
-        return true;
-    }
-
-    destroy_render_targets();
-
-    output_target_width_ = width;
-    output_target_height_ = height;
-    dof_blur_chain_.set_output_dimensions(width, height);
-
-    floor_target_ = create_render_target(renderer_, width, height, "floor", out_error);
-    if (!floor_target_) {
+    if (size_changed) {
         destroy_render_targets();
+        output_target_width_ = width;
+        output_target_height_ = height;
+        dof_blur_chain_.set_output_dimensions(width, height);
+    }
+    auto queue_missing_main = [&](const char* label) {
+        const bool exists = std::any_of(deferred_creation_queue_.begin(), deferred_creation_queue_.end(),
+                                        [label](const DeferredCreationJob& job) {
+                                            return job.type == DeferredCreationJob::Type::MainTarget && job.label == label;
+                                        });
+        if (!exists) {
+            deferred_creation_queue_.push_back({DeferredCreationJob::Type::MainTarget, 0, label,
+                                                render_diagnostics::current_frame_stats().frame_index, 0, creation_job_sequence_++});
+        }
+    };
+    if (!floor_target_) queue_missing_main("floor");
+    if (!xy_sprite_target_) queue_missing_main("xy_sprite");
+    if (!composite_target_) queue_missing_main("composite");
+    if (!process_creation_queue(frame_data, out_error)) {
         return false;
     }
-
-    xy_sprite_target_ = create_render_target(renderer_, width, height, "xy_sprite", out_error);
-    if (!xy_sprite_target_) {
-        destroy_render_targets();
+    if (!floor_target_ || !xy_sprite_target_ || !composite_target_) {
+        out_error = "Render target creation deferred by per-frame budget.";
         return false;
     }
-
-    composite_target_ = create_render_target(renderer_, width, height, "composite", out_error);
-    if (!composite_target_) {
-        destroy_render_targets();
-        return false;
-    }
-
     return true;
 }
 
@@ -1610,12 +1687,26 @@ bool OpenGLRuntimeRenderer::ensure_depth_layer_targets(const GpuSceneFrameData& 
         if (target) {
             continue;
         }
-        target = create_render_target(renderer_,
-                                      width,
-                                      height,
-                                      "depth_layer_" + std::to_string(layer_id),
-                                      out_error);
-        if (!target) {
+        const bool exists = std::any_of(deferred_creation_queue_.begin(), deferred_creation_queue_.end(),
+                                        [layer_id](const DeferredCreationJob& job) {
+                                            return job.type == DeferredCreationJob::Type::DepthLayerTarget &&
+                                                   job.layer_id == layer_id;
+                                        });
+        if (!exists) {
+            deferred_creation_queue_.push_back({DeferredCreationJob::Type::DepthLayerTarget,
+                                                layer_id,
+                                                "depth_layer_" + std::to_string(layer_id),
+                                                render_diagnostics::current_frame_stats().frame_index,
+                                                0,
+                                                creation_job_sequence_++});
+        }
+    }
+    if (!process_creation_queue(frame_data, out_error)) {
+        return false;
+    }
+    for (int layer_id : active_layer_ids) {
+        if (!depth_layer_targets_[layer_id]) {
+            out_error = "Depth layer target creation deferred by per-frame budget.";
             return false;
         }
     }

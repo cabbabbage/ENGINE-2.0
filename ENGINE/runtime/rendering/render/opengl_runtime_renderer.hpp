@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <deque>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -128,6 +129,8 @@ private:
     bool ensure_depth_layer_targets(const GpuSceneFrameData& frame_data, std::string& out_error);
     void destroy_depth_layer_targets();
     bool ensure_far_background_textures();
+    bool process_creation_queue(const GpuSceneFrameData& frame_data, std::string& out_error);
+    void clear_creation_queue();
     void destroy_far_background_textures();
     bool render_far_background(const WarpedScreenGrid& camera,
                                std::uint32_t target_width,
@@ -172,4 +175,21 @@ private:
     std::uint64_t last_dof_camera_state_version_ = 0;
     std::uint32_t dof_motion_skip_frames_remaining_ = 0;
     double last_dof_path_ms_ = 0.0;
+    struct CreationBudgetConfig {
+        std::uint32_t max_creations_per_frame = 3;
+        double max_creation_ms_per_frame = 2.5;
+        std::uint32_t max_retry_count = 2;
+    };
+    struct DeferredCreationJob {
+        enum class Type { MainTarget, DepthLayerTarget };
+        Type type = Type::MainTarget;
+        int layer_id = 0;
+        std::string label;
+        std::uint64_t enqueue_frame = 0;
+        std::uint32_t retries = 0;
+        std::uint64_t sequence = 0;
+    };
+    CreationBudgetConfig creation_budget_config_{};
+    std::deque<DeferredCreationJob> deferred_creation_queue_{};
+    std::uint64_t creation_job_sequence_ = 0;
 };

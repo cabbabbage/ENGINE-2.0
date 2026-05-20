@@ -80,6 +80,16 @@ struct RenderFrameStats {
     std::uint32_t projection_recompute_budget = 0;
     std::uint32_t projection_points_deferred = 0;
     std::uint32_t projection_points_updated = 0;
+    std::uint32_t creation_budget_limit = 0;
+    double creation_budget_ms_limit = 0.0;
+    std::uint32_t creation_attempted_this_frame = 0;
+    std::uint32_t creation_executed_this_frame = 0;
+    std::uint32_t creation_deferred_count = 0;
+    std::uint32_t creation_queue_depth_start = 0;
+    std::uint32_t creation_queue_depth_end = 0;
+    std::uint32_t creation_queue_age_max = 0;
+    std::uint32_t creation_permanent_failures = 0;
+    std::uint32_t creation_retried_count = 0;
 };
 
 namespace render_diagnostics {
@@ -147,6 +157,16 @@ void set_visibility_projection_stats(std::uint32_t projection_calls_total,
                                     std::uint32_t projection_recompute_budget,
                                     std::uint32_t projection_points_deferred,
                                     std::uint32_t projection_points_updated);
+void set_creation_budget_stats(std::uint32_t budget_limit,
+                               double budget_ms_limit,
+                               std::uint32_t attempted,
+                               std::uint32_t executed,
+                               std::uint32_t deferred,
+                               std::uint32_t queue_depth_start,
+                               std::uint32_t queue_depth_end,
+                               std::uint32_t queue_age_max,
+                               std::uint32_t retried_count,
+                               std::uint32_t permanent_failures);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

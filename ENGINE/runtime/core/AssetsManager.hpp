@@ -471,10 +471,13 @@ private:
     struct RuntimeConvergenceFrameStats {
         std::size_t iterations = 0;
         std::size_t traversal_refresh_count = 0;
+        std::size_t traversal_refresh_deferred_count = 0;
         std::size_t wave_count = 0;
         std::size_t children_considered = 0;
         std::size_t children_updated = 0;
         bool converged = false;
+        bool traversal_refresh_budget_exceeded = false;
+        bool traversal_refresh_pending = false;
         double stage_ms = 0.0;
         double pass_ms = 0.0;
         double refresh_ms = 0.0;
@@ -526,6 +529,7 @@ private:
 
     bool pending_initial_rebuild_ = false;
     bool post_runtime_traversal_refresh_pending_ = false;
+    bool runtime_convergence_traversal_refresh_pending_ = false;
     bool logged_initial_rebuild_warning_ = false;
     bool grid_dirty_ = true;
     bool camera_view_dirty_ = true;

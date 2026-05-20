@@ -413,6 +413,9 @@ struct DefaultAnimationSpec {
     int dz = 0;
     std::string source_id;
     bool folder_sourced = false;
+    bool invert_x = false;
+    bool invert_y = false;
+    bool invert_z = false;
     bool invert_frames_horizontal = false;
     bool invert_frames_vertical = false;
 };
@@ -2370,8 +2373,11 @@ void AnimationEditorWindow::ensure_defaults_modal_widgets() {
     if (!defaults_3d_diagonals_checkbox_) {
         defaults_3d_diagonals_checkbox_ = std::make_unique<DMCheckbox>("3D Diagonals (8-Way)", false);
     }
-    if (!defaults_base_faces_right_checkbox_) {
-        defaults_base_faces_right_checkbox_ = std::make_unique<DMCheckbox>("Base Frames Face Right", false);
+    if (!defaults_base_faces_left_button_) {
+        defaults_base_faces_left_button_ = std::make_unique<DMButton>("Base Faces Left", &DMStyles::HeaderButton(), 170, DMButton::height());
+    }
+    if (!defaults_base_faces_right_button_) {
+        defaults_base_faces_right_button_ = std::make_unique<DMButton>("Base Faces Right", &DMStyles::HeaderButton(), 170, DMButton::height());
     }
     if (!defaults_distance_box_) {
         defaults_distance_box_ = std::make_unique<DMTextBox>("Total movement per animation", "5");
@@ -2456,6 +2462,12 @@ void AnimationEditorWindow::close_defaults_modal() {
     if (defaults_cancel_button_) {
         defaults_cancel_button_->cancel_interaction();
     }
+    if (defaults_base_faces_left_button_) {
+        defaults_base_faces_left_button_->cancel_interaction();
+    }
+    if (defaults_base_faces_right_button_) {
+        defaults_base_faces_right_button_->cancel_interaction();
+    }
     if (defaults_distance_box_) {
         defaults_distance_box_->stop_editing();
     }
@@ -2518,7 +2530,17 @@ void AnimationEditorWindow::layout_defaults_modal() {
     if (defaults_diagonals_checkbox_) { defaults_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
     if (defaults_elevation_checkbox_) { defaults_elevation_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
     if (defaults_3d_diagonals_checkbox_) { defaults_3d_diagonals_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
-    if (defaults_base_faces_right_checkbox_) { defaults_base_faces_right_checkbox_->set_rect(SDL_Rect{content_x, y, content_w, DMCheckbox::height()}); y += DMCheckbox::height() + row_gap; }
+    if (defaults_base_faces_left_button_ && defaults_base_faces_right_button_) {
+        const int selector_label_h = DMStyles::Label().font_size;
+        y += selector_label_h + row_gap;
+        const int button_gap = DMSpacing::small_gap();
+        const int button_w = std::max(0, (content_w - button_gap) / 2);
+        defaults_base_faces_left_button_->set_style(defaults_base_faces_right_.has_value() && !*defaults_base_faces_right_ ? &DMStyles::AccentButton() : &DMStyles::HeaderButton());
+        defaults_base_faces_right_button_->set_style(defaults_base_faces_right_.has_value() && *defaults_base_faces_right_ ? &DMStyles::AccentButton() : &DMStyles::HeaderButton());
+        defaults_base_faces_left_button_->set_rect(SDL_Rect{content_x, y, button_w, DMButton::height()});
+        defaults_base_faces_right_button_->set_rect(SDL_Rect{content_x + button_w + button_gap, y, button_w, DMButton::height()});
+        y += DMButton::height() + row_gap;
+    }
     if (defaults_distance_box_) { const int distance_h = defaults_distance_box_->preferred_height(content_w); defaults_distance_box_->set_rect(SDL_Rect{content_x, y, content_w, distance_h}); y += distance_h + row_gap; }
     if (defaults_base_frames_button_) {
         defaults_base_frames_button_->set_text(defaults_base_frame_paths_.empty() ? "Add Base Movement Animation" : "Base Frames (" + std::to_string(defaults_base_frame_paths_.size()) + ")");
@@ -2567,9 +2589,6 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
     if (defaults_3d_diagonals_checkbox_ && defaults_3d_diagonals_checkbox_->handle_event(e)) {
         consumed = true;
     }
-    if (defaults_base_faces_right_checkbox_ && defaults_base_faces_right_checkbox_->handle_event(e)) {
-        consumed = true;
-    }
     if (defaults_distance_box_ && defaults_distance_box_->handle_event(e)) {
         consumed = true;
     }
@@ -2583,6 +2602,16 @@ bool AnimationEditorWindow::handle_defaults_modal_event(const SDL_Event& e) {
         }
     };
 
+    handle_button(defaults_base_faces_left_button_, [this]() {
+        defaults_base_faces_right_ = false;
+        layout_defaults_modal();
+        set_status_message("Base direction set to Left.", 120);
+    });
+    handle_button(defaults_base_faces_right_button_, [this]() {
+        defaults_base_faces_right_ = true;
+        layout_defaults_modal();
+        set_status_message("Base direction set to Right.", 120);
+    });
     handle_button(defaults_base_frames_button_, [this]() { handle_pick_defaults_base_frames(); });
     handle_button(defaults_create_button_, [this]() { handle_create_defaults(); });
     handle_button(defaults_cancel_button_, [this]() { close_defaults_modal(); });
@@ -2681,7 +2710,12 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
     if (defaults_diagonals_checkbox_) defaults_diagonals_checkbox_->render(renderer);
     if (defaults_elevation_checkbox_) defaults_elevation_checkbox_->render(renderer);
     if (defaults_3d_diagonals_checkbox_) defaults_3d_diagonals_checkbox_->render(renderer);
-    if (defaults_base_faces_right_checkbox_) defaults_base_faces_right_checkbox_->render(renderer);
+    const int selector_label_y = defaults_3d_diagonals_checkbox_
+        ? defaults_3d_diagonals_checkbox_->rect().y + DMCheckbox::height() + DMSpacing::small_gap()
+        : defaults_modal_scroll_rect_.y;
+    render_label(renderer, "Uploaded base animation faces:", defaults_modal_scroll_rect_.x, selector_label_y);
+    if (defaults_base_faces_left_button_) defaults_base_faces_left_button_->render(renderer);
+    if (defaults_base_faces_right_button_) defaults_base_faces_right_button_->render(renderer);
     if (defaults_distance_box_) defaults_distance_box_->render(renderer);
     if (defaults_base_frames_button_) defaults_base_frames_button_->render(renderer);
     SDL_SetRenderClipRect(renderer, nullptr);
@@ -2690,15 +2724,18 @@ void AnimationEditorWindow::render_defaults_modal(SDL_Renderer* renderer) const 
 
     const int info_x = defaults_modal_rect_.x + padding;
     const int info_y = defaults_modal_rect_.y + defaults_modal_rect_.h - padding - DMButton::height() - DMSpacing::small_gap() - DMStyles::Label().font_size;
+    const std::string base_direction_summary =
+        defaults_base_faces_right_.has_value() ? (*defaults_base_faces_right_ ? "Right" : "Left") : "not selected";
     if (defaults_base_frame_paths_.empty()) {
-        render_label(renderer, "Base frames: none selected.", info_x, info_y);
+        render_label(renderer, "Base frames: none selected. Base direction: " + base_direction_summary + ".", info_x, info_y);
     } else {
         std::string summary = "Base frames: " + std::to_string(defaults_base_frame_paths_.size()) +
                               " selected (" + defaults_base_frame_paths_.front().filename().string();
         if (defaults_base_frame_paths_.size() > 1) {
             summary += " ...";
         }
-        summary += ")";
+        summary += ") | Base direction: ";
+        summary += base_direction_summary;
         render_label(renderer, summary, info_x, info_y);
     }
 }
@@ -2729,7 +2766,11 @@ void AnimationEditorWindow::handle_pick_defaults_base_frames() {
 
     defaults_base_frame_paths_ = normalize_sequence_paths(filtered);
     layout_defaults_modal();
-    set_status_message("Selected " + std::to_string(defaults_base_frame_paths_.size()) + " base frame(s).", 180);
+    std::string message = "Selected " + std::to_string(defaults_base_frame_paths_.size()) + " base frame(s).";
+    message += defaults_base_faces_right_.has_value()
+        ? std::string(" Base direction: ") + (*defaults_base_faces_right_ ? "Right." : "Left.")
+        : " Choose whether the base faces Left or Right.";
+    set_status_message(message, 180);
 }
 
 std::optional<int> AnimationEditorWindow::parse_defaults_total_movement() const {
@@ -2754,8 +2795,12 @@ std::optional<int> AnimationEditorWindow::parse_defaults_total_movement() const 
     return value;
 }
 
+bool AnimationEditorWindow::defaults_base_direction_selected() const {
+    return defaults_base_faces_right_.has_value();
+}
+
 bool AnimationEditorWindow::defaults_base_faces_right() const {
-    return defaults_base_faces_right_checkbox_ && defaults_base_faces_right_checkbox_->value();
+    return defaults_base_faces_right_.value_or(false);
 }
 
 bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& animation_id,
@@ -3227,10 +3272,19 @@ void AnimationEditorWindow::handle_create_defaults() {
         set_status_message("Total movement per animation must be a positive integer.", 180);
         return;
     }
+    if (!defaults_base_direction_selected()) {
+        set_status_message("Choose whether the uploaded base animation faces Left or Right.", 240);
+        devmode::dialogs::show_message(parent_window_,
+                                       "Create Defaults",
+                                       "Choose whether the uploaded base animation faces Left or Right before creating default animations.",
+                                       devmode::dialogs::MessageIcon::Warning);
+        return;
+    }
 
     const int d = *total_movement_per_animation;
     const int frame_count = static_cast<int>(base_frames.size());
     const bool base_faces_right = defaults_base_faces_right();
+    const std::string base_direction_label = base_faces_right ? "Right" : "Left";
     const std::vector<std::string> ids_before_defaults = document_->animation_ids();
     const std::unordered_set<std::string> ids_before_defaults_set(
         ids_before_defaults.begin(), ids_before_defaults.end());
@@ -3241,16 +3295,101 @@ void AnimationEditorWindow::handle_create_defaults() {
     std::unordered_set<std::string> backed_up_source_folder_ids;
     std::vector<DefaultAnimationSpec> specs;
 
-    auto add_seed=[&](const std::string& id,int dx,int dy,int dz){specs.push_back(DefaultAnimationSpec{id,dx,dy,dz,{},true,false,false});};
-    auto add_derived=[&](const std::string& id,const std::string& source_id,int dx,int dy,int dz,bool h,bool v){specs.push_back(DefaultAnimationSpec{id,dx,dy,dz,source_id,false,h,v});};
+    auto add_seed = [&](const std::string& id, int dx, int dy, int dz) {
+        DefaultAnimationSpec spec;
+        spec.id = id;
+        spec.dx = dx;
+        spec.dy = dy;
+        spec.dz = dz;
+        spec.folder_sourced = true;
+        specs.push_back(std::move(spec));
+    };
+    auto add_derived = [&](const std::string& id,
+                           const std::string& source_id,
+                           int dx,
+                           int dy,
+                           int dz,
+                           bool invert_x,
+                           bool invert_y,
+                           bool invert_z,
+                           bool flip_horizontal,
+                           bool flip_vertical) {
+        DefaultAnimationSpec spec;
+        spec.id = id;
+        spec.dx = dx;
+        spec.dy = dy;
+        spec.dz = dz;
+        spec.source_id = source_id;
+        spec.folder_sourced = false;
+        spec.invert_x = invert_x;
+        spec.invert_y = invert_y;
+        spec.invert_z = invert_z;
+        spec.invert_frames_horizontal = flip_horizontal;
+        spec.invert_frames_vertical = flip_vertical;
+        specs.push_back(std::move(spec));
+    };
     const int x_seed_dx = base_faces_right ? d : -d;
     const std::string x_seed_id = base_faces_right ? "right" : "left";
     const std::string x_opposite_id = base_faces_right ? "left" : "right";
     const int x_opposite_dx = -x_seed_dx;
-    if (create_basic) { add_seed(x_seed_id,x_seed_dx,0,0); add_derived(x_opposite_id,x_seed_id,x_opposite_dx,0,0,true,false); add_seed("up",0,0,-d); add_derived("forward","up",0,0,-d,false,false); add_derived("down","up",0,0,d,false,true); add_derived("backward","up",0,0,d,false,true);}    
-    if (create_diagonals) { const std::string seed_id=base_faces_right?"forward_right":"forward_left"; const std::string opposite_forward_id=base_faces_right?"forward_left":"forward_right"; const std::string same_backward_id=base_faces_right?"backward_right":"backward_left"; const std::string opposite_backward_id=base_faces_right?"backward_left":"backward_right"; add_seed(seed_id,x_seed_dx,0,-d); add_derived(opposite_forward_id,seed_id,x_opposite_dx,0,-d,true,false); add_derived(same_backward_id,seed_id,x_seed_dx,0,d,false,true); add_derived(opposite_backward_id,seed_id,x_opposite_dx,0,d,true,true);}    
-    if (create_elevation) { add_seed("elevation_up",0,d,0); add_derived("elevation_down","elevation_up",0,-d,0,false,true);}    
-    if (create_3d_diagonals) { const std::string seed_id=base_faces_right?"up_forward_right":"up_forward_left"; add_seed(seed_id,x_seed_dx,d,-d); const std::array<int,2> y{1,-1},z{-1,1},x{-1,1}; for(int ys:y) for(int zs:z) for(int xs:x){ const int dx=xs*d,dy=ys*d,dz=zs*d; const std::string id=std::string(ys>0?"up":"down")+"_"+(zs<0?"forward":"backward")+"_"+(xs<0?"left":"right"); if(id==seed_id) continue; add_derived(id,seed_id,dx,dy,dz,dx!=x_seed_dx,dy!=d||dz!=-d);} }
+
+    if (create_basic) {
+        add_seed(x_seed_id, x_seed_dx, 0, 0);
+        add_derived(x_opposite_id, x_seed_id, x_opposite_dx, 0, 0, true, false, false, true, false);
+        add_seed("up", 0, 0, -d);
+        add_derived("forward", "up", 0, 0, -d, false, false, false, false, false);
+        add_derived("down", "up", 0, 0, d, false, false, true, false, true);
+        add_derived("backward", "up", 0, 0, d, false, false, true, false, true);
+    }
+    if (create_diagonals) {
+        const std::string seed_id = base_faces_right ? "forward_right" : "forward_left";
+        const std::string opposite_forward_id = base_faces_right ? "forward_left" : "forward_right";
+        const std::string same_backward_id = base_faces_right ? "backward_right" : "backward_left";
+        const std::string opposite_backward_id = base_faces_right ? "backward_left" : "backward_right";
+        add_seed(seed_id, x_seed_dx, 0, -d);
+        add_derived(opposite_forward_id, seed_id, x_opposite_dx, 0, -d, true, false, false, true, false);
+        add_derived(same_backward_id, seed_id, x_seed_dx, 0, d, false, false, true, false, true);
+        add_derived(opposite_backward_id, seed_id, x_opposite_dx, 0, d, true, false, true, true, true);
+    }
+    if (create_elevation) {
+        add_seed("elevation_up", 0, d, 0);
+        add_derived("elevation_down", "elevation_up", 0, -d, 0, false, true, false, false, true);
+    }
+    if (create_3d_diagonals) {
+        const std::string seed_id = base_faces_right ? "up_forward_right" : "up_forward_left";
+        add_seed(seed_id, x_seed_dx, d, -d);
+        const std::array<int, 2> y_signs{1, -1};
+        const std::array<int, 2> z_signs{-1, 1};
+        const std::array<int, 2> x_signs{-1, 1};
+        for (int y_sign : y_signs) {
+            for (int z_sign : z_signs) {
+                for (int x_sign : x_signs) {
+                    const int dx = x_sign * d;
+                    const int dy = y_sign * d;
+                    const int dz = z_sign * d;
+                    const std::string id = std::string(y_sign > 0 ? "up" : "down") + "_" +
+                                           (z_sign < 0 ? "forward" : "backward") + "_" +
+                                           (x_sign < 0 ? "left" : "right");
+                    if (id == seed_id) {
+                        continue;
+                    }
+                    const bool invert_x = dx != x_seed_dx;
+                    const bool invert_y = dy != d;
+                    const bool invert_z = dz != -d;
+                    add_derived(id,
+                                seed_id,
+                                dx,
+                                dy,
+                                dz,
+                                invert_x,
+                                invert_y,
+                                invert_z,
+                                invert_x,
+                                invert_y || invert_z);
+                }
+            }
+        }
+    }
 
     auto find_source=[&](const std::string& id)->const DefaultAnimationSpec*{for(const auto& spec:specs) if(spec.id==id) return &spec; return nullptr;};
     std::vector<PlannedDefaultWrite> plan; plan.reserve(specs.size());
@@ -3270,7 +3409,15 @@ void AnimationEditorWindow::handle_create_defaults() {
         else {
             const DefaultAnimationSpec* source = find_source(spec.source_id);
             if (!source) { error = DefaultsStageError::SourceDependency; break; }
-            write.payload = build_derived_movement_payload(spec.id,spec.source_id,frame_count,source->dx!=0&&source->dx!=spec.dx,source->dy!=0&&source->dy!=spec.dy,source->dz!=0&&source->dz!=spec.dz,spec.invert_frames_horizontal,spec.invert_frames_vertical,default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
+            write.payload = build_derived_movement_payload(spec.id,
+                                                           spec.source_id,
+                                                           frame_count,
+                                                           spec.invert_x,
+                                                           spec.invert_y,
+                                                           spec.invert_z,
+                                                           spec.invert_frames_horizontal,
+                                                           spec.invert_frames_vertical,
+                                                           default_direction_tags(spec.id, spec.dx, spec.dy, spec.dz));
         }
         plan.push_back(std::move(write));
     }
@@ -3449,7 +3596,10 @@ void AnimationEditorWindow::handle_create_defaults() {
 
     if (preview_provider_) preview_provider_->invalidate_all();
     if (!created_ids.empty()) select_animation(std::optional<std::string>{created_ids.front()}, false); else ensure_selection_valid();
-    set_status_message("Created default movement animations.", 300);
+    set_status_message("Created " + std::to_string(created_ids.size()) +
+                       " default animation(s) from " + std::to_string(frame_count) +
+                       " base frame(s), base direction " + base_direction_label + ".",
+                       300);
     close_defaults_modal();
 }
 

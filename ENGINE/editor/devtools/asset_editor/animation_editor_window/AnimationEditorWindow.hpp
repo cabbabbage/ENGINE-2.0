@@ -203,6 +203,7 @@ class AnimationEditorWindow {
     bool ensure_animation_exists(const std::string& animation_id);
     bool create_or_replace_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
     std::optional<int> parse_defaults_total_movement() const;
+    bool defaults_base_direction_selected() const;
     bool defaults_base_faces_right() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
@@ -290,12 +291,14 @@ class AnimationEditorWindow {
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_elevation_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_3d_diagonals_checkbox_;
-    std::unique_ptr<DMCheckbox> defaults_base_faces_right_checkbox_;
+    std::unique_ptr<DMButton> defaults_base_faces_left_button_;
+    std::unique_ptr<DMButton> defaults_base_faces_right_button_;
     std::unique_ptr<DMTextBox> defaults_distance_box_;
     std::unique_ptr<DMButton> defaults_base_frames_button_;
     std::unique_ptr<DMButton> defaults_create_button_;
     std::unique_ptr<DMButton> defaults_cancel_button_;
     std::vector<std::filesystem::path> defaults_base_frame_paths_;
+    std::optional<bool> defaults_base_faces_right_;
     SDL_Rect defaults_modal_rect_{0, 0, 0, 0};
     SDL_Rect defaults_modal_scroll_rect_{0, 0, 0, 0};
     int defaults_modal_scroll_offset_ = 0;

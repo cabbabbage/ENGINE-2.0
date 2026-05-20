@@ -485,6 +485,7 @@ private:
     std::unordered_map<std::string, Asset*> assets_by_name_;
     std::unordered_map<std::string, Asset*> assets_by_stable_id_;
     std::unordered_set<const Asset*> all_asset_membership_;
+    std::unordered_set<Asset*> trap_escape_candidates_;
     std::vector<Asset*> movement_enabled_active_assets_;
     std::vector<Asset*> scratch_previous_active_assets_;
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;

@@ -26406,9 +26406,9 @@
             }
           },
           "display_color": [
-            146,
-            85,
             242,
+            85,
+            153,
             255
           ],
           "edge_smoothness": 101,
@@ -26495,9 +26495,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            31,
+            234,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26554,9 +26554,9 @@
             }
           },
           "display_color": [
-            204,
             31,
-            100,
+            204,
+            97,
             255
           ],
           "edge_smoothness": 4,
@@ -26613,9 +26613,9 @@
             }
           },
           "display_color": [
-            34,
-            224,
-            119,
+            242,
+            159,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26702,9 +26702,9 @@
             }
           },
           "display_color": [
-            242,
-            152,
             85,
+            169,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26766,9 +26766,9 @@
             }
           },
           "display_color": [
-            85,
-            146,
-            242,
+            204,
+            31,
+            95,
             255
           ],
           "edge_smoothness": 70,
@@ -26866,9 +26866,9 @@
             }
           },
           "display_color": [
-            101,
-            31,
-            204,
+            170,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27127,6 +27127,7 @@
               "origional_height": 15488,
               "origional_width": 15496,
               "position": "Exact",
+              "priority": 7,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -27215,7 +27216,7 @@
             }
           },
           "display_color": [
-            222,
+            96,
             85,
             242,
             255

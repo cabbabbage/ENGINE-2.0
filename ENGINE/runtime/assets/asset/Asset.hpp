@@ -323,6 +323,7 @@ class Asset {
     std::uint64_t last_scale_update_camera_state_version_ = std::numeric_limits<std::uint64_t>::max();
 
     void update_scale_values(bool force = false);
+    bool can_skip_static_runtime_update();
     SDL_Texture* get_current_variant_texture() const;
     void set_current_animation(const std::string& name);
     // Queue an attack event for deferred controller handling.

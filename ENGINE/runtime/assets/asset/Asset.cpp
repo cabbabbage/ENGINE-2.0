@@ -1319,6 +1319,25 @@ void Asset::update() {
 #endif
 }
 
+bool Asset::can_skip_static_runtime_update() {
+    if (!info || dead) {
+        return false;
+    }
+    if (!static_frame) {
+        return false;
+    }
+    if (has_pending_attacks()) {
+        return false;
+    }
+    if (anim_runtime_ && anim_runtime_->has_active_plan()) {
+        return false;
+    }
+    if (controller_ && controller_->requires_runtime_update()) {
+        return false;
+    }
+    return true;
+}
+
 void Asset::refresh_anchor_point_cache_from_frame() {
     if (!anchors_initialized_) {
         initialize_anchor_registry_from_animations();

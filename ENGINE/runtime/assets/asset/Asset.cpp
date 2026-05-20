@@ -13,6 +13,7 @@
 #include "utils/grid.hpp"
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include "utils/oval_anchor_math.hpp"
 #include "utils/weighted_range.hpp"
 #include "gameplay/world/grid_point.hpp"
@@ -955,14 +956,14 @@ void Asset::update_scale_values(bool force) {
     const bool trace_scale = should_trace_asset_scale(*this) &&
                              should_emit_scale_trace_for_frame(*this, frame_id);
     if (trace_scale) {
-        vibble::log::debug(std::string("[ScaleTrace][Asset] asset='") +
-                           (info ? info->name : std::string{"<unknown>"}) +
-                           "' frame=" + std::to_string(frame_id) +
-                           " source=" + perspective_source +
-                           " perspective=" + std::to_string(perspective_scale) +
-                           " base=" + std::to_string(base_scale) +
-                           " scale=" + std::to_string(prospective_scale) +
-                           " delta=" + std::to_string(scale_delta));
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("scale_trace.asset_name", info ? info->name : std::string{"<unknown>"});
+        frame_stats.set("scale_trace.asset_frame_id", static_cast<std::uint64_t>(frame_id));
+        frame_stats.set("scale_trace.asset_source", perspective_source);
+        frame_stats.set("scale_trace.asset_perspective", static_cast<double>(perspective_scale));
+        frame_stats.set("scale_trace.asset_base", static_cast<double>(base_scale));
+        frame_stats.set("scale_trace.asset_scale", static_cast<double>(prospective_scale));
+        frame_stats.set("scale_trace.asset_delta", static_cast<double>(scale_delta));
     }
 
     if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&

@@ -38,6 +38,7 @@
 #include "utils/map_grid_settings.hpp"
 #include "utils/log.hpp"
 #include "utils/task_editor.hpp"
+#include "utils/frame_stats_recorder.hpp"
 
 #include <filesystem>
 #include <algorithm>
@@ -1413,7 +1414,11 @@ Assets::RuntimeConvergencePassResult Assets::run_active_runtime_single_pass(bool
     run_camera_trap_escape_pass();
 
     if (include_audio_update && last_audio_engine_update_frame_id_ != frame_id_) {
+        const Uint64 audio_begin = SDL_GetPerformanceCounter();
         AudioEngine::instance().update();
+        runtime_stats::FrameStatsRecorder::instance().set(
+            "audio.update_ms",
+            runtime_stats::FrameStatsRecorder::elapsed_ms(audio_begin, SDL_GetPerformanceCounter()));
         last_audio_engine_update_frame_id_ = frame_id_;
     }
 
@@ -1528,24 +1533,29 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         if (elapsed_ms >= runtime_detail_warning_ms()) {
             const std::string asset_name =
                 (asset->info && !asset->info->name.empty()) ? asset->info->name : std::string{"<unknown>"};
-            vibble::log::warn("[Assets] Slow runtime asset pass asset='" + asset_name +
-                              "' ms=" + std::to_string(elapsed_ms) +
-                              " geometry_refresh=" + (geometry_state_changed ? std::string("true") : "false") +
-                              " camera_only=" + (!geometry_state_changed && camera_anchor_state_changed ? std::string("true") : "false") +
-                              " frame_index=" + std::to_string(current_frame_index));
+            auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+            frame_stats.set("assets.slow_runtime_asset_pass", true);
+            frame_stats.set("assets.slow_runtime_asset_name", asset_name);
+            frame_stats.set("assets.slow_runtime_asset_ms", elapsed_ms);
+            frame_stats.set("assets.slow_runtime_asset_geometry_refresh", geometry_state_changed);
+            frame_stats.set("assets.slow_runtime_asset_camera_only", !geometry_state_changed && camera_anchor_state_changed);
+            frame_stats.set("assets.slow_runtime_asset_frame_index", current_frame_index);
         }
     }
 }
 
 
 void Assets::run_camera_trap_escape_pass() {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     const Uint64 stage_begin = SDL_GetPerformanceCounter();
     if (startup_runtime_safety_active(frame_id_) &&
         frame_id_ <= startup_skip_trap_escape_frames()) {
+        frame_stats.set("assets.trap_escape_skipped_startup", true);
         return;
     }
     if (movement_enabled_active_assets_.empty() &&
         (!player || player->dead || !player->isMovementEnabled())) {
+        frame_stats.set("assets.trap_escape_skipped_no_movement_assets", true);
         return;
     }
     std::size_t processed_assets = 0;
@@ -1655,15 +1665,14 @@ void Assets::run_camera_trap_escape_pass() {
     if (perf_counter_frequency_ > 0.0 && stage_end > stage_begin) {
         const double elapsed_ms =
             static_cast<double>(stage_end - stage_begin) * 1000.0 / perf_counter_frequency_;
-        if (elapsed_ms >= runtime_detail_warning_ms()) {
-            vibble::log::warn("[Assets] Slow trap escape pass frame=" + std::to_string(frame_id_) +
-                              " ms=" + std::to_string(elapsed_ms) +
-                              " processed=" + std::to_string(processed_assets) +
-                              " skipped=" + std::to_string(skipped_assets) +
-                              " queries=" + std::to_string(query_count) +
-                              " unstuck=" + std::to_string(unstuck_count) +
-                              " candidates=" + std::to_string(trap_escape_candidates_.size()));
-        }
+        frame_stats.set("assets.trap_escape_ms", elapsed_ms);
+        frame_stats.set("assets.trap_escape_processed", static_cast<std::uint64_t>(processed_assets));
+        frame_stats.set("assets.trap_escape_skipped", static_cast<std::uint64_t>(skipped_assets));
+        frame_stats.set("assets.trap_escape_queries", static_cast<std::uint64_t>(query_count));
+        frame_stats.set("assets.trap_escape_unstuck", static_cast<std::uint64_t>(unstuck_count));
+        frame_stats.set("assets.trap_escape_candidates", static_cast<std::uint64_t>(trap_escape_candidates_.size()));
+        frame_stats.set("assets.slow_trap_escape", elapsed_ms >= runtime_detail_warning_ms());
+        frame_stats.set("assets.slow_trap_escape_threshold_ms", runtime_detail_warning_ms());
     }
 }
 
@@ -2086,6 +2095,8 @@ void Assets::set_input(Input* m) {
 }
 
 void Assets::run_idle_frame_pipeline(const Input& input) {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("assets.idle_frame", true);
     game_context_.begin_frame(
         this,
         frame_id_,
@@ -2094,11 +2105,31 @@ void Assets::run_idle_frame_pipeline(const Input& input) {
         player,
         &camera_,
         &runtime_game_config());
+    const Uint64 visibility_begin = SDL_GetPerformanceCounter();
     run_visibility_build_stage();
+    frame_stats.set("assets.visibility_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(visibility_begin,
+                                                                  SDL_GetPerformanceCounter()));
+    const Uint64 runtime_begin = SDL_GetPerformanceCounter();
     run_runtime_effects_stage(false);
+    frame_stats.set("assets.runtime_effects_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(runtime_begin,
+                                                                  SDL_GetPerformanceCounter()));
+    const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
     sync_dev_controls_for_frame(input);
+    frame_stats.set("assets.dev_sync_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(dev_sync_begin,
+                                                                  SDL_GetPerformanceCounter()));
+    const Uint64 filter_begin = SDL_GetPerformanceCounter();
     refresh_filtered_active_assets_if_needed();
+    frame_stats.set("assets.filtered_refresh_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(filter_begin,
+                                                                  SDL_GetPerformanceCounter()));
+    const Uint64 render_begin = SDL_GetPerformanceCounter();
     render_runtime_frame();
+    frame_stats.set("assets.render_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(render_begin,
+                                                                  SDL_GetPerformanceCounter()));
     finalize_dev_frame_state();
 }
 
@@ -2330,22 +2361,22 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         };
         const double total_ms = elapsed_ms(stage_begin, stage_end);
         const double detail_warn = std::max(runtime_detail_warning_ms(), runtime_stage_warning_ms() * 0.5);
-        if (total_ms >= detail_warn) {
-            vibble::log::warn("[Assets] Slow world update internals frame=" + std::to_string(frame_id_) +
-                              " total_ms=" + std::to_string(total_ms) +
-                              " player_ms=" + std::to_string(elapsed_ms(player_begin, player_end)) +
-                              " non_player_ms=" + std::to_string(elapsed_ms(non_player_begin, non_player_end)) +
-                              " movement_flush_ms=" + std::to_string(elapsed_ms(movement_flush_begin, movement_flush_end)) +
-                              " camera_ms=" + std::to_string(elapsed_ms(camera_begin, camera_end)) +
-                              " max_dimensions_ms=" + std::to_string(elapsed_ms(max_dimensions_begin, max_dimensions_end)) +
-                              " dev_sync_ms=" + std::to_string(elapsed_ms(dev_sync_begin, dev_sync_end)) +
-                              " pending_assets_ms=" + std::to_string(elapsed_ms(pending_assets_begin, pending_assets_end)) +
-                              " empty_points_ms=" + std::to_string(elapsed_ms(empty_points_begin, empty_points_end)) +
-                              " full_updates=" + std::to_string(full_runtime_updates) +
-                              " skipped_static=" + std::to_string(skipped_static_updates) +
-                              " trap_candidates=" + std::to_string(trap_escape_candidates_.size()) +
-                              " active=" + std::to_string(active_assets.size()));
-        }
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("assets.world_total_ms", total_ms);
+        frame_stats.set("assets.world_player_ms", elapsed_ms(player_begin, player_end));
+        frame_stats.set("assets.world_non_player_ms", elapsed_ms(non_player_begin, non_player_end));
+        frame_stats.set("assets.world_movement_flush_ms", elapsed_ms(movement_flush_begin, movement_flush_end));
+        frame_stats.set("assets.world_camera_ms", elapsed_ms(camera_begin, camera_end));
+        frame_stats.set("assets.world_max_dimensions_ms", elapsed_ms(max_dimensions_begin, max_dimensions_end));
+        frame_stats.set("assets.world_dev_sync_ms", elapsed_ms(dev_sync_begin, dev_sync_end));
+        frame_stats.set("assets.world_pending_assets_ms", elapsed_ms(pending_assets_begin, pending_assets_end));
+        frame_stats.set("assets.world_empty_points_ms", elapsed_ms(empty_points_begin, empty_points_end));
+        frame_stats.set("assets.world_full_updates", static_cast<std::uint64_t>(full_runtime_updates));
+        frame_stats.set("assets.world_skipped_static_updates", static_cast<std::uint64_t>(skipped_static_updates));
+        frame_stats.set("assets.world_trap_candidates", static_cast<std::uint64_t>(trap_escape_candidates_.size()));
+        frame_stats.set("assets.world_active_count", static_cast<std::uint64_t>(active_assets.size()));
+        frame_stats.set("assets.slow_world_update", total_ms >= detail_warn);
+        frame_stats.set("assets.slow_world_update_threshold_ms", detail_warn);
     }
 }
 
@@ -2375,6 +2406,7 @@ void Assets::run_post_flush_traversal_refresh_once() {
 }
 
 void Assets::run_runtime_effects_stage(bool include_audio_update) {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     auto elapsed_ms = [this](Uint64 begin, Uint64 end) -> double {
         if (end <= begin || perf_counter_frequency_ <= 0.0) {
             return 0.0;
@@ -2389,6 +2421,7 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
         skipped.iterations = 0;
         skipped.stage_ms = 0.0;
         last_runtime_convergence_stats_ = skipped;
+        frame_stats.set("assets.runtime_effects_skipped_startup", true);
         return;
     }
 
@@ -2435,47 +2468,26 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
     stats.stage_ms = elapsed_ms(stage_begin, stage_end);
     last_runtime_convergence_stats_ = stats;
 
-    if (vibble_runtime_convergence_trace_enabled()) {
-        vibble::log::debug(
-            std::string("[Assets] Runtime convergence frame=") + std::to_string(frame_id_) +
-            " iterations=" + std::to_string(stats.iterations) +
-            " converged=" + (stats.converged ? "1" : "0") +
-            " waves=" + std::to_string(stats.wave_count) +
-            " children_considered=" + std::to_string(stats.children_considered) +
-            " children_updated=" + std::to_string(stats.children_updated) +
-            " traversal_refreshes=" + std::to_string(stats.traversal_refresh_count) +
-            " pass_ms=" + std::to_string(stats.pass_ms) +
-            " refresh_ms=" + std::to_string(stats.refresh_ms) +
-            " stage_ms=" + std::to_string(stats.stage_ms));
-    }
-
-    if (stats.stage_ms >= runtime_detail_warning_ms()) {
-        vibble::log::warn(
-            std::string("[Assets] Slow runtime effects internals frame=") + std::to_string(frame_id_) +
-            " stage_ms=" + std::to_string(stats.stage_ms) +
-            " iterations=" + std::to_string(stats.iterations) +
-            " converged=" + (stats.converged ? "1" : "0") +
-            " traversal_refreshes=" + std::to_string(stats.traversal_refresh_count) +
-            " pass_ms=" + std::to_string(stats.pass_ms) +
-            " refresh_ms=" + std::to_string(stats.refresh_ms) +
-            " waves=" + std::to_string(stats.wave_count) +
-            " children_considered=" + std::to_string(stats.children_considered) +
-            " children_updated=" + std::to_string(stats.children_updated));
-    }
+    frame_stats.set("assets.runtime_convergence_trace_enabled", vibble_runtime_convergence_trace_enabled());
+    frame_stats.set("assets.runtime_convergence_iterations", static_cast<std::uint64_t>(stats.iterations));
+    frame_stats.set("assets.runtime_convergence_converged", stats.converged);
+    frame_stats.set("assets.runtime_convergence_waves", static_cast<std::uint64_t>(stats.wave_count));
+    frame_stats.set("assets.runtime_convergence_children_considered", static_cast<std::uint64_t>(stats.children_considered));
+    frame_stats.set("assets.runtime_convergence_children_updated", static_cast<std::uint64_t>(stats.children_updated));
+    frame_stats.set("assets.runtime_convergence_traversal_refreshes", static_cast<std::uint64_t>(stats.traversal_refresh_count));
+    frame_stats.set("assets.runtime_convergence_pass_ms", stats.pass_ms);
+    frame_stats.set("assets.runtime_convergence_refresh_ms", stats.refresh_ms);
+    frame_stats.set("assets.runtime_convergence_stage_ms", stats.stage_ms);
+    frame_stats.set("assets.slow_runtime_effects", stats.stage_ms >= runtime_detail_warning_ms());
+    frame_stats.set("assets.slow_runtime_effects_threshold_ms", runtime_detail_warning_ms());
 
     if (!stats.converged && last_runtime_convergence_warning_frame_id_ != frame_id_) {
         last_runtime_convergence_warning_frame_id_ = frame_id_;
-        std::cerr << "[Assets] Anchor convergence cap reached ("
-                  << iteration_cap
-                  << ") at frame " << frame_id_
-                  << "; iterations=" << stats.iterations
-                  << " waves=" << stats.wave_count
-                  << " children_updated=" << stats.children_updated
-                  << " traversal_refreshes=" << stats.traversal_refresh_count
-                  << " pass_ms=" << stats.pass_ms
-                  << " refresh_ms=" << stats.refresh_ms
-                  << " stage_ms=" << stats.stage_ms
-                  << "; deferring remaining anchor reconciliation to next frame.\n";
+        frame_stats.set("assets.runtime_convergence_cap_reached", true);
+        frame_stats.set("assets.runtime_convergence_iteration_cap", static_cast<std::uint64_t>(iteration_cap));
+    } else {
+        frame_stats.set("assets.runtime_convergence_cap_reached", false);
+        frame_stats.set("assets.runtime_convergence_iteration_cap", static_cast<std::uint64_t>(iteration_cap));
     }
 }
 
@@ -2513,6 +2525,7 @@ void Assets::refresh_filtered_active_assets_if_needed() {
 }
 
 void Assets::render_runtime_frame() {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     bool should_render = !suppress_render_ && opengl_renderer_ != nullptr;
     if (should_render && startup_runtime_safety_active(frame_id_)) {
         const std::uint32_t skip_frames = startup_skip_render_frames();
@@ -2526,13 +2539,9 @@ void Assets::render_runtime_frame() {
         }
     }
 
-    auto render_guard_log = [this](const std::string& message) {
-        if (frame_id_ <= 8) {
-            vibble::log::info(message);
-        } else {
-            vibble::log::debug(message);
-        }
-    };
+    frame_stats.set("assets.render_should_render", should_render);
+    frame_stats.set("assets.render_suppressed", suppress_render_);
+    frame_stats.set("assets.render_has_opengl_renderer", opengl_renderer_ != nullptr);
     if (should_render) {
         const Uint64 overlay_begin = SDL_GetPerformanceCounter();
         SDL_Texture* ui_overlay = prepare_runtime_ui_overlay_texture();
@@ -2543,10 +2552,11 @@ void Assets::render_runtime_frame() {
                 : 0.0;
         const bool ui_overlay_active = has_runtime_ui_overlay_content(SDL_GetTicks());
         const auto& dynamic_diag = dynamic_spawn_diagnostics();
-        render_guard_log("[RenderGuard] before renderer submission frame=" + std::to_string(frame_id_) +
-                         " path=opengl ui_overlay=" + (ui_overlay ? std::string("true") : std::string("false")) +
-                         " active=" + std::to_string(active_assets.size()) +
-                         " dynamic_active=" + std::to_string(dynamic_diag.active));
+        frame_stats.set("assets.render_ui_overlay_texture", ui_overlay != nullptr);
+        frame_stats.set("assets.render_ui_overlay_active", ui_overlay_active);
+        frame_stats.set("assets.render_ui_overlay_prepare_ms", ui_overlay_prepare_ms);
+        frame_stats.set("assets.render_active_count", static_cast<std::uint64_t>(active_assets.size()));
+        frame_stats.set("dynamic_spawn.active", static_cast<std::uint64_t>(dynamic_diag.active));
 
         std::string frame_error;
         if (!opengl_renderer_->render_frame(frame_error,
@@ -2567,8 +2577,9 @@ void Assets::render_runtime_frame() {
                                " submit_succeeded=" + (stats.submit_succeeded ? std::string("true") : "false"));
             throw std::runtime_error("[Assets] Fatal OpenGL runtime failure: " + reason);
         }
-        render_guard_log("[RenderGuard] after renderer submission frame=" + std::to_string(frame_id_) +
-                         " path=opengl");
+        frame_stats.set("assets.render_submit_succeeded", true);
+    } else {
+        frame_stats.set("assets.render_submit_succeeded", false);
     }
 }
 
@@ -2580,11 +2591,19 @@ void Assets::finalize_dev_frame_state() {
 
 void Assets::update(const Input& input)
 {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
     const bool should_step_frame = should_step_dev_frame(input);
 
     ++frame_id_;
     reset_frame_rebuild_stage();
+    frame_stats.set("assets.frame_id", frame_id_);
+    frame_stats.set("assets.idle_frame", !should_step_frame);
+    frame_stats.set("assets.dev_mode", dev_mode);
+    frame_stats.set("assets.runtime_updates_enabled", should_run_runtime_updates());
+    frame_stats.set("assets.active_count", static_cast<std::uint64_t>(active_assets.size()));
+    frame_stats.set("assets.filtered_active_count", static_cast<std::uint64_t>(filtered_active_assets.size()));
+    frame_stats.set("assets.total_count", static_cast<std::uint64_t>(all.size()));
 
     static bool startup_safety_logged = false;
     if (!startup_safety_logged && startup_runtime_safety_active(frame_id_)) {
@@ -2598,6 +2617,7 @@ void Assets::update(const Input& input)
         run_idle_frame_pipeline(input);
         last_frame_dt_seconds_ = 0.0f;
         last_frame_counter_    = now_counter;
+        frame_stats.set("assets.frame_dt_seconds", 0.0);
         return;
     }
 
@@ -2610,6 +2630,7 @@ void Assets::update(const Input& input)
     }
     last_frame_counter_    = now_counter;
     last_frame_dt_seconds_ = dt;
+    frame_stats.set("assets.frame_dt_seconds", static_cast<double>(dt));
 
     const bool ctrl_down = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
     const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
@@ -2672,7 +2693,9 @@ void Assets::update(const Input& input)
 
     // Stage: render + UI refresh.
     const Uint64 render_begin = SDL_GetPerformanceCounter();
+    const Uint64 filter_begin = SDL_GetPerformanceCounter();
     refresh_filtered_active_assets_if_needed();
+    const Uint64 filter_end = SDL_GetPerformanceCounter();
     render_runtime_frame();
     const Uint64 render_end = SDL_GetPerformanceCounter();
 
@@ -2680,35 +2703,41 @@ void Assets::update(const Input& input)
     const double visibility_ms = elapsed_ms(visibility_begin, visibility_end);
     const double runtime_ms = elapsed_ms(runtime_begin, runtime_end);
     const double render_ms = elapsed_ms(render_begin, render_end);
-    if (world_ms >= warn_ms || visibility_ms >= warn_ms ||
-        runtime_ms >= warn_ms || render_ms >= warn_ms) {
-        const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
-        const auto& dynamic_diag = dynamic_spawn_diagnostics();
-        vibble::log::warn(std::string("[Assets] Slow ") +
-                          (startup_active ? "startup" : "runtime") +
-                          " frame=" + std::to_string(frame_id_) +
-                          " world_ms=" + std::to_string(world_ms) +
-                          " visibility=" + std::to_string(visibility_ms) +
-                          " runtime=" + std::to_string(runtime_ms) +
-                          " render=" + std::to_string(render_ms) +
-                          " active=" + std::to_string(active_assets.size()) +
-                          " dynamic_active=" + std::to_string(dynamic_diag.active) +
-                          " dynamic_spawned=" + std::to_string(dynamic_diag.spawned) +
-                          " dynamic_reused=" + std::to_string(dynamic_diag.reused) +
-                          " dynamic_suspended=" + std::to_string(dynamic_diag.suspended) +
-                          " dynamic_sync_ms=" + std::to_string(dynamic_diag.sync_ms) +
-                          " dof_bucket_count=" + std::to_string(stats.active_depth_layer_count) +
-                          " draw_submission_ms=" + std::to_string(stats.draw_submission_cpu_ms) +
-                          " ui_overlay_ms=" + std::to_string(stats.ui_overlay_prepare_ms) +
-                          " ui_overlay_active=" + (stats.ui_overlay_active ? std::string("true") : "false") +
-                          " ui_overlay_redrawn=" + (stats.ui_overlay_redrawn ? std::string("true") : "false") +
-                          " render_passes=" + std::to_string(stats.render_pass_count) +
-                          " target_switches=" + std::to_string(stats.render_target_switch_count) +
-                          " draw_calls=" + std::to_string(stats.draw_call_count) +
-                          " floor_packets=" + std::to_string(stats.floor_packet_count) +
-                          " xy_packets=" + std::to_string(stats.xy_sprite_packet_count) +
-                          " render_stages='" + stats.render_stage_timings + "'");
-    }
+    const double filter_ms = elapsed_ms(filter_begin, filter_end);
+    const bool slow_frame = world_ms >= warn_ms || visibility_ms >= warn_ms ||
+                            runtime_ms >= warn_ms || render_ms >= warn_ms;
+    const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+    const auto& dynamic_diag = dynamic_spawn_diagnostics();
+    frame_stats.set("assets.world_ms", world_ms);
+    frame_stats.set("assets.visibility_ms", visibility_ms);
+    frame_stats.set("assets.runtime_effects_ms", runtime_ms);
+    frame_stats.set("assets.filtered_refresh_ms", filter_ms);
+    frame_stats.set("assets.render_ms", render_ms);
+    frame_stats.set("assets.slow_frame", slow_frame);
+    frame_stats.set("assets.slow_frame_threshold_ms", warn_ms);
+    frame_stats.set("assets.startup_safety_active", startup_active);
+    frame_stats.set("assets.active_count", static_cast<std::uint64_t>(active_assets.size()));
+    frame_stats.set("assets.filtered_active_count", static_cast<std::uint64_t>(filtered_active_assets.size()));
+    frame_stats.set("assets.total_count", static_cast<std::uint64_t>(all.size()));
+    frame_stats.set("dynamic_spawn.active", static_cast<std::uint64_t>(dynamic_diag.active));
+    frame_stats.set("dynamic_spawn.suspended", static_cast<std::uint64_t>(dynamic_diag.suspended));
+    frame_stats.set("dynamic_spawn.planned_cells", static_cast<std::uint64_t>(dynamic_diag.planned_cells));
+    frame_stats.set("dynamic_spawn.spawned", static_cast<std::uint64_t>(dynamic_diag.spawned));
+    frame_stats.set("dynamic_spawn.reused", static_cast<std::uint64_t>(dynamic_diag.reused));
+    frame_stats.set("dynamic_spawn.deleted", static_cast<std::uint64_t>(dynamic_diag.deleted));
+    frame_stats.set("dynamic_spawn.suspended_this_sync", static_cast<std::uint64_t>(dynamic_diag.suspended_this_sync));
+    frame_stats.set("dynamic_spawn.sync_ms", dynamic_diag.sync_ms);
+    frame_stats.set("render.active_depth_layer_count", stats.active_depth_layer_count);
+    frame_stats.set("render.draw_submission_ms", stats.draw_submission_cpu_ms);
+    frame_stats.set("render.ui_overlay_prepare_ms", stats.ui_overlay_prepare_ms);
+    frame_stats.set("render.ui_overlay_active", stats.ui_overlay_active);
+    frame_stats.set("render.ui_overlay_redrawn", stats.ui_overlay_redrawn);
+    frame_stats.set("render.pass_count", stats.render_pass_count);
+    frame_stats.set("render.target_switches", stats.render_target_switch_count);
+    frame_stats.set("render.draw_calls", stats.draw_call_count);
+    frame_stats.set("render.floor_packet_count", stats.floor_packet_count);
+    frame_stats.set("render.xy_sprite_packet_count", stats.xy_sprite_packet_count);
+    frame_stats.set("render.stage_timings", stats.render_stage_timings);
 
     finalize_dev_frame_state();
 }
@@ -3192,10 +3221,10 @@ void Assets::set_dev_mode(bool mode) {
     try {
         force_camera_view_refresh();
         if (vibble_scale_trace_enabled()) {
-            vibble::log::debug(std::string("[ScaleTrace][ModeToggle] mode=") +
-                               (dev_mode ? "dev" : "normal") +
-                               " camera_state=" + std::to_string(camera_.camera_state_version()) +
-                               " active_generation=" + std::to_string(active_assets_generation_));
+            auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+            frame_stats.set("scale_trace.mode_toggle_mode", dev_mode ? "dev" : "normal");
+            frame_stats.set("scale_trace.mode_toggle_camera_state", camera_.camera_state_version());
+            frame_stats.set("scale_trace.mode_toggle_active_generation", active_assets_generation_);
         }
     } catch (const std::exception& ex) {
         std::cerr << "[Assets] force_camera_view_refresh failed after mode toggle: "
@@ -3542,11 +3571,10 @@ bool Assets::run_frame_rebuild_stage() {
     const bool rebuilt = maybe_rebuild_world_grid();
     if (rebuilt) {
         ++frame_rebuild_execution_count_;
-        if (frame_rebuild_request_count_ > 1 && frame_rebuild_execution_count_ == 1) {
-            vibble::log::debug(std::string("[Assets] Coalesced ") +
-                               std::to_string(frame_rebuild_request_count_) +
-                               " rebuild requests into frame rebuild passes.");
-        }
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("assets.frame_rebuild_requests", frame_rebuild_request_count_);
+        frame_stats.set("assets.frame_rebuild_executions", frame_rebuild_execution_count_);
+        frame_stats.set("assets.frame_rebuild_coalesced", frame_rebuild_request_count_ > 1);
     }
     return rebuilt;
 }

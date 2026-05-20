@@ -18,6 +18,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/string_utils.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -392,9 +393,7 @@ void MainApp::game_loop() {
         const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
         const double target_counts  = app::frame_pacing::target_frame_counts(perf_frequency);
 
-        double idle_counts_accum = 0.0;
-        int idle_frame_counter   = 0;
-        constexpr int IDLE_REPORT_INTERVAL = 120;
+        std::uint64_t runtime_frame_counter = 0;
         bool quit = false;
         SDL_Event e;
 
@@ -402,16 +401,26 @@ void MainApp::game_loop() {
         vibble::log::info("[MainApp] Frame pacing target: " + app::frame_pacing::target_summary());
 
         while (!quit) {
+                ++runtime_frame_counter;
+                auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+                frame_stats.begin_frame(runtime_frame_counter);
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 SDL_Renderer* renderer = raw_renderer();
 
+                int event_count = 0;
+                const Uint64 event_begin = SDL_GetPerformanceCounter();
                 while (SDL_PollEvent(&e)) {
+                        ++event_count;
                         if (renderer) {
                                 // Keep event coordinates aligned with renderer-space hit testing (DPI/scaling aware).
                                 SDL_ConvertEventToRenderCoordinates(renderer, &e);
                         }
                         if (renderer && is_resize_or_scale_event(e.type)) {
+                                const Uint64 resize_sync_begin = SDL_GetPerformanceCounter();
                                 sync_output_dimensions(renderer);
+                                frame_stats.add("main.resize_sync_ms",
+                                                runtime_stats::FrameStatsRecorder::elapsed_ms(resize_sync_begin,
+                                                                                              SDL_GetPerformanceCounter()));
                         }
                         handle_global_shortcuts(e);
                         if (e.type == SDL_EVENT_QUIT) {
@@ -424,40 +433,60 @@ void MainApp::game_loop() {
                                 game_assets_->handle_sdl_event(e);
                         }
                 }
+                const Uint64 event_end = SDL_GetPerformanceCounter();
+                frame_stats.set("main.event_count", event_count);
+                frame_stats.set("main.event_poll_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin, event_end));
 
                 if (renderer) {
+                        const Uint64 sync_begin = SDL_GetPerformanceCounter();
                         sync_output_dimensions(renderer);
+                        frame_stats.set("main.sync_output_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin,
+                                                                                      SDL_GetPerformanceCounter()));
                 }
                 if (game_assets_ && input_) {
+                        const Uint64 assets_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
+                        frame_stats.set("main.assets_update_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(assets_begin,
+                                                                                      SDL_GetPerformanceCounter()));
                 }
                 if (renderer) {
                         log_render_diagnostics(renderer, "MainApp");
                 }
                 if (input_) {
+                        const Uint64 input_begin = SDL_GetPerformanceCounter();
                         input_->update();
+                        frame_stats.set("main.input_update_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(input_begin,
+                                                                                      SDL_GetPerformanceCounter()));
                 }
 
                 const double remaining_counts =
                         app::frame_pacing::remaining_frame_counts(frame_begin,
                                                                   target_counts,
                                                                   perf_frequency);
+                frame_stats.set("main.idle_pacing_requested_ms",
+                                remaining_counts > 0.0
+                                        ? (remaining_counts * 1000.0) / perf_frequency
+                                        : 0.0);
                 if (remaining_counts > 0.0) {
-                        idle_counts_accum += remaining_counts;
-                        ++idle_frame_counter;
+                        const Uint64 idle_begin = SDL_GetPerformanceCounter();
                         app::frame_pacing::delay_from_remaining_counts(remaining_counts,
                                                                        perf_frequency);
+                        frame_stats.set("main.idle_pacing_delay_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(idle_begin,
+                                                                                      SDL_GetPerformanceCounter()));
+                } else {
+                        frame_stats.set("main.idle_pacing_delay_ms", 0.0);
                 }
 
-                if (idle_frame_counter >= IDLE_REPORT_INTERVAL) {
-                        const double total_idle_ms =
-                                (idle_counts_accum * 1000.0) / perf_frequency;
-                        const double average_idle_ms =
-                                total_idle_ms / static_cast<double>(idle_frame_counter);
-                        vibble::log::debug("[MainApp] Idle pacing: total " + std::to_string(total_idle_ms) + "ms over " + std::to_string(idle_frame_counter) + " frame(s); avg " + std::to_string(average_idle_ms) + "ms.");
-                        idle_counts_accum = 0.0;
-                        idle_frame_counter = 0;
-                }
+                frame_stats.set("main.quit_requested", quit);
+                frame_stats.set("main.frame_total_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(frame_begin,
+                                                                              SDL_GetPerformanceCounter()));
+                frame_stats.end_frame();
         }
 }
 
@@ -488,7 +517,8 @@ bool MainApp::sync_output_dimensions(SDL_Renderer* renderer) {
 }
 
 void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_label) {
-        if (!render_diagnostics_enabled_ || !renderer) {
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        if (!frame_stats.enabled() || !renderer) {
                 return;
         }
 
@@ -560,7 +590,6 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                 }
         }
 
-        std::ostringstream frame_line;
         const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
         const std::string backend_name = !stats.backend_name.empty()
             ? stats.backend_name
@@ -568,68 +597,99 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         const std::string present_mode = !stats.present_mode.empty()
             ? stats.present_mode
             : (renderer_ ? renderer_->present_mode_name() : std::string("unknown"));
-        frame_line << "[RenderDiag][" << (loop_label ? loop_label : "loop")
-                   << "] frame=" << frame_diagnostics_counter_
-                   << " window=" << window_w << "x" << window_h
-                   << " window_px=" << window_px_w << "x" << window_px_h
-                   << " output=" << output_w << "x" << output_h
-                   << " target=" << target_w << "x" << target_h << (target_is_backbuffer ? "(backbuffer)" : "(texture)")
-                   << " viewport=(" << viewport.x << "," << viewport.y << "," << viewport.w << "," << viewport.h << ")"
-                   << " clip=(" << clip.x << "," << clip.y << "," << clip.w << "," << clip.h << ")"
-                   << " projection=" << projection_w << "x" << projection_h
-                   << " visible_rect=(" << visible_l << "," << visible_t << "," << visible_r << "," << visible_b << ")"
-                   << " frustum_z=[" << frustum_min_z << "," << frustum_max_z << "]"
-                   << " depth_culled=" << depth_culled
-                   << " nodes=" << frustum_nodes
-                   << " branches_skipped=" << frustum_skipped
-                   << " postprocess=" << postprocess_text
-                   << " frame_cpu_ms=" << stats.frame_cpu_ms
-                   << " render_thread_cpu_ms=" << stats.render_thread_cpu_ms
-                   << " draw_submission_ms=" << stats.draw_submission_cpu_ms
-                   << " present_block_ms=" << stats.present_block_ms
-                   << " present_interval_ms=" << (stats.present_interval_known ? stats.present_interval_ms : -1.0)
-                   << " pass_count=" << stats.render_pass_count
-                   << " copy_pass_count=" << stats.copy_pass_count
-                   << " compute_pass_count=" << stats.compute_pass_count
-                   << " draw_calls=" << stats.draw_call_count
-                   << " rt_switches=" << stats.render_target_switch_count
-                   << " tex_create=" << stats.texture_create_count
-                   << " tex_destroy=" << stats.texture_destroy_count
-                   << " gpu_buf_create=" << stats.gpu_buffer_create_count
-                   << " gpu_buf_destroy=" << stats.gpu_buffer_destroy_count
-                   << " cpu_light_gather_ms=" << stats.cpu_light_gather_ms
-                   << " cpu_light_mask_ms=" << stats.cpu_light_mask_generation_ms
-                   << " gpu_light_tiles=" << stats.gpu_light_tile_assignments
-                   << " gpu_light_naive=" << stats.gpu_light_naive_evaluations
-                   << " gpu_light_tiled=" << stats.gpu_light_tiled_evaluations
-                   << " pipeline_cache_hits=" << stats.gpu_pipeline_cache_hits
-                   << " pipeline_cache_misses=" << stats.gpu_pipeline_cache_misses
-                   << " pipeline_cache_hit_rate=" << stats.gpu_pipeline_cache_hit_rate
-                   << " sdl_target_calls=" << stats.sdl_renderer_target_call_count
-                   << " sdl_draw_calls=" << stats.sdl_renderer_draw_call_count
-                   << " present_calls=" << stats.present_call_count
-                   << " gpu_failed_frames=" << stats.gpu_failed_frame_count
-                   << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)
-                   << " backend=" << backend_name
-                   << " present_mode=" << present_mode;
-        if (stats.texture_memory_known) {
-                frame_line << " texture_mem_mb="
-                           << static_cast<double>(stats.texture_memory_bytes) / (1024.0 * 1024.0);
-        }
-        vibble::log::debug(frame_line.str());
-
-        if (output_h > 0 && std::abs(target_h - output_h / 2) <= 1) {
-                vibble::log::warn("[RenderDiag] target height is half of output height (possible mismatch).");
-        }
-        if (viewport.y != 0) {
-                vibble::log::warn("[RenderDiag] viewport has non-zero Y offset: " + std::to_string(viewport.y));
-        }
-        if (clip.y != 0) {
-                vibble::log::warn("[RenderDiag] clip rect has non-zero Y offset: " + std::to_string(clip.y));
-        }
-        if (projection_w > 0 && projection_h > 0 && (projection_w != output_w || projection_h != output_h)) {
-                vibble::log::warn("[RenderDiag] camera projection size does not match render output.");
-        }
+        frame_stats.set("render.loop_label", loop_label ? loop_label : "loop");
+        frame_stats.set("render.diagnostics_frame", frame_diagnostics_counter_);
+        frame_stats.set("render.window_w", window_w);
+        frame_stats.set("render.window_h", window_h);
+        frame_stats.set("render.window_px_w", window_px_w);
+        frame_stats.set("render.window_px_h", window_px_h);
+        frame_stats.set("render.output_w", output_w);
+        frame_stats.set("render.output_h", output_h);
+        frame_stats.set("render.target_w", target_w);
+        frame_stats.set("render.target_h", target_h);
+        frame_stats.set("render.target_is_backbuffer", target_is_backbuffer);
+        frame_stats.set("render.viewport_x", viewport.x);
+        frame_stats.set("render.viewport_y", viewport.y);
+        frame_stats.set("render.viewport_w", viewport.w);
+        frame_stats.set("render.viewport_h", viewport.h);
+        frame_stats.set("render.clip_x", clip.x);
+        frame_stats.set("render.clip_y", clip.y);
+        frame_stats.set("render.clip_w", clip.w);
+        frame_stats.set("render.clip_h", clip.h);
+        frame_stats.set("camera.projection_w", projection_w);
+        frame_stats.set("camera.projection_h", projection_h);
+        frame_stats.set("camera.visible_left", static_cast<double>(visible_l));
+        frame_stats.set("camera.visible_top", static_cast<double>(visible_t));
+        frame_stats.set("camera.visible_right", static_cast<double>(visible_r));
+        frame_stats.set("camera.visible_bottom", static_cast<double>(visible_b));
+        frame_stats.set("camera.frustum_min_z", frustum_min_z);
+        frame_stats.set("camera.frustum_max_z", frustum_max_z);
+        frame_stats.set("camera.depth_culled", depth_culled);
+        frame_stats.set("camera.nodes_visited", frustum_nodes);
+        frame_stats.set("camera.branches_skipped", frustum_skipped);
+        frame_stats.set("render.postprocess_target", postprocess_text);
+        frame_stats.set("render.frame_cpu_ms", stats.frame_cpu_ms);
+        frame_stats.set("render.render_thread_cpu_ms", stats.render_thread_cpu_ms);
+        frame_stats.set("render.draw_submission_ms", stats.draw_submission_cpu_ms);
+        frame_stats.set("render.present_block_ms", stats.present_block_ms);
+        frame_stats.set("render.present_interval_ms", stats.present_interval_known ? stats.present_interval_ms : -1.0);
+        frame_stats.set("render.pass_count", stats.render_pass_count);
+        frame_stats.set("render.copy_pass_count", stats.copy_pass_count);
+        frame_stats.set("render.compute_pass_count", stats.compute_pass_count);
+        frame_stats.set("render.draw_calls", stats.draw_call_count);
+        frame_stats.set("render.target_switches", stats.render_target_switch_count);
+        frame_stats.set("render.texture_create_count", stats.texture_create_count);
+        frame_stats.set("render.texture_destroy_count", stats.texture_destroy_count);
+        frame_stats.set("render.gpu_buffer_create_count", stats.gpu_buffer_create_count);
+        frame_stats.set("render.gpu_buffer_destroy_count", stats.gpu_buffer_destroy_count);
+        frame_stats.set("render.cpu_light_gather_ms", stats.cpu_light_gather_ms);
+        frame_stats.set("render.cpu_light_mask_ms", stats.cpu_light_mask_generation_ms);
+        frame_stats.set("render.gpu_light_tiles", stats.gpu_light_tile_assignments);
+        frame_stats.set("render.gpu_light_naive", stats.gpu_light_naive_evaluations);
+        frame_stats.set("render.gpu_light_tiled", stats.gpu_light_tiled_evaluations);
+        frame_stats.set("render.pipeline_cache_hits", stats.gpu_pipeline_cache_hits);
+        frame_stats.set("render.pipeline_cache_misses", stats.gpu_pipeline_cache_misses);
+        frame_stats.set("render.pipeline_cache_hit_rate", stats.gpu_pipeline_cache_hit_rate);
+        frame_stats.set("render.sdl_target_calls", stats.sdl_renderer_target_call_count);
+        frame_stats.set("render.sdl_draw_calls", stats.sdl_renderer_draw_call_count);
+        frame_stats.set("render.present_calls", stats.present_call_count);
+        frame_stats.set("render.gpu_failed_frames", stats.gpu_failed_frame_count);
+        frame_stats.set("render.renderer_path", stats.renderer_path.empty() ? "unknown" : stats.renderer_path);
+        frame_stats.set("render.backend", backend_name);
+        frame_stats.set("render.present_mode", present_mode);
+        frame_stats.set("render.texture_memory_known", stats.texture_memory_known);
+        frame_stats.set("render.texture_memory_mb",
+                        stats.texture_memory_known
+                                ? static_cast<double>(stats.texture_memory_bytes) / (1024.0 * 1024.0)
+                                : 0.0);
+        frame_stats.set("render.floor_packet_count", stats.floor_packet_count);
+        frame_stats.set("render.xy_sprite_packet_count", stats.xy_sprite_packet_count);
+        frame_stats.set("render.active_depth_layer_count", stats.active_depth_layer_count);
+        frame_stats.set("render.blur_pass_count", stats.blur_pass_count);
+        frame_stats.set("render.skipped_texture_count", stats.skipped_texture_count);
+        frame_stats.set("render.failed_texture_names", stats.failed_texture_names);
+        frame_stats.set("render.packets_per_depth_layer", stats.packets_per_depth_layer);
+        frame_stats.set("render.blur_strength_per_layer", stats.blur_strength_per_layer);
+        frame_stats.set("render.composite_layers_submitted", stats.composite_layers_submitted);
+        frame_stats.set("render.stage_timings", stats.render_stage_timings);
+        frame_stats.set("render.ui_overlay_active", stats.ui_overlay_active);
+        frame_stats.set("render.ui_overlay_redrawn", stats.ui_overlay_redrawn);
+        frame_stats.set("render.ui_overlay_prepare_ms", stats.ui_overlay_prepare_ms);
+        frame_stats.set("render.submit_succeeded", stats.submit_succeeded);
+        frame_stats.set("render.projection_calls_total", stats.projection_calls_total);
+        frame_stats.set("render.projection_calls_saved_early", stats.projection_calls_saved_early);
+        frame_stats.set("render.assets_stageA_reject", stats.assets_stageA_reject);
+        frame_stats.set("render.assets_stageC_entered", stats.assets_stageC_entered);
+        frame_stats.set("render.projection_recompute_budget", stats.projection_recompute_budget);
+        frame_stats.set("render.projection_points_deferred", stats.projection_points_deferred);
+        frame_stats.set("render.projection_points_updated", stats.projection_points_updated);
+        frame_stats.set("render.warn_target_half_output",
+                        output_h > 0 && std::abs(target_h - output_h / 2) <= 1);
+        frame_stats.set("render.warn_viewport_y_nonzero", viewport.y != 0);
+        frame_stats.set("render.warn_clip_y_nonzero", clip.y != 0);
+        frame_stats.set("render.warn_projection_output_mismatch",
+                        projection_w > 0 && projection_h > 0 &&
+                                (projection_w != output_w || projection_h != output_h));
 }
 
 void MainApp::toggle_fullscreen() {
@@ -987,6 +1047,14 @@ int main(int argc, char* argv[]) {
         (void)argv;
         vibble::log::info("[Main] Starting game engine...");
         vibble::log::info("[Main] Startup uses existing asset caches; missing cache entries regenerate on demand.");
+        struct RuntimeStatsSession {
+                RuntimeStatsSession() {
+                        runtime_stats::FrameStatsRecorder::instance().begin_run();
+                }
+                ~RuntimeStatsSession() {
+                        runtime_stats::FrameStatsRecorder::instance().shutdown();
+                }
+        } runtime_stats_session;
 
         const SDL_InitFlags init_flags =
                 static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);

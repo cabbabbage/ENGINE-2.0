@@ -11,6 +11,7 @@
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/screen_space_math.hpp"
 #include "rendering/render/render_diagnostics.hpp"
+#include "utils/frame_stats_recorder.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1338,6 +1339,16 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     transition_telemetry_.settle_time_remaining = settle_time_remaining_;
 
     if (camera_transition_trace_enabled()) {
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("camera.transition_state", transition_state_name(transition_state));
+        frame_stats.set("camera.transition_target_x", static_cast<double>(desired_center.x));
+        frame_stats.set("camera.transition_target_y", static_cast<double>(desired_center.y));
+        frame_stats.set("camera.transition_velocity_x", static_cast<double>(controller_state.center_velocity.x));
+        frame_stats.set("camera.transition_velocity_y", static_cast<double>(controller_state.center_velocity.y));
+        frame_stats.set("camera.transition_blend_factor", static_cast<double>(static_cast<float>(t)));
+        frame_stats.set("camera.transition_settle_time_remaining", static_cast<double>(settle_time_remaining_));
+    }
+    if (false && camera_transition_trace_enabled()) {
         vibble::log::debug(
             std::string("[CameraTransition] מצב=") + transition_state_name(transition_state) +
             " מטרה=(" + std::to_string(desired_center.x) + "," + std::to_string(desired_center.y) + ")" +

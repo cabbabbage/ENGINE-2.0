@@ -26406,7 +26406,7 @@
             }
           },
           "display_color": [
-            141,
+            146,
             85,
             242,
             255
@@ -26495,9 +26495,9 @@
             }
           },
           "display_color": [
+            31,
             204,
             31,
-            87,
             255
           ],
           "edge_smoothness": 4,
@@ -26554,9 +26554,9 @@
             }
           },
           "display_color": [
-            108,
             204,
             31,
+            100,
             255
           ],
           "edge_smoothness": 4,
@@ -26613,9 +26613,9 @@
             }
           },
           "display_color": [
-            51,
-            130,
-            204,
+            34,
+            224,
+            119,
             255
           ],
           "edge_smoothness": 4,
@@ -26702,9 +26702,9 @@
             }
           },
           "display_color": [
-            85,
             242,
-            168,
+            152,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26766,9 +26766,9 @@
             }
           },
           "display_color": [
-            37,
+            85,
+            146,
             242,
-            36,
             255
           ],
           "edge_smoothness": 70,
@@ -26866,7 +26866,7 @@
             }
           },
           "display_color": [
-            103,
+            101,
             31,
             204,
             255
@@ -27103,6 +27103,35 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-ff9bd67553fd"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -3229,
+              "dz": -1046,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 15488,
+              "origional_width": 15496,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-df1781471a53"
             }
           ],
           "trail_connection_sector": {
@@ -27186,9 +27215,9 @@
             }
           },
           "display_color": [
-            178,
-            31,
-            204,
+            222,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 96,

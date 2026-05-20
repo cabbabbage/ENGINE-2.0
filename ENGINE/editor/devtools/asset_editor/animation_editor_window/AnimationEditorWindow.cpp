@@ -219,6 +219,39 @@ fs::path ensure_assets_storage(const fs::path& candidate, const AssetInfo& info)
     return preferred;
 }
 
+fs::path upload_picker_start_directory() {
+    std::error_code ec;
+    fs::path current = fs::current_path(ec);
+    if (!ec && !current.empty() && fs::exists(current, ec) && !ec && fs::is_directory(current, ec) && !ec) {
+        return current.lexically_normal();
+    }
+
+    ec.clear();
+    fs::path assets_root = asset_paths::assets_root_path();
+    if (fs::exists(assets_root, ec) && !ec && fs::is_directory(assets_root, ec) && !ec) {
+        return fs::absolute(assets_root, ec).lexically_normal();
+    }
+
+    return {};
+}
+
+std::string summarize_paths_for_log(const std::vector<std::filesystem::path>& paths, std::size_t limit = 6) {
+    std::ostringstream ss;
+    ss << "[";
+    const std::size_t count = std::min(paths.size(), limit);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (i > 0) {
+            ss << ", ";
+        }
+        ss << "'" << paths[i].generic_string() << "'";
+    }
+    if (paths.size() > limit) {
+        ss << ", ... +" << (paths.size() - limit) << " more";
+    }
+    ss << "]";
+    return ss.str();
+}
+
 void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
     if (!renderer || text.empty()) return;
 
@@ -1541,9 +1574,6 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
     // 4) Route pointer events to list first when pointer is inside list.
     if (list_panel_ && pointer_in_list) {
         last_event_route_ = "list";
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            log_ui_transition("event_route", "pointer_to_list");
-        }
         if (list_panel_->handle_event(e)) {
             return true;
         }
@@ -1556,7 +1586,6 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
     if (inspector_panel_ && selected_animation_id_) {
         if (pointer_in_inspector && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             last_event_route_ = "inspector";
-            log_ui_transition("event_route", "pointer_to_inspector");
         }
         if (pointer_in_inspector && inspector_panel_->handle_event(e)) {
             return true;
@@ -2759,9 +2788,10 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
     };
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "[AnimationEditor][frame_import] start animation='%s' source_count=%zu asset_root='%s'",
+                "[AnimationEditor][frame_import] start animation='%s' source_count=%zu source_paths=%s asset_root='%s'",
                 animation_id.c_str(),
                 frames.size(),
+                summarize_paths_for_log(frames).c_str(),
                 asset_root_path_.generic_string().c_str());
 
     if (!document_) {
@@ -2784,6 +2814,10 @@ AnimationEditorWindow::SourceFrameImportOutcome AnimationEditorWindow::import_so
     }
 
     const std::filesystem::path output_dir = asset_root_path_ / animation_id;
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "[AnimationEditor][frame_import] destination animation='%s' output_dir='%s'",
+                animation_id.c_str(),
+                output_dir.generic_string().c_str());
     const std::optional<nlohmann::json> previous_payload = document_->animation_payload_json(animation_id);
     const bool animation_existed = previous_payload.has_value();
 
@@ -3887,7 +3921,7 @@ std::optional<std::string> AnimationEditorWindow::resolve_manifest_key(const Ass
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_folder() const {
     return devmode::dialogs::open_folder(parent_window_,
                                          "Select Animation Folder",
-                                         asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_);
+                                         upload_picker_start_directory());
 }
 
 void AnimationEditorWindow::handle_controller_button_click() {
@@ -4100,7 +4134,7 @@ void AnimationEditorWindow::open_controller() {
 std::optional<std::filesystem::path> AnimationEditorWindow::pick_gif() const {
     return devmode::dialogs::open_file(parent_window_,
                                        "Import GIF",
-                                       asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_,
+                                       upload_picker_start_directory(),
                                        {devmode::dialogs::FileDialogFilter{"GIF Image", "gif"}});
 }
 
@@ -4110,7 +4144,7 @@ devmode::dialogs::FileDialogResult AnimationEditorWindow::pick_png_sequence() co
     }
     return devmode::dialogs::open_files(parent_window_,
                                         "Upload Images",
-                                        asset_root_path_.empty() ? std::filesystem::path{} : asset_root_path_,
+                                        upload_picker_start_directory(),
                                         {devmode::dialogs::FileDialogFilter{"Image Files", "png;jpg;jpeg;bmp;webp;gif"}},
                                         true);
 }

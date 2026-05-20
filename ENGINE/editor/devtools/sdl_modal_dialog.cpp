@@ -9,9 +9,11 @@
 #include <cmath>
 #include <cctype>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -188,6 +190,27 @@ struct FileDialogState {
     FileDialogResult result;
 };
 
+std::mutex& retained_file_dialog_states_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::vector<std::shared_ptr<FileDialogState>>& retained_file_dialog_states() {
+    static std::vector<std::shared_ptr<FileDialogState>> states;
+    return states;
+}
+
+void retain_file_dialog_state(std::shared_ptr<FileDialogState> state) {
+    if (!state) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(retained_file_dialog_states_mutex());
+    // Native dialog callbacks are asynchronous and may run on another thread.
+    // Keep callback state alive for the process lifetime so a late backend
+    // callback cannot touch stack memory after the blocking wrapper returns.
+    retained_file_dialog_states().push_back(std::move(state));
+}
+
 int hex_value(char ch) {
     const unsigned char value = static_cast<unsigned char>(ch);
     if (value >= '0' && value <= '9') {
@@ -230,72 +253,117 @@ std::filesystem::path normalize_dialog_path(const char* raw_path) {
     if (normalized.rfind(file_scheme.data(), 0) == 0) {
         normalized.erase(0, file_scheme.size());
         if (normalized.rfind("localhost/", 0) == 0) {
-            normalized.erase(0, std::string{"localhost"}.size());
+            normalized.erase(0, std::string{"localhost/"}.size());
         }
+#ifdef _WIN32
+        if (normalized.size() >= 3 &&
+            (normalized[0] == '/' || normalized[0] == '\\') &&
+            std::isalpha(static_cast<unsigned char>(normalized[1])) &&
+            normalized[2] == ':') {
+            normalized.erase(0, 1);
+        }
+#endif
     }
     normalized = decode_percent_escapes(std::move(normalized));
     const char preferred_separator = static_cast<char>(std::filesystem::path::preferred_separator);
     std::replace(normalized.begin(), normalized.end(), '\\', preferred_separator);
     std::replace(normalized.begin(), normalized.end(), '/', preferred_separator);
 
-    std::filesystem::path path = std::filesystem::path(normalized).lexically_normal();
+    std::filesystem::path path = std::filesystem::u8path(normalized).lexically_normal();
     if (path.is_relative()) {
         path = std::filesystem::absolute(path);
     }
     return path.lexically_normal();
 }
 
-void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int count) {
+std::filesystem::path existing_dialog_location(const std::filesystem::path& requested) {
+    if (requested.empty()) {
+        return {};
+    }
+
+    std::error_code ec;
+    std::filesystem::path path = requested;
+    if (path.is_relative()) {
+        path = std::filesystem::absolute(path, ec);
+        if (ec) {
+            ec.clear();
+            path = requested;
+        }
+    }
+    path = path.lexically_normal();
+
+    if (std::filesystem::exists(path, ec) && !ec) {
+        return path;
+    }
+    ec.clear();
+
+    std::filesystem::path parent = path.parent_path();
+    while (!parent.empty()) {
+        if (std::filesystem::exists(parent, ec) && !ec && std::filesystem::is_directory(parent, ec) && !ec) {
+            return parent.lexically_normal();
+        }
+        ec.clear();
+        const std::filesystem::path next = parent.parent_path();
+        if (next == parent) {
+            break;
+        }
+        parent = next;
+    }
+
+    std::filesystem::path current = std::filesystem::current_path(ec);
+    if (!ec && !current.empty()) {
+        return current.lexically_normal();
+    }
+    return {};
+}
+
+void SDLCALL file_dialog_callback(void* userdata, const char* const* filelist, int selected_filter) {
     auto* state = static_cast<FileDialogState*>(userdata);
     if (!state) {
         return;
     }
 
-    SDL_Log("[SDLModalDialog] file_dialog_callback invoked: count=%d filelist=%s", count, filelist ? "set" : "null");
-
     {
         std::lock_guard<std::mutex> lock(state->mutex);
-        int parsed_count = 0;
+        if (state->done && state->result.status == FileDialogStatus::Selected) {
+            return;
+        }
+
+        state->result.paths.clear();
+        state->result.error_message.reset();
+        state->filelist_was_set = false;
         if (!filelist) {
+            state->result.status = FileDialogStatus::DialogError;
+            const char* error = SDL_GetError();
+            state->result.error_message = (error && *error)
+                ? std::string{error}
+                : std::string{"SDL file dialog failed without an error message."};
+        } else if (!filelist[0]) {
             state->result.status = FileDialogStatus::Cancelled;
-            state->result.error_message.reset();
-            state->result.paths.clear();
-        } else if (count > 0) {
+        } else {
             state->filelist_was_set = true;
-            const char* first_path = filelist[0];
-            SDL_Log("[SDLModalDialog] file_dialog_callback first path: %s", (first_path && *first_path) ? first_path : "<empty>");
-            for (int i = 0; i < count; ++i) {
+            constexpr int kMaxDialogPaths = 4096;
+            for (int i = 0; filelist[i] && i < kMaxDialogPaths; ++i) {
                 const char* path = filelist[i];
                 if (path && *path) {
                     const std::filesystem::path normalized = normalize_dialog_path(path);
-                    SDL_Log("[SDLModalDialog] file_dialog_callback path[%d]: raw='%s' normalized='%s'",
-                            i,
-                            path,
-                            normalized.string().c_str());
                     if (!normalized.empty()) {
                         state->result.paths.push_back(normalized);
-                        ++parsed_count;
                     }
                 }
             }
-        } else {
-            // Some SDL backends report count==0 with a non-null filelist pointer for an
-            // explicit empty selection. Treat this as cancellation and avoid walking a
-            // potentially non-null-terminated list.
-            state->result.status = FileDialogStatus::Cancelled;
-            state->result.error_message.reset();
-            state->result.paths.clear();
         }
         if (state->result.paths.empty()) {
             if (state->filelist_was_set) {
                 state->result.status = FileDialogStatus::MalformedResult;
-                state->result.error_message = "SDL file dialog returned filelist but no usable paths were parsed.";
+                state->result.error_message =
+                    "SDL file dialog returned a selection list but no usable paths were parsed.";
             }
         } else {
             state->result.status = FileDialogStatus::Selected;
             state->result.error_message.reset();
         }
-        SDL_Log("[SDLModalDialog] file_dialog_callback parsed paths: raw_count=%d parsed_count=%d", count, parsed_count);
+        (void)selected_filter;
         state->done = true;
     }
     state->cv.notify_one();
@@ -315,7 +383,9 @@ FileDialogResult run_file_dialog(SDL_Window* parent,
         sdl_filters.push_back(SDL_DialogFileFilter{filter.name.c_str(), filter.pattern.c_str()});
     }
 
-    FileDialogState state;
+    auto state = std::make_shared<FileDialogState>();
+    retain_file_dialog_state(state);
+
     SDL_PropertiesID props = SDL_CreateProperties();
     if (!props) {
         FileDialogResult result;
@@ -328,8 +398,9 @@ FileDialogResult run_file_dialog(SDL_Window* parent,
     if (parent) {
         SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, parent);
     }
-    if (!default_location.empty()) {
-        const std::string location = default_location.string();
+    const std::filesystem::path dialog_location = existing_dialog_location(default_location);
+    if (!dialog_location.empty()) {
+        const std::string location = dialog_location.string();
         SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_LOCATION_STRING, location.c_str());
     }
     if (!sdl_filters.empty()) {
@@ -339,24 +410,19 @@ FileDialogResult run_file_dialog(SDL_Window* parent,
     SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, allow_many);
 
     SDL_ClearError();
-    SDL_ShowFileDialogWithProperties(type, file_dialog_callback, &state, props);
-    const std::string launch_error = SDL_GetError();
+    SDL_ShowFileDialogWithProperties(type, file_dialog_callback, state.get(), props);
 
-    std::unique_lock<std::mutex> lock(state.mutex);
-    while (!state.done) {
+    std::unique_lock<std::mutex> lock(state->mutex);
+    while (!state->done) {
         lock.unlock();
         SDL_PumpEvents();
         lock.lock();
-        state.cv.wait_for(lock, std::chrono::milliseconds(16));
+        state->cv.wait_for(lock, std::chrono::milliseconds(16));
     }
-    FileDialogResult result = std::move(state.result);
+    FileDialogResult result = state->result;
     lock.unlock();
     SDL_DestroyProperties(props);
     raise_parent(parent);
-    if (!launch_error.empty() && result.status != FileDialogStatus::Selected) {
-        result.status = FileDialogStatus::DialogError;
-        result.error_message = launch_error;
-    }
     return result;
 }
 

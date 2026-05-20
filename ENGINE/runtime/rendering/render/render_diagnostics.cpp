@@ -159,6 +159,16 @@ void begin_frame() {
     g_frame_stats.projection_recompute_budget = 0;
     g_frame_stats.projection_points_deferred = 0;
     g_frame_stats.projection_points_updated = 0;
+    g_frame_stats.creation_budget_limit = 0;
+    g_frame_stats.creation_budget_ms_limit = 0.0;
+    g_frame_stats.creation_attempted_this_frame = 0;
+    g_frame_stats.creation_executed_this_frame = 0;
+    g_frame_stats.creation_deferred_count = 0;
+    g_frame_stats.creation_queue_depth_start = 0;
+    g_frame_stats.creation_queue_depth_end = 0;
+    g_frame_stats.creation_queue_age_max = 0;
+    g_frame_stats.creation_permanent_failures = 0;
+    g_frame_stats.creation_retried_count = 0;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -349,6 +359,27 @@ void set_visibility_projection_stats(std::uint32_t projection_calls_total,
     g_frame_stats.projection_recompute_budget = projection_recompute_budget;
     g_frame_stats.projection_points_deferred = projection_points_deferred;
     g_frame_stats.projection_points_updated = projection_points_updated;
+}
+void set_creation_budget_stats(std::uint32_t budget_limit,
+                               double budget_ms_limit,
+                               std::uint32_t attempted,
+                               std::uint32_t executed,
+                               std::uint32_t deferred,
+                               std::uint32_t queue_depth_start,
+                               std::uint32_t queue_depth_end,
+                               std::uint32_t queue_age_max,
+                               std::uint32_t retried_count,
+                               std::uint32_t permanent_failures) {
+    g_frame_stats.creation_budget_limit = budget_limit;
+    g_frame_stats.creation_budget_ms_limit = std::max(0.0, budget_ms_limit);
+    g_frame_stats.creation_attempted_this_frame = attempted;
+    g_frame_stats.creation_executed_this_frame = executed;
+    g_frame_stats.creation_deferred_count = deferred;
+    g_frame_stats.creation_queue_depth_start = queue_depth_start;
+    g_frame_stats.creation_queue_depth_end = queue_depth_end;
+    g_frame_stats.creation_queue_age_max = queue_age_max;
+    g_frame_stats.creation_retried_count = retried_count;
+    g_frame_stats.creation_permanent_failures = permanent_failures;
 }
 void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }
 

@@ -723,6 +723,16 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         frame_stats.set("render.projection_recompute_budget", stats.projection_recompute_budget);
         frame_stats.set("render.projection_points_deferred", stats.projection_points_deferred);
         frame_stats.set("render.projection_points_updated", stats.projection_points_updated);
+        frame_stats.set("render.creation_budget_limit", stats.creation_budget_limit);
+        frame_stats.set("render.creation_budget_ms_limit", stats.creation_budget_ms_limit);
+        frame_stats.set("render.creation_attempted_this_frame", stats.creation_attempted_this_frame);
+        frame_stats.set("render.creation_executed_this_frame", stats.creation_executed_this_frame);
+        frame_stats.set("render.creation_deferred_count", stats.creation_deferred_count);
+        frame_stats.set("render.creation_queue_depth_start", stats.creation_queue_depth_start);
+        frame_stats.set("render.creation_queue_depth_end", stats.creation_queue_depth_end);
+        frame_stats.set("render.creation_queue_age_max", stats.creation_queue_age_max);
+        frame_stats.set("render.creation_retried_count", stats.creation_retried_count);
+        frame_stats.set("render.creation_permanent_failures", stats.creation_permanent_failures);
         frame_stats.set("render.warn_target_half_output",
                         output_h > 0 && std::abs(target_h - output_h / 2) <= 1);
         frame_stats.set("render.warn_viewport_y_nonzero", viewport.y != 0);

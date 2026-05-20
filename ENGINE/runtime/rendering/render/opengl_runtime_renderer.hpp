@@ -135,7 +135,6 @@ private:
                                std::string& out_error);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
-    SDL_Color update_smoothed_floor_clear_color(SDL_Color target);
 
     static SDL_Texture* create_render_target(SDL_Renderer* renderer,
                                              int width,
@@ -173,8 +172,4 @@ private:
     std::uint64_t last_dof_camera_state_version_ = 0;
     std::uint32_t dof_motion_skip_frames_remaining_ = 0;
     double last_dof_path_ms_ = 0.0;
-    SDL_Color smoothed_floor_clear_color_{0, 0, 0, 255};
-    bool smoothed_floor_color_valid_ = false;
-    SDL_Point last_floor_color_player_xz_{0, 0};
-    bool last_floor_color_player_xz_valid_ = false;
 };

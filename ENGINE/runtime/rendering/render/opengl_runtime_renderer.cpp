@@ -19,7 +19,6 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
-#include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/render_diagnostics.hpp"
 #include "rendering/render/layer_depth_bins.hpp"
@@ -35,8 +34,6 @@
 
 namespace {
 
-constexpr float kFloorBlendRadius = 2400.0f;
-constexpr float kFloorLerpWhenMoving = 0.08f;
 
 std::filesystem::path project_root_path() {
 #ifdef PROJECT_ROOT
@@ -1798,7 +1795,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     if (ui_overlay_texture) {
         frame_data.ui_overlay_texture = ui_overlay_texture;
     }
-    const SDL_Color floor_clear_color = update_smoothed_floor_clear_color(resolve_runtime_floor_clear_color());
+    const SDL_Color floor_clear_color = resolve_runtime_floor_clear_color();
 
     const bool can_hold_previous_scene =
         last_complete_scene_frame_data_.has_value() &&
@@ -2096,96 +2093,5 @@ SDL_Color OpenGLRuntimeRenderer::resolve_runtime_floor_clear_color() const {
         }
     }
 
-    const Asset* player = assets_->player;
-    if (!player) {
-        return map_default;
-    }
-
-    const float px = static_cast<float>(player->world_x());
-    const float pz = static_cast<float>(player->world_z());
-    const std::vector<Room*>& rooms = assets_->rooms();
-    if (rooms.empty()) {
-        return map_default;
-    }
-
-    double weighted_r = 0.0;
-    double weighted_g = 0.0;
-    double weighted_b = 0.0;
-    double total_weight = 0.0;
-    for (Room* room : rooms) {
-        if (!room || !room->room_area) {
-            continue;
-        }
-        const SDL_Point c = room->room_area->get_center();
-        const float dx = px - static_cast<float>(c.x);
-        const float dz = pz - static_cast<float>(c.y);
-        const float distance = std::sqrt(dx * dx + dz * dz);
-        const float t = std::clamp(distance / kFloorBlendRadius, 0.0f, 1.0f);
-        const float weight = 1.0f - t;
-        if (weight <= 0.0f) {
-            continue;
-        }
-        SDL_Color room_color = room->inherit_map_floor_color() ? map_default : room->room_floor_color(map_default);
-        weighted_r += static_cast<double>(room_color.r) * static_cast<double>(weight);
-        weighted_g += static_cast<double>(room_color.g) * static_cast<double>(weight);
-        weighted_b += static_cast<double>(room_color.b) * static_cast<double>(weight);
-        total_weight += static_cast<double>(weight);
-    }
-
-    if (total_weight <= 1e-6) {
-        return map_default;
-    }
-    SDL_Color out{
-        static_cast<Uint8>(std::clamp<int>(static_cast<int>(std::lround(weighted_r / total_weight)), 0, 255)),
-        static_cast<Uint8>(std::clamp<int>(static_cast<int>(std::lround(weighted_g / total_weight)), 0, 255)),
-        static_cast<Uint8>(std::clamp<int>(static_cast<int>(std::lround(weighted_b / total_weight)), 0, 255)),
-        255};
-    return out;
-}
-
-SDL_Color OpenGLRuntimeRenderer::update_smoothed_floor_clear_color(SDL_Color target) {
-    target.a = 255;
-    const Asset* player = assets_ ? assets_->player : nullptr;
-    SDL_Point player_xz{0, 0};
-    bool has_player = false;
-    if (player) {
-        player_xz = SDL_Point{player->world_x(), player->world_z()};
-        has_player = true;
-    }
-
-    if (!smoothed_floor_color_valid_) {
-        smoothed_floor_color_valid_ = true;
-        smoothed_floor_clear_color_ = target;
-        if (has_player) {
-            last_floor_color_player_xz_ = player_xz;
-            last_floor_color_player_xz_valid_ = true;
-        }
-        return smoothed_floor_clear_color_;
-    }
-
-    bool moved = false;
-    if (has_player) {
-        if (!last_floor_color_player_xz_valid_) {
-            moved = true;
-            last_floor_color_player_xz_valid_ = true;
-        } else {
-            moved = (last_floor_color_player_xz_.x != player_xz.x) || (last_floor_color_player_xz_.y != player_xz.y);
-        }
-        last_floor_color_player_xz_ = player_xz;
-    } else {
-        last_floor_color_player_xz_valid_ = false;
-    }
-
-    if (moved) {
-        auto blend_channel = [](Uint8 current, Uint8 goal) {
-            const float c = static_cast<float>(current);
-            const float g = static_cast<float>(goal);
-            return static_cast<Uint8>(std::clamp<int>(static_cast<int>(std::lround(c + ((g - c) * kFloorLerpWhenMoving))), 0, 255));
-        };
-        smoothed_floor_clear_color_.r = blend_channel(smoothed_floor_clear_color_.r, target.r);
-        smoothed_floor_clear_color_.g = blend_channel(smoothed_floor_clear_color_.g, target.g);
-        smoothed_floor_clear_color_.b = blend_channel(smoothed_floor_clear_color_.b, target.b);
-    }
-    smoothed_floor_clear_color_.a = 255;
-    return smoothed_floor_clear_color_;
+    return map_default;
 }

@@ -50,6 +50,7 @@
 #include "dev_mode_utils.hpp"
 #include "asset_paths.hpp"
 #include "utils/log.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
@@ -1814,6 +1815,10 @@ bool DevControls::is_misc_options_panel_open() const {
     return misc_options_panel_open_;
 }
 
+bool DevControls::layout_dirty() const {
+    return !layout_cache_.valid || has_dirty(kDirtyLayout);
+}
+
 void DevControls::set_player(Asset* player) {
     player_ = player;
     if (room_editor_) room_editor_->set_player(player);
@@ -1821,13 +1826,16 @@ void DevControls::set_player(Asset* player) {
 
 void DevControls::set_active_assets(std::vector<Asset*>& actives, std::uint64_t version) {
     const bool assets_changed = (active_assets_ != &actives) || (active_assets_version_ != version);
+    if (!assets_changed) {
+        return;
+    }
     active_assets_ = &actives;
     active_assets_version_ = version;
     if (room_editor_) {
         room_editor_->set_active_assets(actives, version);
     }
 
-    if (assets_changed) mark_layout_dirty();
+    mark_layout_dirty();
 }
 
 void DevControls::set_screen_dimensions(int width, int height) {
@@ -2022,11 +2030,15 @@ Room* DevControls::resolve_current_room(Room* detected_room) {
     }
     if (!enabled_) {
         dev_selected_room_ = nullptr;
-        set_current_room(target);
+        if (current_room_ != target) {
+            set_current_room(target);
+        }
         return current_room_;
     }
     dev_selected_room_ = target;
-    set_current_room(target);
+    if (current_room_ != target) {
+        set_current_room(target);
+    }
     return current_room_;
 }
 
@@ -2216,6 +2228,10 @@ void DevControls::sync_camera_tilt_override() {
 void DevControls::update(const Input& input) {
     save_coordinator_.begin_frame();
     if (!enabled_) return;
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    auto elapsed_ms = [](Uint64 begin, Uint64 end) -> double {
+        return runtime_stats::FrameStatsRecorder::elapsed_ms(begin, end);
+    };
     if (map_info_dirty_ && assets_) {
         other_settings_.set_map_info(&assets_->map_info_json());
         map_info_dirty_ = false;
@@ -2292,24 +2308,36 @@ void DevControls::update(const Input& input) {
                 camera_panel_ && camera_panel_->is_visible() && pointer_over_camera_panel_;
             const bool depth_guide_blocking = depth_guide_drag_active_ || depth_guide_selection_ != DepthGuideSelection::None;
             if (!camera_panel_blocking && !depth_guide_blocking) {
+                const Uint64 room_update_begin = SDL_GetPerformanceCounter();
                 room_editor_->update(input);
+                frame_stats.set("dev.room_editor_update_ms",
+                                elapsed_ms(room_update_begin, SDL_GetPerformanceCounter()));
             }
         } else {
             room_editor_->clear_highlighted_assets();
         }
     }
 
-    if (camera_panel_) {
+    if (camera_panel_ && camera_panel_->is_visible()) {
+        const Uint64 camera_panel_begin = SDL_GetPerformanceCounter();
         camera_panel_->update(input, screen_w_, screen_h_);
+        frame_stats.set("dev.camera_panel_ms",
+                        elapsed_ms(camera_panel_begin, SDL_GetPerformanceCounter()));
     }
     if (regenerate_popup_ && regenerate_popup_->visible()) {
         regenerate_popup_->update(input);
     }
     other_settings_.set_enabled(enabled_);
     apply_header_suppression();
+    const Uint64 other_settings_begin = SDL_GetPerformanceCounter();
     other_settings_.update(input);
+    frame_stats.set("dev.other_settings_ms",
+                    elapsed_ms(other_settings_begin, SDL_GetPerformanceCounter()));
     if (map_mode_ui_) {
+        const Uint64 map_mode_begin = SDL_GetPerformanceCounter();
         map_mode_ui_->update(input);
+        frame_stats.set("dev.map_mode_ui_ms",
+                        elapsed_ms(map_mode_begin, SDL_GetPerformanceCounter()));
     }
     if (depth_guide_selection_ == DepthGuideSelection::BlueLayer &&
         depth_guide_blue_wheel_last_change_ms_ > 0 &&
@@ -2334,8 +2362,19 @@ void DevControls::update(const Input& input) {
 
     
 
-    ensure_layout_cache();
-    layout_misc_options_panel();
+    const bool layout_was_dirty = layout_dirty();
+    frame_stats.set("dev.layout_dirty", layout_was_dirty);
+    const Uint64 layout_begin = SDL_GetPerformanceCounter();
+    if (layout_was_dirty) {
+        ensure_layout_cache();
+    } else {
+        update_header_and_footer_bounds();
+    }
+    if (misc_options_panel_open_ || layout_was_dirty) {
+        layout_misc_options_panel();
+    }
+    frame_stats.set("dev.layout_ms",
+                    elapsed_ms(layout_begin, SDL_GetPerformanceCounter()));
 
     if (room_editor_ && room_editor_->is_enabled()) {
         SDL_Point pointer{input.getX(), input.getY()};
@@ -2369,6 +2408,7 @@ void DevControls::update(const Input& input) {
         }
     }
 
+    const Uint64 save_begin = SDL_GetPerformanceCounter();
     if (save_manager_.has_dirty_saveables()) {
         try {
             save_manager_.save_dirty_with_reason(devmode::core::DevSaveCoordinator::Priority::Debounced,
@@ -2386,6 +2426,7 @@ void DevControls::update(const Input& input) {
             }
         }
     }
+    frame_stats.set("dev.save_ms", elapsed_ms(save_begin, SDL_GetPerformanceCounter()));
 
     save_coordinator_.tick();
 }

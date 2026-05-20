@@ -79,6 +79,7 @@ public:
     bool run_exit_save_sequence(const std::string& reason);
     bool is_enabled() const { return enabled_; }
     Mode mode() const { return mode_; }
+    bool layout_dirty() const;
     void sync_camera_tilt_override();
 
     void set_camera_override_for_testing(WarpedScreenGrid* camera_override);

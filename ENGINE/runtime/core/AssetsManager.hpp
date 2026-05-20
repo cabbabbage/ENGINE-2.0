@@ -343,7 +343,7 @@ private:
     void rebuild_focus_filter_closure();
     void mark_focus_filter_closure_dirty();
     void ensure_dev_controls();
-    void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
+    bool sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
     void log_camera_fog_state(const char* label) const;
     void rebuild_runtime_asset_state_index();
@@ -511,6 +511,9 @@ private:
     std::uint32_t frame_rebuild_execution_count_ = 0;
     bool frame_rebuild_metrics_initialized_ = false;
     RuntimeConvergenceFrameStats last_runtime_convergence_stats_{};
+    bool visible_scaling_initialized_ = false;
+    std::uint64_t last_visible_scaling_camera_state_version_ = 0;
+    std::uint64_t last_visible_scaling_active_generation_ = 0;
 
     bool pending_initial_rebuild_ = false;
     bool post_runtime_traversal_refresh_pending_ = false;
@@ -564,7 +567,8 @@ private:
     void run_visibility_build_stage();
     void run_post_flush_traversal_refresh_once();
     void run_runtime_effects_stage(bool include_audio_update = true);
-    void sync_dev_controls_for_frame(const Input& input);
+    void sync_dev_controls_runtime_state();
+    void run_dev_controls_ui_frame(const Input& input);
     void refresh_filtered_active_assets_if_needed();
     void render_runtime_frame();
     SDL_Texture* prepare_runtime_ui_overlay_texture();

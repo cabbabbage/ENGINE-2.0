@@ -1996,15 +1996,16 @@ void Assets::reset_dev_controls_current_room_cache() {
     dev_controls_last_room_ = nullptr;
 }
 
-void Assets::sync_dev_controls_current_room(Room* room, bool force_refresh) {
+bool Assets::sync_dev_controls_current_room(Room* room, bool force_refresh) {
     if (!dev_controls_) {
-        return;
+        return false;
     }
     if (!force_refresh && dev_controls_last_room_ == room) {
-        return;
+        return false;
     }
     dev_controls_last_room_ = room;
     dev_controls_->set_current_room(room, force_refresh);
+    return true;
 }
 
 void Assets::ensure_dev_controls() {
@@ -2115,15 +2116,15 @@ void Assets::run_idle_frame_pipeline(const Input& input) {
     frame_stats.set("assets.runtime_effects_ms",
                     runtime_stats::FrameStatsRecorder::elapsed_ms(runtime_begin,
                                                                   SDL_GetPerformanceCounter()));
-    const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
-    sync_dev_controls_for_frame(input);
-    frame_stats.set("assets.dev_sync_ms",
-                    runtime_stats::FrameStatsRecorder::elapsed_ms(dev_sync_begin,
-                                                                  SDL_GetPerformanceCounter()));
     const Uint64 filter_begin = SDL_GetPerformanceCounter();
     refresh_filtered_active_assets_if_needed();
     frame_stats.set("assets.filtered_refresh_ms",
                     runtime_stats::FrameStatsRecorder::elapsed_ms(filter_begin,
+                                                                  SDL_GetPerformanceCounter()));
+    const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
+    sync_dev_controls_runtime_state();
+    frame_stats.set("assets.dev_sync_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(dev_sync_begin,
                                                                   SDL_GetPerformanceCounter()));
     const Uint64 render_begin = SDL_GetPerformanceCounter();
     render_runtime_frame();
@@ -2337,7 +2338,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     culled_debug_rects_.clear();
 
     dev_sync_begin = SDL_GetPerformanceCounter();
-    sync_dev_controls_for_frame(input);
+    sync_dev_controls_runtime_state();
     dev_sync_end = SDL_GetPerformanceCounter();
 
     pending_assets_begin = SDL_GetPerformanceCounter();
@@ -2388,21 +2389,53 @@ void Assets::run_visibility_build_stage() {
         }
     }
 
-    run_frame_rebuild_stage();
+    const bool frame_rebuilt = run_frame_rebuild_stage();
+    bool focus_refreshed = false;
     if (focus_filter_closure_dirty_) {
         rebuild_focus_filter_closure();
+        focus_refreshed = true;
     }
-    refresh_visible_asset_scaling_only();
+    const std::uint64_t camera_state = camera_.camera_state_version();
+    const bool scaling_refresh_needed =
+        frame_rebuilt ||
+        focus_refreshed ||
+        !visible_scaling_initialized_ ||
+        last_visible_scaling_camera_state_version_ != camera_state ||
+        last_visible_scaling_active_generation_ != active_assets_generation_;
+    runtime_stats::FrameStatsRecorder::instance().set("assets.visible_scaling_refreshed",
+                                                      scaling_refresh_needed);
+    if (scaling_refresh_needed) {
+        refresh_visible_asset_scaling_only();
+        visible_scaling_initialized_ = true;
+        last_visible_scaling_camera_state_version_ = camera_state;
+        last_visible_scaling_active_generation_ = active_assets_generation_;
+    }
 }
 
 void Assets::run_post_flush_traversal_refresh_once() {
     post_runtime_traversal_refresh_pending_ = true;
     note_frame_rebuild_request();
-    run_frame_rebuild_stage();
+    const bool frame_rebuilt = run_frame_rebuild_stage();
+    bool focus_refreshed = false;
     if (focus_filter_closure_dirty_) {
         rebuild_focus_filter_closure();
+        focus_refreshed = true;
     }
-    refresh_visible_asset_scaling_only();
+    const std::uint64_t camera_state = camera_.camera_state_version();
+    const bool scaling_refresh_needed =
+        frame_rebuilt ||
+        focus_refreshed ||
+        !visible_scaling_initialized_ ||
+        last_visible_scaling_camera_state_version_ != camera_state ||
+        last_visible_scaling_active_generation_ != active_assets_generation_;
+    runtime_stats::FrameStatsRecorder::instance().set("assets.visible_scaling_refreshed",
+                                                      scaling_refresh_needed);
+    if (scaling_refresh_needed) {
+        refresh_visible_asset_scaling_only();
+        visible_scaling_initialized_ = true;
+        last_visible_scaling_camera_state_version_ = camera_state;
+        last_visible_scaling_active_generation_ = active_assets_generation_;
+    }
 }
 
 void Assets::run_runtime_effects_stage(bool include_audio_update) {
@@ -2491,15 +2524,55 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
     }
 }
 
-void Assets::sync_dev_controls_for_frame(const Input& input) {
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        sync_dev_controls_current_room(current_room_);
-        dev_controls_->update(input);
-        dev_controls_->update_ui(input);
+void Assets::sync_dev_controls_runtime_state() {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return;
+    }
+
+    const Uint64 sync_begin = SDL_GetPerformanceCounter();
+    const bool room_changed = sync_dev_controls_current_room(current_room_);
+    frame_stats.set("dev.current_room_sync_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin, SDL_GetPerformanceCounter()));
+    if (room_changed) {
+        frame_stats.set("dev.current_room_changed", true);
     }
 }
 
+void Assets::run_dev_controls_ui_frame(const Input& input) {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return;
+    }
+
+    const Uint64 sync_begin = SDL_GetPerformanceCounter();
+    const bool room_changed = sync_dev_controls_current_room(current_room_);
+    frame_stats.set("dev.current_room_sync_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin, SDL_GetPerformanceCounter()));
+    if (room_changed) {
+        frame_stats.set("dev.current_room_changed", true);
+    }
+
+    const Uint64 update_begin = SDL_GetPerformanceCounter();
+    dev_controls_->update(input);
+    const Uint64 update_end = SDL_GetPerformanceCounter();
+    frame_stats.set("dev.update_total_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(update_begin, update_end));
+
+    const Uint64 ui_begin = SDL_GetPerformanceCounter();
+    dev_controls_->update_ui(input);
+    const Uint64 ui_end = SDL_GetPerformanceCounter();
+    frame_stats.set("dev.room_editor_ui_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(ui_begin, ui_end));
+}
+
 void Assets::refresh_filtered_active_assets_if_needed() {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("dev.set_active_assets_called", false);
+    frame_stats.set("dev.active_assets_sync_ms", 0.0);
+    frame_stats.set("dev.current_room_sync_ms", 0.0);
+    frame_stats.set("dev.active_assets_generation", dev_active_state_version_);
+    frame_stats.set("dev.filtered_assets_generation", dev_active_state_version_);
     bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
     std::uint64_t dev_filter_version = 0;
@@ -2518,8 +2591,20 @@ void Assets::refresh_filtered_active_assets_if_needed() {
         needs_filtered_active_refresh_ = false;
         update_filtered_active_assets();
         if (dev_controls_enabled) {
+            const Uint64 sync_begin = SDL_GetPerformanceCounter();
             dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
-            sync_dev_controls_current_room(current_room_);
+            const Uint64 sync_end = SDL_GetPerformanceCounter();
+            frame_stats.set("dev.set_active_assets_called", true);
+            frame_stats.set("dev.active_assets_sync_ms",
+                            runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin, sync_end));
+            const Uint64 room_sync_begin = SDL_GetPerformanceCounter();
+            const bool room_changed = sync_dev_controls_current_room(current_room_);
+            frame_stats.set("dev.current_room_sync_ms",
+                            runtime_stats::FrameStatsRecorder::elapsed_ms(room_sync_begin,
+                                                                          SDL_GetPerformanceCounter()));
+            if (room_changed) {
+                frame_stats.set("dev.current_room_changed", true);
+            }
         }
     }
 }
@@ -2542,6 +2627,9 @@ void Assets::render_runtime_frame() {
     frame_stats.set("assets.render_should_render", should_render);
     frame_stats.set("assets.render_suppressed", suppress_render_);
     frame_stats.set("assets.render_has_opengl_renderer", opengl_renderer_ != nullptr);
+    frame_stats.set("render.ui_overlay_cache_hit", false);
+    frame_stats.set("render.ui_overlay_content_dirty", false);
+    frame_stats.set("render.ui_overlay_redraw_reason", "");
     if (should_render) {
         const Uint64 overlay_begin = SDL_GetPerformanceCounter();
         SDL_Texture* ui_overlay = prepare_runtime_ui_overlay_texture();
@@ -2604,6 +2692,22 @@ void Assets::update(const Input& input)
     frame_stats.set("assets.active_count", static_cast<std::uint64_t>(active_assets.size()));
     frame_stats.set("assets.filtered_active_count", static_cast<std::uint64_t>(filtered_active_assets.size()));
     frame_stats.set("assets.total_count", static_cast<std::uint64_t>(all.size()));
+    frame_stats.set("assets.visible_scaling_refreshed", false);
+    frame_stats.set("dev.set_active_assets_called", false);
+    frame_stats.set("dev.current_room_changed", false);
+    frame_stats.set("dev.active_assets_sync_ms", 0.0);
+    frame_stats.set("dev.current_room_sync_ms", 0.0);
+    frame_stats.set("dev.update_total_ms", 0.0);
+    frame_stats.set("dev.room_editor_update_ms", 0.0);
+    frame_stats.set("dev.room_editor_ui_ms", 0.0);
+    frame_stats.set("dev.other_settings_ms", 0.0);
+    frame_stats.set("dev.map_mode_ui_ms", 0.0);
+    frame_stats.set("dev.camera_panel_ms", 0.0);
+    frame_stats.set("dev.layout_ms", 0.0);
+    frame_stats.set("dev.save_ms", 0.0);
+    frame_stats.set("dev.layout_dirty", false);
+    frame_stats.set("dev.active_assets_generation", dev_active_state_version_);
+    frame_stats.set("dev.filtered_assets_generation", dev_active_state_version_);
 
     static bool startup_safety_logged = false;
     if (!startup_safety_logged && startup_runtime_safety_active(frame_id_)) {
@@ -2691,11 +2795,16 @@ void Assets::update(const Input& input)
     run_runtime_effects_stage();
     const Uint64 runtime_end = SDL_GetPerformanceCounter();
 
-    // Stage: render + UI refresh.
-    const Uint64 render_begin = SDL_GetPerformanceCounter();
+    // Stage: dev UI refresh.
     const Uint64 filter_begin = SDL_GetPerformanceCounter();
     refresh_filtered_active_assets_if_needed();
     const Uint64 filter_end = SDL_GetPerformanceCounter();
+    const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
+    run_dev_controls_ui_frame(input);
+    const Uint64 dev_sync_end = SDL_GetPerformanceCounter();
+
+    // Stage: render.
+    const Uint64 render_begin = SDL_GetPerformanceCounter();
     render_runtime_frame();
     const Uint64 render_end = SDL_GetPerformanceCounter();
 
@@ -2704,6 +2813,7 @@ void Assets::update(const Input& input)
     const double runtime_ms = elapsed_ms(runtime_begin, runtime_end);
     const double render_ms = elapsed_ms(render_begin, render_end);
     const double filter_ms = elapsed_ms(filter_begin, filter_end);
+    const double dev_sync_ms = elapsed_ms(dev_sync_begin, dev_sync_end);
     const bool slow_frame = world_ms >= warn_ms || visibility_ms >= warn_ms ||
                             runtime_ms >= warn_ms || render_ms >= warn_ms;
     const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
@@ -2712,6 +2822,7 @@ void Assets::update(const Input& input)
     frame_stats.set("assets.visibility_ms", visibility_ms);
     frame_stats.set("assets.runtime_effects_ms", runtime_ms);
     frame_stats.set("assets.filtered_refresh_ms", filter_ms);
+    frame_stats.set("assets.dev_sync_ms", dev_sync_ms);
     frame_stats.set("assets.render_ms", render_ms);
     frame_stats.set("assets.slow_frame", slow_frame);
     frame_stats.set("assets.slow_frame_threshold_ms", warn_ms);
@@ -4105,7 +4216,11 @@ bool Assets::has_runtime_ui_overlay_content(Uint32 now_ticks) const {
 }
 
 SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     runtime_ui_overlay_redrawn_last_prepare_ = false;
+    frame_stats.set("render.ui_overlay_cache_hit", false);
+    frame_stats.set("render.ui_overlay_content_dirty", false);
+    frame_stats.set("render.ui_overlay_redraw_reason", "");
     SDL_Renderer* active_renderer = renderer();
     if (!active_renderer || screen_width <= 0 || screen_height <= 0) {
         return nullptr;
@@ -4113,11 +4228,15 @@ SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
 
     const Uint32 now = SDL_GetTicks();
     if (!has_runtime_ui_overlay_content(now)) {
+        frame_stats.set("render.ui_overlay_cache_hit", true);
+        frame_stats.set("render.ui_overlay_redraw_reason", "no_content");
         return nullptr;
     }
 
     if (runtime_ui_overlay_texture_ &&
         (runtime_ui_overlay_width_ != screen_width || runtime_ui_overlay_height_ != screen_height)) {
+        frame_stats.set("render.ui_overlay_content_dirty", true);
+        frame_stats.set("render.ui_overlay_redraw_reason", "target_size");
         destroy_runtime_ui_overlay_texture();
     }
 
@@ -4135,6 +4254,8 @@ SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
         runtime_ui_overlay_height_ = screen_height;
         SDL_SetTextureBlendMode(runtime_ui_overlay_texture_, SDL_BLENDMODE_BLEND);
         SDL_SetTextureScaleMode(runtime_ui_overlay_texture_, SDL_SCALEMODE_NEAREST);
+        frame_stats.set("render.ui_overlay_content_dirty", true);
+        frame_stats.set("render.ui_overlay_redraw_reason", "texture_create");
     }
 
     SDL_Texture* previous_target = SDL_GetRenderTarget(active_renderer);
@@ -4147,6 +4268,9 @@ SDL_Texture* Assets::prepare_runtime_ui_overlay_texture() {
 
     render_overlays(active_renderer, runtime_ui_overlay_texture_);
     runtime_ui_overlay_redrawn_last_prepare_ = true;
+    frame_stats.set("render.ui_overlay_content_dirty", true);
+    frame_stats.set("render.ui_overlay_redraw_reason",
+                    dev_controls_ && dev_controls_->is_enabled() ? "dev_controls" : "runtime_overlay");
     return runtime_ui_overlay_texture_;
 }
 

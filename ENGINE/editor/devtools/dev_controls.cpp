@@ -1535,6 +1535,9 @@ void DevControls::ensure_misc_options_widgets() {
     if (!misc_map_color_button_) {
         misc_map_color_button_ = std::make_unique<DMButton>("Pick Floor Color", &DMStyles::AccentButton(), 0, DMButton::height());
     }
+    if (!misc_delete_map_button_) {
+        misc_delete_map_button_ = std::make_unique<DMButton>("Delete This Map", &DMStyles::DeleteButton(), 0, DMButton::height());
+    }
     if (!color_picker_) {
         color_picker_ = std::make_unique<DevColorPicker>();
         color_picker_->set_screen_size(screen_w_, screen_h_);
@@ -1666,28 +1669,18 @@ void DevControls::layout_misc_options_panel() {
     }
     ensure_misc_options_widgets();
 
-    const int panel_w = 320;
+    const int panel_w = 360;
     const int padding = DMSpacing::panel_padding();
     const int gap = DMSpacing::item_gap();
     const int content_w = std::max(0, panel_w - padding * 2);
     const int label_h = DMStyles::Label().font_size;
     const int tile_h = misc_tile_size_stepper_ ? misc_tile_size_stepper_->preferred_height(content_w) : DMNumericStepper::height();
     const int color_h = DMButton::height();
+    const int delete_h = DMButton::height();
     const int preview_h = 26;
-    const int panel_h = padding + label_h + gap + tile_h + gap + label_h + gap + color_h + gap + preview_h + padding;
-
-    int footer_top = screen_h_;
-    if (map_mode_ui_) {
-        if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible()) {
-                SDL_Rect footer_rect = footer->rect();
-                footer_top = footer_rect.y;
-            }
-        }
-    }
-
-    const int x = std::max(0, screen_w_ - panel_w - 16);
-    const int y = std::max(0, footer_top - panel_h - 10);
+    const int panel_h = std::max(220, screen_h_ - 120);
+    const int x = std::max(0, screen_w_ - panel_w - 8);
+    const int y = 56;
     misc_options_panel_rect_ = SDL_Rect{x, y, panel_w, panel_h};
 
     int cursor_y = y + padding + label_h + gap;
@@ -1698,6 +1691,12 @@ void DevControls::layout_misc_options_panel() {
     cursor_y += label_h + gap;
     if (misc_map_color_button_) {
         misc_map_color_button_->set_rect(SDL_Rect{x + padding, cursor_y, content_w, color_h});
+    }
+    if (misc_delete_map_button_) {
+        misc_delete_map_button_->set_rect(SDL_Rect{x + padding,
+                                                   y + panel_h - padding - delete_h,
+                                                   content_w,
+                                                   delete_h});
     }
 }
 
@@ -1725,6 +1724,13 @@ bool DevControls::handle_misc_options_panel_event(const SDL_Event& event) {
                         (misc_map_color_.g != misc_map_color_saved_.g) ||
                         (misc_map_color_.b != misc_map_color_saved_.b);
                 });
+        }
+    }
+    if (misc_delete_map_button_ && misc_delete_map_button_->handle_event(event)) {
+        used = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            delete_current_map_and_exit_to_start_menu();
+            return true;
         }
     }
     if (color_picker_ && color_picker_->is_open()) {
@@ -1790,10 +1796,36 @@ void DevControls::render_misc_options_panel(SDL_Renderer* renderer) {
     sdl_render::FillRect(renderer, &preview_rect);
     SDL_SetRenderDrawColor(renderer, panel_border.r, panel_border.g, panel_border.b, panel_border.a);
     sdl_render::Rect(renderer, &preview_rect);
+    if (misc_delete_map_button_) {
+        misc_delete_map_button_->render(renderer);
+    }
 
     if (color_picker_ && color_picker_->is_open()) {
         color_picker_->render(renderer);
     }
+}
+
+void DevControls::delete_current_map_and_exit_to_start_menu() {
+    if (!assets_) {
+        return;
+    }
+    const std::string map_id = assets_->map_id();
+    if (map_id.empty()) {
+        assets_->show_dev_notice("Cannot delete map: missing map id", 2000);
+        return;
+    }
+    devmode::core::ManifestStore::MapPersistOptions options;
+    options.flush = true;
+    options.guard_reason = "delete_map_from_misc_options";
+    const bool removed = manifest_store_.remove_map_entry(map_id, options);
+    if (!removed) {
+        assets_->show_dev_notice("Map not found in manifest maps", 2000);
+        return;
+    }
+    (void)run_exit_save_sequence("delete_map_from_misc_options");
+    SDL_Event quit_event{};
+    quit_event.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&quit_event);
 }
 
 void DevControls::open_misc_options_panel() {

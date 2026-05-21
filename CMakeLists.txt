@@ -71,6 +71,10 @@ target_sources(engine PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp
 )
 
+add_executable(debug_flag_sync_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/debug_flag_sync_regression_test.cpp
+)
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)
@@ -316,5 +320,4 @@ foreach(tool_target asset_tool_cli)
         )
     endforeach()
 endforeach()
-
 

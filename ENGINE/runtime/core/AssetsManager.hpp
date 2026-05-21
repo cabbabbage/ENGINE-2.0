@@ -132,10 +132,10 @@ public:
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     bool impass_floor_debug_enabled() const { return impass_floor_debug_enabled_; }
     bool impass_floor_debug_visible() const { return impass_floor_debug_visible_; }
-    void set_movement_debug_enabled(bool enabled) { movement_debug_enabled_ = enabled; }
+    void set_movement_debug_enabled(bool enabled, bool notify_dev_controls = true);
     void set_movement_debug_visible(bool visible) { movement_debug_visible_ = visible; }
-    void set_anchor_point_debug_enabled(bool enabled) { anchor_point_debug_enabled_ = enabled; }
-    void set_impass_floor_debug_enabled(bool enabled) { impass_floor_debug_enabled_ = enabled; }
+    void set_anchor_point_debug_enabled(bool enabled, bool notify_dev_controls = true);
+    void set_impass_floor_debug_enabled(bool enabled, bool notify_dev_controls = true);
     void set_impass_floor_debug_visible(bool visible) { impass_floor_debug_visible_ = visible; }
     void set_render_suppressed(bool suppressed);
     void set_input(Input* m);

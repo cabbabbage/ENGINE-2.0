@@ -2856,7 +2856,7 @@ void Assets::update(const Input& input)
 
     if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
         const bool enable = !anchor_point_debug_enabled_;
-        anchor_point_debug_enabled_ = enable;
+        set_anchor_point_debug_enabled(enable);
         std::cout << "[Assets] Anchor point overlay "
                   << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
     }
@@ -3492,6 +3492,27 @@ void Assets::set_force_high_quality_rendering(bool enable) {
     }
     force_high_quality_rendering_ = enable;
     apply_camera_runtime_settings();
+}
+
+void Assets::set_movement_debug_enabled(bool enabled, bool notify_dev_controls) {
+    movement_debug_enabled_ = enabled;
+    if (notify_dev_controls && dev_controls_) {
+        dev_controls_->sync_debug_flags_from_assets();
+    }
+}
+
+void Assets::set_anchor_point_debug_enabled(bool enabled, bool notify_dev_controls) {
+    anchor_point_debug_enabled_ = enabled;
+    if (notify_dev_controls && dev_controls_) {
+        dev_controls_->sync_debug_flags_from_assets();
+    }
+}
+
+void Assets::set_impass_floor_debug_enabled(bool enabled, bool notify_dev_controls) {
+    impass_floor_debug_enabled_ = enabled;
+    if (notify_dev_controls && dev_controls_) {
+        dev_controls_->sync_debug_flags_from_assets();
+    }
 }
 
 void Assets::set_render_suppressed(bool suppressed) {

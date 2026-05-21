@@ -345,3 +345,44 @@ void DebugOverlayRenderer::render_anchor_debug(const WarpedScreenGrid& cam,
                           "' דלתא_פיקסלים=" + std::to_string(delta_px));
     }
 }
+
+void DebugOverlayRenderer::render_impass_floor_debug(
+    const WarpedScreenGrid& cam,
+    int screen_width,
+    int screen_height,
+    const std::vector<render_debug::ImpassFloorDebugPolygon>& polygons) const {
+    if (!renderer_ || polygons.empty()) {
+        return;
+    }
+
+    const SDL_Color edge_color{255, 64, 180, 230};
+    const SDL_Color point_color{255, 200, 80, 220};
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, edge_color.r, edge_color.g, edge_color.b, edge_color.a);
+    for (const auto& polygon : polygons) {
+        if (polygon.world_points.size() < 3) {
+            continue;
+        }
+        std::vector<SDL_FPoint> screen_points;
+        screen_points.reserve(polygon.world_points.size());
+        for (const SDL_Point& pt : polygon.world_points) {
+            SDL_FPoint projected{};
+            if (project_floor_point_to_screen(cam, static_cast<float>(pt.x), static_cast<float>(pt.y), projected)) {
+                screen_points.push_back(projected);
+            }
+        }
+        if (screen_points.size() < 3) {
+            continue;
+        }
+        for (std::size_t i = 0; i < screen_points.size(); ++i) {
+            const SDL_FPoint& a = screen_points[i];
+            const SDL_FPoint& b = screen_points[(i + 1) % screen_points.size()];
+            if (!is_debug_marker_in_bounds(a, screen_width, screen_height) &&
+                !is_debug_marker_in_bounds(b, screen_width, screen_height)) {
+                continue;
+            }
+            SDL_RenderLine(renderer_, a.x, a.y, b.x, b.y);
+            draw_filled_debug_dot(renderer_, a, 2, point_color);
+        }
+    }
+}

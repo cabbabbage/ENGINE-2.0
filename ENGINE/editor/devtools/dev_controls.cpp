@@ -186,6 +186,7 @@ constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
 constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
+constexpr const char* kImpassFloorDebugEnabledKey = "dev.impass_floor.debug.enabled";
 constexpr const char* kDevMapSettingsKey = "dev_map_settings";
 constexpr const char* kMapColorKey = "default_floor_color";
 constexpr const char* kLegacyMapColorKey = "map_color";
@@ -869,6 +870,10 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     grid_cell_size_px_ = grid_world_spacing_for_resolution(grid_overlay_resolution_r_);
     movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
     anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
+    impass_floor_debug_enabled_ = devmode::ui_settings::load_bool(kImpassFloorDebugEnabledKey, false);
+    if (assets_) {
+        assets_->set_impass_floor_debug_enabled(impass_floor_debug_enabled_);
+    }
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_parent_window(parent_window_);
@@ -1382,6 +1387,24 @@ void DevControls::rebuild_settings_schema() {
         [this](bool enabled) {
             anchor_point_debug_enabled_ = enabled;
             persist_dev_bool(kAnchorPointDebugEnabledKey, enabled);
+        },
+        {},
+        {},
+    });
+    global_settings_schema_.push_back(SettingSchema{
+        OtherSettingsAndControls::kImpassFloorDebugSettingId,
+        "Debug Impass Floor",
+        SettingGroup::Debug,
+        SettingControl::Toggle,
+        0,
+        0,
+        [this]() { return impass_floor_debug_enabled_; },
+        [this](bool enabled) {
+            impass_floor_debug_enabled_ = enabled;
+            persist_dev_bool(kImpassFloorDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_impass_floor_debug_enabled(enabled);
+            }
         },
         {},
         {},
@@ -4871,6 +4894,13 @@ void DevControls::set_mode(Mode new_mode) {
 void DevControls::update_movement_debug_visibility() {
     (void)enabled_;
     (void)movement_debug_enabled_;
+    if (assets_) {
+        bool suppress_impass_floor_debug = false;
+        if (room_editor_) {
+            suppress_impass_floor_debug = room_editor_->impassable_box_mode_active();
+        }
+        assets_->set_impass_floor_debug_visible(!suppress_impass_floor_debug);
+    }
 }
 
 void DevControls::restore_filter_hidden_assets() const {

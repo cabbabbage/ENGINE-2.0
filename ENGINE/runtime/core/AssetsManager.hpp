@@ -130,6 +130,10 @@ public:
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
     bool movement_debug_visible() const { return movement_debug_visible_; }
     bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
+    bool impass_floor_debug_enabled() const { return impass_floor_debug_enabled_; }
+    bool impass_floor_debug_visible() const { return impass_floor_debug_visible_; }
+    void set_impass_floor_debug_enabled(bool enabled) { impass_floor_debug_enabled_ = enabled; }
+    void set_impass_floor_debug_visible(bool visible) { impass_floor_debug_visible_ = visible; }
     void set_render_suppressed(bool suppressed);
     void set_input(Input* m);
     Input* get_input() const { return input; }
@@ -396,6 +400,8 @@ private:
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool anchor_point_debug_enabled_ = false;
+    bool impass_floor_debug_enabled_ = false;
+    bool impass_floor_debug_visible_ = true;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     mutable std::vector<FrameCollisionEntry> frame_collision_entries_;

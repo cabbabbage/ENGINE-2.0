@@ -2010,6 +2010,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                      assets_->movement_debug_visible();
     const bool draw_anchor_debug = assets_->is_dev_mode() &&
                                    assets_->anchor_point_debug_enabled();
+    const bool draw_impass_floor_debug = assets_->is_dev_mode() &&
+                                         assets_->impass_floor_debug_enabled() &&
+                                         assets_->impass_floor_debug_visible();
     const std::vector<Asset*>& visible_assets_for_debug = assets_->getFilteredActiveAssets();
     auto build_movement_debug_snapshots =
         [&]() -> std::unordered_map<const Asset*, render_debug::MovementDebugAssetSnapshot> {
@@ -2054,6 +2057,27 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         }
         return snapshots;
     };
+    auto build_impass_floor_polygons = [&]() -> std::vector<render_debug::ImpassFloorDebugPolygon> {
+        std::vector<render_debug::ImpassFloorDebugPolygon> polygons;
+        if (!draw_impass_floor_debug) {
+            return polygons;
+        }
+        const auto& entries = assets_->frame_collision_entries();
+        polygons.reserve(entries.size());
+        for (const auto& entry : entries) {
+            if (entry.canonical_type != "impassable") {
+                continue;
+            }
+            const auto& points = entry.area.get_points();
+            if (points.size() < 3) {
+                continue;
+            }
+            render_debug::ImpassFloorDebugPolygon polygon{};
+            polygon.world_points = points;
+            polygons.push_back(std::move(polygon));
+        }
+        return polygons;
+    };
 
     if (dof_active) {
         const std::uint64_t floor_begin = SDL_GetPerformanceCounter();
@@ -2083,6 +2107,14 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                                 static_cast<int>(frame_to_render->target_height),
                                                 snapshots,
                                                 visible_assets_for_debug);
+        }
+        if (draw_impass_floor_debug) {
+            DebugOverlayRenderer debug_overlay(renderer_);
+            const auto polygons = build_impass_floor_polygons();
+            debug_overlay.render_impass_floor_debug(assets_->getView(),
+                                                    static_cast<int>(frame_to_render->target_width),
+                                                    static_cast<int>(frame_to_render->target_height),
+                                                    polygons);
         }
         floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
 
@@ -2196,6 +2228,14 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                                 static_cast<int>(frame_to_render->target_height),
                                                 snapshots,
                                                 visible_assets_for_debug);
+        }
+        if (draw_impass_floor_debug) {
+            DebugOverlayRenderer debug_overlay(renderer_);
+            const auto polygons = build_impass_floor_polygons();
+            debug_overlay.render_impass_floor_debug(assets_->getView(),
+                                                    static_cast<int>(frame_to_render->target_width),
+                                                    static_cast<int>(frame_to_render->target_height),
+                                                    polygons);
         }
         floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
 

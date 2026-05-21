@@ -385,7 +385,6 @@ void MapLayersController::normalize_candidate_shape(json& candidate) {
     }
     candidate["source_type"] = source_type;
     candidate["value"] = value;
-    candidate["name"] = value; // Backward-compat mirror.
 }
 
 bool MapLayersController::add_candidate_internal(int layer_index,
@@ -402,7 +401,6 @@ bool MapLayersController::add_candidate_internal(int layer_index,
         json candidate = {
             {"source_type", source_type},
             {"value", value},
-            {"name", value},
             {"min_instances", 1},
             {"max_instances", 1},
             {"required_children", json::array()}
@@ -427,7 +425,6 @@ bool MapLayersController::add_candidate_internal(int layer_index,
     json candidate = {
         {"source_type", source_type},
         {"value", value},
-        {"name", value},
         {"min_instances", 0},
         {"max_instances", 1},
         {"required_children", json::array()}
@@ -554,7 +551,6 @@ bool MapLayersController::add_candidate_child(int layer_index, int candidate_ind
         json child_candidate = {
             {"source_type", "room_name"},
             {"value", child_room},
-            {"name", child_room},
             {"min_instances", 0},
             {"max_instances", 1},
             {"required_children", json::array()}
@@ -774,4 +770,3 @@ void MapLayersController::clamp_layer_counts(json& layer) const {
     layer["min_rooms"] = derived_min;
     layer["max_rooms"] = derived_max;
 }
-

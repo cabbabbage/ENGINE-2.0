@@ -463,6 +463,14 @@ void MainApp::game_loop() {
                 frame_stats.set("main.event_poll_ms",
                                 runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin, event_end));
 
+                if (input_) {
+                        const Uint64 keyboard_sync_begin = SDL_GetPerformanceCounter();
+                        input_->sync_live_keyboard_state();
+                        frame_stats.set("main.keyboard_sync_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(keyboard_sync_begin,
+                                                                                      SDL_GetPerformanceCounter()));
+                }
+
                 if (renderer) {
                         const Uint64 sync_begin = SDL_GetPerformanceCounter();
                         sync_output_dimensions(renderer);

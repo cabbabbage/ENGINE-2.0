@@ -1687,6 +1687,7 @@ void Assets::rebuild_frame_collision_context() const {
     if (!frame_collision_context_dirty_) {
         return;
     }
+    const Uint64 rebuild_begin = SDL_GetPerformanceCounter();
 
     frame_collision_entries_.clear();
     frame_collision_bounds_.clear();
@@ -1783,6 +1784,13 @@ void Assets::rebuild_frame_collision_context() const {
 
     frame_collision_context_frame_id_ = frame_id_;
     frame_collision_context_dirty_ = false;
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("assets.collision_context_rebuilt", true);
+    frame_stats.set("assets.collision_context_rebuild_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(rebuild_begin,
+                                                                  SDL_GetPerformanceCounter()));
+    frame_stats.set("assets.collision_context_entries",
+                    static_cast<std::uint64_t>(frame_collision_entries_.size()));
 }
 
 void Assets::query_impassable_entries(const Asset& self,
@@ -2339,10 +2347,23 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         dev_controls_->sync_camera_tilt_override();
     }
     camera_begin = SDL_GetPerformanceCounter();
+    const bool camera_settings_was_dirty = camera_settings_dirty_;
+    const std::uint64_t camera_state_before_update = camera_.camera_state_version();
     camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
-    if (camera_refresh_needed || camera_.is_height_animating()) {
+    const std::uint64_t camera_state_after_update = camera_.camera_state_version();
+    const bool camera_state_changed = camera_state_after_update != camera_state_before_update;
+    const bool camera_rebuild_request_needed =
+        room_changed ||
+        camera_settings_was_dirty ||
+        camera_state_changed ||
+        camera_.is_height_animating();
+    if (camera_rebuild_request_needed) {
         note_frame_rebuild_request();
     }
+    runtime_stats::FrameStatsRecorder::instance().set("assets.world_camera_state_changed",
+                                                      camera_state_changed);
+    runtime_stats::FrameStatsRecorder::instance().set("assets.world_camera_rebuild_requested",
+                                                      camera_rebuild_request_needed);
     camera_settings_dirty_ = false;
     camera_end = SDL_GetPerformanceCounter();
 
@@ -2757,6 +2778,9 @@ void Assets::update(const Input& input)
     frame_stats.set("assets.filtered_active_count", static_cast<std::uint64_t>(filtered_active_assets.size()));
     frame_stats.set("assets.total_count", static_cast<std::uint64_t>(all.size()));
     frame_stats.set("assets.visible_scaling_refreshed", false);
+    frame_stats.set("assets.collision_context_rebuilt", false);
+    frame_stats.set("assets.collision_context_rebuild_ms", 0.0);
+    frame_stats.set("assets.collision_context_entries", static_cast<std::uint64_t>(0));
     frame_stats.set("dev.set_active_assets_called", false);
     frame_stats.set("dev.current_room_changed", false);
     frame_stats.set("dev.active_assets_sync_ms", 0.0);

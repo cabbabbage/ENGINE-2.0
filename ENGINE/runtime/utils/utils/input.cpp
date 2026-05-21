@@ -1,7 +1,12 @@
 #include "utils/input.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <string>
 #include <utility>
+
+#include "utils/frame_stats_recorder.hpp"
 
 namespace {
 Input::Button to_button(Uint8 sdl_button) {
@@ -14,10 +19,32 @@ Input::Button to_button(Uint8 sdl_button) {
     default:                return Input::COUNT;
     }
 }
+
+bool live_scancode_down(const bool* live_keys, int key_count, SDL_Scancode sc) {
+    return live_keys && sc >= 0 && sc < key_count && live_keys[sc];
+}
+
+void record_key_metric(runtime_stats::FrameStatsRecorder& frame_stats,
+                       const char* prefix,
+                       const char* name,
+                       bool value) {
+    frame_stats.set(std::string(prefix) + name, value);
+}
 }
 
 void Input::handleEvent(const SDL_Event& e) {
     switch (e.type) {
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+    case SDL_EVENT_WINDOW_HIDDEN:
+    case SDL_EVENT_WINDOW_MINIMIZED:
+        keyboard_focus_active_ = false;
+        clear_all_state();
+        break;
+
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        keyboard_focus_active_ = true;
+        break;
+
     case SDL_EVENT_MOUSE_MOTION:
         dx_ = static_cast<int>(std::lround(e.motion.xrel));
         dy_ = static_cast<int>(std::lround(e.motion.yrel));
@@ -65,10 +92,7 @@ void Input::handleEvent(const SDL_Event& e) {
         SDL_Scancode sc = e.key.scancode;
         if (sc >= 0 && sc < SDL_SCANCODE_COUNT) {
             keys_down_[sc] = (e.type == SDL_EVENT_KEY_DOWN);
-            if (!scancode_dirty_flags_[sc]) {
-                scancode_dirty_flags_[sc] = true;
-                dirty_scancodes_.push_back(sc);
-            }
+            mark_scancode_dirty(sc);
         }
         break;
     }
@@ -76,6 +100,45 @@ void Input::handleEvent(const SDL_Event& e) {
     default:
         break;
     }
+}
+
+std::uint32_t Input::sync_live_keyboard_state() {
+    int key_count = 0;
+    const bool* live_keys = SDL_GetKeyboardState(&key_count);
+    std::uint32_t changed_count = 0;
+
+    if (live_keys && key_count > 0) {
+        const int count = std::min(key_count, static_cast<int>(SDL_SCANCODE_COUNT));
+        for (int i = 0; i < count; ++i) {
+            const SDL_Scancode sc = static_cast<SDL_Scancode>(i);
+            const bool live_down = keyboard_focus_active_ && live_keys[i];
+            if (keys_down_[sc] == live_down) {
+                continue;
+            }
+            keys_down_[sc] = live_down;
+            mark_scancode_dirty(sc);
+            ++changed_count;
+        }
+    }
+
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("input.keyboard_reconciled", changed_count > 0);
+    frame_stats.set("input.keyboard_reconciled_changed_count", changed_count);
+    frame_stats.set("input.keyboard_focus_active", keyboard_focus_active_);
+    frame_stats.set("input.focus_loss_cleared", focus_loss_cleared_since_sync_);
+    focus_loss_cleared_since_sync_ = false;
+
+    record_key_metric(frame_stats, "input.live.", "w", keyboard_focus_active_ && live_scancode_down(live_keys, key_count, SDL_SCANCODE_W));
+    record_key_metric(frame_stats, "input.live.", "a", keyboard_focus_active_ && live_scancode_down(live_keys, key_count, SDL_SCANCODE_A));
+    record_key_metric(frame_stats, "input.live.", "s", keyboard_focus_active_ && live_scancode_down(live_keys, key_count, SDL_SCANCODE_S));
+    record_key_metric(frame_stats, "input.live.", "d", keyboard_focus_active_ && live_scancode_down(live_keys, key_count, SDL_SCANCODE_D));
+    record_key_metric(frame_stats, "input.live.", "space", keyboard_focus_active_ && live_scancode_down(live_keys, key_count, SDL_SCANCODE_SPACE));
+    record_key_metric(frame_stats, "input.stored.", "w", keys_down_[SDL_SCANCODE_W]);
+    record_key_metric(frame_stats, "input.stored.", "a", keys_down_[SDL_SCANCODE_A]);
+    record_key_metric(frame_stats, "input.stored.", "s", keys_down_[SDL_SCANCODE_S]);
+    record_key_metric(frame_stats, "input.stored.", "d", keys_down_[SDL_SCANCODE_D]);
+    record_key_metric(frame_stats, "input.stored.", "space", keys_down_[SDL_SCANCODE_SPACE]);
+    return changed_count;
 }
 
 void Input::update() {
@@ -244,6 +307,44 @@ void Input::refresh_button_transition_active() {
             break;
         }
     }
+}
+
+void Input::mark_scancode_dirty(SDL_Scancode sc) {
+    if (sc < 0 || sc >= SDL_SCANCODE_COUNT) {
+        return;
+    }
+    if (!scancode_dirty_flags_[sc]) {
+        scancode_dirty_flags_[sc] = true;
+        dirty_scancodes_.push_back(sc);
+    }
+}
+
+void Input::clear_all_state() {
+    for (int i = 0; i < COUNT; ++i) {
+        if (buttons_[i]) {
+            button_state_dirty_ = true;
+        }
+        buttons_[i] = false;
+        pressed_[i] = false;
+        released_[i] = false;
+        clickBuffer_[i] = 0;
+    }
+    click_buffer_active_ = false;
+
+    for (int i = 0; i < SDL_SCANCODE_COUNT; ++i) {
+        const SDL_Scancode sc = static_cast<SDL_Scancode>(i);
+        if (keys_down_[sc]) {
+            keys_down_[sc] = false;
+            mark_scancode_dirty(sc);
+        }
+    }
+
+    dx_ = dy_ = 0;
+    scrollX_ = scrollY_ = 0;
+    mouse_motion_dirty_ = false;
+    scroll_dirty_ = false;
+    focus_loss_cleared_since_sync_ = true;
+    refresh_button_transition_active();
 }
 
 bool Input::has_activity() const {

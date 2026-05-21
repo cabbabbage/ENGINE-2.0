@@ -6,6 +6,7 @@
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
 #include "utils/string_utils.hpp"
@@ -59,6 +60,30 @@ int consume_axis(float& accumulator) {
         accumulator -= static_cast<float>(whole);
     }
     return whole;
+}
+
+SDL_Point clamp_delta_magnitude(int dx, int dy, float max_magnitude) {
+    if (max_magnitude <= 0.0f) {
+        return SDL_Point{0, 0};
+    }
+    const double magnitude = std::sqrt(static_cast<double>(dx) * static_cast<double>(dx) +
+                                       static_cast<double>(dy) * static_cast<double>(dy));
+    if (magnitude <= static_cast<double>(max_magnitude) || magnitude <= 1.0e-6) {
+        return SDL_Point{dx, dy};
+    }
+
+    const double scale = static_cast<double>(max_magnitude) / magnitude;
+    SDL_Point clamped{
+        static_cast<int>(std::round(static_cast<double>(dx) * scale)),
+        static_cast<int>(std::round(static_cast<double>(dy) * scale))
+    };
+    if (clamped.x == 0 && dx != 0) {
+        clamped.x = (dx > 0) ? 1 : -1;
+    }
+    if (clamped.y == 0 && dy != 0) {
+        clamped.y = (dy > 0) ? 1 : -1;
+    }
+    return clamped;
 }
 
 vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
@@ -212,12 +237,36 @@ void vibble_controller::movement(const Input& input) {
     dx_ = consume_axis(subpixel_x_);
     dy_ = consume_axis(subpixel_y_);
 
+    const int raw_dx = dx_;
+    const int raw_dy = dy_;
+    constexpr float kMaxNormalMovePixelsPerFrame = 48.0f;
+    constexpr float kMaxDashMovePixelsPerFrame = 96.0f;
+    const SDL_Point clamped_delta = clamp_delta_magnitude(
+        dx_,
+        dy_,
+        isDashing ? kMaxDashMovePixelsPerFrame : kMaxNormalMovePixelsPerFrame);
+    dx_ = clamped_delta.x;
+    dy_ = clamped_delta.y;
+
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("movement.player_input_delta_raw_x", raw_dx);
+    frame_stats.set("movement.player_input_delta_raw_y", raw_dy);
+    frame_stats.set("movement.player_input_delta_clamped_x", dx_);
+    frame_stats.set("movement.player_input_delta_clamped_y", dy_);
+    frame_stats.set("movement.player_input_delta_clamped", raw_dx != dx_ || raw_dy != dy_);
+    frame_stats.set("movement.player_dash_active", isDashing);
+    frame_stats.set("movement.player_input_x", input_x);
+    frame_stats.set("movement.player_input_y", input_y);
+    frame_stats.set("movement.player_world_intent_x", world_x);
+    frame_stats.set("movement.player_world_intent_y", world_y);
+
     constexpr float kResidualClamp = 8.0f;
     subpixel_x_ = std::clamp(subpixel_x_, -kResidualClamp, kResidualClamp);
     subpixel_y_ = std::clamp(subpixel_y_, -kResidualClamp, kResidualClamp);
 
     const bool has_pixel_motion = (dx_ != 0 || dy_ != 0);
     const bool has_movement_intent = (input_x != 0 || input_y != 0);
+    frame_stats.set("movement.player_has_intent", has_movement_intent);
     const std::string movement_animation =
         animation_for_direction(input_x, input_y);
     const CardinalVector movement_vector = movement_cardinal_vector(input_x, input_y);

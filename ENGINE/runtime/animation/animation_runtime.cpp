@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -27,10 +28,24 @@
 #include "animation_update.hpp"
 #include "animation/animation_tag_utils.hpp"
 #include "animation/attack_validation.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include "utils/transform_smoothing.hpp"
 #include "unstick_utils.hpp"
 
 namespace {
+constexpr int kMaxBlockedMoveFallbackProbes = 12;
+
+SDL_Point point_on_delta(SDL_Point from, SDL_Point delta, int step, int steps) {
+    if (steps <= 0) {
+        return from;
+    }
+    const double t = static_cast<double>(step) / static_cast<double>(steps);
+    return SDL_Point{
+        static_cast<int>(std::round(static_cast<double>(from.x) + static_cast<double>(delta.x) * t)),
+        static_cast<int>(std::round(static_cast<double>(from.y) + static_cast<double>(delta.y) * t))
+    };
+}
+
 template <typename Fn>
 bool visit_impassable_neighbors(const Asset& asset, Fn&& fn) {
     const Assets* assets = asset.get_assets();
@@ -778,29 +793,72 @@ void AnimationRuntime::apply_pending_move() {
 
     SDL_Point final_position = from;
     const auto block_context = active_path_blocking_context();
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    std::uint64_t path_blocked_checks = 0;
+    std::uint64_t fallback_probes = 0;
+    double path_blocked_ms = 0.0;
+    double fallback_ms = 0.0;
+    bool direct_blocked = false;
+    bool fallback_used = false;
+    bool fallback_probe_cap_hit = false;
+
+    auto timed_path_blocked = [&](SDL_Point check_from, SDL_Point check_to) {
+        const Uint64 begin = SDL_GetPerformanceCounter();
+        const bool blocked = path_blocked(check_from, check_to, self_, nullptr, block_context);
+        path_blocked_ms += runtime_stats::FrameStatsRecorder::elapsed_ms(begin, SDL_GetPerformanceCounter());
+        ++path_blocked_checks;
+        return blocked;
+    };
+
     if (world_delta.x != 0 || world_delta.y != 0) {
-        if (!path_blocked(from, to, self_, nullptr, block_context)) {
+        direct_blocked = timed_path_blocked(from, to);
+        if (!direct_blocked) {
             final_position = to;
         } else {
             const int steps = std::max(std::abs(world_delta.x), std::abs(world_delta.y));
             if (steps > 0) {
-                const double step_x = static_cast<double>(world_delta.x) / static_cast<double>(steps);
-                const double step_y = static_cast<double>(world_delta.y) / static_cast<double>(steps);
-                double       accum_x = static_cast<double>(from.x);
-                double       accum_y = static_cast<double>(from.y);
-                SDL_Point    current = from;
-                for (int i = 0; i < steps; ++i) {
-                    accum_x += step_x;
-                    accum_y += step_y;
-                    SDL_Point candidate{ static_cast<int>(std::round(accum_x)), static_cast<int>(std::round(accum_y)) };
-                    if (candidate.x == current.x && candidate.y == current.y) continue;
-                    if (path_blocked(current, candidate, self_, nullptr, block_context)) break;
-                    final_position = candidate;
-                    current        = candidate;
+                fallback_used = true;
+                const Uint64 fallback_begin = SDL_GetPerformanceCounter();
+                int low = 0;
+                int high = steps;
+                while (low + 1 < high && fallback_probes < kMaxBlockedMoveFallbackProbes) {
+                    const int mid = low + (high - low) / 2;
+                    const SDL_Point candidate = point_on_delta(from, world_delta, mid, steps);
+                    if (candidate.x == final_position.x && candidate.y == final_position.y) {
+                        low = mid;
+                        continue;
+                    }
+                    ++fallback_probes;
+                    if (timed_path_blocked(from, candidate)) {
+                        high = mid;
+                    } else {
+                        low = mid;
+                        final_position = candidate;
+                    }
+                }
+                if (low + 1 < high) {
+                    fallback_probe_cap_hit = true;
+                }
+                fallback_ms = runtime_stats::FrameStatsRecorder::elapsed_ms(fallback_begin,
+                                                                            SDL_GetPerformanceCounter());
+                const SDL_Point low_position = point_on_delta(from, world_delta, low, steps);
+                if (low_position.x != from.x || low_position.y != from.y) {
+                    final_position = low_position;
                 }
             }
         }
     }
+    frame_stats.set("movement.player_delta_world_x", world_delta.x);
+    frame_stats.set("movement.player_delta_world_z", world_delta.y);
+    frame_stats.set("movement.player_final_delta_world_x", final_position.x - from.x);
+    frame_stats.set("movement.player_final_delta_world_z", final_position.y - from.y);
+    frame_stats.set("movement.player_path_blocked_checks", path_blocked_checks);
+    frame_stats.set("movement.player_path_blocked_ms", path_blocked_ms);
+    frame_stats.set("movement.player_direct_blocked", direct_blocked);
+    frame_stats.set("movement.player_fallback_used", fallback_used);
+    frame_stats.set("movement.player_fallback_probes", fallback_probes);
+    frame_stats.set("movement.player_fallback_ms", fallback_ms);
+    frame_stats.set("movement.player_fallback_probe_cap_hit", fallback_probe_cap_hit);
 
     if (final_position.x != self_->world_x() || final_position.y != self_->world_z()) {
         self_->move_to_world_position(final_position.x, self_->world_y(), final_position.y);

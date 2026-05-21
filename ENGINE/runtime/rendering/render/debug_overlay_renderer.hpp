@@ -35,6 +35,10 @@ struct RuntimeLightDebugOverlayEntry {
     bool rendered = false;
 };
 
+struct ImpassFloorDebugPolygon {
+    std::vector<SDL_Point> world_points;
+};
+
 } // namespace render_debug
 
 class DebugOverlayRenderer {
@@ -54,6 +58,10 @@ public:
                              int screen_height,
                              const std::vector<Asset*>& visible_assets,
                              bool dev_mode) const;
+    void render_impass_floor_debug(const WarpedScreenGrid& cam,
+                                   int screen_width,
+                                   int screen_height,
+                                   const std::vector<render_debug::ImpassFloorDebugPolygon>& polygons) const;
 
 private:
     SDL_Renderer* renderer_ = nullptr;

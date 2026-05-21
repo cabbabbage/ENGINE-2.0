@@ -418,6 +418,7 @@ private:
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
     bool anchor_point_debug_enabled_ = false;
+    bool impass_floor_debug_enabled_ = false;
     bool misc_options_panel_open_ = false;
     bool misc_options_panel_suppress_callbacks_ = false;
     SDL_Rect misc_options_panel_rect_{0, 0, 0, 0};

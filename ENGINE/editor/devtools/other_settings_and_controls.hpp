@@ -52,6 +52,7 @@ public:
     static constexpr const char* kSnapToGridSettingId = "snap_to_grid";
     static constexpr const char* kMovementDebugSettingId = "movement_debug";
     static constexpr const char* kAnchorPointDebugSettingId = "anchor_point_debug";
+    static constexpr const char* kImpassFloorDebugSettingId = "impass_floor_debug";
     static constexpr const char* kOverlayResolutionSettingId = "overlay_resolution";
 
     OtherSettingsAndControls();

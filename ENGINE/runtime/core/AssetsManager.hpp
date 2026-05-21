@@ -127,6 +127,9 @@ public:
     bool run_exit_save_sequence(const std::string& reason);
     void set_force_high_quality_rendering(bool enable);
     bool force_high_quality_rendering() const { return force_high_quality_rendering_; }
+    bool movement_debug_enabled() const { return movement_debug_enabled_; }
+    bool movement_debug_visible() const { return movement_debug_visible_; }
+    bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     void set_render_suppressed(bool suppressed);
     void set_input(Input* m);
     Input* get_input() const { return input; }

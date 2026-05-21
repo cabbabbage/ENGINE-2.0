@@ -26,8 +26,10 @@
 #include "rendering/render/render_object_builder.hpp"
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/opengl_runtime_renderer.hpp"
+#include "rendering/render/debug_overlay_renderer.hpp"
 #include "rendering/render/sink_clip.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "animation/animation_update.hpp"
 #include "utils/grid.hpp"
 #include "utils/log.hpp"
 #include "utils/ranged_color.hpp"
@@ -2003,6 +2005,55 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         render_diagnostics::set_blur_pass_count(0);
     }
     bool dof_composited = false;
+    const bool draw_movement_debug = assets_->is_dev_mode() &&
+                                     assets_->movement_debug_enabled() &&
+                                     assets_->movement_debug_visible();
+    const bool draw_anchor_debug = assets_->is_dev_mode() &&
+                                   assets_->anchor_point_debug_enabled();
+    const std::vector<Asset*>& visible_assets_for_debug = assets_->getFilteredActiveAssets();
+    auto build_movement_debug_snapshots =
+        [&]() -> std::unordered_map<const Asset*, render_debug::MovementDebugAssetSnapshot> {
+        std::unordered_map<const Asset*, render_debug::MovementDebugAssetSnapshot> snapshots;
+        if (!draw_movement_debug) {
+            return snapshots;
+        }
+        snapshots.reserve(visible_assets_for_debug.size());
+        for (const Asset* asset : visible_assets_for_debug) {
+            if (!asset || !asset->anim_) {
+                continue;
+            }
+            render_debug::MovementDebugAssetSnapshot snapshot{};
+            const AnimationUpdate::ActivePlanMode mode = asset->anim_->current_plan_mode();
+            if (mode == AnimationUpdate::ActivePlanMode::Plan2D) {
+                const Plan* plan = asset->anim_->current_plan();
+                if (!plan || plan->sanitized_checkpoints.empty()) {
+                    continue;
+                }
+                render_debug::MovementDebugPathSnapshot path{};
+                path.world_points = plan->sanitized_checkpoints;
+                if (path.world_points.size() >= 2) {
+                    snapshot.paths.push_back(std::move(path));
+                }
+            } else if (mode == AnimationUpdate::ActivePlanMode::Plan3D) {
+                const Plan3D* plan3d = asset->anim_->current_plan_3d();
+                if (!plan3d || plan3d->sanitized_checkpoints.empty()) {
+                    continue;
+                }
+                render_debug::MovementDebugPathSnapshot path{};
+                path.world_points.reserve(plan3d->sanitized_checkpoints.size());
+                for (const axis::WorldPos& p : plan3d->sanitized_checkpoints) {
+                    path.world_points.push_back(SDL_Point{p.x, p.z});
+                }
+                if (path.world_points.size() >= 2) {
+                    snapshot.paths.push_back(std::move(path));
+                }
+            }
+            if (!snapshot.paths.empty()) {
+                snapshots.emplace(asset, std::move(snapshot));
+            }
+        }
+        return snapshots;
+    };
 
     if (dof_active) {
         const std::uint64_t floor_begin = SDL_GetPerformanceCounter();
@@ -2023,6 +2074,15 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                  out_error)) {
             render_diagnostics::end_frame();
             return false;
+        }
+        if (draw_movement_debug) {
+            DebugOverlayRenderer debug_overlay(renderer_);
+            const auto snapshots = build_movement_debug_snapshots();
+            debug_overlay.render_movement_debug(assets_->getView(),
+                                                static_cast<int>(frame_to_render->target_width),
+                                                static_cast<int>(frame_to_render->target_height),
+                                                snapshots,
+                                                visible_assets_for_debug);
         }
         floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
 
@@ -2046,6 +2106,14 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                      out_error)) {
                 render_diagnostics::end_frame();
                 return false;
+            }
+            if (draw_anchor_debug && layer.depth_layer == frame_to_render->focus_depth_layer) {
+                DebugOverlayRenderer debug_overlay(renderer_);
+                debug_overlay.render_anchor_debug(assets_->getView(),
+                                                  static_cast<int>(frame_to_render->target_width),
+                                                  static_cast<int>(frame_to_render->target_height),
+                                                  visible_assets_for_debug,
+                                                  assets_->is_dev_mode());
             }
             dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer_target});
         }
@@ -2120,6 +2188,15 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             render_diagnostics::end_frame();
             return false;
         }
+        if (draw_movement_debug) {
+            DebugOverlayRenderer debug_overlay(renderer_);
+            const auto snapshots = build_movement_debug_snapshots();
+            debug_overlay.render_movement_debug(assets_->getView(),
+                                                static_cast<int>(frame_to_render->target_width),
+                                                static_cast<int>(frame_to_render->target_height),
+                                                snapshots,
+                                                visible_assets_for_debug);
+        }
         floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
 
         const std::uint64_t xy_begin = SDL_GetPerformanceCounter();
@@ -2130,6 +2207,14 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                  out_error)) {
             render_diagnostics::end_frame();
             return false;
+        }
+        if (draw_anchor_debug) {
+            DebugOverlayRenderer debug_overlay(renderer_);
+            debug_overlay.render_anchor_debug(assets_->getView(),
+                                              static_cast<int>(frame_to_render->target_width),
+                                              static_cast<int>(frame_to_render->target_height),
+                                              visible_assets_for_debug,
+                                              assets_->is_dev_mode());
         }
         xy_pass_ms += elapsed_ms(xy_begin, SDL_GetPerformanceCounter());
         render_diagnostics::set_composite_layers_submitted("direct_scene->ui_overlay");

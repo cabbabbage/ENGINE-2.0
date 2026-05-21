@@ -20,6 +20,8 @@ set "RUN_EXIT_CODE=0"
 
 if not defined CODEX_PLAYTEST_MAP set "CODEX_PLAYTEST_MAP=forrest"
 if not defined CODEX_PLAYTEST_SECONDS set "CODEX_PLAYTEST_SECONDS=60"
+if not defined CODEX_PLAYTEST_ALLOW_SHORT set "CODEX_PLAYTEST_ALLOW_SHORT=0"
+for /f %%S in ('powershell -NoProfile -Command "$s=60; [void][int]::TryParse($env:CODEX_PLAYTEST_SECONDS,[ref]$s); if($env:CODEX_PLAYTEST_ALLOW_SHORT -eq "1"){ [Math]::Max(1,$s) } else { [Math]::Max(60,$s) }"') do set "CODEX_PLAYTEST_SECONDS=%%S"
 if not defined CODEX_PLAYTEST_REPORT set "CODEX_PLAYTEST_REPORT=codex_playtest_report.md"
 if not defined VIBBLE_SAFE_LOADING set "VIBBLE_SAFE_LOADING=1"
 

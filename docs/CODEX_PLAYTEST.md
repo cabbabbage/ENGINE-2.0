@@ -29,13 +29,16 @@ When the user references this file, run the harness from the repo root:
 codex_playtest.bat
 ```
 
-For fast validation, use:
+When the user explicitly asks for a shorter run, allow it by setting both variables below:
 
 ```bat
 set CODEX_PLAYTEST_SECONDS=5
+set CODEX_PLAYTEST_ALLOW_SHORT=1
 set CODEX_PLAYTEST_FRAME_LIMIT=300
 codex_playtest.bat
 ```
+
+If `CODEX_PLAYTEST_ALLOW_SHORT` is not `1`, the harness enforces a minimum 60-second play duration.
 
 The harness sets `VIBBLE_AUTOSTART_MAP=forrest`, `VIBBLE_RUNTIME_FRAME_LIMIT`, and `VIBBLE_CODEX_PLAYTEST_INPUT=1`. The in-engine input driver uses deterministic pseudo-random movement segments: short bursts, medium holds, and long single-direction holds. Long holds are required because normal mode stalls often show up while the player keeps moving in one direction.
 

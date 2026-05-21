@@ -51,6 +51,11 @@ public:
     bool wasScancodePressed(SDL_Scancode sc) const { return keys_pressed_[sc]; }
     bool wasScancodeReleased(SDL_Scancode sc) const { return keys_released_[sc]; }
 
+    void setScancodeDownForTest(SDL_Scancode sc, bool down);
+    void setMousePositionForTest(int x, int y);
+    void setMouseButtonDownForTest(Button button, bool down);
+    void applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w, int screen_h);
+
     bool has_activity() const;
 
     using ScreenToWorldFunction = std::function<SDL_Point(SDL_Point)>;

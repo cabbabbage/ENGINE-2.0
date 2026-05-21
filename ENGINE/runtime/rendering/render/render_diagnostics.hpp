@@ -90,6 +90,8 @@ struct RenderFrameStats {
     std::uint32_t creation_queue_age_max = 0;
     std::uint32_t creation_permanent_failures = 0;
     std::uint32_t creation_retried_count = 0;
+    bool held_scene_frame = false;
+    std::string held_scene_reason;
 };
 
 namespace render_diagnostics {
@@ -167,6 +169,7 @@ void set_creation_budget_stats(std::uint32_t budget_limit,
                                std::uint32_t queue_age_max,
                                std::uint32_t retried_count,
                                std::uint32_t permanent_failures);
+void set_held_scene_frame(bool held, const std::string& reason);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

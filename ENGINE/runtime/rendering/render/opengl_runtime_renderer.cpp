@@ -1918,18 +1918,27 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
 
     GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
+    std::string held_scene_reason;
     if (hold_incomplete_scene_frame || hold_zero_sprite_scene_frame || hold_empty_scene_frame) {
         held_frame_data = *last_complete_scene_frame_data_;
         held_frame_data.ui_overlay_texture = frame_data.ui_overlay_texture;
         held_frame_data.ui_overlay_gpu_texture = frame_data.ui_overlay_gpu_texture;
         held_frame_data.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
         frame_to_render = &held_frame_data;
+        if (hold_incomplete_scene_frame) {
+            held_scene_reason = "incomplete_scene";
+        } else if (hold_zero_sprite_scene_frame) {
+            held_scene_reason = "zero_sprite_scene";
+        } else {
+            held_scene_reason = "empty_scene";
+        }
 
         ++consecutive_held_incomplete_scene_frames_;
     } else {
         consecutive_held_incomplete_scene_frames_ = 0;
     }
 
+    render_diagnostics::set_held_scene_frame(frame_to_render == &held_frame_data, held_scene_reason);
     render_diagnostics::set_renderer_runtime_info("opengl", backend_name(), present_mode());
     render_diagnostics::set_floor_pass_target_dimensions(frame_to_render->target_width, frame_to_render->target_height);
     render_diagnostics::set_xy_sprite_pass_target_dimensions(frame_to_render->target_width, frame_to_render->target_height);

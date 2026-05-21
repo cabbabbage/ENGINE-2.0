@@ -2781,6 +2781,12 @@ void Assets::update(const Input& input)
     frame_stats.set("assets.collision_context_rebuilt", false);
     frame_stats.set("assets.collision_context_rebuild_ms", 0.0);
     frame_stats.set("assets.collision_context_entries", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.visibility_traversal_count", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.active_candidate_count", static_cast<std::uint64_t>(active_assets.size()));
+    frame_stats.set("assets.active_publish_count", static_cast<std::uint64_t>(active_assets.size()));
+    frame_stats.set("assets.active_fail_open_applied", false);
+    frame_stats.set("assets.active_fail_open_frames", visibility_fail_open_consecutive_frames_);
+    frame_stats.set("assets.active_fail_open_reason", "");
     frame_stats.set("dev.set_active_assets_called", false);
     frame_stats.set("dev.current_room_changed", false);
     frame_stats.set("dev.active_assets_sync_ms", 0.0);
@@ -2949,6 +2955,8 @@ void Assets::update(const Input& input)
     frame_stats.set("render.draw_calls", stats.draw_call_count);
     frame_stats.set("render.floor_packet_count", stats.floor_packet_count);
     frame_stats.set("render.xy_sprite_packet_count", stats.xy_sprite_packet_count);
+    frame_stats.set("render.held_scene_frame", stats.held_scene_frame);
+    frame_stats.set("render.held_scene_reason", stats.held_scene_reason);
     frame_stats.set("render.stage_timings", stats.render_stage_timings);
 
     finalize_dev_frame_state();
@@ -5004,6 +5012,7 @@ void Assets::rebuild_active_from_screen_grid() {
     if (current_frame_id == last_active_rebuild_frame_id_) {
         return;
     }
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     bool active_changed = false;
     if (++active_rebuild_epoch_ == 0) {
         active_rebuild_epoch_ = 1;
@@ -5019,13 +5028,106 @@ void Assets::rebuild_active_from_screen_grid() {
         scratch_previous_active_assets_.end(),
         active_assets.begin(),
         active_assets.end());
-    active_assets.clear();
-    movement_enabled_active_assets_.clear();
 
     const auto& visible_traversal = camera_.visible_traversal_entries();
     const bool traversal_empty = visible_traversal.empty();
-    active_assets.reserve(visible_traversal.size());
-    movement_enabled_active_assets_.reserve(visible_traversal.size());
+    std::vector<Asset*> candidate_active_assets;
+    std::unordered_set<Asset*> candidate_seen;
+    candidate_active_assets.reserve(visible_traversal.size() + 1);
+    candidate_seen.reserve(visible_traversal.size() + scratch_previous_active_assets_.size() + 1);
+
+    auto add_candidate = [&](Asset* asset) {
+        if (!asset || asset->dead) {
+            return;
+        }
+        if (!candidate_seen.insert(asset).second) {
+            return;
+        }
+        candidate_active_assets.push_back(asset);
+    };
+
+    for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : visible_traversal) {
+        add_candidate(source_entry.asset);
+    }
+
+    const std::size_t traversal_candidate_count = candidate_active_assets.size();
+    bool fail_open_applied = false;
+    std::string fail_open_reason;
+    if (!dev_mode && player && !player->dead) {
+        const std::size_t before_player = candidate_active_assets.size();
+        add_candidate(player);
+        if (candidate_active_assets.size() != before_player && traversal_empty) {
+            fail_open_applied = true;
+            fail_open_reason = "player";
+        }
+    }
+    if (!dev_mode && traversal_candidate_count == 0 && !scratch_previous_active_assets_.empty()) {
+        const std::size_t before_previous = candidate_active_assets.size();
+        for (Asset* asset : scratch_previous_active_assets_) {
+            add_candidate(asset);
+        }
+        if (candidate_active_assets.size() != before_previous) {
+            fail_open_applied = true;
+            fail_open_reason = fail_open_reason.empty() ? "previous_active" : "previous_active_plus_player";
+        }
+    } else if (!dev_mode && traversal_candidate_count == 0 &&
+               candidate_active_assets.size() > 0 &&
+               fail_open_reason.empty()) {
+        fail_open_applied = true;
+        fail_open_reason = "player";
+    }
+
+    if (fail_open_applied) {
+        ++visibility_fail_open_activation_count_;
+        if (visibility_fail_open_activation_count_ == 0) {
+            ++visibility_fail_open_activation_count_;
+        }
+        ++visibility_fail_open_consecutive_frames_;
+        if (visibility_fail_open_consecutive_frames_ == 0) {
+            ++visibility_fail_open_consecutive_frames_;
+        }
+    } else if (traversal_candidate_count > 0) {
+        visibility_fail_open_consecutive_frames_ = 0;
+    }
+
+    frame_stats.set("assets.visibility_traversal_count",
+                    static_cast<std::uint64_t>(visible_traversal.size()));
+    frame_stats.set("assets.active_candidate_count",
+                    static_cast<std::uint64_t>(traversal_candidate_count));
+    frame_stats.set("assets.active_publish_count",
+                    static_cast<std::uint64_t>(candidate_active_assets.size()));
+    frame_stats.set("assets.active_fail_open_applied", fail_open_applied);
+    frame_stats.set("assets.active_fail_open_frames", visibility_fail_open_consecutive_frames_);
+    frame_stats.set("assets.active_fail_open_reason", fail_open_reason);
+
+    if (traversal_empty && candidate_active_assets.empty() && !scratch_previous_active_assets_.empty()) {
+        vibble::log::warn("[Assets] Empty visibility traversal produced no publishable active set. frame=" +
+                          std::to_string(current_frame_id) +
+                          " previous_active=" + std::to_string(scratch_previous_active_assets_.size()) +
+                          " dev_mode=" + (dev_mode ? std::string("true") : "false") +
+                          " camera_state=" + std::to_string(camera_.camera_state_version()) +
+                          " depth_culled=" + std::to_string(camera_.last_depth_culled()) +
+                          " nodes=" + std::to_string(camera_.last_nodes_visited()) +
+                          " branches_skipped=" + std::to_string(camera_.last_branches_skipped()) +
+                          " active_chunk_points_scanned=" + std::to_string(camera_.last_active_chunk_points_scanned()) +
+                          " asset_to_point_lookups_avoided=" + std::to_string(camera_.last_asset_to_point_lookups_avoided()));
+    } else if (fail_open_applied &&
+               (visibility_fail_open_consecutive_frames_ == 1 ||
+                (visibility_fail_open_consecutive_frames_ % 60) == 0)) {
+        vibble::log::warn("[Assets] Visibility fail-open kept active set populated. frame=" +
+                          std::to_string(current_frame_id) +
+                          " reason=" + fail_open_reason +
+                          " traversal=" + std::to_string(visible_traversal.size()) +
+                          " candidate=" + std::to_string(traversal_candidate_count) +
+                          " published=" + std::to_string(candidate_active_assets.size()) +
+                          " consecutive=" + std::to_string(visibility_fail_open_consecutive_frames_) +
+                          " camera_state=" + std::to_string(camera_.camera_state_version()));
+    }
+
+    active_assets.clear();
+    movement_enabled_active_assets_.clear();
+    active_assets.reserve(candidate_active_assets.size());
+    movement_enabled_active_assets_.reserve(candidate_active_assets.size());
 
     auto activate_asset = [&](Asset* asset) {
         if (!asset || asset->dead) {
@@ -5059,43 +5161,8 @@ void Assets::rebuild_active_from_screen_grid() {
         mark_anchor_basis_dirty(asset);
     };
 
-    for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : visible_traversal) {
-        activate_asset(source_entry.asset);
-    }
-
-    bool fail_open_applied = false;
-    if (traversal_empty && active_assets.empty() && !scratch_previous_active_assets_.empty()) {
-        vibble::log::warn("[Assets] Empty visibility traversal detected. frame=" +
-                          std::to_string(current_frame_id) +
-                          " previous_active=" + std::to_string(scratch_previous_active_assets_.size()) +
-                          " fail_open_eligible=" + (visibility_fail_open_used_last_rebuild_ ? std::string("false") : std::string("true")) +
-                          " camera_state=" + std::to_string(camera_.camera_state_version()) +
-                          " depth_culled=" + std::to_string(camera_.last_depth_culled()) +
-                          " nodes=" + std::to_string(camera_.last_nodes_visited()) +
-                          " branches_skipped=" + std::to_string(camera_.last_branches_skipped()) +
-                          " active_chunk_points_scanned=" + std::to_string(camera_.last_active_chunk_points_scanned()) +
-                          " asset_to_point_lookups_avoided=" + std::to_string(camera_.last_asset_to_point_lookups_avoided()));
-    }
-    if (traversal_empty &&
-        active_assets.empty() &&
-        !scratch_previous_active_assets_.empty() &&
-        !visibility_fail_open_used_last_rebuild_) {
-        active_assets.reserve(scratch_previous_active_assets_.size());
-        for (Asset* asset : scratch_previous_active_assets_) {
-            activate_asset(asset);
-        }
-        if (!active_assets.empty()) {
-            ++visibility_fail_open_activation_count_;
-            if (visibility_fail_open_activation_count_ == 0) {
-                ++visibility_fail_open_activation_count_;
-            }
-            fail_open_applied = true;
-            vibble::log::warn("[Assets] Visibility fail-open reused previous active set for one frame. frame=" +
-                              std::to_string(current_frame_id) +
-                              " reused=" + std::to_string(active_assets.size()) +
-                              " activations=" + std::to_string(visibility_fail_open_activation_count_) +
-                              " camera_state=" + std::to_string(camera_.camera_state_version()));
-        }
+    for (Asset* asset : candidate_active_assets) {
+        activate_asset(asset);
     }
 
     // Deactivate assets no longer visible this frame.
@@ -5153,11 +5220,7 @@ void Assets::rebuild_active_from_screen_grid() {
         }
     }
 
-    if (!traversal_empty) {
-        visibility_fail_open_used_last_rebuild_ = false;
-    } else if (fail_open_applied) {
-        visibility_fail_open_used_last_rebuild_ = true;
-    }
+    visibility_fail_open_used_last_rebuild_ = fail_open_applied;
 
     last_active_rebuild_frame_id_ = current_frame_id;
 }

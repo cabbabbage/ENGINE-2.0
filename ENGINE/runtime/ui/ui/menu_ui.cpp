@@ -59,6 +59,33 @@ int env_int_clamped(const char* name, int default_value, int min_value, int max_
                 return safe_default;
         }
 }
+
+bool env_flag_enabled(const char* name, bool default_value) {
+        if (!name || !*name) {
+                return default_value;
+        }
+        const char* raw = std::getenv(name);
+        if (!raw || !*raw) {
+                return default_value;
+        }
+        std::string value(raw);
+        std::transform(value.begin(),
+                       value.end(),
+                       value.begin(),
+                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (value == "1" || value == "true" || value == "yes" || value == "on" || value == "y" || value == "t") {
+                return true;
+        }
+        if (value == "0" || value == "false" || value == "no" || value == "off" || value == "n" || value == "f") {
+                return false;
+        }
+        return default_value;
+}
+
+bool codex_playtest_input_enabled() {
+        static const bool enabled = env_flag_enabled("VIBBLE_CODEX_PLAYTEST_INPUT", false);
+        return enabled;
+}
 } // namespace
 
 bool MenuUI::MenuPacketStructuralKey::operator==(const MenuPacketStructuralKey& other) const {
@@ -129,6 +156,9 @@ void MenuUI::game_loop() {
                 env_int_clamped("VIBBLE_RUNTIME_FRAME_LIMIT", 0, 0, 1000000);
         if (auto_exit_frame_limit > 0) {
                 vibble::log::info("[MenuUI] Runtime frame limit: " + std::to_string(auto_exit_frame_limit));
+        }
+        if (codex_playtest_input_enabled()) {
+                vibble::log::info("[CodexPlaytest] In-engine input driver enabled for MenuUI runtime.");
         }
         auto process_event = [&](const SDL_Event& event) {
                 if (renderer && is_resize_or_scale_event(event.type)) {
@@ -227,6 +257,11 @@ void MenuUI::game_loop() {
 
                 const bool should_update = !menu_active_ && game_assets_ && input_;
                 if (should_update) {
+                        if (codex_playtest_input_enabled()) {
+                                input_->applyCodexPlaytestDriverForTest(runtime_frame_counter,
+                                                                        screen_w_,
+                                                                        screen_h_);
+                        }
                         const Uint64 assets_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
                         frame_stats.set("main.assets_update_ms",

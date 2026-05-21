@@ -510,6 +510,7 @@ private:
     Asset* max_asset_height_holder_ = nullptr;
     std::uint64_t active_assets_generation_ = 1;
     std::uint64_t visibility_fail_open_activation_count_ = 0;
+    std::uint64_t visibility_fail_open_consecutive_frames_ = 0;
     std::uint32_t frame_id_ = 0;
     std::uint32_t non_player_update_visit_epoch_ = 0;
     std::size_t startup_non_player_update_cursor_ = 0;

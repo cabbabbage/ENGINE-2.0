@@ -172,6 +172,23 @@ bool is_resize_or_scale_event(Uint32 event_type) {
         }
 }
 
+bool codex_playtest_input_enabled() {
+        static const bool enabled = env_flag_enabled("VIBBLE_CODEX_PLAYTEST_INPUT", false);
+        return enabled;
+}
+
+void apply_codex_playtest_input(Input& input,
+                                std::uint64_t frame_id,
+                                int screen_w,
+                                int screen_h) {
+        static bool logged = false;
+        if (!logged) {
+                logged = true;
+                vibble::log::info("[CodexPlaytest] In-engine input driver enabled.");
+        }
+        input.applyCodexPlaytestDriverForTest(frame_id, screen_w, screen_h);
+}
+
 }
 
 #if defined(_WIN32)
@@ -401,6 +418,7 @@ void MainApp::game_loop() {
 
         vibble::log::info("[MainApp] Game loop started.");
         vibble::log::info("[MainApp] Frame pacing target: " + app::frame_pacing::target_summary());
+        vibble::log::info("[RuntimeFrameStats] telemetry_schema=normal_active_set_fix_v1");
         if (auto_exit_frame_limit > 0) {
                 vibble::log::info("[MainApp] Runtime frame limit: " + std::to_string(auto_exit_frame_limit));
         }
@@ -409,6 +427,22 @@ void MainApp::game_loop() {
                 ++runtime_frame_counter;
                 auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
                 frame_stats.begin_frame(runtime_frame_counter);
+                frame_stats.set("main.telemetry_schema", "normal_active_set_fix_v1");
+                frame_stats.set("main.keyboard_sync_ms", 0.0);
+                frame_stats.set("input.keyboard_reconciled", false);
+                frame_stats.set("input.keyboard_reconciled_changed_count", static_cast<std::uint64_t>(0));
+                frame_stats.set("input.keyboard_focus_active", false);
+                frame_stats.set("input.focus_loss_cleared", false);
+                frame_stats.set("input.live.w", false);
+                frame_stats.set("input.live.a", false);
+                frame_stats.set("input.live.s", false);
+                frame_stats.set("input.live.d", false);
+                frame_stats.set("input.live.space", false);
+                frame_stats.set("input.stored.w", false);
+                frame_stats.set("input.stored.a", false);
+                frame_stats.set("input.stored.s", false);
+                frame_stats.set("input.stored.d", false);
+                frame_stats.set("input.stored.space", false);
                 struct RuntimeFrameScope {
                         runtime_stats::FrameStatsRecorder& stats;
                         bool active = true;
@@ -469,6 +503,12 @@ void MainApp::game_loop() {
                         frame_stats.set("main.keyboard_sync_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(keyboard_sync_begin,
                                                                                       SDL_GetPerformanceCounter()));
+                        if (codex_playtest_input_enabled()) {
+                                apply_codex_playtest_input(*input_,
+                                                           runtime_frame_counter,
+                                                           screen_w_,
+                                                           screen_h_);
+                        }
                 }
 
                 if (renderer) {
@@ -613,6 +653,7 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         if (game_assets_) {
                 const WarpedScreenGrid& cam = game_assets_->getView();
                 const world::CameraProjectionParams params = cam.projection_params();
+                const auto& camera_state = cam.camera_state();
                 projection_w = params.screen_width;
                 projection_h = params.screen_height;
                 const auto bounds = cam.get_bounds();
@@ -625,6 +666,13 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                 frustum_max_z = cam.last_max_world_z();
                 frustum_nodes = static_cast<int>(cam.last_nodes_visited());
                 frustum_skipped = static_cast<int>(cam.last_branches_skipped());
+                frame_stats.set("camera.center_x", static_cast<double>(camera_state.center.x));
+                frame_stats.set("camera.center_y", static_cast<double>(camera_state.center.y));
+                frame_stats.set("camera.target_center_x", static_cast<double>(camera_state.target_center.x));
+                frame_stats.set("camera.target_center_y", static_cast<double>(camera_state.target_center.y));
+                frame_stats.set("camera.velocity_x", static_cast<double>(camera_state.center_velocity.x));
+                frame_stats.set("camera.velocity_y", static_cast<double>(camera_state.center_velocity.y));
+                frame_stats.set("camera.state_version", cam.camera_state_version());
                 if (const std::optional<SDL_Point> pp_size = game_assets_->opengl_postprocess_target_size()) {
                         postprocess_text = std::to_string(pp_size->x) + "x" + std::to_string(pp_size->y);
                 }

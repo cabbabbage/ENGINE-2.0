@@ -169,6 +169,8 @@ void begin_frame() {
     g_frame_stats.creation_queue_age_max = 0;
     g_frame_stats.creation_permanent_failures = 0;
     g_frame_stats.creation_retried_count = 0;
+    g_frame_stats.held_scene_frame = false;
+    g_frame_stats.held_scene_reason.clear();
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -381,6 +383,12 @@ void set_creation_budget_stats(std::uint32_t budget_limit,
     g_frame_stats.creation_retried_count = retried_count;
     g_frame_stats.creation_permanent_failures = permanent_failures;
 }
+
+void set_held_scene_frame(bool held, const std::string& reason) {
+    g_frame_stats.held_scene_frame = held;
+    g_frame_stats.held_scene_reason = held ? reason : std::string{};
+}
+
 void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }
 
 void note_texture_created(SDL_Texture* texture) {

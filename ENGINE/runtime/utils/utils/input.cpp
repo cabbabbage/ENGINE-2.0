@@ -269,6 +269,120 @@ void Input::consumeEvent(const SDL_Event& e) {
     }
 }
 
+void Input::setScancodeDownForTest(SDL_Scancode sc, bool down) {
+    if (sc < 0 || sc >= SDL_SCANCODE_COUNT) {
+        return;
+    }
+    keyboard_focus_active_ = true;
+    if (keys_down_[sc] != down) {
+        keys_down_[sc] = down;
+        mark_scancode_dirty(sc);
+    }
+}
+
+void Input::setMousePositionForTest(int x, int y) {
+    dx_ = x - x_;
+    dy_ = y - y_;
+    x_ = x;
+    y_ = y;
+    mouse_motion_dirty_ = true;
+}
+
+void Input::setMouseButtonDownForTest(Button button, bool down) {
+    if (button < 0 || button >= COUNT) {
+        return;
+    }
+    if (buttons_[button] == down) {
+        return;
+    }
+    buttons_[button] = down;
+    button_state_dirty_ = true;
+    if (!down) {
+        clickBuffer_[button] = 3;
+        click_buffer_active_ = true;
+    }
+}
+
+void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w, int screen_h) {
+    constexpr SDL_Scancode movement_keys[] = {
+        SDL_SCANCODE_W,
+        SDL_SCANCODE_A,
+        SDL_SCANCODE_S,
+        SDL_SCANCODE_D,
+        SDL_SCANCODE_UP,
+        SDL_SCANCODE_LEFT,
+        SDL_SCANCODE_DOWN,
+        SDL_SCANCODE_RIGHT,
+        SDL_SCANCODE_SPACE,
+        SDL_SCANCODE_LSHIFT,
+        SDL_SCANCODE_E
+    };
+    for (SDL_Scancode scancode : movement_keys) {
+        setScancodeDownForTest(scancode, false);
+    }
+
+    const std::uint64_t phase = (frame_id / 45u) % 8u;
+    switch (phase) {
+    case 0:
+        setScancodeDownForTest(SDL_SCANCODE_W, true);
+        break;
+    case 1:
+        setScancodeDownForTest(SDL_SCANCODE_D, true);
+        break;
+    case 2:
+        setScancodeDownForTest(SDL_SCANCODE_S, true);
+        break;
+    case 3:
+        setScancodeDownForTest(SDL_SCANCODE_A, true);
+        break;
+    case 4:
+        setScancodeDownForTest(SDL_SCANCODE_W, true);
+        setScancodeDownForTest(SDL_SCANCODE_D, true);
+        break;
+    case 5:
+        setScancodeDownForTest(SDL_SCANCODE_S, true);
+        setScancodeDownForTest(SDL_SCANCODE_A, true);
+        break;
+    case 6:
+        setScancodeDownForTest(SDL_SCANCODE_W, true);
+        setScancodeDownForTest(SDL_SCANCODE_LSHIFT, true);
+        break;
+    default:
+        setScancodeDownForTest(SDL_SCANCODE_D, true);
+        break;
+    }
+
+    const bool pulse_dash = (frame_id % 180u) < 12u;
+    const bool pulse_interact = (frame_id % 240u) >= 20u && (frame_id % 240u) < 44u;
+    setScancodeDownForTest(SDL_SCANCODE_SPACE, pulse_dash);
+    setScancodeDownForTest(SDL_SCANCODE_E, pulse_interact);
+
+    const int safe_w = std::max(1, screen_w);
+    const int safe_h = std::max(1, screen_h);
+    const std::uint64_t mouse_phase = (frame_id / 60u) % 4u;
+    const int mouse_x = (mouse_phase == 0u) ? (safe_w * 3) / 4
+                      : (mouse_phase == 2u) ? safe_w / 4
+                      : safe_w / 2;
+    const int mouse_y = (mouse_phase == 1u) ? safe_h / 4
+                      : (mouse_phase == 3u) ? (safe_h * 3) / 4
+                      : safe_h / 2;
+    setMousePositionForTest(mouse_x, mouse_y);
+
+    const bool melee_down = (frame_id % 210u) < 6u;
+    setMouseButtonDownForTest(Input::LEFT, melee_down);
+
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("codex_playtest.input_driver", true);
+    frame_stats.set("codex_playtest.phase", static_cast<std::uint64_t>(phase));
+    frame_stats.set("codex_playtest.mouse_x", mouse_x);
+    frame_stats.set("codex_playtest.mouse_y", mouse_y);
+    record_key_metric(frame_stats, "input.stored.", "w", keys_down_[SDL_SCANCODE_W]);
+    record_key_metric(frame_stats, "input.stored.", "a", keys_down_[SDL_SCANCODE_A]);
+    record_key_metric(frame_stats, "input.stored.", "s", keys_down_[SDL_SCANCODE_S]);
+    record_key_metric(frame_stats, "input.stored.", "d", keys_down_[SDL_SCANCODE_D]);
+    record_key_metric(frame_stats, "input.stored.", "space", keys_down_[SDL_SCANCODE_SPACE]);
+}
+
 void Input::set_screen_to_world_mapper(ScreenToWorldFunction fn) {
     screen_to_world_fn_ = std::move(fn);
 }

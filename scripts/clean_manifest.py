@@ -3,8 +3,7 @@
 Script to remove deprecated fields from manifest.json asset entries.
 
 Deprecated fields identified from codebase analysis:
-- Animation level: crop_frames, flipped_source, inherit_source_movement,
-                   reverse_source, rnd_start, speed_multiplier, on_end
+- Animation level: crop_frames, flipped_source, reverse_source, rnd_start, speed_multiplier, on_end
 - Frame level: needs_rebuild, children (legacy child payloads)
 - Asset level: async_children (legacy child format)
 - Movement entries: embedded legacy child arrays ("children")
@@ -20,7 +19,6 @@ from typing import Any, Dict, List
 DEPRECATED_ANIMATION_FIELDS = {
     'crop_frames',
     'flipped_source',
-    'inherit_source_movement',
     'reverse_source',
     'rnd_start',
     'speed_multiplier',

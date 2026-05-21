@@ -1162,16 +1162,9 @@ void AnimationLoader::load(Animation& animation,
             movement_enabled && anim_json.contains("movement_paths") && anim_json["movement_paths"].is_array();
         const bool has_any_local_frame_data =
             has_movement_json || has_movement_paths_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
-        const bool legacy_inherit_source_movement =
-            read_bool_field_like(anim_json, "inherit_source_movement", (animation.source.kind == "animation"));
         const bool default_inherit_data =
-            (animation.source.kind == "animation") && legacy_inherit_source_movement && !has_any_local_frame_data;
-        bool inherit_data = default_inherit_data;
-        if (anim_json.contains("inherit_data")) {
-                inherit_data = read_bool_field_like(anim_json, "inherit_data", default_inherit_data);
-        } else {
-                inherit_data = read_bool_field_like(anim_json, "inherit_source_geometry", default_inherit_data);
-        }
+            (animation.source.kind == "animation") && !has_any_local_frame_data;
+        const bool inherit_data = read_bool_field_like(anim_json, "inherit_data", default_inherit_data);
         animation.inherit_data = (animation.source.kind == "animation") && inherit_data;
         const bool allow_geometry_inversion = (animation.source.kind == "animation") && animation.inherit_data;
         if (!allow_geometry_inversion) {

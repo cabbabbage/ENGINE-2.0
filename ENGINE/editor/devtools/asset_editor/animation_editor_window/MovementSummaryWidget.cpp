@@ -61,10 +61,7 @@ bool payload_inherits_geometry(const nlohmann::json& payload) {
         (payload.contains("hit_boxes") && payload["hit_boxes"].is_array()) ||
         (payload.contains("attack_boxes") && payload["attack_boxes"].is_array());
     const bool default_inherit = !has_local_frame_data;
-    if (payload.contains("inherit_data")) {
-        return payload.value("inherit_data", default_inherit);
-    }
-    return payload.value("inherit_source_geometry", default_inherit);
+    return payload.value("inherit_data", default_inherit);
 }
 
 void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x, int y, SDL_Color color) {

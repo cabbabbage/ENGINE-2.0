@@ -4414,12 +4414,7 @@ std::optional<std::string> AnimationEditorWindow::pick_animation_reference() con
         }
         const bool sourced_from_animation =
             animation_editor::strings::to_lower_copy(kind) == std::string{"animation"};
-        bool inherits_data = false;
-        if (payload.contains("inherit_data")) {
-            inherits_data = payload.value("inherit_data", false);
-        } else {
-            inherits_data = payload.value("inherit_source_geometry", false);
-        }
+        const bool inherits_data = payload.value("inherit_data", false);
         if (!sourced_from_animation || !inherits_data) {
         selectable.push_back(id);
     }

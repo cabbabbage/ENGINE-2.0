@@ -537,7 +537,6 @@ void normalize_layer_candidate_entry(nlohmann::json& candidate, bool& changed) {
 
     candidate["source_type"] = source_type;
     candidate["value"] = value;
-    candidate["name"] = value; // compatibility mirror
     candidate["min_instances"] = min_instances;
     candidate["max_instances"] = max_instances;
 }
@@ -587,7 +586,6 @@ bool ensure_layer_zero_defaults(nlohmann::json& map_manifest, const std::string&
         nlohmann::json spawn_candidate = nlohmann::json::object({
             {"source_type", "room_name"},
             {"value", std::string("Spawn")},
-            {"name", std::string("Spawn")},
             {"min_instances", 1},
             {"max_instances", 1},
             {"required_children", nlohmann::json::array()}

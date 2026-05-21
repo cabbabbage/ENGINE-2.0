@@ -872,6 +872,8 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
     impass_floor_debug_enabled_ = devmode::ui_settings::load_bool(kImpassFloorDebugEnabledKey, false);
     if (assets_) {
+        assets_->set_movement_debug_enabled(movement_debug_enabled_);
+        assets_->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
         assets_->set_impass_floor_debug_enabled(impass_floor_debug_enabled_);
     }
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
@@ -1365,6 +1367,9 @@ void DevControls::rebuild_settings_schema() {
         [this](bool enabled) {
             movement_debug_enabled_ = enabled;
             persist_dev_bool(kMovementDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_movement_debug_enabled(enabled);
+            }
             if (map_mode_ui_) {
                 if (auto* footer = map_mode_ui_->get_footer_bar()) {
                     footer->set_movement_debug_enabled(enabled);
@@ -1387,6 +1392,9 @@ void DevControls::rebuild_settings_schema() {
         [this](bool enabled) {
             anchor_point_debug_enabled_ = enabled;
             persist_dev_bool(kAnchorPointDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_anchor_point_debug_enabled(enabled);
+            }
         },
         {},
         {},
@@ -4924,9 +4932,12 @@ void DevControls::set_mode(Mode new_mode) {
 }
 
 void DevControls::update_movement_debug_visibility() {
-    (void)enabled_;
-    (void)movement_debug_enabled_;
     if (assets_) {
+        bool suppress_movement_debug = false;
+        if (room_editor_) {
+            suppress_movement_debug = room_editor_->impassable_box_mode_active();
+        }
+        assets_->set_movement_debug_visible(!suppress_movement_debug);
         bool suppress_impass_floor_debug = false;
         if (room_editor_) {
             suppress_impass_floor_debug = room_editor_->impassable_box_mode_active();

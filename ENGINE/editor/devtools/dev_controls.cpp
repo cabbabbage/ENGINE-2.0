@@ -1432,6 +1432,29 @@ void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
     }
 }
 
+void DevControls::sync_debug_flags_from_assets() {
+    if (!assets_) {
+        return;
+    }
+
+    movement_debug_enabled_ = assets_->movement_debug_enabled();
+    anchor_point_debug_enabled_ = assets_->anchor_point_debug_enabled();
+    impass_floor_debug_enabled_ = assets_->impass_floor_debug_enabled();
+
+    persist_dev_bool(kMovementDebugEnabledKey, movement_debug_enabled_);
+    persist_dev_bool(kAnchorPointDebugEnabledKey, anchor_point_debug_enabled_);
+    persist_dev_bool(kImpassFloorDebugEnabledKey, impass_floor_debug_enabled_);
+
+    if (map_mode_ui_) {
+        if (auto* footer = map_mode_ui_->get_footer_bar()) {
+            footer->set_movement_debug_enabled(movement_debug_enabled_);
+        }
+    }
+
+    update_movement_debug_visibility();
+    other_settings_.refresh_setting_values();
+}
+
 void DevControls::apply_bool_setting(const char* id, bool value, bool sync_other_settings) {
     for (auto& setting : global_settings_schema_) {
         if (setting.id == id && setting.control == OtherSettingsAndControls::SettingControl::Toggle) {

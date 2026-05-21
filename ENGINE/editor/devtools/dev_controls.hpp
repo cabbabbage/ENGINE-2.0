@@ -81,6 +81,7 @@ public:
     Mode mode() const { return mode_; }
     bool layout_dirty() const;
     void sync_camera_tilt_override();
+    void sync_debug_flags_from_assets();
 
     void set_camera_override_for_testing(WarpedScreenGrid* camera_override);
 

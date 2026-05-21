@@ -2,7 +2,7 @@
     "dev": {
         "anchor_points": {
             "debug": {
-                "enabled": false
+                "enabled": true
             }
         },
         "asset_filter": {
@@ -43,9 +43,14 @@
                 "enabled": false
             }
         },
+        "impass_floor": {
+            "debug": {
+                "enabled": true
+            }
+        },
         "movement": {
             "debug": {
-                "enabled": false
+                "enabled": true
             }
         }
     },

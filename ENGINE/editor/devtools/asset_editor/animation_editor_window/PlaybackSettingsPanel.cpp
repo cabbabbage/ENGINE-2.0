@@ -125,12 +125,8 @@ bool payload_inherits_data(const nlohmann::json& payload) {
     if (!payload_uses_animation_source(payload)) {
         return false;
     }
-    const bool legacy_inherit = read_bool_field_like(payload, "inherit_source_movement", true);
-    const bool default_inherit = legacy_inherit && !payload_has_local_frame_data(payload);
-    if (payload.contains("inherit_data")) {
-        return read_bool_field_like(payload, "inherit_data", default_inherit);
-    }
-    return read_bool_field_like(payload, "inherit_source_geometry", default_inherit);
+    const bool default_inherit = !payload_has_local_frame_data(payload);
+    return read_bool_field_like(payload, "inherit_data", default_inherit);
 }
 
 std::string payload_on_end_value(const nlohmann::json& payload) {
@@ -1426,7 +1422,7 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         payload.erase("speed_factor");
         payload.erase("speed_multiplier");
     }
-    payload.erase("inherit_source_movement");
+    payload.erase("inherit_source_geometry");
     payload.erase("flipped_source");
     payload.erase("flip_vertical_source");
     payload.erase("flip_movement_horizontal");
@@ -1536,5 +1532,4 @@ void PlaybackSettingsPanel::refresh_inherited_message() {
 }
 
 }
-
 

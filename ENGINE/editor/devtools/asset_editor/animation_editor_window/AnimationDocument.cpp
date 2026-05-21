@@ -133,18 +133,17 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     const bool has_attack_boxes_json = payload.contains("attack_boxes") && payload["attack_boxes"].is_array();
     const bool has_any_local_frame_data =
         has_movement_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
-    const bool legacy_inherit_source_movement =
-        read_bool_field_like(payload, "inherit_source_movement", derived_from_animation);
-    const bool default_inherit_data =
-        derived_from_animation &&
-            legacy_inherit_source_movement &&
-            !has_any_local_frame_data;
-    bool inherit_data = default_inherit_data;
-    if (payload.contains("inherit_data")) {
-        inherit_data = read_bool_field_like(payload, "inherit_data", default_inherit_data);
-    } else {
-        inherit_data = read_bool_field_like(payload, "inherit_source_geometry", default_inherit_data);
+    if (!payload.contains("inherit_data")) {
+        const bool legacy_inherit_source_movement =
+            read_bool_field_like(payload, "inherit_source_movement", derived_from_animation);
+        const bool legacy_inherit_source_geometry =
+            read_bool_field_like(payload, "inherit_source_geometry", legacy_inherit_source_movement);
+        const bool migrated_inherit_data =
+            derived_from_animation && legacy_inherit_source_geometry && !has_any_local_frame_data;
+        payload["inherit_data"] = migrated_inherit_data;
     }
+    const bool default_inherit_data = derived_from_animation && !has_any_local_frame_data;
+    bool inherit_data = read_bool_field_like(payload, "inherit_data", default_inherit_data);
     inherit_data = derived_from_animation && inherit_data;
     if (!inherit_data) {
         derived_invert_x = false;
@@ -189,6 +188,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         payload.erase("invert_frames_vertical");
     }
     payload.erase("inherit_source_movement");
+    payload.erase("inherit_source_geometry");
     payload.erase("flipped_source");
     payload.erase("flip_vertical_source");
     payload.erase("flip_movement_horizontal");
@@ -416,12 +416,8 @@ bool payload_inherits_data(const nlohmann::json& payload) {
     if (!payload_uses_animation_source(payload)) {
         return false;
     }
-    const bool legacy_inherit = read_bool_field_like(payload, "inherit_source_movement", true);
-    const bool default_inherit = legacy_inherit && !payload_has_local_frame_data(payload);
-    if (payload.contains("inherit_data")) {
-        return read_bool_field_like(payload, "inherit_data", default_inherit);
-    }
-    return read_bool_field_like(payload, "inherit_source_geometry", default_inherit);
+    const bool default_inherit = !payload_has_local_frame_data(payload);
+    return read_bool_field_like(payload, "inherit_data", default_inherit);
 }
 
 std::size_t payload_frame_count(const nlohmann::json& payload) {
@@ -1293,4 +1289,3 @@ double AnimationDocument::scale_percentage() const {
 }
 
 }
-

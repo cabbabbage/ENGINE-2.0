@@ -230,6 +230,12 @@ $inputXValues = Get-MetricValues -Rows $rows -Metric "movement.player_input_x"
 $inputYValues = Get-MetricValues -Rows $rows -Metric "movement.player_input_y"
 $codexDriverValues = Get-MetricValues -Rows $rows -Metric "codex_playtest.input_driver"
 $codexDriverFrameCount = @($codexDriverValues | Where-Object { $_ -ne 0.0 }).Count
+$longSegmentFrameCount = 0
+$burstSegmentFrameCount = 0
+if ($rows.Count -gt 0 -and ($rows[0].PSObject.Properties.Name -contains "codex_playtest.segment_kind")) {
+    $longSegmentFrameCount = @($rows | Where-Object { $_."codex_playtest.segment_kind" -eq "long" }).Count
+    $burstSegmentFrameCount = @($rows | Where-Object { $_."codex_playtest.segment_kind" -eq "burst" }).Count
+}
 if ($assetsMax -ne $null -and $assetsMax -gt 100.0) {
     $likely.Add("Large `main.assets_update_ms` spikes point at runtime update work rather than present/input pacing.") | Out-Null
 }
@@ -274,6 +280,8 @@ Add-SectionLine $report
 Add-SectionLine $report "### Player Input"
 Add-SectionLine $report "- Codex driver frames: $codexDriverFrameCount"
 Add-SectionLine $report "- Movement-intent frames: $intentFrameCount"
+Add-SectionLine $report "- Long-hold frames: $longSegmentFrameCount"
+Add-SectionLine $report "- Burst frames: $burstSegmentFrameCount"
 if ($inputXValues.Count -gt 0) {
     Add-SectionLine $report ("- Input X range: {0} to {1}" -f (($inputXValues | Measure-Object -Minimum).Minimum), (($inputXValues | Measure-Object -Maximum).Maximum))
 }

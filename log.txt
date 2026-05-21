@@ -1,466 +1,454 @@
 [INFO] +-0.000s: [Main] Starting game engine...
 [INFO] +0.003s: [Main] Startup uses existing asset caches; missing cache entries regenerate on demand.
-[INFO] +0.369s: [EngineRenderer] Renderer=OpenGL name=opengl max_texture_size=32768 render_targets=yes scale_mode=yes vsync=on
-[INFO] +0.371s: [Main] Render quality tier: OpenGL full.
-[INFO] +0.374s: [Main] Screen resolution: 1920x1200
-[INFO] +0.564s: [Main] Shared frame pacing target: 24.00 FPS (41.667 ms/frame)
-[INFO] +0.580s: [Main] Preparing asset metadata cache...
-[INFO] +0.595s: [FrameData] Loading animations manifest from C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/manifest.json
+[INFO] +0.358s: [EngineRenderer] Renderer=OpenGL name=opengl max_texture_size=32768 render_targets=yes scale_mode=yes vsync=on
+[INFO] +0.361s: [Main] Render quality tier: OpenGL full.
+[INFO] +0.364s: [Main] Screen resolution: 1920x1200
+[INFO] +0.552s: [Main] Shared frame pacing target: 24.00 FPS (41.667 ms/frame)
+[INFO] +0.568s: [Main] Preparing asset metadata cache...
+[INFO] +0.584s: [FrameData] Loading animations manifest from C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/manifest.json
 [AssetInfo] Player asset 'vibble' loaded
 
-[INFO] +0.642s: [AssetLibrary] Loaded 105 assets (ok=105, failed=0) in 13ms
-[INFO] +0.649s: [Main] Asset metadata cache ready for 105 asset(s).
-[INFO] +0.649s: [Main] SAFE loading is enabled; deferring full animation preload until runtime requests it.
-[INFO] +0.649s: [Main] Auto-selecting map via VIBBLE_AUTOSTART_MAP: forrest
-[INFO] +0.669s: [MainApp] Constructing AssetLoader...
-[INFO] +0.669s: [AssetLoader] Start for map 'forrest' at root 'C:\Users\cal_m\OneDrive\Documents\GitHub\ENGINE-2.0\content\forrest'.
-[INFO] +0.670s: [AssetLoader] Asset library mode: shared
-[INFO] +0.670s: [Loading] Loading map data
-[INFO] +0.749s: [AssetLoader] Map JSON parsed in 79ms
-[INFO] +1.235s: [AssetLoader] Audio initialized in 484ms
-[INFO] +1.235s: [Loading] Loading assets
-[INFO] +1.237s: [AssetLoader] Asset library ready with 105 known assets
-[INFO] +1.237s: [Loading] Creating map
-[INFO] +1.239s: [AssetLoader] Starting room generation for map 'forrest'
-[INFO] +1.239s: [GenerateRooms] Starting build for map 'forrest' with 2 layers
-[INFO] +1.239s: [GenerateRooms] Creating root room: baseball
-[INFO] +1.240s: [GenerateRooms] Draft layer 1 level=1 radius=19806.000000 children=2 attempt=1
-[INFO] +1.241s: [GenerateRooms] Draft layout built attempt=1/12 rooms=3 required_connections=2
-[INFO] +1.242s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.074500
-[WARN] +1.242s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.291s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.341s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=98.850700
-[WARN] +1.341s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.402s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.462s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=121.361900
-[INFO] +1.463s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=221.108000
-[WARN] +1.463s: [GenerateRooms] Required trail failed attempt=1 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +1.463s: [GenerateRooms] Required trail failed attempt=1 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +1.463s: [GenerateRooms] Draft layout rejected attempt=1 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=223.354600
-[INFO] +1.464s: [GenerateRooms] Draft layer 1 level=1 radius=20306.000000 children=2 attempt=2
-[INFO] +1.465s: [GenerateRooms] Draft layout built attempt=2/12 rooms=3 required_connections=2
-[INFO] +1.465s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.014900
-[WARN] +1.466s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.536s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.606s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=141.217000
-[WARN] +1.607s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +1.638s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +1.668s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=60.320300
-[INFO] +1.668s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=202.885000
-[WARN] +1.668s: [GenerateRooms] Required trail failed attempt=2 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +1.668s: [GenerateRooms] Required trail failed attempt=2 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +1.668s: [GenerateRooms] Draft layout rejected attempt=2 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=205.220300
-[INFO] +1.669s: [GenerateRooms] Draft layer 1 level=1 radius=20806.000000 children=2 attempt=3
-[INFO] +1.670s: [GenerateRooms] Draft layout built attempt=3/12 rooms=3 required_connections=2
-[INFO] +1.670s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.012400
-[WARN] +1.671s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.721s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.771s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=100.432200
-[WARN] +1.772s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.816s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.861s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=89.217100
-[INFO] +1.861s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=190.445400
-[WARN] +1.861s: [GenerateRooms] Required trail failed attempt=3 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +1.861s: [GenerateRooms] Required trail failed attempt=3 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +1.861s: [GenerateRooms] Draft layout rejected attempt=3 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=192.791200
-[INFO] +1.862s: [GenerateRooms] Draft layer 1 level=1 radius=21306.000000 children=2 attempt=4
-[INFO] +1.864s: [GenerateRooms] Draft layout built attempt=4/12 rooms=3 required_connections=2
-[INFO] +1.864s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.008300
-[WARN] +1.864s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.926s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +1.989s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=124.969500
-[WARN] +1.989s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +2.044s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +2.099s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=109.511200
-[INFO] +2.099s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=234.993200
-[WARN] +2.099s: [GenerateRooms] Required trail failed attempt=4 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +2.099s: [GenerateRooms] Required trail failed attempt=4 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +2.099s: [GenerateRooms] Draft layout rejected attempt=4 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=237.394900
-[INFO] +2.100s: [GenerateRooms] Draft layer 1 level=1 radius=21806.000000 children=2 attempt=5
-[INFO] +2.101s: [GenerateRooms] Draft layout built attempt=5/12 rooms=3 required_connections=2
-[INFO] +2.102s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.009300
-[WARN] +2.102s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +2.138s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +2.174s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=72.414500
-[WARN] +2.175s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +2.282s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +2.386s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=211.175100
-[INFO] +2.386s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=284.678700
-[WARN] +2.386s: [GenerateRooms] Required trail failed attempt=5 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +2.387s: [GenerateRooms] Required trail failed attempt=5 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +2.387s: [GenerateRooms] Draft layout rejected attempt=5 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=287.518700
-[INFO] +2.387s: [GenerateRooms] Draft layer 1 level=1 radius=22306.000000 children=2 attempt=6
-[INFO] +2.389s: [GenerateRooms] Draft layout built attempt=6/12 rooms=3 required_connections=2
-[INFO] +2.389s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.008400
-[WARN] +2.390s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +2.526s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +2.659s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=269.806400
-[WARN] +2.660s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +2.731s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +2.802s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=141.700700
-[INFO] +2.802s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=413.189900
-[WARN] +2.803s: [GenerateRooms] Required trail failed attempt=6 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +2.803s: [GenerateRooms] Required trail failed attempt=6 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +2.803s: [GenerateRooms] Draft layout rejected attempt=6 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=416.083400
-[INFO] +2.804s: [GenerateRooms] Draft layer 1 level=1 radius=22806.000000 children=2 attempt=7
-[INFO] +2.805s: [GenerateRooms] Draft layout built attempt=7/12 rooms=3 required_connections=2
-[INFO] +2.806s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.007700
-[WARN] +2.806s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +2.933s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +3.059s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=253.624500
-[WARN] +3.060s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +3.205s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +3.351s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=291.057500
-[INFO] +3.351s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=545.788500
-[WARN] +3.352s: [GenerateRooms] Required trail failed attempt=7 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +3.352s: [GenerateRooms] Required trail failed attempt=7 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +3.352s: [GenerateRooms] Draft layout rejected attempt=7 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=548.800600
-[INFO] +3.353s: [GenerateRooms] Draft layer 1 level=1 radius=23306.000000 children=2 attempt=8
-[INFO] +3.355s: [GenerateRooms] Draft layout built attempt=8/12 rooms=3 required_connections=2
-[INFO] +3.355s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.008200
-[WARN] +3.355s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +3.455s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +3.557s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=201.689100
-[WARN] +3.558s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +3.694s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +3.831s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=273.724200
-[INFO] +3.832s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=477.006800
-[WARN] +3.832s: [GenerateRooms] Required trail failed attempt=8 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +3.832s: [GenerateRooms] Required trail failed attempt=8 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +3.832s: [GenerateRooms] Draft layout rejected attempt=8 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=480.380500
-[INFO] +3.834s: [GenerateRooms] Draft layer 1 level=1 radius=23806.000000 children=2 attempt=9
-[INFO] +3.836s: [GenerateRooms] Draft layout built attempt=9/12 rooms=3 required_connections=2
-[INFO] +3.836s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.007300
-[WARN] +3.836s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +3.952s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +4.069s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=233.164900
-[WARN] +4.070s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +4.212s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +4.353s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=283.125600
-[INFO] +4.354s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=517.904200
-[WARN] +4.354s: [GenerateRooms] Required trail failed attempt=9 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +4.354s: [GenerateRooms] Required trail failed attempt=9 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +4.354s: [GenerateRooms] Draft layout rejected attempt=9 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=521.533500
-[INFO] +4.355s: [GenerateRooms] Draft layer 1 level=1 radius=24306.000000 children=2 attempt=10
-[INFO] +4.357s: [GenerateRooms] Draft layout built attempt=10/12 rooms=3 required_connections=2
-[INFO] +4.358s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.008100
-[WARN] +4.358s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +4.445s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +4.529s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=171.404700
-[WARN] +4.531s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +4.588s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +4.645s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=114.244200
-[INFO] +4.645s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=287.210700
-[WARN] +4.645s: [GenerateRooms] Required trail failed attempt=10 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +4.645s: [GenerateRooms] Required trail failed attempt=10 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +4.645s: [GenerateRooms] Draft layout rejected attempt=10 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=290.959800
-[INFO] +4.646s: [GenerateRooms] Draft layer 1 level=1 radius=24806.000000 children=2 attempt=11
-[INFO] +4.649s: [GenerateRooms] Draft layout built attempt=11/12 rooms=3 required_connections=2
-[INFO] +4.649s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.008200
-[WARN] +4.649s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +4.741s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +4.833s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=184.014800
-[WARN] +4.834s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +4.907s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +4.981s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=147.751900
-[INFO] +4.982s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=333.369000
-[WARN] +4.982s: [GenerateRooms] Required trail failed attempt=11 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +4.982s: [GenerateRooms] Required trail failed attempt=11 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +4.983s: [GenerateRooms] Draft layout rejected attempt=11 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=337.368500
-[INFO] +4.984s: [GenerateRooms] Draft layer 1 level=1 radius=25306.000000 children=2 attempt=12
-[INFO] +4.987s: [GenerateRooms] Draft layout built attempt=12/12 rooms=3 required_connections=2
-[INFO] +4.987s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.008000
-[WARN] +4.988s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +5.105s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
-[WARN] +5.221s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=233.656000
-[WARN] +5.222s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +5.360s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
-[WARN] +5.500s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=278.589400
-[INFO] +5.501s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=513.864400
-[WARN] +5.501s: [GenerateRooms] Required trail failed attempt=12 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +5.501s: [GenerateRooms] Required trail failed attempt=12 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
-[WARN] +5.501s: [GenerateRooms] Draft layout rejected attempt=12 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=518.596000
-[WARN] +5.513s: [GenerateRooms] Failed to produce a fully connected map after bounded layout attempts; committed degraded layout attempt=1 total_rooms=3 required_successes=0 reachable_non_trail=1 trails=0 total_ms=4273.567700
-[INFO] +5.513s: [AssetLoader] Room generation completed successfully: 3 rooms created
-[INFO] +5.513s: [AssetLoader] Rooms created: 3 in 4276ms
-[INFO] +5.513s: [Loading] Loading assets
-[INFO] +5.515s: [AssetLoader] Preloading animations for all known assets (105)...
-[INFO] +8.437s: [PrimaryAssetCache] No cache work required.
-[INFO] +8.440s: [AssetLibrary] Preload pass 1 summary: created=0 [], rebuilt=0 [], repaired=0 [], reused=105 [3_candles, aluminum_pole_transparent_11549833983xjwlyimgun, attack_speed, axe_in_stump, barrel, baseball_field, bench, big_rock, +97 more], failed=0 [], already_loaded=0 in 2925ms
-[INFO] +8.442s: [AssetLibrary] Pure load pass loaded '3_candles' in 1ms
-[INFO] +8.468s: [AssetLibrary] Pure load pass loaded 'aluminum_pole_transparent_11549833983xjwlyimgun' in 25ms
-[INFO] +8.469s: [AssetLibrary] Pure load pass loaded 'attack_speed' in 0ms
-[INFO] +8.470s: [AssetLibrary] Pure load pass loaded 'axe_in_stump' in 0ms
-[INFO] +8.472s: [AssetLibrary] Pure load pass loaded 'barrel' in 1ms
-[INFO] +8.509s: [AssetLibrary] Pure load pass loaded 'baseball_field' in 37ms
-[INFO] +8.511s: [AssetLibrary] Pure load pass loaded 'bench' in 1ms
-[INFO] +8.514s: [AssetLibrary] Pure load pass loaded 'big_rock' in 2ms
-[INFO] +8.515s: [AssetLibrary] Pure load pass loaded 'blacksmith' in 1ms
-[INFO] +8.516s: [AssetLibrary] Pure load pass loaded 'blue_flower' in 0ms
-[INFO] +9.350s: [AssetLibrary] Pure load pass loaded 'bomb' in 834ms
-[INFO] +9.352s: [AssetLibrary] Pure load pass loaded 'bone' in 1ms
-[INFO] +9.354s: [AssetLibrary] Pure load pass loaded 'bone_1' in 1ms
-[INFO] +9.355s: [AssetLibrary] Pure load pass loaded 'bone_pile' in 1ms
-[INFO] +9.358s: [AssetLibrary] Pure load pass loaded 'book' in 2ms
-[INFO] +9.360s: [AssetLibrary] Pure load pass loaded 'book_1' in 2ms
-[INFO] +9.362s: [AssetLibrary] Pure load pass loaded 'book_pile' in 1ms
-[INFO] +9.363s: [AssetLibrary] Pure load pass loaded 'booze_1' in 0ms
-[INFO] +9.364s: [AssetLibrary] Pure load pass loaded 'booze_2' in 1ms
-[INFO] +9.366s: [AssetLibrary] Pure load pass loaded 'box' in 1ms
-[INFO] +9.382s: [AssetLibrary] Pure load pass loaded 'brian' in 15ms
-[INFO] +9.383s: [AssetLibrary] Pure load pass loaded 'building_1' in 0ms
-[INFO] +9.384s: [AssetLibrary] Pure load pass loaded 'building_2' in 0ms
-[INFO] +9.400s: [AssetLibrary] Pure load pass loaded 'bush_1_fps_2' in 16ms
-[INFO] +9.416s: [AssetLibrary] Pure load pass loaded 'bush_fps_2' in 15ms
-[INFO] +9.424s: [AssetLibrary] Pure load pass loaded 'candle_fps_12' in 8ms
-[INFO] +9.426s: [AssetLibrary] Pure load pass loaded 'car' in 1ms
-[INFO] +9.451s: [AssetLibrary] Pure load pass loaded 'casino' in 24ms
-[INFO] +9.685s: [AssetLibrary] Pure load pass loaded 'chest_opening' in 233ms
-[INFO] +9.721s: [AssetLibrary] Pure load pass loaded 'church' in 28ms
-[INFO] +9.814s: [AssetLibrary] Pure load pass loaded 'city_hall_background' in 93ms
-[INFO] +9.834s: [AssetLibrary] Pure load pass loaded 'clock' in 19ms
-[INFO] +9.835s: [AssetLibrary] Pure load pass loaded 'cropped_output' in 0ms
-[INFO] +9.836s: [AssetLibrary] Pure load pass loaded 'curse_circle' in 0ms
-[INFO] +9.870s: [AssetLibrary] Pure load pass loaded 'doorway_1' in 33ms
-[INFO] +9.871s: [AssetLibrary] Pure load pass loaded 'dot' in 0ms
-[INFO] +9.884s: [AssetLibrary] Pure load pass loaded 'flame_fps_12' in 12ms
-[INFO] +9.896s: [AssetLibrary] Pure load pass loaded 'flame_no_light' in 11ms
-[INFO] +9.899s: [AssetLibrary] Pure load pass loaded 'fly' in 2ms
-[INFO] +10.000s: [AssetLibrary] Pure load pass loaded 'fog_1' in 100ms
-[INFO] +10.111s: [AssetLibrary] Pure load pass loaded 'fog_2' in 109ms
-[INFO] +10.200s: [AssetLibrary] Pure load pass loaded 'fog_3' in 87ms
-[INFO] +10.284s: [AssetLibrary] Pure load pass loaded 'fog_4' in 83ms
-[INFO] +10.301s: [AssetLibrary] Pure load pass loaded 'fountain' in 15ms
-[INFO] +10.302s: [AssetLibrary] Pure load pass loaded 'frog' in 0ms
-[INFO] +10.327s: [AssetLibrary] Pure load pass loaded 'grass_1_fps_2' in 24ms
-[INFO] +10.459s: [AssetLibrary] Pure load pass loaded 'grass_fps_2' in 131ms
-[INFO] +10.461s: [AssetLibrary] Pure load pass loaded 'grave_1' in 0ms
-[INFO] +10.461s: [AssetLibrary] Pure load pass loaded 'grave_2' in 0ms
-[INFO] +10.463s: [AssetLibrary] Pure load pass loaded 'grave_3' in 0ms
-[INFO] +10.464s: [AssetLibrary] Pure load pass loaded 'grave_4' in 0ms
-[INFO] +10.621s: [AssetLibrary] Pure load pass loaded 'gun' in 156ms
-[INFO] +10.623s: [AssetLibrary] Pure load pass loaded 'health' in 0ms
-[INFO] +10.624s: [AssetLibrary] Pure load pass loaded 'health_beer' in 1ms
-[INFO] +10.625s: [AssetLibrary] Pure load pass loaded 'key' in 0ms
-[INFO] +10.641s: [AssetLibrary] Pure load pass loaded 'lamp_left' in 15ms
-[INFO] +10.657s: [AssetLibrary] Pure load pass loaded 'lamp_right' in 15ms
-[INFO] +10.658s: [AssetLibrary] Pure load pass loaded 'mana' in 0ms
-[INFO] +10.659s: [AssetLibrary] Pure load pass loaded 'mana_beer' in 0ms
-[INFO] +10.660s: [AssetLibrary] Pure load pass loaded 'movement_speed' in 0ms
-[INFO] +10.661s: [AssetLibrary] Pure load pass loaded 'mushroom' in 0ms
-[INFO] +10.662s: [AssetLibrary] Pure load pass loaded 'mushroom_1' in 0ms
-[INFO] +10.663s: [AssetLibrary] Pure load pass loaded 'mushroom_2' in 0ms
-[INFO] +10.664s: [AssetLibrary] Pure load pass loaded 'mushroom_3' in 0ms
-[INFO] +10.664s: [AssetLibrary] Pure load pass loaded 'noose' in 0ms
-[INFO] +10.733s: [AssetLibrary] Pure load pass loaded 'parking_lot' in 68ms
-[INFO] +10.735s: [AssetLibrary] Pure load pass loaded 'path' in 1ms
-[INFO] +10.738s: [AssetLibrary] Pure load pass loaded 'pngtree_3d_rendering_of_a_fast_food_shop_building_illustration_png_image_11533843' in 2ms
-[INFO] +10.940s: [AssetLibrary] Pure load pass loaded 'pngtree_blank_metal_frame_billboard_png_image_14678769' in 202ms
-[INFO] +10.943s: [AssetLibrary] Pure load pass loaded 'pngtree_electric_pole_png_image_5949632' in 1ms
-[INFO] +10.944s: [AssetLibrary] Pure load pass loaded 'pole_800a21_o0109_2' in 0ms
-[INFO] +10.945s: [AssetLibrary] Pure load pass loaded 'pub' in 1ms
-[INFO] +10.946s: [AssetLibrary] Pure load pass loaded 'purple_flower' in 0ms
-[INFO] +10.947s: [AssetLibrary] Pure load pass loaded 'red_flower' in 0ms
-[INFO] +10.950s: [AssetLibrary] Pure load pass loaded 'rock' in 2ms
-[INFO] +10.952s: [AssetLibrary] Pure load pass loaded 'sigil_of_fortune' in 2ms
-[INFO] +10.953s: [AssetLibrary] Pure load pass loaded 'skull' in 1ms
-[INFO] +10.955s: [AssetLibrary] Pure load pass loaded 'skull_pile' in 1ms
-[INFO] +10.957s: [AssetLibrary] Pure load pass loaded 'skull_pile_1' in 1ms
-[INFO] +10.958s: [AssetLibrary] Pure load pass loaded 'small_rock' in 0ms
-[INFO] +10.958s: [AssetLibrary] Pure load pass loaded 'small_rock_1' in 0ms
-[INFO] +11.831s: [AssetLibrary] Pure load pass loaded 'spider' in 872ms
-[INFO] +11.833s: [AssetLibrary] Pure load pass loaded 'stagecoach' in 0ms
-[INFO] +11.834s: [AssetLibrary] Pure load pass loaded 'store' in 1ms
-[INFO] +11.837s: [AssetLibrary] Pure load pass loaded 'stump' in 2ms
-[INFO] +11.909s: [AssetLibrary] Pure load pass loaded 'sword' in 71ms
-[INFO] +11.911s: [AssetLibrary] Pure load pass loaded 'table' in 1ms
-[INFO] +11.912s: [AssetLibrary] Pure load pass loaded 'tailor' in 0ms
-[INFO] +11.913s: [AssetLibrary] Pure load pass loaded 'townhall' in 1ms
-[INFO] +12.321s: [AssetLibrary] Pure load pass loaded 'trail' in 407ms
-[INFO] +12.322s: [AssetLibrary] Pure load pass loaded 'tree_dark' in 1ms
-[INFO] +12.324s: [AssetLibrary] Pure load pass loaded 'tree_darker' in 0ms
-[INFO] +12.327s: [AssetLibrary] Pure load pass loaded 'tree_eyes_fps_2' in 3ms
-[INFO] +12.349s: [AssetLibrary] Pure load pass loaded 'tree_fps_2' in 22ms
-[INFO] +12.503s: [AssetLibrary] Pure load pass loaded 'vibble' in 153ms
-[INFO] +12.513s: [AssetLibrary] Pure load pass loaded 'vibble_attack_1' in 9ms
-[INFO] +12.515s: [AssetLibrary] Pure load pass loaded 'vibble_eyes' in 1ms
-[INFO] +12.515s: [AssetLibrary] Pure load pass loaded 'vibble_hat' in 0ms
-[INFO] +12.516s: [AssetLibrary] Pure load pass loaded 'vibble_mouth' in 0ms
-[INFO] +12.517s: [AssetLibrary] Pure load pass loaded 'vibble_neck' in 0ms
-[INFO] +12.518s: [AssetLibrary] Pure load pass loaded 'water' in 1ms
-[INFO] +12.717s: [AssetLibrary] Pure load pass loaded 'wendys_logo' in 199ms
-[INFO] +12.891s: [AssetLibrary] Pure load pass loaded 'wendys_logo_png_transparent' in 173ms
-[INFO] +12.900s: [AssetLibrary] Pure load pass loaded 'window_round_large' in 8ms
-[INFO] +12.905s: [AssetLibrary] Pure load pass loaded 'window_round_small' in 4ms
-[INFO] +12.906s: [AssetLibrary] Pure load pass summary: loaded=105 [3_candles, aluminum_pole_transparent_11549833983xjwlyimgun, attack_speed, axe_in_stump, barrel, baseball_field, bench, big_rock, +97 more], failed=0 [], already_loaded=0 in 4464ms
-[INFO] +12.906s: [AssetLoader] Animation preload pass completed for 105 assets in 7391.000000ms
-[INFO] +12.906s: [Loading] Loading assets
-[INFO] +12.908s: [AssetLoader] Finalizing assets across rooms...
-[INFO] +12.910s: [AssetLoader] finalizeAssets complete: 84/84 assets ready
-[WARN] +12.910s: [AssetLoader] finalizeAssets missing-default skip count: 0
-[INFO] +12.910s: [AssetLoader] Asset finalization completed; all assets are ready.
-[INFO] +12.910s: [AssetLoader] Map metadata loaded in 79.000000ms
-[INFO] +12.910s: [AssetLoader] Asset library ready in 1.000000ms
-[INFO] +12.910s: [AssetLoader] Rooms built in 4276.000000ms
-[INFO] +12.910s: [AssetLoader] Initialization completed in 12240.000000ms
-[INFO] +12.911s: [AssetLoader] Boundary startup filtering moved to runtime visibility culling. distance_candidates=0 hidden_applied=0
-[INFO] +12.911s: [Loading] Spawning assets
-[INFO] +12.913s: [AssetLoader] Extracted 84 visible assets from rooms
-[INFO] +12.913s: [AssetLoader] Boundary startup visibility summary: extracted=0
-[INFO] +12.914s: [AssetLoader] Boundary startup visibility summary: registered=0 filtered=0
-[INFO] +12.920s: [TileBuilder] Chunk tile build: chunks_with_tiles=6, chunk_textures=6, draw_contributions=6, texture_bytes=1572864, elapsed_ms=5
-[INFO] +12.920s: [MainApp] AssetLoader constructed in 12241ms
-[INFO] +12.921s: [MainApp] Asset spawning finished for map 'forrest'.
-[INFO] +12.921s: [MainApp] 84 assets created and cached.
-[INFO] +12.921s: [MainApp] Creating Assets object...
-[INFO] +12.922s: [Assets] Constructor: Starting InitializeAssets initialization
-[INFO] +12.922s: [InitializeAssets] Processing 84 assets from world grid
-[INFO] +12.922s: [InitializeAssets] Asset 1/84: mushroom
-[INFO] +12.922s: [InitializeAssets] Asset 2/84: barrel
-[WARN] +13.047s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.172s: [InitializeAssets] Asset 3/84: vibble
-[WARN] +13.295s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'eyes_oval_center' on asset 'vibble'
-[WARN] +13.295s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'hand' on asset 'vibble'
-[WARN] +13.295s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'hand_oval_center' on asset 'vibble'
-[WARN] +13.310s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'melee_oval_center' on asset 'vibble'
-[WARN] +13.310s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'neck' on asset 'vibble'
-[WARN] +13.311s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'neck_oval_center' on asset 'vibble'
-[WARN] +13.311s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'vibble'
-[INFO] +13.311s: [InitializeAssets] Asset 4/84: sigil_of_fortune
-[INFO] +13.311s: [InitializeAssets] Asset 5/84: barrel
-[WARN] +13.316s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.321s: [InitializeAssets] Asset 6/84: barrel
-[WARN] +13.327s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.332s: [InitializeAssets] Asset 7/84: grass_fps_2
-[INFO] +13.332s: [InitializeAssets] Asset 8/84: barrel
-[WARN] +13.332s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'flame_fps_12'
-[WARN] +13.332s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_3' on asset 'flame_fps_12'
-[WARN] +13.343s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.348s: [InitializeAssets] Asset 9/84: grass_fps_2
-[INFO] +13.348s: [InitializeAssets] Asset 10/84: barrel
-[WARN] +13.358s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'flame_fps_12'
-[WARN] +13.359s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_3' on asset 'flame_fps_12'
-[WARN] +13.368s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.373s: [InitializeAssets] Asset 11/84: barrel
-[WARN] +13.383s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'flame_fps_12'
-[WARN] +13.383s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_3' on asset 'flame_fps_12'
-[WARN] +13.393s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.397s: [InitializeAssets] Asset 12/84: blue_flower
-[INFO] +13.397s: [InitializeAssets] Asset 13/84: grass_fps_2
-[INFO] +13.397s: [InitializeAssets] Asset 14/84: grass_fps_2
-[INFO] +13.398s: [InitializeAssets] Asset 15/84: mushroom_2
-[INFO] +13.398s: [InitializeAssets] Asset 16/84: 3_candles
-[WARN] +13.407s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'flame_fps_12'
-[WARN] +13.407s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_3' on asset 'flame_fps_12'
-[INFO] +13.413s: [InitializeAssets] Asset 17/84: barrel
-[WARN] +13.418s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.423s: [InitializeAssets] Asset 18/84: barrel
-[WARN] +13.427s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.432s: [InitializeAssets] Asset 19/84: red_flower
-[INFO] +13.432s: [InitializeAssets] Asset 20/84: spider
-[INFO] +13.433s: [InitializeAssets] Asset 21/84: barrel
-[WARN] +13.438s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.442s: [InitializeAssets] Asset 22/84: barrel
-[WARN] +13.447s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.452s: [InitializeAssets] Asset 23/84: barrel
-[WARN] +13.457s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.462s: [InitializeAssets] Asset 24/84: barrel
-[WARN] +13.467s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
-[INFO] +13.471s: [InitializeAssets] Asset 25/84: mushroom_1
-[INFO] +13.472s: [InitializeAssets] Asset 26/84: city_hall_background
-[WARN] +13.494s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'norm_anhor_point_1' on asset 'bush_fps_2'
-[WARN] +13.499s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'norm_anhor_point_1' on asset 'bush_fps_2'
-[WARN] +13.504s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
-[WARN] +13.504s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
-[WARN] +13.504s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
-[WARN] +13.508s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
-[WARN] +13.508s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
-[WARN] +13.509s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
-[WARN] +13.514s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
-[WARN] +13.514s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
-[WARN] +13.514s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
-[WARN] +13.518s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
-[WARN] +13.519s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
-[WARN] +13.519s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
-[WARN] +13.524s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
-[WARN] +13.524s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
-[WARN] +13.524s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
-[WARN] +13.528s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
-[WARN] +13.528s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
-[WARN] +13.529s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
-[WARN] +13.533s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'city_hall_background'
-[INFO] +13.533s: [InitializeAssets] Asset 27/84: red_flower
-[INFO] +13.533s: [InitializeAssets] Asset 28/84: axe_in_stump
-[INFO] +13.534s: [InitializeAssets] Asset 29/84: booze_2
-[INFO] +13.534s: [InitializeAssets] Asset 30/84: grass_fps_2
-[INFO] +13.534s: [InitializeAssets] Asset 31/84: grass_1_fps_2
-[INFO] +13.534s: [InitializeAssets] Asset 32/84: purple_flower
-[INFO] +13.534s: [InitializeAssets] Asset 33/84: booze_2
-[INFO] +13.534s: [InitializeAssets] Asset 34/84: blue_flower
-[INFO] +13.535s: [InitializeAssets] Asset 35/84: mushroom_3
-[INFO] +13.535s: [InitializeAssets] Asset 36/84: grass_fps_2
-[INFO] +13.535s: [InitializeAssets] Asset 37/84: grass_1_fps_2
-[INFO] +13.535s: [InitializeAssets] Asset 38/84: grass_1_fps_2
-[INFO] +13.535s: [InitializeAssets] Asset 39/84: mushroom
-[INFO] +13.535s: [InitializeAssets] Asset 40/84: mushroom
-[INFO] +13.535s: [InitializeAssets] Asset 41/84: barrel
-[WARN] +13.545s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'norm_anhor_point_1' on asset 'barrel'
-[INFO] +13.545s: [InitializeAssets] Asset 42/84: grass_1_fps_2
-[INFO] +13.545s: [InitializeAssets] Asset 43/84: grass_fps_2
-[INFO] +13.545s: [InitializeAssets] Asset 44/84: grass_1_fps_2
-[INFO] +13.545s: [InitializeAssets] Asset 45/84: mushroom_1
-[INFO] +13.546s: [InitializeAssets] Asset 46/84: grass_1_fps_2
-[INFO] +13.546s: [InitializeAssets] Asset 47/84: grass_1_fps_2
-[INFO] +13.546s: [InitializeAssets] Asset 48/84: booze_2
-[INFO] +13.546s: [InitializeAssets] Asset 49/84: grass_fps_2
-[INFO] +13.546s: [InitializeAssets] Asset 50/84: grass_1_fps_2
-[INFO] +13.546s: [InitializeAssets] Asset 51/84: box
-[INFO] +13.546s: [InitializeAssets] Asset 52/84: grass_fps_2
-[INFO] +13.546s: [InitializeAssets] Asset 53/84: booze_2
-[INFO] +13.546s: [InitializeAssets] Asset 54/84: grass_fps_2
-[INFO] +13.546s: [InitializeAssets] Asset 55/84: grass_1_fps_2
-[INFO] +13.547s: [InitializeAssets] Asset 56/84: grass_fps_2
-[INFO] +13.547s: [InitializeAssets] Asset 57/84: red_flower
-[INFO] +13.547s: [InitializeAssets] Asset 58/84: skull_pile
-[INFO] +13.547s: [InitializeAssets] Asset 59/84: grass_1_fps_2
-[INFO] +13.547s: [InitializeAssets] Asset 60/84: mushroom_3
-[INFO] +13.547s: [InitializeAssets] Asset 61/84: grass_1_fps_2
-[INFO] +13.547s: [InitializeAssets] Asset 62/84: grass_1_fps_2
-[INFO] +13.547s: [InitializeAssets] Asset 63/84: grass_fps_2
-[INFO] +13.547s: [InitializeAssets] Asset 64/84: grass_1_fps_2
-[INFO] +13.547s: [InitializeAssets] Asset 65/84: blue_flower
-[INFO] +13.548s: [InitializeAssets] Asset 66/84: grass_1_fps_2
-[INFO] +13.548s: [InitializeAssets] Asset 67/84: bone
-[INFO] +13.548s: [InitializeAssets] Asset 68/84: grass_fps_2
-[INFO] +13.548s: [InitializeAssets] Asset 69/84: mushroom
-[INFO] +13.548s: [InitializeAssets] Asset 70/84: grass_1_fps_2
-[INFO] +13.548s: [InitializeAssets] Asset 71/84: booze_2
-[INFO] +13.548s: [InitializeAssets] Asset 72/84: grass_fps_2
-[INFO] +13.548s: [InitializeAssets] Asset 73/84: grass_1_fps_2
-[INFO] +13.548s: [InitializeAssets] Asset 74/84: barrel
-[WARN] +13.558s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'norm_anhor_point_1' on asset 'barrel'
-[INFO] +13.558s: [InitializeAssets] Asset 75/84: grass_1_fps_2
-[INFO] +13.558s: [InitializeAssets] Asset 76/84: grass_1_fps_2
-[INFO] +13.558s: [InitializeAssets] Asset 77/84: grass_1_fps_2
-[INFO] +13.558s: [InitializeAssets] Asset 78/84: grass_fps_2
-[INFO] +13.558s: [InitializeAssets] Asset 79/84: grass_1_fps_2
-[INFO] +13.558s: [InitializeAssets] Asset 80/84: grass_1_fps_2
-[INFO] +13.558s: [InitializeAssets] Asset 81/84: grass_fps_2
-[INFO] +13.559s: [InitializeAssets] Asset 82/84: grass_1_fps_2
-[INFO] +13.559s: [InitializeAssets] Asset 83/84: chest_opening
-[WARN] +13.559s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'chest_opening'
-[INFO] +13.559s: [InitializeAssets] Asset 84/84: chest_opening
-[WARN] +13.559s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'chest_opening'
-[INFO] +13.559s: [Assets] Constructor: InitializeAssets complete
-[INFO] +13.559s: [Assets] Constructor: Creating OpenGL runtime renderer
-[INFO] +13.624s: [Assets] Constructor: OpenGL runtime renderer created successfully
-[INFO] +13.625s: [Assets] Constructor: Setting up assets (137 total)
-[INFO] +13.625s: [Assets] Constructor: Asset finalization complete
-[INFO] +13.805s: [Assets] Constructor: Initialization complete
-[INFO] +13.806s: [MainApp] Assets object created successfully.
-[INFO] +13.806s: [Init] Assets initialized: 84 assets across 3 rooms in 0.01s
-[INFO] +13.806s: [Assets] Reloading camera settings from manifest
-[INFO] +13.807s: [Assets] Camera settings reloaded and marked dirty for refresh
-[INFO] +13.815s: [MenuUI] Runtime frame limit: 300
-[INFO] +13.815s: [CodexPlaytest] In-engine input driver enabled for MenuUI runtime.
-[INFO] +18.840s: [MenuUI] Runtime frame limit reached; exiting automation run.
+[INFO] +0.638s: [AssetLibrary] Loaded 105 assets (ok=105, failed=0) in 16ms
+[INFO] +0.645s: [Main] Asset metadata cache ready for 105 asset(s).
+[INFO] +0.645s: [Main] SAFE loading is enabled; deferring full animation preload until runtime requests it.
+[INFO] +0.646s: [Main] Auto-selecting map via VIBBLE_AUTOSTART_MAP: forrest
+[INFO] +0.667s: [MainApp] Constructing AssetLoader...
+[INFO] +0.667s: [AssetLoader] Start for map 'forrest' at root 'C:\Users\cal_m\OneDrive\Documents\GitHub\ENGINE-2.0\content\forrest'.
+[INFO] +0.667s: [AssetLoader] Asset library mode: shared
+[INFO] +0.668s: [Loading] Loading map data
+[INFO] +0.749s: [AssetLoader] Map JSON parsed in 81ms
+[INFO] +1.243s: [AssetLoader] Audio initialized in 493ms
+[INFO] +1.243s: [Loading] Loading assets
+[INFO] +1.245s: [AssetLoader] Asset library ready with 105 known assets
+[INFO] +1.246s: [Loading] Creating map
+[INFO] +1.247s: [AssetLoader] Starting room generation for map 'forrest'
+[INFO] +1.247s: [GenerateRooms] Starting build for map 'forrest' with 2 layers
+[INFO] +1.247s: [GenerateRooms] Creating root room: baseball
+[INFO] +1.248s: [GenerateRooms] Draft layer 1 level=1 radius=19806.000000 children=2 attempt=1
+[INFO] +1.249s: [GenerateRooms] Draft layout built attempt=1/12 rooms=3 required_connections=2
+[INFO] +1.249s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.044100
+[WARN] +1.250s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.309s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.374s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=124.824300
+[WARN] +1.375s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.440s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.502s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=127.148400
+[INFO] +1.502s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=253.088500
+[WARN] +1.502s: [GenerateRooms] Required trail failed attempt=1 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +1.503s: [GenerateRooms] Required trail failed attempt=1 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +1.503s: [GenerateRooms] Draft layout rejected attempt=1 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=255.065100
+[INFO] +1.503s: [GenerateRooms] Draft layer 1 level=1 radius=20306.000000 children=2 attempt=2
+[INFO] +1.505s: [GenerateRooms] Draft layout built attempt=2/12 rooms=3 required_connections=2
+[INFO] +1.505s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.040900
+[WARN] +1.505s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.555s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.610s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=104.458500
+[WARN] +1.610s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +1.640s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +1.670s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=60.432900
+[INFO] +1.671s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=165.705500
+[WARN] +1.671s: [GenerateRooms] Required trail failed attempt=2 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +1.671s: [GenerateRooms] Required trail failed attempt=2 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +1.671s: [GenerateRooms] Draft layout rejected attempt=2 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=168.216100
+[INFO] +1.672s: [GenerateRooms] Draft layer 1 level=1 radius=20806.000000 children=2 attempt=3
+[INFO] +1.673s: [GenerateRooms] Draft layout built attempt=3/12 rooms=3 required_connections=2
+[INFO] +1.673s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.017900
+[WARN] +1.674s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.737s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.797s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=123.214300
+[WARN] +1.797s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +1.841s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +1.884s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=86.611500
+[INFO] +1.884s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=210.651200
+[WARN] +1.884s: [GenerateRooms] Required trail failed attempt=3 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +1.884s: [GenerateRooms] Required trail failed attempt=3 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +1.884s: [GenerateRooms] Draft layout rejected attempt=3 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=213.269400
+[INFO] +1.885s: [GenerateRooms] Draft layer 1 level=1 radius=21306.000000 children=2 attempt=4
+[INFO] +1.887s: [GenerateRooms] Draft layout built attempt=4/12 rooms=3 required_connections=2
+[INFO] +1.887s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.008800
+[WARN] +1.887s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.943s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +1.999s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=112.073100
+[WARN] +2.000s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +2.070s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +2.149s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=149.493600
+[INFO] +2.150s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=262.684600
+[WARN] +2.150s: [GenerateRooms] Required trail failed attempt=4 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +2.150s: [GenerateRooms] Required trail failed attempt=4 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +2.151s: [GenerateRooms] Draft layout rejected attempt=4 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=265.917400
+[INFO] +2.152s: [GenerateRooms] Draft layer 1 level=1 radius=21806.000000 children=2 attempt=5
+[INFO] +2.154s: [GenerateRooms] Draft layout built attempt=5/12 rooms=3 required_connections=2
+[INFO] +2.155s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.011000
+[WARN] +2.155s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +2.221s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +2.295s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=139.907100
+[WARN] +2.296s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +2.441s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +2.582s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=286.941900
+[INFO] +2.583s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=428.064500
+[WARN] +2.583s: [GenerateRooms] Required trail failed attempt=5 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +2.583s: [GenerateRooms] Required trail failed attempt=5 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +2.583s: [GenerateRooms] Draft layout rejected attempt=5 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=432.151500
+[INFO] +2.584s: [GenerateRooms] Draft layer 1 level=1 radius=22306.000000 children=2 attempt=6
+[INFO] +2.586s: [GenerateRooms] Draft layout built attempt=6/12 rooms=3 required_connections=2
+[INFO] +2.586s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.007500
+[WARN] +2.586s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +2.771s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +2.957s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=371.317100
+[WARN] +2.958s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +3.087s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +3.216s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=257.418200
+[INFO] +3.216s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=629.818000
+[WARN] +3.216s: [GenerateRooms] Required trail failed attempt=6 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +3.216s: [GenerateRooms] Required trail failed attempt=6 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +3.216s: [GenerateRooms] Draft layout rejected attempt=6 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=632.632300
+[INFO] +3.217s: [GenerateRooms] Draft layer 1 level=1 radius=22806.000000 children=2 attempt=7
+[INFO] +3.219s: [GenerateRooms] Draft layout built attempt=7/12 rooms=3 required_connections=2
+[INFO] +3.219s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.008400
+[WARN] +3.219s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +3.363s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +3.508s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=288.746600
+[WARN] +3.509s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +3.637s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +3.764s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=256.028000
+[INFO] +3.765s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=545.910700
+[WARN] +3.765s: [GenerateRooms] Required trail failed attempt=7 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +3.765s: [GenerateRooms] Required trail failed attempt=7 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +3.765s: [GenerateRooms] Draft layout rejected attempt=7 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=549.145800
+[INFO] +3.766s: [GenerateRooms] Draft layer 1 level=1 radius=23306.000000 children=2 attempt=8
+[INFO] +3.768s: [GenerateRooms] Draft layout built attempt=8/12 rooms=3 required_connections=2
+[INFO] +3.768s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.007700
+[WARN] +3.769s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +3.849s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +3.930s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=161.880400
+[WARN] +3.931s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.066s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.202s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=271.260200
+[INFO] +4.203s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=434.787600
+[WARN] +4.203s: [GenerateRooms] Required trail failed attempt=8 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +4.203s: [GenerateRooms] Required trail failed attempt=8 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +4.204s: [GenerateRooms] Draft layout rejected attempt=8 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=438.012100
+[INFO] +4.205s: [GenerateRooms] Draft layer 1 level=1 radius=23806.000000 children=2 attempt=9
+[INFO] +4.207s: [GenerateRooms] Draft layout built attempt=9/12 rooms=3 required_connections=2
+[INFO] +4.207s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=3 room_obstacles=3 planning_ms=0.008200
+[WARN] +4.208s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.302s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.396s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=188.827300
+[WARN] +4.397s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.494s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.588s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=191.177500
+[INFO] +4.588s: [GenerateTrails] Summary total_connections=3 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=380.594200
+[WARN] +4.588s: [GenerateRooms] Required trail failed attempt=9 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +4.588s: [GenerateRooms] Required trail failed attempt=9 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +4.588s: [GenerateRooms] Draft layout rejected attempt=9 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=384.323100
+[INFO] +4.589s: [GenerateRooms] Draft layer 1 level=1 radius=24306.000000 children=2 attempt=10
+[INFO] +4.591s: [GenerateRooms] Draft layout built attempt=10/12 rooms=3 required_connections=2
+[INFO] +4.592s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.007700
+[WARN] +4.592s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +4.701s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +4.814s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=222.723200
+[WARN] +4.815s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.891s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +4.969s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=153.756700
+[INFO] +4.969s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=377.765600
+[WARN] +4.970s: [GenerateRooms] Required trail failed attempt=10 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +4.970s: [GenerateRooms] Required trail failed attempt=10 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +4.970s: [GenerateRooms] Draft layout rejected attempt=10 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=381.503300
+[INFO] +4.971s: [GenerateRooms] Draft layer 1 level=1 radius=24806.000000 children=2 attempt=11
+[INFO] +4.974s: [GenerateRooms] Draft layout built attempt=11/12 rooms=3 required_connections=2
+[INFO] +4.974s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.012200
+[WARN] +4.974s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +5.073s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +5.173s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=199.288400
+[WARN] +5.174s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +5.231s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +5.287s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=112.683000
+[INFO] +5.287s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=313.387300
+[WARN] +5.287s: [GenerateRooms] Required trail failed attempt=11 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +5.287s: [GenerateRooms] Required trail failed attempt=11 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +5.288s: [GenerateRooms] Draft layout rejected attempt=11 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=317.552600
+[INFO] +5.289s: [GenerateRooms] Draft layer 1 level=1 radius=25306.000000 children=2 attempt=12
+[INFO] +5.291s: [GenerateRooms] Draft layout built attempt=12/12 rooms=3 required_connections=2
+[INFO] +5.292s: [GenerateTrails] Begin generation rooms=3 forced_pairs=2 planned_connections=2 room_obstacles=3 planning_ms=0.009700
+[WARN] +5.292s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +5.450s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1332 budget=256
+[WARN] +5.609s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=317.309300
+[WARN] +5.610s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +5.776s: [GenerateTrails] Route pair budget clamp rooms=baseball<->Loot_Room candidates=1369 budget=256
+[WARN] +5.956s: [GenerateTrails] Connection failed rooms=baseball<->Loot_Room final_failure=no_valid_sector_contacts layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 connection_ms=346.576200
+[INFO] +5.956s: [GenerateTrails] Summary total_connections=2 successes=0 failures=2 asset_attempts=4 layout_attempts=0 straight_attempts=0 curved_attempts=0 room_rejects=0 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=4 sector_boundary_failures=0 route_budget_failures=0 total_ms=664.634500
+[WARN] +5.956s: [GenerateRooms] Required trail failed attempt=12 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +5.956s: [GenerateRooms] Required trail failed attempt=12 rooms=baseball<->Loot_Room reason=no_valid_sector_contacts
+[WARN] +5.957s: [GenerateRooms] Draft layout rejected attempt=12 connected=false required_successes=0 reachable_non_trail=1 attempt_ms=668.799300
+[WARN] +5.969s: [GenerateRooms] Failed to produce a fully connected map after bounded layout attempts; committed degraded layout attempt=1 total_rooms=3 required_successes=0 reachable_non_trail=1 trails=0 total_ms=4721.828200
+[INFO] +5.969s: [AssetLoader] Room generation completed successfully: 3 rooms created
+[INFO] +5.969s: [AssetLoader] Rooms created: 3 in 4723ms
+[INFO] +5.970s: [Loading] Loading assets
+[INFO] +5.971s: [AssetLoader] Preloading animations for all known assets (105)...
+[INFO] +8.941s: [PrimaryAssetCache] No cache work required.
+[INFO] +8.944s: [AssetLibrary] Preload pass 1 summary: created=0 [], rebuilt=0 [], repaired=0 [], reused=105 [3_candles, aluminum_pole_transparent_11549833983xjwlyimgun, attack_speed, axe_in_stump, barrel, baseball_field, bench, big_rock, +97 more], failed=0 [], already_loaded=0 in 2972ms
+[INFO] +8.945s: [AssetLibrary] Pure load pass loaded '3_candles' in 0ms
+[INFO] +8.968s: [AssetLibrary] Pure load pass loaded 'aluminum_pole_transparent_11549833983xjwlyimgun' in 23ms
+[INFO] +8.969s: [AssetLibrary] Pure load pass loaded 'attack_speed' in 1ms
+[INFO] +8.970s: [AssetLibrary] Pure load pass loaded 'axe_in_stump' in 0ms
+[INFO] +8.972s: [AssetLibrary] Pure load pass loaded 'barrel' in 1ms
+[INFO] +9.011s: [AssetLibrary] Pure load pass loaded 'baseball_field' in 39ms
+[INFO] +9.013s: [AssetLibrary] Pure load pass loaded 'bench' in 1ms
+[INFO] +9.016s: [AssetLibrary] Pure load pass loaded 'big_rock' in 2ms
+[INFO] +9.017s: [AssetLibrary] Pure load pass loaded 'blacksmith' in 1ms
+[INFO] +9.018s: [AssetLibrary] Pure load pass loaded 'blue_flower' in 0ms
+[INFO] +9.883s: [AssetLibrary] Pure load pass loaded 'bomb' in 865ms
+[INFO] +9.886s: [AssetLibrary] Pure load pass loaded 'bone' in 1ms
+[INFO] +9.887s: [AssetLibrary] Pure load pass loaded 'bone_1' in 1ms
+[INFO] +9.889s: [AssetLibrary] Pure load pass loaded 'bone_pile' in 1ms
+[INFO] +9.892s: [AssetLibrary] Pure load pass loaded 'book' in 2ms
+[INFO] +9.894s: [AssetLibrary] Pure load pass loaded 'book_1' in 2ms
+[INFO] +9.896s: [AssetLibrary] Pure load pass loaded 'book_pile' in 1ms
+[INFO] +9.897s: [AssetLibrary] Pure load pass loaded 'booze_1' in 0ms
+[INFO] +9.898s: [AssetLibrary] Pure load pass loaded 'booze_2' in 1ms
+[INFO] +9.900s: [AssetLibrary] Pure load pass loaded 'box' in 1ms
+[INFO] +9.915s: [AssetLibrary] Pure load pass loaded 'brian' in 14ms
+[INFO] +9.916s: [AssetLibrary] Pure load pass loaded 'building_1' in 0ms
+[INFO] +9.917s: [AssetLibrary] Pure load pass loaded 'building_2' in 0ms
+[INFO] +9.934s: [AssetLibrary] Pure load pass loaded 'bush_1_fps_2' in 16ms
+[INFO] +9.950s: [AssetLibrary] Pure load pass loaded 'bush_fps_2' in 16ms
+[INFO] +9.959s: [AssetLibrary] Pure load pass loaded 'candle_fps_12' in 8ms
+[INFO] +9.961s: [AssetLibrary] Pure load pass loaded 'car' in 1ms
+[INFO] +9.985s: [AssetLibrary] Pure load pass loaded 'casino' in 24ms
+[INFO] +10.218s: [AssetLibrary] Pure load pass loaded 'chest_opening' in 231ms
+[INFO] +10.247s: [AssetLibrary] Pure load pass loaded 'church' in 29ms
+[INFO] +10.339s: [AssetLibrary] Pure load pass loaded 'city_hall_background' in 91ms
+[INFO] +10.360s: [AssetLibrary] Pure load pass loaded 'clock' in 19ms
+[INFO] +10.361s: [AssetLibrary] Pure load pass loaded 'cropped_output' in 0ms
+[INFO] +10.362s: [AssetLibrary] Pure load pass loaded 'curse_circle' in 0ms
+[INFO] +10.395s: [AssetLibrary] Pure load pass loaded 'doorway_1' in 32ms
+[INFO] +10.396s: [AssetLibrary] Pure load pass loaded 'dot' in 0ms
+[INFO] +10.408s: [AssetLibrary] Pure load pass loaded 'flame_fps_12' in 12ms
+[INFO] +10.420s: [AssetLibrary] Pure load pass loaded 'flame_no_light' in 11ms
+[INFO] +10.423s: [AssetLibrary] Pure load pass loaded 'fly' in 2ms
+[INFO] +10.528s: [AssetLibrary] Pure load pass loaded 'fog_1' in 104ms
+[INFO] +10.641s: [AssetLibrary] Pure load pass loaded 'fog_2' in 113ms
+[INFO] +10.733s: [AssetLibrary] Pure load pass loaded 'fog_3' in 90ms
+[INFO] +10.821s: [AssetLibrary] Pure load pass loaded 'fog_4' in 88ms
+[INFO] +10.839s: [AssetLibrary] Pure load pass loaded 'fountain' in 16ms
+[INFO] +10.840s: [AssetLibrary] Pure load pass loaded 'frog' in 0ms
+[INFO] +10.865s: [AssetLibrary] Pure load pass loaded 'grass_1_fps_2' in 24ms
+[INFO] +11.006s: [AssetLibrary] Pure load pass loaded 'grass_fps_2' in 141ms
+[INFO] +11.008s: [AssetLibrary] Pure load pass loaded 'grave_1' in 0ms
+[INFO] +11.009s: [AssetLibrary] Pure load pass loaded 'grave_2' in 0ms
+[INFO] +11.011s: [AssetLibrary] Pure load pass loaded 'grave_3' in 1ms
+[INFO] +11.012s: [AssetLibrary] Pure load pass loaded 'grave_4' in 1ms
+[INFO] +11.183s: [AssetLibrary] Pure load pass loaded 'gun' in 171ms
+[INFO] +11.185s: [AssetLibrary] Pure load pass loaded 'health' in 1ms
+[INFO] +11.187s: [AssetLibrary] Pure load pass loaded 'health_beer' in 1ms
+[INFO] +11.188s: [AssetLibrary] Pure load pass loaded 'key' in 0ms
+[INFO] +11.205s: [AssetLibrary] Pure load pass loaded 'lamp_left' in 16ms
+[INFO] +11.222s: [AssetLibrary] Pure load pass loaded 'lamp_right' in 16ms
+[INFO] +11.224s: [AssetLibrary] Pure load pass loaded 'mana' in 1ms
+[INFO] +11.225s: [AssetLibrary] Pure load pass loaded 'mana_beer' in 1ms
+[INFO] +11.227s: [AssetLibrary] Pure load pass loaded 'movement_speed' in 0ms
+[INFO] +11.228s: [AssetLibrary] Pure load pass loaded 'mushroom' in 1ms
+[INFO] +11.229s: [AssetLibrary] Pure load pass loaded 'mushroom_1' in 0ms
+[INFO] +11.230s: [AssetLibrary] Pure load pass loaded 'mushroom_2' in 0ms
+[INFO] +11.231s: [AssetLibrary] Pure load pass loaded 'mushroom_3' in 1ms
+[INFO] +11.232s: [AssetLibrary] Pure load pass loaded 'noose' in 0ms
+[INFO] +11.314s: [AssetLibrary] Pure load pass loaded 'parking_lot' in 81ms
+[INFO] +11.315s: [AssetLibrary] Pure load pass loaded 'path' in 1ms
+[INFO] +11.318s: [AssetLibrary] Pure load pass loaded 'pngtree_3d_rendering_of_a_fast_food_shop_building_illustration_png_image_11533843' in 2ms
+[INFO] +11.517s: [AssetLibrary] Pure load pass loaded 'pngtree_blank_metal_frame_billboard_png_image_14678769' in 198ms
+[INFO] +11.519s: [AssetLibrary] Pure load pass loaded 'pngtree_electric_pole_png_image_5949632' in 1ms
+[INFO] +11.520s: [AssetLibrary] Pure load pass loaded 'pole_800a21_o0109_2' in 0ms
+[INFO] +11.522s: [AssetLibrary] Pure load pass loaded 'pub' in 1ms
+[INFO] +11.523s: [AssetLibrary] Pure load pass loaded 'purple_flower' in 0ms
+[INFO] +11.523s: [AssetLibrary] Pure load pass loaded 'red_flower' in 0ms
+[INFO] +11.526s: [AssetLibrary] Pure load pass loaded 'rock' in 2ms
+[INFO] +11.528s: [AssetLibrary] Pure load pass loaded 'sigil_of_fortune' in 1ms
+[INFO] +11.529s: [AssetLibrary] Pure load pass loaded 'skull' in 1ms
+[INFO] +11.531s: [AssetLibrary] Pure load pass loaded 'skull_pile' in 1ms
+[INFO] +11.533s: [AssetLibrary] Pure load pass loaded 'skull_pile_1' in 1ms
+[INFO] +11.534s: [AssetLibrary] Pure load pass loaded 'small_rock' in 0ms
+[INFO] +11.535s: [AssetLibrary] Pure load pass loaded 'small_rock_1' in 0ms
+[INFO] +12.512s: [AssetLibrary] Pure load pass loaded 'spider' in 977ms
+[INFO] +12.514s: [AssetLibrary] Pure load pass loaded 'stagecoach' in 0ms
+[INFO] +12.515s: [AssetLibrary] Pure load pass loaded 'store' in 1ms
+[INFO] +12.518s: [AssetLibrary] Pure load pass loaded 'stump' in 2ms
+[INFO] +12.583s: [AssetLibrary] Pure load pass loaded 'sword' in 64ms
+[INFO] +12.585s: [AssetLibrary] Pure load pass loaded 'table' in 1ms
+[INFO] +12.586s: [AssetLibrary] Pure load pass loaded 'tailor' in 0ms
+[INFO] +12.588s: [AssetLibrary] Pure load pass loaded 'townhall' in 1ms
+[INFO] +13.028s: [AssetLibrary] Pure load pass loaded 'trail' in 439ms
+[INFO] +13.030s: [AssetLibrary] Pure load pass loaded 'tree_dark' in 1ms
+[INFO] +13.031s: [AssetLibrary] Pure load pass loaded 'tree_darker' in 1ms
+[INFO] +13.037s: [AssetLibrary] Pure load pass loaded 'tree_eyes_fps_2' in 5ms
+[INFO] +13.062s: [AssetLibrary] Pure load pass loaded 'tree_fps_2' in 25ms
+[INFO] +13.239s: [AssetLibrary] Pure load pass loaded 'vibble' in 176ms
+[INFO] +13.251s: [AssetLibrary] Pure load pass loaded 'vibble_attack_1' in 11ms
+[INFO] +13.253s: [AssetLibrary] Pure load pass loaded 'vibble_eyes' in 1ms
+[INFO] +13.254s: [AssetLibrary] Pure load pass loaded 'vibble_hat' in 0ms
+[INFO] +13.254s: [AssetLibrary] Pure load pass loaded 'vibble_mouth' in 0ms
+[INFO] +13.255s: [AssetLibrary] Pure load pass loaded 'vibble_neck' in 0ms
+[INFO] +13.256s: [AssetLibrary] Pure load pass loaded 'water' in 1ms
+[INFO] +13.456s: [AssetLibrary] Pure load pass loaded 'wendys_logo' in 200ms
+[INFO] +13.624s: [AssetLibrary] Pure load pass loaded 'wendys_logo_png_transparent' in 166ms
+[INFO] +13.632s: [AssetLibrary] Pure load pass loaded 'window_round_large' in 6ms
+[INFO] +13.636s: [AssetLibrary] Pure load pass loaded 'window_round_small' in 4ms
+[INFO] +13.636s: [AssetLibrary] Pure load pass summary: loaded=105 [3_candles, aluminum_pole_transparent_11549833983xjwlyimgun, attack_speed, axe_in_stump, barrel, baseball_field, bench, big_rock, +97 more], failed=0 [], already_loaded=0 in 4692ms
+[INFO] +13.637s: [AssetLoader] Animation preload pass completed for 105 assets in 7665.000000ms
+[INFO] +13.637s: [Loading] Loading assets
+[INFO] +13.639s: [AssetLoader] Finalizing assets across rooms...
+[INFO] +13.640s: [AssetLoader] finalizeAssets complete: 75/75 assets ready
+[WARN] +13.641s: [AssetLoader] finalizeAssets missing-default skip count: 0
+[INFO] +13.641s: [AssetLoader] Asset finalization completed; all assets are ready.
+[INFO] +13.641s: [AssetLoader] Map metadata loaded in 81.000000ms
+[INFO] +13.641s: [AssetLoader] Asset library ready in 2.000000ms
+[INFO] +13.641s: [AssetLoader] Rooms built in 4723.000000ms
+[INFO] +13.641s: [AssetLoader] Initialization completed in 12973.000000ms
+[INFO] +13.641s: [AssetLoader] Boundary startup filtering moved to runtime visibility culling. distance_candidates=0 hidden_applied=0
+[INFO] +13.642s: [Loading] Spawning assets
+[INFO] +13.644s: [AssetLoader] Extracted 75 visible assets from rooms
+[INFO] +13.644s: [AssetLoader] Boundary startup visibility summary: extracted=0
+[INFO] +13.645s: [AssetLoader] Boundary startup visibility summary: registered=0 filtered=0
+[INFO] +13.653s: [TileBuilder] Chunk tile build: chunks_with_tiles=6, chunk_textures=6, draw_contributions=6, texture_bytes=1572864, elapsed_ms=8
+[INFO] +13.654s: [MainApp] AssetLoader constructed in 12974ms
+[INFO] +13.654s: [MainApp] Asset spawning finished for map 'forrest'.
+[INFO] +13.654s: [MainApp] 75 assets created and cached.
+[INFO] +13.654s: [MainApp] Creating Assets object...
+[INFO] +13.655s: [Assets] Constructor: Starting InitializeAssets initialization
+[INFO] +13.656s: [InitializeAssets] Processing 75 assets from world grid
+[INFO] +13.656s: [InitializeAssets] Asset 1/75: grass_fps_2
+[INFO] +13.656s: [InitializeAssets] Asset 2/75: grass_1_fps_2
+[INFO] +13.656s: [InitializeAssets] Asset 3/75: barrel
+[WARN] +13.657s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'flame_fps_12'
+[WARN] +13.657s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_3' on asset 'flame_fps_12'
+[WARN] +14.026s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.356s: [InitializeAssets] Asset 4/75: barrel
+[WARN] +14.385s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.390s: [InitializeAssets] Asset 5/75: grass_1_fps_2
+[INFO] +14.390s: [InitializeAssets] Asset 6/75: sigil_of_fortune
+[INFO] +14.391s: [InitializeAssets] Asset 7/75: vibble
+[WARN] +14.396s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'eyes_oval_center' on asset 'vibble'
+[WARN] +14.396s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'hand' on asset 'vibble'
+[WARN] +14.396s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'hand_oval_center' on asset 'vibble'
+[WARN] +14.401s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'melee_oval_center' on asset 'vibble'
+[WARN] +14.402s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'neck' on asset 'vibble'
+[WARN] +14.402s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'neck_oval_center' on asset 'vibble'
+[WARN] +14.402s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'vibble'
+[INFO] +14.402s: [InitializeAssets] Asset 8/75: mushroom_3
+[INFO] +14.402s: [InitializeAssets] Asset 9/75: barrel
+[WARN] +14.407s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.412s: [InitializeAssets] Asset 10/75: grass_fps_2
+[INFO] +14.412s: [InitializeAssets] Asset 11/75: barrel
+[WARN] +14.417s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.423s: [InitializeAssets] Asset 12/75: grass_1_fps_2
+[INFO] +14.423s: [InitializeAssets] Asset 13/75: barrel
+[WARN] +14.427s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.432s: [InitializeAssets] Asset 14/75: barrel
+[WARN] +14.438s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.443s: [InitializeAssets] Asset 15/75: grass_1_fps_2
+[INFO] +14.443s: [InitializeAssets] Asset 16/75: spider
+[INFO] +14.443s: [InitializeAssets] Asset 17/75: mushroom_1
+[INFO] +14.443s: [InitializeAssets] Asset 18/75: grass_1_fps_2
+[INFO] +14.443s: [InitializeAssets] Asset 19/75: barrel
+[WARN] +14.448s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.454s: [InitializeAssets] Asset 20/75: grass_fps_2
+[INFO] +14.454s: [InitializeAssets] Asset 21/75: barrel
+[WARN] +14.459s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.463s: [InitializeAssets] Asset 22/75: barrel
+[WARN] +14.468s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.474s: [InitializeAssets] Asset 23/75: axe_in_stump
+[INFO] +14.474s: [InitializeAssets] Asset 24/75: barrel
+[WARN] +14.479s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.484s: [InitializeAssets] Asset 25/75: barrel
+[WARN] +14.489s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.494s: [InitializeAssets] Asset 26/75: grass_1_fps_2
+[INFO] +14.494s: [InitializeAssets] Asset 27/75: barrel
+[WARN] +14.500s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_2' on asset 'barrel'
+[INFO] +14.506s: [InitializeAssets] Asset 28/75: grass_fps_2
+[INFO] +14.506s: [InitializeAssets] Asset 29/75: city_hall_background
+[WARN] +14.531s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'norm_anhor_point_1' on asset 'bush_fps_2'
+[WARN] +14.535s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'norm_anhor_point_1' on asset 'bush_fps_2'
+[WARN] +14.540s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
+[WARN] +14.541s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
+[WARN] +14.541s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
+[WARN] +14.546s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
+[WARN] +14.546s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
+[WARN] +14.546s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
+[WARN] +14.551s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
+[WARN] +14.551s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
+[WARN] +14.551s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
+[WARN] +14.557s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
+[WARN] +14.557s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
+[WARN] +14.557s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
+[WARN] +14.562s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
+[WARN] +14.562s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
+[WARN] +14.562s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
+[WARN] +14.568s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'window_round_small'
+[WARN] +14.568s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1_copy_copy' on asset 'window_round_small'
+[WARN] +14.568s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_2' on asset 'window_round_small'
+[WARN] +14.575s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'lightanchor_point_1' on asset 'city_hall_background'
+[INFO] +14.575s: [InitializeAssets] Asset 30/75: box
+[INFO] +14.575s: [InitializeAssets] Asset 31/75: grass_1_fps_2
+[INFO] +14.575s: [InitializeAssets] Asset 32/75: 3_candles
+[WARN] +14.587s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'flame_fps_12'
+[WARN] +14.587s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_3' on asset 'flame_fps_12'
+[INFO] +14.592s: [InitializeAssets] Asset 33/75: grass_1_fps_2
+[INFO] +14.593s: [InitializeAssets] Asset 34/75: grass_fps_2
+[INFO] +14.593s: [InitializeAssets] Asset 35/75: box
+[INFO] +14.593s: [InitializeAssets] Asset 36/75: grass_fps_2
+[INFO] +14.593s: [InitializeAssets] Asset 37/75: bone
+[INFO] +14.593s: [InitializeAssets] Asset 38/75: grass_fps_2
+[INFO] +14.593s: [InitializeAssets] Asset 39/75: grass_fps_2
+[INFO] +14.593s: [InitializeAssets] Asset 40/75: grass_fps_2
+[INFO] +14.593s: [InitializeAssets] Asset 41/75: box
+[INFO] +14.594s: [InitializeAssets] Asset 42/75: grass_1_fps_2
+[INFO] +14.594s: [InitializeAssets] Asset 43/75: grass_1_fps_2
+[INFO] +14.594s: [InitializeAssets] Asset 44/75: skull_pile
+[INFO] +14.594s: [InitializeAssets] Asset 45/75: grass_fps_2
+[INFO] +14.594s: [InitializeAssets] Asset 46/75: grass_fps_2
+[INFO] +14.594s: [InitializeAssets] Asset 47/75: grass_1_fps_2
+[INFO] +14.594s: [InitializeAssets] Asset 48/75: grass_1_fps_2
+[INFO] +14.594s: [InitializeAssets] Asset 49/75: purple_flower
+[INFO] +14.595s: [InitializeAssets] Asset 50/75: booze_2
+[INFO] +14.595s: [InitializeAssets] Asset 51/75: grass_1_fps_2
+[INFO] +14.595s: [InitializeAssets] Asset 52/75: grass_1_fps_2
+[INFO] +14.595s: [InitializeAssets] Asset 53/75: booze_2
+[INFO] +14.595s: [InitializeAssets] Asset 54/75: grass_1_fps_2
+[INFO] +14.595s: [InitializeAssets] Asset 55/75: mushroom
+[INFO] +14.595s: [InitializeAssets] Asset 56/75: grass_1_fps_2
+[INFO] +14.595s: [InitializeAssets] Asset 57/75: grass_1_fps_2
+[INFO] +14.596s: [InitializeAssets] Asset 58/75: purple_flower
+[INFO] +14.596s: [InitializeAssets] Asset 59/75: grass_fps_2
+[INFO] +14.596s: [InitializeAssets] Asset 60/75: grass_fps_2
+[INFO] +14.596s: [InitializeAssets] Asset 61/75: grass_fps_2
+[INFO] +14.596s: [InitializeAssets] Asset 62/75: grass_1_fps_2
+[INFO] +14.596s: [InitializeAssets] Asset 63/75: booze_2
+[INFO] +14.596s: [InitializeAssets] Asset 64/75: grass_1_fps_2
+[INFO] +14.596s: [InitializeAssets] Asset 65/75: grass_1_fps_2
+[INFO] +14.597s: [InitializeAssets] Asset 66/75: grass_fps_2
+[INFO] +14.597s: [InitializeAssets] Asset 67/75: grass_fps_2
+[INFO] +14.597s: [InitializeAssets] Asset 68/75: grass_1_fps_2
+[INFO] +14.597s: [InitializeAssets] Asset 69/75: grass_fps_2
+[INFO] +14.597s: [InitializeAssets] Asset 70/75: grass_1_fps_2
+[INFO] +14.597s: [InitializeAssets] Asset 71/75: barrel
+[WARN] +14.613s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'flame_fps_12'
+[WARN] +14.613s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_3' on asset 'flame_fps_12'
+[WARN] +14.622s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'norm_anhor_point_1' on asset 'barrel'
+[INFO] +14.622s: [InitializeAssets] Asset 72/75: mushroom_1
+[INFO] +14.622s: [InitializeAssets] Asset 73/75: grass_1_fps_2
+[INFO] +14.622s: [InitializeAssets] Asset 74/75: chest_opening
+[WARN] +14.622s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'chest_opening'
+[INFO] +14.622s: [InitializeAssets] Asset 75/75: chest_opening
+[WARN] +14.622s: [CustomAssetController] Unable to resolve explicit anchor candidates for anchor 'anchor_1' on asset 'chest_opening'
+[INFO] +14.622s: [Assets] Constructor: InitializeAssets complete
+[INFO] +14.624s: [Assets] Constructor: Creating OpenGL runtime renderer
+[INFO] +14.692s: [Assets] Constructor: OpenGL runtime renderer created successfully
+[INFO] +14.693s: [Assets] Constructor: Setting up assets (123 total)
+[INFO] +14.694s: [Assets] Constructor: Asset finalization complete
+[INFO] +14.865s: [Assets] Constructor: Initialization complete
+[INFO] +14.865s: [MainApp] Assets object created successfully.
+[INFO] +14.865s: [Init] Assets initialized: 75 assets across 3 rooms in 0.01s
+[INFO] +14.866s: [Assets] Reloading camera settings from manifest
+[INFO] +14.866s: [Assets] Camera settings reloaded and marked dirty for refresh
+[INFO] +14.876s: [MenuUI] Runtime frame limit: 300
+[INFO] +14.877s: [CodexPlaytest] In-engine input driver enabled for MenuUI runtime.
+[INFO] +19.931s: [MenuUI] Runtime frame limit reached; exiting automation run.

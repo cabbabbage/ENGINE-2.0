@@ -304,6 +304,79 @@ void Input::setMouseButtonDownForTest(Button button, bool down) {
 }
 
 void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w, int screen_h) {
+    struct PlaytestSegment {
+        std::uint64_t index = 0;
+        std::uint64_t start_frame = 0;
+        std::uint64_t length_frames = 1;
+        int x = 0;
+        int y = -1;
+        bool sprint = false;
+        bool long_hold = true;
+    };
+
+    auto next_random = [](std::uint32_t& state) {
+        state ^= state << 13u;
+        state ^= state >> 17u;
+        state ^= state << 5u;
+        return state;
+    };
+
+    auto choose_segment = [&](PlaytestSegment previous, std::uint32_t& random_state) {
+        PlaytestSegment next = previous;
+        ++next.index;
+        next.start_frame = frame_id;
+
+        const bool force_long_hold = (next.index % 6u) == 0u;
+        const std::uint32_t duration_roll = next_random(random_state);
+        if (force_long_hold) {
+            next.long_hold = true;
+            next.length_frames = 180u + (duration_roll % 301u);
+        } else if ((duration_roll % 5u) == 0u) {
+            next.long_hold = false;
+            next.length_frames = 60u + (duration_roll % 91u);
+        } else {
+            next.long_hold = false;
+            next.length_frames = 5u + (duration_roll % 32u);
+        }
+
+        static constexpr SDL_Point directions[] = {
+            SDL_Point{0, -1},
+            SDL_Point{1, 0},
+            SDL_Point{0, 1},
+            SDL_Point{-1, 0},
+            SDL_Point{1, -1},
+            SDL_Point{-1, -1},
+            SDL_Point{1, 1},
+            SDL_Point{-1, 1}
+        };
+        const std::uint32_t direction_roll = next_random(random_state);
+        const SDL_Point chosen = directions[direction_roll % (sizeof(directions) / sizeof(directions[0]))];
+        next.x = chosen.x;
+        next.y = chosen.y;
+        next.sprint = next.long_hold && ((next_random(random_state) % 3u) == 0u);
+        return next;
+    };
+
+    static std::uint32_t random_state = 0xC0D3CAFEu;
+    static PlaytestSegment segment{};
+    static bool initialized = false;
+    static std::uint64_t last_frame_id = 0;
+    if (!initialized || frame_id <= last_frame_id) {
+        initialized = true;
+        random_state = 0xC0D3CAFEu;
+        segment = PlaytestSegment{};
+        segment.index = 0;
+        segment.start_frame = frame_id;
+        segment.length_frames = 210u;
+        segment.x = 0;
+        segment.y = -1;
+        segment.sprint = false;
+        segment.long_hold = true;
+    } else if (frame_id - segment.start_frame >= segment.length_frames) {
+        segment = choose_segment(segment, random_state);
+    }
+    last_frame_id = frame_id;
+
     constexpr SDL_Scancode movement_keys[] = {
         SDL_SCANCODE_W,
         SDL_SCANCODE_A,
@@ -321,39 +394,25 @@ void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w
         setScancodeDownForTest(scancode, false);
     }
 
-    const std::uint64_t phase = (frame_id / 45u) % 8u;
-    switch (phase) {
-    case 0:
-        setScancodeDownForTest(SDL_SCANCODE_W, true);
-        break;
-    case 1:
+    if (segment.x > 0) {
         setScancodeDownForTest(SDL_SCANCODE_D, true);
-        break;
-    case 2:
-        setScancodeDownForTest(SDL_SCANCODE_S, true);
-        break;
-    case 3:
+    } else if (segment.x < 0) {
         setScancodeDownForTest(SDL_SCANCODE_A, true);
-        break;
-    case 4:
+    }
+    if (segment.y < 0) {
         setScancodeDownForTest(SDL_SCANCODE_W, true);
-        setScancodeDownForTest(SDL_SCANCODE_D, true);
-        break;
-    case 5:
+    } else if (segment.y > 0) {
         setScancodeDownForTest(SDL_SCANCODE_S, true);
-        setScancodeDownForTest(SDL_SCANCODE_A, true);
-        break;
-    case 6:
-        setScancodeDownForTest(SDL_SCANCODE_W, true);
+    }
+    if (segment.sprint) {
         setScancodeDownForTest(SDL_SCANCODE_LSHIFT, true);
-        break;
-    default:
-        setScancodeDownForTest(SDL_SCANCODE_D, true);
-        break;
     }
 
-    const bool pulse_dash = (frame_id % 180u) < 12u;
-    const bool pulse_interact = (frame_id % 240u) >= 20u && (frame_id % 240u) < 44u;
+    const std::uint64_t segment_frame = frame_id - segment.start_frame;
+    const bool pulse_dash = (segment.long_hold && (segment_frame % 150u) < 10u) ||
+                            (!segment.long_hold && segment.length_frames > 18u && segment_frame < 4u);
+    const bool pulse_interact = !segment.long_hold && (segment.index % 7u) == 0u &&
+                                segment_frame >= 2u && segment_frame < 10u;
     setScancodeDownForTest(SDL_SCANCODE_SPACE, pulse_dash);
     setScancodeDownForTest(SDL_SCANCODE_E, pulse_interact);
 
@@ -373,7 +432,11 @@ void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w
 
     auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     frame_stats.set("codex_playtest.input_driver", true);
-    frame_stats.set("codex_playtest.phase", static_cast<std::uint64_t>(phase));
+    frame_stats.set("codex_playtest.phase", segment.index % 8u);
+    frame_stats.set("codex_playtest.segment_index", segment.index);
+    frame_stats.set("codex_playtest.segment_kind", segment.long_hold ? "long" : "burst");
+    frame_stats.set("codex_playtest.segment_length_frames", segment.length_frames);
+    frame_stats.set("codex_playtest.segment_frame", segment_frame);
     frame_stats.set("codex_playtest.mouse_x", mouse_x);
     frame_stats.set("codex_playtest.mouse_y", mouse_y);
     record_key_metric(frame_stats, "input.stored.", "w", keys_down_[SDL_SCANCODE_W]);

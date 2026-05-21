@@ -2373,6 +2373,7 @@ void DevControls::update(const Input& input) {
             if (!camera_panel_blocking && !depth_guide_blocking) {
                 const Uint64 room_update_begin = SDL_GetPerformanceCounter();
                 room_editor_->update(input);
+                update_movement_debug_visibility();
                 frame_stats.set("dev.room_editor_update_ms",
                                 elapsed_ms(room_update_begin, SDL_GetPerformanceCounter()));
             }
@@ -4932,18 +4933,21 @@ void DevControls::set_mode(Mode new_mode) {
 }
 
 void DevControls::update_movement_debug_visibility() {
-    if (assets_) {
-        bool suppress_movement_debug = false;
-        if (room_editor_) {
-            suppress_movement_debug = room_editor_->impassable_box_mode_active();
-        }
-        assets_->set_movement_debug_visible(!suppress_movement_debug);
-        bool suppress_impass_floor_debug = false;
-        if (room_editor_) {
-            suppress_impass_floor_debug = room_editor_->impassable_box_mode_active();
-        }
-        assets_->set_impass_floor_debug_visible(!suppress_impass_floor_debug);
+    if (!assets_) {
+        return;
     }
+
+    // Suppress debug overlays in shape-authoring submodes where handles and
+    // projected geometry are the primary interaction targets.
+    bool suppress_for_room_editor_submode = false;
+    if (room_editor_) {
+        suppress_for_room_editor_submode =
+            room_editor_->impassable_box_mode_active() ||
+            room_editor_->floor_box_mode_active();
+    }
+
+    assets_->set_movement_debug_visible(!suppress_for_room_editor_submode);
+    assets_->set_impass_floor_debug_visible(!suppress_for_room_editor_submode);
 }
 
 void DevControls::restore_filter_hidden_assets() const {

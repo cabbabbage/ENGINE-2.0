@@ -368,7 +368,7 @@ void DynamicSpawnRuntime::build_plan() {
 }
 
 void DynamicSpawnRuntime::build_plan_into(PlanByChunk& plan, int threshold_px) const {
-    const auto geometry = collect_area_geometry_impl(assets_);
+    const auto geometry = dynamic_spawn::geometry::collect_area_geometry(assets_);
     if (!geometry.valid || selectors_.empty()) {
         return;
     }
@@ -406,7 +406,7 @@ void DynamicSpawnRuntime::refresh_distance_to_edge() {
         return;
     }
 
-    const auto geometry = collect_area_geometry_impl(assets_);
+    const auto geometry = dynamic_spawn::geometry::collect_area_geometry(assets_);
     if (!geometry.valid) {
         clear_active_instances(true);
         cells_by_chunk_.clear();
@@ -870,57 +870,6 @@ DynamicSpawnRuntime::chunk_keys_for_bounds(const world::GridBounds& bounds) cons
 
 world::GridBounds DynamicSpawnRuntime::expanded_bounds(const world::GridBounds& bounds, int margin_px) const {
     return bounds.expanded(std::max(0, margin_px));
-}
-
-dynamic_spawn::geometry::AreaGeometry collect_area_geometry_impl(const Assets& assets) {
-    dynamic_spawn::geometry::AreaGeometry geometry;
-    geometry.min_x = std::numeric_limits<int>::max();
-    geometry.min_z = std::numeric_limits<int>::max();
-    geometry.max_x = std::numeric_limits<int>::min();
-    geometry.max_z = std::numeric_limits<int>::min();
-
-    auto append_area = [&](const Area* area) {
-        if (!area) {
-            return;
-        }
-        geometry.areas.push_back(area);
-        const auto& points = area->get_points();
-        if (points.empty()) {
-            return;
-        }
-        geometry.valid = true;
-        for (const SDL_Point& point : points) {
-            geometry.min_x = std::min(geometry.min_x, point.x);
-            geometry.min_z = std::min(geometry.min_z, point.y);
-            geometry.max_x = std::max(geometry.max_x, point.x);
-            geometry.max_z = std::max(geometry.max_z, point.y);
-        }
-        if (points.size() == 2) {
-            geometry.segments.push_back(dynamic_spawn::geometry::AreaGeometry::Segment{points[0], points[1]});
-        } else if (points.size() > 2) {
-            for (std::size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
-                geometry.segments.push_back(dynamic_spawn::geometry::AreaGeometry::Segment{points[j], points[i]});
-            }
-        }
-    };
-
-    for (Room* room : assets.rooms()) {
-        if (!room) {
-            continue;
-        }
-        append_area(room->room_area.get());
-        for (const Room::NamedArea& area : room->areas) {
-            if (named_area_is_trail(area)) {
-                append_area(area.area.get());
-            }
-        }
-    }
-
-    if (!geometry.valid) {
-        geometry.min_x = geometry.min_z = 0;
-        geometry.max_x = geometry.max_z = -1;
-    }
-    return geometry;
 }
 
 bool DynamicSpawnRuntime::room_contains_dynamic_area(const Room* room, SDL_Point point) const {

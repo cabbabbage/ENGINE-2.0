@@ -5,7 +5,7 @@
 #include "utils/cache_manager.hpp"
 #include "utils/log.hpp"
 #include "utils/oval_anchor_math.hpp"
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include <algorithm>
 #include <iomanip>

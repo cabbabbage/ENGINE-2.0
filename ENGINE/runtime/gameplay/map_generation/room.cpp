@@ -609,6 +609,8 @@ Room::Room(Point origin,
     spawner.spawn(*this);
 }
 
+Room::~Room() = default;
+
 void Room::set_sibling_left(Room* left_room) {
 	left_sibling = left_room;
 }

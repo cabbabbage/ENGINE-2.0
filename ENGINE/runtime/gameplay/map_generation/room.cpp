@@ -420,9 +420,11 @@ Room::Room(Point origin,
     }
     manifest_store_ = manifest_store;
     map_info_root_ = map_info_root;
-    sync_boundary_ = (manifest_store_ || map_info_root_ || manifest_writer_)
-            ? std::make_unique<RoomManifestAdapter::EditorSyncBoundary>()
-            : std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
+    if (manifest_store_ || map_info_root_ || manifest_writer_) {
+        sync_boundary_ = std::make_unique<RoomManifestAdapter::EditorSyncBoundary>();
+    } else {
+        sync_boundary_ = std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
+    }
 
     if (room_data_ptr_) {
         if (room_data_ptr_->is_null()) {
@@ -1215,9 +1217,11 @@ void Room::set_manifest_store(devmode::core::ManifestStore* store,
         if (manifest_writer) {
                 manifest_writer_ = std::move(manifest_writer);
         }
-        sync_boundary_ = (manifest_store_ || map_info_root_ || manifest_writer_)
-                ? std::make_unique<RoomManifestAdapter::EditorSyncBoundary>()
-                : std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
+        if (manifest_store_ || map_info_root_ || manifest_writer_) {
+                sync_boundary_ = std::make_unique<RoomManifestAdapter::EditorSyncBoundary>();
+        } else {
+                sync_boundary_ = std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
+        }
 }
 
 nlohmann::json Room::build_room_payload_for_save() const {

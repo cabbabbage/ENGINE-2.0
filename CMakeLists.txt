@@ -78,6 +78,7 @@ add_executable(debug_flag_sync_regression_test
 add_executable(room_legacy_migration_regression_test
     ${CMAKE_SOURCE_DIR}/ENGINE/tests/room_legacy_migration_regression_test.cpp
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/map_generation/room_legacy_migration.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils/utils/weighted_range.cpp
 )
 target_include_directories(room_legacy_migration_regression_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime

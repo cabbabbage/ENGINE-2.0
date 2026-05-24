@@ -1,6 +1,9 @@
 #include "main.hpp"
 #include "app/bootstrap.hpp"
 #include "app/frame_pacing.hpp"
+#include "app/event_loop_runtime.hpp"
+#include "app/window_mode_runtime.hpp"
+#include "app/startup_runtime.hpp"
 #include "utils/text_style.hpp"
 #include "ui/main_menu.hpp"
 #include "ui/menu_ui.hpp"
@@ -48,83 +51,6 @@ namespace fs = std::filesystem;
 
 namespace {
 
-struct WindowedPlacement {
-        int x;
-        int y;
-        int w;
-        int h;
-};
-
-WindowedPlacement compute_windowed_fallback(SDL_Window* window) {
-        WindowedPlacement placement{SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720};
-
-        if (!window) {
-                return placement;
-        }
-
-        const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
-        if (display != 0) {
-                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
-                        const int margin = 120;
-                        const int preferred_w = (desktop_mode->w * 3) / 4;
-                        const int preferred_h = (desktop_mode->h * 3) / 4;
-
-                        const int max_w = std::max(640, desktop_mode->w - margin);
-                        const int max_h = std::max(360, desktop_mode->h - margin);
-
-                        placement.w = std::max(960, preferred_w);
-                        placement.h = std::max(540, preferred_h);
-
-                        placement.w = std::min(placement.w, max_w);
-                        placement.h = std::min(placement.h, max_h);
-                }
-        }
-
-        return placement;
-}
-
-bool env_flag_enabled(const char* name, bool default_value) {
-        if (!name || !*name) {
-                return default_value;
-        }
-        const char* raw = std::getenv(name);
-        if (!raw || !*raw) {
-                return default_value;
-        }
-
-        std::string value(raw);
-        std::transform(value.begin(),
-                       value.end(),
-                       value.begin(),
-                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-        if (value == "1" || value == "true" || value == "yes" || value == "on" || value == "y" || value == "t") {
-                return true;
-        }
-        if (value == "0" || value == "false" || value == "no" || value == "off" || value == "n" || value == "f") {
-                return false;
-        }
-        return default_value;
-}
-
-int env_int_clamped(const char* name, int default_value, int min_value, int max_value) {
-        const int safe_min = std::min(min_value, max_value);
-        const int safe_max = std::max(min_value, max_value);
-        const int safe_default = std::clamp(default_value, safe_min, safe_max);
-        if (!name || !*name) {
-                return safe_default;
-        }
-        const char* raw = std::getenv(name);
-        if (!raw || !*raw) {
-                return safe_default;
-        }
-        try {
-                const int value = std::stoi(raw);
-                return std::clamp(value, safe_min, safe_max);
-        } catch (...) {
-                return safe_default;
-        }
-}
-
 void show_gpu_required_dialog_and_wait(SDL_Window* window, const std::string& details) {
         const SDL_MessageBoxButtonData buttons[] = {
                 {
@@ -157,57 +83,8 @@ void show_gpu_required_dialog_and_wait(SDL_Window* window, const std::string& de
         }
 }
 
-bool is_resize_or_scale_event(Uint32 event_type) {
-        switch (event_type) {
-        case SDL_EVENT_WINDOW_RESIZED:
-        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-#ifdef SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
-        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-#endif
-#ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
-        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
-#endif
-                return true;
-        default:
-                return false;
-        }
-}
-
-bool is_critical_runtime_event(const SDL_Event& e) {
-        switch (e.type) {
-        case SDL_EVENT_QUIT:
-        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-        case SDL_EVENT_WINDOW_RESIZED:
-        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-#ifdef SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
-        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-#endif
-#ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
-        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
-#endif
-                return true;
-        default:
-                return false;
-        }
-}
-
-bool event_uses_pointer_coordinates(Uint32 event_type) {
-        switch (event_type) {
-        case SDL_EVENT_MOUSE_MOTION:
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        case SDL_EVENT_MOUSE_BUTTON_UP:
-        case SDL_EVENT_MOUSE_WHEEL:
-        case SDL_EVENT_FINGER_DOWN:
-        case SDL_EVENT_FINGER_UP:
-        case SDL_EVENT_FINGER_MOTION:
-                return true;
-        default:
-                return false;
-        }
-}
-
 bool codex_playtest_input_enabled() {
-        static const bool enabled = env_flag_enabled("VIBBLE_CODEX_PLAYTEST_INPUT", false);
+        static const bool enabled = app::startup_runtime::env_flag_enabled("VIBBLE_CODEX_PLAYTEST_INPUT", false);
         return enabled;
 }
 
@@ -259,14 +136,14 @@ MainApp::MainApp(MapDescriptor map,
                         }
                         SDL_GetWindowPosition(window_, &windowed_x_, &windowed_y_);
                 } else {
-                        const WindowedPlacement fallback = compute_windowed_fallback(window_);
+                        const auto fallback = app::window_mode_runtime::compute_windowed_fallback(window_);
                         windowed_x_ = fallback.x;
                         windowed_y_ = fallback.y;
                         windowed_width_ = fallback.w;
                         windowed_height_ = fallback.h;
                 }
         }
-        render_diagnostics_enabled_ = env_flag_enabled("VIBBLE_RENDER_DIAGNOSTICS", false);
+        render_diagnostics_enabled_ = app::startup_runtime::env_flag_enabled("VIBBLE_RENDER_DIAGNOSTICS", false);
 }
 
 MainApp::~MainApp() {
@@ -446,9 +323,8 @@ void MainApp::game_loop() {
 
         std::uint64_t runtime_frame_counter = 0;
         bool quit = false;
-        SDL_Event e;
         const int auto_exit_frame_limit =
-                env_int_clamped("VIBBLE_RUNTIME_FRAME_LIMIT", 0, 0, 1000000);
+                app::startup_runtime::env_int_clamped("VIBBLE_RUNTIME_FRAME_LIMIT", 0, 0, 1000000);
 
         vibble::log::info("[MainApp] Game loop started.");
         vibble::log::info("[MainApp] Frame pacing target: " + app::frame_pacing::target_summary());
@@ -506,19 +382,16 @@ void MainApp::game_loop() {
                 bool event_budget_hit_time = false;
                 bool resize_or_scale_seen_this_frame = false;
                 static std::deque<SDL_Event> deferred_events;
-                const int max_events_per_frame = env_int_clamped("VIBBLE_EVENT_MAX_COUNT", 1000, 64, 5000);
-                const int max_poll_ms_per_frame = env_int_clamped("VIBBLE_EVENT_MAX_MS", 4, 1, 33);
+                const int max_events_per_frame = app::startup_runtime::env_int_clamped("VIBBLE_EVENT_MAX_COUNT", 1000, 64, 5000);
+                const int max_poll_ms_per_frame = app::startup_runtime::env_int_clamped("VIBBLE_EVENT_MAX_MS", 4, 1, 33);
                 frame_stats.mark_stage("event_poll_begin");
                 const Uint64 event_begin = SDL_GetPerformanceCounter();
 
                 auto process_event = [&](SDL_Event& event) {
                         ++event_count;
-                        if (renderer && event_uses_pointer_coordinates(event.type)) {
+                        if (renderer && app::event_loop_runtime::event_uses_pointer_coordinates(event.type)) {
                                 // Keep pointer/touch event coordinates aligned with renderer-space hit testing.
                                 SDL_ConvertEventToRenderCoordinates(renderer, &event);
-                        }
-                        if (renderer && is_resize_or_scale_event(event.type)) {
-                                resize_or_scale_seen_this_frame = true;
                         }
                         handle_global_shortcuts(event);
                         if (event.type == SDL_EVENT_QUIT) {
@@ -532,25 +405,17 @@ void MainApp::game_loop() {
                         }
                 };
 
-                while (!deferred_events.empty()) {
-                        SDL_Event deferred = deferred_events.front();
-                        deferred_events.pop_front();
-                        process_event(deferred);
-                }
-
-                while (SDL_PollEvent(&e)) {
-                        const bool over_count = event_count >= max_events_per_frame;
-                        const bool over_time = runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin,
-                                                                                              SDL_GetPerformanceCounter()) >= max_poll_ms_per_frame;
-                        if (!is_critical_runtime_event(e) && (over_count || over_time)) {
-                                deferred_events.push_back(e);
-                                ++deferred_event_count;
-                                event_budget_hit_count = event_budget_hit_count || over_count;
-                                event_budget_hit_time = event_budget_hit_time || over_time;
-                                continue;
-                        }
-                        process_event(e);
-                }
+                app::event_loop_runtime::EventPumpConfig event_config{max_events_per_frame, max_poll_ms_per_frame};
+                auto event_state = app::event_loop_runtime::pump_events(renderer,
+                                                                        event_config,
+                                                                        deferred_events,
+                                                                        process_event,
+                                                                        event_begin);
+                event_count = event_state.event_count;
+                deferred_event_count = event_state.deferred_event_count;
+                event_budget_hit_count = event_state.event_budget_hit_count;
+                event_budget_hit_time = event_state.event_budget_hit_time;
+                resize_or_scale_seen_this_frame = event_state.resize_or_scale_seen;
                 const Uint64 event_end = SDL_GetPerformanceCounter();
                 frame_stats.mark_stage("event_poll_end");
                 frame_stats.set("main.event_count", event_count);
@@ -895,67 +760,12 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
 }
 
 void MainApp::toggle_fullscreen() {
-        if (!window_) {
-                return;
-        }
-
-        if (is_fullscreen_) {
-                WindowedPlacement target{windowed_x_, windowed_y_, windowed_width_, windowed_height_};
-
-                if (target.w <= 0 || target.h <= 0) {
-                        target = compute_windowed_fallback(window_);
-                } else {
-                        const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
-                        if (display != 0) {
-                                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
-                                        if (target.w >= desktop_mode->w - 16 || target.h >= desktop_mode->h - 16) {
-                                                target = compute_windowed_fallback(window_);
-                                        }
-                                }
-                        }
-                }
-
-                const bool result = SDL_SetWindowFullscreen(window_, false);
-                if (!result) {
-                        vibble::log::warn(std::string("[MainApp] Failed to switch to windowed mode: ") + SDL_GetError());
-                        return;
-                }
-
-                SDL_SetWindowResizable(window_, true);
-                SDL_SetWindowBordered(window_, true);
-                SDL_SetWindowSize(window_, target.w, target.h);
-                SDL_SetWindowPosition(window_, target.x, target.y);
-
-                is_fullscreen_ = false;
-                windowed_x_ = target.x;
-                windowed_y_ = target.y;
-                windowed_width_ = target.w;
-                windowed_height_ = target.h;
-                vibble::log::info("[MainApp] Window mode switched to windowed.");
-                return;
-        }
-
-        int current_x = 0;
-        int current_y = 0;
-        int current_width = 0;
-        int current_height = 0;
-        SDL_GetWindowPosition(window_, &current_x, &current_y);
-        SDL_GetWindowSize(window_, &current_width, &current_height);
-        if (current_width > 0 && current_height > 0) {
-                windowed_x_ = current_x;
-                windowed_y_ = current_y;
-                windowed_width_ = current_width;
-                windowed_height_ = current_height;
-        }
-
-        const bool result = SDL_SetWindowFullscreen(window_, true);
-        if (!result) {
-                vibble::log::warn(std::string("[MainApp] Failed to switch to fullscreen mode: ") + SDL_GetError());
-                return;
-        }
-
-        is_fullscreen_ = true;
-        vibble::log::info("[MainApp] Window mode switched to fullscreen.");
+        app::window_mode_runtime::toggle_fullscreen(window_,
+                                                    is_fullscreen_,
+                                                    windowed_x_,
+                                                    windowed_y_,
+                                                    windowed_width_,
+                                                    windowed_height_);
 }
 
 void MainApp::handle_global_shortcuts(const SDL_Event& e) {
@@ -1165,8 +975,7 @@ void run(SDL_Window* window,
         } else {
             menu = std::make_unique<MainMenu>(renderer, screen_w, screen_h, manifest_data.maps);
             vibble::log::info("[Main] Main menu displayed.");
-            SDL_Event e;
-            bool choosing = true;
+                bool choosing = true;
             while (choosing) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 while (SDL_PollEvent(&e)) {

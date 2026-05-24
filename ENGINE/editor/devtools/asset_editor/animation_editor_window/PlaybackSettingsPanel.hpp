@@ -106,10 +106,10 @@ class PlaybackSettingsPanel {
     std::vector<std::string> inherited_modifiers_;
     mutable SDL_Rect inherited_message_rect_{0, 0, 0, 0};
     mutable SDL_Rect invert_frames_helper_rect_{0, 0, 0, 0};
+    mutable SDL_Rect inversion_preview_rect_{0, 0, 0, 0};
 
     DMWidgetTooltipState info_tooltip_{};
 };
 
 }
-
 

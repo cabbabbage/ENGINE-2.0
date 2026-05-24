@@ -26,6 +26,7 @@
 namespace {
 
 constexpr int kItemGap = 8;
+constexpr int kInversionPreviewHeight = 66;
 
 using animation_editor::kPanelPadding;
 using animation_editor::strings::trim_copy;
@@ -54,6 +55,43 @@ void render_message_lines(SDL_Renderer* renderer, const SDL_Rect& rect, const st
         DMFontCache::instance().draw_text(renderer, style, line, rect.x, y);
         y += line_height;
     }
+}
+
+void render_inversion_preview(SDL_Renderer* renderer, const SDL_Rect& rect, bool invert_x, bool invert_y, bool invert_z) {
+    if (!renderer || rect.w <= 0 || rect.h <= 0) {
+        return;
+    }
+
+    const SDL_Color border = DMStyles::BorderColor();
+    const SDL_Color text = DMStyles::TextMuted();
+    const SDL_Color x_color{237, 85, 85, 255};
+    const SDL_Color y_color{95, 205, 120, 255};
+    const SDL_Color z_color{109, 177, 255, 255};
+
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, 255);
+    SDL_RenderRect(renderer, &rect);
+
+    const int cx = rect.x + rect.w / 2;
+    const int cy = rect.y + rect.h / 2 + 6;
+    const int len = std::max(10, std::min(rect.w, rect.h) / 3);
+
+    auto draw_axis = [&](int dx, int dy, const SDL_Color& color, const char* label) {
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 255);
+        SDL_RenderLine(renderer, static_cast<float>(cx), static_cast<float>(cy),
+                       static_cast<float>(cx + dx), static_cast<float>(cy + dy));
+        DMFontCache::instance().draw_text(renderer, DMStyles::Label(), label, cx + dx + 3, cy + dy - 6);
+    };
+
+    draw_axis(invert_x ? -len : len, 0, x_color, "X");
+    draw_axis(0, invert_y ? len : -len, y_color, "Y");
+    draw_axis(invert_z ? -len : len, invert_z ? len : -len, z_color, "Z");
+
+    DMFontCache::instance().draw_text(renderer, DMStyles::Label(), "Invert preview", rect.x + 6, rect.y + 4);
+    std::string state_text = std::string("X:") + (invert_x ? "<" : ">") +
+                             "  Y:" + (invert_y ? "v" : "^") +
+                             "  Z:" + (invert_z ? "\\\\" : "//");
+    DMFontCache::instance().draw_text(renderer, DMStyles::Label(), state_text, rect.x + 6, rect.y + rect.h - 18);
+    SDL_SetRenderDrawColor(renderer, text.r, text.g, text.b, 255);
 }
 
 const std::vector<std::string>& invert_frames_help_lines() {
@@ -888,6 +926,10 @@ int PlaybackSettingsPanel::preferred_height(int width) const {
             height += gap;
             height += message_block_height(inherited_message_lines_);
         }
+        if (inversion_controls_visible()) {
+            height += gap;
+            height += kInversionPreviewHeight;
+        }
     } else {
         if (random_start_visible()) {
             height += gap;
@@ -925,6 +967,13 @@ void PlaybackSettingsPanel::render(SDL_Renderer* renderer) const {
     render_checkbox(invert_x_checkbox_, show_flip_controls);
     render_checkbox(invert_y_checkbox_, show_flip_controls);
     render_checkbox(invert_z_checkbox_, show_flip_controls);
+    if (show_flip_controls && inversion_preview_rect_.h > 0) {
+        render_inversion_preview(renderer,
+                                 inversion_preview_rect_,
+                                 invert_x_checkbox_ && invert_x_checkbox_->value(),
+                                 invert_y_checkbox_ && invert_y_checkbox_->value(),
+                                 invert_z_checkbox_ && invert_z_checkbox_->value());
+    }
     render_checkbox(inherit_geometry_checkbox_, inherit_controls_visible());
 
     render_checkbox(reverse_checkbox_, derived_from_animation_);
@@ -1055,6 +1104,15 @@ void PlaybackSettingsPanel::layout_widgets() const {
     place_checkbox(invert_x_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(invert_y_checkbox_.get(), show_flip_controls, placed_any_checkbox);
     place_checkbox(invert_z_checkbox_.get(), show_flip_controls, placed_any_checkbox);
+    inversion_preview_rect_ = SDL_Rect{0, 0, 0, 0};
+    if (show_flip_controls) {
+        if (placed_any_checkbox) {
+            y += gap;
+        }
+        inversion_preview_rect_ = SDL_Rect{x, y, width, kInversionPreviewHeight};
+        y += kInversionPreviewHeight;
+        placed_any_checkbox = true;
+    }
     place_checkbox(inherit_geometry_checkbox_.get(), inherit_controls_visible(), placed_any_checkbox);
 
     place_checkbox(reverse_checkbox_.get(), derived_from_animation_, placed_any_checkbox);
@@ -1532,4 +1590,3 @@ void PlaybackSettingsPanel::refresh_inherited_message() {
 }
 
 }
-

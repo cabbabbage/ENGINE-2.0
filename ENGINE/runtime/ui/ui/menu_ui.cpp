@@ -178,7 +178,9 @@ void MenuUI::game_loop() {
                 handle_global_shortcuts(event);
                 const bool menu_was_active = menu_active_;
                 if (event.type == SDL_EVENT_QUIT) {
+                        runtime_stats::FrameStatsRecorder::instance().mark_stage("shutdown_save_begin", true);
                         run_exit_save_sequence("sdl_event_quit");
+                        runtime_stats::FrameStatsRecorder::instance().mark_stage("shutdown_save_end", true);
                         quit = true;
                 }
                 if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE && event.key.repeat == 0) {

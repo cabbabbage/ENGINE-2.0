@@ -162,6 +162,11 @@ $mapSelected = $mapAutoSelected -or (($logLines -match "Map selected: $([regex]:
 $loopStarted = (($logLines -match "Game loop started\.").Count -gt 0) -or
                (($logLines -match "\[MenuUI\] Runtime frame limit:").Count -gt 0)
 $finalLogLine = if ($logLines.Count -gt 0) { $logLines[-1] } else { "<no log lines>" }
+$exitSaveSeen = (($logLines -match "Exit save sequence").Count -gt 0)
+$finalWatchdogAfterExitSave =
+    $exitSaveSeen -and
+    ($finalLogLine -match "\[FreezeWatchdog\]") -and
+    (($logLines | Select-Object -Last 8) -match "Exit save sequence").Count -gt 0
 
 $frameMetricName = "main.frame_total_ms"
 if ($rows.Count -gt 0 -and ($rows[0].PSObject.Properties.Name -contains "main.raw_frame_total_ms")) {
@@ -308,6 +313,9 @@ if ($over33Count -gt 0) {
 if ($finalLogLine -match "Loading|Creating map|Generating|Start for map|Spawning assets") {
     $freezeSignals.Add("Final log line appears to be in startup/loading work: $finalLogLine") | Out-Null
 }
+if ($finalWatchdogAfterExitSave) {
+    $freezeSignals.Add("Final watchdog warning occurred after the exit-save sequence; classify it as shutdown/close handling, not a captured gameplay movement frame.") | Out-Null
+}
 
 $likely = New-Object System.Collections.Generic.List[string]
 if ($errorLines.Count -gt 0) {
@@ -315,6 +323,9 @@ if ($errorLines.Count -gt 0) {
 }
 if ($TimedOut -or $TimeoutForcedKill) {
     $likely.Add("Treat this run as a hang/freeze repro because the harness had to intervene.") | Out-Null
+}
+if ($finalWatchdogAfterExitSave) {
+    $likely.Add("The final FreezeWatchdog line happened after exit-save logs and has no completed frame-stat row; do not attribute it to player movement without a gameplay-frame repro.") | Out-Null
 }
 $assetsMax = Max-Metric -Rows $rows -Metric "main.assets_update_ms"
 $worldMax = Max-Metric -Rows $rows -Metric "assets.world_ms"

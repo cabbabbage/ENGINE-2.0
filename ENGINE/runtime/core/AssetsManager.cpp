@@ -2226,11 +2226,7 @@ void Assets::run_idle_frame_pipeline(const Input& input) {
     frame_stats.set("assets.filtered_refresh_ms",
                     runtime_stats::FrameStatsRecorder::elapsed_ms(filter_begin,
                                                                   SDL_GetPerformanceCounter()));
-    const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
-    sync_dev_controls_runtime_state();
-    frame_stats.set("assets.dev_sync_ms",
-                    runtime_stats::FrameStatsRecorder::elapsed_ms(dev_sync_begin,
-                                                                  SDL_GetPerformanceCounter()));
+    run_dev_mode_stage(input);
     const Uint64 render_begin = SDL_GetPerformanceCounter();
     render_runtime_frame();
     frame_stats.set("assets.render_ms",
@@ -2251,8 +2247,6 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
     Uint64 camera_end = 0;
     Uint64 max_dimensions_begin = 0;
     Uint64 max_dimensions_end = 0;
-    Uint64 dev_sync_begin = 0;
-    Uint64 dev_sync_end = 0;
     Uint64 pending_assets_begin = 0;
     Uint64 pending_assets_end = 0;
     Uint64 empty_points_begin = 0;
@@ -2463,10 +2457,6 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
 
     culled_debug_rects_.clear();
 
-    dev_sync_begin = SDL_GetPerformanceCounter();
-    sync_dev_controls_runtime_state();
-    dev_sync_end = SDL_GetPerformanceCounter();
-
     pending_assets_begin = SDL_GetPerformanceCounter();
     const Uint64 maintenance_begin = SDL_GetPerformanceCounter();
     const double maintenance_budget_ms = startup_runtime_safety_active(frame_id_) ? 0.35 : 0.75;
@@ -2505,7 +2495,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         frame_stats.set("assets.world_movement_flush_ms", elapsed_ms(movement_flush_begin, movement_flush_end));
         frame_stats.set("assets.world_camera_ms", elapsed_ms(camera_begin, camera_end));
         frame_stats.set("assets.world_max_dimensions_ms", elapsed_ms(max_dimensions_begin, max_dimensions_end));
-        frame_stats.set("assets.world_dev_sync_ms", elapsed_ms(dev_sync_begin, dev_sync_end));
+        frame_stats.set("assets.world_dev_sync_ms", 0.0);
         frame_stats.set("assets.world_pending_assets_ms", elapsed_ms(pending_assets_begin, pending_assets_end));
         frame_stats.set("assets.world_empty_points_ms", elapsed_ms(empty_points_begin, empty_points_end));
         frame_stats.set("assets.world_full_updates", static_cast<std::uint64_t>(full_runtime_updates));
@@ -2777,13 +2767,30 @@ void Assets::run_dev_controls_ui_frame(const Input& input) {
                     runtime_stats::FrameStatsRecorder::elapsed_ms(ui_begin, ui_end));
 }
 
+void Assets::run_dev_mode_stage(const Input& input) {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    if (!dev_mode) {
+        frame_stats.set("assets.dev_sync_ms", 0.0);
+        return;
+    }
+
+    const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
+    sync_dev_controls_runtime_state();
+    run_dev_controls_ui_frame(input);
+    frame_stats.set("assets.dev_sync_ms",
+                    runtime_stats::FrameStatsRecorder::elapsed_ms(dev_sync_begin,
+                                                                  SDL_GetPerformanceCounter()));
+}
+
 void Assets::refresh_filtered_active_assets_if_needed() {
     auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
-    frame_stats.set("dev.set_active_assets_called", false);
-    frame_stats.set("dev.active_assets_sync_ms", 0.0);
-    frame_stats.set("dev.current_room_sync_ms", 0.0);
-    frame_stats.set("dev.active_assets_generation", dev_active_state_version_);
-    frame_stats.set("dev.filtered_assets_generation", dev_active_state_version_);
+    if (dev_mode) {
+        frame_stats.set("dev.set_active_assets_called", false);
+        frame_stats.set("dev.active_assets_sync_ms", 0.0);
+        frame_stats.set("dev.current_room_sync_ms", 0.0);
+        frame_stats.set("dev.active_assets_generation", dev_active_state_version_);
+        frame_stats.set("dev.filtered_assets_generation", dev_active_state_version_);
+    }
     bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
     std::uint64_t dev_filter_version = 0;
@@ -2805,16 +2812,10 @@ void Assets::refresh_filtered_active_assets_if_needed() {
             const Uint64 sync_begin = SDL_GetPerformanceCounter();
             dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
             const Uint64 sync_end = SDL_GetPerformanceCounter();
-            frame_stats.set("dev.set_active_assets_called", true);
-            frame_stats.set("dev.active_assets_sync_ms",
-                            runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin, sync_end));
-            const Uint64 room_sync_begin = SDL_GetPerformanceCounter();
-            const bool room_changed = sync_dev_controls_current_room(current_room_);
-            frame_stats.set("dev.current_room_sync_ms",
-                            runtime_stats::FrameStatsRecorder::elapsed_ms(room_sync_begin,
-                                                                          SDL_GetPerformanceCounter()));
-            if (room_changed) {
-                frame_stats.set("dev.current_room_changed", true);
+            if (dev_mode) {
+                frame_stats.set("dev.set_active_assets_called", true);
+                frame_stats.set("dev.active_assets_sync_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin, sync_end));
             }
         }
     }
@@ -3006,7 +3007,7 @@ void Assets::update(const Input& input)
     asset_update_phase_stats_.active_set_assets_touched = static_cast<std::uint64_t>(filtered_active_assets.size());
     const Uint64 filter_end = SDL_GetPerformanceCounter();
     const Uint64 dev_sync_begin = SDL_GetPerformanceCounter();
-    run_dev_controls_ui_frame(input);
+    run_dev_mode_stage(input);
     const Uint64 dev_sync_end = SDL_GetPerformanceCounter();
 
     // Stage: render.

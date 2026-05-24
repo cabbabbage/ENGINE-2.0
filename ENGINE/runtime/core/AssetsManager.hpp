@@ -599,6 +599,7 @@ private:
     void run_visibility_build_stage();
     void run_post_flush_traversal_refresh_once();
     void run_runtime_effects_stage(bool include_audio_update = true);
+    void run_dev_mode_stage(const Input& input);
     void sync_dev_controls_runtime_state();
     void run_dev_controls_ui_frame(const Input& input);
     void refresh_filtered_active_assets_if_needed();

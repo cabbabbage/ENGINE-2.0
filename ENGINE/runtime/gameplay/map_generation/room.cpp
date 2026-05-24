@@ -3,6 +3,7 @@
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "room_manifest_adapter.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <algorithm>
@@ -545,6 +546,9 @@ Room::Room(Point origin,
     }
     manifest_store_ = manifest_store;
     map_info_root_ = map_info_root;
+    sync_boundary_ = (manifest_store_ || map_info_root_ || manifest_writer_)
+            ? std::make_unique<RoomManifestAdapter::EditorSyncBoundary>()
+            : std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
 
     if (room_data_ptr_) {
         if (room_data_ptr_->is_null()) {
@@ -710,26 +714,16 @@ Room::Room(Point origin,
             return payload;
         };
 
-        if (manifest_writer_ && !manifest_map_id_.empty()) {
-            nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
-            payload = apply_mutation(std::move(payload));
-            manifest_writer_(manifest_map_id_, payload);
-        } else if (manifest_store_ && !manifest_map_id_.empty()) {
-            nlohmann::json payload;
-            if (map_info_root_) {
-                payload = *map_info_root_;
-            } else if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
-                payload = *entry;
-            }
-            payload = apply_mutation(std::move(payload));
-            devmode::core::ManifestStore::MapPersistOptions options;
-            options.flush = false;
-            options.guard_reason = "Room::push_payload";
-            const bool ok = manifest_store_->persist_map_entry(manifest_map_id_, payload, options);
-            if (!ok) {
-                std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
-            }
-        }
+        nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
+        payload = apply_mutation(std::move(payload));
+        RoomManifestAdapter::SyncContext ctx;
+        ctx.data_section = data_section_;
+        ctx.room_name = room_name;
+        ctx.manifest_map_id = manifest_map_id_;
+        ctx.manifest_store = manifest_store_;
+        ctx.map_info_root = map_info_root_;
+        ctx.manifest_writer = manifest_writer_;
+        RoomManifestAdapter::write_payload(ctx, payload, "Room::push_payload");
     };
 
     json_sources.push_back(assets_json);
@@ -878,6 +872,8 @@ void Room::load_named_areas_from_json() {
                         const int stored_width = item.value("origional_width", 0);
                         const int stored_height = item.value("origional_height", 0);
 
+                        // Relative points are manifest-owned serialized coordinates.
+                        // They are normalized into runtime-owned `areas` snapshots below.
                         auto relative_points = RoomAreaSerialization::decode_relative_points(item);
 
                         std::vector<SDL_Point> pts;
@@ -1378,39 +1374,37 @@ void Room::set_manifest_store(devmode::core::ManifestStore* store,
         if (manifest_writer) {
                 manifest_writer_ = std::move(manifest_writer);
         }
+        sync_boundary_ = (manifest_store_ || map_info_root_ || manifest_writer_)
+                ? std::make_unique<RoomManifestAdapter::EditorSyncBoundary>()
+                : std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
 }
 
 nlohmann::json Room::build_room_payload_for_save() const {
         assets_save_dirty_ = true;
         const_cast<Room*>(this)->load_named_areas_from_json();
 
-        const_cast<Room*>(this)->assets_json["camera_height_px"] = camera_height_px;
-        const_cast<Room*>(this)->assets_json["camera_tilt_deg"] = camera_tilt_deg;
-        const_cast<Room*>(this)->assets_json["camera_zoom_percent"] = camera_zoom_percent;
-        const_cast<Room*>(this)->assets_json["camera_center_dx"] = camera_center_dx;
-        const_cast<Room*>(this)->assets_json["camera_center_dz"] = camera_center_dz;
+        const nlohmann::json normalized = RoomManifestAdapter::normalize_room_snapshot(
+                assets_json,
+                camera_height_px,
+                camera_tilt_deg,
+                camera_zoom_percent,
+                camera_center_dx,
+                camera_center_dz);
 
-        nlohmann::json payload;
-        if (map_info_root_) {
-                payload = *map_info_root_;
-        } else if (manifest_store_ && !manifest_map_id_.empty()) {
-                if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
-                        payload = *entry;
-                }
-        }
-
-        if (!payload.is_object()) {
-                payload = nlohmann::json::object();
-        }
-        nlohmann::json& section = payload[data_section_];
-        if (!section.is_object()) {
-                section = nlohmann::json::object();
-        }
-        section[room_name] = assets_json;
-        return payload;
+        RoomManifestAdapter::SyncContext ctx;
+        ctx.data_section = data_section_;
+        ctx.room_name = room_name;
+        ctx.manifest_map_id = manifest_map_id_;
+        ctx.manifest_store = manifest_store_;
+        ctx.map_info_root = map_info_root_;
+        ctx.manifest_writer = manifest_writer_;
+        return RoomManifestAdapter::build_payload_from_snapshot(ctx, normalized);
 }
 
 void Room::snapshot_assets_to_map_info() {
+        if (!sync_boundary_ || !sync_boundary_->enabled()) {
+                return;
+        }
         // Keep the in-memory manifest representation aligned with the live room state
         // without letting stale runtime copies overwrite map-mode edits.
         if (!assets_json.is_object()) {
@@ -1467,22 +1461,17 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
                 *map_info_root_ = payload;
         }
 
-        bool success = true;
-        if (manifest_writer_ && !manifest_map_id_.empty()) {
-                manifest_writer_(manifest_map_id_, payload);
-        } else if (manifest_store_ && !manifest_map_id_.empty()) {
-                devmode::core::ManifestStore::MapPersistOptions options;
-                options.flush = false;
-                options.guard_reason = "Room::apply_room_payload_for_save";
-                success = manifest_store_->persist_map_entry(manifest_map_id_, payload, options);
-                if (!success) {
-                        std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
-                }
-        }
+        RoomManifestAdapter::SyncContext ctx;
+        ctx.data_section = data_section_;
+        ctx.room_name = room_name;
+        ctx.manifest_map_id = manifest_map_id_;
+        ctx.manifest_store = manifest_store_;
+        ctx.map_info_root = map_info_root_;
+        ctx.manifest_writer = manifest_writer_;
+        const bool success = RoomManifestAdapter::write_payload(ctx, payload, "Room::apply_room_payload_for_save");
 
         if (success) {
                 assets_save_dirty_ = false;
         }
         return success;
 }
-

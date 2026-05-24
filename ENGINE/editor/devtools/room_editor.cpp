@@ -5372,7 +5372,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 bool hovered = false;
                 std::array<Asset::RuntimeBoxPoint3, 8> world_points{};
                 std::array<SDL_FPoint, 8> points{};
-                BoxExtrusionHandleProjection extrusion_projection{};
             };
 
             std::vector<ProjectedBoxOverlay> projected;
@@ -5397,7 +5396,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                                         cam,
                                                         entry.points[static_cast<std::size_t>(point_index)]);
                 }
-                entry.extrusion_projection = project_extrusion_floor_handles(volume, cam);
                 projected.push_back(entry);
             }
 
@@ -20661,8 +20659,8 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
         marker.color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(color.a), 90, 255));
         marker.shape = shape;
         marker.emphasized = emphasized;
-        marker.pixel_size = std::clamp(emphasized ? 5 : 3, 2, 10);
-        marker.crosshair_radius = std::clamp(emphasized ? 5 : 4, 3, 12);
+        marker.pixel_size = std::clamp(emphasized ? 4 : 3, 2, 10);
+        marker.crosshair_radius = std::clamp(emphasized ? 10 : 8, 3, 12);
         markers.push_back(marker);
     };
 
@@ -22613,24 +22611,8 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
         !pointer_blocked) {
         hitbox_edit_.hovered_rotation_handle = false;
         clear_box_extrusion_hover_state(hitbox_edit_);
-        bool extrusion_handle_hovered = false;
-        if (hitbox_edit_.selected_box_index >= 0) {
-            const auto extrusion_side = find_extrusion_handle_at_screen_point(
-                hitbox_volumes,
-                hitbox_edit_.selected_box_index,
-                assets_->getView(),
-                screen_pt,
-                kBoxExtrusionHandlePickRadiusPx);
-            if (extrusion_side != BoxExtrusionHandleSide::None) {
-                set_box_extrusion_hover_side(hitbox_edit_, extrusion_side);
-                hitbox_edit_.hovered_box_index = hitbox_edit_.selected_box_index;
-                hitbox_edit_.hovered_corner_index = -1;
-                hitbox_edit_.hovered_point_index = -1;
-                extrusion_handle_hovered = true;
-            }
-        }
         bool rotation_handle_hovered = false;
-        if (!extrusion_handle_hovered && hitbox_edit_.selected_box_index >= 0) {
+        if (hitbox_edit_.selected_box_index >= 0) {
             if (const auto rotation_hit = find_box_rotation_handle_at_screen_point_for_index(
                     hitbox_volumes,
                     hitbox_edit_.selected_box_index,
@@ -22646,7 +22628,8 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
             }
         }
 
-        if (!extrusion_handle_hovered && !rotation_handle_hovered) {
+        bool corner_hovered = false;
+        if (!rotation_handle_hovered) {
             int hover_corner = -1;
             int hover_point = -1;
             int hover_box = -1;
@@ -22668,7 +22651,28 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
                 hitbox_edit_.hovered_box_index = hover_box;
                 hitbox_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
                 hitbox_edit_.hovered_point_index = hover_point;
-            } else {
+                corner_hovered = true;
+            }
+        }
+
+        bool extrusion_handle_hovered = false;
+        if (!rotation_handle_hovered && !corner_hovered && hitbox_edit_.selected_box_index >= 0) {
+            const auto extrusion_side = find_extrusion_handle_at_screen_point(
+                hitbox_volumes,
+                hitbox_edit_.selected_box_index,
+                assets_->getView(),
+                screen_pt,
+                kBoxExtrusionHandlePickRadiusPx);
+            if (extrusion_side != BoxExtrusionHandleSide::None) {
+                set_box_extrusion_hover_side(hitbox_edit_, extrusion_side);
+                hitbox_edit_.hovered_box_index = hitbox_edit_.selected_box_index;
+                hitbox_edit_.hovered_corner_index = -1;
+                hitbox_edit_.hovered_point_index = -1;
+                extrusion_handle_hovered = true;
+            }
+        }
+
+        if (!rotation_handle_hovered && !corner_hovered && !extrusion_handle_hovered) {
                 if (hitbox_edit_.selected_box_index >= 0 &&
                     box_body_contains_screen_point_for_index(hitbox_volumes,
                                                              hitbox_edit_.selected_box_index,
@@ -22682,7 +22686,6 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
                 }
                 hitbox_edit_.hovered_corner_index = -1;
                 hitbox_edit_.hovered_point_index = -1;
-            }
         }
     } else if (pointer_blocked) {
         hitbox_edit_.hovered_box_index = -1;
@@ -22711,31 +22714,8 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     const bool lock_to_selected_box = locked_box_index >= 0;
     const auto& attack_volumes = attack_box_edit_.target_asset->current_attack_box_volumes();
     if (left_pressed && !pointer_blocked) {
-        bool started_extrusion_drag = false;
-        if (lock_to_selected_box && attack_box_edit_.target_asset && attack_box_edit_.target_asset->current_frame) {
-            const auto& boxes = attack_box_edit_.target_asset->current_frame->attack_boxes.boxes;
-            if (locked_box_index >= 0 && locked_box_index < static_cast<int>(boxes.size())) {
-                started_extrusion_drag = begin_box_extrusion_handle_drag(
-                    attack_box_edit_,
-                    attack_volumes,
-                    assets_->getView(),
-                    screen_pt,
-                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_forward,
-                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_backward);
-                if (started_extrusion_drag) {
-                    attack_box_edit_.point_selected = false;
-                    attack_box_edit_.dragging_corner = false;
-                    attack_box_edit_.dragging_box = false;
-                    attack_box_edit_.dragging_rotation = false;
-                    attack_box_edit_.hovered_rotation_handle = false;
-                    attack_box_edit_.hovered_box_index = locked_box_index;
-                    attack_box_edit_.hovered_corner_index = -1;
-                    attack_box_edit_.hovered_point_index = -1;
-                }
-            }
-        }
         bool started_rotation_drag = false;
-        if (!started_extrusion_drag && lock_to_selected_box) {
+        if (lock_to_selected_box) {
             const int rotation_box = find_attack_box_rotation_handle_at_screen_point(screen_pt);
             if (rotation_box >= 0 && begin_attack_box_rotation_drag(rotation_box, screen_pt)) {
                 started_rotation_drag = true;
@@ -22746,7 +22726,8 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
                 attack_box_edit_.hovered_point_index = -1;
             }
         }
-        if (!started_extrusion_drag && !started_rotation_drag) {
+        bool started_corner_drag = false;
+        if (!started_rotation_drag) {
             int corner_idx = -1;
             int point_idx = -1;
             int box_idx = -1;
@@ -22778,41 +22759,72 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
                 attack_box_edit_.drag_reference_point_index = -1;
                 attack_box_edit_.drag_reference_corner_index = -1;
                 drag_attack_box_corner_to_screen(box_idx, attack_box_edit_.selected_point_index, screen_pt);
-            } else {
-                int body_box = -1;
-                if (lock_to_selected_box) {
-                    if (box_body_contains_screen_point_for_index(attack_volumes,
-                                                                 locked_box_index,
-                                                                 assets_->getView(),
-                                                                 screen_pt)) {
-                        body_box = locked_box_index;
-                    }
-                } else {
-                    body_box = find_attack_box_body_at_screen_point(screen_pt);
-                }
-                if (body_box >= 0 && begin_attack_box_drag(body_box, screen_pt)) {
-                    clear_box_extrusion_drag_state(attack_box_edit_);
-                    clear_box_extrusion_hover_state(attack_box_edit_);
-                    attack_box_edit_.hovered_box_index = body_box;
-                    attack_box_edit_.hovered_corner_index = -1;
-                    attack_box_edit_.hovered_point_index = -1;
-                } else {
-                    attack_box_edit_.selected_box_index = -1;
-                    attack_box_edit_.selected_corner_index = 0;
-                    attack_box_edit_.selected_point_index = 0;
-                    attack_box_edit_.hovered_box_index = -1;
-                    attack_box_edit_.hovered_corner_index = -1;
-                    attack_box_edit_.hovered_point_index = -1;
-                    attack_box_edit_.hovered_rotation_handle = false;
+                started_corner_drag = true;
+            }
+        }
+
+        bool started_extrusion_drag = false;
+        if (!started_rotation_drag &&
+            !started_corner_drag &&
+            lock_to_selected_box &&
+            attack_box_edit_.target_asset &&
+            attack_box_edit_.target_asset->current_frame) {
+            const auto& boxes = attack_box_edit_.target_asset->current_frame->attack_boxes.boxes;
+            if (locked_box_index >= 0 && locked_box_index < static_cast<int>(boxes.size())) {
+                started_extrusion_drag = begin_box_extrusion_handle_drag(
+                    attack_box_edit_,
+                    attack_volumes,
+                    assets_->getView(),
+                    screen_pt,
+                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_forward,
+                    boxes[static_cast<std::size_t>(locked_box_index)].extrusion_backward);
+                if (started_extrusion_drag) {
                     attack_box_edit_.point_selected = false;
                     attack_box_edit_.dragging_corner = false;
                     attack_box_edit_.dragging_box = false;
                     attack_box_edit_.dragging_rotation = false;
-                    clear_box_extrusion_drag_state(attack_box_edit_);
-                    clear_box_extrusion_hover_state(attack_box_edit_);
-                    attack_box_edit_.drag_reference_point_index = -1;
-                    attack_box_edit_.drag_reference_corner_index = -1;
+                    attack_box_edit_.hovered_rotation_handle = false;
+                    attack_box_edit_.hovered_box_index = locked_box_index;
+                    attack_box_edit_.hovered_corner_index = -1;
+                    attack_box_edit_.hovered_point_index = -1;
                 }
+            }
+        }
+
+        if (!started_rotation_drag && !started_corner_drag && !started_extrusion_drag) {
+            int body_box = -1;
+            if (lock_to_selected_box) {
+                if (box_body_contains_screen_point_for_index(attack_volumes,
+                                                             locked_box_index,
+                                                             assets_->getView(),
+                                                             screen_pt)) {
+                    body_box = locked_box_index;
+                }
+            } else {
+                body_box = find_attack_box_body_at_screen_point(screen_pt);
+            }
+            if (body_box >= 0 && begin_attack_box_drag(body_box, screen_pt)) {
+                clear_box_extrusion_drag_state(attack_box_edit_);
+                clear_box_extrusion_hover_state(attack_box_edit_);
+                attack_box_edit_.hovered_box_index = body_box;
+                attack_box_edit_.hovered_corner_index = -1;
+                attack_box_edit_.hovered_point_index = -1;
+            } else {
+                attack_box_edit_.selected_box_index = -1;
+                attack_box_edit_.selected_corner_index = 0;
+                attack_box_edit_.selected_point_index = 0;
+                attack_box_edit_.hovered_box_index = -1;
+                attack_box_edit_.hovered_corner_index = -1;
+                attack_box_edit_.hovered_point_index = -1;
+                attack_box_edit_.hovered_rotation_handle = false;
+                attack_box_edit_.point_selected = false;
+                attack_box_edit_.dragging_corner = false;
+                attack_box_edit_.dragging_box = false;
+                attack_box_edit_.dragging_rotation = false;
+                clear_box_extrusion_drag_state(attack_box_edit_);
+                clear_box_extrusion_hover_state(attack_box_edit_);
+                attack_box_edit_.drag_reference_point_index = -1;
+                attack_box_edit_.drag_reference_corner_index = -1;
             }
         }
         sync_attack_box_tools_panel();
@@ -22867,24 +22879,8 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
         !pointer_blocked) {
         attack_box_edit_.hovered_rotation_handle = false;
         clear_box_extrusion_hover_state(attack_box_edit_);
-        bool extrusion_handle_hovered = false;
-        if (attack_box_edit_.selected_box_index >= 0) {
-            const auto extrusion_side = find_extrusion_handle_at_screen_point(
-                attack_volumes,
-                attack_box_edit_.selected_box_index,
-                assets_->getView(),
-                screen_pt,
-                kBoxExtrusionHandlePickRadiusPx);
-            if (extrusion_side != BoxExtrusionHandleSide::None) {
-                set_box_extrusion_hover_side(attack_box_edit_, extrusion_side);
-                attack_box_edit_.hovered_box_index = attack_box_edit_.selected_box_index;
-                attack_box_edit_.hovered_corner_index = -1;
-                attack_box_edit_.hovered_point_index = -1;
-                extrusion_handle_hovered = true;
-            }
-        }
         bool rotation_handle_hovered = false;
-        if (!extrusion_handle_hovered && attack_box_edit_.selected_box_index >= 0) {
+        if (attack_box_edit_.selected_box_index >= 0) {
             if (const auto rotation_hit = find_box_rotation_handle_at_screen_point_for_index(
                     attack_volumes,
                     attack_box_edit_.selected_box_index,
@@ -22900,7 +22896,8 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
             }
         }
 
-        if (!extrusion_handle_hovered && !rotation_handle_hovered) {
+        bool corner_hovered = false;
+        if (!rotation_handle_hovered) {
             int hover_corner = -1;
             int hover_point = -1;
             int hover_box = -1;
@@ -22922,7 +22919,28 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
                 attack_box_edit_.hovered_box_index = hover_box;
                 attack_box_edit_.hovered_corner_index = editor_corner_from_runtime_corner(hover_corner);
                 attack_box_edit_.hovered_point_index = hover_point;
-            } else {
+                corner_hovered = true;
+            }
+        }
+
+        bool extrusion_handle_hovered = false;
+        if (!rotation_handle_hovered && !corner_hovered && attack_box_edit_.selected_box_index >= 0) {
+            const auto extrusion_side = find_extrusion_handle_at_screen_point(
+                attack_volumes,
+                attack_box_edit_.selected_box_index,
+                assets_->getView(),
+                screen_pt,
+                kBoxExtrusionHandlePickRadiusPx);
+            if (extrusion_side != BoxExtrusionHandleSide::None) {
+                set_box_extrusion_hover_side(attack_box_edit_, extrusion_side);
+                attack_box_edit_.hovered_box_index = attack_box_edit_.selected_box_index;
+                attack_box_edit_.hovered_corner_index = -1;
+                attack_box_edit_.hovered_point_index = -1;
+                extrusion_handle_hovered = true;
+            }
+        }
+
+        if (!rotation_handle_hovered && !corner_hovered && !extrusion_handle_hovered) {
                 if (attack_box_edit_.selected_box_index >= 0 &&
                     box_body_contains_screen_point_for_index(attack_volumes,
                                                              attack_box_edit_.selected_box_index,
@@ -22936,7 +22954,6 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
                 }
                 attack_box_edit_.hovered_corner_index = -1;
                 attack_box_edit_.hovered_point_index = -1;
-            }
         }
     } else if (pointer_blocked) {
         attack_box_edit_.hovered_box_index = -1;

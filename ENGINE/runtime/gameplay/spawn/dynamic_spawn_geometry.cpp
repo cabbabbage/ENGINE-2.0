@@ -1,7 +1,11 @@
 #include "gameplay/spawn/dynamic_spawn_geometry.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <limits>
 
+#include "core/AssetsManager.hpp"
+#include "gameplay/map_generation/room.hpp"
 #include "utils/area.hpp"
 
 namespace dynamic_spawn::geometry {
@@ -34,6 +38,65 @@ bool point_near_geometry(SDL_Point point, const AreaGeometry& geometry, int thre
         if (point_to_segment_distance_sq(point, segment.a, segment.b) <= threshold_sq) return true;
     }
     return false;
+}
+
+namespace {
+bool area_label_is_trail(const std::string& value) {
+    std::string lower = value;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return lower.find("trail") != std::string::npos || lower.find("path") != std::string::npos;
+}
+
+bool named_area_is_trail(const Room::NamedArea& area) {
+    return area_label_is_trail(area.type) ||
+           area_label_is_trail(area.kind) ||
+           area_label_is_trail(area.name);
+}
+} // namespace
+
+AreaGeometry collect_area_geometry(const Assets& assets) {
+    AreaGeometry geometry;
+    geometry.min_x = std::numeric_limits<int>::max();
+    geometry.min_z = std::numeric_limits<int>::max();
+    geometry.max_x = std::numeric_limits<int>::min();
+    geometry.max_z = std::numeric_limits<int>::min();
+
+    auto append_area = [&](const Area* area) {
+        if (!area) return;
+        geometry.areas.push_back(area);
+        const auto& points = area->get_points();
+        if (points.empty()) return;
+        geometry.valid = true;
+        for (const SDL_Point& point : points) {
+            geometry.min_x = std::min(geometry.min_x, point.x);
+            geometry.min_z = std::min(geometry.min_z, point.y);
+            geometry.max_x = std::max(geometry.max_x, point.x);
+            geometry.max_z = std::max(geometry.max_z, point.y);
+        }
+        if (points.size() == 2) {
+            geometry.segments.push_back(AreaGeometry::Segment{points[0], points[1]});
+        } else if (points.size() > 2) {
+            for (std::size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
+                geometry.segments.push_back(AreaGeometry::Segment{points[j], points[i]});
+            }
+        }
+    };
+
+    for (Room* room : assets.rooms()) {
+        if (!room) continue;
+        append_area(room->room_area.get());
+        for (const Room::NamedArea& area : room->areas) {
+            if (named_area_is_trail(area)) append_area(area.area.get());
+        }
+    }
+
+    if (!geometry.valid) {
+        geometry.min_x = geometry.min_z = 0;
+        geometry.max_x = geometry.max_z = -1;
+    }
+    return geometry;
 }
 
 } // namespace dynamic_spawn::geometry

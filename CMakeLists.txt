@@ -82,6 +82,9 @@ add_executable(room_legacy_migration_regression_test
 target_include_directories(room_legacy_migration_regression_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime
 )
+target_link_libraries(room_legacy_migration_regression_test PRIVATE
+    nlohmann_json::nlohmann_json
+)
 
 add_executable(spawn_trail_classification_test
     ${CMAKE_SOURCE_DIR}/ENGINE/tests/spawn_trail_classification_test.cpp
@@ -336,4 +339,3 @@ foreach(tool_target asset_tool_cli)
         )
     endforeach()
 endforeach()
-

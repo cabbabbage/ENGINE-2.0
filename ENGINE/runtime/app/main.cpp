@@ -88,6 +88,38 @@ bool codex_playtest_input_enabled() {
         return enabled;
 }
 
+bool main_verbose_frame_stat_defaults_enabled() {
+        static const bool enabled =
+                app::startup_runtime::env_flag_enabled("VIBBLE_VERBOSE_FRAME_STAT_DEFAULTS", false);
+        return enabled;
+}
+
+void begin_main_frame_stats(runtime_stats::FrameStatsRecorder& frame_stats,
+                            std::uint64_t runtime_frame_counter) {
+        frame_stats.begin_frame(runtime_frame_counter);
+        frame_stats.set("main.telemetry_schema", "freeze_watchdog_v1");
+        frame_stats.set("main.keyboard_sync_ms", 0.0);
+
+        if (!main_verbose_frame_stat_defaults_enabled()) {
+                return;
+        }
+
+        frame_stats.set("input.keyboard_reconciled", false);
+        frame_stats.set("input.keyboard_reconciled_changed_count", static_cast<std::uint64_t>(0));
+        frame_stats.set("input.keyboard_focus_active", false);
+        frame_stats.set("input.focus_loss_cleared", false);
+        frame_stats.set("input.live.w", false);
+        frame_stats.set("input.live.a", false);
+        frame_stats.set("input.live.s", false);
+        frame_stats.set("input.live.d", false);
+        frame_stats.set("input.live.space", false);
+        frame_stats.set("input.stored.w", false);
+        frame_stats.set("input.stored.a", false);
+        frame_stats.set("input.stored.s", false);
+        frame_stats.set("input.stored.d", false);
+        frame_stats.set("input.stored.space", false);
+}
+
 void apply_codex_playtest_input(Input& input,
                                 std::uint64_t frame_id,
                                 int screen_w,
@@ -336,23 +368,7 @@ void MainApp::game_loop() {
         while (!quit) {
                 ++runtime_frame_counter;
                 auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
-                frame_stats.begin_frame(runtime_frame_counter);
-                frame_stats.set("main.telemetry_schema", "freeze_watchdog_v1");
-                frame_stats.set("main.keyboard_sync_ms", 0.0);
-                frame_stats.set("input.keyboard_reconciled", false);
-                frame_stats.set("input.keyboard_reconciled_changed_count", static_cast<std::uint64_t>(0));
-                frame_stats.set("input.keyboard_focus_active", false);
-                frame_stats.set("input.focus_loss_cleared", false);
-                frame_stats.set("input.live.w", false);
-                frame_stats.set("input.live.a", false);
-                frame_stats.set("input.live.s", false);
-                frame_stats.set("input.live.d", false);
-                frame_stats.set("input.live.space", false);
-                frame_stats.set("input.stored.w", false);
-                frame_stats.set("input.stored.a", false);
-                frame_stats.set("input.stored.s", false);
-                frame_stats.set("input.stored.d", false);
-                frame_stats.set("input.stored.space", false);
+                begin_main_frame_stats(frame_stats, runtime_frame_counter);
                 struct RuntimeFrameScope {
                         runtime_stats::FrameStatsRecorder& stats;
                         bool active = true;

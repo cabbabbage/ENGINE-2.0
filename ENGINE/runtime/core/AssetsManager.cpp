@@ -120,6 +120,74 @@ double env_double_clamped(const char* name, double fallback, double min_value, d
     }
 }
 
+bool verbose_frame_stat_defaults_enabled() {
+    static const bool enabled = []() {
+        const char* raw = SDL_getenv("VIBBLE_VERBOSE_FRAME_STAT_DEFAULTS");
+        if (!raw || !*raw) {
+            return false;
+        }
+        const unsigned char c = static_cast<unsigned char>(*raw);
+        return *raw == '1' || *raw == 'y' || *raw == 'Y' || *raw == 't' || *raw == 'T' || std::tolower(c) == 'd';
+    }();
+    return enabled;
+}
+
+void begin_assets_frame_stats(runtime_stats::FrameStatsRecorder& frame_stats,
+                              std::uint64_t frame_id,
+                              bool idle_frame,
+                              bool dev_mode,
+                              bool runtime_updates_enabled,
+                              std::size_t active_count,
+                              std::size_t filtered_active_count,
+                              std::size_t total_count,
+                              std::uint64_t visibility_fail_open_consecutive_frames,
+                              std::uint64_t dev_active_state_version) {
+    frame_stats.set("assets.frame_id", frame_id);
+    frame_stats.set("assets.idle_frame", idle_frame);
+    frame_stats.set("assets.dev_mode", dev_mode);
+    frame_stats.set("assets.runtime_updates_enabled", runtime_updates_enabled);
+    frame_stats.set("assets.active_count", static_cast<std::uint64_t>(active_count));
+    frame_stats.set("assets.filtered_active_count", static_cast<std::uint64_t>(filtered_active_count));
+    frame_stats.set("assets.total_count", static_cast<std::uint64_t>(total_count));
+    frame_stats.set("assets.active_fail_open_frames", visibility_fail_open_consecutive_frames);
+    frame_stats.set("dev.active_assets_generation", dev_active_state_version);
+    frame_stats.set("dev.filtered_assets_generation", dev_active_state_version);
+
+    if (!verbose_frame_stat_defaults_enabled()) {
+        return;
+    }
+
+    frame_stats.set("assets.visible_scaling_refreshed", false);
+    frame_stats.set("assets.collision_context_rebuilt", false);
+    frame_stats.set("assets.collision_context_rebuild_ms", 0.0);
+    frame_stats.set("assets.collision_context_entries", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.visibility_traversal_count", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.active_candidate_count", static_cast<std::uint64_t>(active_count));
+    frame_stats.set("assets.active_publish_count", static_cast<std::uint64_t>(active_count));
+    frame_stats.set("assets.active_fail_open_applied", false);
+    frame_stats.set("assets.active_fail_open_reason", "");
+    frame_stats.set("dev.set_active_assets_called", false);
+    frame_stats.set("dev.current_room_changed", false);
+    frame_stats.set("dev.active_assets_sync_ms", 0.0);
+    frame_stats.set("dev.current_room_sync_ms", 0.0);
+    frame_stats.set("dev.update_total_ms", 0.0);
+    frame_stats.set("dev.room_editor_update_ms", 0.0);
+    frame_stats.set("dev.room_editor_ui_ms", 0.0);
+    frame_stats.set("dev.other_settings_ms", 0.0);
+    frame_stats.set("dev.map_mode_ui_ms", 0.0);
+    frame_stats.set("dev.camera_panel_ms", 0.0);
+    frame_stats.set("dev.layout_ms", 0.0);
+    frame_stats.set("dev.save_ms", 0.0);
+    frame_stats.set("dev.layout_dirty", false);
+    frame_stats.set("asset_runtime_animation_load.attempted", false);
+    frame_stats.set("asset_runtime_animation_load.asset_name", "");
+    frame_stats.set("asset_runtime_animation_load.animation_name", "");
+    frame_stats.set("asset_runtime_animation_load.ms", 0.0);
+    frame_stats.set("asset_runtime_animation_load.loaded", false);
+    frame_stats.set("asset_runtime_animation_load.deferred", false);
+    frame_stats.set("asset_runtime_animation_load.fallback_used", false);
+}
+
 bool startup_runtime_safety_enabled() {
     return false;
 }
@@ -2828,45 +2896,16 @@ void Assets::update(const Input& input)
 
     ++frame_id_;
     reset_frame_rebuild_stage();
-    frame_stats.set("assets.frame_id", frame_id_);
-    frame_stats.set("assets.idle_frame", !should_step_frame);
-    frame_stats.set("assets.dev_mode", dev_mode);
-    frame_stats.set("assets.runtime_updates_enabled", should_run_runtime_updates());
-    frame_stats.set("assets.active_count", static_cast<std::uint64_t>(active_assets.size()));
-    frame_stats.set("assets.filtered_active_count", static_cast<std::uint64_t>(filtered_active_assets.size()));
-    frame_stats.set("assets.total_count", static_cast<std::uint64_t>(all.size()));
-    frame_stats.set("assets.visible_scaling_refreshed", false);
-    frame_stats.set("assets.collision_context_rebuilt", false);
-    frame_stats.set("assets.collision_context_rebuild_ms", 0.0);
-    frame_stats.set("assets.collision_context_entries", static_cast<std::uint64_t>(0));
-    frame_stats.set("assets.visibility_traversal_count", static_cast<std::uint64_t>(0));
-    frame_stats.set("assets.active_candidate_count", static_cast<std::uint64_t>(active_assets.size()));
-    frame_stats.set("assets.active_publish_count", static_cast<std::uint64_t>(active_assets.size()));
-    frame_stats.set("assets.active_fail_open_applied", false);
-    frame_stats.set("assets.active_fail_open_frames", visibility_fail_open_consecutive_frames_);
-    frame_stats.set("assets.active_fail_open_reason", "");
-    frame_stats.set("dev.set_active_assets_called", false);
-    frame_stats.set("dev.current_room_changed", false);
-    frame_stats.set("dev.active_assets_sync_ms", 0.0);
-    frame_stats.set("dev.current_room_sync_ms", 0.0);
-    frame_stats.set("dev.update_total_ms", 0.0);
-    frame_stats.set("dev.room_editor_update_ms", 0.0);
-    frame_stats.set("dev.room_editor_ui_ms", 0.0);
-    frame_stats.set("dev.other_settings_ms", 0.0);
-    frame_stats.set("dev.map_mode_ui_ms", 0.0);
-    frame_stats.set("dev.camera_panel_ms", 0.0);
-    frame_stats.set("dev.layout_ms", 0.0);
-    frame_stats.set("dev.save_ms", 0.0);
-    frame_stats.set("dev.layout_dirty", false);
-    frame_stats.set("asset_runtime_animation_load.attempted", false);
-    frame_stats.set("asset_runtime_animation_load.asset_name", "");
-    frame_stats.set("asset_runtime_animation_load.animation_name", "");
-    frame_stats.set("asset_runtime_animation_load.ms", 0.0);
-    frame_stats.set("asset_runtime_animation_load.loaded", false);
-    frame_stats.set("asset_runtime_animation_load.deferred", false);
-    frame_stats.set("asset_runtime_animation_load.fallback_used", false);
-    frame_stats.set("dev.active_assets_generation", dev_active_state_version_);
-    frame_stats.set("dev.filtered_assets_generation", dev_active_state_version_);
+    begin_assets_frame_stats(frame_stats,
+                             frame_id_,
+                             !should_step_frame,
+                             dev_mode,
+                             should_run_runtime_updates(),
+                             active_assets.size(),
+                             filtered_active_assets.size(),
+                             all.size(),
+                             visibility_fail_open_consecutive_frames_,
+                             dev_active_state_version_);
     asset_update_phase_stats_ = AssetUpdatePhaseFrameStats{};
 
     static bool startup_safety_logged = false;

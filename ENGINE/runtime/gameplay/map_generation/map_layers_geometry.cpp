@@ -8,7 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 
 namespace map_layers {
 

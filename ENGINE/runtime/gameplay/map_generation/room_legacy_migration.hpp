@@ -3,7 +3,7 @@
 #include <functional>
 #include <nlohmann/json.hpp>
 
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 
 namespace room_legacy_migration {
 

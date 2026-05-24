@@ -15,7 +15,7 @@
 #include "utils/log.hpp"
 #include "utils/frame_stats_recorder.hpp"
 #include "utils/oval_anchor_math.hpp"
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <iostream>

@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 
 #include "gameplay/world/grid_point.hpp"
+#include "gameplay/spawn/dynamic_spawn_geometry.hpp"
 
 class Asset;
 class AssetInfo;
@@ -39,6 +40,10 @@ struct DynamicSpawnDiagnostics {
     std::size_t deferred_cells_remaining = 0;
     bool movement_throttling_applied = false;
     double sync_ms = 0.0;
+    double compile_ms = 0.0;
+    double plan_ms = 0.0;
+    double activate_ms = 0.0;
+    double suspend_ms = 0.0;
 };
 
 class DynamicSpawnRuntime {
@@ -134,31 +139,20 @@ private:
 
     using PlanByChunk = std::unordered_map<ChunkKey, std::vector<PlannedCell>, ChunkKeyHash>;
 
-    struct AreaGeometry {
-        struct Segment {
-            SDL_Point a{};
-            SDL_Point b{};
-        };
-
-        std::vector<const Area*> areas;
-        std::vector<Segment> segments;
-        int min_x = 0;
-        int min_z = 0;
-        int max_x = -1;
-        int max_z = -1;
-        bool valid = false;
-    };
+    struct SelectorCompiler;
+    struct SpawnPlanner;
+    struct SpawnActivationRuntime;
 
     void clear_active_instances(bool delete_assets);
     void parse_selectors();
     void build_plan();
     void build_plan_into(PlanByChunk& plan, int threshold_px) const;
     void add_selector_cells(const Selector& selector,
-                            const AreaGeometry& geometry,
+                            const geometry::AreaGeometry& geometry,
                             int threshold_px,
                             PlanByChunk& plan) const;
     void add_selector_cells_in_distance_band(const Selector& selector,
-                                             const AreaGeometry& geometry,
+                                             const geometry::AreaGeometry& geometry,
                                              int previous_threshold_px,
                                              int next_threshold_px,
                                              PlanByChunk& plan,
@@ -170,7 +164,7 @@ private:
                           const std::string& owner_name,
                           PlanByChunk& plan) const;
     bool resolve_cell_owner(const Selector& selector,
-                            const AreaGeometry& geometry,
+                            const geometry::AreaGeometry& geometry,
                             SDL_Point owner_anchor,
                             int threshold_px,
                             std::string& owner_name) const;
@@ -183,11 +177,8 @@ private:
     ChunkKey chunk_key_for_world(int world_x, int world_z) const;
     std::unordered_set<ChunkKey, ChunkKeyHash> chunk_keys_for_bounds(const world::GridBounds& bounds) const;
     world::GridBounds expanded_bounds(const world::GridBounds& bounds, int margin_px) const;
-    AreaGeometry collect_area_geometry() const;
     bool room_contains_dynamic_area(const Room* room, SDL_Point point) const;
     Room* inherited_room_for_point(SDL_Point point) const;
-    bool point_inside_any_area(SDL_Point point, const AreaGeometry& geometry) const;
-    bool point_near_geometry(SDL_Point point, const AreaGeometry& geometry, int threshold_px) const;
     const Candidate* pick_candidate(const Selector& selector, const CellKey& key) const;
     SDL_Point jittered_world_point(const Selector& selector, const CellKey& key, SDL_Point base_point) const;
     bool info_allowed(const AssetInfo* info, Mode mode) const;
@@ -197,6 +188,7 @@ private:
 
     Assets& assets_;
     std::vector<Selector> selectors_;
+    std::unordered_map<std::uint64_t, const Selector*> selector_index_;
     PlanByChunk cells_by_chunk_;
     std::unordered_map<CellKey, Asset*, CellKeyHash> active_;
     std::unordered_map<CellKey, std::unique_ptr<Asset>, CellKeyHash> suspended_;
@@ -208,6 +200,9 @@ private:
     DynamicSpawnDiagnostics diagnostics_{};
     std::uint32_t next_selector_id_ = 1;
     int planned_max_spawn_from_room_px_ = 128;
+    std::uint64_t selector_config_hash_ = 0;
+    std::uint64_t geometry_hash_ = 0;
+    std::uint64_t plan_hash_ = 0;
 };
 
 } // namespace dynamic_spawn

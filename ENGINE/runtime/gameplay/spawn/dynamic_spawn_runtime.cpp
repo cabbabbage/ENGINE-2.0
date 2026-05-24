@@ -1,4 +1,5 @@
 #include "gameplay/spawn/dynamic_spawn_runtime.hpp"
+#include "gameplay/spawn/dynamic_spawn_geometry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -108,29 +109,6 @@ bool named_area_is_trail(const Room::NamedArea& area) {
     return area_label_is_trail(area.type) ||
            area_label_is_trail(area.kind) ||
            area_label_is_trail(area.name);
-}
-
-double point_to_segment_distance_sq(SDL_Point p, SDL_Point a, SDL_Point b) {
-    const double px = static_cast<double>(p.x);
-    const double py = static_cast<double>(p.y);
-    const double ax = static_cast<double>(a.x);
-    const double ay = static_cast<double>(a.y);
-    const double bx = static_cast<double>(b.x);
-    const double by = static_cast<double>(b.y);
-    const double vx = bx - ax;
-    const double vy = by - ay;
-    const double wx = px - ax;
-    const double wy = py - ay;
-    const double len_sq = vx * vx + vy * vy;
-    double t = 0.0;
-    if (len_sq > 1.0e-9) {
-        t = std::clamp((wx * vx + wy * vy) / len_sq, 0.0, 1.0);
-    }
-    const double cx = ax + t * vx;
-    const double cy = ay + t * vy;
-    const double dx = px - cx;
-    const double dy = py - cy;
-    return dx * dx + dy * dy;
 }
 
 int read_int_setting(const nlohmann::json& object, const char* key, int fallback, int min_value, int max_value) {
@@ -380,6 +358,8 @@ void DynamicSpawnRuntime::parse_selectors() {
         append_selector(selector_json, Mode::BoundaryArea);
         append_selector(selector_json, Mode::InheritedMap);
     }
+    selector_index_.clear();
+    for (const Selector& s : selectors_) { selector_index_[ (static_cast<std::uint64_t>(s.id) << 32) | static_cast<std::uint64_t>(s.mode)] = &s; }
 }
 
 void DynamicSpawnRuntime::build_plan() {
@@ -388,7 +368,7 @@ void DynamicSpawnRuntime::build_plan() {
 }
 
 void DynamicSpawnRuntime::build_plan_into(PlanByChunk& plan, int threshold_px) const {
-    const AreaGeometry geometry = collect_area_geometry();
+    const auto geometry = collect_area_geometry_impl(assets_);
     if (!geometry.valid || selectors_.empty()) {
         return;
     }
@@ -426,7 +406,7 @@ void DynamicSpawnRuntime::refresh_distance_to_edge() {
         return;
     }
 
-    const AreaGeometry geometry = collect_area_geometry();
+    const auto geometry = collect_area_geometry_impl(assets_);
     if (!geometry.valid) {
         clear_active_instances(true);
         cells_by_chunk_.clear();
@@ -441,13 +421,9 @@ void DynamicSpawnRuntime::refresh_distance_to_edge() {
         for (auto& [chunk, cells] : cells_by_chunk_) {
             (void)chunk;
             for (const PlannedCell& cell : cells) {
-                const Selector* selector = nullptr;
-                for (const Selector& candidate : selectors_) {
-                    if (candidate.id == cell.key.selector_id && candidate.mode == cell.key.mode) {
-                        selector = &candidate;
-                        break;
-                    }
-                }
+                const std::uint64_t selector_key = (static_cast<std::uint64_t>(cell.key.selector_id) << 32) | static_cast<std::uint64_t>(cell.key.mode);
+                auto sel_it = selector_index_.find(selector_key);
+                const Selector* selector = sel_it == selector_index_.end() ? nullptr : sel_it->second;
                 std::string owner_name;
                 if (!selector ||
                     !resolve_cell_owner(*selector,
@@ -521,7 +497,7 @@ void DynamicSpawnRuntime::refresh_distance_to_edge() {
 }
 
 void DynamicSpawnRuntime::add_selector_cells(const Selector& selector,
-                                             const AreaGeometry& geometry,
+                                             const dynamic_spawn::geometry::AreaGeometry& geometry,
                                              int threshold_px,
                                              PlanByChunk& plan) const {
     const int threshold = std::max(0, threshold_px);
@@ -555,7 +531,7 @@ void DynamicSpawnRuntime::add_selector_cells(const Selector& selector,
 
 void DynamicSpawnRuntime::add_selector_cells_in_distance_band(
     const Selector& selector,
-    const AreaGeometry& geometry,
+    const dynamic_spawn::geometry::AreaGeometry& geometry,
     int previous_threshold_px,
     int next_threshold_px,
     PlanByChunk& plan,
@@ -583,7 +559,7 @@ void DynamicSpawnRuntime::add_selector_cells_in_distance_band(
                 continue;
             }
             const SDL_Point owner_anchor = vibble::grid::global_grid().index_to_world(gx, gz, resolution);
-            if (point_near_geometry(owner_anchor, geometry, previous_threshold)) {
+            if (dynamic_spawn::geometry::point_near_geometry(owner_anchor, geometry, previous_threshold)) {
                 continue;
             }
             std::string owner_name;
@@ -597,11 +573,11 @@ void DynamicSpawnRuntime::add_selector_cells_in_distance_band(
 }
 
 bool DynamicSpawnRuntime::resolve_cell_owner(const Selector& selector,
-                                             const AreaGeometry& geometry,
+                                             const dynamic_spawn::geometry::AreaGeometry& geometry,
                                              SDL_Point owner_anchor,
                                              int threshold_px,
                                              std::string& owner_name) const {
-    if (!point_near_geometry(owner_anchor, geometry, threshold_px)) {
+    if (!dynamic_spawn::geometry::point_near_geometry(owner_anchor, geometry, threshold_px)) {
         return false;
     }
 
@@ -614,7 +590,7 @@ bool DynamicSpawnRuntime::resolve_cell_owner(const Selector& selector,
         return true;
     }
 
-    if (point_inside_any_area(owner_anchor, geometry)) {
+    if (dynamic_spawn::geometry::point_inside_any_area(owner_anchor, geometry)) {
         return false;
     }
     owner_name = assets_.map_id();
@@ -896,8 +872,8 @@ world::GridBounds DynamicSpawnRuntime::expanded_bounds(const world::GridBounds& 
     return bounds.expanded(std::max(0, margin_px));
 }
 
-DynamicSpawnRuntime::AreaGeometry DynamicSpawnRuntime::collect_area_geometry() const {
-    AreaGeometry geometry;
+dynamic_spawn::geometry::AreaGeometry collect_area_geometry_impl(const Assets& assets) {
+    dynamic_spawn::geometry::AreaGeometry geometry;
     geometry.min_x = std::numeric_limits<int>::max();
     geometry.min_z = std::numeric_limits<int>::max();
     geometry.max_x = std::numeric_limits<int>::min();
@@ -920,15 +896,15 @@ DynamicSpawnRuntime::AreaGeometry DynamicSpawnRuntime::collect_area_geometry() c
             geometry.max_z = std::max(geometry.max_z, point.y);
         }
         if (points.size() == 2) {
-            geometry.segments.push_back(AreaGeometry::Segment{points[0], points[1]});
+            geometry.segments.push_back(dynamic_spawn::geometry::AreaGeometry::Segment{points[0], points[1]});
         } else if (points.size() > 2) {
             for (std::size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
-                geometry.segments.push_back(AreaGeometry::Segment{points[j], points[i]});
+                geometry.segments.push_back(dynamic_spawn::geometry::AreaGeometry::Segment{points[j], points[i]});
             }
         }
     };
 
-    for (Room* room : assets_.rooms()) {
+    for (Room* room : assets.rooms()) {
         if (!room) {
             continue;
         }
@@ -969,29 +945,6 @@ Room* DynamicSpawnRuntime::inherited_room_for_point(SDL_Point point) const {
         }
     }
     return nullptr;
-}
-
-bool DynamicSpawnRuntime::point_inside_any_area(SDL_Point point, const AreaGeometry& geometry) const {
-    for (const Area* area : geometry.areas) {
-        if (area && area->contains_point(point)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool DynamicSpawnRuntime::point_near_geometry(SDL_Point point, const AreaGeometry& geometry, int threshold_px) const {
-    if (point_inside_any_area(point, geometry)) {
-        return true;
-    }
-    const double threshold_sq = static_cast<double>(std::max(0, threshold_px)) *
-                                static_cast<double>(std::max(0, threshold_px));
-    for (const AreaGeometry::Segment& segment : geometry.segments) {
-        if (point_to_segment_distance_sq(point, segment.a, segment.b) <= threshold_sq) {
-            return true;
-        }
-    }
-    return false;
 }
 
 const DynamicSpawnRuntime::Candidate*

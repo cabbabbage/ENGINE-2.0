@@ -32,6 +32,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <deque>
 #include <algorithm>
 #include <optional>
 #include <iomanip>
@@ -166,6 +167,39 @@ bool is_resize_or_scale_event(Uint32 event_type) {
 #ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
         case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
 #endif
+                return true;
+        default:
+                return false;
+        }
+}
+
+bool is_critical_runtime_event(const SDL_Event& e) {
+        switch (e.type) {
+        case SDL_EVENT_QUIT:
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+#ifdef SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
+        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+#endif
+#ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
+        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+#endif
+                return true;
+        default:
+                return false;
+        }
+}
+
+bool event_uses_pointer_coordinates(Uint32 event_type) {
+        switch (event_type) {
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_WHEEL:
+        case SDL_EVENT_FINGER_DOWN:
+        case SDL_EVENT_FINGER_UP:
+        case SDL_EVENT_FINGER_MOTION:
                 return true;
         default:
                 return false;
@@ -467,35 +501,70 @@ void MainApp::game_loop() {
                 SDL_Renderer* renderer = raw_renderer();
 
                 int event_count = 0;
+                int deferred_event_count = 0;
+                bool event_budget_hit_count = false;
+                bool event_budget_hit_time = false;
+                static std::deque<SDL_Event> deferred_events;
+                const int max_events_per_frame = env_int_clamped("VIBBLE_EVENT_MAX_COUNT", 1000, 64, 5000);
+                const int max_poll_ms_per_frame = env_int_clamped("VIBBLE_EVENT_MAX_MS", 4, 1, 33);
                 frame_stats.mark_stage("event_poll_begin");
                 const Uint64 event_begin = SDL_GetPerformanceCounter();
-                while (SDL_PollEvent(&e)) {
+
+                auto process_event = [&](SDL_Event& event) {
                         ++event_count;
-                        if (renderer) {
-                                // Keep event coordinates aligned with renderer-space hit testing (DPI/scaling aware).
-                                SDL_ConvertEventToRenderCoordinates(renderer, &e);
+                        if (renderer && event_uses_pointer_coordinates(event.type)) {
+                                // Keep pointer/touch event coordinates aligned with renderer-space hit testing.
+                                SDL_ConvertEventToRenderCoordinates(renderer, &event);
                         }
-                        if (renderer && is_resize_or_scale_event(e.type)) {
+                        if (renderer && is_resize_or_scale_event(event.type)) {
                                 const Uint64 resize_sync_begin = SDL_GetPerformanceCounter();
                                 sync_output_dimensions(renderer);
                                 frame_stats.add("main.resize_sync_ms",
                                                 runtime_stats::FrameStatsRecorder::elapsed_ms(resize_sync_begin,
                                                                                               SDL_GetPerformanceCounter()));
                         }
-                        handle_global_shortcuts(e);
-                        if (e.type == SDL_EVENT_QUIT) {
+                        handle_global_shortcuts(event);
+                        if (event.type == SDL_EVENT_QUIT) {
                                 quit = true;
                         }
                         if (input_) {
-                                input_->handleEvent(e);
+                                input_->handleEvent(event);
                         }
                         if (game_assets_) {
-                                game_assets_->handle_sdl_event(e);
+                                game_assets_->handle_sdl_event(event);
                         }
+                };
+
+                while (!deferred_events.empty()) {
+                        SDL_Event deferred = deferred_events.front();
+                        deferred_events.pop_front();
+                        process_event(deferred);
+                }
+
+                while (SDL_PollEvent(&e)) {
+                        const bool over_count = event_count >= max_events_per_frame;
+                        const bool over_time = runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin,
+                                                                                              SDL_GetPerformanceCounter()) >= max_poll_ms_per_frame;
+                        if (!is_critical_runtime_event(e) && (over_count || over_time)) {
+                                deferred_events.push_back(e);
+                                ++deferred_event_count;
+                                event_budget_hit_count = event_budget_hit_count || over_count;
+                                event_budget_hit_time = event_budget_hit_time || over_time;
+                                continue;
+                        }
+                        process_event(e);
                 }
                 const Uint64 event_end = SDL_GetPerformanceCounter();
                 frame_stats.mark_stage("event_poll_end");
                 frame_stats.set("main.event_count", event_count);
+                frame_stats.set("main.event_deferred_count", deferred_event_count);
+                frame_stats.set("main.event_deferred_queue_size", static_cast<std::uint64_t>(deferred_events.size()));
+                frame_stats.set("main.event_budget_hit_count_cap", event_budget_hit_count);
+                frame_stats.set("main.event_budget_hit_time_cap", event_budget_hit_time);
+                frame_stats.set("main.event_poll_budget_reason",
+                                event_budget_hit_count && event_budget_hit_time
+                                        ? "count+time"
+                                        : (event_budget_hit_count ? "count" : (event_budget_hit_time ? "time" : "none")));
                 frame_stats.set("main.event_poll_ms",
                                 runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin, event_end));
 

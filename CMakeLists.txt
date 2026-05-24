@@ -75,6 +75,14 @@ add_executable(debug_flag_sync_regression_test
     ${CMAKE_SOURCE_DIR}/ENGINE/tests/debug_flag_sync_regression_test.cpp
 )
 
+add_executable(room_legacy_migration_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/room_legacy_migration_regression_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/map_generation/room_legacy_migration.cpp
+)
+target_include_directories(room_legacy_migration_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
 add_executable(spawn_trail_classification_test
     ${CMAKE_SOURCE_DIR}/ENGINE/tests/spawn_trail_classification_test.cpp
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn/trail_classification.cpp

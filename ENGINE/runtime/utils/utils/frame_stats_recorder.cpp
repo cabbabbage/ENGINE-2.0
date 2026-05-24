@@ -1,7 +1,11 @@
 #include "utils/frame_stats_recorder.hpp"
 
+#include "utils/log.hpp"
+
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -9,6 +13,7 @@
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -33,12 +38,40 @@ struct RecorderState {
     bool frame_open = false;
     bool header_written = false;
     bool write_failure_reported = false;
+    Uint64 last_frame_begin_counter = 0;
+    Uint64 last_frame_end_counter = 0;
+};
+
+struct WatchdogState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::thread thread;
+    bool running = false;
+    bool stop_requested = false;
+    bool heartbeat_active = false;
+    bool idle_wait = false;
+    bool stall_active = false;
+    Uint64 last_counter = 0;
+    Uint64 stall_begin_counter = 0;
+    Uint64 last_report_counter = 0;
+    std::uint64_t frame_id = 0;
+    std::string stage = "inactive";
 };
 
 RecorderState& state() {
     static RecorderState s;
     return s;
 }
+
+WatchdogState& watchdog_state() {
+    static WatchdogState s;
+    return s;
+}
+
+constexpr double kFreezeWatchdogThresholdMs = 500.0;
+constexpr double kFreezeWatchdogIdleThresholdMs = 2000.0;
+constexpr double kFreezeWatchdogReportIntervalMs = 1000.0;
+constexpr auto kFreezeWatchdogPollInterval = std::chrono::milliseconds(100);
 
 std::filesystem::path default_output_path() {
 #if defined(PROJECT_ROOT)
@@ -51,6 +84,10 @@ std::filesystem::path default_output_path() {
 std::vector<std::string> default_metric_order() {
     return {
         "main.telemetry_schema",
+        "main.frame_gap_ms",
+        "main.frame_begin_interval_ms",
+        "main.raw_frame_total_ms",
+        "main.last_completed_stage",
         "main.event_count",
         "main.event_poll_ms",
         "main.keyboard_sync_ms",
@@ -118,6 +155,8 @@ std::vector<std::string> default_metric_order() {
         "movement.player_slide_used",
         "movement.player_unstick_used",
         "assets.frame_id",
+        "assets.frame_dt_raw_seconds",
+        "assets.frame_dt_clamped_seconds",
         "assets.frame_dt_seconds",
         "assets.idle_frame",
         "assets.dev_mode",
@@ -415,6 +454,134 @@ std::string number_to_string(double value) {
     return out.empty() ? std::string{"0"} : out;
 }
 
+double counter_delta_ms(Uint64 begin_counter, Uint64 end_counter) {
+    const Uint64 frequency = SDL_GetPerformanceFrequency();
+    if (frequency == 0 || begin_counter == 0 || end_counter <= begin_counter) {
+        return 0.0;
+    }
+    return (static_cast<double>(end_counter - begin_counter) * 1000.0) /
+           static_cast<double>(frequency);
+}
+
+void log_watchdog_stall(const char* kind,
+                        double stall_ms,
+                        const std::string& stage,
+                        std::uint64_t frame_id,
+                        bool recovered) {
+    std::ostringstream out;
+    out << "[FreezeWatchdog] " << kind
+        << " stall_ms=" << number_to_string(stall_ms)
+        << " stage=" << stage
+        << " frame=" << frame_id
+        << " recovered=" << (recovered ? 1 : 0);
+    vibble::log::warn(out.str());
+}
+
+void watchdog_loop() {
+    WatchdogState& w = watchdog_state();
+    std::unique_lock<std::mutex> lock(w.mutex);
+    while (!w.stop_requested) {
+        w.cv.wait_for(lock, kFreezeWatchdogPollInterval);
+        if (w.stop_requested || !w.heartbeat_active || w.last_counter == 0) {
+            continue;
+        }
+
+        const Uint64 now = SDL_GetPerformanceCounter();
+        const double idle_ms = counter_delta_ms(w.last_counter, now);
+        const double threshold_ms = w.idle_wait
+            ? kFreezeWatchdogIdleThresholdMs
+            : kFreezeWatchdogThresholdMs;
+
+        if (idle_ms >= threshold_ms) {
+            const std::string stage = w.stage;
+            const std::uint64_t frame_id = w.frame_id;
+            if (!w.stall_active) {
+                w.stall_active = true;
+                w.stall_begin_counter = w.last_counter;
+                w.last_report_counter = now;
+                lock.unlock();
+                log_watchdog_stall("start", idle_ms, stage, frame_id, false);
+                lock.lock();
+            } else if (counter_delta_ms(w.last_report_counter, now) >= kFreezeWatchdogReportIntervalMs) {
+                w.last_report_counter = now;
+                lock.unlock();
+                log_watchdog_stall("update", idle_ms, stage, frame_id, false);
+                lock.lock();
+            }
+            continue;
+        }
+
+        if (w.stall_active) {
+            const double stall_ms = counter_delta_ms(w.stall_begin_counter, now);
+            const std::string stage = w.stage;
+            const std::uint64_t frame_id = w.frame_id;
+            w.stall_active = false;
+            w.stall_begin_counter = 0;
+            w.last_report_counter = 0;
+            lock.unlock();
+            log_watchdog_stall("recovered", stall_ms, stage, frame_id, true);
+            lock.lock();
+        }
+    }
+}
+
+void start_watchdog() {
+    WatchdogState& w = watchdog_state();
+    std::lock_guard<std::mutex> lock(w.mutex);
+    if (w.running) {
+        return;
+    }
+    w.stop_requested = false;
+    w.heartbeat_active = false;
+    w.idle_wait = false;
+    w.stall_active = false;
+    w.last_counter = 0;
+    w.stall_begin_counter = 0;
+    w.last_report_counter = 0;
+    w.frame_id = 0;
+    w.stage = "inactive";
+    w.thread = std::thread(watchdog_loop);
+    w.running = true;
+}
+
+void stop_watchdog() {
+    WatchdogState& w = watchdog_state();
+    std::thread thread;
+    {
+        std::lock_guard<std::mutex> lock(w.mutex);
+        if (!w.running) {
+            return;
+        }
+        w.stop_requested = true;
+        w.heartbeat_active = false;
+        thread = std::move(w.thread);
+    }
+    w.cv.notify_all();
+    if (thread.joinable()) {
+        thread.join();
+    }
+    {
+        std::lock_guard<std::mutex> lock(w.mutex);
+        w.running = false;
+        w.stop_requested = false;
+        w.stall_active = false;
+        w.stage = "inactive";
+    }
+}
+
+void update_watchdog_heartbeat(std::uint64_t frame_id, const char* stage, bool idle_wait) {
+    WatchdogState& w = watchdog_state();
+    std::lock_guard<std::mutex> lock(w.mutex);
+    if (!w.running || w.stop_requested) {
+        return;
+    }
+    w.heartbeat_active = true;
+    w.idle_wait = idle_wait;
+    w.last_counter = SDL_GetPerformanceCounter();
+    w.frame_id = frame_id;
+    w.stage = (stage && stage[0] != '\0') ? stage : "unknown";
+}
+
 std::string extra_metrics_for_frame(const FrameSnapshot& frame,
                                     const std::unordered_set<std::string>& known_metrics) {
     std::vector<std::string> extras;
@@ -567,6 +734,8 @@ void FrameStatsRecorder::begin_run(const std::filesystem::path& output_path) {
         return;
     }
 
+    start_watchdog();
+
     RecorderState& s = state();
     std::lock_guard<std::mutex> lock(s.mutex);
     s.output_path = output_path;
@@ -582,6 +751,8 @@ void FrameStatsRecorder::begin_run(const std::filesystem::path& output_path) {
     s.frame_open = false;
     s.header_written = false;
     s.write_failure_reported = false;
+    s.last_frame_begin_counter = 0;
+    s.last_frame_end_counter = 0;
 
     write_header_locked(s);
 }
@@ -590,6 +761,9 @@ void FrameStatsRecorder::shutdown() {
     if (!enabled()) {
         return;
     }
+
+    mark_stage("shutdown");
+    stop_watchdog();
 
     RecorderState& s = state();
     std::lock_guard<std::mutex> lock(s.mutex);
@@ -610,6 +784,9 @@ void FrameStatsRecorder::begin_frame(std::uint64_t frame_id) {
         return;
     }
 
+    start_watchdog();
+    const Uint64 frame_begin_counter = SDL_GetPerformanceCounter();
+
     RecorderState& s = state();
     std::lock_guard<std::mutex> lock(s.mutex);
     if (!s.started) {
@@ -618,6 +795,8 @@ void FrameStatsRecorder::begin_frame(std::uint64_t frame_id) {
         s.frame_open = false;
         s.header_written = false;
         s.write_failure_reported = false;
+        s.last_frame_begin_counter = 0;
+        s.last_frame_end_counter = 0;
         s.metric_order = default_metric_order();
         s.known_metrics.clear();
         for (const std::string& metric : s.metric_order) {
@@ -633,6 +812,15 @@ void FrameStatsRecorder::begin_frame(std::uint64_t frame_id) {
     s.current_frame = FrameSnapshot{};
     s.current_frame.frame_id = frame_id;
     s.frame_open = true;
+    set_locked(s,
+               "main.frame_begin_interval_ms",
+               number_to_string(counter_delta_ms(s.last_frame_begin_counter, frame_begin_counter)));
+    set_locked(s,
+               "main.frame_gap_ms",
+               number_to_string(counter_delta_ms(s.last_frame_end_counter, frame_begin_counter)));
+    set_locked(s, "main.last_completed_stage", "frame_begin");
+    s.last_frame_begin_counter = frame_begin_counter;
+    update_watchdog_heartbeat(frame_id, "frame_begin", false);
 }
 
 void FrameStatsRecorder::end_frame() {
@@ -645,6 +833,13 @@ void FrameStatsRecorder::end_frame() {
     if (!s.started || !s.frame_open) {
         return;
     }
+    const Uint64 frame_end_counter = SDL_GetPerformanceCounter();
+    set_locked(s,
+               "main.raw_frame_total_ms",
+               number_to_string(counter_delta_ms(s.last_frame_begin_counter, frame_end_counter)));
+    set_locked(s, "main.last_completed_stage", "frame_end");
+    s.last_frame_end_counter = frame_end_counter;
+    update_watchdog_heartbeat(s.current_frame.frame_id, "frame_end", false);
     append_frame_locked(s, s.current_frame);
     s.current_frame = FrameSnapshot{};
     s.frame_open = false;
@@ -660,6 +855,25 @@ void FrameStatsRecorder::flush() {
     if (s.started && !s.header_written) {
         write_header_locked(s);
     }
+}
+
+void FrameStatsRecorder::mark_stage(const char* stage, bool idle_wait) {
+    if (!enabled()) {
+        return;
+    }
+
+    std::uint64_t frame_id = 0;
+    {
+        RecorderState& s = state();
+        std::lock_guard<std::mutex> lock(s.mutex);
+        if (s.started && s.frame_open) {
+            frame_id = s.current_frame.frame_id;
+            set_locked(s,
+                       "main.last_completed_stage",
+                       (stage && stage[0] != '\0') ? std::string(stage) : std::string("unknown"));
+        }
+    }
+    update_watchdog_heartbeat(frame_id, stage, idle_wait);
 }
 
 void FrameStatsRecorder::set(const std::string& metric, const std::string& value) {
@@ -718,12 +932,7 @@ void FrameStatsRecorder::add(const std::string& metric, double value) {
 }
 
 double FrameStatsRecorder::elapsed_ms(Uint64 begin_counter, Uint64 end_counter) {
-    const Uint64 frequency = SDL_GetPerformanceFrequency();
-    if (frequency == 0 || end_counter <= begin_counter) {
-        return 0.0;
-    }
-    return (static_cast<double>(end_counter - begin_counter) * 1000.0) /
-           static_cast<double>(frequency);
+    return counter_delta_ms(begin_counter, end_counter);
 }
 
 } // namespace runtime_stats

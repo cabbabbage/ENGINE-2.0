@@ -418,7 +418,7 @@ void MainApp::game_loop() {
 
         vibble::log::info("[MainApp] Game loop started.");
         vibble::log::info("[MainApp] Frame pacing target: " + app::frame_pacing::target_summary());
-        vibble::log::info("[RuntimeFrameStats] telemetry_schema=normal_active_set_fix_v1");
+        vibble::log::info("[RuntimeFrameStats] telemetry_schema=freeze_watchdog_v1");
         if (auto_exit_frame_limit > 0) {
                 vibble::log::info("[MainApp] Runtime frame limit: " + std::to_string(auto_exit_frame_limit));
         }
@@ -427,7 +427,7 @@ void MainApp::game_loop() {
                 ++runtime_frame_counter;
                 auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
                 frame_stats.begin_frame(runtime_frame_counter);
-                frame_stats.set("main.telemetry_schema", "normal_active_set_fix_v1");
+                frame_stats.set("main.telemetry_schema", "freeze_watchdog_v1");
                 frame_stats.set("main.keyboard_sync_ms", 0.0);
                 frame_stats.set("input.keyboard_reconciled", false);
                 frame_stats.set("input.keyboard_reconciled_changed_count", static_cast<std::uint64_t>(0));
@@ -467,6 +467,7 @@ void MainApp::game_loop() {
                 SDL_Renderer* renderer = raw_renderer();
 
                 int event_count = 0;
+                frame_stats.mark_stage("event_poll_begin");
                 const Uint64 event_begin = SDL_GetPerformanceCounter();
                 while (SDL_PollEvent(&e)) {
                         ++event_count;
@@ -493,47 +494,60 @@ void MainApp::game_loop() {
                         }
                 }
                 const Uint64 event_end = SDL_GetPerformanceCounter();
+                frame_stats.mark_stage("event_poll_end");
                 frame_stats.set("main.event_count", event_count);
                 frame_stats.set("main.event_poll_ms",
                                 runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin, event_end));
 
                 if (input_) {
+                        frame_stats.mark_stage("keyboard_sync_begin");
                         const Uint64 keyboard_sync_begin = SDL_GetPerformanceCounter();
                         input_->sync_live_keyboard_state();
                         frame_stats.set("main.keyboard_sync_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(keyboard_sync_begin,
                                                                                       SDL_GetPerformanceCounter()));
                         if (codex_playtest_input_enabled()) {
+                                frame_stats.mark_stage("codex_playtest_input_begin");
                                 apply_codex_playtest_input(*input_,
                                                            runtime_frame_counter,
                                                            screen_w_,
                                                            screen_h_);
+                                frame_stats.mark_stage("codex_playtest_input_end");
                         }
+                        frame_stats.mark_stage("keyboard_sync_end");
                 }
 
                 if (renderer) {
+                        frame_stats.mark_stage("sync_output_begin");
                         const Uint64 sync_begin = SDL_GetPerformanceCounter();
                         sync_output_dimensions(renderer);
                         frame_stats.set("main.sync_output_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin,
                                                                                       SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("sync_output_end");
                 }
                 if (game_assets_ && input_) {
+                        frame_stats.mark_stage("assets_update_begin");
                         const Uint64 assets_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
                         frame_stats.set("main.assets_update_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(assets_begin,
                                                                                       SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("assets_update_end");
                 }
                 if (renderer) {
+                        frame_stats.mark_stage("render_diagnostics_begin");
                         log_render_diagnostics(renderer, "MainApp");
+                        frame_stats.mark_stage("render_diagnostics_end");
                 }
                 if (input_) {
+                        frame_stats.mark_stage("input_update_begin");
                         const Uint64 input_begin = SDL_GetPerformanceCounter();
                         input_->update();
                         frame_stats.set("main.input_update_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(input_begin,
                                                                                       SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("input_update_end");
                 }
 
                 const double remaining_counts =
@@ -545,12 +559,14 @@ void MainApp::game_loop() {
                                         ? (remaining_counts * 1000.0) / perf_frequency
                                         : 0.0);
                 if (remaining_counts > 0.0) {
+                        frame_stats.mark_stage("frame_pacing_begin");
                         const Uint64 idle_begin = SDL_GetPerformanceCounter();
                         app::frame_pacing::delay_from_remaining_counts(remaining_counts,
                                                                        perf_frequency);
                         frame_stats.set("main.idle_pacing_delay_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(idle_begin,
                                                                                       SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("frame_pacing_end");
                 } else {
                         frame_stats.set("main.idle_pacing_delay_ms", 0.0);
                 }

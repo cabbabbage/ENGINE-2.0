@@ -120,11 +120,14 @@ void EngineRenderer::present() {
         return;
     }
 
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.mark_stage("render_present_begin");
     render_diagnostics::note_present_call();
     const std::uint64_t perf_frequency = SDL_GetPerformanceFrequency();
     const std::uint64_t present_begin = SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer_);
     const std::uint64_t present_end = SDL_GetPerformanceCounter();
+    frame_stats.mark_stage("render_present_end");
 
     const double present_block_ms =
         (perf_frequency > 0 && present_end >= present_begin)
@@ -140,7 +143,6 @@ void EngineRenderer::present() {
     }
     last_present_counter_ = present_end;
     render_diagnostics::set_present_pacing(present_block_ms, present_interval_ms, interval_known);
-    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     frame_stats.set("render.present_block_ms", present_block_ms);
     frame_stats.set("render.present_interval_ms", interval_known ? present_interval_ms : -1.0);
     frame_stats.set("render.present_interval_known", interval_known);

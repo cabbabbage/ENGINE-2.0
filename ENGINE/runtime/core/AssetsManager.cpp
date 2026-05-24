@@ -2816,19 +2816,25 @@ void Assets::update(const Input& input)
         run_idle_frame_pipeline(input);
         last_frame_dt_seconds_ = 0.0f;
         last_frame_counter_    = now_counter;
+        frame_stats.set("assets.frame_dt_raw_seconds", 0.0);
+        frame_stats.set("assets.frame_dt_clamped_seconds", 0.0);
         frame_stats.set("assets.frame_dt_seconds", 0.0);
         return;
     }
 
     float dt = 1.0f / 60.0f;
+    float raw_dt = dt;
     if (last_frame_counter_ != 0 && perf_counter_frequency_ > 0.0) {
         const double elapsed = static_cast<double>(now_counter - last_frame_counter_) / perf_counter_frequency_;
         if (std::isfinite(elapsed) && elapsed > 0.0) {
+            raw_dt = static_cast<float>(elapsed);
             dt = static_cast<float>(std::clamp(elapsed, 0.0, 0.25));
         }
     }
     last_frame_counter_    = now_counter;
     last_frame_dt_seconds_ = dt;
+    frame_stats.set("assets.frame_dt_raw_seconds", static_cast<double>(raw_dt));
+    frame_stats.set("assets.frame_dt_clamped_seconds", static_cast<double>(dt));
     frame_stats.set("assets.frame_dt_seconds", static_cast<double>(dt));
 
     const bool ctrl_down = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);

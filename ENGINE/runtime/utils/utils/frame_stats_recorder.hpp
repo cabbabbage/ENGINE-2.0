@@ -36,6 +36,7 @@ public:
     void begin_frame(std::uint64_t frame_id);
     void end_frame();
     void flush();
+    void mark_stage(const char* stage, bool idle_wait = false);
 
     void set(const std::string& metric, const std::string& value);
     void set(const std::string& metric, const char* value);

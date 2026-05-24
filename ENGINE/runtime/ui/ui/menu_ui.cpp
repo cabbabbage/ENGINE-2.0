@@ -211,6 +211,7 @@ void MenuUI::game_loop() {
                 ++runtime_frame_counter;
                 auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
                 frame_stats.begin_frame(runtime_frame_counter);
+                frame_stats.set("main.telemetry_schema", "freeze_watchdog_v1");
                 struct RuntimeFrameScope {
                         runtime_stats::FrameStatsRecorder& stats;
                         bool active = true;
@@ -233,20 +234,25 @@ void MenuUI::game_loop() {
                 } runtime_frame_scope(frame_stats);
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 int event_count = 0;
+                frame_stats.mark_stage("idle_wait", true);
                 const Uint64 event_begin = SDL_GetPerformanceCounter();
                 if (SDL_WaitEventTimeout(&e, EVENT_WAIT_TIMEOUT_MS)) {
+                        frame_stats.mark_stage("event_wait_returned");
                         ++event_count;
                         process_event(e);
+                        frame_stats.mark_stage("event_poll_begin");
                         while (SDL_PollEvent(&e)) {
                                 ++event_count;
                                 process_event(e);
                         }
                 }
                 const Uint64 event_end = SDL_GetPerformanceCounter();
+                frame_stats.mark_stage("event_poll_end");
                 frame_stats.set("main.event_count", event_count);
                 frame_stats.set("main.event_poll_ms",
                                 runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin, event_end));
 
+                frame_stats.mark_stage("sync_output_begin");
                 const Uint64 sync_begin = SDL_GetPerformanceCounter();
                 if (sync_output_dimensions(renderer)) {
                         rebuildButtons();
@@ -254,41 +260,56 @@ void MenuUI::game_loop() {
                 frame_stats.set("main.sync_output_ms",
                                 runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin,
                                                                               SDL_GetPerformanceCounter()));
+                frame_stats.mark_stage("sync_output_end");
 
                 const bool should_update = !menu_active_ && game_assets_ && input_;
                 if (should_update) {
                         if (codex_playtest_input_enabled()) {
+                                frame_stats.mark_stage("codex_playtest_input_begin");
                                 input_->applyCodexPlaytestDriverForTest(runtime_frame_counter,
                                                                         screen_w_,
                                                                         screen_h_);
+                                frame_stats.mark_stage("codex_playtest_input_end");
                         }
+                        frame_stats.mark_stage("assets_update_begin");
                         const Uint64 assets_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
                         frame_stats.set("main.assets_update_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(assets_begin,
                                                                                       SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("assets_update_end");
                 }
                 if (menu_active_) {
+                        frame_stats.mark_stage("menu_render_begin");
                         render();
+                        frame_stats.mark_stage("menu_render_end");
+                        frame_stats.mark_stage("menu_action_begin");
                         switch (consumeAction()) {
                                 case MenuAction::EXIT:     doExit();    closeMenu(); quit = true; break;
                                 case MenuAction::QUIT:     doQuit();    closeMenu(); quit = true; break;
                                 case MenuAction::SETTINGS: doSettings();             break;
                                 default: break;
                         }
+                        frame_stats.mark_stage("menu_action_end");
                 }
 
                 if (renderer_) {
+                        frame_stats.mark_stage("present_begin");
                         renderer_->present();
+                        frame_stats.mark_stage("present_end");
                 }
+                frame_stats.mark_stage("render_diagnostics_begin");
                 log_render_diagnostics(renderer, "MenuUI");
+                frame_stats.mark_stage("render_diagnostics_end");
 
                 if (input_) {
+                        frame_stats.mark_stage("input_update_begin");
                         const Uint64 input_begin = SDL_GetPerformanceCounter();
                         input_->update();
                         frame_stats.set("main.input_update_ms",
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(input_begin,
                                                                                       SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("input_update_end");
                 }
                 frame_stats.set("main.menu_active", menu_active_);
                 if (auto_exit_frame_limit > 0 &&

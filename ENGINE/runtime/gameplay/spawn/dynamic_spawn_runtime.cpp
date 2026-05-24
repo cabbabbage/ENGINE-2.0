@@ -13,6 +13,7 @@
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
+#include "gameplay/spawn/trail_classification.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
@@ -97,18 +98,10 @@ bool type_is_boundary(const AssetInfo* info) {
     return info && asset_types::canonicalize(info->type) == asset_types::boundary;
 }
 
-bool area_label_is_trail(const std::string& value) {
-    std::string lower = value;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    return lower.find("trail") != std::string::npos || lower.find("path") != std::string::npos;
-}
-
 bool named_area_is_trail(const Room::NamedArea& area) {
-    return area_label_is_trail(area.type) ||
-           area_label_is_trail(area.kind) ||
-           area_label_is_trail(area.name);
+    return is_trail_area_label(area.type) ||
+           is_trail_area_label(area.kind) ||
+           is_trail_area_label(area.name);
 }
 
 int read_int_setting(const nlohmann::json& object, const char* key, int fallback, int min_value, int max_value) {

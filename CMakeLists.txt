@@ -75,6 +75,14 @@ add_executable(debug_flag_sync_regression_test
     ${CMAKE_SOURCE_DIR}/ENGINE/tests/debug_flag_sync_regression_test.cpp
 )
 
+add_executable(spawn_trail_classification_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/spawn_trail_classification_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn/trail_classification.cpp
+)
+target_include_directories(spawn_trail_classification_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)

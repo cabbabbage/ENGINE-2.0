@@ -932,7 +932,7 @@ void run(SDL_Window* window,
                 shared_asset_library->load_all_from_resources();
     { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
     vibble::log::info(std::string("[Main] Asset metadata cache ready for ") + std::to_string(shared_asset_library->all().size()) + " asset(s).");
-    const bool safe_loading_enabled = env_flag_enabled("VIBBLE_SAFE_LOADING", true);
+    const bool safe_loading_enabled = app::startup_runtime::env_flag_enabled("VIBBLE_SAFE_LOADING", true);
     if (!safe_loading_enabled) {
         vibble::log::info("[Main] Loading cached asset resources...");
         shared_asset_library->loadAllAnimations(renderer);
@@ -975,7 +975,8 @@ void run(SDL_Window* window,
         } else {
             menu = std::make_unique<MainMenu>(renderer, screen_w, screen_h, manifest_data.maps);
             vibble::log::info("[Main] Main menu displayed.");
-                bool choosing = true;
+            bool choosing = true;
+            SDL_Event e{};
             while (choosing) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 while (SDL_PollEvent(&e)) {

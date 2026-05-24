@@ -62,14 +62,16 @@ void render_inversion_preview(SDL_Renderer* renderer, const SDL_Rect& rect, bool
         return;
     }
 
-    const SDL_Color border = DMStyles::BorderColor();
-    const SDL_Color text = DMStyles::TextMuted();
+    const SDL_Color border = DMStyles::Border();
+    const SDL_Color text = DMStyles::Label().color;
     const SDL_Color x_color{237, 85, 85, 255};
     const SDL_Color y_color{95, 205, 120, 255};
     const SDL_Color z_color{109, 177, 255, 255};
 
     SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, 255);
-    SDL_RenderRect(renderer, &rect);
+    const SDL_FRect border_rect{static_cast<float>(rect.x), static_cast<float>(rect.y),
+                               static_cast<float>(rect.w), static_cast<float>(rect.h)};
+    SDL_RenderRect(renderer, &border_rect);
 
     const int cx = rect.x + rect.w / 2;
     const int cy = rect.y + rect.h / 2 + 6;

@@ -603,7 +603,8 @@ bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
             continue;
         }
         const float packet_y = center.y;
-        const std::uintptr_t base_sort_id = floor_sort_id(true, marker_sequence++);
+        const std::uintptr_t base_sort_id = floor_sort_id(true, marker_sequence);
+        marker_sequence += 4u;
 
         auto init_packet = [&](GpuSpriteDrawPacket& packet) {
             packet.source_texture = nullptr;
@@ -625,29 +626,86 @@ bool build_floor_marker_draw_packets(const WarpedScreenGrid& camera,
         };
 
         if (marker.shape == Assets::DevFloorProjectionMarker::Shape::Crosshair) {
-            const float line_half = static_cast<float>(std::clamp(marker.crosshair_radius, 3, 12));
-            const float thickness_half =
-                std::max(0.5f, 0.5f * static_cast<float>(std::clamp(marker.pixel_size, 2, 8)));
+            const float line_half_world = static_cast<float>(std::clamp(marker.crosshair_radius, 3, 12));
+            const float thickness_half_world =
+                std::max(0.75f, 0.5f * static_cast<float>(std::clamp(marker.pixel_size, 2, 8)));
 
-            GpuSpriteDrawPacket horizontal{};
-            init_packet(horizontal);
-            horizontal.stable_sort_id = base_sort_id;
-            fill_quad_packet_vertices(SDL_FPoint{center.x - line_half, center.y - thickness_half},
-                                      SDL_FPoint{center.x + line_half, center.y - thickness_half},
-                                      SDL_FPoint{center.x + line_half, center.y + thickness_half},
-                                      SDL_FPoint{center.x - line_half, center.y + thickness_half},
-                                      0.0f, 0.0f, 1.0f, 1.0f, output_w, output_h, horizontal);
-            out_packets.push_back(horizontal);
+            auto emit_floor_arm = [&](const SDL_FPoint& world_tl,
+                                      const SDL_FPoint& world_tr,
+                                      const SDL_FPoint& world_br,
+                                      const SDL_FPoint& world_bl,
+                                      std::uintptr_t sort_id,
+                                      const char* texture_id) {
+                SDL_FPoint screen_tl{};
+                SDL_FPoint screen_tr{};
+                SDL_FPoint screen_br{};
+                SDL_FPoint screen_bl{};
+                if (!camera.project_world_point(SDL_FPoint{world_tl.x, 0.0f}, world_tl.y, screen_tl) ||
+                    !camera.project_world_point(SDL_FPoint{world_tr.x, 0.0f}, world_tr.y, screen_tr) ||
+                    !camera.project_world_point(SDL_FPoint{world_br.x, 0.0f}, world_br.y, screen_br) ||
+                    !camera.project_world_point(SDL_FPoint{world_bl.x, 0.0f}, world_bl.y, screen_bl) ||
+                    !std::isfinite(screen_tl.x) || !std::isfinite(screen_tl.y) ||
+                    !std::isfinite(screen_tr.x) || !std::isfinite(screen_tr.y) ||
+                    !std::isfinite(screen_br.x) || !std::isfinite(screen_br.y) ||
+                    !std::isfinite(screen_bl.x) || !std::isfinite(screen_bl.y)) {
+                    return;
+                }
 
-            GpuSpriteDrawPacket vertical{};
-            init_packet(vertical);
-            vertical.stable_sort_id = base_sort_id + 1u;
-            fill_quad_packet_vertices(SDL_FPoint{center.x - thickness_half, center.y - line_half},
-                                      SDL_FPoint{center.x + thickness_half, center.y - line_half},
-                                      SDL_FPoint{center.x + thickness_half, center.y + line_half},
-                                      SDL_FPoint{center.x - thickness_half, center.y + line_half},
-                                      0.0f, 0.0f, 1.0f, 1.0f, output_w, output_h, vertical);
-            out_packets.push_back(vertical);
+                GpuSpriteDrawPacket packet{};
+                init_packet(packet);
+                packet.source_texture_id = texture_id;
+                packet.stable_sort_id = sort_id;
+                fill_quad_packet_vertices(screen_tl,
+                                          screen_tr,
+                                          screen_br,
+                                          screen_bl,
+                                          0.0f,
+                                          0.0f,
+                                          1.0f,
+                                          1.0f,
+                                          output_w,
+                                          output_h,
+                                          packet);
+                out_packets.push_back(packet);
+            };
+
+            const SDL_FPoint horizontal_tl{
+                marker.floor_world_xz.x - line_half_world,
+                marker.floor_world_xz.y - thickness_half_world};
+            const SDL_FPoint horizontal_tr{
+                marker.floor_world_xz.x + line_half_world,
+                marker.floor_world_xz.y - thickness_half_world};
+            const SDL_FPoint horizontal_br{
+                marker.floor_world_xz.x + line_half_world,
+                marker.floor_world_xz.y + thickness_half_world};
+            const SDL_FPoint horizontal_bl{
+                marker.floor_world_xz.x - line_half_world,
+                marker.floor_world_xz.y + thickness_half_world};
+            emit_floor_arm(horizontal_tl,
+                           horizontal_tr,
+                           horizontal_br,
+                           horizontal_bl,
+                           base_sort_id,
+                           "floor_marker_floor_crosshair_x");
+
+            const SDL_FPoint vertical_tl{
+                marker.floor_world_xz.x - thickness_half_world,
+                marker.floor_world_xz.y - line_half_world};
+            const SDL_FPoint vertical_tr{
+                marker.floor_world_xz.x + thickness_half_world,
+                marker.floor_world_xz.y - line_half_world};
+            const SDL_FPoint vertical_br{
+                marker.floor_world_xz.x + thickness_half_world,
+                marker.floor_world_xz.y + line_half_world};
+            const SDL_FPoint vertical_bl{
+                marker.floor_world_xz.x - thickness_half_world,
+                marker.floor_world_xz.y + line_half_world};
+            emit_floor_arm(vertical_tl,
+                           vertical_tr,
+                           vertical_br,
+                           vertical_bl,
+                           base_sort_id + 1u,
+                           "floor_marker_floor_crosshair_z");
         } else {
             GpuSpriteDrawPacket dot{};
             init_packet(dot);
@@ -2139,14 +2197,6 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 render_diagnostics::end_frame();
                 return false;
             }
-            if (draw_anchor_debug && layer.depth_layer == frame_to_render->focus_depth_layer) {
-                DebugOverlayRenderer debug_overlay(renderer_);
-                debug_overlay.render_anchor_debug(assets_->getView(),
-                                                  static_cast<int>(frame_to_render->target_width),
-                                                  static_cast<int>(frame_to_render->target_height),
-                                                  visible_assets_for_debug,
-                                                  assets_->is_dev_mode());
-            }
             dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer_target});
         }
 
@@ -2248,16 +2298,17 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             render_diagnostics::end_frame();
             return false;
         }
-        if (draw_anchor_debug) {
-            DebugOverlayRenderer debug_overlay(renderer_);
-            debug_overlay.render_anchor_debug(assets_->getView(),
-                                              static_cast<int>(frame_to_render->target_width),
-                                              static_cast<int>(frame_to_render->target_height),
-                                              visible_assets_for_debug,
-                                              assets_->is_dev_mode());
-        }
         xy_pass_ms += elapsed_ms(xy_begin, SDL_GetPerformanceCounter());
         render_diagnostics::set_composite_layers_submitted("direct_scene->ui_overlay");
+    }
+
+    if (draw_anchor_debug) {
+        DebugOverlayRenderer debug_overlay(renderer_);
+        debug_overlay.render_anchor_debug(assets_->getView(),
+                                          static_cast<int>(frame_to_render->target_width),
+                                          static_cast<int>(frame_to_render->target_height),
+                                          visible_assets_for_debug,
+                                          assets_->is_dev_mode());
     }
 
     if (frame_to_render->ui_overlay_texture) {

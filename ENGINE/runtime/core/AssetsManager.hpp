@@ -594,6 +594,17 @@ private:
 
     void rebuild_non_player_update_buffer_if_needed();
     void refresh_visible_asset_scaling_only();
+    struct VisibleScalingRefreshReasons {
+        bool frame_rebuilt = false;
+        bool focus_changed = false;
+        bool camera_changed = false;
+        bool generation_changed = false;
+
+        bool any() const {
+            return frame_rebuilt || focus_changed || camera_changed || generation_changed;
+        }
+    };
+    VisibleScalingRefreshReasons evaluate_visible_scaling_refresh_reasons(bool frame_rebuilt);
     void run_idle_frame_pipeline(const Input& input);
     void run_world_update_stage(const Input& input, bool& room_changed, bool& player_moved);
     void run_visibility_build_stage();

@@ -2521,25 +2521,16 @@ void Assets::run_visibility_build_stage() {
     }
 
     const bool frame_rebuilt = run_frame_rebuild_stage();
-    bool focus_refreshed = false;
-    if (focus_filter_closure_dirty_) {
-        rebuild_focus_filter_closure();
-        focus_refreshed = true;
-    }
-    const std::uint64_t camera_state = camera_.camera_state_version();
-    const bool scaling_refresh_needed =
-        frame_rebuilt ||
-        focus_refreshed ||
-        !visible_scaling_initialized_ ||
-        last_visible_scaling_camera_state_version_ != camera_state ||
-        last_visible_scaling_active_generation_ != active_assets_generation_;
+    const VisibleScalingRefreshReasons refresh_reasons =
+        evaluate_visible_scaling_refresh_reasons(frame_rebuilt);
+    const bool scaling_refresh_needed = refresh_reasons.any();
     runtime_stats::FrameStatsRecorder::instance().set("assets.visible_scaling_refreshed",
                                                       scaling_refresh_needed);
     if (scaling_refresh_needed) {
         refresh_visible_asset_scaling_only();
         asset_update_phase_stats_.refreshes_triggered += 1;
         visible_scaling_initialized_ = true;
-        last_visible_scaling_camera_state_version_ = camera_state;
+        last_visible_scaling_camera_state_version_ = camera_.camera_state_version();
         last_visible_scaling_active_generation_ = active_assets_generation_;
     }
 }
@@ -2548,26 +2539,42 @@ void Assets::run_post_flush_traversal_refresh_once() {
     post_runtime_traversal_refresh_pending_ = true;
     note_frame_rebuild_request();
     const bool frame_rebuilt = run_frame_rebuild_stage();
-    bool focus_refreshed = false;
-    if (focus_filter_closure_dirty_) {
-        rebuild_focus_filter_closure();
-        focus_refreshed = true;
-    }
-    const std::uint64_t camera_state = camera_.camera_state_version();
-    const bool scaling_refresh_needed =
-        frame_rebuilt ||
-        focus_refreshed ||
-        !visible_scaling_initialized_ ||
-        last_visible_scaling_camera_state_version_ != camera_state ||
-        last_visible_scaling_active_generation_ != active_assets_generation_;
+    const VisibleScalingRefreshReasons refresh_reasons =
+        evaluate_visible_scaling_refresh_reasons(frame_rebuilt);
+    const bool scaling_refresh_needed = refresh_reasons.any();
     runtime_stats::FrameStatsRecorder::instance().set("assets.visible_scaling_refreshed",
                                                       scaling_refresh_needed);
     if (scaling_refresh_needed) {
         refresh_visible_asset_scaling_only();
         visible_scaling_initialized_ = true;
-        last_visible_scaling_camera_state_version_ = camera_state;
+        last_visible_scaling_camera_state_version_ = camera_.camera_state_version();
         last_visible_scaling_active_generation_ = active_assets_generation_;
     }
+}
+
+Assets::VisibleScalingRefreshReasons Assets::evaluate_visible_scaling_refresh_reasons(bool frame_rebuilt) {
+    VisibleScalingRefreshReasons reasons{};
+    reasons.frame_rebuilt = frame_rebuilt;
+
+    if (focus_filter_closure_dirty_) {
+        rebuild_focus_filter_closure();
+        reasons.focus_changed = true;
+    }
+
+    const std::uint64_t camera_state = camera_.camera_state_version();
+    reasons.camera_changed =
+        !visible_scaling_initialized_ ||
+        last_visible_scaling_camera_state_version_ != camera_state;
+    reasons.generation_changed =
+        !visible_scaling_initialized_ ||
+        last_visible_scaling_active_generation_ != active_assets_generation_;
+
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("assets.visible_scaling_reason_frame_rebuilt", reasons.frame_rebuilt);
+    frame_stats.set("assets.visible_scaling_reason_focus_changed", reasons.focus_changed);
+    frame_stats.set("assets.visible_scaling_reason_camera_changed", reasons.camera_changed);
+    frame_stats.set("assets.visible_scaling_reason_generation_changed", reasons.generation_changed);
+    return reasons;
 }
 
 void Assets::run_runtime_effects_stage(bool include_audio_update) {

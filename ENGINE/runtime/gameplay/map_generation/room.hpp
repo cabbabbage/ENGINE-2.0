@@ -66,6 +66,7 @@ class Room {
         std::string manifest_map_id = {},
         ManifestWriter manifest_writer = {},
         bool auto_populate_assets = true);
+    ~Room();
     void set_sibling_left(Room* left_room);
     void set_sibling_right(Room* right_room);
     void add_connecting_room(Room* room);

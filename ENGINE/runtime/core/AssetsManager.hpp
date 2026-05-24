@@ -484,6 +484,8 @@ private:
         std::size_t iterations = 0;
         std::size_t traversal_refresh_count = 0;
         std::size_t traversal_refresh_deferred_count = 0;
+        std::size_t budget_throttled_count = 0;
+        std::size_t deferred_due_to_budget_count = 0;
         std::size_t wave_count = 0;
         std::size_t children_considered = 0;
         std::size_t children_updated = 0;
@@ -543,6 +545,7 @@ private:
     bool pending_initial_rebuild_ = false;
     bool post_runtime_traversal_refresh_pending_ = false;
     bool runtime_convergence_traversal_refresh_pending_ = false;
+    std::uint32_t runtime_convergence_deferred_refresh_streak_ = 0;
     bool logged_initial_rebuild_warning_ = false;
     bool grid_dirty_ = true;
     bool camera_view_dirty_ = true;

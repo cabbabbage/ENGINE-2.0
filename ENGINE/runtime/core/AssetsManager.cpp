@@ -76,6 +76,7 @@ constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
 constexpr int kDefaultCameraHeightMinPx = 1;
 constexpr int kDefaultCameraHeightMaxPx = 100000;
 constexpr std::size_t kRuntimeAnchorConvergenceIterationCap = 8;
+constexpr std::size_t kRuntimeConvergenceIterationCapNonStartupDefault = 4;
 constexpr int kCollisionIndexSpacingMinPx = 64;
 constexpr int kCollisionIndexSpacingMaxPx = 256;
 constexpr int kAggressiveMaxCollisionSearchRadiusPx = 320;
@@ -213,9 +214,16 @@ std::size_t runtime_convergence_iteration_cap_for_frame(std::uint32_t frame_id) 
     return std::min(base_cap, startup_cap);
 }
 
+std::size_t runtime_convergence_iteration_cap_non_startup_default() {
+    return static_cast<std::size_t>(env_int_clamped("VIBBLE_RUNTIME_CONVERGENCE_ITERATION_CAP_NON_STARTUP_DEFAULT",
+                                                    static_cast<int>(kRuntimeConvergenceIterationCapNonStartupDefault),
+                                                    1,
+                                                    64));
+}
+
 double runtime_convergence_stage_budget_ms_for_frame(std::uint32_t frame_id) {
     if (!startup_runtime_safety_active(frame_id)) {
-        return env_double_clamped("VIBBLE_RUNTIME_CONVERGENCE_BUDGET_MS", 0.0, 0.0, 2000.0);
+        return env_double_clamped("VIBBLE_RUNTIME_CONVERGENCE_BUDGET_MS", 3.0, 0.0, 2000.0);
     }
     return env_double_clamped("VIBBLE_STARTUP_CONVERGENCE_BUDGET_MS", 12.0, 0.0, 2000.0);
 }
@@ -233,7 +241,14 @@ double runtime_traversal_refresh_budget_ms_for_frame(std::uint32_t frame_id) {
     if (startup_runtime_safety_active(frame_id)) {
         return env_double_clamped("VIBBLE_STARTUP_TRAVERSAL_REFRESH_BUDGET_MS", 2.0, 0.0, 2000.0);
     }
-    return env_double_clamped("VIBBLE_RUNTIME_TRAVERSAL_REFRESH_BUDGET_MS", 1.0, 0.0, 2000.0);
+    return env_double_clamped("VIBBLE_RUNTIME_TRAVERSAL_REFRESH_BUDGET_MS", 0.5, 0.0, 2000.0);
+}
+
+bool runtime_convergence_asset_priority(const Asset* asset) {
+    if (!asset) {
+        return false;
+    }
+    return asset->last_visible_frame_id > 0 || asset->distance_from_camera <= 1400.0f;
 }
 
 float normalize_depth_axis_sign(float sign) {
@@ -1403,20 +1418,27 @@ Assets::RuntimeConvergencePassResult Assets::run_active_runtime_single_pass(bool
                                                  camera_anchor_world_z,
                                                  depth_axis_sign);
     }
-    for (std::size_t i = active_begin; i < active_end; ++i) {
-        Asset* asset = active_assets[i];
-        if (asset == player) {
-            continue;
+    auto run_priority_bucket = [&](bool prioritized) {
+        for (std::size_t i = active_begin; i < active_end; ++i) {
+            Asset* asset = active_assets[i];
+            if (asset == player) {
+                continue;
+            }
+            if (!asset_matches_focus_filter(asset)) {
+                continue;
+            }
+            if (runtime_convergence_asset_priority(asset) != prioritized) {
+                continue;
+            }
+            run_active_runtime_single_pass_for_asset(asset,
+                                                     camera_focus,
+                                                     camera_state_version,
+                                                     camera_anchor_world_z,
+                                                     depth_axis_sign);
         }
-        if (!asset_matches_focus_filter(asset)) {
-            continue;
-        }
-        run_active_runtime_single_pass_for_asset(asset,
-                                                 camera_focus,
-                                                 camera_state_version,
-                                                 camera_anchor_world_z,
-                                                 depth_axis_sign);
-    }
+    };
+    run_priority_bucket(true);
+    run_priority_bucket(false);
 
     run_camera_trap_escape_pass();
 
@@ -2515,9 +2537,26 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
         static_cast<std::uint64_t>(movement_enabled_active_assets_.size());
     RuntimeConvergenceFrameStats stats{};
     bool audio_update_pending = include_audio_update;
-    const std::size_t iteration_cap = runtime_convergence_iteration_cap_for_frame(frame_id_);
-    const double stage_budget_ms = runtime_convergence_stage_budget_ms_for_frame(frame_id_);
-    const double traversal_refresh_budget_ms = runtime_traversal_refresh_budget_ms_for_frame(frame_id_);
+    std::size_t iteration_cap = runtime_convergence_iteration_cap_for_frame(frame_id_);
+    if (!startup_runtime_safety_active(frame_id_)) {
+        iteration_cap = std::min(iteration_cap, runtime_convergence_iteration_cap_non_startup_default());
+    }
+    double stage_budget_ms = runtime_convergence_stage_budget_ms_for_frame(frame_id_);
+    double traversal_refresh_budget_ms = runtime_traversal_refresh_budget_ms_for_frame(frame_id_);
+    const double runtime_threshold_ms = runtime_detail_warning_ms();
+    const bool previous_frame_over_threshold =
+        last_runtime_convergence_stats_.stage_ms >= runtime_threshold_ms && last_runtime_convergence_stats_.stage_ms > 0.0;
+    if (previous_frame_over_threshold) {
+        const std::size_t adaptive_cap = std::max<std::size_t>(1, iteration_cap / 2);
+        if (adaptive_cap < iteration_cap) {
+            ++stats.budget_throttled_count;
+            iteration_cap = adaptive_cap;
+        }
+        stage_budget_ms = (stage_budget_ms > 0.0) ? std::max(0.5, stage_budget_ms * 0.75) : stage_budget_ms;
+        traversal_refresh_budget_ms = (traversal_refresh_budget_ms > 0.0)
+                                          ? std::max(0.0, traversal_refresh_budget_ms * 0.5)
+                                          : traversal_refresh_budget_ms;
+    }
     double cumulative_refresh_ms = 0.0;
     std::size_t iteration = 0;
     for (; iteration < iteration_cap; ++iteration) {
@@ -2535,10 +2574,15 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
 
         const bool traversal_refresh_requested =
             pass_result.needs_traversal_refresh || runtime_convergence_traversal_refresh_pending_;
-        if (traversal_refresh_requested && allow_traversal_refresh_for_frame(frame_id_)) {
+        const bool traversal_allowed_by_interval = allow_traversal_refresh_for_frame(frame_id_);
+        const bool prioritize_runtime_work =
+            previous_frame_over_threshold || runtime_convergence_deferred_refresh_streak_ > 0;
+        const bool defer_offscreen_refresh = prioritize_runtime_work && pass_result.needs_repass;
+        if (traversal_refresh_requested && traversal_allowed_by_interval && !defer_offscreen_refresh) {
             if (traversal_refresh_budget_ms > 0.0 && cumulative_refresh_ms >= traversal_refresh_budget_ms) {
                 runtime_convergence_traversal_refresh_pending_ = true;
                 ++stats.traversal_refresh_deferred_count;
+                ++stats.deferred_due_to_budget_count;
                 stats.traversal_refresh_budget_exceeded = true;
             } else {
                 const Uint64 refresh_begin = SDL_GetPerformanceCounter();
@@ -2554,12 +2598,18 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
                     pass_result.needs_traversal_refresh;
                 if (runtime_convergence_traversal_refresh_pending_) {
                     ++stats.traversal_refresh_deferred_count;
+                    ++stats.deferred_due_to_budget_count;
                     stats.traversal_refresh_budget_exceeded = true;
                 }
+                runtime_convergence_deferred_refresh_streak_ = 0;
             }
         } else if (traversal_refresh_requested) {
             runtime_convergence_traversal_refresh_pending_ = true;
             ++stats.traversal_refresh_deferred_count;
+            if (!traversal_allowed_by_interval || defer_offscreen_refresh) {
+                ++stats.deferred_due_to_budget_count;
+            }
+            ++runtime_convergence_deferred_refresh_streak_;
         }
 
         if (!pass_result.needs_repass) {
@@ -2570,6 +2620,7 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
         if (stage_budget_ms > 0.0) {
             const Uint64 budget_now = SDL_GetPerformanceCounter();
             if (elapsed_ms(stage_begin, budget_now) >= stage_budget_ms) {
+                ++stats.budget_throttled_count;
                 break;
             }
         }
@@ -2577,6 +2628,9 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
     const Uint64 stage_end = SDL_GetPerformanceCounter();
     stats.stage_ms = elapsed_ms(stage_begin, stage_end);
     stats.traversal_refresh_pending = runtime_convergence_traversal_refresh_pending_;
+    if (!stats.traversal_refresh_pending) {
+        runtime_convergence_deferred_refresh_streak_ = 0;
+    }
     last_runtime_convergence_stats_ = stats;
 
     frame_stats.set("assets.runtime_convergence_trace_enabled", vibble_runtime_convergence_trace_enabled());
@@ -2590,6 +2644,10 @@ void Assets::run_runtime_effects_stage(bool include_audio_update) {
                     static_cast<std::uint64_t>(stats.traversal_refresh_deferred_count));
     frame_stats.set("assets.runtime_convergence_traversal_refresh_budget_exceeded",
                     stats.traversal_refresh_budget_exceeded);
+    frame_stats.set("assets.runtime_convergence_budget_throttled_count",
+                    static_cast<std::uint64_t>(stats.budget_throttled_count));
+    frame_stats.set("assets.runtime_convergence_deferred_due_to_budget_count",
+                    static_cast<std::uint64_t>(stats.deferred_due_to_budget_count));
     frame_stats.set("assets.runtime_convergence_traversal_refresh_pending",
                     stats.traversal_refresh_pending);
     frame_stats.set("assets.runtime_convergence_pass_ms", stats.pass_ms);

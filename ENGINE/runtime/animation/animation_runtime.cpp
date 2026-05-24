@@ -196,6 +196,39 @@ int attack_facing_match_score_impl(const std::vector<std::string>& animation_tag
 
 } // namespace
 
+
+
+struct MovementController {
+    static bool consume_replan_attempt_budget(AnimationRuntime& runtime, std::uint32_t frame_id) {
+        if (runtime.movement_state_.replan_budget_frame_id != frame_id) {
+            runtime.movement_state_.replan_budget_frame_id = frame_id;
+            runtime.movement_state_.replan_attempts_this_frame = 0;
+        }
+        if (runtime.movement_state_.replan_attempts_this_frame >= AnimationRuntime::kMaxReplanAttemptsPerFrame) {
+            return false;
+        }
+        ++runtime.movement_state_.replan_attempts_this_frame;
+        return true;
+    }
+};
+
+struct PlaybackController {
+    static void clear_reverse(AnimationRuntime& runtime) {
+        runtime.playback_state_.reverse_mode = AnimationRuntime::ReversePlaybackMode::None;
+        runtime.playback_state_.reverse_animation_id.clear();
+    }
+};
+
+struct CombatController {
+    static void clear_commitment(AnimationRuntime& runtime) {
+        runtime.combat_state_.committed_attack_target_asset_id = std::nullopt;
+        runtime.combat_state_.committed_attack_animation_id.clear();
+        runtime.combat_state_.committed_attack_last_dispatched_frame_index = -1;
+        runtime.combat_state_.committed_attack_last_payload_id.clear();
+        runtime.combat_state_.attack_recovery_pending = false;
+        runtime.combat_state_.attack_recovery_animation_id.clear();
+    }
+};
 namespace animation_runtime::test_hooks {
 
 int attack_facing_match_score(const std::vector<std::string>& animation_tags,
@@ -206,11 +239,11 @@ int attack_facing_match_score(const std::vector<std::string>& animation_tags,
 }
 
 void force_committed_attack_target(AnimationRuntime& runtime, std::string target_asset_id) {
-    runtime.committed_attack_target_asset_id_ = std::move(target_asset_id);
-    runtime.committed_attack_animation_id_ =
+    runtime.combat_state_.committed_attack_target_asset_id = std::move(target_asset_id);
+    runtime.combat_state_.committed_attack_animation_id =
         runtime.self_ ? runtime.self_->current_animation : std::string{};
-    runtime.committed_attack_last_dispatched_frame_index_ = -1;
-    runtime.committed_attack_last_payload_id_.clear();
+    runtime.combat_state_.committed_attack_last_dispatched_frame_index = -1;
+    runtime.combat_state_.committed_attack_last_payload_id.clear();
 }
 
 }
@@ -221,15 +254,7 @@ AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
 bool AnimationRuntime::consume_replan_attempt_budget() {
     const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
     const std::uint32_t frame_id = assets ? assets->frame_id() : 0;
-    if (replan_budget_frame_id_ != frame_id) {
-        replan_budget_frame_id_ = frame_id;
-        replan_attempts_this_frame_ = 0;
-    }
-    if (replan_attempts_this_frame_ >= kMaxReplanAttemptsPerFrame) {
-        return false;
-    }
-    ++replan_attempts_this_frame_;
-    return true;
+    return MovementController::consume_replan_attempt_budget(*this, frame_id);
 }
 
 std::uint32_t AnimationRuntime::resolve_frame_id_for_cooldown() {
@@ -361,7 +386,7 @@ std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
 }
 
 bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
-    const bool committed_cycle_boundary = current_animation_is_attack() && committed_attack_target_asset_id_.has_value();
+    const bool committed_cycle_boundary = current_animation_is_attack() && combat_state_.committed_attack_target_asset_id.has_value();
     if (committed_cycle_boundary) {
         clear_attack_commitment();
     }
@@ -377,8 +402,8 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     }
     const std::uint32_t frame_id = resolve_frame_id_for_cooldown();
     if (!committed_cycle_boundary &&
-        next_attack_cycle_eval_frame_ != 0 &&
-        frame_id < next_attack_cycle_eval_frame_) {
+        combat_state_.next_attack_cycle_eval_frame != 0 &&
+        frame_id < combat_state_.next_attack_cycle_eval_frame) {
         return false;
     }
 
@@ -471,12 +496,12 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         }
         return false;
     }
-    committed_attack_target_asset_id_ = best.target_asset_id;
-    committed_attack_animation_id_ = best.animation_id;
-    committed_attack_last_dispatched_frame_index_ = -1;
-    committed_attack_last_payload_id_.clear();
+    combat_state_.committed_attack_target_asset_id = best.target_asset_id;
+    combat_state_.committed_attack_animation_id = best.animation_id;
+    combat_state_.committed_attack_last_dispatched_frame_index = -1;
+    combat_state_.committed_attack_last_payload_id.clear();
     switch_to(best.animation_id, 0);
-    next_attack_cycle_eval_frame_ = frame_id + kAttackCycleDebounceFrames;
+    combat_state_.next_attack_cycle_eval_frame = frame_id + kAttackCycleDebounceFrames;
     return true;
 }
 
@@ -498,24 +523,19 @@ bool AnimationRuntime::auto_attack_commitment_active() const {
     if (!self_ || !self_->info || !current_animation_is_attack()) {
         return false;
     }
-    if (committed_attack_target_asset_id_.has_value()) {
+    if (combat_state_.committed_attack_target_asset_id.has_value()) {
         return true;
     }
-    return !committed_attack_animation_id_.empty() &&
-           committed_attack_animation_id_ == self_->current_animation;
+    return !combat_state_.committed_attack_animation_id.empty() &&
+           combat_state_.committed_attack_animation_id == self_->current_animation;
 }
 
 void AnimationRuntime::clear_attack_commitment() {
-    committed_attack_target_asset_id_ = std::nullopt;
-    committed_attack_animation_id_.clear();
-    committed_attack_last_dispatched_frame_index_ = -1;
-    committed_attack_last_payload_id_.clear();
-    attack_recovery_pending_ = false;
-    attack_recovery_animation_id_.clear();
+    CombatController::clear_commitment(*this);
 }
 
 bool AnimationRuntime::attack_recovery_sequence_active() const {
-    return attack_recovery_pending_ && !attack_recovery_animation_id_.empty();
+    return combat_state_.attack_recovery_pending && !combat_state_.attack_recovery_animation_id.empty();
 }
 
 void AnimationRuntime::dispatch_active_attack_payload() {
@@ -529,11 +549,11 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     if (!current_animation_is_attack()) {
         return;
     }
-    if (!committed_attack_target_asset_id_.has_value()) {
+    if (!combat_state_.committed_attack_target_asset_id.has_value()) {
         return;
     }
 
-    Asset* target = resolve_asset_by_stable_id(*committed_attack_target_asset_id_);
+    Asset* target = resolve_asset_by_stable_id(*combat_state_.committed_attack_target_asset_id);
     if (!target || !target->active || target->dead || !target->isHitboxEnabled()) {
         clear_attack_commitment();
         return;
@@ -545,14 +565,14 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     }
 
     const animation_update::Attack& attack = *attack_opt;
-    if (attack.source_frame_index == committed_attack_last_dispatched_frame_index_ &&
-        attack.attack_payload_id == committed_attack_last_payload_id_) {
+    if (attack.source_frame_index == combat_state_.committed_attack_last_dispatched_frame_index &&
+        attack.attack_payload_id == combat_state_.committed_attack_last_payload_id) {
         return;
     }
 
     target->send_attack(attack);
-    committed_attack_last_dispatched_frame_index_ = attack.source_frame_index;
-    committed_attack_last_payload_id_ = attack.attack_payload_id;
+    combat_state_.committed_attack_last_dispatched_frame_index = attack.source_frame_index;
+    combat_state_.committed_attack_last_payload_id = attack.attack_payload_id;
 }
 
 void AnimationRuntime::refresh_runtime_frame_geometry() {
@@ -621,15 +641,14 @@ void AnimationRuntime::set_debug_enabled(bool enabled) {
 }
 
 void AnimationRuntime::clear_reverse_playback_state() {
-    reverse_playback_mode_ = ReversePlaybackMode::None;
-    reverse_playback_animation_id_.clear();
+    PlaybackController::clear_reverse(*this);
 }
 
 bool AnimationRuntime::reverse_mode_applies_to_current_animation() const {
-    return reverse_playback_mode_ != ReversePlaybackMode::None &&
-           !reverse_playback_animation_id_.empty() &&
+    return playback_state_.reverse_mode != ReversePlaybackMode::None &&
+           !playback_state_.reverse_animation_id.empty() &&
            self_ &&
-           self_->current_animation == reverse_playback_animation_id_;
+           self_->current_animation == playback_state_.reverse_animation_id;
 }
 
 void AnimationRuntime::activate_reverse_playback(ReversePlaybackMode mode) {
@@ -650,9 +669,9 @@ void AnimationRuntime::activate_reverse_playback(ReversePlaybackMode mode) {
         return;
     }
 
-    reverse_playback_mode_ = mode;
-    reverse_playback_animation_id_ = self_->current_animation;
-    lock_on_end_active_ = false;
+    playback_state_.reverse_mode = mode;
+    playback_state_.reverse_animation_id = self_->current_animation;
+    playback_state_.lock_on_end_active = false;
     self_->static_frame = false;
     self_->mark_composite_dirty();
     self_->mark_anchors_dirty();
@@ -1084,7 +1103,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         (auto_attack_commitment_active() || committed_attack_execution_active());
     const bool static_blocked = self_->static_frame && !reverse_command_active && !attack_follow_through;
     const bool locked_blocked = anim->locked && !reverse_command_active && !attack_follow_through;
-    bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || lock_on_end_active_);
+    bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || playback_state_.lock_on_end_active);
     bool has_overriding_plan = false;
     if (planner_iface_) {
         if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D) {
@@ -1096,7 +1115,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         }
     }
     if (should_skip && !has_overriding_plan) {
-        self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || lock_on_end_active_;
+        self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || playback_state_.lock_on_end_active;
         return report;
     }
     if (is_player) {
@@ -1127,7 +1146,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                 continue;
             }
 
-            if (reverse_playback_mode_ == ReversePlaybackMode::ReverseUntilStopCurrentAnimation) {
+            if (playback_state_.reverse_mode == ReversePlaybackMode::ReverseUntilStopCurrentAnimation) {
                 frame = last_frame_for(*anim, path_index);
                 if (!frame) {
                     report.ok = false;
@@ -1137,7 +1156,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                 continue;
             }
 
-            const ReversePlaybackMode mode_at_boundary = reverse_playback_mode_;
+            const ReversePlaybackMode mode_at_boundary = playback_state_.reverse_mode;
             clear_reverse_playback_state();
             if (mode_at_boundary == ReversePlaybackMode::ReverseToDefaultAtStart) {
                 switch_to(animation_update::detail::kDefaultAnimation,
@@ -1171,7 +1190,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         switch (directive) {
         case Animation::OnEndDirective::Loop: {
             if (current_animation_is_attack() &&
-                committed_attack_target_asset_id_.has_value()) {
+                combat_state_.committed_attack_target_asset_id.has_value()) {
                 clear_attack_commitment();
                 switch_to(animation_update::detail::kDefaultAnimation,
                           path_index_for(animation_update::detail::kDefaultAnimation));
@@ -1206,12 +1225,12 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
             report.ok = false;
             return report;
         case Animation::OnEndDirective::Lock:
-            lock_on_end_active_ = true;
+            playback_state_.lock_on_end_active = true;
             self_->static_frame = true;
             return report;
         case Animation::OnEndDirective::Reverse:
             activate_reverse_playback(ReversePlaybackMode::ReverseToDefaultAtStart);
-            lock_on_end_active_ = false;
+            playback_state_.lock_on_end_active = false;
             self_->static_frame = false;
             break;
         case Animation::OnEndDirective::Animation: {
@@ -1220,8 +1239,8 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                                               : anim->on_end_animation;
             const std::string resolved = resolve_animation(*self_, requested);
             if (current_animation_is_attack()) {
-                attack_recovery_pending_ = true;
-                attack_recovery_animation_id_ = resolved;
+                combat_state_.attack_recovery_pending = true;
+                combat_state_.attack_recovery_animation_id = resolved;
             }
             switch_to(resolved, path_index_for(requested));
             frame = self_->current_frame;
@@ -1243,7 +1262,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         default: {
             const bool completed_committed_attack =
                 current_animation_is_attack() &&
-                committed_attack_target_asset_id_.has_value();
+                combat_state_.committed_attack_target_asset_id.has_value();
             switch_to(animation_update::detail::kDefaultAnimation,
                       path_index_for(animation_update::detail::kDefaultAnimation));
             if (completed_committed_attack && self_) {
@@ -1284,7 +1303,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     }
 
     clear_reverse_playback_state();
-    lock_on_end_active_ = false;
+    playback_state_.lock_on_end_active = false;
 
     auto it = self_->info->animations.find(anim_id);
     if (it == self_->info->animations.end()) {
@@ -1304,19 +1323,19 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     AnimationFrame* new_frame = anim.get_first_frame(path_index);
     self_->current_animation = it->first;
     self_->current_frame     = new_frame;
-    if (attack_recovery_pending_ &&
-        self_->current_animation != attack_recovery_animation_id_) {
-        attack_recovery_pending_ = false;
-        attack_recovery_animation_id_.clear();
+    if (combat_state_.attack_recovery_pending &&
+        self_->current_animation != combat_state_.attack_recovery_animation_id) {
+        combat_state_.attack_recovery_pending = false;
+        combat_state_.attack_recovery_animation_id.clear();
     }
     const bool switched_to_attack =
         animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
     if (!switched_to_attack) {
         clear_attack_commitment();
-    } else if (committed_attack_animation_id_ != self_->current_animation) {
-        committed_attack_animation_id_ = self_->current_animation;
-        committed_attack_last_dispatched_frame_index_ = -1;
-        committed_attack_last_payload_id_.clear();
+    } else if (combat_state_.committed_attack_animation_id != self_->current_animation) {
+        combat_state_.committed_attack_animation_id = self_->current_animation;
+        combat_state_.committed_attack_last_dispatched_frame_index = -1;
+        combat_state_.committed_attack_last_payload_id.clear();
     }
     {
         const bool is_player = self_->info && self_->info->type == asset_types::player;

@@ -1645,7 +1645,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         out_data.depth_layers.size(),
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
     out_data.debug_overlay_draw_count = 0;
-    out_data.has_valid_composite_source = true;
 
     render_diagnostics::set_pass_packet_counts(out_data.floor_draw_count, out_data.xy_sprite_draw_count);
     render_diagnostics::set_active_depth_layer_count(out_data.active_depth_layer_count);
@@ -1674,6 +1673,10 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         out_data.xy_sprite_draw_count == 0 &&
         out_data.active_asset_count > 0 &&
         (out_data.selected_asset_count > 0 || out_data.visible_traversal_count > 0);
+    const bool empty_scene_submission =
+        out_data.floor_draw_count == 0 &&
+        out_data.xy_sprite_draw_count == 0;
+    out_data.has_valid_composite_source = !out_data.suspected_incomplete_scene && !empty_scene_submission;
 
     return true;
 }
@@ -1974,16 +1977,19 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         last_complete_scene_frame_data_.has_value() &&
         last_complete_scene_width_ == frame_data.target_width &&
         last_complete_scene_height_ == frame_data.target_height;
+    const bool empty_scene_submission =
+        frame_data.floor_draw_count == 0 &&
+        frame_data.xy_sprite_draw_count == 0;
+    const bool invalid_gameplay_submission =
+        frame_data.suspected_incomplete_scene || empty_scene_submission;
+    constexpr std::uint32_t kMaxGameplayRecoveryHolds = 1;
     const bool hold_incomplete_scene_frame =
-        frame_data.suspected_incomplete_scene &&
+        invalid_gameplay_submission &&
         can_hold_previous_scene &&
-        !camera_motion_active &&
-        hold_after_target_resize_frames_remaining_ > 0 &&
-        consecutive_held_incomplete_scene_frames_ == 0;
+        consecutive_held_incomplete_scene_frames_ < kMaxGameplayRecoveryHolds;
     const bool hold_zero_sprite_scene_frame = false;
     const bool hold_empty_scene_frame =
-        frame_data.floor_draw_count == 0 &&
-        frame_data.xy_sprite_draw_count == 0 &&
+        empty_scene_submission &&
         can_hold_previous_scene &&
         !camera_motion_active &&
         hold_empty_scene_frames_remaining_ > 0;
@@ -1998,7 +2004,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         held_frame_data.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
         frame_to_render = &held_frame_data;
         if (hold_incomplete_scene_frame) {
-            held_scene_reason = "incomplete_scene_target_recovery";
+            held_scene_reason = frame_data.suspected_incomplete_scene
+                ? "incomplete_scene_gameplay_recovery"
+                : "empty_scene_gameplay_recovery";
             hold_after_target_resize_frames_remaining_ = 0;
             ++consecutive_held_incomplete_scene_frames_;
         } else if (hold_zero_sprite_scene_frame) {
@@ -2390,7 +2398,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     if (!hold_incomplete_scene_frame &&
         !hold_zero_sprite_scene_frame &&
         !hold_empty_scene_frame &&
-        (frame_data.xy_sprite_draw_count > 0 || frame_data.floor_draw_count > 0)) {
+        frame_data.has_valid_composite_source) {
         last_complete_scene_frame_data_ = frame_data;
         last_complete_scene_width_ = frame_data.target_width;
         last_complete_scene_height_ = frame_data.target_height;

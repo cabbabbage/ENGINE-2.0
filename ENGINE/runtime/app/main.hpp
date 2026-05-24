@@ -58,6 +58,7 @@ protected:
     int            windowed_height_  = 720;
     bool           render_diagnostics_enabled_ = false;
     std::uint64_t  frame_diagnostics_counter_ = 0;
+    std::uint64_t  last_render_stats_frame_index_ = 0;
     bool           startup_abort_requested_ = false;
 };
 

@@ -2800,6 +2800,13 @@ void Assets::update(const Input& input)
     frame_stats.set("dev.layout_ms", 0.0);
     frame_stats.set("dev.save_ms", 0.0);
     frame_stats.set("dev.layout_dirty", false);
+    frame_stats.set("asset_runtime_animation_load.attempted", false);
+    frame_stats.set("asset_runtime_animation_load.asset_name", "");
+    frame_stats.set("asset_runtime_animation_load.animation_name", "");
+    frame_stats.set("asset_runtime_animation_load.ms", 0.0);
+    frame_stats.set("asset_runtime_animation_load.loaded", false);
+    frame_stats.set("asset_runtime_animation_load.deferred", false);
+    frame_stats.set("asset_runtime_animation_load.fallback_used", false);
     frame_stats.set("dev.active_assets_generation", dev_active_state_version_);
     frame_stats.set("dev.filtered_assets_generation", dev_active_state_version_);
     asset_update_phase_stats_ = AssetUpdatePhaseFrameStats{};
@@ -2953,6 +2960,13 @@ void Assets::update(const Input& input)
     frame_stats.set("dynamic_spawn.movement_throttling_applied", dynamic_diag.movement_throttling_applied);
     frame_stats.set("render.active_depth_layer_count", stats.active_depth_layer_count);
     frame_stats.set("render.draw_submission_ms", stats.draw_submission_cpu_ms);
+    frame_stats.set("render.submit_unaccounted_ms", stats.draw_submission_unaccounted_ms);
+    frame_stats.set("render.target_sync_ms", stats.render_target_sync_ms);
+    frame_stats.set("render.first_ensure_targets_ms", stats.first_render_target_ensure_ms);
+    frame_stats.set("render.final_ensure_targets_ms", stats.final_render_target_ensure_ms);
+    frame_stats.set("render.sdl_render_target_ms", stats.sdl_render_target_ms);
+    frame_stats.set("render.sdl_render_texture_ms", stats.sdl_render_texture_ms);
+    frame_stats.set("render.sdl_render_geometry_ms", stats.sdl_render_geometry_ms);
     frame_stats.set("render.ui_overlay_prepare_ms", stats.ui_overlay_prepare_ms);
     frame_stats.set("render.ui_overlay_active", stats.ui_overlay_active);
     frame_stats.set("render.ui_overlay_redrawn", stats.ui_overlay_redrawn);

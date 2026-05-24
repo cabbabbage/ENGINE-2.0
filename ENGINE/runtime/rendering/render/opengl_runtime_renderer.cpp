@@ -1872,6 +1872,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         return static_cast<double>(end - begin) * 1000.0 / static_cast<double>(perf_frequency);
     };
     double frame_build_ms = 0.0;
+    double render_target_sync_ms = 0.0;
+    double first_ensure_targets_ms = 0.0;
     double ensure_targets_ms = 0.0;
     double floor_pass_ms = 0.0;
     double xy_pass_ms = 0.0;
@@ -1888,12 +1890,14 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     }
 
     std::string size_error;
+    const std::uint64_t target_sync_begin = SDL_GetPerformanceCounter();
     if (!render_target_manager_.synchronize_to_output(screen_width_, screen_height_, size_error)) {
         out_error = size_error;
         render_diagnostics::set_submit_result(false);
         render_diagnostics::end_frame();
         return false;
     }
+    render_target_sync_ms = elapsed_ms(target_sync_begin, SDL_GetPerformanceCounter());
 
     const std::optional<SDL_Point> effective_target = render_target_manager_.current_size();
     if (!effective_target.has_value() || effective_target->x <= 0 || effective_target->y <= 0) {
@@ -1906,11 +1910,13 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     GpuSceneFrameData target_size_only{};
     target_size_only.target_width = static_cast<std::uint32_t>(effective_target->x);
     target_size_only.target_height = static_cast<std::uint32_t>(effective_target->y);
+    const std::uint64_t first_ensure_begin = SDL_GetPerformanceCounter();
     if (!ensure_render_targets(target_size_only, out_error)) {
         render_diagnostics::set_submit_result(false);
         render_diagnostics::end_frame();
         return false;
     }
+    first_ensure_targets_ms = elapsed_ms(first_ensure_begin, SDL_GetPerformanceCounter());
 
     if (last_complete_scene_frame_data_.has_value() &&
         (last_complete_scene_width_ != static_cast<std::uint32_t>(effective_target->x) ||
@@ -2335,14 +2341,27 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
 
     const double submit_ms = elapsed_ms(frame_submit_begin, SDL_GetPerformanceCounter());
     const double pipeline_bind_ms = floor_pass_ms + xy_pass_ms + dof_pass_ms + composite_pass_ms + ui_overlay_ms + backbuffer_ms;
+    const double accounted_submit_ms =
+        render_target_sync_ms +
+        first_ensure_targets_ms +
+        frame_build_ms +
+        ensure_targets_ms +
+        pipeline_bind_ms;
+    const double submit_unaccounted_ms = std::max(0.0, submit_ms - accounted_submit_ms);
     render_diagnostics::add_draw_submission_pipeline_bind_ms(
         pipeline_bind_ms,
         render_diagnostics::current_frame_stats().render_target_switch_count +
             static_cast<std::uint32_t>(render_diagnostics::current_frame_stats().gpu_pipeline_cache_misses));
     render_diagnostics::add_draw_submission_submit_present_handoff_ms(backbuffer_ms, 1);
     render_diagnostics::add_draw_submission_ms(submit_ms);
+    render_diagnostics::set_draw_submission_breakdown(submit_unaccounted_ms,
+                                                      render_target_sync_ms,
+                                                      first_ensure_targets_ms,
+                                                      ensure_targets_ms);
     std::ostringstream stage_summary;
-    stage_summary << "frame_build=" << frame_build_ms
+    stage_summary << "target_sync=" << render_target_sync_ms
+                  << " first_ensure_targets=" << first_ensure_targets_ms
+                  << " frame_build=" << frame_build_ms
                   << " ensure_targets=" << ensure_targets_ms
                   << " floor=" << floor_pass_ms
                   << " xy=" << xy_pass_ms
@@ -2353,7 +2372,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " ui_prepare=" << ui_overlay_prepare_ms
                   << " ui_copy=" << ui_overlay_ms
                   << " backbuffer=" << backbuffer_ms
-                  << " submit=" << submit_ms;
+                  << " submit=" << submit_ms
+                  << " submit_unaccounted=" << submit_unaccounted_ms;
     render_diagnostics::set_render_stage_timings(stage_summary.str());
     render_diagnostics::set_submit_result(true);
 

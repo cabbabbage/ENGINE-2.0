@@ -695,6 +695,9 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         }
 
         const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+        const bool render_diagnostics_stale =
+            stats.frame_index == 0 || stats.frame_index == last_render_stats_frame_index_;
+        last_render_stats_frame_index_ = stats.frame_index;
         const std::string backend_name = !stats.backend_name.empty()
             ? stats.backend_name
             : (renderer_ ? renderer_->renderer_name() : std::string("unknown"));
@@ -703,6 +706,7 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
             : (renderer_ ? renderer_->present_mode_name() : std::string("unknown"));
         frame_stats.set("render.loop_label", loop_label ? loop_label : "loop");
         frame_stats.set("render.diagnostics_frame", frame_diagnostics_counter_);
+        frame_stats.set("render.diagnostics_stale", render_diagnostics_stale);
         frame_stats.set("render.window_w", window_w);
         frame_stats.set("render.window_h", window_h);
         frame_stats.set("render.window_px_w", window_px_w);
@@ -739,6 +743,13 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         frame_stats.set("render.draw_submission_resource_create_ms", stats.draw_submission_resource_create_ms);
         frame_stats.set("render.draw_submission_pipeline_bind_ms", stats.draw_submission_pipeline_bind_ms);
         frame_stats.set("render.draw_submission_submit_handoff_ms", stats.draw_submission_submit_present_handoff_ms);
+        frame_stats.set("render.submit_unaccounted_ms", stats.draw_submission_unaccounted_ms);
+        frame_stats.set("render.target_sync_ms", stats.render_target_sync_ms);
+        frame_stats.set("render.first_ensure_targets_ms", stats.first_render_target_ensure_ms);
+        frame_stats.set("render.final_ensure_targets_ms", stats.final_render_target_ensure_ms);
+        frame_stats.set("render.sdl_render_target_ms", stats.sdl_render_target_ms);
+        frame_stats.set("render.sdl_render_texture_ms", stats.sdl_render_texture_ms);
+        frame_stats.set("render.sdl_render_geometry_ms", stats.sdl_render_geometry_ms);
         frame_stats.set("render.draw_submission_packet_build_count", stats.draw_submission_packet_build_count);
         frame_stats.set("render.draw_submission_resource_create_count", stats.draw_submission_resource_create_count);
         frame_stats.set("render.draw_submission_pipeline_bind_count", stats.draw_submission_pipeline_bind_count);

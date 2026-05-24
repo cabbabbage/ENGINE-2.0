@@ -107,6 +107,13 @@ void begin_frame() {
     g_frame_stats.draw_submission_resource_create_ms = 0.0;
     g_frame_stats.draw_submission_pipeline_bind_ms = 0.0;
     g_frame_stats.draw_submission_submit_present_handoff_ms = 0.0;
+    g_frame_stats.draw_submission_unaccounted_ms = 0.0;
+    g_frame_stats.render_target_sync_ms = 0.0;
+    g_frame_stats.first_render_target_ensure_ms = 0.0;
+    g_frame_stats.final_render_target_ensure_ms = 0.0;
+    g_frame_stats.sdl_render_target_ms = 0.0;
+    g_frame_stats.sdl_render_texture_ms = 0.0;
+    g_frame_stats.sdl_render_geometry_ms = 0.0;
     g_frame_stats.draw_submission_packet_build_count = 0;
     g_frame_stats.draw_submission_resource_create_count = 0;
     g_frame_stats.draw_submission_pipeline_bind_count = 0;
@@ -251,6 +258,16 @@ void add_draw_submission_pipeline_bind_ms(double elapsed_ms_value, std::uint32_t
 void add_draw_submission_submit_present_handoff_ms(double elapsed_ms_value, std::uint32_t handoff_count) {
     g_frame_stats.draw_submission_submit_present_handoff_ms += std::max(0.0, elapsed_ms_value);
     g_frame_stats.draw_submission_submit_handoff_count += handoff_count;
+}
+
+void set_draw_submission_breakdown(double unaccounted_ms,
+                                   double target_sync_ms,
+                                   double first_ensure_ms,
+                                   double final_ensure_ms) {
+    g_frame_stats.draw_submission_unaccounted_ms = std::max(0.0, unaccounted_ms);
+    g_frame_stats.render_target_sync_ms = std::max(0.0, target_sync_ms);
+    g_frame_stats.first_render_target_ensure_ms = std::max(0.0, first_ensure_ms);
+    g_frame_stats.final_render_target_ensure_ms = std::max(0.0, final_ensure_ms);
 }
 
 void set_ui_overlay_stats(bool active, bool redrawn, double prepare_ms) {
@@ -464,7 +481,9 @@ bool set_render_target(SDL_Renderer* renderer, SDL_Texture* texture) {
         ++g_frame_stats.render_target_switch_count;
         g_last_render_target = texture;
     }
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
     const bool ok = SDL_SetRenderTarget(renderer, texture);
+    g_frame_stats.sdl_render_target_ms += elapsed_ms(begin, SDL_GetPerformanceCounter());
     if (ok) {
         add_render_pass();
     }
@@ -475,7 +494,9 @@ bool render_texture(SDL_Renderer* renderer,
                     SDL_Texture* texture,
                     const SDL_FRect* srcrect,
                     const SDL_FRect* dstrect) {
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
     const bool ok = SDL_RenderTexture(renderer, texture, srcrect, dstrect);
+    g_frame_stats.sdl_render_texture_ms += elapsed_ms(begin, SDL_GetPerformanceCounter());
     if (ok) {
         ++g_frame_stats.sdl_renderer_draw_call_count;
         add_draw_call_count();
@@ -489,7 +510,9 @@ bool render_geometry(SDL_Renderer* renderer,
                      int num_vertices,
                      const int* indices,
                      int num_indices) {
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
     const bool ok = SDL_RenderGeometry(renderer, texture, vertices, num_vertices, indices, num_indices);
+    g_frame_stats.sdl_render_geometry_ms += elapsed_ms(begin, SDL_GetPerformanceCounter());
     if (ok) {
         ++g_frame_stats.sdl_renderer_draw_call_count;
         add_draw_call_count();

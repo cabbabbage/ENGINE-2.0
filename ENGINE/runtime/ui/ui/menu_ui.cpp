@@ -9,6 +9,8 @@
 #include "utils/input.hpp"
 #include "utils/log.hpp"
 #include "utils/frame_stats_recorder.hpp"
+#include "app/frame_pacing.hpp"
+#include "rendering/render/render_diagnostics.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -154,6 +156,8 @@ void MenuUI::game_loop() {
         std::uint64_t runtime_frame_counter = 0;
         const int auto_exit_frame_limit =
                 env_int_clamped("VIBBLE_RUNTIME_FRAME_LIMIT", 0, 0, 1000000);
+        const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
+        const double target_counts = app::frame_pacing::target_frame_counts(perf_frequency);
         if (auto_exit_frame_limit > 0) {
                 vibble::log::info("[MenuUI] Runtime frame limit: " + std::to_string(auto_exit_frame_limit));
         }
@@ -234,16 +238,25 @@ void MenuUI::game_loop() {
                 } runtime_frame_scope(frame_stats);
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 int event_count = 0;
-                frame_stats.mark_stage("idle_wait", true);
+                const bool gameplay_active_before_events = !menu_active_ && game_assets_ && input_;
                 const Uint64 event_begin = SDL_GetPerformanceCounter();
-                if (SDL_WaitEventTimeout(&e, EVENT_WAIT_TIMEOUT_MS)) {
-                        frame_stats.mark_stage("event_wait_returned");
-                        ++event_count;
-                        process_event(e);
+                if (gameplay_active_before_events) {
                         frame_stats.mark_stage("event_poll_begin");
                         while (SDL_PollEvent(&e)) {
                                 ++event_count;
                                 process_event(e);
+                        }
+                } else {
+                        frame_stats.mark_stage("idle_wait", true);
+                        if (SDL_WaitEventTimeout(&e, EVENT_WAIT_TIMEOUT_MS)) {
+                                frame_stats.mark_stage("event_wait_returned");
+                                ++event_count;
+                                process_event(e);
+                                frame_stats.mark_stage("event_poll_begin");
+                                while (SDL_PollEvent(&e)) {
+                                        ++event_count;
+                                        process_event(e);
+                                }
                         }
                 }
                 const Uint64 event_end = SDL_GetPerformanceCounter();
@@ -263,6 +276,7 @@ void MenuUI::game_loop() {
                 frame_stats.mark_stage("sync_output_end");
 
                 const bool should_update = !menu_active_ && game_assets_ && input_;
+                frame_stats.set("main.gameplay_active", should_update);
                 if (should_update) {
                         if (codex_playtest_input_enabled()) {
                                 frame_stats.mark_stage("codex_playtest_input_begin");
@@ -293,10 +307,27 @@ void MenuUI::game_loop() {
                         frame_stats.mark_stage("menu_action_end");
                 }
 
+                if (!should_update) {
+                        render_diagnostics::begin_frame();
+                        render_diagnostics::set_renderer_runtime_info(
+                                "menu_or_idle",
+                                renderer_ ? renderer_->renderer_name() : "unknown",
+                                renderer_ ? renderer_->present_mode_name() : "unknown");
+                        render_diagnostics::set_render_stage_timings(menu_active_ ? "menu_only" : "idle_no_gameplay_update");
+                        render_diagnostics::set_submit_result(false);
+                        render_diagnostics::end_frame();
+                }
+
                 if (renderer_) {
                         frame_stats.mark_stage("present_begin");
+                        const Uint64 present_begin = SDL_GetPerformanceCounter();
                         renderer_->present();
+                        frame_stats.set("main.present_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(present_begin,
+                                                                                      SDL_GetPerformanceCounter()));
                         frame_stats.mark_stage("present_end");
+                } else {
+                        frame_stats.set("main.present_ms", 0.0);
                 }
                 frame_stats.mark_stage("render_diagnostics_begin");
                 log_render_diagnostics(renderer, "MenuUI");
@@ -310,6 +341,29 @@ void MenuUI::game_loop() {
                                         runtime_stats::FrameStatsRecorder::elapsed_ms(input_begin,
                                                                                       SDL_GetPerformanceCounter()));
                         frame_stats.mark_stage("input_update_end");
+                }
+
+                const double remaining_counts =
+                        app::frame_pacing::remaining_frame_counts(frame_begin,
+                                                                  target_counts,
+                                                                  perf_frequency);
+                const bool use_end_idle_pacing = should_update && remaining_counts > 0.0;
+                frame_stats.set("main.idle_wait_used", use_end_idle_pacing);
+                frame_stats.set("main.idle_pacing_requested_ms",
+                                use_end_idle_pacing
+                                        ? (remaining_counts * 1000.0) / perf_frequency
+                                        : 0.0);
+                if (use_end_idle_pacing) {
+                        frame_stats.mark_stage("frame_pacing_begin");
+                        const Uint64 idle_begin = SDL_GetPerformanceCounter();
+                        app::frame_pacing::delay_from_remaining_counts(remaining_counts,
+                                                                       perf_frequency);
+                        frame_stats.set("main.idle_pacing_delay_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(idle_begin,
+                                                                                      SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("frame_pacing_end");
+                } else {
+                        frame_stats.set("main.idle_pacing_delay_ms", 0.0);
                 }
                 frame_stats.set("main.menu_active", menu_active_);
                 if (auto_exit_frame_limit > 0 &&

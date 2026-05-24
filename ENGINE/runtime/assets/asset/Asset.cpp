@@ -34,6 +34,7 @@
 #include <exception>
 #include <cassert>
 #include <new>
+#include <chrono>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -1198,9 +1199,43 @@ void Asset::set_current_animation(const std::string& name)
 
 	auto it = info->animations.find(name);
         if (it == info->animations.end() && assets_) {
-                if (SDL_Renderer* renderer = assets_->renderer()) {
-                        info->loadAnimations(renderer, true);
-                        it = info->animations.find(name);
+                auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+                frame_stats.set("asset_runtime_animation_load.attempted", true);
+                frame_stats.set("asset_runtime_animation_load.asset_name", info ? info->name : std::string{});
+                frame_stats.set("asset_runtime_animation_load.animation_name", name);
+                frame_stats.set("asset_runtime_animation_load.loaded", false);
+                frame_stats.set("asset_runtime_animation_load.fallback_used", true);
+                frame_stats.set("asset_runtime_animation_load.ms", 0.0);
+
+                const bool allow_editor_sync_load = assets_->is_dev_mode();
+                if (allow_editor_sync_load) {
+                        if (SDL_Renderer* renderer = assets_->renderer()) {
+                                const auto load_begin = std::chrono::steady_clock::now();
+                                info->loadAnimations(renderer, true);
+                                const auto load_end = std::chrono::steady_clock::now();
+                                const double load_ms =
+                                    static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count());
+                                it = info->animations.find(name);
+                                frame_stats.set("asset_runtime_animation_load.ms", load_ms);
+                                frame_stats.set("asset_runtime_animation_load.loaded", it != info->animations.end());
+                                frame_stats.set("asset_runtime_animation_load.deferred", false);
+                        }
+                } else {
+                        frame_stats.set("asset_runtime_animation_load.deferred", true);
+                        static std::mutex missing_animation_log_mutex;
+                        static std::unordered_set<std::string> missing_animation_log_keys;
+                        const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                        const std::string key = asset_name + "\n" + name;
+                        bool should_log = false;
+                        {
+                                std::lock_guard<std::mutex> lock(missing_animation_log_mutex);
+                                should_log = missing_animation_log_keys.insert(key).second;
+                        }
+                        if (should_log) {
+                                vibble::log::warn("[Asset] Deferred missing runtime animation load in normal mode: asset='" +
+                                                  asset_name + "' animation='" + name +
+                                                  "'. Keeping current/default frame to avoid a gameplay stall.");
+                        }
                 }
         }
 	if (it != info->animations.end()) {

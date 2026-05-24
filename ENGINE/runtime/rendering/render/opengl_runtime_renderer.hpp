@@ -162,6 +162,8 @@ private:
     std::uint32_t last_complete_scene_width_ = 0;
     std::uint32_t last_complete_scene_height_ = 0;
     std::uint32_t consecutive_held_incomplete_scene_frames_ = 0;
+    std::uint32_t hold_after_target_resize_frames_remaining_ = 0;
+    std::uint32_t hold_empty_scene_frames_remaining_ = 1;
     int output_target_width_ = 1;
     int output_target_height_ = 1;
     SDL_Texture* floor_target_ = nullptr;

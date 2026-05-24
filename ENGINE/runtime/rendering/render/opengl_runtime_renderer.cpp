@@ -1918,9 +1918,12 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     }
     first_ensure_targets_ms = elapsed_ms(first_ensure_begin, SDL_GetPerformanceCounter());
 
-    if (last_complete_scene_frame_data_.has_value() &&
+    const bool target_size_changed_since_last_complete =
+        last_complete_scene_frame_data_.has_value() &&
         (last_complete_scene_width_ != static_cast<std::uint32_t>(effective_target->x) ||
-         last_complete_scene_height_ != static_cast<std::uint32_t>(effective_target->y))) {
+         last_complete_scene_height_ != static_cast<std::uint32_t>(effective_target->y));
+    if (target_size_changed_since_last_complete) {
+        hold_after_target_resize_frames_remaining_ = 1;
         last_complete_scene_frame_data_.reset();
         last_complete_scene_width_ = 0;
         last_complete_scene_height_ = 0;
@@ -1966,21 +1969,24 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     }
     const SDL_Color floor_clear_color = resolve_runtime_floor_clear_color();
 
+    const bool camera_motion_active = camera_state_changed;
     const bool can_hold_previous_scene =
         last_complete_scene_frame_data_.has_value() &&
         last_complete_scene_width_ == frame_data.target_width &&
         last_complete_scene_height_ == frame_data.target_height;
     const bool hold_incomplete_scene_frame =
-        frame_data.suspected_incomplete_scene && can_hold_previous_scene;
-    const bool hold_zero_sprite_scene_frame =
-        frame_data.xy_sprite_draw_count == 0 &&
+        frame_data.suspected_incomplete_scene &&
         can_hold_previous_scene &&
-        last_complete_scene_frame_data_.has_value() &&
-        last_complete_scene_frame_data_->xy_sprite_draw_count > 0;
+        !camera_motion_active &&
+        hold_after_target_resize_frames_remaining_ > 0 &&
+        consecutive_held_incomplete_scene_frames_ == 0;
+    const bool hold_zero_sprite_scene_frame = false;
     const bool hold_empty_scene_frame =
         frame_data.floor_draw_count == 0 &&
         frame_data.xy_sprite_draw_count == 0 &&
-        can_hold_previous_scene;
+        can_hold_previous_scene &&
+        !camera_motion_active &&
+        hold_empty_scene_frames_remaining_ > 0;
 
     GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
@@ -1992,14 +1998,18 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         held_frame_data.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
         frame_to_render = &held_frame_data;
         if (hold_incomplete_scene_frame) {
-            held_scene_reason = "incomplete_scene";
+            held_scene_reason = "incomplete_scene_target_recovery";
+            hold_after_target_resize_frames_remaining_ = 0;
+            ++consecutive_held_incomplete_scene_frames_;
         } else if (hold_zero_sprite_scene_frame) {
             held_scene_reason = "zero_sprite_scene";
         } else {
-            held_scene_reason = "empty_scene";
+            held_scene_reason = "empty_scene_startup_safety";
+            if (hold_empty_scene_frames_remaining_ > 0) {
+                --hold_empty_scene_frames_remaining_;
+            }
+            consecutive_held_incomplete_scene_frames_ = 0;
         }
-
-        ++consecutive_held_incomplete_scene_frames_;
     } else {
         consecutive_held_incomplete_scene_frames_ = 0;
     }
@@ -2384,6 +2394,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         last_complete_scene_frame_data_ = frame_data;
         last_complete_scene_width_ = frame_data.target_width;
         last_complete_scene_height_ = frame_data.target_height;
+        hold_after_target_resize_frames_remaining_ = 0;
     }
 
     render_diagnostics::end_frame();

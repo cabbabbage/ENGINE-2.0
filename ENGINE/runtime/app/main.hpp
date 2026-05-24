@@ -31,6 +31,19 @@ class MainApp {
     virtual void setup();
     SDL_Renderer* raw_renderer() const;
 protected:
+    struct FramePhaseState {
+        bool quit_requested = false;
+        bool resize_or_scale_seen = false;
+        bool event_budget_hit_count = false;
+        bool event_budget_hit_time = false;
+        int event_count = 0;
+        int deferred_event_count = 0;
+        double input_ms = 0.0;
+        double update_ms = 0.0;
+        double render_ms = 0.0;
+        double diagnostics_ms = 0.0;
+    };
+
     void run_startup_stabilization();
     bool startup_abort_requested() const { return startup_abort_requested_; }
     void handle_global_shortcuts(const SDL_Event& e);

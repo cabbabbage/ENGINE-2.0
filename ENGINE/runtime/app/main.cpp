@@ -504,6 +504,7 @@ void MainApp::game_loop() {
                 int deferred_event_count = 0;
                 bool event_budget_hit_count = false;
                 bool event_budget_hit_time = false;
+                bool resize_or_scale_seen_this_frame = false;
                 static std::deque<SDL_Event> deferred_events;
                 const int max_events_per_frame = env_int_clamped("VIBBLE_EVENT_MAX_COUNT", 1000, 64, 5000);
                 const int max_poll_ms_per_frame = env_int_clamped("VIBBLE_EVENT_MAX_MS", 4, 1, 33);
@@ -517,11 +518,7 @@ void MainApp::game_loop() {
                                 SDL_ConvertEventToRenderCoordinates(renderer, &event);
                         }
                         if (renderer && is_resize_or_scale_event(event.type)) {
-                                const Uint64 resize_sync_begin = SDL_GetPerformanceCounter();
-                                sync_output_dimensions(renderer);
-                                frame_stats.add("main.resize_sync_ms",
-                                                runtime_stats::FrameStatsRecorder::elapsed_ms(resize_sync_begin,
-                                                                                              SDL_GetPerformanceCounter()));
+                                resize_or_scale_seen_this_frame = true;
                         }
                         handle_global_shortcuts(event);
                         if (event.type == SDL_EVENT_QUIT) {
@@ -590,10 +587,13 @@ void MainApp::game_loop() {
                         frame_stats.mark_stage("sync_output_begin");
                         const Uint64 sync_begin = SDL_GetPerformanceCounter();
                         sync_output_dimensions(renderer);
-                        frame_stats.set("main.sync_output_ms",
-                                        runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin,
-                                                                                      SDL_GetPerformanceCounter()));
+                        const double sync_output_ms = runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin,
+                                                                                                     SDL_GetPerformanceCounter());
+                        frame_stats.set("main.sync_output_ms", sync_output_ms);
+                        frame_stats.set("main.resize_sync_ms", resize_or_scale_seen_this_frame ? sync_output_ms : 0.0);
                         frame_stats.mark_stage("sync_output_end");
+                } else {
+                        frame_stats.set("main.resize_sync_ms", 0.0);
                 }
                 if (game_assets_ && input_) {
                         frame_stats.mark_stage("assets_update_begin");

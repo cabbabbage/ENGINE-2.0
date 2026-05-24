@@ -2,7 +2,6 @@
 
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/AnchorPointResolver.hpp"
-#include "utils/log.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -12,9 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <optional>
-#include <string>
 
 namespace {
 
@@ -202,14 +199,10 @@ void DebugOverlayRenderer::render_anchor_debug(const WarpedScreenGrid& cam,
                                                int screen_width,
                                                int screen_height,
                                                const std::vector<Asset*>& visible_assets,
-                                               bool dev_mode) const {
+                                               bool /*dev_mode*/) const {
     if (!renderer_ || visible_assets.empty()) {
         return;
     }
-
-    static std::uint64_t s_anchor_debug_frame_counter = 0;
-    ++s_anchor_debug_frame_counter;
-    const bool emit_parity_logs = (s_anchor_debug_frame_counter % 30u) == 0u;
 
     const SDL_Color flat_color{255, 32, 32, 220};
     const SDL_Color final_color{48, 128, 255, 255};
@@ -325,24 +318,6 @@ void DebugOverlayRenderer::render_anchor_debug(const WarpedScreenGrid& cam,
                            actual_child_screen.y);
         }
 
-        if (!emit_parity_logs) {
-            continue;
-        }
-
-        const float dx = actual_child_screen.x - expected.child_screen_px.x;
-        const float dy = actual_child_screen.y - expected.child_screen_px.y;
-        const float delta_px = std::sqrt(dx * dx + dy * dy);
-        if (delta_px <= 0.5f) {
-            continue;
-        }
-
-        const std::string mode_label = dev_mode ? "פיתוח" : "רגיל";
-        vibble::log::warn(std::string("[AnchorParity][") + mode_label + "] בעלים='" +
-                          (owner->info ? owner->info->name : std::string{"<unknown>"}) +
-                          "' ילד='" +
-                          (child->info ? child->info->name : std::string{"<unknown>"}) +
-                          "' עוגן='" + binding.anchor_name +
-                          "' דלתא_פיקסלים=" + std::to_string(delta_px));
     }
 }
 

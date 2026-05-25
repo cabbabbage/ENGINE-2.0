@@ -40,6 +40,22 @@ constexpr int kTrailSectorMinWidthPercent = 25;
 constexpr int kTrailSectorMaxWidthPercent = 100;
 constexpr int kTrailContactAngleSamples = 36;
 
+json make_default_trail_template() {
+    return json::object({
+        {"name", "MainTrail"},
+        {"display_color", json::array({85, 242, 143, 255})},
+        {"geometry", "Square"},
+        {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
+        {"tags", json::array()},
+        {"anti_tags", json::array()},
+        {"spawn_groups", json::array()}
+    });
+}
+
+bool is_valid_trail_template(const json& candidate) {
+    return candidate.is_object();
+}
+
 vibble::weighted_range::WeightedIntRange read_weighted_range_field(const json& src,
                                                                    const char* key,
                                                                    const vibble::weighted_range::WeightedIntRange& fallback) {
@@ -2735,19 +2751,37 @@ std::vector<RoomObstacle> build_room_obstacles(const std::vector<Room*>& rooms) 
 
 GenerateTrails::GenerateTrails(nlohmann::json& trail_data, std::vector<SDL_Color> reserved_colors)
     : rng_(std::random_device{}()), trails_data_(&trail_data), trail_colors_(std::move(reserved_colors)) {
+    const json* source_trails = &trail_data;
     if (!trail_data.is_object()) {
-        trail_data = nlohmann::json::object();
+        source_trails = nullptr;
     }
-    for (auto it = trail_data.begin(); it != trail_data.end(); ++it) {
-        if (!it->is_object()) {
-            continue;
+    if (source_trails) {
+        for (auto it = source_trails->begin(); it != source_trails->end(); ++it) {
+            if (!is_valid_trail_template(*it)) {
+                continue;
+            }
+            available_assets_.push_back({it.key(), &(*it)});
+            utils::display_color::ensure(*available_assets_.back().data, trail_colors_);
         }
-        available_assets_.push_back({it.key(), &(*it)});
-        utils::display_color::ensure(*available_assets_.back().data, trail_colors_);
     }
+
+    if (available_assets_.empty()) {
+        fallback_trails_data_ = json::object({{"MainTrail", make_default_trail_template()}});
+        trails_data_ = &fallback_trails_data_;
+        for (auto it = trails_data_->begin(); it != trails_data_->end(); ++it) {
+            if (!is_valid_trail_template(*it)) {
+                continue;
+            }
+            available_assets_.push_back({it.key(), &(*it)});
+            utils::display_color::ensure(*available_assets_.back().data, trail_colors_);
+        }
+        vibble::log::warn("[GenerateTrails] No valid trail templates found; using built-in default trail data for this run.");
+    }
+
     if (available_assets_.empty()) {
         throw std::runtime_error("[GenerateTrails] No trail templates found in trails_data");
     }
+
 }
 
 void GenerateTrails::set_all_rooms_reference(const std::vector<Room*>& rooms) {
@@ -3322,5 +3356,3 @@ std::vector<std::pair<Room*, Room*>> GenerateTrails::plan_maze_connections(
 
     return planned;
 }
-
-

@@ -26588,9 +26588,9 @@
             }
           },
           "display_color": [
-            139,
             242,
             85,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -26677,9 +26677,9 @@
             }
           },
           "display_color": [
-            204,
-            77,
+            151,
             31,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -26736,9 +26736,9 @@
             }
           },
           "display_color": [
-            150,
-            51,
+            164,
             204,
+            71,
             255
           ],
           "edge_smoothness": 4,
@@ -26795,9 +26795,9 @@
             }
           },
           "display_color": [
-            51,
+            31,
             204,
-            117,
+            100,
             255
           ],
           "edge_smoothness": 4,
@@ -26884,9 +26884,9 @@
             }
           },
           "display_color": [
-            31,
-            159,
             204,
+            60,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26948,9 +26948,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            176,
+            31,
+            159,
+            204,
             255
           ],
           "edge_smoothness": 70,
@@ -27048,9 +27048,9 @@
             }
           },
           "display_color": [
-            85,
-            199,
             242,
+            85,
+            160,
             255
           ],
           "edge_smoothness": 101,
@@ -27204,36 +27204,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "city_hall_background"
-                }
-              ],
-              "display_name": "city_hall_background",
-              "dx": -1849,
-              "dz": -2745,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 15488,
-              "origional_width": 15496,
-              "position": "Exact",
-              "priority": 4,
-              "quantity": 1,
-              "resolution": 4,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-8888611014e8"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "axe_in_stump"
                 }
               ],
@@ -27249,7 +27219,7 @@
               "origional_height": 15488,
               "origional_width": 15496,
               "position": "Exact",
-              "priority": 5,
+              "priority": 4,
               "quantity": 1,
               "resolution": 7,
               "resolve_geometry_to_room_size": true,
@@ -27279,7 +27249,7 @@
               "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 6,
+              "priority": 5,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27309,7 +27279,7 @@
               "origional_height": 15488,
               "origional_width": 15496,
               "position": "Exact",
-              "priority": 7,
+              "priority": 6,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
@@ -27398,8 +27368,8 @@
             }
           },
           "display_color": [
-            176,
             204,
+            152,
             31,
             255
           ],

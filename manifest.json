@@ -20794,43 +20794,13 @@
               0,
               0,
               0.0
-            ],
-            [
-              -9,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -9,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -9,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -9,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -9,
-              0,
-              0,
-              0.0
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -45,
+            "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -23638,16 +23608,16 @@
                     "texture_y": 73
                   },
                   {
-                    "texture_x": 383,
+                    "texture_x": 342,
                     "texture_y": 73
                   },
                   {
-                    "texture_x": 383,
-                    "texture_y": 443
+                    "texture_x": 342,
+                    "texture_y": 475
                   },
                   {
                     "texture_x": 0,
-                    "texture_y": 443
+                    "texture_y": 475
                   }
                 ],
                 "enabled": true,
@@ -23665,8 +23635,8 @@
                 },
                 "rotation_degrees": 0.0,
                 "size": {
-                  "h": 370,
-                  "w": 383
+                  "h": 402,
+                  "w": 342
                 },
                 "type": "hitbox"
               }
@@ -25805,7 +25775,8 @@
       "asset_name": "vibble",
       "asset_type": "player",
       "attack_box_enabled": true,
-      "bounce_amount": 0,
+      "bounce_amount": 6,
+      "can_invert": false,
       "floor_boxes_enabled": true,
       "hitbox_enabled": true,
       "impassable_enabled": false,
@@ -26249,7 +26220,7 @@
       },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
-      "weight_kg": 0.0,
+      "weight_kg": 506.0,
       "y_position_range": {
         "center": 0,
         "falloff": 0,
@@ -27417,9 +27388,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            32,
-            31,
+            135,
             204,
+            31,
             255
           ],
           "geometry": "Square",
@@ -27524,9 +27495,9 @@
         },
         "NewRoom": {
           "display_color": [
-            147,
-            31,
-            204,
+            163,
+            85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -27572,7 +27543,7 @@
           "display_color": [
             85,
             242,
-            165,
+            170,
             255
           ],
           "geometry": "Square",
@@ -27616,8 +27587,8 @@
         },
         "NewRoom2": {
           "display_color": [
-            96,
             204,
+            31,
             31,
             255
           ],
@@ -27693,9 +27664,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            204,
-            31,
-            64,
+            63,
+            242,
+            36,
             255
           ],
           "geometry": "Square",
@@ -27744,9 +27715,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            204,
-            188,
             31,
+            101,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -27833,8 +27804,8 @@
           "camera_zoom_percent": 1,
           "display_color": [
             224,
+            184,
             34,
-            183,
             255
           ],
           "geometry": "Circle",
@@ -28051,16 +28022,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -3278,
-              "dz": -2477,
+              "dx": -3154,
+              "dz": -1948,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 15488,
-              "origional_width": 15496,
+              "origional_height": 13936,
+              "origional_width": 16680,
               "position": "Exact",
               "priority": 6,
               "quantity": 1,
@@ -28196,9 +28167,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            31,
-            110,
             204,
+            31,
+            109,
             255
           ],
           "geometry": "Square",

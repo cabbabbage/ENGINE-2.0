@@ -17047,7 +17047,7 @@
       "render_radius": 0,
       "size_settings": {
         "scale_percentage": 180.0,
-        "size_variation": 10.0
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [
@@ -17055,29 +17055,29 @@
       ],
       "tillable": false,
       "tilt_range": {
-        "center": 0,
+        "center": -59,
         "falloff": 0,
-        "random": false,
-        "span": 0,
+        "random": true,
+        "span": 180,
         "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
+          "center": 0.3333333333333333,
+          "edge": 0.3333333333333333,
+          "falloff": 0.3333333333333333
         }
       },
-      "tilt_range_max_deg": 0,
-      "tilt_range_min_deg": 0,
+      "tilt_range_max_deg": 121,
+      "tilt_range_min_deg": -180,
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -60,
-        "falloff": 1,
+        "center": -10,
+        "falloff": 2,
         "random": true,
-        "span": 1,
+        "span": 5,
         "weights": {
-          "center": 0.4517618884707492,
-          "edge": 0.1664385904892234,
-          "falloff": 0.3817995210400274
+          "center": 0.33333333333333337,
+          "edge": 0.3717948717948718,
+          "falloff": 0.2948717948717949
         }
       }
     },
@@ -17148,14 +17148,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -60,
-        "falloff": 1,
+        "center": -10,
+        "falloff": 2,
         "random": true,
-        "span": 1,
+        "span": 5,
         "weights": {
-          "center": 0.4517618884707492,
-          "edge": 0.1664385904892234,
-          "falloff": 0.3817995210400274
+          "center": 0.33333333333333337,
+          "edge": 0.3717948717948718,
+          "falloff": 0.2948717948717949
         }
       }
     },
@@ -17215,14 +17215,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -60,
-        "falloff": 1,
+        "center": -10,
+        "falloff": 2,
         "random": true,
-        "span": 1,
+        "span": 5,
         "weights": {
-          "center": 0.4517618884707492,
-          "edge": 0.1664385904892234,
-          "falloff": 0.3817995210400274
+          "center": 0.33333333333333337,
+          "edge": 0.3717948717948718,
+          "falloff": 0.2948717948717949
         }
       }
     },
@@ -17290,14 +17290,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -60,
-        "falloff": 1,
+        "center": -10,
+        "falloff": 2,
         "random": true,
-        "span": 1,
+        "span": 5,
         "weights": {
-          "center": 0.4517618884707492,
-          "edge": 0.1664385904892234,
-          "falloff": 0.3817995210400274
+          "center": 0.33333333333333337,
+          "edge": 0.3717948717948718,
+          "falloff": 0.2948717948717949
         }
       }
     },
@@ -26650,8 +26650,8 @@
             "spawn_id": "spn-e8fa833dc553"
           }
         ],
-        "fog_far_distance_px": 1028,
-        "fog_near_distance_px": 553,
+        "fog_far_distance_px": 5296,
+        "fog_near_distance_px": 2451,
         "max_spawn_from_room": 1806,
         "regen_seed": 4,
         "render_radius": 8419
@@ -26676,7 +26676,7 @@
               "name": "baseball",
               "required_children": [],
               "source_type": "room_name",
-              "value": "normal"
+              "value": "baseball"
             }
           ]
         },
@@ -26711,9 +26711,9 @@
           "camera_tilt_deg": 37.47359085083008,
           "camera_zoom_percent": 40,
           "display_color": [
-            242,
             36,
-            89,
+            242,
+            113,
             255
           ],
           "geometry": "Square",
@@ -26788,9 +26788,9 @@
         },
         "NewRoom": {
           "display_color": [
+            242,
+            139,
             85,
-            242,
-            242,
             255
           ],
           "geometry": "Square",
@@ -26834,9 +26834,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            81,
-            31,
+            67,
             204,
+            31,
             255
           ],
           "geometry": "Square",
@@ -26880,9 +26880,9 @@
         },
         "NewRoom2": {
           "display_color": [
+            36,
             242,
-            85,
-            168,
+            208,
             255
           ],
           "geometry": "Square",
@@ -26957,9 +26957,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            37,
-            242,
-            36,
+            31,
+            32,
+            204,
             255
           ],
           "geometry": "Square",
@@ -27008,9 +27008,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            204,
+            242,
             85,
-            31,
+            168,
             255
           ],
           "geometry": "Circle",
@@ -27090,14 +27090,14 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -2668,
-          "camera_center_dz": -2194,
-          "camera_height_px": 326,
-          "camera_tilt_deg": 24.618484497070312,
-          "camera_zoom_percent": 49,
+          "camera_center_dx": -5195,
+          "camera_center_dz": 2061,
+          "camera_height_px": 56,
+          "camera_tilt_deg": 10.0,
+          "camera_zoom_percent": 8,
           "display_color": [
+            115,
             242,
-            127,
             85,
             255
           ],
@@ -27430,8 +27430,8 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            71,
-            170,
+            31,
+            120,
             204,
             255
           ],
@@ -27759,10 +27759,17 @@
       "schema_version": 1,
       "trails_data": {
         "MainTrail": {
-          "name": "MainTrail",
+          "display_color": [
+            85,
+            242,
+            143,
+            255
+          ],
           "geometry": "Square",
+          "name": "MainTrail",
+          "spawn_groups": [],
           "width": {
-            "center": 700,
+            "center": 1169,
             "falloff": 0,
             "random": false,
             "span": 0,
@@ -27771,16 +27778,7 @@
               "edge": 0.0,
               "falloff": 0.0
             }
-          },
-          "display_color": [
-            85,
-            242,
-            143,
-            255
-          ],
-          "tags": [],
-          "anti_tags": [],
-          "spawn_groups": []
+          }
         }
       }
     }

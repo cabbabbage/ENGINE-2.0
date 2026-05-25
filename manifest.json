@@ -17046,7 +17046,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0,
+        "scale_percentage": 180.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -17070,14 +17070,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -4,
+        "center": -50,
         "falloff": 0,
-        "random": true,
-        "span": 1,
+        "random": false,
+        "span": 0,
         "weights": {
-          "center": 0.3214285714285714,
-          "edge": 0.19642857142857145,
-          "falloff": 0.48214285714285715
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
         }
       }
     },
@@ -17121,7 +17121,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0,
+        "scale_percentage": 180.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -17190,7 +17190,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0,
+        "scale_percentage": 180.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -17212,14 +17212,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -4,
+        "center": -50,
         "falloff": 0,
-        "random": true,
-        "span": 1,
+        "random": false,
+        "span": 0,
         "weights": {
-          "center": 0.3214285714285714,
-          "edge": 0.19642857142857145,
-          "falloff": 0.48214285714285715
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
         }
       }
     },
@@ -17257,7 +17257,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0,
+        "scale_percentage": 180.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -17279,14 +17279,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -4,
+        "center": -50,
         "falloff": 0,
-        "random": true,
-        "span": 1,
+        "random": false,
+        "span": 0,
         "weights": {
-          "center": 0.3214285714285714,
-          "edge": 0.19642857142857145,
-          "falloff": 0.48214285714285715
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
         }
       }
     },
@@ -26700,9 +26700,9 @@
             }
           },
           "display_color": [
+            32,
             31,
             204,
-            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26789,9 +26789,9 @@
             }
           },
           "display_color": [
-            154,
+            143,
+            61,
             242,
-            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26848,9 +26848,9 @@
             }
           },
           "display_color": [
-            31,
-            88,
-            204,
+            150,
+            242,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26909,7 +26909,7 @@
           "display_color": [
             36,
             242,
-            208,
+            224,
             255
           ],
           "edge_smoothness": 4,
@@ -26996,9 +26996,9 @@
             }
           },
           "display_color": [
-            178,
-            85,
-            242,
+            31,
+            120,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27060,9 +27060,9 @@
             }
           },
           "display_color": [
+            223,
+            85,
             242,
-            85,
-            85,
             255
           ],
           "edge_smoothness": 70,
@@ -27143,10 +27143,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -2913,
-          "camera_center_dz": -2481,
-          "camera_height_px": 1022,
-          "camera_tilt_deg": 35.0184326171875,
+          "camera_center_dx": -2668,
+          "camera_center_dz": -2194,
+          "camera_height_px": 326,
+          "camera_tilt_deg": 24.618484497070313,
           "camera_zoom_percent": 49,
           "curvyness": {
             "center": 2,
@@ -27160,9 +27160,9 @@
             }
           },
           "display_color": [
-            233,
-            242,
-            36,
+            31,
+            204,
+            109,
             255
           ],
           "edge_smoothness": 101,
@@ -27506,9 +27506,9 @@
             }
           },
           "display_color": [
-            93,
-            85,
             242,
+            94,
+            85,
             255
           ],
           "edge_smoothness": 96,

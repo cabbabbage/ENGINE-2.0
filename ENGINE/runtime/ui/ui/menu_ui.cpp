@@ -679,8 +679,7 @@ bool MenuUI::doExit() {
 	std::cout << "[MenuUI] End Run -> return to main menu (exit_save="
                   << (saved ? "ok" : "FAILED") << ")\n";
         if (!saved) {
-                std::cerr << "[MenuUI] End Run canceled due to exit-save failure; staying in current run.\n";
-                return false;
+                std::cerr << "[MenuUI] End Run continuing despite exit-save failure; returning to main menu.\n";
         }
 	return_to_main_menu_ = true;
         return true;

@@ -44,6 +44,11 @@ private:
     void persist_changes();
     void apply_live_changes();
     void invalidate_preview() const;
+    void sync_current_path_from_frames();
+    void select_path(int index);
+    void add_movement_path();
+    void delete_selected_movement_path();
+    void update_path_button_labels();
     void apply_movement_to_next_frame();
     void apply_movement_to_animation();
     bool apply_movement_to_all_animations();
@@ -60,9 +65,11 @@ private:
     SelectionState* selection_state_ = nullptr;
     std::unique_ptr<Point3DEditor> point_3d_editor_;
     ManifestTransaction manifest_txn_;
+    std::vector<std::vector<MovementFrame>> movement_paths_;
     std::vector<MovementFrame> frames_;
     std::vector<SDL_FPoint> rel_positions_;
     std::vector<float> rel_positions_z_;
+    int selected_path_index_ = 0;
     int selected_index_ = 0;
     bool dirty_ = false;
     bool wants_close_ = false;
@@ -73,6 +80,11 @@ private:
 
     std::unique_ptr<DMCheckbox> cb_smooth_;
     std::unique_ptr<DMCheckbox> cb_curve_;
+    std::unique_ptr<DMButton> btn_prev_path_;
+    std::unique_ptr<DMButton> btn_path_label_;
+    std::unique_ptr<DMButton> btn_next_path_;
+    std::unique_ptr<DMButton> btn_add_path_;
+    std::unique_ptr<DMButton> btn_delete_path_;
     std::unique_ptr<DMButton> btn_back_;
     std::unique_ptr<FrameNavigator> frame_navigator_;
     bool smooth_enabled_ = false;
@@ -82,6 +94,11 @@ private:
 
     std::unique_ptr<FrameToolPanel> tool_panel_;
     std::unique_ptr<ButtonWidget> back_widget_;
+    std::unique_ptr<ButtonWidget> prev_path_widget_;
+    std::unique_ptr<ButtonWidget> path_label_widget_;
+    std::unique_ptr<ButtonWidget> next_path_widget_;
+    std::unique_ptr<ButtonWidget> add_path_widget_;
+    std::unique_ptr<ButtonWidget> delete_path_widget_;
     std::unique_ptr<CheckboxWidget> smooth_widget_;
     std::unique_ptr<CheckboxWidget> curve_widget_;
 };

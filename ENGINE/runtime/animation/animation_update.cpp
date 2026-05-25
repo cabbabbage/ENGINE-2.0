@@ -670,12 +670,16 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
 
     const std::vector<axis::WorldPos> requested_absolute = absolute;
+    const int furthest_checkpoint_distance_px =
+        furthest_checkpoint_distance_xz(axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() },
+                                        requested_absolute);
+    if (furthest_checkpoint_distance_px > 0 && visited_thresh_ >= furthest_checkpoint_distance_px) {
+        visited_thresh_ = furthest_checkpoint_distance_px - 1;
+    }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
     collision_context.path_variance_seed = auto_move_variance_seed(*self_, ++plan_variance_attempt_counter_);
-    collision_context.set_furthest_checkpoint_distance_px(
-        furthest_checkpoint_distance_xz(axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() },
-                                        requested_absolute));
+    collision_context.set_furthest_checkpoint_distance_px(furthest_checkpoint_distance_px);
     const std::vector<axis::WorldPos> sanitized_checkpoints =
         sanitizer_3d_.sanitize(*self_, requested_absolute, visited_thresh_);
     plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
@@ -789,11 +793,15 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     const std::vector<SDL_Point> requested_absolute = absolute;
+    const int furthest_checkpoint_distance_px =
+        furthest_checkpoint_distance_xz(self_->world_xz_point(), requested_absolute);
+    if (furthest_checkpoint_distance_px > 0 && visited_thresh_ >= furthest_checkpoint_distance_px) {
+        visited_thresh_ = furthest_checkpoint_distance_px - 1;
+    }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
     collision_context.path_variance_seed = auto_move_variance_seed(*self_, ++plan_variance_attempt_counter_);
-    collision_context.set_furthest_checkpoint_distance_px(
-        furthest_checkpoint_distance_xz(self_->world_xz_point(), requested_absolute));
+    collision_context.set_furthest_checkpoint_distance_px(furthest_checkpoint_distance_px);
     const std::vector<SDL_Point> sanitized_checkpoints =
         sanitizer_.sanitize(*self_, requested_absolute, visited_thresh_, &collision_context);
     plan_      = planner_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);

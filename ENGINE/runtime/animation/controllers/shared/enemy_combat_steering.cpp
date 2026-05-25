@@ -24,6 +24,17 @@ SDL_Point normalized_scaled_delta(double dx, double dz, int length_px) {
     };
 }
 
+int adaptive_visit_threshold_for_step(int requested_visit_threshold_px, int step_px) {
+    int threshold = std::max(0, requested_visit_threshold_px);
+    const int clamped_step = std::max(1, step_px);
+    // If the threshold is as large as (or larger than) the planned step, path planning
+    // frequently resolves to "already reached" and yields no strides.
+    if (threshold >= clamped_step) {
+        threshold = (clamped_step <= 1) ? 0 : (clamped_step - 1);
+    }
+    return threshold;
+}
+
 } // namespace
 
 EnemyCombatSteering::EnemyCombatSteering(EnemyCombatSteeringConfig config)
@@ -122,6 +133,7 @@ bool EnemyCombatSteering::approach(Asset& self,
     const double dist = std::sqrt(std::max(1.0, to_target_x * to_target_x + to_target_z * to_target_z));
     int step_px = static_cast<int>(std::lround(dist - static_cast<double>(std::max(0, desired_range_px))));
     step_px = std::clamp(step_px, 1, std::max(1, config_.max_plan_distance_px));
+    const int effective_visit_threshold_px = adaptive_visit_threshold_for_step(visit_threshold_px, step_px);
 
     SDL_Point delta = normalized_scaled_delta(to_target_x, to_target_z, step_px);
     if (is_stuck()) {
@@ -135,7 +147,7 @@ bool EnemyCombatSteering::approach(Asset& self,
     }
 
     const SDL_Point world_target = bounded_target_from_delta(self, delta);
-    self.anim_->auto_move(world_target, std::max(0, visit_threshold_px), std::nullopt, true, combat_overrides);
+    self.anim_->auto_move(world_target, effective_visit_threshold_px, std::nullopt, true, combat_overrides);
     mark_planned(self, target);
     return true;
 }
@@ -153,7 +165,10 @@ bool EnemyCombatSteering::evade(Asset& self,
     const double away_x = static_cast<double>(self.world_x() - target.world_x());
     const double away_z = static_cast<double>(self.world_z() - target.world_z());
     const double len = std::sqrt(std::max(1.0, away_x * away_x + away_z * away_z));
-    SDL_Point delta = normalized_scaled_delta(away_x, away_z, std::max(1, evade_distance_px));
+    const int escape_step_px = std::max(1, evade_distance_px);
+    const int effective_visit_threshold_px =
+        adaptive_visit_threshold_for_step(visit_threshold_px, escape_step_px);
+    SDL_Point delta = normalized_scaled_delta(away_x, away_z, escape_step_px);
     const SDL_Point tangent{
         static_cast<int>(std::lround((-away_z / len) * static_cast<double>(evade_distance_px / 2) * detour_side_)),
         static_cast<int>(std::lround((away_x / len) * static_cast<double>(evade_distance_px / 2) * detour_side_))
@@ -163,7 +178,7 @@ bool EnemyCombatSteering::evade(Asset& self,
     detour_side_ = -detour_side_;
 
     const SDL_Point world_target = bounded_target_from_delta(self, delta);
-    self.anim_->auto_move(world_target, std::max(0, visit_threshold_px), std::nullopt, true, combat_overrides);
+    self.anim_->auto_move(world_target, effective_visit_threshold_px, std::nullopt, true, combat_overrides);
     mark_planned(self, target);
     return true;
 }

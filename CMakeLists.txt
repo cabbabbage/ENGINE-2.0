@@ -126,6 +126,18 @@ target_include_directories(dof_blur_strength_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime
 )
 
+add_executable(movement_paths_frame_edit_state_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/movement_paths_frame_edit_state_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/frame_editors/shared/FrameEditState.cpp
+)
+target_include_directories(movement_paths_frame_edit_state_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+)
+target_link_libraries(movement_paths_frame_edit_state_test PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)

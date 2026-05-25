@@ -58,6 +58,7 @@ class MovementSummaryWidget {
     float total_dx_ = 0.0f;
     float total_dy_ = 0.0f;
     float total_dz_ = 0.0f;
+    std::size_t path_count_ = 1;
     std::string totals_signature_;
     bool show_button_ = true;
     bool button_is_go_to_ = false;

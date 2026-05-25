@@ -158,6 +158,7 @@ SourceChainClassification classify_source_chain(const animation_editor::Animatio
 
 bool payload_has_local_frame_data(const nlohmann::json& payload) {
     return (payload.contains("movement") && payload["movement"].is_array()) ||
+           (payload.contains("movement_paths") && payload["movement_paths"].is_array()) ||
            (payload.contains("anchor_points") && payload["anchor_points"].is_array()) ||
            (payload.contains("hit_boxes") && payload["hit_boxes"].is_array()) ||
            (payload.contains("attack_boxes") && payload["attack_boxes"].is_array());
@@ -398,15 +399,43 @@ nlohmann::json canonical_movement_entry(const nlohmann::json& entry) {
 
 std::vector<nlohmann::json> canonical_movement_frames(const nlohmann::json& payload, std::size_t frame_count) {
     std::vector<nlohmann::json> movement(frame_count, nlohmann::json::array({0, 0, 0}));
-    if (!payload.contains("movement") || !payload["movement"].is_array()) {
+    const nlohmann::json* raw_movement = nullptr;
+    if (payload.contains("movement_paths") && payload["movement_paths"].is_array() &&
+        !payload["movement_paths"].empty() && payload["movement_paths"][0].is_array()) {
+        raw_movement = &payload["movement_paths"][0];
+    } else if (payload.contains("movement") && payload["movement"].is_array()) {
+        raw_movement = &payload["movement"];
+    }
+    if (!raw_movement) {
         return movement;
     }
-    const auto& raw_movement = payload["movement"];
-    const std::size_t limit = std::min(frame_count, raw_movement.size());
+    const std::size_t limit = std::min(frame_count, raw_movement->size());
     for (std::size_t i = 0; i < limit; ++i) {
-        movement[i] = canonical_movement_entry(raw_movement[i]);
+        movement[i] = canonical_movement_entry((*raw_movement)[i]);
     }
     return movement;
+}
+
+std::vector<std::vector<nlohmann::json>> canonical_movement_paths(const nlohmann::json& payload,
+                                                                  std::size_t frame_count) {
+    std::vector<std::vector<nlohmann::json>> paths;
+    if (payload.contains("movement_paths") && payload["movement_paths"].is_array()) {
+        for (const auto& path : payload["movement_paths"]) {
+            if (!path.is_array()) {
+                continue;
+            }
+            nlohmann::json path_payload;
+            path_payload["movement"] = path;
+            paths.push_back(canonical_movement_frames(path_payload, frame_count));
+        }
+    }
+    if (paths.empty()) {
+        paths.push_back(canonical_movement_frames(payload, frame_count));
+    }
+    if (paths.empty()) {
+        paths.push_back(std::vector<nlohmann::json>(frame_count, nlohmann::json::array({0, 0, 0})));
+    }
+    return paths;
 }
 
 void set_movement_components(nlohmann::json& entry, int dx, int dy, int dz) {
@@ -776,6 +805,7 @@ void apply_box_frame_flip(nlohmann::json& frame, const SDL_Point& size, bool fli
 }
 struct GeometryResolution {
     std::vector<nlohmann::json> movement;
+    std::vector<std::vector<nlohmann::json>> movement_paths;
     std::vector<nlohmann::json> anchors;
     std::vector<nlohmann::json> hit_boxes;
     std::vector<nlohmann::json> attack_boxes;
@@ -810,10 +840,17 @@ GeometryResolution resolve_geometry(const animation_editor::AnimationDocument* d
         }
 
         result.movement = inherited.movement;
+        result.movement_paths = inherited.movement_paths;
         result.anchors = inherited.anchors;
         result.hit_boxes = inherited.hit_boxes;
         result.attack_boxes = inherited.attack_boxes;
         resize_with_last(result.movement, frame_count, nlohmann::json::array({0, 0, 0}));
+        for (auto& path : result.movement_paths) {
+            resize_with_last(path, frame_count, nlohmann::json::array({0, 0, 0}));
+        }
+        if (result.movement_paths.empty()) {
+            result.movement_paths.push_back(result.movement);
+        }
         resize_with_last(result.anchors, frame_count, nlohmann::json::array());
         resize_with_last(result.hit_boxes, frame_count, nlohmann::json::array());
         resize_with_last(result.attack_boxes, frame_count, nlohmann::json::array());
@@ -829,12 +866,18 @@ GeometryResolution resolve_geometry(const animation_editor::AnimationDocument* d
 
         if (reverse) {
             std::reverse(result.movement.begin(), result.movement.end());
+            for (auto& path : result.movement_paths) {
+                std::reverse(path.begin(), path.end());
+            }
             std::reverse(result.anchors.begin(), result.anchors.end());
             std::reverse(result.hit_boxes.begin(), result.hit_boxes.end());
             std::reverse(result.attack_boxes.begin(), result.attack_boxes.end());
             std::reverse(result.frame_sizes.begin(), result.frame_sizes.end());
         }
         apply_movement_transforms(result.movement, false, invert_x, invert_y, invert_z);
+        for (auto& path : result.movement_paths) {
+            apply_movement_transforms(path, false, invert_x, invert_y, invert_z);
+        }
         for (std::size_t i = 0; i < frame_count; ++i) {
             const SDL_Point size = i < result.frame_sizes.size() ? result.frame_sizes[i] : SDL_Point{0, 0};
             apply_anchor_frame_flip(result.anchors[i], size, invert_x, invert_y, invert_z);
@@ -846,7 +889,8 @@ GeometryResolution resolve_geometry(const animation_editor::AnimationDocument* d
         return result;
     }
 
-    result.movement = canonical_movement_frames(payload, frame_count);
+    result.movement_paths = canonical_movement_paths(payload, frame_count);
+    result.movement = result.movement_paths.empty() ? canonical_movement_frames(payload, frame_count) : result.movement_paths.front();
     result.anchors.reserve(frame_count);
     result.hit_boxes.reserve(frame_count);
     result.attack_boxes.reserve(frame_count);
@@ -865,9 +909,7 @@ GeometryResolution resolve_geometry(const animation_editor::AnimationDocument* d
 }
 
 void update_payload_movement_total(nlohmann::json& payload) {
-    const auto movement = payload.contains("movement") && payload["movement"].is_array()
-        ? payload["movement"]
-        : nlohmann::json::array();
+    auto movement_total = [](const nlohmann::json& movement) {
     int total_dx = 0;
     int total_dy = 0;
     int total_dz = 0;
@@ -886,8 +928,23 @@ void update_payload_movement_total(nlohmann::json& payload) {
             total_dr += static_cast<float>(movement[i]["rotation_degrees"].get<double>());
         }
     }
-    payload["movement_total"] =
-        nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
+        return nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
+    };
+
+    nlohmann::json totals = nlohmann::json::array();
+    if (payload.contains("movement_paths") && payload["movement_paths"].is_array()) {
+        for (const auto& path : payload["movement_paths"]) {
+            totals.push_back(movement_total(path.is_array() ? path : nlohmann::json::array()));
+        }
+    }
+    if (totals.empty()) {
+        const auto movement = payload.contains("movement") && payload["movement"].is_array()
+            ? payload["movement"]
+            : nlohmann::json::array();
+        totals.push_back(movement_total(movement));
+    }
+    payload["movement_total"] = totals.front();
+    payload["movement_totals"] = std::move(totals);
 }
 
 void materialize_inherited_geometry(const animation_editor::AnimationDocument* document,
@@ -903,12 +960,20 @@ void materialize_inherited_geometry(const animation_editor::AnimationDocument* d
         return;
     }
 
-    payload["movement"] = nlohmann::json::array();
+    payload["movement_paths"] = nlohmann::json::array();
     payload["anchor_points"] = nlohmann::json::array();
     payload["hit_boxes"] = nlohmann::json::array();
     payload["attack_boxes"] = nlohmann::json::array();
-    for (const auto& frame : resolved.movement) {
-        payload["movement"].push_back(frame);
+    std::vector<std::vector<nlohmann::json>> movement_paths = resolved.movement_paths;
+    if (movement_paths.empty()) {
+        movement_paths.push_back(resolved.movement);
+    }
+    for (const auto& path : movement_paths) {
+        nlohmann::json path_json = nlohmann::json::array();
+        for (const auto& frame : path) {
+            path_json.push_back(frame);
+        }
+        payload["movement_paths"].push_back(std::move(path_json));
     }
     for (const auto& frame : resolved.anchors) {
         payload["anchor_points"].push_back(frame);
@@ -921,6 +986,7 @@ void materialize_inherited_geometry(const animation_editor::AnimationDocument* d
     }
     payload.erase("hit_geometry");
     payload.erase("attack_geometry");
+    payload.erase("movement");
     update_payload_movement_total(payload);
 }
 
@@ -1538,7 +1604,9 @@ void PlaybackSettingsPanel::apply_state_to_payload(nlohmann::json& payload, cons
         modifiers["reverse"] = state.reverse_source;
         if (effective_inherit_data) {
             payload.erase("movement");
+            payload.erase("movement_paths");
             payload.erase("movement_total");
+            payload.erase("movement_totals");
             payload.erase("anchor_points");
             payload.erase("hit_boxes");
             payload.erase("attack_boxes");

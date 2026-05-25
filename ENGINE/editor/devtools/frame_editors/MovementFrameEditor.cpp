@@ -113,7 +113,9 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     }
     dirty_ = false;
     wants_close_ = false;
+    selected_path_index_ = 0;
     selected_index_ = 0;
+    movement_paths_.clear();
     frames_.clear();
     rel_positions_.clear();
     rel_positions_z_.clear();
@@ -123,8 +125,15 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     if (context_.document) {
         auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
-        frames_ = parse_frames_from_payload(payload);
+        movement_paths_ = parse_movement_paths_from_payload(payload);
     }
+    if (movement_paths_.empty()) {
+        movement_paths_.push_back(std::vector<MovementFrame>{MovementFrame{}});
+    }
+    if (movement_paths_.front().empty()) {
+        movement_paths_.front().push_back(MovementFrame{});
+    }
+    frames_ = movement_paths_.front();
     if (frames_.empty()) {
         frames_.push_back(MovementFrame{});
     }
@@ -143,12 +152,18 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         }
         auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json existing = payload_opt.value_or(nlohmann::json::object());
-        nlohmann::json updated = build_payload_from_frames(frames_, existing);
+        sync_current_path_from_frames();
+        nlohmann::json updated = build_payload_from_movement_paths(movement_paths_, existing);
         return context_.document->update_animation_payload(context_.animation_id, updated);
     });
 
     cb_smooth_ = std::make_unique<DMCheckbox>("Smooth", smooth_enabled_);
     cb_curve_ = std::make_unique<DMCheckbox>("Curve", curve_enabled_);
+    btn_prev_path_ = std::make_unique<DMButton>("< Path", &DMStyles::SecondaryButton(), 100, DMButton::height());
+    btn_path_label_ = std::make_unique<DMButton>("Path 1/1", &DMStyles::HeaderButton(), 120, DMButton::height());
+    btn_next_path_ = std::make_unique<DMButton>("Path >", &DMStyles::SecondaryButton(), 100, DMButton::height());
+    btn_add_path_ = std::make_unique<DMButton>("Add Path", &DMStyles::CreateButton(), 120, DMButton::height());
+    btn_delete_path_ = std::make_unique<DMButton>("Delete Path", &DMStyles::DeleteButton(), 120, DMButton::height());
     frame_navigator_ = std::make_unique<FrameNavigator>();
     frame_navigator_->set_parent_window(context_.parent_window);
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
@@ -173,9 +188,24 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     });
 
     tool_panel_ = std::make_unique<FrameToolPanel>("Movement Tool Panel", "frame_editor_tool_panel_movement");
+    prev_path_widget_ = std::make_unique<ButtonWidget>(btn_prev_path_.get(), [this]() {
+        select_path(selected_path_index_ - 1);
+    });
+    path_label_widget_ = std::make_unique<ButtonWidget>(btn_path_label_.get(), []() {});
+    next_path_widget_ = std::make_unique<ButtonWidget>(btn_next_path_.get(), [this]() {
+        select_path(selected_path_index_ + 1);
+    });
+    add_path_widget_ = std::make_unique<ButtonWidget>(btn_add_path_.get(), [this]() {
+        add_movement_path();
+    });
+    delete_path_widget_ = std::make_unique<ButtonWidget>(btn_delete_path_.get(), [this]() {
+        delete_selected_movement_path();
+    });
     smooth_widget_ = std::make_unique<CheckboxWidget>(cb_smooth_.get());
     curve_widget_ = std::make_unique<CheckboxWidget>(cb_curve_.get());
     DockableCollapsible::Rows rows{
+        {prev_path_widget_.get(), path_label_widget_.get(), next_path_widget_.get()},
+        {add_path_widget_.get(), delete_path_widget_.get()},
         {smooth_widget_.get()},
         {curve_widget_.get()},
     };
@@ -291,6 +321,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->set_selected_point_index(selected_index_);
     }
     refresh_selection_state();
+    update_path_button_labels();
 
     apply_selected_frame_to_target();
 }
@@ -306,6 +337,7 @@ void MovementFrameEditor::end() {
     previous_static_frame_ = false;
     wants_close_ = false;
     dirty_ = false;
+    movement_paths_.clear();
     frames_.clear();
     rel_positions_.clear();
     rel_positions_z_.clear();
@@ -315,8 +347,18 @@ void MovementFrameEditor::end() {
     }
     point_3d_editor_ = nullptr;
     tool_panel_.reset();
+    prev_path_widget_.reset();
+    path_label_widget_.reset();
+    next_path_widget_.reset();
+    add_path_widget_.reset();
+    delete_path_widget_.reset();
     smooth_widget_.reset();
     curve_widget_.reset();
+    btn_prev_path_.reset();
+    btn_path_label_.reset();
+    btn_next_path_.reset();
+    btn_add_path_.reset();
+    btn_delete_path_.reset();
     cb_smooth_.reset();
     cb_curve_.reset();
 }
@@ -662,6 +704,7 @@ void MovementFrameEditor::persist_changes() {
     if (frames_.empty()) {
         return;
     }
+    sync_current_path_from_frames();
     apply_live_changes();
     refresh_selection_state();
 }
@@ -721,14 +764,19 @@ bool MovementFrameEditor::apply_movement_to_all_animations() {
     for (const auto& id : ids) {
         auto payload_opt = context_.document->animation_payload_json(id);
         nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
-        auto frames = parse_frames_from_payload(payload);
-        if (frames.empty()) {
-            frames.push_back(MovementFrame{});
+        auto paths = parse_movement_paths_from_payload(payload);
+        if (paths.empty()) {
+            paths.push_back(std::vector<MovementFrame>{MovementFrame{}});
         }
-        for (auto& f : frames) {
-            copy_movement_fields(f, src);
+        for (auto& path : paths) {
+            if (path.empty()) {
+                path.push_back(MovementFrame{});
+            }
+            for (auto& f : path) {
+                copy_movement_fields(f, src);
+            }
         }
-        nlohmann::json updated = build_payload_from_frames(frames, payload);
+        nlohmann::json updated = build_payload_from_movement_paths(paths, payload);
         context_.document->update_animation_payload(id, updated);
         if (context_.preview) {
             context_.preview->invalidate(id);
@@ -739,12 +787,100 @@ bool MovementFrameEditor::apply_movement_to_all_animations() {
 }
 
 void MovementFrameEditor::apply_live_changes() {
+    sync_current_path_from_frames();
     dirty_ = true;
 }
 
 void MovementFrameEditor::invalidate_preview() const {
     if (context_.preview && !context_.animation_id.empty()) {
         context_.preview->invalidate(context_.animation_id);
+    }
+}
+
+void MovementFrameEditor::sync_current_path_from_frames() {
+    if (movement_paths_.empty()) {
+        movement_paths_.push_back(std::vector<MovementFrame>{MovementFrame{}});
+    }
+    selected_path_index_ = clamp_index(selected_path_index_, static_cast<int>(movement_paths_.size()));
+    if (frames_.empty()) {
+        frames_.push_back(MovementFrame{});
+    }
+    movement_paths_[static_cast<std::size_t>(selected_path_index_)] = frames_;
+}
+
+void MovementFrameEditor::select_path(int index) {
+    if (movement_paths_.empty()) {
+        movement_paths_.push_back(std::vector<MovementFrame>{MovementFrame{}});
+    }
+    sync_current_path_from_frames();
+    const int count = static_cast<int>(movement_paths_.size());
+    selected_path_index_ = clamp_index(index, count);
+    frames_ = movement_paths_[static_cast<std::size_t>(selected_path_index_)];
+    if (frames_.empty()) {
+        frames_.push_back(MovementFrame{});
+    }
+    selected_index_ = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+    rebuild_rel_positions();
+    refresh_selection_state();
+    if (frame_navigator_) {
+        frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
+        frame_navigator_->set_current_frame(selected_index_);
+    }
+    update_path_button_labels();
+    apply_selected_frame_to_target();
+}
+
+void MovementFrameEditor::add_movement_path() {
+    sync_current_path_from_frames();
+    std::vector<MovementFrame> new_path(frames_.size(), MovementFrame{});
+    if (new_path.empty()) {
+        new_path.push_back(MovementFrame{});
+    }
+    movement_paths_.push_back(std::move(new_path));
+    select_path(static_cast<int>(movement_paths_.size()) - 1);
+    persist_changes();
+    persist_pending_changes();
+    invalidate_preview();
+}
+
+void MovementFrameEditor::delete_selected_movement_path() {
+    if (movement_paths_.size() <= 1) {
+        return;
+    }
+    selected_path_index_ = clamp_index(selected_path_index_, static_cast<int>(movement_paths_.size()));
+    movement_paths_.erase(movement_paths_.begin() + selected_path_index_);
+    selected_path_index_ = clamp_index(selected_path_index_, static_cast<int>(movement_paths_.size()));
+    frames_ = movement_paths_[static_cast<std::size_t>(selected_path_index_)];
+    if (frames_.empty()) {
+        frames_.push_back(MovementFrame{});
+    }
+    selected_index_ = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+    rebuild_rel_positions();
+    refresh_selection_state();
+    if (frame_navigator_) {
+        frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
+        frame_navigator_->set_current_frame(selected_index_);
+    }
+    update_path_button_labels();
+    persist_changes();
+    persist_pending_changes();
+    invalidate_preview();
+}
+
+void MovementFrameEditor::update_path_button_labels() {
+    const int count = std::max(1, static_cast<int>(movement_paths_.size()));
+    selected_path_index_ = clamp_index(selected_path_index_, count);
+    if (btn_path_label_) {
+        btn_path_label_->set_text("Path " + std::to_string(selected_path_index_ + 1) + "/" + std::to_string(count));
+    }
+    if (btn_prev_path_) {
+        btn_prev_path_->set_text(selected_path_index_ > 0 ? "< Path" : "< Path");
+    }
+    if (btn_next_path_) {
+        btn_next_path_->set_text((selected_path_index_ + 1 < count) ? "Path >" : "Path >");
+    }
+    if (btn_delete_path_) {
+        btn_delete_path_->set_text(count > 1 ? "Delete Path" : "Keep Path");
     }
 }
 

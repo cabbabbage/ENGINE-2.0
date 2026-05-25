@@ -26,6 +26,7 @@ struct ResolvedMovement {
     float total_dx = 0.0f;
     float total_dy = 0.0f;
     float total_dz = 0.0f;
+    std::size_t path_count = 1;
     bool derived = false;
     std::string source_id;
     std::vector<std::string> modifiers;
@@ -57,6 +58,7 @@ bool payload_inherits_geometry(const nlohmann::json& payload) {
     }
     const bool has_local_frame_data =
         (payload.contains("movement") && payload["movement"].is_array()) ||
+        (payload.contains("movement_paths") && payload["movement_paths"].is_array()) ||
         (payload.contains("anchor_points") && payload["anchor_points"].is_array()) ||
         (payload.contains("hit_boxes") && payload["hit_boxes"].is_array()) ||
         (payload.contains("attack_boxes") && payload["attack_boxes"].is_array());
@@ -205,6 +207,7 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
         result.total_dx = nested.total_dx;
         result.total_dy = nested.total_dy;
         result.total_dz = nested.total_dz;
+        result.path_count = nested.path_count;
         result.signature = payload_signature + "|child{" + nested.signature + "}";
         result.derived = true;
         result.source_id = reference;
@@ -226,7 +229,12 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
         return result;
     }
 
-    const nlohmann::json& movement = payload.contains("movement") ? payload["movement"] : nlohmann::json::array();
+    const bool has_movement_paths = payload.contains("movement_paths") && payload["movement_paths"].is_array();
+    const nlohmann::json& movement =
+        has_movement_paths && !payload["movement_paths"].empty() && payload["movement_paths"][0].is_array()
+            ? payload["movement_paths"][0]
+            : (payload.contains("movement") ? payload["movement"] : nlohmann::json::array());
+    result.path_count = has_movement_paths ? std::max<std::size_t>(1, payload["movement_paths"].size()) : 1;
     if (!movement.is_array()) {
         result.signature = payload_signature + "|movement:none";
         return result;
@@ -337,7 +345,7 @@ int MovementSummaryWidget::preferred_height(int) const {
     const int padding = kPanelPadding;
     const int label_height = DMStyles::Label().font_size + DMSpacing::small_gap();
     int height = padding;
-    int text_lines = derived_from_animation_ ? static_cast<int>(inherited_message_lines_.empty() ? 1 : inherited_message_lines_.size()) : 3;
+    int text_lines = derived_from_animation_ ? static_cast<int>(inherited_message_lines_.empty() ? 1 : inherited_message_lines_.size()) : 4;
     height += label_height * std::max(1, text_lines);
     if (show_button_) {
         height += DMSpacing::small_gap();
@@ -385,6 +393,8 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
         render_summary_label(renderer, "Total Z (Depth): " + std::to_string(static_cast<int>(std::lround(total_dz_))), text_x, text_y, text_color);
         text_y += label_stride;
         render_summary_label(renderer, "Total Y (Height): " + std::to_string(static_cast<int>(std::lround(total_dy_))), text_x, text_y, text_color);
+        text_y += label_stride;
+        render_summary_label(renderer, "Movement Paths: " + std::to_string(path_count_), text_x, text_y, text_color);
         text_y += label_stride;
     }
 
@@ -532,6 +542,7 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
     total_dx_ = resolved.total_dx;
     total_dy_ = resolved.total_dy;
     total_dz_ = resolved.total_dz;
+    path_count_ = std::max<std::size_t>(1, resolved.path_count);
     derived_from_animation_ = resolved.derived;
     inherited_source_id_ = resolved.source_id;
     inherited_message_lines_.clear();

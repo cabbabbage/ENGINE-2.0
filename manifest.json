@@ -7705,12 +7705,28 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -9785,14 +9801,16 @@
             [
               0,
               0,
-              0
+              0,
+              0.0,
+              true
             ]
           ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0
+            "dz": 0.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -10434,37 +10452,43 @@
               0,
               0,
               0,
-              0.0
+              0.0,
+              true
             ],
             [
               -33,
               0,
               2,
-              0.0
+              0.0,
+              true
             ],
             [
               -33,
               0,
               2,
-              0.0
+              0.0,
+              true
             ],
             [
               -33,
               0,
               2,
-              0.0
+              0.0,
+              true
             ],
             [
               -33,
               0,
               2,
-              0.0
+              0.0,
+              true
             ],
             [
               -33,
               0,
               2,
-              0.0
+              0.0,
+              true
             ]
           ],
           "movement_total": {
@@ -10836,7 +10860,18 @@
             [
               0,
               0,
-              0
+              0,
+              0.0,
+              true
+            ]
+          ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
             ]
           ],
           "movement_total": {
@@ -10845,6 +10880,14 @@
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -11405,44 +11448,50 @@
               0,
               0,
               0,
-              0.0
+              0.0,
+              true
             ],
             [
               -11,
               0,
               0,
-              0.0
+              0.0,
+              true
             ],
             [
               -11,
               0,
               0,
-              0.0
+              0.0,
+              true
             ],
             [
-              -11,
+              5,
               0,
-              0,
-              0.0
+              32,
+              0.0,
+              true
             ],
             [
-              -11,
+              -17,
               0,
-              0,
-              0.0
+              -5,
+              0.0,
+              true
             ],
             [
-              -11,
+              -48,
               0,
-              0,
-              0.0
+              -23,
+              0.0,
+              true
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -55,
+            "dx": -82,
             "dy": 0,
-            "dz": 0.0
+            "dz": 4.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -12001,37 +12050,43 @@
               0,
               0,
               0,
-              0.0
+              0.0,
+              true
             ],
             [
               0,
               0,
               -15,
-              0.0
+              0.0,
+              true
             ],
             [
               0,
               0,
               -15,
-              0.0
+              0.0,
+              true
             ],
             [
               0,
               0,
               -15,
-              0.0
+              0.0,
+              true
             ],
             [
               0,
               0,
               -15,
-              0.0
+              0.0,
+              true
             ],
             [
               0,
               0,
               -15,
-              0.0
+              0.0,
+              true
             ]
           ],
           "movement_total": {
@@ -18233,17 +18288,17 @@
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
         "depth_of_field_enabled": true,
-        "dynamic_renderer_depth_efficiency_depth": 1795.0,
-        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.14999999105930328,
+        "dynamic_renderer_depth_efficiency_depth": 3769.0,
+        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.5399999618530273,
         "layer_depth_curve": 29.369998931884766,
         "layer_depth_interval": 50.0,
-        "light_max_cull_depth": 31839.0,
+        "light_max_cull_depth": 34305.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 29597.0,
+        "max_cull_depth": 34305.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
@@ -18382,9 +18437,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            85,
+            36,
             242,
-            242,
+            236,
             255
           ],
           "geometry": "Square",
@@ -18490,7 +18545,7 @@
         "NewRoom": {
           "display_color": [
             242,
-            239,
+            148,
             36,
             255
           ],
@@ -18535,9 +18590,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            31,
-            161,
+            113,
             204,
+            31,
             255
           ],
           "geometry": "Square",
@@ -18581,9 +18636,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            169,
-            85,
-            242,
+            71,
+            204,
+            156,
             255
           ],
           "geometry": "Square",
@@ -18658,9 +18713,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            86,
-            204,
+            32,
             31,
+            204,
             255
           ],
           "geometry": "Square",
@@ -18709,9 +18764,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            85,
-            242,
-            157,
+            31,
+            148,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -18797,9 +18852,9 @@
           "camera_tilt_deg": 30.68971061706543,
           "camera_zoom_percent": 0,
           "display_color": [
-            204,
-            99,
+            115,
             31,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -19221,9 +19276,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            85,
-            121,
             242,
+            229,
+            36,
             255
           ],
           "geometry": "Square",

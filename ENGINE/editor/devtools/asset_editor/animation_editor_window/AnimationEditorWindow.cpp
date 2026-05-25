@@ -1840,8 +1840,14 @@ void AnimationEditorWindow::delete_animation_with_confirmation(const std::string
     }
 
     document_->delete_animation(animation_id);
+    const bool saved_delete = document_->save_to_file_checked(true);
     preview_provider_->invalidate(animation_id);
-    if (!removed_source_folder) {
+    if (auto info_ptr = info_.lock()) {
+        devmode::refresh_loaded_animation_instances(assets_, info_ptr);
+    }
+    if (!saved_delete) {
+        set_status_message("Deleted animation '" + animation_id + "' but save failed.", 300);
+    } else if (!removed_source_folder) {
         set_status_message("Deleted animation '" + animation_id + "' (some files could not be removed).", 300);
     } else {
         set_status_message("Deleted animation '" + animation_id + "'.", 240);

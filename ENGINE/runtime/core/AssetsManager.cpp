@@ -5303,10 +5303,10 @@ void Assets::rebuild_active_from_screen_grid() {
                           " camera_state=" + std::to_string(camera_.camera_state_version()));
     }
 
-    active_assets.clear();
-    movement_enabled_active_assets_.clear();
-    active_assets.reserve(candidate_active_assets.size());
-    movement_enabled_active_assets_.reserve(candidate_active_assets.size());
+    std::vector<Asset*> next_active_assets;
+    std::vector<Asset*> next_movement_enabled_active_assets;
+    next_active_assets.reserve(candidate_active_assets.size());
+    next_movement_enabled_active_assets.reserve(candidate_active_assets.size());
 
     auto activate_asset = [&](Asset* asset) {
         if (!asset || asset->dead) {
@@ -5330,9 +5330,9 @@ void Assets::rebuild_active_from_screen_grid() {
         asset->last_active_frame_id = current_frame_id;
         asset->last_visible_frame_id = current_frame_id;
         asset->active = true;
-        active_assets.push_back(asset);
+        next_active_assets.push_back(asset);
         if (asset->isMovementEnabled()) {
-            movement_enabled_active_assets_.push_back(asset);
+            next_movement_enabled_active_assets.push_back(asset);
             state.movement_enabled_active = true;
         } else {
             state.movement_enabled_active = false;
@@ -5362,6 +5362,9 @@ void Assets::rebuild_active_from_screen_grid() {
             mark_anchor_basis_dirty(asset);
         }
     }
+
+    active_assets.swap(next_active_assets);
+    movement_enabled_active_assets_.swap(next_movement_enabled_active_assets);
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {

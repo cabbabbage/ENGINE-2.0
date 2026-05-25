@@ -6,6 +6,7 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation_frame.hpp"
 #include "assets/asset/animation_frame_variant.hpp"
+#include "core/AssetsManager.hpp"
 #include "rendering/render/render_object.hpp"
 
 namespace render_build {
@@ -49,6 +50,67 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
     mix(static_cast<Uint32>(scale_q));
     mix(static_cast<Uint32>(world_y_q));
     return hash;
+}
+
+int read_int_setting(const nlohmann::json& object, const char* key, int fallback, int min_value, int max_value) {
+    if (!object.is_object()) {
+        return std::clamp(fallback, min_value, max_value);
+    }
+    auto it = object.find(key);
+    if (it == object.end() || !it->is_number()) {
+        return std::clamp(fallback, min_value, max_value);
+    }
+    try {
+        const double raw = it->get<double>();
+        if (!std::isfinite(raw)) {
+            return std::clamp(fallback, min_value, max_value);
+        }
+        return std::clamp(static_cast<int>(std::llround(raw)), min_value, max_value);
+    } catch (...) {
+        return std::clamp(fallback, min_value, max_value);
+    }
+}
+
+float fog_opacity_multiplier(const Asset& asset) {
+    if (!asset.info || !asset.info->has_tag("fog")) {
+        return 1.0f;
+    }
+
+    constexpr int kFogDistanceMin = 0;
+    constexpr int kFogDistanceMax = 20000;
+    constexpr int kDefaultFogNearDistance = 64;
+    constexpr int kDefaultFogFarDistance = 256;
+
+    int near_distance = kDefaultFogNearDistance;
+    int far_distance = kDefaultFogFarDistance;
+    if (Assets* assets = asset.get_assets()) {
+        const nlohmann::json& map = assets->map_info_json();
+        if (map.is_object()) {
+            auto live_it = map.find("live_dynamic_spawns");
+            if (live_it != map.end() && live_it->is_object()) {
+                near_distance = read_int_setting(*live_it,
+                                                 "fog_near_distance_px",
+                                                 kDefaultFogNearDistance,
+                                                 kFogDistanceMin,
+                                                 kFogDistanceMax);
+                far_distance = read_int_setting(*live_it,
+                                                "fog_far_distance_px",
+                                                kDefaultFogFarDistance,
+                                                near_distance,
+                                                kFogDistanceMax);
+            }
+        }
+
+        const SDL_Point camera_center = assets->getView().get_screen_center();
+        const double dx = static_cast<double>(asset.world_x()) - static_cast<double>(camera_center.x);
+        const double dz = static_cast<double>(asset.world_z()) - static_cast<double>(camera_center.y);
+        const double distance = std::hypot(dx, dz);
+        const double span = std::max(1.0, static_cast<double>(far_distance - near_distance));
+        const double t = std::clamp((distance - static_cast<double>(near_distance)) / span, 0.0, 1.0);
+        return static_cast<float>(t);
+    }
+
+    return 1.0f;
 }
 
 bool query_asset_frame_variant(Asset* asset, const FrameVariant*& out_variant, SDL_Texture*& out_texture) {
@@ -173,8 +235,9 @@ bool build_direct_asset_render_object(Asset* asset,
     const float world_anchor_z_offset = asset->world_z_offset() + asset->render_anchor_offset_z();
     const SDL_FlipMode base_flip = asset->effective_render_flip();
     const double base_angle = asset->effective_render_angle();
+    const float alpha_multiplier = fog_opacity_multiplier(*asset);
     const Uint8 asset_alpha = static_cast<Uint8>(std::lround(
-        std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
+        std::clamp(asset->smoothed_alpha() * alpha_multiplier, 0.0f, 1.0f) * 255.0f));
 
     out_object.texture = cache_record.texture;
     out_object.screen_rect = SDL_Rect{

@@ -98,6 +98,10 @@ bool type_is_boundary(const AssetInfo* info) {
     return info && asset_types::canonicalize(info->type) == asset_types::boundary;
 }
 
+bool type_is_fog(const AssetInfo* info) {
+    return info && info->has_tag("fog");
+}
+
 bool named_area_is_trail(const Room::NamedArea& area) {
     return is_trail_area_label(area.type) ||
            is_trail_area_label(area.kind) ||
@@ -929,6 +933,9 @@ SDL_Point DynamicSpawnRuntime::jittered_world_point(const Selector& selector,
 }
 
 bool DynamicSpawnRuntime::info_allowed(const AssetInfo* info, Mode mode) const {
+    if (type_is_fog(info)) {
+        return true;
+    }
     const bool boundary = type_is_boundary(info);
     return mode == Mode::BoundaryArea ? boundary : !boundary;
 }

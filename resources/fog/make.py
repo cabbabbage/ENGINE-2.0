@@ -10,12 +10,12 @@ from PIL import Image, ImageFilter
 NUM_IMAGES = 4
 
 # Portrait canvas
-WIDTH = 720 * 3
-HEIGHT_MIN_MULT = 2.0
-HEIGHT_MAX_MULT = 2.0
+WIDTH = 720 
+HEIGHT_MIN_MULT = 3.0
+HEIGHT_MAX_MULT = 3.0
 
 # Final opacity multiplier applied as the LAST step (0.0 to 1.0)
-FINAL_OPACITY_MULT = 0.1
+FINAL_OPACITY_MULT = 1.0
 
 # Keep portrait canvas size instead of cropping to visible fog bounds
 CROP_TO_ALPHA_BOUNDS = False

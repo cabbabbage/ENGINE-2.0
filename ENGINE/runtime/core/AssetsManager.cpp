@@ -3925,12 +3925,6 @@ void Assets::track_asset_for_grid(Asset* asset) {
 
 }
 
-namespace {
-constexpr std::uint32_t to_reason_mask(Assets::FrameRebuildReason reason) {
-    return static_cast<std::uint32_t>(reason);
-}
-}
-
 void Assets::reset_frame_rebuild_stage() {
     frame_rebuild_metrics_frame_ = frame_id_;
     frame_rebuild_request_count_ = 0;
@@ -3944,7 +3938,7 @@ void Assets::note_frame_rebuild_request(FrameRebuildReason reason) {
         reset_frame_rebuild_stage();
     }
     ++frame_rebuild_request_count_;
-    frame_rebuild_reasons_ |= to_reason_mask(reason);
+    frame_rebuild_reasons_ |= static_cast<std::uint32_t>(reason);
 }
 
 bool Assets::run_frame_rebuild_stage() {

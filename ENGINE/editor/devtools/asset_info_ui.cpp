@@ -275,6 +275,11 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
     }
     used = DockableCollapsible::handle_event(e) || used;
+    if (!is_expanded()) {
+        if (wr_size_variation_) wr_size_variation_->clear_selection();
+        if (wr_tilt_range_) wr_tilt_range_->clear_selection();
+        if (wr_y_pos_range_) wr_y_pos_range_->clear_selection();
+    }
     if (!info_) return used;
 
     bool changed = false;

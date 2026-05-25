@@ -133,6 +133,10 @@ bool is_trail_room(const Room* room) {
     return vibble::strings::to_lower_copy(room->type) == "trail";
 }
 
+bool type_is_fog(const AssetInfo& info) {
+    return info.has_tag("fog");
+}
+
 bool is_pointer_or_wheel_event(const SDL_Event& event) {
     switch (event.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:

@@ -20130,9 +20130,9 @@
           "inherit_data": true,
           "invert_frames_horizontal": false,
           "invert_frames_vertical": false,
-          "invert_x": true,
+          "invert_x": false,
           "invert_y": false,
-          "invert_z": false,
+          "invert_z": true,
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -20148,40 +20148,10 @@
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
-          "locked": false,
+          "locked": true,
           "movement": [
             [
               0,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -20,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -20,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -20,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -20,
-              0,
-              0,
-              0.0
-            ],
-            [
-              -20,
               0,
               0,
               0.0
@@ -20189,9 +20159,9 @@
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -100,
+            "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -20211,9 +20181,9 @@
           "inherit_data": true,
           "invert_frames_horizontal": true,
           "invert_frames_vertical": false,
-          "invert_x": false,
+          "invert_x": true,
           "invert_y": false,
-          "invert_z": true,
+          "invert_z": false,
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -20230,7 +20200,7 @@
             "reverse": false
           },
           "inherit_data": false,
-          "invert_frames_horizontal": false,
+          "invert_frames_horizontal": true,
           "invert_frames_vertical": false,
           "invert_x": false,
           "invert_y": false,
@@ -26433,29 +26403,29 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "blur_px": 0.3400000035762787,
+        "blur_px": 20.65999984741211,
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": false,
-        "dynamic_renderer_depth_efficiency_depth": 2069.0,
-        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
+        "depth_of_field_enabled": true,
+        "dynamic_renderer_depth_efficiency_depth": 8871.0,
+        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.699999988079071,
         "layer_depth_curve": 68.61000061035156,
         "layer_depth_interval": 136.0,
-        "light_max_cull_depth": 16480.0,
+        "light_max_cull_depth": 22870.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 7512.0,
+        "max_cull_depth": 22870.0,
         "min_visible_screen_ratio": 0.004000000189989805,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 0.5,
+        "radial_blur_px": 125.12999725341797,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -26519,8 +26489,9 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "max_spawn_from_room": 779,
-        "regen_seed": 4
+        "max_spawn_from_room": 1925,
+        "regen_seed": 4,
+        "render_radius": 13518
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -26588,9 +26559,9 @@
             }
           },
           "display_color": [
-            85,
-            146,
-            242,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26677,9 +26648,9 @@
             }
           },
           "display_color": [
-            142,
-            31,
-            204,
+            242,
+            132,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26736,9 +26707,9 @@
             }
           },
           "display_color": [
+            85,
             242,
-            140,
-            36,
+            156,
             255
           ],
           "edge_smoothness": 4,
@@ -26795,9 +26766,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            103,
+            224,
+            34,
+            140,
             255
           ],
           "edge_smoothness": 4,
@@ -26884,9 +26855,9 @@
             }
           },
           "display_color": [
-            127,
-            204,
-            31,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26948,9 +26919,9 @@
             }
           },
           "display_color": [
-            242,
-            36,
-            36,
+            121,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 70,
@@ -27031,10 +27002,10 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -3374,
-          "camera_center_dz": -733,
-          "camera_height_px": 700,
-          "camera_tilt_deg": 27.6158504486084,
+          "camera_center_dx": -1820,
+          "camera_center_dz": -6376,
+          "camera_height_px": 297,
+          "camera_tilt_deg": 22.218433380126953,
           "camera_zoom_percent": 49,
           "curvyness": {
             "center": 2,
@@ -27049,8 +27020,8 @@
           },
           "display_color": [
             31,
-            103,
             204,
+            111,
             255
           ],
           "edge_smoothness": 101,
@@ -27368,8 +27339,8 @@
             }
           },
           "display_color": [
+            161,
             85,
-            222,
             242,
             255
           ],
@@ -27715,9 +27686,9 @@
             }
           },
           "display_color": [
-            178,
-            71,
             204,
+            116,
+            31,
             255
           ],
           "edge_smoothness": 101,

@@ -47,7 +47,7 @@ class MenuUI : public MainApp {
     std::string pickRandomLine(const std::filesystem::path& csv_path) const;
     void drawVignette(Uint8 alpha) const;
     bool run_exit_save_sequence(const std::string& reason);
-    void doExit();
+    bool doExit();
     void doSettings();
     void doQuit();
     void doToggleDevMode();

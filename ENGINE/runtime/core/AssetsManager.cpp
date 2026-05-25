@@ -3486,12 +3486,34 @@ world::GridBounds Assets::live_dynamic_work_bounds_from_render_bounds(const worl
 
     const auto& settings = camera_.get_settings();
     const int despawn_margin = std::max(0, dynamic_spawn_despawn_margin_world_px_);
-    const double dynamic_depth = std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)
-        ? static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth)
-        : 1200.0;
-    const int unclamped_radius = static_cast<int>(std::lround(dynamic_depth)) + despawn_margin;
-    constexpr int kMinDynamicWorkRadiusWorldPx = 700;
-    constexpr int kMaxDynamicWorkRadiusWorldPx = 2600;
+    const nlohmann::json* live_dynamic_spawns = nullptr;
+    if (map_info_json_.is_object()) {
+        auto live_it = map_info_json_.find("live_dynamic_spawns");
+        if (live_it != map_info_json_.end() && live_it->is_object()) {
+            live_dynamic_spawns = &(*live_it);
+        }
+    }
+
+    int render_radius = 1200;
+    if (live_dynamic_spawns) {
+        auto radius_it = live_dynamic_spawns->find("render_radius");
+        if (radius_it != live_dynamic_spawns->end() && radius_it->is_number()) {
+            try {
+                const double parsed = radius_it->get<double>();
+                if (std::isfinite(parsed)) {
+                    render_radius = static_cast<int>(std::lround(parsed));
+                }
+            } catch (...) {
+            }
+        }
+    } else if (std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)) {
+        render_radius = static_cast<int>(std::lround(settings.dynamic_renderer_depth_efficiency_depth));
+    }
+    render_radius = std::clamp(render_radius, 0, 20000);
+
+    const int unclamped_radius = render_radius + despawn_margin;
+    constexpr int kMinDynamicWorkRadiusWorldPx = 1;
+    constexpr int kMaxDynamicWorkRadiusWorldPx = 200000;
     const int work_radius = std::clamp(unclamped_radius,
                                        kMinDynamicWorkRadiusWorldPx,
                                        kMaxDynamicWorkRadiusWorldPx);

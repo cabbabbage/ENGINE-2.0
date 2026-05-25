@@ -36,6 +36,12 @@ int clamp_index(int idx, int max_value) {
     return std::clamp(idx, 0, max_value - 1);
 }
 
+int wrap_index(int idx, int count) {
+    if (count <= 0) return 0;
+    const int mod = idx % count;
+    return mod < 0 ? mod + count : mod;
+}
+
 SDL_FPoint sample_quadratic_by_arclen(const SDL_FPoint& p0,
                                       const SDL_FPoint& p1,
                                       const SDL_FPoint& p2,
@@ -814,7 +820,7 @@ void MovementFrameEditor::select_path(int index) {
     }
     sync_current_path_from_frames();
     const int count = static_cast<int>(movement_paths_.size());
-    selected_path_index_ = clamp_index(index, count);
+    selected_path_index_ = wrap_index(index, count);
     frames_ = movement_paths_[static_cast<std::size_t>(selected_path_index_)];
     if (frames_.empty()) {
         frames_.push_back(MovementFrame{});
@@ -874,13 +880,13 @@ void MovementFrameEditor::update_path_button_labels() {
         btn_path_label_->set_text("Path " + std::to_string(selected_path_index_ + 1) + "/" + std::to_string(count));
     }
     if (btn_prev_path_) {
-        btn_prev_path_->set_text(selected_path_index_ > 0 ? "< Path" : "< Path");
+        btn_prev_path_->set_text("< Path");
     }
     if (btn_next_path_) {
-        btn_next_path_->set_text((selected_path_index_ + 1 < count) ? "Path >" : "Path >");
+        btn_next_path_->set_text("Path >");
     }
     if (btn_delete_path_) {
-        btn_delete_path_->set_text(count > 1 ? "Delete Path" : "Keep Path");
+        btn_delete_path_->set_text(count > 1 ? "Delete Path" : "Delete Path (min 1)");
     }
 }
 

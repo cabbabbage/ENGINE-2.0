@@ -1572,7 +1572,7 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         const bool runtime_geometry_may_have_changed =
             anchor_revision_changed || frame_index_changed;
         if (runtime_geometry_may_have_changed && signature_changed) {
-            mark_collision_context_dirty();
+            mark_collision_asset_dirty(asset);
         }
 
         state.processed_anchor_invalidation_version = state.pending_anchor_invalidation_version;
@@ -1740,7 +1740,7 @@ void Assets::run_camera_trap_escape_pass() {
         }
         ++unstuck_count;
         trap_escape_candidates_.insert(asset);
-        mark_collision_context_dirty();
+        mark_collision_asset_dirty(asset);
         note_frame_rebuild_request(FrameRebuildReason::MovementFlushed);
     };
 
@@ -1779,10 +1779,13 @@ void Assets::rebuild_frame_collision_context() const {
     }
     const Uint64 rebuild_begin = SDL_GetPerformanceCounter();
 
+    const bool selective_update = !collision_structure_invalidated_ && !collision_dirty_assets_.empty();
     frame_collision_entries_.clear();
     frame_collision_bounds_.clear();
     frame_collision_index_.clear();
-    frame_collision_query_scratch_.clear();
+    if (!selective_update) {
+        frame_collision_query_scratch_.clear();
+    }
     ++frame_collision_context_version_;
     if (frame_collision_context_version_ == 0) {
         ++frame_collision_context_version_;
@@ -1802,7 +1805,9 @@ void Assets::rebuild_frame_collision_context() const {
         }
         RuntimeAssetState& runtime_state = const_cast<Assets*>(this)->runtime_asset_states_[slot];
         const Asset::RuntimeImpassableGeometrySignature signature = asset->runtime_impassable_geometry_signature();
-        const bool cache_valid = runtime_state.cached_collision_entries_valid &&
+        const bool is_asset_dirty = collision_dirty_assets_.find(asset) != collision_dirty_assets_.end();
+        const bool cache_valid = !is_asset_dirty &&
+                                 runtime_state.cached_collision_entries_valid &&
                                  runtime_state.collision_signature_initialized &&
                                  runtime_state.collision_signature == signature;
         if (!cache_valid) {
@@ -1870,10 +1875,16 @@ void Assets::rebuild_frame_collision_context() const {
             }
         }
     }
-    frame_collision_query_seen_epoch_.assign(frame_collision_entries_.size(), 0);
+    if (frame_collision_query_seen_epoch_.size() < frame_collision_entries_.size()) {
+        frame_collision_query_seen_epoch_.resize(frame_collision_entries_.size(), 0);
+    } else if (frame_collision_query_seen_epoch_.size() > frame_collision_entries_.size()) {
+        frame_collision_query_seen_epoch_.resize(frame_collision_entries_.size());
+    }
 
     frame_collision_context_frame_id_ = frame_id_;
     frame_collision_context_dirty_ = false;
+    collision_structure_invalidated_ = false;
+    collision_dirty_assets_.clear();
     auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     frame_stats.set("assets.collision_context_rebuilt", true);
     frame_stats.set("assets.collision_context_rebuild_ms",

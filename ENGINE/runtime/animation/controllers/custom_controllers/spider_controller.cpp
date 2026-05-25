@@ -1,5 +1,4 @@
 #include "spider_controller.hpp"
-#include "animation/attack.hpp"
 #include "animation/animation_tag_utils.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
@@ -38,13 +37,6 @@ bool current_animation_has_tag(const Asset& self, const char* tag) {
         return false;
     }
     return animation_update::tag_utils::has_normalized_tag(it->second.tags, tag);
-}
-
-std::string stable_asset_id_for_attack(const Asset& asset) {
-    if (!asset.spawn_id.empty()) {
-        return asset.spawn_id;
-    }
-    return asset.info ? asset.info->name : std::string{};
 }
 
 std::string stable_asset_name_for_attack(const Asset& asset) {
@@ -87,30 +79,6 @@ void pounce_toward_player(Asset& self, const Asset& player, long long distance_s
     self.anim_->move(delta, animation_id);
 }
 
-animation_update::Attack build_spider_maul_attack(const Asset& spider, const Asset& player) {
-    animation_update::Attack attack{};
-    attack.attacker_asset_id = stable_asset_id_for_attack(spider);
-    attack.attacker_asset_name = stable_asset_name_for_attack(spider);
-    attack.target_asset_id = stable_asset_id_for_attack(player);
-    attack.target_asset_name = stable_asset_name_for_attack(player);
-    attack.attack_type = "spider_maul";
-    attack.attack_payload_id = "spider_maul_payload";
-    attack.damage_amount = kMaulDamage;
-    attack.payload.damage_amount = kMaulDamage;
-    attack.payload.damage_type = "piercing";
-    attack.payload.element_type = "venom";
-    attack.payload.hitback_enabled = true;
-    attack.payload.hitback_distance = 95.0f;
-    attack.payload.stun_frames = 10;
-    attack.payload.status_effects = {"webbed", "venom"};
-    attack.payload.payload_id = attack.attack_payload_id;
-    attack.hit_x = static_cast<float>(spider.world_x() + player.world_x()) * 0.5f;
-    attack.hit_y = static_cast<float>(spider.world_y() + player.world_y()) * 0.5f;
-    attack.hit_z = static_cast<float>(spider.world_z() + player.world_z()) * 0.5f;
-    attack.source_frame_index = spider.current_animation_frame() ? spider.current_animation_frame()->frame_index : -1;
-    return attack;
-}
-
 } // namespace
 
 spider_controller::spider_controller(Asset* self)
@@ -138,32 +106,33 @@ void spider_controller::on_update(const Input& in) {
 
     const auto now = std::chrono::steady_clock::now();
     const long long distance_sq = distance_sq_xz(*self, *player);
-    if (self->needs_target || now >= next_retarget_time_) {
+    const bool is_attacking = current_animation_has_tag(*self, "attack");
+    if (!is_attacking && (self->needs_target || now >= next_retarget_time_)) {
         AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
         combat_overrides.attacking_enabled = true;
         self->anim_->auto_move(player, 0, true, combat_overrides);
         next_retarget_time_ = now + std::chrono::milliseconds(kRetargetMs);
     }
 
-    pounce_toward_player(*self, *player, distance_sq);
+    if (!is_attacking) {
+        pounce_toward_player(*self, *player, distance_sq);
+    }
 
     if (distance_sq <= static_cast<long long>(kMaulRangePx) * kMaulRangePx &&
-        now >= next_maul_time_) {
+        now >= next_maul_time_ &&
+        !is_attacking) {
         trigger_maul_animation(*self, *player);
-        const animation_update::Attack attack = build_spider_maul_attack(*self, *player);
-        const int health_before = player->runtime_health;
-        player->send_attack(attack);
         next_maul_time_ = now + std::chrono::milliseconds(kMaulCooldownMs);
 
         auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
         frame_stats.set("combat.spider_maul_sent", true);
-        frame_stats.set("combat.spider_maul_damage", attack.payload.damage_amount);
-        frame_stats.set("combat.vibble_health_before_spider_maul", health_before);
+        frame_stats.set("combat.spider_maul_damage", kMaulDamage);
+        frame_stats.set("combat.vibble_health_before_spider_maul", player->runtime_health);
 
         std::ostringstream oss;
-        oss << "[Combat] Spider maul queued target='" << attack.target_asset_name
-            << "' damage=" << attack.payload.damage_amount
-            << " target_health_before=" << health_before
+        oss << "[Combat] Spider maul started target='" << stable_asset_name_for_attack(*player)
+            << "' damage=" << kMaulDamage
+            << " target_health_before=" << player->runtime_health
             << " distance_sq=" << distance_sq;
         vibble::log::info(oss.str());
     }

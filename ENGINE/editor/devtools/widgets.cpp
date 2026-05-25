@@ -2267,12 +2267,10 @@ constexpr int kWeightedRangeHistogramTopGap = 10;
 constexpr int kWeightedRangeHistogramBottomGap = 12;
 constexpr int kWeightedRangeLineThickness = 2;
 constexpr int kWeightedRangeHandleSize = 12;
-constexpr int kWeightedRangeHandleHitSize = 18;
+constexpr int kWeightedRangeHandleHitSize = 24;
 constexpr int kWeightedRangeColumnPad = 18;
 constexpr int kWeightedRangeWeightTopPad = 14;
 constexpr int kWeightedRangeWeightBottomPad = 30;
-constexpr double kWeightedRangeWheelScaleUp = 1.12;
-constexpr double kWeightedRangeWheelScaleDown = 0.89;
 constexpr double kWeightedRangeDefaultSpanScreenRatio = 0.88;
 constexpr int kWeightedRangeMinorTickHeight = 5;
 constexpr int kWeightedRangeMidTickHeight = 9;
@@ -2615,6 +2613,8 @@ double DMWeightedRangeWidget::weight_for_y(int y) const {
 }
 
 int DMWeightedRangeWidget::weight_index_for_point(SDL_Point point) const {
+    int nearest_index = -1;
+    int nearest_distance = std::numeric_limits<int>::max();
     for (int i = 0; i < 5; ++i) {
         if (!value_.random && i != 2) {
             continue;
@@ -2622,8 +2622,19 @@ int DMWeightedRangeWidget::weight_index_for_point(SDL_Point point) const {
         if (SDL_PointInRect(&point, &histogram_handle_rect(i))) {
             return i;
         }
+        const SDL_Rect line = histogram_line_rect(i);
+        const int expanded_top = line.y - 6;
+        const int expanded_bottom = line.y + line.h + 6;
+        if (point.y < expanded_top || point.y > expanded_bottom) {
+            continue;
+        }
+        const int dx = std::abs(point.x - columns_[i].x);
+        if (dx <= 14 && dx < nearest_distance) {
+            nearest_distance = dx;
+            nearest_index = i;
+        }
     }
-    return -1;
+    return nearest_index;
 }
 
 void DMWeightedRangeWidget::sanitize_value() {
@@ -2709,19 +2720,28 @@ bool DMWeightedRangeWidget::apply_wheel_delta(int wheel_y) {
     if (wheel_y == 0) {
         return false;
     }
-    const double factor = wheel_y > 0 ? kWeightedRangeWheelScaleDown : kWeightedRangeWheelScaleUp;
-    const std::int64_t old_span = value_.span;
-    std::int64_t new_span = static_cast<std::int64_t>(std::llround(static_cast<double>(old_span) * factor));
-    if (old_span == 0 && factor > 1.0) {
-        new_span = 1;
+    std::int64_t span = value_.span;
+    const int steps = std::abs(wheel_y);
+    const int direction = (wheel_y > 0) ? -1 : 1;
+    bool changed = false;
+    for (int i = 0; i < steps; ++i) {
+        if (direction > 0 && span == 0) {
+            span = 1;
+            changed = true;
+            continue;
+        }
+        const std::int64_t step_size = std::max<std::int64_t>(1, span / 10);
+        const std::int64_t next = std::max<std::int64_t>(0, span + (direction * step_size));
+        if (next == span) {
+            continue;
+        }
+        span = next;
+        changed = true;
     }
-    if (new_span < 0) {
-        new_span = 0;
-    }
-    if (new_span == value_.span) {
+    if (!changed) {
         return false;
     }
-    value_.span = new_span;
+    value_.span = span;
     sanitize_value();
     sync_falloff_value_from_visual();
     update_geometry();

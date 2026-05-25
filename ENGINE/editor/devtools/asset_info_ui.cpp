@@ -274,7 +274,9 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
     }
-    used = DockableCollapsible::handle_event(e) || used;
+    if (!used) {
+        used = DockableCollapsible::handle_event(e);
+    }
     if (!is_expanded()) {
         if (wr_size_variation_) wr_size_variation_->clear_selection();
         if (wr_tilt_range_) wr_tilt_range_->clear_selection();
@@ -609,7 +611,9 @@ class Section_Spacing : public DockableCollapsible {
         if (s_min_all_ && s_min_all_->handle_event(e)) used = true;
         if (s_neighbor_search_ && s_neighbor_search_->handle_event(e)) used = true;
       }
-      used = DockableCollapsible::handle_event(e) || used;
+      if (!used) {
+        used = DockableCollapsible::handle_event(e);
+      }
       if (!info_ || !expanded_) return used;
 
       bool changed = false;

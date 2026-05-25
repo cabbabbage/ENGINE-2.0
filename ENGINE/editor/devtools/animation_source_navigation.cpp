@@ -22,52 +22,29 @@ StackAnimationRow describe_stack_animation_row(const AssetInfo& info, const std:
         return row;
     }
 
-    std::string current_id = animation_id;
-    std::unordered_set<std::string> visited;
-    while (!current_id.empty()) {
-        if (!visited.insert(current_id).second) {
-            row.editable_in_stack_mode = false;
-            row.reason = StackAnimationEditabilityReason::CyclicAnimationSource;
-            return row;
-        }
-
-        auto current_it = info.animations.find(current_id);
-        if (current_it == info.animations.end()) {
-            row.editable_in_stack_mode = false;
-            row.reason = StackAnimationEditabilityReason::MissingAnimationSource;
-            return row;
-        }
-
-        const Animation& animation = current_it->second;
-        if (animation.source.kind != "animation" || !animation.inherit_data) {
-            if (!animation.has_frames()) {
-                row.editable_in_stack_mode = false;
-                row.reason = StackAnimationEditabilityReason::MissingFrames;
-                return row;
-            }
-            row.editable_in_stack_mode = true;
-            row.reason = StackAnimationEditabilityReason::Editable;
-            row.resolved_edit_target_id = current_id;
-            return row;
-        }
-
+    const Animation& animation = animation_it->second;
+    if (animation.source.kind == "animation" && animation.inherit_data) {
+        row.editable_in_stack_mode = false;
         row.reason = StackAnimationEditabilityReason::InheritedFromAnimationSource;
-        ++row.source_chain_depth;
-
-        std::string next_id = animation.source.name;
-        if (next_id.empty()) {
-            next_id = animation.source.path;
+        std::string source_id = animation.source.name;
+        if (source_id.empty()) {
+            source_id = animation.source.path;
         }
-        if (next_id.empty()) {
-            row.editable_in_stack_mode = false;
-            row.reason = StackAnimationEditabilityReason::MissingAnimationSource;
-            return row;
+        if (!source_id.empty()) {
+            row.resolved_edit_target_id = source_id;
         }
-        current_id = next_id;
+        return row;
     }
 
-    row.editable_in_stack_mode = false;
-    row.reason = StackAnimationEditabilityReason::MissingAnimationSource;
+    if (!animation.has_frames()) {
+        row.editable_in_stack_mode = false;
+        row.reason = StackAnimationEditabilityReason::MissingFrames;
+        return row;
+    }
+
+    row.editable_in_stack_mode = true;
+    row.reason = StackAnimationEditabilityReason::Editable;
+    row.resolved_edit_target_id = animation_id;
     return row;
 }
 
@@ -103,28 +80,14 @@ StackAnimationListModel resolve_stack_animation_list_model(const AssetInfo* info
         return nullptr;
     };
 
-    if (!requested_animation_id.empty()) {
+    if (!requested_animation_id.empty() && row_for(requested_animation_id)) {
+        result.resolved_animation_id = requested_animation_id;
         const StackAnimationRow* requested_row = row_for(requested_animation_id);
         if (requested_row) {
             result.requested_was_derived =
-                requested_row->reason == StackAnimationEditabilityReason::InheritedFromAnimationSource ||
-                (requested_row->resolved_edit_target_id.has_value() &&
-                 *requested_row->resolved_edit_target_id != requested_animation_id);
-            if (requested_row->editable_in_stack_mode) {
-                result.resolved_animation_id = requested_row->animation_id;
-                return result;
-            }
-            if (requested_row->resolved_edit_target_id.has_value()) {
-                const StackAnimationRow* resolved_row = row_for(*requested_row->resolved_edit_target_id);
-                if (resolved_row && resolved_row->editable_in_stack_mode) {
-                    result.resolved_animation_id = resolved_row->animation_id;
-                    result.used_fallback = (result.resolved_animation_id != requested_animation_id);
-                    return result;
-                }
-            }
-        } else {
-            result.used_fallback = true;
+                requested_row->reason == StackAnimationEditabilityReason::InheritedFromAnimationSource;
         }
+        return result;
     }
 
     for (const auto& row : result.rows) {
@@ -139,23 +102,68 @@ StackAnimationListModel resolve_stack_animation_list_model(const AssetInfo* info
 
 FileSourcedAnimationSelection resolve_file_sourced_animation_selection(const AssetInfo* info,
                                                                        const std::string& requested_animation_id) {
-    const StackAnimationListModel model = resolve_stack_animation_list_model(info, requested_animation_id);
     FileSourcedAnimationSelection result;
     result.requested_animation_id = requested_animation_id;
-    result.resolved_animation_id = model.resolved_animation_id;
-    result.requested_was_derived = model.requested_was_derived;
-    result.used_fallback = model.used_fallback;
-
     if (!info) {
         return result;
     }
 
-    result.navigable_animation_ids.reserve(model.rows.size());
-    for (const auto& row : model.rows) {
-        if (row.editable_in_stack_mode) {
-            result.navigable_animation_ids.push_back(row.animation_id);
+    result.navigable_animation_ids.reserve(info->animations.size());
+    for (const auto& [animation_id, animation] : info->animations) {
+        if (!animation.has_frames()) {
+            continue;
+        }
+        if (animation.source.kind != "animation" || !animation.inherit_data) {
+            result.navigable_animation_ids.push_back(animation_id);
         }
     }
+    std::sort(result.navigable_animation_ids.begin(), result.navigable_animation_ids.end());
+
+    if (result.navigable_animation_ids.empty()) {
+        return result;
+    }
+
+    std::string current_id = requested_animation_id;
+    if (current_id.empty() || info->animations.find(current_id) == info->animations.end()) {
+        result.resolved_animation_id = result.navigable_animation_ids.front();
+        result.used_fallback = true;
+        return result;
+    }
+
+    std::unordered_set<std::string> visited;
+    while (!current_id.empty()) {
+        if (!visited.insert(current_id).second) {
+            break;
+        }
+
+        auto animation_it = info->animations.find(current_id);
+        if (animation_it == info->animations.end()) {
+            break;
+        }
+
+        const Animation& animation = animation_it->second;
+        if (animation.source.kind != "animation" || !animation.inherit_data) {
+            if (animation.has_frames()) {
+                result.resolved_animation_id = current_id;
+                result.requested_was_derived = (requested_animation_id != current_id);
+                return result;
+            }
+            break;
+        }
+
+        result.requested_was_derived = true;
+        std::string next_id = animation.source.name;
+        if (next_id.empty()) {
+            next_id = animation.source.path;
+        }
+        if (next_id.empty()) {
+            break;
+        }
+        current_id = next_id;
+    }
+
+    result.resolved_animation_id = result.navigable_animation_ids.front();
+    result.used_fallback = true;
     return result;
 }
 

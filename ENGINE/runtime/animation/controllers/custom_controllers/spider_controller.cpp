@@ -1,6 +1,7 @@
 #include "spider_controller.hpp"
 #include "animation/animation_tag_utils.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/attack_validation.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/custom_controller_api.hpp"
 #include "assets/asset/Asset.hpp"
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <random>
 #include <sstream>
 #include <string>
 
@@ -139,16 +141,42 @@ void spider_controller::on_update(const Input& in) {
 
     // Ensure close-range attack candidates are still evaluated while
     // pathing updates are throttled by planner cooldowns.
-    custom_controller_api::dispatch_contact_attack(ctx);
-
-    // Auto-move combat animations do not always trigger the generic controller
-    // attack dispatch path, so explicitly dispatch runtime attack-box collisions
-    // from spider to valid active targets (including Vibble).
-    animation_update::custom_controllers::AttackDetectionHelper::send_attacks_to_active_targets(
-        self,
-        ctx.assets);
+    if (dispatch_weighted_attack_if_ready(*self, *player)) {
+        on_after_attack();
+    }
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {
     CustomAssetController::on_process_pending_attacks(self);
+}
+
+bool spider_controller::dispatch_weighted_attack_if_ready(Asset& self, Asset& player) {
+    const auto attack_opt = animation_update::AttackValidation::compute_attack_if_hit(self, player);
+    if (!attack_opt.has_value()) {
+        return false;
+    }
+    auto attack = *attack_opt;
+    const std::string payload_id = attack.payload.payload_id.empty() ? attack.attack_payload_id : attack.payload.payload_id;
+    const auto now = std::chrono::steady_clock::now();
+    if (!payload_id.empty()) {
+        const auto cooldown_it = payload_recharge_ready_at_.find(payload_id);
+        if (cooldown_it != payload_recharge_ready_at_.end() && now < cooldown_it->second) {
+            return false;
+        }
+    }
+
+    const float weight = std::max(0.05f, attack.payload.recharge_random_weight);
+    static thread_local std::mt19937 rng{std::random_device{}()};
+    std::uniform_real_distribution<float> roll(0.0f, 1.0f);
+    if (roll(rng) > std::min(1.0f, weight / 5.0f)) {
+        return false;
+    }
+
+    player.send_attack(attack);
+    if (!payload_id.empty()) {
+        const float recharge_seconds = std::max(0.0f, attack.payload.recharge_seconds);
+        payload_recharge_ready_at_[payload_id] =
+            now + std::chrono::milliseconds(static_cast<int>(std::lround(recharge_seconds * 1000.0f)));
+    }
+    return true;
 }

@@ -407,6 +407,18 @@ void CustomAssetController::on_death() {}
 
 void CustomAssetController::on_no_pending_attacks() {}
 
+void CustomAssetController::on_after_attack() {
+    Asset* self = self_ptr();
+    const auto& ctx = game_context();
+    Asset* player = custom_controllers::resolve_valid_player_target(ctx);
+    if (!self || !self->anim_ || !player) {
+        return;
+    }
+    AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
+    combat_overrides.attacking_enabled = false;
+    self->anim_->auto_move(player, 220, true, combat_overrides);
+}
+
 custom_controllers::AttackProcessingConfig CustomAssetController::attack_processing_config() const {
     return {};
 }

@@ -8,6 +8,7 @@
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
+#include "devtools/float_slider_widget.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/widgets.hpp"
 #include "utils/sdl_mouse_utils.hpp"
@@ -94,6 +95,8 @@ bool payloads_equal(const animation_update::AttackPayload& lhs,
            lhs.status_effects == rhs.status_effects &&
            std::fabs(lhs.critical_hit_chance - rhs.critical_hit_chance) <= 1e-5f &&
            lhs.element_type == rhs.element_type &&
+           std::fabs(lhs.recharge_seconds - rhs.recharge_seconds) <= 1e-5f &&
+           std::fabs(lhs.recharge_random_weight - rhs.recharge_random_weight) <= 1e-5f &&
            lhs.payload_id == rhs.payload_id;
 }
 
@@ -110,6 +113,9 @@ AttackPayloadEditor::AttackPayloadEditor() {
     status_effects_textbox_ = std::make_unique<DMTextBox>("Status Effects (CSV)", "");
     critical_hit_chance_textbox_ = std::make_unique<DMTextBox>("Critical Hit Chance (0-1)", "0");
     element_type_textbox_ = std::make_unique<DMTextBox>("Element Type", "none");
+    recharge_seconds_textbox_ = std::make_unique<DMTextBox>("Recharge Seconds", "0");
+    recharge_random_weight_slider_ =
+        std::make_unique<FloatSliderWidget>("Recharge Random Weight", 0.05f, 5.0f, 0.05f, 1.0f, 2);
 }
 
 AttackPayloadEditor::~AttackPayloadEditor() = default;
@@ -195,6 +201,12 @@ void AttackPayloadEditor::apply_payload_to_widgets() {
     if (element_type_textbox_) {
         element_type_textbox_->set_value(payload_.element_type);
     }
+    if (recharge_seconds_textbox_) {
+        recharge_seconds_textbox_->set_value(std::to_string(payload_.recharge_seconds));
+    }
+    if (recharge_random_weight_slider_) {
+        recharge_random_weight_slider_->set_value(payload_.recharge_random_weight);
+    }
     applying_payload_to_widgets_ = false;
 }
 
@@ -212,6 +224,9 @@ animation_update::AttackPayload AttackPayloadEditor::payload_from_widgets() cons
     payload.critical_hit_chance =
         parse_float_or(critical_hit_chance_textbox_ ? critical_hit_chance_textbox_->value() : "0", payload.critical_hit_chance);
     payload.element_type = element_type_textbox_ ? element_type_textbox_->value() : payload.element_type;
+    payload.recharge_seconds =
+        parse_float_or(recharge_seconds_textbox_ ? recharge_seconds_textbox_->value() : "0", payload.recharge_seconds);
+    payload.recharge_random_weight = recharge_random_weight_slider_ ? recharge_random_weight_slider_->value() : payload.recharge_random_weight;
     return animation_update::sanitize_attack_payload(std::move(payload));
 }
 
@@ -257,6 +272,11 @@ bool AttackPayloadEditor::handle_event(const SDL_Event& event) {
         handle_text(status_effects_textbox_.get());
         handle_text(critical_hit_chance_textbox_.get());
         handle_text(element_type_textbox_.get());
+        handle_text(recharge_seconds_textbox_.get());
+        if (recharge_random_weight_slider_ && recharge_random_weight_slider_->handle_event(event)) {
+            handled = true;
+            changed = true;
+        }
 
         if (hitback_enabled_checkbox_) {
             const bool before = hitback_enabled_checkbox_->value();
@@ -280,7 +300,8 @@ bool AttackPayloadEditor::handle_event(const SDL_Event& event) {
         (sound_effect_textbox_ && sound_effect_textbox_->is_editing()) ||
         (status_effects_textbox_ && status_effects_textbox_->is_editing()) ||
         (critical_hit_chance_textbox_ && critical_hit_chance_textbox_->is_editing()) ||
-        (element_type_textbox_ && element_type_textbox_->is_editing());
+        (element_type_textbox_ && element_type_textbox_->is_editing()) ||
+        (recharge_seconds_textbox_ && recharge_seconds_textbox_->is_editing());
     if ((event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN) && payload_text_editing) {
         handled = true;
     }
@@ -350,6 +371,8 @@ void AttackPayloadEditor::render(SDL_Renderer* renderer) const {
     if (status_effects_textbox_) status_effects_textbox_->render(renderer);
     if (critical_hit_chance_textbox_) critical_hit_chance_textbox_->render(renderer);
     if (element_type_textbox_) element_type_textbox_->render(renderer);
+    if (recharge_seconds_textbox_) recharge_seconds_textbox_->render(renderer);
+    if (recharge_random_weight_slider_) recharge_random_weight_slider_->render(renderer);
 }
 
 bool AttackPayloadEditor::is_point_inside(int x, int y) const {
@@ -406,6 +429,12 @@ void AttackPayloadEditor::update_layout() const {
         layout_textbox(status_effects_textbox_.get());
         layout_textbox(critical_hit_chance_textbox_.get());
         layout_textbox(element_type_textbox_.get());
+        layout_textbox(recharge_seconds_textbox_.get());
+        if (recharge_random_weight_slider_) {
+            const int height = recharge_random_weight_slider_->height_for_width(content_w);
+            recharge_random_weight_slider_->set_rect(SDL_Rect{content_x, y, content_w, height});
+            y += height + kRowGap;
+        }
     } else {
         auto hide_textbox = [](DMTextBox* textbox) {
             if (textbox) {
@@ -421,6 +450,10 @@ void AttackPayloadEditor::update_layout() const {
         hide_textbox(status_effects_textbox_.get());
         hide_textbox(critical_hit_chance_textbox_.get());
         hide_textbox(element_type_textbox_.get());
+        hide_textbox(recharge_seconds_textbox_.get());
+        if (recharge_random_weight_slider_) {
+            recharge_random_weight_slider_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
         if (hitback_enabled_checkbox_) {
             hitback_enabled_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
         }

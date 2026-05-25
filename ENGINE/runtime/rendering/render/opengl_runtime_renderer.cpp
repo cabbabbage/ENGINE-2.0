@@ -1607,8 +1607,8 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             return focus + delta;
         };
         scratch_depth_xy_sprite_packets_.clear();
-        scratch_depth_xy_sprite_packets_.reserve(std::max(scratch_depth_xy_sprite_packets_.capacity(),
-                                                          out_data.xy_sprite_draws.size()));
+        scratch_depth_xy_sprite_packets_.rehash(std::max<std::size_t>(
+            scratch_depth_xy_sprite_packets_.bucket_count(), out_data.xy_sprite_draws.size()));
         for (const GpuSpriteDrawPacket& packet : out_data.xy_sprite_draws) {
             scratch_depth_xy_sprite_packets_[bucket_depth_layer(packet.depth_layer)].push_back(packet);
         }

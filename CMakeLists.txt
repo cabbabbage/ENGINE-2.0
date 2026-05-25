@@ -119,6 +119,13 @@ target_include_directories(sprite_floor_clip_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime
 )
 
+add_executable(dof_blur_strength_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/dof_blur_strength_test.cpp
+)
+target_include_directories(dof_blur_strength_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)

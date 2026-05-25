@@ -1556,9 +1556,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const bool dof_requested = allow_dof_depth_layers &&
         dof_requested_by_settings;
     if (dof_requested) {
-        constexpr int kDofFarNearBucketRadius = 2;
         const auto bucket_depth_layer =
-            [focus = out_data.focus_depth_layer, bucket_radius = kDofFarNearBucketRadius](int layer) {
+            [focus = out_data.focus_depth_layer](int layer) {
+            constexpr int bucket_radius = render_depth::kDofFocusBucketRadius;
             const int delta = std::clamp(layer - focus, -bucket_radius, bucket_radius);
             return focus + delta;
         };
@@ -1579,10 +1579,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             return lhs > rhs;
         });
 
-        const float focus_depth_key = assets_->player
-            ? static_cast<float>(compute_asset_camera_depth_key(camera, *assets_->player))
-            : 0.0f;
-
         out_data.depth_layers.reserve(scratch_depth_layer_ids_.size());
         for (int layer_id : scratch_depth_layer_ids_) {
             GpuDepthLayerDrawPackets layer{};
@@ -1591,19 +1587,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
                 std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
             }
-            float layer_depth_sum = 0.0f;
-            float layer_depth_min = std::numeric_limits<float>::max();
-            float layer_depth_max = std::numeric_limits<float>::lowest();
-            for (const GpuSpriteDrawPacket& packet : layer.packets) {
-                layer_depth_sum += packet.camera_depth_key;
-                layer_depth_min = std::min(layer_depth_min, packet.camera_depth_key);
-                layer_depth_max = std::max(layer_depth_max, packet.camera_depth_key);
-            }
-            const float layer_depth_center = layer.packets.empty() ? 0.0f : (layer_depth_sum / static_cast<float>(layer.packets.size()));
-            const float focus_distance = std::fabs(layer_depth_center - focus_depth_key);
-            const float norm_distance = focus_distance / std::max(1.0f, static_cast<float>(kDofFarNearBucketRadius));
-            const float coc_like = 1.0f - std::exp(-1.35f * norm_distance);
-            layer.blur_strength_px = std::clamp(coc_like, 0.0f, 1.0f);
+            layer.blur_strength_px = render_depth::dof_blur_strength_for_layer_distance(
+                layer.depth_layer,
+                out_data.focus_depth_layer);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }

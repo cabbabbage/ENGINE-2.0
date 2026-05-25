@@ -1053,6 +1053,25 @@
       "anchor_point_child_candidates": [],
       "animations": {
         "default": {
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "box_schema_version": 1,
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -1188,7 +1207,584 @@
           },
           "tags": []
         },
+        "die": {
+          "attack_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 744,
+                    "texture_y": 403
+                  },
+                  {
+                    "texture_x": 1133,
+                    "texture_y": 403
+                  },
+                  {
+                    "texture_x": 1133,
+                    "texture_y": 678
+                  },
+                  {
+                    "texture_x": 744,
+                    "texture_y": 678
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 744,
+                  "y": 403
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 275,
+                  "w": 389
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 678,
+                    "texture_y": 288
+                  },
+                  {
+                    "texture_x": 1208,
+                    "texture_y": 288
+                  },
+                  {
+                    "texture_x": 1208,
+                    "texture_y": 823
+                  },
+                  {
+                    "texture_x": 678,
+                    "texture_y": 823
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 678,
+                  "y": 288
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 535,
+                  "w": 530
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 663,
+                    "texture_y": 213
+                  },
+                  {
+                    "texture_x": 1263,
+                    "texture_y": 213
+                  },
+                  {
+                    "texture_x": 1263,
+                    "texture_y": 828
+                  },
+                  {
+                    "texture_x": 663,
+                    "texture_y": 828
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 663,
+                  "y": 213
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 615,
+                  "w": 600
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 558,
+                    "texture_y": 193
+                  },
+                  {
+                    "texture_x": 1323,
+                    "texture_y": 193
+                  },
+                  {
+                    "texture_x": 1323,
+                    "texture_y": 908
+                  },
+                  {
+                    "texture_x": 558,
+                    "texture_y": 908
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 558,
+                  "y": 193
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 715,
+                  "w": 765
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 523,
+                    "texture_y": 178
+                  },
+                  {
+                    "texture_x": 1348,
+                    "texture_y": 178
+                  },
+                  {
+                    "texture_x": 1348,
+                    "texture_y": 833
+                  },
+                  {
+                    "texture_x": 523,
+                    "texture_y": 833
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 523,
+                  "y": 178
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 655,
+                  "w": 825
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 638,
+                    "texture_y": 258
+                  },
+                  {
+                    "texture_x": 1278,
+                    "texture_y": 258
+                  },
+                  {
+                    "texture_x": 1278,
+                    "texture_y": 763
+                  },
+                  {
+                    "texture_x": 638,
+                    "texture_y": 763
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 638,
+                  "y": 258
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 505,
+                  "w": 640
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 744,
+                    "texture_y": 403
+                  },
+                  {
+                    "texture_x": 1133,
+                    "texture_y": 403
+                  },
+                  {
+                    "texture_x": 1133,
+                    "texture_y": 678
+                  },
+                  {
+                    "texture_x": 744,
+                    "texture_y": 678
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 744,
+                  "y": 403
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 275,
+                  "w": 389
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 917,
+                    "texture_y": 436
+                  },
+                  {
+                    "texture_x": 1057,
+                    "texture_y": 436
+                  },
+                  {
+                    "texture_x": 1057,
+                    "texture_y": 586
+                  },
+                  {
+                    "texture_x": 917,
+                    "texture_y": 586
+                  }
+                ],
+                "damage_amount": 400,
+                "enabled": true,
+                "extrusion_backward": 40,
+                "extrusion_forward": 48,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 400,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 80.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 917,
+                  "y": 436
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 150,
+                  "w": 140
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "number_of_frames": 8,
+          "on_end": "kill",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "die"
+          },
+          "tags": [
+            "attack",
+            "die"
+          ]
+        },
         "down": {
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "box_schema_version": 1,
           "derived_modifiers": {
             "reverse": false
           },
@@ -1330,6 +1926,25 @@
           "tags": []
         },
         "left": {
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "box_schema_version": 1,
           "derived_modifiers": {
             "reverse": false
           },
@@ -1517,7 +2132,7 @@
       "asset_directory": "resources/assets/bomb",
       "asset_name": "bomb",
       "asset_type": "Object",
-      "attack_box_enabled": false,
+      "attack_box_enabled": true,
       "bounce_amount": 0,
       "can_invert": false,
       "floor_boxes_enabled": false,
@@ -17767,9 +18382,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            31,
+            132,
             204,
-            83,
+            31,
             255
           ],
           "geometry": "Square",
@@ -17875,7 +18490,7 @@
         "NewRoom": {
           "display_color": [
             85,
-            141,
+            124,
             242,
             255
           ],
@@ -17922,7 +18537,7 @@
           "display_color": [
             85,
             242,
-            156,
+            157,
             255
           ],
           "geometry": "Square",
@@ -17966,9 +18581,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            242,
-            85,
-            120,
+            204,
+            31,
+            97,
             255
           ],
           "geometry": "Square",
@@ -18043,9 +18658,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            102,
+            199,
+            85,
             242,
-            36,
             255
           ],
           "geometry": "Square",
@@ -18094,9 +18709,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
+            177,
             242,
             85,
-            242,
             255
           ],
           "geometry": "Circle",
@@ -18182,9 +18797,9 @@
           "camera_tilt_deg": 11.089710235595703,
           "camera_zoom_percent": 0,
           "display_color": [
-            31,
-            178,
             204,
+            143,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -18606,9 +19221,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            204,
             31,
-            87,
+            161,
+            204,
             255
           ],
           "geometry": "Square",

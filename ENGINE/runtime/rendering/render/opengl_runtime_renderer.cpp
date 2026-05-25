@@ -1995,16 +1995,25 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         can_hold_previous_scene &&
         consecutive_held_incomplete_scene_frames_ < kMaxGameplayRecoveryHolds;
     const bool hold_zero_sprite_scene_frame = false;
+    const bool startup_empty_scene_hold_window_active =
+        !startup_scene_submission_established_ &&
+        hold_empty_scene_frames_remaining_ > 0;
     const bool hold_empty_scene_frame =
         empty_scene_submission &&
         can_hold_previous_scene &&
         !scene_motion_active &&
-        hold_empty_scene_frames_remaining_ > 0;
+        startup_empty_scene_hold_window_active;
     const bool motion_gated_hold_suppressed =
         scene_motion_active &&
         can_hold_previous_scene &&
         (frame_data.suspected_incomplete_scene ||
-         (empty_scene_submission && hold_empty_scene_frames_remaining_ > 0));
+         (empty_scene_submission && startup_empty_scene_hold_window_active));
+    const bool empty_scene_hold_bypassed_due_to_startup_policy =
+        empty_scene_submission &&
+        can_hold_previous_scene &&
+        !scene_motion_active &&
+        !startup_empty_scene_hold_window_active &&
+        hold_empty_scene_frames_remaining_ > 0;
 
     GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
@@ -2386,6 +2395,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                                       render_target_sync_ms,
                                                       first_ensure_targets_ms,
                                                       ensure_targets_ms);
+    const bool empty_scene_after_startup = empty_scene_submission && startup_scene_submission_established_;
+    if (empty_scene_after_startup) {
+        ++post_startup_empty_scene_frame_count_;
+    }
+
     std::ostringstream stage_summary;
     stage_summary << "target_sync=" << render_target_sync_ms
                   << " first_ensure_targets=" << first_ensure_targets_ms
@@ -2397,6 +2411,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " dof_motion_skip=" << (dof_suppressed_for_motion && dof_requested_by_settings ? 1 : 0)
                   << " scene_motion_active=" << (scene_motion_active ? 1 : 0)
                   << " hold_motion_gated_suppressed=" << (motion_gated_hold_suppressed ? 1 : 0)
+                  << " empty_scene_post_startup_count=" << post_startup_empty_scene_frame_count_
+                  << " empty_scene_hold_bypassed_runtime_motion="
+                  << ((empty_scene_submission && motion_gated_hold_suppressed) ? 1 : 0)
+                  << " empty_scene_hold_bypassed_startup_policy="
+                  << (empty_scene_hold_bypassed_due_to_startup_policy ? 1 : 0)
                   << " dof_last_ms=" << last_dof_path_ms_
                   << " composite=" << composite_pass_ms
                   << " ui_prepare=" << ui_overlay_prepare_ms
@@ -2415,6 +2434,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         last_complete_scene_width_ = frame_data.target_width;
         last_complete_scene_height_ = frame_data.target_height;
         hold_after_target_resize_frames_remaining_ = 0;
+        startup_scene_submission_established_ = true;
     }
 
     render_diagnostics::end_frame();

@@ -537,7 +537,10 @@ void vibble_controller::on_hit(const animation_update::Attack& attack) {
 }
 
 void vibble_controller::on_death() {
-    vibble::log::info("[Combat] Vibble died from accumulated damage");
+    vibble::log::info("[Combat] Vibble died from accumulated damage; forcing dev mode");
+    if (Assets* owner_assets = assets()) {
+        owner_assets->set_dev_mode(true);
+    }
 }
 
 bool vibble_controller::has_tag(const Asset& asset, std::string_view tag) const {

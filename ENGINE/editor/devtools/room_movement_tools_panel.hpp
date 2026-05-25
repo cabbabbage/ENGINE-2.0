@@ -3,12 +3,12 @@
 #include <memory>
 #include <string>
 #include <functional>
+#include <vector>
 
 #include <SDL3/SDL.h>
 
 class DMCheckbox;
 class DMTextBox;
-class DMDropdown;
 class DMButton;
 
 class RoomMovementToolsPanel {
@@ -75,6 +75,7 @@ private:
     mutable SDL_Rect dz_rect_{0, 0, 0, 0};
     mutable SDL_Rect rot_rect_{0, 0, 0, 0};
     mutable SDL_Rect path_select_rect_{0, 0, 0, 0};
+    mutable SDL_Rect path_list_rect_{0, 0, 0, 0};
     mutable SDL_Rect path_add_rect_{0, 0, 0, 0};
     mutable SDL_Rect path_delete_rect_{0, 0, 0, 0};
 
@@ -85,7 +86,9 @@ private:
     std::unique_ptr<DMTextBox> dy_box_;
     std::unique_ptr<DMTextBox> dz_box_;
     std::unique_ptr<DMTextBox> rot_box_;
-    std::unique_ptr<DMDropdown> path_dropdown_;
+    std::vector<std::string> path_options_;
+    std::vector<std::unique_ptr<DMButton>> path_buttons_;
+    int selected_path_index_ = 0;
     std::unique_ptr<DMButton> add_path_button_;
     std::unique_ptr<DMButton> delete_path_button_;
     SystemEnabledToggleCallback on_system_enabled_toggle_;

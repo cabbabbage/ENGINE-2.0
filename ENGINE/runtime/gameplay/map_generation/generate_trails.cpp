@@ -2751,7 +2751,7 @@ std::vector<RoomObstacle> build_room_obstacles(const std::vector<Room*>& rooms) 
 
 GenerateTrails::GenerateTrails(nlohmann::json& trail_data, std::vector<SDL_Color> reserved_colors)
     : rng_(std::random_device{}()), trails_data_(&trail_data), trail_colors_(std::move(reserved_colors)) {
-    const json* source_trails = &trail_data;
+    json* source_trails = &trail_data;
     if (!trail_data.is_object()) {
         source_trails = nullptr;
     }

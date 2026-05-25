@@ -2006,6 +2006,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         static_cast<std::size_t>(kProjectionBudgetBase)));
     projection_points_deferred_ = 0;
     projection_points_updated_ = 0;
+    last_traversal_complete_ = true;
+    last_traversal_projection_budget_exhausted_ = false;
+    last_traversal_points_without_projection_ = 0;
+    last_traversal_camera_mismatch_deferred_ = 0;
+    last_traversal_frame_id_ = frame_id;
     std::uint32_t projection_budget_remaining = projection_recompute_budget_;
     if (!cam_state.valid) {
         last_min_world_z_ = 0;
@@ -2303,6 +2308,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             const bool can_defer = has_cached_screen && camera_mismatch && !near_visible_region;
             if (can_defer && projection_budget_remaining == 0) {
                 ++projection_points_deferred_;
+                last_traversal_projection_budget_exhausted_ = true;
+                ++last_traversal_camera_mismatch_deferred_;
                 needs_projection = false;
             }
         }
@@ -2310,16 +2317,26 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         if (needs_projection) {
             if (projection_budget_remaining == 0) {
                 ++projection_points_deferred_;
-                continue;
+                last_traversal_projection_budget_exhausted_ = true;
+                if (camera_mismatch) {
+                    ++last_traversal_camera_mismatch_deferred_;
+                }
+                if (!projection_cache.screen_data_valid) {
+                    ++last_traversal_points_without_projection_;
+                    last_traversal_complete_ = false;
+                }
+                needs_projection = false;
             }
-            world::CameraProjectionParams params = camera_state_to_projection_params(
-                cam_state, screen_width_, screen_height_, horizon_band);
-            params.state_version = camera_state_version_;
+            if (needs_projection) {
+                world::CameraProjectionParams params = camera_state_to_projection_params(
+                    cam_state, screen_width_, screen_height_, horizon_band);
+                params.state_version = camera_state_version_;
 
-            gp->project_to_screen(params);
-            gp->mark_screen_data_updated(frame_stamp);
-            --projection_budget_remaining;
-            ++projection_points_updated_;
+                gp->project_to_screen(params);
+                gp->mark_screen_data_updated(frame_stamp);
+                --projection_budget_remaining;
+                ++projection_points_updated_;
+            }
         }
 
         const int z_floor = static_cast<int>(std::floor(base_world_z));

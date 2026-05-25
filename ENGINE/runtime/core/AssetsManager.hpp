@@ -594,7 +594,7 @@ private:
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
     void rebuild_all_assets_from_grid();
-    void rebuild_active_from_screen_grid();
+    void rebuild_active_from_screen_grid(bool force_same_frame = false);
     world::GridBounds runtime_work_bounds_from_render_bounds(const world::GridBounds& render_bounds);
     world::GridBounds live_dynamic_work_bounds_from_render_bounds(const world::GridBounds& render_bounds) const;
 

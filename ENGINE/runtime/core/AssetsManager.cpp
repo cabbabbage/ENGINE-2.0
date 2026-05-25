@@ -164,6 +164,9 @@ void begin_assets_frame_stats(runtime_stats::FrameStatsRecorder& frame_stats,
     frame_stats.set("assets.visibility_traversal_count", static_cast<std::uint64_t>(0));
     frame_stats.set("assets.active_candidate_count", static_cast<std::uint64_t>(active_count));
     frame_stats.set("assets.active_publish_count", static_cast<std::uint64_t>(active_count));
+    frame_stats.set("assets.active_activation_count", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.active_activation_skipped_count", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.active_rebuild_forced_same_frame", false);
     frame_stats.set("assets.active_fail_open_applied", false);
     frame_stats.set("assets.active_fail_open_reason", "");
     frame_stats.set("dev.set_active_assets_called", false);
@@ -2439,6 +2442,10 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         grid_registration_buffer_.clear();
     }
     movement_flush_end = SDL_GetPerformanceCounter();
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.movement_flush_frame",
+                                                      static_cast<std::uint64_t>(frame_id_));
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.movement_flush_camera_state",
+                                                      camera_.camera_state_version());
 
     const bool camera_motion_active_before_update = camera_.is_height_animating();
     const bool camera_refresh_needed = room_changed || player_moved || camera_motion_active_before_update || camera_settings_dirty_;
@@ -2463,6 +2470,10 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
                                                       camera_state_changed);
     runtime_stats::FrameStatsRecorder::instance().set("assets.world_camera_rebuild_requested",
                                                       camera_rebuild_request_needed);
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.camera_state_before_world_update",
+                                                      camera_state_before_update);
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.camera_state_after_world_update",
+                                                      camera_state_after_update);
     camera_settings_dirty_ = false;
     camera_end = SDL_GetPerformanceCounter();
 
@@ -4017,6 +4028,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                                   double current_pitch,
                                                   std::uint64_t current_projection_version,
                                                   bool allow_live_dynamic_sync) {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     last_grid_rebuild_frame_ = frame_id_;
     camera_.recompute_current_view();
     const world::GridBounds pre_rebuild_render_bounds = screen_world_rect();
@@ -4045,14 +4057,27 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                          movement_active);
         }
     }
+    frame_stats.set("assets.pipeline.camera_state_before_grid_rebuild", camera_.camera_state_version());
     world_grid_.update_active_chunks(pre_rebuild_work_bounds, 0);
+    frame_stats.set("assets.pipeline.pre_rebuild_active_chunk_count",
+                    static_cast<std::uint64_t>(world_grid_.active_chunks().size()));
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
                          frame_id_);
+    frame_stats.set("assets.pipeline.traversal_count_after_camera_rebuild",
+                    static_cast<std::uint64_t>(camera_.visible_traversal_entries().size()));
+    frame_stats.set("assets.pipeline.traversal_complete_after_camera_rebuild",
+                    camera_.last_traversal_complete());
+    frame_stats.set("assets.pipeline.traversal_budget_exhausted_after_camera_rebuild",
+                    camera_.last_traversal_projection_budget_exhausted());
     const world::GridBounds post_rebuild_render_bounds = screen_world_rect();
     const world::GridBounds post_rebuild_work_bounds = runtime_work_bounds_from_render_bounds(post_rebuild_render_bounds);
     world_grid_.update_active_chunks(post_rebuild_work_bounds, 0);
-    rebuild_active_from_screen_grid();
+    frame_stats.set("assets.pipeline.post_rebuild_active_chunk_count",
+                    static_cast<std::uint64_t>(world_grid_.active_chunks().size()));
+    rebuild_active_from_screen_grid(true);
+    frame_stats.set("assets.pipeline.active_publish_count_after_rebuild",
+                    static_cast<std::uint64_t>(active_assets.size()));
     const bool projection_changed =
         current_projection_version != last_camera_projection_state_version_for_grid_ ||
         std::fabs(current_scale - last_camera_scale_for_grid_) > 1e-4 ||
@@ -5188,12 +5213,15 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
     }
 }
 
-void Assets::rebuild_active_from_screen_grid() {
+void Assets::rebuild_active_from_screen_grid(bool force_same_frame) {
     const std::uint32_t current_frame_id = frame_id_;
-    if (current_frame_id == last_active_rebuild_frame_id_) {
+    const bool same_frame_rebuild = current_frame_id == last_active_rebuild_frame_id_;
+    if (same_frame_rebuild && !force_same_frame) {
         return;
     }
     auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("assets.active_rebuild_forced_same_frame",
+                    same_frame_rebuild && force_same_frame);
     bool active_changed = false;
     if (++active_rebuild_epoch_ == 0) {
         active_rebuild_epoch_ = 1;
@@ -5210,12 +5238,11 @@ void Assets::rebuild_active_from_screen_grid() {
         active_assets.begin(),
         active_assets.end());
 
-    const auto& visible_traversal = camera_.visible_traversal_entries();
-    const bool traversal_empty = visible_traversal.empty();
+    const std::vector<WarpedScreenGrid::VisibleTraversalEntry>* visible_traversal_ptr = &camera_.visible_traversal_entries();
     std::vector<Asset*> candidate_active_assets;
     std::unordered_set<Asset*> candidate_seen;
-    candidate_active_assets.reserve(visible_traversal.size() + 1);
-    candidate_seen.reserve(visible_traversal.size() + scratch_previous_active_assets_.size() + 1);
+    candidate_active_assets.reserve(visible_traversal_ptr->size() + 1);
+    candidate_seen.reserve(visible_traversal_ptr->size() + scratch_previous_active_assets_.size() + 1);
 
     auto add_candidate = [&](Asset* asset) {
         if (!asset || asset->dead) {
@@ -5227,9 +5254,45 @@ void Assets::rebuild_active_from_screen_grid() {
         candidate_active_assets.push_back(asset);
     };
 
-    for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : visible_traversal) {
-        add_candidate(source_entry.asset);
+    auto populate_candidates = [&]() {
+        candidate_active_assets.clear();
+        candidate_seen.clear();
+        candidate_active_assets.reserve(visible_traversal_ptr->size() + 1);
+        candidate_seen.reserve(visible_traversal_ptr->size() + scratch_previous_active_assets_.size() + 1);
+        for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : *visible_traversal_ptr) {
+            add_candidate(source_entry.asset);
+        }
+    };
+    populate_candidates();
+
+    bool traversal_complete = camera_.last_traversal_complete();
+    bool traversal_budget_exhausted = camera_.last_traversal_projection_budget_exhausted();
+    std::uint32_t traversal_points_without_projection = camera_.last_traversal_points_without_projection();
+    std::uint32_t traversal_camera_mismatch_deferred = camera_.last_traversal_camera_mismatch_deferred();
+    std::uint64_t traversal_frame_id = camera_.last_traversal_frame_id();
+    bool traversal_retry_attempted = false;
+    bool traversal_retry_produced_candidates = false;
+    if (candidate_active_assets.empty() &&
+        !scratch_previous_active_assets_.empty() &&
+        (!traversal_complete || traversal_budget_exhausted) &&
+        traversal_frame_id == current_frame_id) {
+        traversal_retry_attempted = true;
+        const world::GridBounds retry_work_bounds = runtime_work_bounds_from_render_bounds(screen_world_rect());
+        world_grid_.update_active_chunks(retry_work_bounds, 0);
+        camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_, frame_id_);
+        visible_traversal_ptr = &camera_.visible_traversal_entries();
+        populate_candidates();
+
+        traversal_complete = camera_.last_traversal_complete();
+        traversal_budget_exhausted = camera_.last_traversal_projection_budget_exhausted();
+        traversal_points_without_projection = camera_.last_traversal_points_without_projection();
+        traversal_camera_mismatch_deferred = camera_.last_traversal_camera_mismatch_deferred();
+        traversal_frame_id = camera_.last_traversal_frame_id();
+        traversal_retry_produced_candidates = !candidate_active_assets.empty();
     }
+
+    const auto& visible_traversal = *visible_traversal_ptr;
+    const bool traversal_empty = visible_traversal.empty();
 
     const std::size_t traversal_candidate_count = candidate_active_assets.size();
     const bool fail_open_applied = false;
@@ -5242,16 +5305,29 @@ void Assets::rebuild_active_from_screen_grid() {
                     static_cast<std::uint64_t>(visible_traversal.size()));
     frame_stats.set("assets.active_candidate_count",
                     static_cast<std::uint64_t>(traversal_candidate_count));
-    frame_stats.set("assets.active_publish_count",
-                    static_cast<std::uint64_t>(candidate_active_assets.size()));
     frame_stats.set("assets.active_fail_open_applied", fail_open_applied);
     frame_stats.set("assets.active_fail_open_frames", visibility_fail_open_consecutive_frames_);
     frame_stats.set("assets.active_fail_open_reason", fail_open_reason);
+    frame_stats.set("assets.traversal_complete", traversal_complete);
+    frame_stats.set("assets.traversal_projection_budget_exhausted", traversal_budget_exhausted);
+    frame_stats.set("assets.traversal_points_without_projection",
+                    static_cast<std::uint64_t>(traversal_points_without_projection));
+    frame_stats.set("assets.traversal_camera_mismatch_deferred",
+                    static_cast<std::uint64_t>(traversal_camera_mismatch_deferred));
+    frame_stats.set("assets.traversal_retry_attempted", traversal_retry_attempted);
+    frame_stats.set("assets.traversal_retry_produced_candidates", traversal_retry_produced_candidates);
+    frame_stats.set("assets.traversal_frame_id", traversal_frame_id);
 
     if (traversal_empty && candidate_active_assets.empty() && !scratch_previous_active_assets_.empty()) {
         vibble::log::warn("[Assets] Empty visibility traversal produced no publishable active set. frame=" +
                           std::to_string(current_frame_id) +
                           " previous_active=" + std::to_string(scratch_previous_active_assets_.size()) +
+                          " traversal_complete=" + (traversal_complete ? std::string("true") : std::string("false")) +
+                          " traversal_budget_exhausted=" + (traversal_budget_exhausted ? std::string("true") : std::string("false")) +
+                          " traversal_points_without_projection=" + std::to_string(traversal_points_without_projection) +
+                          " traversal_camera_mismatch_deferred=" + std::to_string(traversal_camera_mismatch_deferred) +
+                          " traversal_retry_attempted=" + (traversal_retry_attempted ? std::string("true") : std::string("false")) +
+                          " traversal_retry_produced_candidates=" + (traversal_retry_produced_candidates ? std::string("true") : std::string("false")) +
                           " dev_mode=" + (dev_mode ? std::string("true") : "false") +
                           " camera_state=" + std::to_string(camera_.camera_state_version()) +
                           " depth_culled=" + std::to_string(camera_.last_depth_culled()) +
@@ -5276,17 +5352,22 @@ void Assets::rebuild_active_from_screen_grid() {
     std::vector<Asset*> next_movement_enabled_active_assets;
     next_active_assets.reserve(candidate_active_assets.size());
     next_movement_enabled_active_assets.reserve(candidate_active_assets.size());
+    std::uint64_t active_activation_count = 0;
+    std::uint64_t active_activation_skipped_count = 0;
 
     auto activate_asset = [&](Asset* asset) {
         if (!asset || asset->dead) {
+            ++active_activation_skipped_count;
             return;
         }
         const std::size_t slot = ensure_runtime_asset_state_slot(asset);
         if (slot == std::numeric_limits<std::size_t>::max()) {
+            ++active_activation_skipped_count;
             return;
         }
         RuntimeAssetState& state = runtime_asset_states_[slot];
         if (state.active_seen_epoch == build_epoch) {
+            ++active_activation_skipped_count;
             return;
         }
         const bool was_active = state.active_membership_epoch == (build_epoch - 1);
@@ -5300,6 +5381,7 @@ void Assets::rebuild_active_from_screen_grid() {
         asset->last_visible_frame_id = current_frame_id;
         asset->active = true;
         next_active_assets.push_back(asset);
+        ++active_activation_count;
         if (asset->isMovementEnabled()) {
             next_movement_enabled_active_assets.push_back(asset);
             state.movement_enabled_active = true;
@@ -5334,6 +5416,10 @@ void Assets::rebuild_active_from_screen_grid() {
 
     active_assets.swap(next_active_assets);
     movement_enabled_active_assets_.swap(next_movement_enabled_active_assets);
+    frame_stats.set("assets.active_activation_count", active_activation_count);
+    frame_stats.set("assets.active_activation_skipped_count", active_activation_skipped_count);
+    frame_stats.set("assets.active_publish_count",
+                    static_cast<std::uint64_t>(active_assets.size()));
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {

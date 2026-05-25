@@ -1497,6 +1497,15 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                           " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false") +
                           " traversal_count=" + std::to_string(traversal_count));
     }
+    if (selected_visible_assets.empty() && !active_assets.empty() && traversal_count > 0) {
+        vibble::log::warn("[OpenGLRuntimeRenderer] Observed empty selected_visible_assets despite non-empty active traversal state. "
+                          "active_count=" + std::to_string(active_assets.size()) +
+                          " filtered_count=" + std::to_string(filtered_active_assets.size()) +
+                          " selected_count=" + std::to_string(selected_visible_assets.size()) +
+                          " traversal_count=" + std::to_string(traversal_count) +
+                          " dev_mode=" + std::string(assets_->is_dev_mode() ? "true" : "false") +
+                          " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false"));
+    }
 
     if (!opengl_runtime_renderer_detail::build_floor_tile_draw_packets(
             camera,

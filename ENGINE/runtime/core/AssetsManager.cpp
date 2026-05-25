@@ -4019,8 +4019,8 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                                   bool allow_live_dynamic_sync) {
     last_grid_rebuild_frame_ = frame_id_;
     camera_.recompute_current_view();
-    const world::GridBounds render_bounds = screen_world_rect();
-    const world::GridBounds work_bounds = runtime_work_bounds_from_render_bounds(render_bounds);
+    const world::GridBounds pre_rebuild_render_bounds = screen_world_rect();
+    const world::GridBounds pre_rebuild_work_bounds = runtime_work_bounds_from_render_bounds(pre_rebuild_render_bounds);
     if (allow_live_dynamic_sync && dynamic_spawn_runtime_) {
         constexpr std::uint32_t kDynamicSpawnReasons =
             static_cast<std::uint32_t>(FrameRebuildReason::CameraChanged) |
@@ -4040,16 +4040,18 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                 player && player->anim_runtime_ && player->anim_runtime_->has_active_plan();
             const bool movement_active = camera_motion_active || player_motion_active;
             constexpr std::size_t kMotionSyncCellBudget = 48;
-            dynamic_spawn_runtime_->sync(live_dynamic_work_bounds_from_render_bounds(render_bounds),
+            dynamic_spawn_runtime_->sync(live_dynamic_work_bounds_from_render_bounds(pre_rebuild_render_bounds),
                                          movement_active ? kMotionSyncCellBudget : 0,
                                          movement_active);
         }
     }
-    world_grid_.update_active_chunks(work_bounds, 0);
+    world_grid_.update_active_chunks(pre_rebuild_work_bounds, 0);
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
                          frame_id_);
-    world_grid_.update_active_chunks(work_bounds, 0);
+    const world::GridBounds post_rebuild_render_bounds = screen_world_rect();
+    const world::GridBounds post_rebuild_work_bounds = runtime_work_bounds_from_render_bounds(post_rebuild_render_bounds);
+    world_grid_.update_active_chunks(post_rebuild_work_bounds, 0);
     rebuild_active_from_screen_grid();
     const bool projection_changed =
         current_projection_version != last_camera_projection_state_version_for_grid_ ||
@@ -5230,42 +5232,9 @@ void Assets::rebuild_active_from_screen_grid() {
     }
 
     const std::size_t traversal_candidate_count = candidate_active_assets.size();
-    bool fail_open_applied = false;
-    std::string fail_open_reason;
-    if (!dev_mode && player && !player->dead) {
-        const std::size_t before_player = candidate_active_assets.size();
-        add_candidate(player);
-        if (candidate_active_assets.size() != before_player && traversal_empty) {
-            fail_open_applied = true;
-            fail_open_reason = "player";
-        }
-    }
-    if (!dev_mode && traversal_candidate_count == 0 && !scratch_previous_active_assets_.empty()) {
-        const std::size_t before_previous = candidate_active_assets.size();
-        for (Asset* asset : scratch_previous_active_assets_) {
-            add_candidate(asset);
-        }
-        if (candidate_active_assets.size() != before_previous) {
-            fail_open_applied = true;
-            fail_open_reason = fail_open_reason.empty() ? "previous_active" : "previous_active_plus_player";
-        }
-    } else if (!dev_mode && traversal_candidate_count == 0 &&
-               candidate_active_assets.size() > 0 &&
-               fail_open_reason.empty()) {
-        fail_open_applied = true;
-        fail_open_reason = "player";
-    }
-
-    if (fail_open_applied) {
-        ++visibility_fail_open_activation_count_;
-        if (visibility_fail_open_activation_count_ == 0) {
-            ++visibility_fail_open_activation_count_;
-        }
-        ++visibility_fail_open_consecutive_frames_;
-        if (visibility_fail_open_consecutive_frames_ == 0) {
-            ++visibility_fail_open_consecutive_frames_;
-        }
-    } else if (traversal_candidate_count > 0) {
+    const bool fail_open_applied = false;
+    const std::string fail_open_reason;
+    if (traversal_candidate_count > 0) {
         visibility_fail_open_consecutive_frames_ = 0;
     }
 

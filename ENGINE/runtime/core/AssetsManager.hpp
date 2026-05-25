@@ -536,6 +536,7 @@ private:
     std::uint32_t frame_rebuild_metrics_frame_ = 0;
     std::uint32_t frame_rebuild_request_count_ = 0;
     std::uint32_t frame_rebuild_execution_count_ = 0;
+    std::uint32_t frame_rebuild_reasons_ = 0;
     bool frame_rebuild_metrics_initialized_ = false;
     RuntimeConvergenceFrameStats last_runtime_convergence_stats_{};
     bool visible_scaling_initialized_ = false;
@@ -561,8 +562,17 @@ private:
     };
 
     void track_asset_for_grid(Asset* asset);
+    enum class FrameRebuildReason : std::uint32_t {
+        None = 0,
+        CameraChanged = 1u << 0,
+        RoomChanged = 1u << 1,
+        MovementFlushed = 1u << 2,
+        SettingsChanged = 1u << 3,
+        SpawnChanged = 1u << 4,
+    };
+
     void reset_frame_rebuild_stage();
-    void note_frame_rebuild_request();
+    void note_frame_rebuild_request(FrameRebuildReason reason = FrameRebuildReason::None);
     bool run_frame_rebuild_stage();
     bool maybe_rebuild_world_grid();
     void rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,

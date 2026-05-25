@@ -119,6 +119,7 @@ public:
     ActivePlanMode current_plan_mode() const { return active_plan_mode_; }
 
     void cancel_all_movement();
+    void stop_movement();
 
 private:
 
@@ -179,6 +180,7 @@ private:
     std::optional<std::string> pending_engagement_target_asset_id_ = std::nullopt;
     std::uint32_t next_plan_retry_frame_ = 0;
     std::uint32_t local_plan_frame_counter_ = 0;
+    std::uint32_t plan_variance_attempt_counter_ = 0;
     static constexpr std::uint32_t kPlanRetryCooldownFrames = 4;
 
     std::uint32_t resolve_plan_frame_id();

@@ -97,13 +97,27 @@ int resolve_effective_grid_resolution(const Asset* self,
     return grid_service.default_resolution();
 }
 
-int bounded_step_toward(int delta, int max_step) {
-    if (delta == 0) {
-        return 0;
+std::uint64_t fnv1a_64(std::string_view text) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char ch : text) {
+        hash ^= static_cast<std::uint64_t>(ch);
+        hash *= 1099511628211ULL;
     }
-    const int positive_step = std::max(1, max_step);
-    const int magnitude = std::min(std::abs(delta), positive_step);
-    return (delta > 0) ? magnitude : -magnitude;
+    return hash;
+}
+
+std::uint64_t mix64(std::uint64_t value) {
+    value ^= value >> 30;
+    value *= 0xbf58476d1ce4e5b9ULL;
+    value ^= value >> 27;
+    value *= 0x94d049bb133111ebULL;
+    value ^= value >> 31;
+    return value;
+}
+
+std::uint64_t auto_move_variance_seed(const Asset& self, std::uint32_t attempt_counter) {
+    const std::uint64_t stable_hash = fnv1a_64(animation_update::detail::stable_asset_id(self));
+    return mix64(stable_hash ^ (static_cast<std::uint64_t>(attempt_counter) * 0x9e3779b97f4a7c15ULL));
 }
 
 
@@ -658,6 +672,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     const std::vector<axis::WorldPos> requested_absolute = absolute;
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    collision_context.path_variance_seed = auto_move_variance_seed(*self_, ++plan_variance_attempt_counter_);
     collision_context.set_furthest_checkpoint_distance_px(
         furthest_checkpoint_distance_xz(axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() },
                                         requested_absolute));
@@ -689,55 +704,6 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
 
     if (plan3d_.strides.empty()) {
-        bool queued_fallback = false;
-        axis::WorldPos fallback_target{0, 0, 0};
-        if (!plan3d_.sanitized_checkpoints.empty()) {
-            fallback_target = plan3d_.sanitized_checkpoints.front();
-            queued_fallback = true;
-        } else if (!requested_absolute.empty()) {
-            fallback_target = requested_absolute.front();
-            queued_fallback = true;
-        }
-
-        if (queued_fallback) {
-            const axis::WorldPos fallback_delta =
-                animation_update::movement_targets::world_delta_to_checkpoint_3d(*self_, fallback_target);
-            int fallback_step = vibble::grid::delta(resolution);
-            if (fallback_step <= 0) {
-                fallback_step = vibble::grid::delta(grid().default_resolution());
-            }
-            if (fallback_step <= 0) {
-                fallback_step = 1;
-            }
-
-            const axis::WorldPos bounded_delta{
-                bounded_step_toward(fallback_delta.x, fallback_step),
-                bounded_step_toward(fallback_delta.y, fallback_step),
-                bounded_step_toward(fallback_delta.z, fallback_step)
-            };
-
-            if (bounded_delta.x != 0 || bounded_delta.y != 0 || bounded_delta.z != 0) {
-                move_3d(bounded_delta,
-                        animation_update::detail::kDefaultAnimation,
-                        true,
-                        override_non_locked);
-                clear_plan_retry_cooldown();
-                active_plan_mode_ = ActivePlanMode::None;
-                if (self_) {
-                    self_->needs_target = false;
-                }
-                if (debug_logging) {
-                    std::ostringstream oss;
-                    oss << "[AnimationUpdate] auto_move_3d fallback asset=" << asset_name
-                        << " target=(" << fallback_target.x << "," << fallback_target.y << "," << fallback_target.z << ")"
-                        << " delta=(" << bounded_delta.x << "," << bounded_delta.y << "," << bounded_delta.z << ")"
-                        << " step=" << fallback_step;
-                    vibble::log::info(oss.str());
-                }
-                return;
-            }
-        }
-
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move_3d plan produced no strides for asset=" + asset_name);
         }
@@ -825,6 +791,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     const std::vector<SDL_Point> requested_absolute = absolute;
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    collision_context.path_variance_seed = auto_move_variance_seed(*self_, ++plan_variance_attempt_counter_);
     collision_context.set_furthest_checkpoint_distance_px(
         furthest_checkpoint_distance_xz(self_->world_xz_point(), requested_absolute));
     const std::vector<SDL_Point> sanitized_checkpoints =
@@ -854,53 +821,6 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
 
     if (plan_.strides.empty()) {
-        bool queued_fallback = false;
-        SDL_Point fallback_target{0, 0};
-        if (!plan_.sanitized_checkpoints.empty()) {
-            fallback_target = plan_.sanitized_checkpoints.front();
-            queued_fallback = true;
-        } else if (!requested_absolute.empty()) {
-            fallback_target = requested_absolute.front();
-            queued_fallback = true;
-        }
-
-        if (queued_fallback) {
-            SDL_Point fallback_delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, fallback_target);
-            int fallback_step = vibble::grid::delta(resolution);
-            if (fallback_step <= 0) {
-                fallback_step = vibble::grid::delta(grid().default_resolution());
-            }
-            if (fallback_step <= 0) {
-                fallback_step = 1;
-            }
-
-            SDL_Point bounded_delta{
-                bounded_step_toward(fallback_delta.x, fallback_step),
-                bounded_step_toward(fallback_delta.y, fallback_step)
-            };
-
-            if (bounded_delta.x != 0 || bounded_delta.y != 0) {
-                move(bounded_delta,
-                     animation_update::detail::kDefaultAnimation,
-                     true,
-                     override_non_locked);
-                clear_plan_retry_cooldown();
-                active_plan_mode_ = ActivePlanMode::None;
-                if (self_) {
-                    self_->needs_target = false;
-                }
-                if (debug_logging) {
-                    std::ostringstream oss;
-                    oss << "[AnimationUpdate] auto_move fallback asset=" << asset_name
-                        << " target=(" << fallback_target.x << "," << fallback_target.y << ")"
-                        << " delta=(" << bounded_delta.x << "," << bounded_delta.y << ")"
-                        << " step=" << fallback_step;
-                    vibble::log::info(oss.str());
-                }
-                return;
-            }
-        }
-
         if (debug_logging) {
             vibble::log::info("[AnimationUpdate] auto_move plan produced no strides for asset=" + asset_name);
         }
@@ -1025,6 +945,14 @@ void AnimationUpdate::cancel_all_movement() {
     pending_move_3d_ = MoveRequest3D{};
     clear_movement_plan();
     move(SDL_Point{0, 0}, animation_update::detail::kDefaultAnimation, true, true);
+}
+
+void AnimationUpdate::stop_movement() {
+    move_pending_ = false;
+    pending_move_ = MoveRequest{};
+    move_pending_3d_ = false;
+    pending_move_3d_ = MoveRequest3D{};
+    clear_movement_plan();
 }
 
 

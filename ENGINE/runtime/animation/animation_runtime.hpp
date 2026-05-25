@@ -110,6 +110,7 @@ private:
     struct MovementState {
         std::uint32_t replan_budget_frame_id = 0;
         int replan_attempts_this_frame = 0;
+        std::uint32_t replan_attempt_counter = 0;
     };
 
     struct PlaybackState {

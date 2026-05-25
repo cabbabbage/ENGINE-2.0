@@ -1,7 +1,9 @@
 #include "get_best_path_3d.hpp"
 
+#include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 
 #include "animation_update.hpp"
 #include "animation_tag_utils.hpp"
@@ -128,7 +130,38 @@ struct CandidateStride3D {
     bool reaches = false;
     bool valid = false;
     std::size_t path_index = 0;
+    std::uint64_t tie_breaker = 0;
 };
+
+std::uint64_t fnv1a_64(std::string_view text) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char ch : text) {
+        hash ^= static_cast<std::uint64_t>(ch);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::uint64_t mix64(std::uint64_t value) {
+    value ^= value >> 30;
+    value *= 0xbf58476d1ce4e5b9ULL;
+    value ^= value >> 27;
+    value *= 0x94d049bb133111ebULL;
+    value ^= value >> 31;
+    return value;
+}
+
+std::uint64_t stride_tie_breaker_seed(std::uint64_t path_seed_base,
+                                      std::size_t checkpoint_index,
+                                      const AnimationDescriptor3D& descriptor,
+                                      int frames) {
+    std::uint64_t seed = path_seed_base;
+    seed ^= mix64(static_cast<std::uint64_t>(checkpoint_index) * 0x9e3779b97f4a7c15ULL);
+    seed ^= mix64(static_cast<std::uint64_t>(descriptor.path_index + 1) * 0xd6e8feb86659fd93ULL);
+    seed ^= mix64(static_cast<std::uint64_t>(frames + 1) * 0xa0761d6478bd642fULL);
+    seed ^= fnv1a_64(descriptor.id);
+    return mix64(seed);
+}
 
 } // namespace
 
@@ -163,8 +196,10 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     const auto& movement_anims = animation_buckets.locomotion;
 
     axis::WorldPos cursor = plan.world_start;
+    const std::uint64_t path_seed_base = context.path_variance_seed;
     bool aborted = false;
-    for (const axis::WorldPos& checkpoint : sanitized_checkpoints) {
+    for (std::size_t checkpoint_index = 0; checkpoint_index < sanitized_checkpoints.size(); ++checkpoint_index) {
+        const axis::WorldPos& checkpoint = sanitized_checkpoints[checkpoint_index];
         if (visited_sq > 0 && animation_update::detail::distance_sq_3d(cursor, checkpoint) <= visited_sq) {
             continue;
         }
@@ -213,6 +248,8 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                     if (!reaches && !progress) {
                         continue;
                     }
+                    const std::uint64_t tie_breaker =
+                        stride_tie_breaker_seed(path_seed_base, checkpoint_index, descriptor, frames);
 
                     bool use_candidate = false;
                     if (!best.valid) {
@@ -221,9 +258,14 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                         use_candidate = reaches;
                     } else if (reaches && frames < best.frames) {
                         use_candidate = true;
+                    } else if (reaches && frames == best.frames && tie_breaker < best.tie_breaker) {
+                        use_candidate = true;
                     } else if (!reaches && dist_sq < best.dist_sq) {
                         use_candidate = true;
                     } else if (!reaches && dist_sq == best.dist_sq && frames < best.frames) {
+                        use_candidate = true;
+                    } else if (!reaches && dist_sq == best.dist_sq && frames == best.frames &&
+                               tie_breaker < best.tie_breaker) {
                         use_candidate = true;
                     }
 
@@ -235,6 +277,7 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                         best.dist_sq = dist_sq;
                         best.end_position = simulated;
                         best.path_index = descriptor.path_index;
+                        best.tie_breaker = tie_breaker;
                     }
                 }
             }
@@ -274,6 +317,8 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                         if (!reaches && !progress) {
                             continue;
                         }
+                        const std::uint64_t tie_breaker =
+                            stride_tie_breaker_seed(path_seed_base, checkpoint_index, descriptor, frames);
 
                         bool use_candidate = false;
                         if (!fallback.valid) {
@@ -282,9 +327,15 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                             use_candidate = reaches;
                         } else if (reaches && frames < fallback.frames) {
                             use_candidate = true;
+                        } else if (reaches && frames == fallback.frames &&
+                                   tie_breaker < fallback.tie_breaker) {
+                            use_candidate = true;
                         } else if (!reaches && dist_sq < fallback.dist_sq) {
                             use_candidate = true;
                         } else if (!reaches && dist_sq == fallback.dist_sq && frames < fallback.frames) {
+                            use_candidate = true;
+                        } else if (!reaches && dist_sq == fallback.dist_sq && frames == fallback.frames &&
+                                   tie_breaker < fallback.tie_breaker) {
                             use_candidate = true;
                         }
 
@@ -296,6 +347,7 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
                             fallback.dist_sq = dist_sq;
                             fallback.end_position = simulated;
                             fallback.path_index = descriptor.path_index;
+                            fallback.tie_breaker = tie_breaker;
                         }
                     }
                 }

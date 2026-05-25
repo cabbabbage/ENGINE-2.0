@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <string>
@@ -18,6 +19,7 @@ struct CollisionQueryContext {
     std::vector<CollisionEntryRef> entries{};
     bool loaded = false;
     int furthest_checkpoint_distance_px = 0;
+    std::uint64_t path_variance_seed = 0;
     std::optional<std::string> engagement_target_asset_id = std::nullopt;
 
     void set_furthest_checkpoint_distance_px(int extent_px) {

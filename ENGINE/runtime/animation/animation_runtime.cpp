@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -88,6 +89,47 @@ std::string resolve_animation(const Asset& asset, const std::string& requested) 
 
 bool same_point(SDL_Point lhs, SDL_Point rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y;
+}
+
+std::uint64_t fnv1a_64(std::string_view text) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char ch : text) {
+        hash ^= static_cast<std::uint64_t>(ch);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::uint64_t mix64(std::uint64_t value) {
+    value ^= value >> 30;
+    value *= 0xbf58476d1ce4e5b9ULL;
+    value ^= value >> 27;
+    value *= 0x94d049bb133111ebULL;
+    value ^= value >> 31;
+    return value;
+}
+
+std::uint64_t path_variance_seed_for_retry(const Asset& self,
+                                           std::size_t checkpoint_index,
+                                           std::uint32_t retry_counter,
+                                           std::uint64_t salt = 0) {
+    const std::string stable_id = animation_update::detail::stable_asset_id(self);
+    std::uint64_t seed = fnv1a_64(stable_id);
+    seed ^= mix64((static_cast<std::uint64_t>(checkpoint_index) + 1) * 0x9e3779b97f4a7c15ULL);
+    seed ^= mix64((static_cast<std::uint64_t>(retry_counter) + 1) * 0xd6e8feb86659fd93ULL);
+    seed ^= mix64(salt + 0xa0761d6478bd642fULL);
+    return mix64(seed);
+}
+
+void reorder_directions_for_retry(std::vector<SDL_Point>& directions, std::uint64_t seed) {
+    if (directions.size() < 2) {
+        return;
+    }
+    const std::size_t offset = static_cast<std::size_t>(seed % directions.size());
+    std::rotate(directions.begin(), directions.begin() + offset, directions.end());
+    if (((seed >> 8) & 1ULL) != 0ULL) {
+        std::reverse(directions.begin(), directions.end());
+    }
 }
 
 template <typename Fn>
@@ -208,6 +250,7 @@ struct MovementController {
             return false;
         }
         ++runtime.movement_state_.replan_attempts_this_frame;
+        ++runtime.movement_state_.replan_attempt_counter;
         return true;
     }
 };
@@ -1774,6 +1817,9 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
     directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
     if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
+    const std::uint64_t retry_seed =
+        path_variance_seed_for_retry(*self_, next_checkpoint_index_, movement_state_.replan_attempt_counter, 0x21ULL);
+    reorder_directions_for_retry(directions, retry_seed);
     std::vector<SDL_Point> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan_.sanitized_checkpoints.size(); ++i) {
         tail.push_back(planner_iface_->plan_.sanitized_checkpoints[i]);
@@ -1790,10 +1836,16 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         }
         CollisionQueryContext collision_context;
         collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+        collision_context.path_variance_seed =
+            path_variance_seed_for_retry(*self_,
+                                         next_checkpoint_index_,
+                                         movement_state_.replan_attempt_counter,
+                                         static_cast<std::uint64_t>(targets.size()));
         auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_, &collision_context);
         if (sanitized.empty()) return false;
         Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
+        new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
         new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
         if (new_plan.strides.empty()) return false;
         planner_iface_->plan_ = std::move(new_plan);
@@ -1919,6 +1971,9 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
     directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
     directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
     if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
+    const std::uint64_t retry_seed_3d =
+        path_variance_seed_for_retry(*self_, next_checkpoint_index_, movement_state_.replan_attempt_counter, 0x31ULL);
+    reorder_directions_for_retry(directions, retry_seed_3d);
 
     std::vector<axis::WorldPos> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan3d_.sanitized_checkpoints.size(); ++i) {
@@ -1944,6 +1999,11 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
 
         CollisionQueryContext collision_context;
         collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+        collision_context.path_variance_seed =
+            path_variance_seed_for_retry(*self_,
+                                         next_checkpoint_index_,
+                                         movement_state_.replan_attempt_counter,
+                                         static_cast<std::uint64_t>(targets.size()));
         Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
         new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
@@ -2008,7 +2068,13 @@ bool AnimationRuntime::handle_blocked_path(const world::GridPoint& from,
         return false;
     }
 
-    bool moved = attempt_unstick(from, to, blockers);
+    const bool auto_plan_active =
+        planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D ||
+        planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D;
+    bool moved = false;
+    if (!auto_plan_active) {
+        moved = attempt_unstick(from, to, blockers);
+    }
     if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D) {
         if (moved) {
             mark_progress_toward_checkpoints_3d();
@@ -2069,6 +2135,11 @@ bool AnimationRuntime::replan_to_destination() {
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    collision_context.path_variance_seed =
+        path_variance_seed_for_retry(*self_,
+                                     next_checkpoint_index_,
+                                     movement_state_.replan_attempt_counter,
+                                     0x41ULL);
     auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_, &collision_context);
     if (sanitized.empty()) {
         return false;
@@ -2123,6 +2194,11 @@ bool AnimationRuntime::replan_to_destination_3d() {
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+    collision_context.path_variance_seed =
+        path_variance_seed_for_retry(*self_,
+                                     next_checkpoint_index_,
+                                     movement_state_.replan_attempt_counter,
+                                     0x51ULL);
     auto sanitized = sanitizer_3d_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
     if (sanitized.empty()) {
         return false;

@@ -1,90 +1,43 @@
 #include "spider_controller.hpp"
-#include "animation/animation_tag_utils.hpp"
+
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
-#include "animation/controllers/shared/attack_detection_helper.hpp"
-#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "assets/asset/Asset.hpp"
 #include "utils/frame_stats_recorder.hpp"
 #include "utils/log.hpp"
+
 #include <algorithm>
 #include <chrono>
-#include <cmath>
-#include <random>
 #include <sstream>
 #include <string>
 
 namespace {
 
-constexpr int kMaulRangePx = 320;
-constexpr int kPounceRangePx = 1150;
-constexpr int kPounceStopRangePx = 190;
-constexpr int kPounceStepPx = 140;
-constexpr int kMaulDamage = 34;
-constexpr int kRetargetMs = 220;
-constexpr int kMaulCooldownMs = 420;
-
-long long distance_sq_xz(const Asset& a, const Asset& b) {
-    const long long dx = static_cast<long long>(b.world_x()) - static_cast<long long>(a.world_x());
-    const long long dz = static_cast<long long>(b.world_z()) - static_cast<long long>(a.world_z());
-    return dx * dx + dz * dz;
-}
-
-bool current_animation_has_tag(const Asset& self, const char* tag) {
-    if (!self.info) {
-        return false;
-    }
-    const auto it = self.info->animations.find(self.current_animation);
-    if (it == self.info->animations.end()) {
-        return false;
-    }
-    return animation_update::tag_utils::has_normalized_tag(it->second.tags, tag);
-}
+constexpr int kAttackEnterRangePx = 330;
+constexpr int kAttackApproachRangePx = 230;
+constexpr int kAttackVisitThresholdPx = 90;
+constexpr int kEvadeDistancePx = 310;
+constexpr int kEvadeVisitThresholdPx = 130;
+constexpr int kEvadeMs = 520;
+constexpr int kAttackCooldownMs = 680;
+constexpr int kAttackWindowHorizonFrames = 16;
 
 std::string stable_asset_name_for_attack(const Asset& asset) {
     return asset.info ? asset.info->name : std::string{};
 }
 
-void trigger_maul_animation(Asset& self, const Asset& target) {
-    if (!self.anim_) {
-        return;
-    }
-    const char* facing_tag = target.world_x() < self.world_x() ? "left" : "right";
-    if (self.anim_->set_animation_by_tags({"attack", facing_tag}, {})) {
-        return;
-    }
-    (void)self.anim_->set_animation_by_tags({"attack"}, {});
-}
-
-void pounce_toward_player(Asset& self, const Asset& player, long long distance_sq) {
-    if (!self.anim_ || current_animation_has_tag(self, "attack")) {
-        return;
-    }
-    if (distance_sq <= static_cast<long long>(kPounceStopRangePx) * kPounceStopRangePx ||
-        distance_sq > static_cast<long long>(kPounceRangePx) * kPounceRangePx) {
-        return;
-    }
-
-    const double dx = static_cast<double>(player.world_x() - self.world_x());
-    const double dz = static_cast<double>(player.world_z() - self.world_z());
-    const double distance = std::sqrt(std::max(1.0, dx * dx + dz * dz));
-    const int step = std::max(1, std::min(kPounceStepPx, static_cast<int>(std::lround(distance - kPounceStopRangePx))));
-    SDL_Point delta{
-        static_cast<int>(std::lround((dx / distance) * static_cast<double>(step))),
-        static_cast<int>(std::lround((dz / distance) * static_cast<double>(step)))
-    };
-    if (delta.x == 0 && delta.y == 0) {
-        delta.x = dx < 0.0 ? -1 : 1;
-    }
-
-    const std::string animation_id = delta.x < 0 ? "left" : "right";
-    self.anim_->move(delta, animation_id);
-}
-
 } // namespace
 
 spider_controller::spider_controller(Asset* self)
-    : CustomAssetController(self) {
+    : CustomAssetController(self),
+      steering_(custom_controller_api::EnemyCombatSteeringConfig{
+          150,
+          80,
+          8,
+          14,
+          210,
+          820
+      }) {
     Asset* owner = self_ptr();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
@@ -94,55 +47,35 @@ spider_controller::spider_controller(Asset* self)
 }
 
 void spider_controller::on_update(const Input& in) {
-    CustomAssetController::on_update(in);
+    (void)in;
     const auto& ctx = game_context();
     Asset* self = self_ptr();
     if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
     Asset* player = custom_controller_api::resolve_valid_player_target(ctx);
-
     if (!player) {
         return;
     }
 
-    const auto now = std::chrono::steady_clock::now();
-    const long long distance_sq = distance_sq_xz(*self, *player);
-    const bool is_attacking = current_animation_has_tag(*self, "attack");
-    if (!is_attacking && (self->needs_target || now >= next_retarget_time_)) {
-        AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
-        combat_overrides.attacking_enabled = true;
-        self->anim_->auto_move(player, 0, true, combat_overrides);
-        next_retarget_time_ = now + std::chrono::milliseconds(kRetargetMs);
+    steering_.tick_progress(*self);
+
+    if (custom_controller_api::current_animation_has_tag(*self, "attack")) {
+        state_ = State::Attack;
+    } else if (state_ == State::Attack) {
+        enter_evade();
     }
 
-    if (!is_attacking) {
-        pounce_toward_player(*self, *player, distance_sq);
-    }
-
-    if (distance_sq <= static_cast<long long>(kMaulRangePx) * kMaulRangePx &&
-        now >= next_maul_time_ &&
-        !is_attacking) {
-        trigger_maul_animation(*self, *player);
-        next_maul_time_ = now + std::chrono::milliseconds(kMaulCooldownMs);
-
-        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
-        frame_stats.set("combat.spider_maul_sent", true);
-        frame_stats.set("combat.spider_maul_damage", kMaulDamage);
-        frame_stats.set("combat.vibble_health_before_spider_maul", player->runtime_health);
-
-        std::ostringstream oss;
-        oss << "[Combat] Spider maul started target='" << stable_asset_name_for_attack(*player)
-            << "' damage=" << kMaulDamage
-            << " target_health_before=" << player->runtime_health
-            << " distance_sq=" << distance_sq;
-        vibble::log::info(oss.str());
-    }
-
-    // Ensure close-range attack candidates are still evaluated while
-    // pathing updates are throttled by planner cooldowns.
-    if (dispatch_weighted_attack_if_ready(*self, *player)) {
-        on_after_attack();
+    switch (state_) {
+    case State::Approach:
+        tick_approach(*self, *player);
+        break;
+    case State::Attack:
+        tick_attack(*self, *player);
+        break;
+    case State::Evade:
+        tick_evade(*self, *player);
+        break;
     }
 }
 
@@ -150,33 +83,153 @@ void spider_controller::on_process_pending_attacks(Asset& self) {
     CustomAssetController::on_process_pending_attacks(self);
 }
 
-bool spider_controller::dispatch_weighted_attack_if_ready(Asset& self, Asset& player) {
+void spider_controller::tick_approach(Asset& self, Asset& player) {
+    const auto now = std::chrono::steady_clock::now();
+    const long long attack_range_sq =
+        static_cast<long long>(kAttackEnterRangePx) * kAttackEnterRangePx;
+    const auto attack_animation_id = resolve_attack_animation_id(self, player);
+    bool window_hittable = false;
+    if (attack_animation_id.has_value()) {
+        window_hittable = attack_window_is_hittable(self, player, *attack_animation_id);
+    }
+    const bool fresh_hittable_window = window_hittable && (!prior_window_hittable_ || !await_fresh_window_after_evade_);
+    prior_window_hittable_ = window_hittable;
+
+    if (now >= next_attack_time_ &&
+        custom_controller_api::distance_sq_xz(self, player) <= attack_range_sq &&
+        attack_animation_id.has_value() &&
+        fresh_hittable_window &&
+        trigger_attack(self, player, *attack_animation_id)) {
+        (void)dispatch_attack_frame_once(self, player);
+        return;
+    }
+
+    AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
+    combat_overrides.attacking_enabled = true;
+    steering_.approach(self,
+                       player,
+                       kAttackApproachRangePx,
+                       kAttackVisitThresholdPx,
+                       false,
+                       combat_overrides);
+}
+
+void spider_controller::tick_attack(Asset& self, Asset& player) {
+    if (!custom_controller_api::current_animation_has_tag(self, "attack")) {
+        enter_evade();
+        return;
+    }
+
+    if (dispatch_attack_frame_once(self, player)) {
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("combat.spider_attack_sent", true);
+        frame_stats.set("combat.vibble_health_before_spider_attack", player.runtime_health);
+    }
+}
+
+void spider_controller::tick_evade(Asset& self, Asset& player) {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= evade_until_) {
+        state_ = State::Approach;
+        steering_.reset();
+        await_fresh_window_after_evade_ = true;
+        return;
+    }
+
+    AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
+    combat_overrides.attacking_enabled = false;
+    steering_.evade(self,
+                    player,
+                    kEvadeDistancePx,
+                    kEvadeVisitThresholdPx,
+                    self.needs_target || self.target_reached || steering_.is_stuck(),
+                    combat_overrides);
+}
+
+std::optional<std::string> spider_controller::resolve_attack_animation_id(Asset& self, const Asset& player) const {
+    if (!self.anim_) {
+        return std::nullopt;
+    }
+    const char* facing_tag = player.world_x() < self.world_x() ? "left" : "right";
+    if (const auto facing_attack = self.anim_->resolve_animation_by_tags({"attack", facing_tag}, {});
+        facing_attack.has_value()) {
+        return facing_attack;
+    }
+    return self.anim_->resolve_animation_by_tags({"attack"}, {});
+}
+
+bool spider_controller::attack_window_is_hittable(const Asset& self,
+                                                  const Asset& player,
+                                                  const std::string& attack_animation_id) const {
+    const auto evaluation = animation_update::AttackValidation::evaluate_attack_window(
+        self,
+        player,
+        attack_animation_id,
+        kAttackWindowHorizonFrames);
+    return evaluation.score != animation_update::AttackValidation::AttackWindowScore::Miss;
+}
+
+bool spider_controller::trigger_attack(Asset& self,
+                                       const Asset& player,
+                                       const std::string& attack_animation_id) {
+    if (!self.anim_) {
+        return false;
+    }
+    if (attack_animation_id.empty()) {
+        return false;
+    }
+
+    self.anim_->stop_movement();
+    self.anim_->set_animation(attack_animation_id);
+
+    state_ = State::Attack;
+    steering_.reset();
+    last_dispatched_attack_frame_ = -1;
+    last_dispatched_payload_id_.clear();
+    attack_dispatched_this_cycle_ = false;
+    await_fresh_window_after_evade_ = false;
+    prior_window_hittable_ = true;
+    next_attack_time_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kAttackCooldownMs);
+
+    std::ostringstream oss;
+    oss << "[Combat] Spider attack started target='" << stable_asset_name_for_attack(player)
+        << "' distance_sq=" << custom_controller_api::distance_sq_xz(self, player);
+    vibble::log::info(oss.str());
+    return true;
+}
+
+bool spider_controller::dispatch_attack_frame_once(Asset& self, Asset& player) {
+    if (attack_dispatched_this_cycle_) {
+        return false;
+    }
+
     const auto attack_opt = animation_update::AttackValidation::compute_attack_if_hit(self, player);
     if (!attack_opt.has_value()) {
         return false;
     }
-    auto attack = *attack_opt;
-    const std::string payload_id = attack.payload.payload_id.empty() ? attack.attack_payload_id : attack.payload.payload_id;
-    const auto now = std::chrono::steady_clock::now();
-    if (!payload_id.empty()) {
-        const auto cooldown_it = payload_recharge_ready_at_.find(payload_id);
-        if (cooldown_it != payload_recharge_ready_at_.end() && now < cooldown_it->second) {
-            return false;
-        }
-    }
 
-    const float weight = std::max(0.05f, attack.payload.recharge_random_weight);
-    static thread_local std::mt19937 rng{std::random_device{}()};
-    std::uniform_real_distribution<float> roll(0.0f, 1.0f);
-    if (roll(rng) > std::min(1.0f, weight / 5.0f)) {
+    const auto& attack = *attack_opt;
+    const std::string payload_id =
+        attack.payload.payload_id.empty() ? attack.attack_payload_id : attack.payload.payload_id;
+    if (attack.source_frame_index == last_dispatched_attack_frame_ &&
+        payload_id == last_dispatched_payload_id_) {
         return false;
     }
 
     player.send_attack(attack);
-    if (!payload_id.empty()) {
-        const float recharge_seconds = std::max(0.0f, attack.payload.recharge_seconds);
-        payload_recharge_ready_at_[payload_id] =
-            now + std::chrono::milliseconds(static_cast<int>(std::lround(recharge_seconds * 1000.0f)));
-    }
+    last_dispatched_attack_frame_ = attack.source_frame_index;
+    last_dispatched_payload_id_ = payload_id;
+    attack_dispatched_this_cycle_ = true;
     return true;
+}
+
+void spider_controller::enter_evade() {
+    state_ = State::Evade;
+    steering_.reset();
+    last_dispatched_attack_frame_ = -1;
+    last_dispatched_payload_id_.clear();
+    attack_dispatched_this_cycle_ = false;
+    await_fresh_window_after_evade_ = true;
+    prior_window_hittable_ = true;
+    evade_until_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(kEvadeMs);
 }

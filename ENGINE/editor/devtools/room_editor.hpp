@@ -62,7 +62,11 @@ class DevFooterBar;
 class DevControls;
 namespace animation_update { struct AttackPayload; }
 namespace devmode::room_config { class AttackPayloadEditor; }
-namespace animation_editor { class AnimationListPanel; }
+namespace animation_editor {
+class AnimationDocument;
+class AnimationListPanel;
+class PreviewProvider;
+}
 
 namespace devmode::core {
 class ManifestStore;
@@ -506,6 +510,7 @@ private:
     std::optional<std::string> stack_animation_list_selected_animation_id() const;
     bool is_stack_animation_editable_id(const std::string& animation_id) const;
     bool is_point_inside_stack_animation_list(int x, int y) const;
+    void sync_stack_animation_list_preview_provider(const AssetInfo* info);
     bool apply_stack_animation_selection(const std::string& animation_id);
     std::string asset_editor_subview_label(AssetEditorSubview subview) const;
     bool should_show_asset_editor_navigation() const;
@@ -970,6 +975,9 @@ private:
     std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
     std::unique_ptr<animation_editor::AnimationListPanel> stack_animation_list_panel_;
+    std::shared_ptr<animation_editor::AnimationDocument> stack_animation_preview_document_;
+    std::shared_ptr<animation_editor::PreviewProvider> stack_animation_preview_provider_;
+    std::string stack_animation_preview_signature_;
     SDL_Rect stack_animation_list_bounds_{0, 0, 0, 0};
     bool stack_animation_list_visible_ = false;
     std::unordered_set<std::string> stack_animation_list_selectable_ids_;

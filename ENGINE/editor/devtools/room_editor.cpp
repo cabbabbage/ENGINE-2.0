@@ -13,7 +13,9 @@
 #include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_info_ui.hpp"
+#include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationListPanel.hpp"
+#include "devtools/asset_editor/animation_editor_window/PreviewProvider.hpp"
 #include "devtools/sdl_modal_dialog.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
@@ -82,6 +84,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <optional>
 #include <iostream>
@@ -10527,6 +10530,23 @@ void RoomEditor::ensure_attack_payload_editor_widget() {
     }
 }
 
+std::string build_stack_animation_preview_signature(const AssetInfo& info) {
+    std::ostringstream ss;
+    ss << info.asset_dir_path() << "|" << info.start_animation << "|" << info.animations.size();
+    for (const auto& [id, animation] : info.animations) {
+        ss << "|" << id
+           << "|k=" << animation.source.kind
+           << "|p=" << animation.source.path
+           << "|n=" << animation.source.name
+           << "|f=" << animation.number_of_frames
+           << "|ix=" << (animation.invert_frames_horizontal ? 1 : 0)
+           << "|iy=" << (animation.invert_frames_vertical ? 1 : 0)
+           << "|rev=" << (animation.reverse_source ? 1 : 0)
+           << "|inh=" << (animation.inherit_data ? 1 : 0);
+    }
+    return ss.str();
+}
+
 void RoomEditor::ensure_stack_animation_list_panel() {
     if (stack_animation_list_panel_) {
         return;
@@ -10638,6 +10658,44 @@ bool RoomEditor::is_point_inside_stack_animation_list(int x, int y) const {
     return SDL_PointInRect(&p, &stack_animation_list_bounds_) != 0;
 }
 
+void RoomEditor::sync_stack_animation_list_preview_provider(const AssetInfo* info) {
+    if (!stack_animation_list_panel_) {
+        return;
+    }
+    if (!info) {
+        stack_animation_preview_document_.reset();
+        stack_animation_preview_provider_.reset();
+        stack_animation_preview_signature_.clear();
+        stack_animation_list_panel_->set_preview_provider({});
+        return;
+    }
+
+    const std::string signature = build_stack_animation_preview_signature(*info);
+    const bool needs_reload = !stack_animation_preview_document_ ||
+                              !stack_animation_preview_provider_ ||
+                              signature != stack_animation_preview_signature_;
+    if (needs_reload) {
+        if (!stack_animation_preview_document_) {
+            stack_animation_preview_document_ = std::make_shared<animation_editor::AnimationDocument>();
+        }
+        if (!stack_animation_preview_provider_) {
+            stack_animation_preview_provider_ = std::make_shared<animation_editor::PreviewProvider>();
+        }
+
+        std::filesystem::path asset_root;
+        try {
+            asset_root = info->asset_dir_path();
+        } catch (...) {
+            asset_root.clear();
+        }
+        stack_animation_preview_document_->load_from_manifest(info->manifest_payload(), asset_root, {});
+        stack_animation_preview_provider_->set_document(stack_animation_preview_document_);
+        stack_animation_preview_signature_ = signature;
+    }
+
+    stack_animation_list_panel_->set_preview_provider(stack_animation_preview_provider_);
+}
+
 void RoomEditor::sync_stack_animation_list_panel() {
     ensure_stack_animation_list_panel();
     if (!stack_animation_list_panel_) {
@@ -10648,6 +10706,7 @@ void RoomEditor::sync_stack_animation_list_panel() {
     const bool list_visible = is_stack_animation_list_subview_active();
     stack_animation_list_visible_ = list_visible;
     if (!list_visible) {
+        sync_stack_animation_list_preview_provider(nullptr);
         stack_animation_list_panel_->set_external_rows(std::vector<animation_editor::AnimationListPanel::ExternalRow>{});
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
         return;
@@ -10655,6 +10714,7 @@ void RoomEditor::sync_stack_animation_list_panel() {
 
     Asset* target = stack_animation_list_target_asset();
     if (!target || !target->info) {
+        sync_stack_animation_list_preview_provider(nullptr);
         stack_animation_list_panel_->set_external_rows(std::vector<animation_editor::AnimationListPanel::ExternalRow>{});
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
         return;
@@ -10662,6 +10722,7 @@ void RoomEditor::sync_stack_animation_list_panel() {
 
     const std::optional<std::string> requested = stack_animation_list_selected_animation_id();
     const auto model = devmode::resolve_stack_animation_list_model(target->info.get(), requested.value_or(std::string{}));
+    sync_stack_animation_list_preview_provider(target->info.get());
 
     std::vector<animation_editor::AnimationListPanel::ExternalRow> rows;
     rows.reserve(model.rows.size());

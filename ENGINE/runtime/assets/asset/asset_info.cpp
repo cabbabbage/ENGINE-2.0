@@ -618,8 +618,26 @@ std::pair<int, int> tilt_range_bounds(const vibble::weighted_range::WeightedIntR
         return {min_value, max_value};
 }
 
-int clamp_y_position_value(int value) {
-    return std::clamp(value, -50, 200);
+int clamp_y_position_percent(int value) {
+    return std::clamp(value, -100, 500);
+}
+
+vibble::weighted_range::WeightedIntRange sanitize_y_position_range_percent(
+    const vibble::weighted_range::WeightedIntRange& range) {
+    vibble::weighted_range::WeightedIntRange sanitized = range;
+    sanitized.center = clamp_y_position_percent(static_cast<int>(std::clamp<std::int64_t>(
+        sanitized.center,
+        static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+        static_cast<std::int64_t>(std::numeric_limits<int>::max()))));
+    sanitized.span = std::max<std::int64_t>(0, sanitized.span);
+    if (sanitized.center - sanitized.span < -100) {
+        sanitized.span = sanitized.center + 100;
+    }
+    if (sanitized.center + sanitized.span > 500) {
+        sanitized.span = std::min<std::int64_t>(sanitized.span, 500 - sanitized.center);
+    }
+    sanitized.span = std::max<std::int64_t>(0, sanitized.span);
+    return sanitized;
 }
 
 std::optional<double> parse_number_like_json(const nlohmann::json& value) {
@@ -2701,7 +2719,9 @@ void AssetInfo::set_tilt_range_degrees(int min_deg, int max_deg) {
 }
 
 void AssetInfo::set_y_position_range(const vibble::weighted_range::WeightedIntRange& range) {
-        y_position_range = vibble::weighted_range::from_json(vibble::weighted_range::to_json(range), vibble::weighted_range::make_flat(0));
+        y_position_range = sanitize_y_position_range_percent(
+            vibble::weighted_range::from_json(vibble::weighted_range::to_json(range),
+                                              vibble::weighted_range::make_flat(0)));
         info_json_[kYPositionRangeKey] = vibble::weighted_range::to_json(y_position_range);
         info_json_.erase("y_pos_min");
         info_json_.erase("y_pos_max");
@@ -3119,10 +3139,8 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                                                                      "tilt_range_max_deg");
                 }
                 std::tie(tilt_range_min_deg, tilt_range_max_deg) = tilt_range_bounds(tilt_range);
-                y_position_range = read_weighted_range_field(data, kYPositionRangeKey);
-                if (!y_position_range.random && (!data.contains(kYPositionRangeKey) || !data[kYPositionRangeKey].is_object())) {
-                        y_position_range = read_weighted_range_legacy_pair(data, "y_pos_min", "y_pos_max");
-                }
+                y_position_range = sanitize_y_position_range_percent(
+                    read_weighted_range_field(data, kYPositionRangeKey, vibble::weighted_range::make_flat(0)));
         } catch (...) {
 
         }

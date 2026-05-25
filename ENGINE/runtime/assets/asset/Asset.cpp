@@ -92,7 +92,9 @@ static int sample_spawn_y_position(const std::shared_ptr<AssetInfo>& info)
         }
         const vibble::weighted_range::WeightedIntRange range = info->y_position_range;
         std::lock_guard<std::mutex> lock(asset_rng_mutex());
-        const std::int64_t resolved = vibble::weighted_range::resolve(range, asset_rng());
+        const std::int64_t resolved_percent = vibble::weighted_range::resolve(range, asset_rng(), -100, 500, true);
+        const std::int64_t asset_length = std::max<std::int64_t>(1, static_cast<std::int64_t>(info->original_canvas_height));
+        const std::int64_t resolved = (resolved_percent * asset_length) / 100;
         if (resolved < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
                 return std::numeric_limits<int>::min();
         }

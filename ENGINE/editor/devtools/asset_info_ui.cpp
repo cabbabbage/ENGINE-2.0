@@ -217,7 +217,7 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_tilt.get() });
     widgets_.push_back(std::move(w_tilt));
 
-    wr_y_pos_range_ = std::make_unique<DMWeightedRangeWidget>("Y Position", info_->y_position_range, -50, 200, false);
+    wr_y_pos_range_ = std::make_unique<DMWeightedRangeWidget>("Y Position (%)", info_->y_position_range, -100, 500, false);
     wr_y_pos_range_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
         this->on_y_position_range_changed(range);
     });

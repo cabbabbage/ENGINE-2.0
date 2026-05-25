@@ -709,8 +709,33 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                 room_refs.push_back(room_ptr.get());
             }
             trailgen.set_all_rooms_reference(room_refs);
+            std::unordered_set<std::string> required_child_keys;
+            for (std::size_t li = 1; li < map_layers_.size(); ++li) {
+                const LayerSpec& parent_layer = map_layers_[li - 1];
+                for (const RoomSpec& parent_spec : parent_layer.rooms) {
+                    for (const std::string& required_child : parent_spec.required_children) {
+                        required_child_keys.insert(parent_spec.name + "->" + required_child);
+                    }
+                }
+            }
+            std::vector<std::pair<Room*, Room*>> ordered_connections = scratch.required_connections;
+            std::stable_sort(ordered_connections.begin(),
+                             ordered_connections.end(),
+                             [&](const std::pair<Room*, Room*>& lhs, const std::pair<Room*, Room*>& rhs) {
+                                 auto priority = [&](const std::pair<Room*, Room*>& edge) {
+                                     Room* parent = edge.first;
+                                     Room* child = edge.second;
+                                     const bool is_required_child =
+                                         (parent && child) &&
+                                         required_child_keys.find(parent->room_name + "->" + child->room_name) != required_child_keys.end();
+                                     const int layer = child ? child->layer : std::numeric_limits<int>::max();
+                                     const int group = is_required_child ? 0 : 1;
+                                     return std::pair<int, int>{group, layer};
+                                 };
+                                 return priority(lhs) < priority(rhs);
+                             });
             trail_result = trailgen.generate_trails(
-                scratch.required_connections,
+                ordered_connections,
                 map_id_,
                 nullptr,
                 map_radius,
@@ -744,7 +769,7 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
             0,
             static_cast<int>(scratch.required_connections.size()) -
                 static_cast<int>(trail_result.required_failures.size()));
-        const bool connected = trail_result.required_failures.empty() &&
+        const bool connected = trail_result.unresolved_rooms.empty() &&
                                graph_reaches_all_non_trail(scratch.rooms.front().get(), connectivity_refs);
         trail_result.all_required_connected = connected;
 
@@ -761,16 +786,16 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
         }
 
         failed_route_room_names.clear();
-        for (const TrailConnectionFailure& failure : trail_result.required_failures) {
-            if (failure.b) {
-                failed_route_room_names.insert(failure.b->room_name);
+        for (const TrailUnresolvedRoom& unresolved : trail_result.unresolved_rooms) {
+            if (unresolved.room) {
+                failed_route_room_names.insert(unresolved.room->room_name);
             }
             vibble::log::warn(
-                std::string("[GenerateRooms] Required trail failed") +
+                std::string("[GenerateRooms] Unresolved room connection") +
                 " attempt=" + std::to_string(attempt + 1) +
-                " rooms=" + (failure.a ? failure.a->room_name : std::string("<null>")) +
-                "<->" + (failure.b ? failure.b->room_name : std::string("<null>")) +
-                " reason=" + failure.reason);
+                " room=" + (unresolved.room ? unresolved.room->room_name : std::string("<null>")) +
+                " phase=" + unresolved.phase +
+                " reason=" + unresolved.reason);
         }
         if (failed_route_room_names.empty()) {
             for (const auto& connection : scratch.required_connections) {

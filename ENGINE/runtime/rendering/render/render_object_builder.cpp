@@ -254,9 +254,6 @@ bool build_direct_asset_render_object(Asset* asset,
     out_object.center = SDL_Point{0, 0};
     out_object.use_custom_center = false;
     out_object.flip = base_flip;
-    float sink_burial_offset_px = 0.0f;
-    out_object.sink_clip_enabled = asset->resolve_static_sink_burial_offset(sink_burial_offset_px);
-    out_object.sink_height_offset_px = out_object.sink_clip_enabled ? sink_burial_offset_px : 0.0f;
     out_object.texture_w = cache_record.frame_w;
     out_object.texture_h = cache_record.frame_h;
     out_object.has_texture_size = cache_record.has_texture_size;

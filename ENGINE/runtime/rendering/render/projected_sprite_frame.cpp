@@ -224,6 +224,11 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
     }
 
     const float aspect = final_height_px / final_width_px;
+    const float world_height = world_width * aspect;
+    if (!std::isfinite(world_height) || world_height <= 0.0f) {
+        return false;
+    }
+
     float screen_height = bottom_len * aspect;
     if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
         return false;
@@ -312,7 +317,12 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
     out.final_width_px = input.final_width_px;
     out.final_height_px = input.final_height_px;
     out.flip = input.flip;
+    out.anchor_uv = sanitize_anchor_uv(input.anchor_uv);
+    out.world_x = input.world_x;
+    out.world_y = input.world_y;
     out.world_z = input.world_z;
+    out.world_width = world_width;
+    out.world_height = world_height;
     out.perspective_scale = safe_perspective;
     out.valid = true;
     return true;

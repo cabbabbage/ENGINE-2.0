@@ -45,7 +45,12 @@ struct ProjectedSpriteFrame {
     int final_width_px = 0;
     int final_height_px = 0;
     SDL_FlipMode flip = SDL_FLIP_NONE;
+    SDL_FPoint anchor_uv{0.5f, 1.0f};
+    float world_x = 0.0f;
+    float world_y = 0.0f;
     float world_z = 0.0f;
+    float world_width = 0.0f;
+    float world_height = 0.0f;
     float perspective_scale = 1.0f;
     bool valid = false;
 

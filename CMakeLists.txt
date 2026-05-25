@@ -95,6 +95,14 @@ target_include_directories(spawn_trail_classification_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime
 )
 
+add_executable(sprite_floor_clip_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/sprite_floor_clip_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/rendering/render/sprite_floor_clip.cpp
+)
+target_include_directories(sprite_floor_clip_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)
@@ -139,6 +147,9 @@ endif()
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(SDL3_ttf CONFIG REQUIRED)
+target_link_libraries(sprite_floor_clip_test PRIVATE
+    SDL3::SDL3
+)
 
 # Try glad via package config first (vcpkg provides this)
 find_package(glad CONFIG QUIET)

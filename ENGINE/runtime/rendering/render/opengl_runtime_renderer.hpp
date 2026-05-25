@@ -50,15 +50,15 @@ bool build_xy_sprite_draw_packets(const WarpedScreenGrid& camera,
                                   std::vector<GpuSpriteDrawPacket>& out_xy_sprite_draws,
                                   std::string& out_error,
                                   const std::vector<double>* cached_depth_edges = nullptr);
-bool build_sink_clipped_sprite_packet(const render_projection::ProjectedSpriteFrame& projected,
-                                      float u0,
-                                      float v0,
-                                      float u1,
-                                      float v1,
-                                      float sink_height_offset_px,
-                                      std::uint32_t target_width,
-                                      std::uint32_t target_height,
-                                      GpuSpriteDrawPacket& out_packet);
+bool build_floor_clipped_sprite_packet(const WarpedScreenGrid& camera,
+                                       const render_projection::ProjectedSpriteFrame& projected,
+                                       float u0,
+                                       float v0,
+                                       float u1,
+                                       float v1,
+                                       std::uint32_t target_width,
+                                       std::uint32_t target_height,
+                                       GpuSpriteDrawPacket& out_packet);
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera,
                                    const Asset& asset,
                                    const std::vector<double>* cached_depth_edges = nullptr);
@@ -149,7 +149,7 @@ private:
     static void packet_to_vertices(const GpuSpriteDrawPacket& packet,
                                    std::uint32_t target_width,
                                    std::uint32_t target_height,
-                                   std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices);
+                                   std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices);
 
     SDL_Renderer* renderer_ = nullptr;
     Assets* assets_ = nullptr;
@@ -202,3 +202,4 @@ private:
     std::deque<DeferredCreationJob> deferred_creation_queue_{};
     std::uint64_t creation_job_sequence_ = 0;
 };
+

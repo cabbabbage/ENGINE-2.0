@@ -1976,6 +1976,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     const SDL_Color floor_clear_color = resolve_runtime_floor_clear_color();
 
     const bool scene_motion_active = camera_state_changed || dof_suppressed_for_motion;
+    const bool previous_scene_motion_active = last_scene_motion_signal_;
+    last_scene_motion_signal_ = scene_motion_active;
     const bool can_hold_previous_scene =
         last_complete_scene_frame_data_.has_value() &&
         last_complete_scene_width_ == frame_data.target_width &&
@@ -2007,6 +2009,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         scene_motion_active &&
         can_hold_previous_scene &&
         (frame_data.suspected_incomplete_scene ||
+         (empty_scene_submission && startup_empty_scene_hold_window_active));
+    const bool hold_scene_attempted =
+        can_hold_previous_scene &&
+        (frame_data.suspected_incomplete_scene ||
+         hold_zero_sprite_scene_frame ||
          (empty_scene_submission && startup_empty_scene_hold_window_active));
     const bool empty_scene_hold_bypassed_due_to_startup_policy =
         empty_scene_submission &&
@@ -2041,7 +2048,16 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         consecutive_held_incomplete_scene_frames_ = 0;
     }
 
+    if (motion_gated_hold_suppressed && held_scene_reason.empty()) {
+        held_scene_reason = "scene_motion_gated_hold_skip";
+    }
+
     render_diagnostics::set_held_scene_frame(frame_to_render == &held_frame_data, held_scene_reason);
+    render_diagnostics::set_scene_hold_gating_stats(scene_motion_active,
+                                                    hold_scene_attempted,
+                                                    motion_gated_hold_suppressed,
+                                                    scene_motion_active,
+                                                    previous_scene_motion_active);
     render_diagnostics::set_renderer_runtime_info("opengl", backend_name(), present_mode());
     render_diagnostics::set_floor_pass_target_dimensions(frame_to_render->target_width, frame_to_render->target_height);
     render_diagnostics::set_xy_sprite_pass_target_dimensions(frame_to_render->target_width, frame_to_render->target_height);

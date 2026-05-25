@@ -3097,6 +3097,11 @@ void Assets::update(const Input& input)
     frame_stats.set("render.xy_sprite_packet_count", stats.xy_sprite_packet_count);
     frame_stats.set("render.held_scene_frame", stats.held_scene_frame);
     frame_stats.set("render.held_scene_reason", stats.held_scene_reason);
+    frame_stats.set("render.scene_motion_active", stats.scene_motion_active);
+    frame_stats.set("render.held_scene_attempted", stats.held_scene_attempted);
+    frame_stats.set("render.held_scene_suppressed_by_motion", stats.held_scene_suppressed_by_motion);
+    frame_stats.set("render.scene_motion_signal_current", stats.scene_motion_signal_current);
+    frame_stats.set("render.scene_motion_signal_previous", stats.scene_motion_signal_previous);
     frame_stats.set("render.stage_timings", stats.render_stage_timings);
 
     finalize_dev_frame_state();

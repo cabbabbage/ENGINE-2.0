@@ -99,6 +99,11 @@ struct RenderFrameStats {
     std::uint32_t creation_retried_count = 0;
     bool held_scene_frame = false;
     std::string held_scene_reason;
+    bool scene_motion_active = false;
+    bool held_scene_attempted = false;
+    bool held_scene_suppressed_by_motion = false;
+    bool scene_motion_signal_current = false;
+    bool scene_motion_signal_previous = false;
 };
 
 namespace render_diagnostics {
@@ -181,6 +186,11 @@ void set_creation_budget_stats(std::uint32_t budget_limit,
                                std::uint32_t retried_count,
                                std::uint32_t permanent_failures);
 void set_held_scene_frame(bool held, const std::string& reason);
+void set_scene_hold_gating_stats(bool scene_motion_active,
+                                 bool held_scene_attempted,
+                                 bool held_scene_suppressed_by_motion,
+                                 bool scene_motion_signal_current,
+                                 bool scene_motion_signal_previous);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

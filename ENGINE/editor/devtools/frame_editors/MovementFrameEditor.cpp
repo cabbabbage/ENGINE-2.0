@@ -442,8 +442,12 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
             }
         }
 
-        // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable);
+        // Only consume event if point editor actually handled it, but do not
+        // clear an already-consumed state from earlier UI handlers (tool panel,
+        // frame navigator, etc).
+        if (point_3d_editor_) {
+            consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable) || consumed;
+        }
     }
 
     return consumed;
@@ -1023,4 +1027,3 @@ void MovementFrameEditor::apply_selected_frame_to_target() {
 }
 
 }  // namespace devmode::frame_editors
-

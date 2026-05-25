@@ -1587,15 +1587,22 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
                 std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
             }
-            const float blur_distance = kDofFarNearBucketRadius > 0
-                ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) /
-                      static_cast<float>(kDofFarNearBucketRadius)
-                : 0.0f;
-            const float blur_strength = std::clamp(
-                static_cast<float>(assets_->getView().get_settings().blur_px) * blur_distance,
-                0.0f,
-                static_cast<float>(assets_->getView().get_settings().blur_px));
-            layer.blur_strength_px = blur_strength;
+            float layer_depth_sum = 0.0f;
+            float layer_depth_min = std::numeric_limits<float>::max();
+            float layer_depth_max = std::numeric_limits<float>::lowest();
+            for (const GpuSpriteDrawPacket& packet : layer.packets) {
+                layer_depth_sum += packet.camera_depth_key;
+                layer_depth_min = std::min(layer_depth_min, packet.camera_depth_key);
+                layer_depth_max = std::max(layer_depth_max, packet.camera_depth_key);
+            }
+            const float layer_depth_center = layer.packets.empty() ? 0.0f : (layer_depth_sum / static_cast<float>(layer.packets.size()));
+            const float layer_depth_range = std::max(0.0f, layer_depth_max - layer_depth_min);
+            const float focus_depth_center = static_cast<float>(out_data.focus_depth_layer);
+            const float focus_distance = std::fabs(layer_depth_center - focus_depth_center);
+            const float norm_distance = focus_distance / std::max(1.0f, static_cast<float>(kDofFarNearBucketRadius));
+            const float coc_like = 1.0f - std::exp(-1.35f * norm_distance);
+            const float range_boost = std::clamp(layer_depth_range / 8.0f, 0.0f, 0.2f);
+            layer.blur_strength_px = std::clamp(coc_like + range_boost, 0.0f, 1.0f);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }
@@ -2111,6 +2118,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             }
             dof_layers.push_back(dof_blur_chain::LayerTexture{
                 frame_to_render->focus_depth_layer + 1,
+                1.0f,
                 xy_sprite_target_});
             used_flattened_xy_dof_layer = true;
             return true;
@@ -2135,7 +2143,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                     render_diagnostics::end_frame();
                     return false;
                 }
-                dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer_target});
+                dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer.blur_strength_px, layer_target});
             }
         } else if (!rebuild_flattened_xy_dof_layer()) {
             render_diagnostics::end_frame();

@@ -94,7 +94,7 @@ private:
     std::mt19937 rng_;
     bool testing_ = false;
     nlohmann::json* trails_data_ = nullptr;
+    nlohmann::json fallback_trails_data_ = nlohmann::json::object();
     std::vector<SDL_Color> trail_colors_;
 };
-
 

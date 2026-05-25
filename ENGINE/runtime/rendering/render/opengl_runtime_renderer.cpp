@@ -1978,84 +1978,14 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     const bool scene_motion_active = camera_state_changed || dof_suppressed_for_motion;
     const bool previous_scene_motion_active = last_scene_motion_signal_;
     last_scene_motion_signal_ = scene_motion_active;
-    const bool can_hold_previous_scene =
-        last_complete_scene_frame_data_.has_value() &&
-        last_complete_scene_width_ == frame_data.target_width &&
-        last_complete_scene_height_ == frame_data.target_height;
     const bool empty_scene_submission =
         frame_data.floor_draw_count == 0 &&
         frame_data.xy_sprite_draw_count == 0;
-    const bool invalid_gameplay_submission =
-        frame_data.suspected_incomplete_scene || empty_scene_submission;
-    constexpr std::uint32_t kMaxGameplayRecoveryHolds = 1;
-    // Never hold a previous scene while camera/player motion is active: that manifests as
-    // visible freezes/flicker where world simulation advances but presentation stalls.
-    // Recovery holds are limited to genuinely incomplete scene builds during stable frames.
-    const bool hold_incomplete_scene_frame =
-        frame_data.suspected_incomplete_scene &&
-        !scene_motion_active &&
-        can_hold_previous_scene &&
-        consecutive_held_incomplete_scene_frames_ < kMaxGameplayRecoveryHolds;
-    const bool hold_zero_sprite_scene_frame = false;
-    const bool startup_empty_scene_hold_window_active =
-        !startup_scene_submission_established_ &&
-        hold_empty_scene_frames_remaining_ > 0;
-    const bool hold_empty_scene_frame =
-        empty_scene_submission &&
-        can_hold_previous_scene &&
-        !scene_motion_active &&
-        startup_empty_scene_hold_window_active;
-    const bool motion_gated_hold_suppressed =
-        scene_motion_active &&
-        can_hold_previous_scene &&
-        (frame_data.suspected_incomplete_scene ||
-         (empty_scene_submission && startup_empty_scene_hold_window_active));
-    const bool hold_scene_attempted =
-        can_hold_previous_scene &&
-        (frame_data.suspected_incomplete_scene ||
-         hold_zero_sprite_scene_frame ||
-         (empty_scene_submission && startup_empty_scene_hold_window_active));
-    const bool empty_scene_hold_bypassed_due_to_startup_policy =
-        empty_scene_submission &&
-        can_hold_previous_scene &&
-        !scene_motion_active &&
-        !startup_empty_scene_hold_window_active &&
-        hold_empty_scene_frames_remaining_ > 0;
-
-    GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
-    std::string held_scene_reason;
-    if (hold_incomplete_scene_frame || hold_zero_sprite_scene_frame || hold_empty_scene_frame) {
-        held_frame_data = *last_complete_scene_frame_data_;
-        held_frame_data.ui_overlay_texture = frame_data.ui_overlay_texture;
-        held_frame_data.ui_overlay_gpu_texture = frame_data.ui_overlay_gpu_texture;
-        held_frame_data.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
-        frame_to_render = &held_frame_data;
-        if (hold_incomplete_scene_frame) {
-            held_scene_reason = "incomplete_scene_gameplay_recovery";
-            hold_after_target_resize_frames_remaining_ = 0;
-            ++consecutive_held_incomplete_scene_frames_;
-        } else if (hold_zero_sprite_scene_frame) {
-            held_scene_reason = "zero_sprite_scene";
-        } else {
-            held_scene_reason = "empty_scene_startup_safety";
-            if (hold_empty_scene_frames_remaining_ > 0) {
-                --hold_empty_scene_frames_remaining_;
-            }
-            consecutive_held_incomplete_scene_frames_ = 0;
-        }
-    } else {
-        consecutive_held_incomplete_scene_frames_ = 0;
-    }
-
-    if (motion_gated_hold_suppressed && held_scene_reason.empty()) {
-        held_scene_reason = "scene_motion_gated_hold_skip";
-    }
-
-    render_diagnostics::set_held_scene_frame(frame_to_render == &held_frame_data, held_scene_reason);
+    render_diagnostics::set_held_scene_frame(false, std::string{});
     render_diagnostics::set_scene_hold_gating_stats(scene_motion_active,
-                                                    hold_scene_attempted,
-                                                    motion_gated_hold_suppressed,
+                                                    false,
+                                                    false,
                                                     scene_motion_active,
                                                     previous_scene_motion_active);
     render_diagnostics::set_renderer_runtime_info("opengl", backend_name(), present_mode());
@@ -2426,12 +2356,10 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " dof=" << dof_pass_ms
                   << " dof_motion_skip=" << (dof_suppressed_for_motion && dof_requested_by_settings ? 1 : 0)
                   << " scene_motion_active=" << (scene_motion_active ? 1 : 0)
-                  << " hold_motion_gated_suppressed=" << (motion_gated_hold_suppressed ? 1 : 0)
+                  << " hold_motion_gated_suppressed=0"
                   << " empty_scene_post_startup_count=" << post_startup_empty_scene_frame_count_
-                  << " empty_scene_hold_bypassed_runtime_motion="
-                  << ((empty_scene_submission && motion_gated_hold_suppressed) ? 1 : 0)
-                  << " empty_scene_hold_bypassed_startup_policy="
-                  << (empty_scene_hold_bypassed_due_to_startup_policy ? 1 : 0)
+                  << " empty_scene_hold_bypassed_runtime_motion=0"
+                  << " empty_scene_hold_bypassed_startup_policy=0"
                   << " dof_last_ms=" << last_dof_path_ms_
                   << " composite=" << composite_pass_ms
                   << " ui_prepare=" << ui_overlay_prepare_ms
@@ -2442,10 +2370,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     render_diagnostics::set_render_stage_timings(stage_summary.str());
     render_diagnostics::set_submit_result(true);
 
-    if (!hold_incomplete_scene_frame &&
-        !hold_zero_sprite_scene_frame &&
-        !hold_empty_scene_frame &&
-        frame_data.has_valid_composite_source) {
+    if (frame_data.has_valid_composite_source) {
         last_complete_scene_frame_data_ = frame_data;
         last_complete_scene_width_ = frame_data.target_width;
         last_complete_scene_height_ = frame_data.target_height;

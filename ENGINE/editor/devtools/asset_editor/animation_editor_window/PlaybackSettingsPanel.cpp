@@ -6,8 +6,10 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <deque>
 #include <filesystem>
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -167,6 +169,60 @@ bool payload_inherits_data(const nlohmann::json& payload) {
     }
     const bool default_inherit = !payload_has_local_frame_data(payload);
     return read_bool_field_like(payload, "inherit_data", default_inherit);
+}
+
+bool apply_locked_to_animation_and_dependents(animation_editor::AnimationDocument* document,
+                                              const std::string& animation_id,
+                                              bool locked_value) {
+    if (!document || animation_id.empty()) {
+        return false;
+    }
+
+    const std::vector<std::string> ids = document->animation_ids();
+    std::unordered_map<std::string, std::vector<std::string>> dependents_by_source;
+    dependents_by_source.reserve(ids.size());
+    for (const auto& id : ids) {
+        auto payload_opt = document->animation_payload_json(id);
+        if (!payload_opt.has_value()) {
+            continue;
+        }
+        const std::string source_id = payload_source_animation_id(*payload_opt);
+        if (!source_id.empty()) {
+            dependents_by_source[source_id].push_back(id);
+        }
+    }
+
+    bool changed = false;
+    std::deque<std::string> to_visit;
+    std::unordered_set<std::string> visited;
+    to_visit.push_back(animation_id);
+
+    while (!to_visit.empty()) {
+        const std::string current_id = to_visit.front();
+        to_visit.pop_front();
+        if (!visited.insert(current_id).second) {
+            continue;
+        }
+
+        auto payload_opt = document->animation_payload_json(current_id);
+        if (payload_opt.has_value()) {
+            nlohmann::json payload = *payload_opt;
+            const bool current_locked = read_bool_field_like(payload, "locked", false);
+            if (current_locked != locked_value) {
+                payload["locked"] = locked_value;
+                changed = document->update_animation_payload(current_id, payload) || changed;
+            }
+        }
+
+        const auto found = dependents_by_source.find(current_id);
+        if (found != dependents_by_source.end()) {
+            for (const auto& dependent_id : found->second) {
+                to_visit.push_back(dependent_id);
+            }
+        }
+    }
+
+    return changed;
 }
 
 std::string payload_on_end_value(const nlohmann::json& payload) {
@@ -1322,8 +1378,25 @@ void PlaybackSettingsPanel::commit_changes(const PlaybackState& desired_state) {
         payload = nlohmann::json::object();
     }
 
-    apply_state_to_payload(payload, desired_state);
-    document_->update_animation_payload(animation_id_, payload);
+    const PlaybackState previous_state = payload_to_state(payload);
+    const bool only_locked_changed =
+        !derived_from_animation_ &&
+        previous_state.locked != desired_state.locked &&
+        previous_state.invert_x == desired_state.invert_x &&
+        previous_state.invert_y == desired_state.invert_y &&
+        previous_state.invert_z == desired_state.invert_z &&
+        previous_state.reverse_source == desired_state.reverse_source &&
+        previous_state.inherit_data == desired_state.inherit_data &&
+        previous_state.invert_frames_horizontal == desired_state.invert_frames_horizontal &&
+        previous_state.invert_frames_vertical == desired_state.invert_frames_vertical &&
+        previous_state.random_start == desired_state.random_start;
+
+    if (only_locked_changed) {
+        apply_locked_to_animation_and_dependents(document_.get(), animation_id_, desired_state.locked);
+    } else {
+        apply_state_to_payload(payload, desired_state);
+        document_->update_animation_payload(animation_id_, payload);
+    }
 
     auto updated_dump = fetch_payload(document_.get(), animation_id_);
     if (!updated_dump) {

@@ -1986,8 +1986,12 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     const bool invalid_gameplay_submission =
         frame_data.suspected_incomplete_scene || empty_scene_submission;
     constexpr std::uint32_t kMaxGameplayRecoveryHolds = 1;
+    // Never hold a previous scene while camera/player motion is active: that manifests as
+    // visible freezes/flicker where world simulation advances but presentation stalls.
+    // Recovery holds are limited to genuinely incomplete scene builds during stable frames.
     const bool hold_incomplete_scene_frame =
-        invalid_gameplay_submission &&
+        frame_data.suspected_incomplete_scene &&
+        !camera_motion_active &&
         can_hold_previous_scene &&
         consecutive_held_incomplete_scene_frames_ < kMaxGameplayRecoveryHolds;
     const bool hold_zero_sprite_scene_frame = false;
@@ -2007,9 +2011,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         held_frame_data.debug_overlay_draw_count = frame_data.debug_overlay_draw_count;
         frame_to_render = &held_frame_data;
         if (hold_incomplete_scene_frame) {
-            held_scene_reason = frame_data.suspected_incomplete_scene
-                ? "incomplete_scene_gameplay_recovery"
-                : "empty_scene_gameplay_recovery";
+            held_scene_reason = "incomplete_scene_gameplay_recovery";
             hold_after_target_resize_frames_remaining_ = 0;
             ++consecutive_held_incomplete_scene_frames_;
         } else if (hold_zero_sprite_scene_frame) {

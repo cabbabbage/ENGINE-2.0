@@ -261,10 +261,8 @@ inline void Section_BasicInfo::build() {
 }
 
 inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
-    bool used = DockableCollapsible::handle_event(e);
-    if (!info_) return used;
-
-    if (!used) {
+    bool used = false;
+    if (info_ && is_expanded()) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
         if (wr_size_variation_ && wr_size_variation_->handle_event(e)) used = true;
@@ -276,6 +274,8 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
     }
+    used = DockableCollapsible::handle_event(e) || used;
+    if (!info_) return used;
 
     bool changed = false;
     bool rebuild_needed = false;
@@ -598,14 +598,14 @@ class Section_Spacing : public DockableCollapsible {
     }
 
     bool handle_event(const SDL_Event& e) override {
-      bool used = DockableCollapsible::handle_event(e);
-      if (!info_ || !expanded_) return used;
-
-      if (!used) {
+      bool used = false;
+      if (info_ && expanded_) {
         if (s_min_same_ && s_min_same_->handle_event(e)) used = true;
         if (s_min_all_ && s_min_all_->handle_event(e)) used = true;
         if (s_neighbor_search_ && s_neighbor_search_->handle_event(e)) used = true;
       }
+      used = DockableCollapsible::handle_event(e) || used;
+      if (!info_ || !expanded_) return used;
 
       bool changed = false;
 

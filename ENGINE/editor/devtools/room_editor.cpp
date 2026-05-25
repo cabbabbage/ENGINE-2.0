@@ -18062,16 +18062,27 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
 
     if (left_pressed && !pointer_blocked) {
         bool started_depth_drag = false;
+        int depth_hit = -1;
         if (selection_locked) {
-            const int depth_hit = find_anchor_floor_crosshair_at_point(
+            depth_hit = find_anchor_floor_crosshair_at_point(
                 screen_pt,
                 kAnchorHandlePickRadiusPx,
                 5,
                 anchor_edit_.selected_anchor_name);
-            if (depth_hit >= 0 &&
-                static_cast<std::size_t>(depth_hit) < anchor_edit_.handles.size() &&
-                anchor_edit_.handles[static_cast<std::size_t>(depth_hit)].name == anchor_edit_.selected_anchor_name &&
-                begin_anchor_depth_drag(anchor_edit_.selected_anchor_name, screen_pt)) {
+        }
+        if (depth_hit < 0) {
+            depth_hit = find_anchor_floor_crosshair_at_point(
+                screen_pt,
+                kAnchorHandlePickRadiusPx,
+                selection_locked ? 5 : 0,
+                std::string{});
+        }
+        if (depth_hit >= 0 &&
+            static_cast<std::size_t>(depth_hit) < anchor_edit_.handles.size()) {
+            const std::string depth_anchor_name = anchor_edit_.handles[static_cast<std::size_t>(depth_hit)].name;
+            anchor_edit_.selected_anchor_name = depth_anchor_name;
+            anchor_edit_.point_selected = true;
+            if (begin_anchor_depth_drag(depth_anchor_name, screen_pt)) {
                 started_depth_drag = true;
                 sync_anchor_tools_panel();
             }

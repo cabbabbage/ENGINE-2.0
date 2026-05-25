@@ -915,14 +915,18 @@ void Asset::finalize_setup() {
         refresh_runtime_box_cache_from_frame();
         refresh_runtime_floor_boxes_cache();
 
+        resample_spawn_y_position();
+
+        finalized_ = true;
+}
+
+void Asset::resample_spawn_y_position() {
         const int resolved_world_y = sample_spawn_y_position(info);
         if (assets_) {
                 move_to_world_position(world_x(), resolved_world_y, world_z());
         } else {
                 set_provisional_grid_point(world_x(), resolved_world_y, world_z(), grid_resolution);
         }
-
-        finalized_ = true;
 }
 void Asset::update_scale_values(bool force) {
     const std::uint32_t frame_id = assets_ ? assets_->frame_id() : 0;
@@ -3053,8 +3057,18 @@ bool Asset::resolve_static_sink_burial_offset(float& out_offset_px) {
         current_frame &&
         (current_frame->dx != 0 || current_frame->dy != 0 || current_frame->dz != 0);
 
-    if (world_transform_changed || frame_reports_motion) {
+    if (frame_reports_motion) {
         sink_burial_disabled_due_to_motion_ = true;
+    }
+    if (world_transform_changed) {
+        if (is_dynamic_spawned_asset()) {
+            // Dynamic runtime assets can be detached/reattached or re-snapped as chunks stream.
+            // Re-lock burial from the new transform instead of permanently disabling sink clipping.
+            sink_burial_locked_ = false;
+            sink_burial_locked_offset_px_ = 0.0f;
+        } else {
+            sink_burial_disabled_due_to_motion_ = true;
+        }
     }
 
     if (sink_burial_disabled_due_to_motion_) {

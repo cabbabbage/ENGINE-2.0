@@ -754,6 +754,7 @@ Asset* DynamicSpawnRuntime::activate_cell(const PlannedCell& cell) {
         asset = std::move(suspended_it->second);
         suspended_.erase(suspended_it);
         reused = true;
+        asset->resample_spawn_y_position();
     } else {
         asset = create_asset_for_cell(cell);
     }

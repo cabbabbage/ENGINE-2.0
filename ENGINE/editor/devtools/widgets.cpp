@@ -2634,9 +2634,7 @@ void DMWeightedRangeWidget::sanitize_value() {
     value_.span = std::max<std::int64_t>(0, value_.span);
     value_.falloff = std::clamp<std::int64_t>(value_.falloff, 0, value_.span);
     if (value_.span == 0) {
-        value_.random = false;
         value_.falloff = 0;
-        value_.weights = vibble::weighted_range::WeightedRangeWeights{0.5, 0.5, 0.5};
     }
 }
 
@@ -2663,7 +2661,12 @@ bool DMWeightedRangeWidget::toggle_random() {
         } else {
             value_.random = true;
             if (value_.span <= 0) {
-                value_.span = 1;
+                if (loop_) {
+                    value_.span = 1;
+                } else {
+                    const std::int64_t room = std::min<std::int64_t>(value_.center - min_allowed_, max_allowed_ - value_.center);
+                    value_.span = std::max<std::int64_t>(0, std::min<std::int64_t>(1, room));
+                }
             }
             if (value_.falloff > value_.span) {
                 value_.falloff = value_.span;
@@ -2828,8 +2831,39 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL:
-        if (hovered_ || dragging_) {
-            used = apply_wheel_delta(e.wheel.y);
+        {
+            int mx = 0;
+            int my = 0;
+            sdl_mouse_util::GetMouseState(&mx, &my);
+            update_hover(SDL_Point{mx, my});
+            SDL_Point wheel_point{mx, my};
+            const bool pointer_over_widget = SDL_PointInRect(&wheel_point, &rect_);
+            if (pointer_over_widget || dragging_) {
+                set_slider_scroll_capture(this, value_.random || dragging_);
+                double delta = static_cast<double>(e.wheel.y);
+                if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                    delta = -delta;
+                }
+                if (std::abs(delta) > 0.0) {
+                    wheel_scroll_accumulator_ += delta;
+                }
+                int steps = 0;
+                while (wheel_scroll_accumulator_ >= 1.0) {
+                    wheel_scroll_accumulator_ -= 1.0;
+                    ++steps;
+                }
+                while (wheel_scroll_accumulator_ <= -1.0) {
+                    wheel_scroll_accumulator_ += 1.0;
+                    --steps;
+                }
+                if (steps != 0) {
+                    used = apply_wheel_delta(steps);
+                } else if (value_.random || dragging_) {
+                    used = true;
+                }
+            } else {
+                wheel_scroll_accumulator_ = 0.0;
+            }
         }
         break;
     case SDL_EVENT_WINDOW_MOUSE_LEAVE:
@@ -2837,6 +2871,8 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         checkbox_hovered_ = false;
         random_hovered_ = false;
         hovered_handle_index_ = -1;
+        wheel_scroll_accumulator_ = 0.0;
+        set_slider_scroll_capture(this, false);
         if (dragging_) {
             end_drag();
         }

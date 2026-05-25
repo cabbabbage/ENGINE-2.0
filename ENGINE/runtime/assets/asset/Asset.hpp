@@ -158,6 +158,7 @@ class Asset {
                                          std::optional<int> resolution_layer_override = std::nullopt);
     bool clear_anchor_perspective_override();
     bool has_anchor_perspective_override() const { return anchor_perspective_override_active_; }
+    void resample_spawn_y_position();
     void move_to_world_position(int world_x, int world_y, int world_z = 0,
                                 std::optional<int> resolution_layer_override = std::nullopt);
     void set_world_z(int world_z);

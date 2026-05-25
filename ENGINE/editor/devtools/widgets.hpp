@@ -427,6 +427,7 @@ private:
     bool has_random_snapshot_ = false;
     double visual_span_px_ = 0.0;
     double visual_falloff_px_ = 0.0;
+    double wheel_scroll_accumulator_ = 0.0;
     ColumnGeometry columns_[5]{};
     mutable std::array<SDL_Rect, 5> label_rects_{};
     mutable std::array<SDL_Rect, 5> value_rects_{};

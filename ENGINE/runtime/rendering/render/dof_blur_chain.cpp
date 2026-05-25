@@ -677,8 +677,9 @@ bool Renderer::compose_foreground_chain(const std::vector<int>& chain,
         scratch_blur_exposure_[step] = accumulated_exposure;
     }
 
-    for (std::size_t reverse_index = chain.size(); reverse_index > 0; --reverse_index) {
-        const std::size_t step = reverse_index - 1;
+    // Preserve canonical XY layering for foreground sprites: farther foreground layers
+    // are drawn first, and nearer layers are drawn last (on top).
+    for (std::size_t step = 0; step < chain.size(); ++step) {
         SDL_Texture* layer_texture = texture_for_depth_layer(layers, chain[step]);
         if (!layer_texture) {
             continue;

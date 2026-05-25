@@ -499,10 +499,10 @@ Room::Room(Point origin,
         }
         room_area = std::make_unique<Area>(room_name, precomputed_area->get_points(), 3);
         if (room_area) {
-            room_area->set_type("room");
+            room_area->set_type(type.empty() ? "room" : type);
         }
     } else {
-        int edge_smoothness = assets_json.value("edge_smoothness", 2);
+        constexpr int kGeneratedRoomEdgeSmoothness = 0;
         std::string geometry = assets_json.value("geometry", "square");
         if (!geometry.empty()) {
             geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
@@ -537,7 +537,7 @@ Room::Room(Point origin,
             width,
             height,
             geometry,
-            edge_smoothness,
+            kGeneratedRoomEdgeSmoothness,
             map_w,
             map_h,
             3);
@@ -1022,7 +1022,6 @@ void Room::upsert_named_area(const Area& area,
 nlohmann::json Room::create_static_room_json(std::string name) {
         json out;
 	const std::string geometry = assets_json.value("geometry", "Square");
-	const int edge_smoothness = assets_json.value("edge_smoothness", 2);
 	int width = 0, height = 0;
 	if (room_area) {
 		bounds_to_size(room_area->get_bounds(), width, height);
@@ -1030,7 +1029,6 @@ nlohmann::json Room::create_static_room_json(std::string name) {
 	out["name"] = std::move(name);
         out["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(width));
         out["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(height));
-        out["edge_smoothness"] = edge_smoothness;
         out["geometry"] = geometry;
         out.erase("radius");
         out.erase("min_radius");

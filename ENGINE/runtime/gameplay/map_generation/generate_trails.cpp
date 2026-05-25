@@ -2319,7 +2319,6 @@ bool attempt_trail_connection(Room* a,
 
     json& config = *trail_config;
     const auto default_width = vibble::weighted_range::make_legacy_uniform(40, 40);
-    const auto default_curvy = vibble::weighted_range::make_flat(2);
     vibble::weighted_range::WeightedIntRange width_range = config.contains("width")
         ? read_weighted_range_field(config, "width", default_width)
         : (config.contains("min_width") || config.contains("max_width")
@@ -2332,7 +2331,6 @@ bool attempt_trail_connection(Room* a,
     const int resolved_width = std::max(1, resolve_weighted_dimension(width_range, rng));
     const int min_width = resolved_width;
     const int max_width = resolved_width;
-    (void)default_curvy; // Curvyness is intentionally ignored in Manhattan routing mode.
     const int curvyness = 0;
     const std::string name = config.value("name", trail_name.empty() ? std::string("trail_segment") : trail_name);
     const int routing_clearance_px = std::max(8, max_width / 2 + 12);

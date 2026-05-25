@@ -87,6 +87,22 @@ target_link_libraries(room_legacy_migration_regression_test PRIVATE
     nlohmann_json::nlohmann_json
 )
 
+add_executable(map_template_data_cleanup_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/map_template_data_cleanup_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core/manifest/map_manifest_normalizer.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core/manifest/manifest_loader.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/map_generation/map_layers_geometry.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils/utils/map_grid_settings.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils/utils/weighted_range.cpp
+)
+target_include_directories(map_template_data_cleanup_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+target_link_libraries(map_template_data_cleanup_test PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
 add_executable(spawn_trail_classification_test
     ${CMAKE_SOURCE_DIR}/ENGINE/tests/spawn_trail_classification_test.cpp
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn/trail_classification.cpp

@@ -29,10 +29,8 @@
 
 namespace {
 constexpr int kRoomConfigPanelMinWidth = 260;
-constexpr bool kTrailsAllowIndependentDimensions = true;
 constexpr int kMinRoomDimension = 1;
 constexpr int kMaxRoomDimension = 40000;
-constexpr int kMaxTrailCurvyness = 20;
 constexpr int kSliderExpansionMargin = 64;
 constexpr int kSliderExpansionFactor = 2;
 constexpr double kDegreesFullCircle = 360.0;
@@ -747,8 +745,6 @@ struct RoomConfigurator::State {
         vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
     vibble::weighted_range::WeightedIntRange height_range =
         vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
-    int edge_smoothness = 2;
-    vibble::weighted_range::WeightedIntRange curvyness_range = vibble::weighted_range::make_flat(2);
     double trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
     int trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
     bool is_boss = false;
@@ -764,17 +760,12 @@ struct RoomConfigurator::State {
         bool mutated = false;
         const auto width_json = vibble::weighted_range::to_json(width_range);
         const auto height_json = vibble::weighted_range::to_json(height_range);
-        const auto curvy_json = vibble::weighted_range::to_json(curvyness_range);
         width_range = vibble::weighted_range::from_json(width_json, vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension));
         height_range = vibble::weighted_range::from_json(height_json, vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension));
-        curvyness_range = vibble::weighted_range::from_json(curvy_json, vibble::weighted_range::make_flat(2));
         if (vibble::weighted_range::to_json(width_range) != width_json) {
             mutated = true;
         }
         if (vibble::weighted_range::to_json(height_range) != height_json) {
-            mutated = true;
-        }
-        if (vibble::weighted_range::to_json(curvyness_range) != curvy_json) {
             mutated = true;
         }
         if (!allow_height || geometry_is_circle()) {
@@ -784,11 +775,6 @@ struct RoomConfigurator::State {
             }
         }
 
-        int new_edge = std::clamp(edge_smoothness, 0, 101);
-        if (new_edge != edge_smoothness) {
-            edge_smoothness = new_edge;
-            mutated = true;
-        }
         const double normalized_direction = normalize_angle_degrees(trail_connection_direction_deg);
         if (std::abs(normalized_direction - trail_connection_direction_deg) > 1e-6) {
             trail_connection_direction_deg = normalized_direction;
@@ -826,8 +812,6 @@ struct RoomConfigurator::State {
 
         const auto width_fallback = vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
         const auto height_fallback = vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
-        const auto curvy_fallback = vibble::weighted_range::make_flat(2);
-
         if (src.contains("width")) {
             width_range = vibble::weighted_range::from_json(src["width"], width_fallback);
         } else {
@@ -901,20 +885,6 @@ struct RoomConfigurator::State {
             height_range = width_range;
         }
 
-        if (src.contains("curvyness")) {
-            if (src["curvyness"].is_object()) {
-                curvyness_range = vibble::weighted_range::from_json(src["curvyness"], curvy_fallback);
-            } else if (auto cv = read_json_int(src, "curvyness")) {
-                curvyness_range = vibble::weighted_range::make_flat(std::max(0, *cv));
-            }
-        } else if (src.contains("curviness")) {
-            if (src["curviness"].is_object()) {
-                curvyness_range = vibble::weighted_range::from_json(src["curviness"], curvy_fallback);
-            } else if (auto cv = read_json_int(src, "curviness")) {
-                curvyness_range = vibble::weighted_range::make_flat(std::max(0, *cv));
-            }
-        }
-
         has_boss_field = src.is_object() && src.contains("is_boss");
         if (auto value = read_json_bool(src, "is_boss")) {
             is_boss = *value;
@@ -941,12 +911,6 @@ struct RoomConfigurator::State {
         } else {
             room_floor_color = SDL_Color{0, 0, 0, 255};
         }
-        if (auto value = read_json_int(src, "edge_smoothness")) {
-            edge_smoothness = *value;
-        } else {
-            edge_smoothness = 4;
-        }
-
         trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
         trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
         if (src.contains("trail_connection_sector") && src["trail_connection_sector"].is_object()) {
@@ -979,11 +943,9 @@ struct RoomConfigurator::State {
         dest["inherit_map_floor_color"] = inherit_map_floor_color;
         dest["room_floor_color"] = nlohmann::json::array(
             {static_cast<int>(room_floor_color.r), static_cast<int>(room_floor_color.g), static_cast<int>(room_floor_color.b)});
-        dest["edge_smoothness"] = edge_smoothness;
         dest["width"] = vibble::weighted_range::to_json(width_range);
         dest["height"] = allow_height ? vibble::weighted_range::to_json(height_range)
                                        : vibble::weighted_range::to_json(width_range);
-        dest["curvyness"] = vibble::weighted_range::to_json(curvyness_range);
 
         (void)include_camera;
 
@@ -994,8 +956,16 @@ struct RoomConfigurator::State {
         dest.erase("max_width");
         dest.erase("min_height");
         dest.erase("max_height");
+        dest.erase("edge_smoothness");
+        dest.erase("curvyness");
         dest.erase("curviness");
         dest.erase("inherits_map_assets");
+        if (!allow_height) {
+            dest.erase("height");
+            dest.erase("inherit_map_floor_color");
+            dest.erase("inherits_live_dynamic_assets");
+            dest.erase("room_floor_color");
+        }
         if (include_trail_connection_sector) {
             dest["trail_connection_sector"] = nlohmann::json::object({
                 {"direction_deg", normalize_angle_degrees(trail_connection_direction_deg)},
@@ -1055,10 +1025,9 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     copy_field("room_name");
     copy_field("geometry");
     copy_field("width");
-    copy_field("height");
-    copy_field("edge_smoothness");
-    copy_field("curvyness");
-    copy_field("curviness");
+    if (allow_height) {
+        copy_field("height");
+    }
     if (include_trail_connection_sector || source.contains("trail_connection_sector")) {
         copy_field("trail_connection_sector");
     }
@@ -1789,7 +1758,7 @@ void RoomConfigurator::handle_container_closed() {
 
 bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     const nlohmann::json& source = data.is_object() ? data : empty_object();
-    const bool allow_height = kTrailsAllowIndependentDimensions;
+    const bool allow_height = !is_trail_context_;
     const bool include_trail_connection_sector = !is_trail_context_;
     const bool include_boss = !is_trail_context_;
     const bool include_tags = !room_metadata_only_mode_;
@@ -1811,8 +1780,6 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
             new_state.geometry != state_->geometry ||
             vibble::weighted_range::to_json(new_state.width_range) != vibble::weighted_range::to_json(state_->width_range) ||
             vibble::weighted_range::to_json(new_state.height_range) != vibble::weighted_range::to_json(state_->height_range) ||
-            new_state.edge_smoothness != state_->edge_smoothness ||
-            vibble::weighted_range::to_json(new_state.curvyness_range) != vibble::weighted_range::to_json(state_->curvyness_range) ||
             std::abs(new_state.trail_connection_direction_deg - state_->trail_connection_direction_deg) > 1e-6 ||
             new_state.trail_connection_width_percent != state_->trail_connection_width_percent ||
             new_state.is_boss != state_->is_boss ||
@@ -2069,7 +2036,7 @@ void RoomConfigurator::rebuild_rows_internal() {
     name_widget_ = std::make_unique<TextBoxWidget>(name_box_.get());
 
     bool allow_geometry_choice = !is_trail_context_;
-    const bool allow_height = kTrailsAllowIndependentDimensions;
+    const bool allow_height = !is_trail_context_;
     if (allow_geometry_choice) {
         auto geom_it = std::find(geometry_options_.begin(), geometry_options_.end(), state_->geometry);
         int geom_index = 0;
@@ -2099,11 +2066,10 @@ void RoomConfigurator::rebuild_rows_internal() {
         height_slider_max_range_ = 0;
     }
 
-    edge_slider_ = std::make_unique<DMSlider>("Edge Smoothness", 0, 101, state_->edge_smoothness);
-    edge_widget_ = std::make_unique<SliderWidget>(edge_slider_.get());
-
-    curvy_range_widget_ = std::make_unique<DMWeightedRangeWidget>("Curvyness", state_->curvyness_range, 0, kMaxTrailCurvyness, false);
-    curvy_widget_ = std::make_unique<WeightedRangeWidget>(curvy_range_widget_.get());
+    edge_slider_.reset();
+    edge_widget_.reset();
+    curvy_range_widget_.reset();
+    curvy_widget_.reset();
 
     if (!is_trail_context_) {
         trail_connection_sector_widget_ = std::make_unique<TrailConnectionSectorWidget>(
@@ -2186,29 +2152,39 @@ void RoomConfigurator::rebuild_rows_internal() {
         boss_widget_.reset();
     }
 
-    inherit_checkbox_ = std::make_unique<DMCheckbox>("Inherit Map Assets", state_->inherits_assets);
-    inherit_widget_ = std::make_unique<CheckboxWidget>(inherit_checkbox_.get());
-    inherit_floor_color_checkbox_ =
-        std::make_unique<DMCheckbox>("Inherit Map Color", state_->inherit_map_floor_color);
-    inherit_floor_color_widget_ = std::make_unique<CheckboxWidget>(inherit_floor_color_checkbox_.get());
-    room_floor_color_button_ = std::make_unique<DMButton>("Pick Room Floor Color", &DMStyles::AccentButton(), 0, DMButton::height());
-    room_floor_color_widget_ = std::make_unique<ButtonWidget>(room_floor_color_button_.get(), [this]() {
-        if (!state_) {
-            return;
-        }
-        if (!color_picker_) {
-            color_picker_ = std::make_unique<DevColorPicker>();
-        }
-        color_picker_->set_screen_size(last_screen_w_, last_screen_h_);
-        color_picker_->open(state_->room_floor_color, [this](SDL_Color chosen) {
+    if (!is_trail_context_) {
+        inherit_checkbox_ = std::make_unique<DMCheckbox>("Inherit Map Assets", state_->inherits_assets);
+        inherit_widget_ = std::make_unique<CheckboxWidget>(inherit_checkbox_.get());
+        inherit_floor_color_checkbox_ =
+            std::make_unique<DMCheckbox>("Inherit Map Color", state_->inherit_map_floor_color);
+        inherit_floor_color_widget_ = std::make_unique<CheckboxWidget>(inherit_floor_color_checkbox_.get());
+        room_floor_color_button_ = std::make_unique<DMButton>("Pick Room Floor Color", &DMStyles::AccentButton(), 0, DMButton::height());
+        room_floor_color_widget_ = std::make_unique<ButtonWidget>(room_floor_color_button_.get(), [this]() {
             if (!state_) {
                 return;
             }
-            chosen.a = 255;
-            state_->room_floor_color = chosen;
-            room_floor_color_dirty_ = true;
+            if (!color_picker_) {
+                color_picker_ = std::make_unique<DevColorPicker>();
+            }
+            color_picker_->set_screen_size(last_screen_w_, last_screen_h_);
+            color_picker_->open(state_->room_floor_color, [this](SDL_Color chosen) {
+                if (!state_) {
+                    return;
+                }
+                chosen.a = 255;
+                state_->room_floor_color = chosen;
+                room_floor_color_dirty_ = true;
+            });
         });
-    });
+    } else {
+        inherit_checkbox_.reset();
+        inherit_widget_.reset();
+        inherit_floor_color_checkbox_.reset();
+        inherit_floor_color_widget_.reset();
+        room_floor_color_button_.reset();
+        room_floor_color_widget_.reset();
+        room_floor_color_dirty_ = false;
+    }
 
     spawn_group_list_widget_ = std::make_unique<SpawnGroupListWidget>(
         [this](const std::string& spawn_id) {
@@ -2358,7 +2334,7 @@ bool RoomConfigurator::sync_state_from_widgets() {
     bool changed = false;
     bool rebuild_required = false;
     bool tags_changed = false;
-    const bool allow_height = kTrailsAllowIndependentDimensions;
+    const bool allow_height = !is_trail_context_;
     const bool include_trail_connection_sector = !is_trail_context_;
     const bool include_boss = !is_trail_context_;
 
@@ -2426,22 +2402,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
             changed = true;
         }
     }
-    if (edge_slider_) {
-        int v = std::clamp(edge_slider_->value(), 0, 101);
-        if (v != state_->edge_smoothness) {
-            state_->edge_smoothness = v;
-            changed = true;
-        }
-    }
-
-    if (curvy_range_widget_) {
-        const auto value = curvy_range_widget_->value();
-        if (vibble::weighted_range::to_json(value) != vibble::weighted_range::to_json(state_->curvyness_range)) {
-            state_->curvyness_range = value;
-            changed = true;
-        }
-    }
-
     if (sector_direction_stepper_) {
         int v = std::clamp(sector_direction_stepper_->value(), 0, 359);
         const double normalized = normalize_angle_degrees(static_cast<double>(v));
@@ -2522,10 +2482,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
     if (height_range_widget_) {
         height_range_widget_->set_value(state_->height_range);
     }
-    if (curvy_range_widget_) {
-        curvy_range_widget_->set_value(state_->curvyness_range);
-    }
-
     if (changed) {
         const bool include_tags = !room_metadata_only_mode_;
         nlohmann::json canonical_metadata = nlohmann::json::object();
@@ -2635,7 +2591,7 @@ nlohmann::json RoomConfigurator::build_json() const {
     nlohmann::json result = loaded_json_.is_object() ? loaded_json_ : nlohmann::json::object();
     if (state_) {
         State copy = *state_;
-        const bool allow_height = kTrailsAllowIndependentDimensions;
+        const bool allow_height = !is_trail_context_;
         const bool include_trail_connection_sector = !is_trail_context_;
         const bool include_boss = !is_trail_context_;
         copy.ensure_valid(allow_height);

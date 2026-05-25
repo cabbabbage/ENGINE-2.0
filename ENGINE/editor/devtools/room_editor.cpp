@@ -6555,10 +6555,9 @@ void RoomEditor::create_room_from_footer() {
     room_entry["geometry"] = "Square";
     room_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800));
     room_entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800));
-    room_entry["edge_smoothness"] = 4;
-    room_entry["curvyness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2));
     room_entry["is_boss"] = false;
-    room_entry["inherits_map_assets"] = false;
+    room_entry["inherits_live_dynamic_assets"] = false;
+    room_entry["inherit_map_floor_color"] = true;
     room_entry["tags"] = nlohmann::json::array();
     if (!room_entry.contains("spawn_groups") || !room_entry["spawn_groups"].is_array()) {
         room_entry["spawn_groups"] = nlohmann::json::array();
@@ -6575,20 +6574,12 @@ void RoomEditor::create_trail_from_footer() {
     if (!trails.is_object()) {
         trails = nlohmann::json::object();
     }
-    std::string base = "NewTrail";
-    std::string key = base;
-    int suffix = 1;
-    while (trails.contains(key)) {
-        key = base + std::to_string(suffix++);
-    }
+    const std::string key = map_layers::make_unique_template_key(map_info, "NewTrail", "NewTrail");
     nlohmann::json& trail_entry = trails[key];
     trail_entry = nlohmann::json::object();
     trail_entry["name"] = key;
     trail_entry["geometry"] = "Square";
     trail_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
-    trail_entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
-    trail_entry["edge_smoothness"] = 4;
-    trail_entry["curvyness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2));
     trail_entry["tags"] = nlohmann::json::array();
     trail_entry["anti_tags"] = nlohmann::json::array();
     if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {
@@ -9381,7 +9372,7 @@ bool RoomEditor::regenerate_geometry(Room* room) {
     const int chosen_w = std::max(1, resolve_weighted_dimension(width_range, rng));
     const int chosen_h = std::max(1, resolve_weighted_dimension(height_range, rng));
 
-    const int edge_smoothness = root.value("edge_smoothness", 2);
+    constexpr int kRegeneratedRoomEdgeSmoothness = 0;
     std::string geometry = root.value("geometry", std::string{"Square"});
     if (!geometry.empty()) geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
     const SDL_Point center = room->room_area->get_center();
@@ -9393,7 +9384,7 @@ bool RoomEditor::regenerate_geometry(Room* room) {
                                                  chosen_w,
                                                  chosen_h,
                                                  geometry,
-                                                 edge_smoothness,
+                                                 kRegeneratedRoomEdgeSmoothness,
                                                  map_w,
                                                  map_h,
                                                  room->room_area->resolution());
@@ -24026,9 +24017,7 @@ std::string RoomEditor::rename_active_room(const std::string& old_name, const st
         return old_name;
     }
 
-    if (rooms_data.contains(candidate)) {
-        return old_name;
-    }
+    candidate = map_layers::make_unique_template_key(map_info, candidate, old_name, old_name);
 
     std::string final_key = candidate;
 

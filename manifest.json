@@ -26403,15 +26403,15 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "blur_px": 33.290000915527344,
+        "blur_px": 0.6800000071525574,
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
         "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 8871.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.699999988079071,
-        "layer_depth_curve": 68.61000061035156,
-        "layer_depth_interval": 136.0,
+        "layer_depth_curve": 29.369998931884766,
+        "layer_depth_interval": 50.0,
         "light_max_cull_depth": 22870.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
@@ -26425,7 +26425,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 159.0,
+        "radial_blur_px": 2.190000057220459,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -26560,8 +26560,8 @@
           },
           "display_color": [
             242,
-            213,
-            36,
+            227,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -26648,9 +26648,9 @@
             }
           },
           "display_color": [
-            204,
-            130,
-            71,
+            36,
+            242,
+            174,
             255
           ],
           "edge_smoothness": 4,
@@ -26707,9 +26707,9 @@
             }
           },
           "display_color": [
-            167,
-            242,
-            85,
+            204,
+            140,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26766,9 +26766,9 @@
             }
           },
           "display_color": [
-            31,
-            110,
-            204,
+            142,
+            242,
+            85,
             255
           ],
           "edge_smoothness": 4,
@@ -26855,8 +26855,8 @@
             }
           },
           "display_color": [
-            149,
             85,
+            222,
             242,
             255
           ],
@@ -26919,9 +26919,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            208,
+            71,
+            204,
+            108,
             255
           ],
           "edge_smoothness": 70,
@@ -27019,9 +27019,9 @@
             }
           },
           "display_color": [
-            204,
-            31,
-            194,
+            242,
+            99,
+            85,
             255
           ],
           "edge_smoothness": 101,
@@ -27339,9 +27339,9 @@
             }
           },
           "display_color": [
-            132,
-            204,
             31,
+            96,
+            204,
             255
           ],
           "edge_smoothness": 96,

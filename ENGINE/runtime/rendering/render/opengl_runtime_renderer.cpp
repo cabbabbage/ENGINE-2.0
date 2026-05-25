@@ -1590,12 +1590,8 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const bool dof_requested_by_settings = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
                                                                    camera_settings.blur_px,
                                                                    camera_settings.radial_blur_px);
-    constexpr std::size_t kDofPacketBudget = 420;
-    constexpr std::uint32_t kDofEmittedAssetBudget = 900;
     const bool dof_requested = allow_dof_depth_layers &&
-        dof_requested_by_settings &&
-        out_data.xy_sprite_draws.size() <= kDofPacketBudget &&
-        out_data.xy_sprite_draw_count <= kDofEmittedAssetBudget;
+        dof_requested_by_settings;
     if (dof_requested) {
         constexpr int kDofFarNearBucketRadius = 2;
         const auto bucket_depth_layer =
@@ -2020,9 +2016,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
                                 camera_settings.blur_px,
                                 camera_settings.radial_blur_px);
-    const bool dof_active =
-        dof_requested_by_settings &&
-        !frame_to_render->depth_layers.empty();
+    const bool dof_active = dof_requested_by_settings;
     bool dof_composited = false;
     const bool draw_movement_debug = assets_->is_dev_mode() &&
                                      assets_->movement_debug_enabled() &&
@@ -2138,27 +2132,51 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
 
         const std::uint64_t dof_begin = SDL_GetPerformanceCounter();
-        if (!ensure_depth_layer_targets(*frame_to_render, out_error)) {
-            render_diagnostics::end_frame();
-            return false;
-        }
-
         std::vector<dof_blur_chain::LayerTexture> dof_layers;
-        dof_layers.reserve(frame_to_render->depth_layers.size());
-        for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
-            SDL_Texture* layer_target = depth_layer_targets_[layer.depth_layer];
-            if (!bind_target(layer_target, transparent_clear)) {
-                render_diagnostics::end_frame();
+        bool used_flattened_xy_dof_layer = false;
+        auto rebuild_flattened_xy_dof_layer = [&]() -> bool {
+            dof_layers.clear();
+            if (!bind_target(xy_sprite_target_, transparent_clear)) {
                 return false;
             }
-            if (!render_packet_batch(layer.packets,
+            if (!frame_to_render->xy_sprite_draws.empty() &&
+                !render_packet_batch(frame_to_render->xy_sprite_draws,
                                      frame_to_render->target_width,
                                      frame_to_render->target_height,
                                      out_error)) {
+                return false;
+            }
+            dof_layers.push_back(dof_blur_chain::LayerTexture{
+                frame_to_render->focus_depth_layer + 1,
+                xy_sprite_target_});
+            used_flattened_xy_dof_layer = true;
+            return true;
+        };
+
+        if (!frame_to_render->depth_layers.empty()) {
+            if (!ensure_depth_layer_targets(*frame_to_render, out_error)) {
                 render_diagnostics::end_frame();
                 return false;
             }
-            dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer_target});
+            dof_layers.reserve(frame_to_render->depth_layers.size());
+            for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
+                SDL_Texture* layer_target = depth_layer_targets_[layer.depth_layer];
+                if (!bind_target(layer_target, transparent_clear)) {
+                    render_diagnostics::end_frame();
+                    return false;
+                }
+                if (!render_packet_batch(layer.packets,
+                                         frame_to_render->target_width,
+                                         frame_to_render->target_height,
+                                         out_error)) {
+                    render_diagnostics::end_frame();
+                    return false;
+                }
+                dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer_target});
+            }
+        } else if (!rebuild_flattened_xy_dof_layer()) {
+            render_diagnostics::end_frame();
+            return false;
         }
 
         const SDL_Point screen_center = assets_->getView().get_screen_center();
@@ -2176,25 +2194,48 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                     optical_center,
                                     frame_to_render->focus_depth_layer);
 
-        if (dof_result.valid) {
+        dof_blur_chain::CompositeResult resolved_dof_result = dof_result;
+        if (resolved_dof_result.valid &&
+            resolved_dof_result.blur_pass_count == 0 &&
+            !used_flattened_xy_dof_layer &&
+            !frame_to_render->xy_sprite_draws.empty()) {
+            if (!rebuild_flattened_xy_dof_layer()) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+            resolved_dof_result =
+                dof_blur_chain_.compose(dof_layers,
+                                        floor_target_,
+                                        camera_settings.depth_of_field_enabled,
+                                        camera_settings.blur_px,
+                                        camera_settings.radial_blur_px,
+                                        optical_center,
+                                        frame_to_render->focus_depth_layer);
+        }
+
+        if (resolved_dof_result.valid) {
             if (!bind_target(composite_target_, transparent_clear)) {
                 render_diagnostics::end_frame();
                 return false;
             }
-            if (dof_result.background_mid &&
-                !render_diagnostics::render_texture(renderer_, dof_result.background_mid, nullptr, &full_rect)) {
+            if (resolved_dof_result.background_mid &&
+                !render_diagnostics::render_texture(renderer_, resolved_dof_result.background_mid, nullptr, &full_rect)) {
                 out_error = "Failed to composite DoF background target: " + safe_string(SDL_GetError());
                 render_diagnostics::end_frame();
                 return false;
             }
-            if (dof_result.foreground_mid &&
-                !render_diagnostics::render_texture(renderer_, dof_result.foreground_mid, nullptr, &full_rect)) {
+            if (resolved_dof_result.foreground_mid &&
+                !render_diagnostics::render_texture(renderer_, resolved_dof_result.foreground_mid, nullptr, &full_rect)) {
                 out_error = "Failed to composite DoF foreground target: " + safe_string(SDL_GetError());
                 render_diagnostics::end_frame();
                 return false;
             }
-            render_diagnostics::set_blur_pass_count(dof_result.blur_pass_count);
-            render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->ui_overlay");
+            render_diagnostics::set_blur_pass_count(resolved_dof_result.blur_pass_count);
+            if (used_flattened_xy_dof_layer) {
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_flattened_xy_layer->ui_overlay");
+            } else {
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->ui_overlay");
+            }
             dof_composited = true;
         } else {
             vibble::log::warn("[OpenGLRuntimeRenderer] DoF blur chain failed; falling back to non-DoF XY sprite composite for this frame.");

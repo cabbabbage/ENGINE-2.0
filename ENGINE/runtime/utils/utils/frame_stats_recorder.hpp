@@ -10,7 +10,9 @@ namespace runtime_stats {
 
 class FrameStatsRecorder {
 public:
-    static constexpr bool kRuntimeFrameStatsDebugEnabled = true;
+    // Temporary kill switch for runtime frame-stats CSV recording.
+    // Re-enable by flipping this back to `true`.
+    static constexpr bool kRuntimeFrameStatsDebugEnabled = false;
 
     class ScopedTimer {
     public:

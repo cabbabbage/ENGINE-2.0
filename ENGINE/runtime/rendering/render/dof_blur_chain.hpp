@@ -9,6 +9,7 @@ namespace dof_blur_chain {
 
 struct LayerTexture {
     int depth_layer = 0;
+    float blur_strength = 0.0f;
     SDL_Texture* texture = nullptr;
 };
 
@@ -20,11 +21,6 @@ struct CompositeResult {
 };
 
 bool enabled(bool depth_of_field_enabled, float blur_px, float radial_blur_px);
-std::vector<int> background_chain_layers(const std::vector<int>& depth_layers);
-std::vector<int> background_chain_layers(const std::vector<int>& depth_layers, int focus_depth_layer);
-std::vector<int> foreground_chain_layers(const std::vector<int>& depth_layers);
-std::vector<int> foreground_chain_layers(const std::vector<int>& depth_layers, int focus_depth_layer);
-
 class Renderer {
 public:
     explicit Renderer(SDL_Renderer* renderer = nullptr);
@@ -58,30 +54,6 @@ private:
                    SDL_FPoint optical_center,
                    float radial_blur_px,
                    float quality_scale) const;
-    bool compose_chain(const std::vector<int>& chain,
-                       const std::vector<LayerTexture>& layers,
-                       SDL_Texture* seed_texture,
-                       SDL_Texture* output_texture,
-                       SDL_Texture* temp_texture,
-                       bool blur_enabled,
-                       float blur_px,
-                       float radial_blur_px,
-                       SDL_FPoint optical_center,
-                       float blur_quality_scale,
-                       bool& out_has_content,
-                       std::uint32_t& in_out_blur_pass_count);
-    bool compose_foreground_chain(const std::vector<int>& chain,
-                                  const std::vector<LayerTexture>& layers,
-                                  bool blur_enabled,
-                                  float blur_px,
-                                  float radial_blur_px,
-                                  SDL_FPoint optical_center,
-                                  float blur_quality_scale,
-                                  bool& out_has_content,
-                                  std::uint32_t& in_out_blur_pass_count);
-
-    SDL_Texture* texture_for_depth_layer(const std::vector<LayerTexture>& layers, int depth_layer) const;
-
     SDL_Renderer* renderer_ = nullptr;
     int width_ = 1;
     int height_ = 1;
@@ -90,9 +62,8 @@ private:
     SDL_Texture* foreground_layer_ = nullptr;
     SDL_Texture* chain_temp_ = nullptr;
     SDL_Texture* blur_work_ = nullptr;
-    std::vector<int> scratch_repeat_schedule_{};
-    std::vector<int> scratch_blur_exposure_{};
-    std::vector<int> scratch_layer_ids_{};
+    std::vector<LayerTexture> scratch_background_layers_{};
+    std::vector<LayerTexture> scratch_foreground_layers_{};
 };
 
 } // namespace dof_blur_chain

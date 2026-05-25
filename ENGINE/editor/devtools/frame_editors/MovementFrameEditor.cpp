@@ -818,9 +818,19 @@ void MovementFrameEditor::select_path(int index) {
     if (movement_paths_.empty()) {
         movement_paths_.push_back(std::vector<MovementFrame>{MovementFrame{}});
     }
+
+    // Persist edits on the currently active path before loading a different path.
     sync_current_path_from_frames();
+    persist_pending_changes();
+
     const int count = static_cast<int>(movement_paths_.size());
-    selected_path_index_ = wrap_index(index, count);
+    const int next_path_index = wrap_index(index, count);
+    if (next_path_index == selected_path_index_ && !frames_.empty()) {
+        update_path_button_labels();
+        return;
+    }
+
+    selected_path_index_ = next_path_index;
     frames_ = movement_paths_[static_cast<std::size_t>(selected_path_index_)];
     if (frames_.empty()) {
         frames_.push_back(MovementFrame{});
@@ -834,6 +844,7 @@ void MovementFrameEditor::select_path(int index) {
     }
     update_path_button_labels();
     apply_selected_frame_to_target();
+    invalidate_preview();
 }
 
 void MovementFrameEditor::add_movement_path() {

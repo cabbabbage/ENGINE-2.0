@@ -18,6 +18,7 @@
 #include "animation/animation_tag_utils.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
 #include "utils/log.hpp"

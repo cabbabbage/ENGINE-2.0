@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -23,6 +24,7 @@ constexpr int kHeaderHeight = 22;
 constexpr int kHeaderToEnabledGap = 10;
 constexpr int kSectionGap = 14;
 constexpr int kFieldGap = 12;
+constexpr int kButtonGap = 8;
 constexpr int kHintHeight = 44;
 constexpr int kHintLineGap = 20;
 
@@ -36,6 +38,14 @@ RoomMovementToolsPanel::RoomMovementToolsPanel() {
     dy_box_ = std::make_unique<DMTextBox>("DY", "0");
     dz_box_ = std::make_unique<DMTextBox>("DZ", "0");
     rot_box_ = std::make_unique<DMTextBox>("Rotation", "0");
+    path_dropdown_ = std::make_unique<DMDropdown>("Movement Path", std::vector<std::string>{"Path 1"}, 0);
+    add_path_button_ = std::make_unique<DMButton>("+ New Path");
+    delete_path_button_ = std::make_unique<DMButton>("Delete Path");
+    if (path_dropdown_) {
+        path_dropdown_->set_on_selection_changed([this](int index) {
+            if (on_path_selection_changed_) on_path_selection_changed_(index);
+        });
+    }
 }
 
 RoomMovementToolsPanel::~RoomMovementToolsPanel() = default;
@@ -159,6 +169,17 @@ bool RoomMovementToolsPanel::any_numeric_editing() const {
 void RoomMovementToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCallback callback) {
     on_system_enabled_toggle_ = std::move(callback);
 }
+void RoomMovementToolsPanel::set_path_options(const std::vector<std::string>& options, int selected_index) {
+    const std::vector<std::string> safe_options = options.empty() ? std::vector<std::string>{"Path 1"} : options;
+    path_dropdown_ = std::make_unique<DMDropdown>("Movement Path", safe_options, selected_index);
+    path_dropdown_->set_on_selection_changed([this](int index) {
+        if (on_path_selection_changed_) on_path_selection_changed_(index);
+    });
+    layout_dirty_ = true;
+}
+void RoomMovementToolsPanel::set_on_path_selection_changed(PathSelectionChangedCallback callback) { on_path_selection_changed_ = std::move(callback); }
+void RoomMovementToolsPanel::set_on_add_path(PathActionCallback callback) { on_add_path_ = std::move(callback); }
+void RoomMovementToolsPanel::set_on_delete_path(PathActionCallback callback) { on_delete_path_ = std::move(callback); }
 
 bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
     if (!visible_) {
@@ -201,6 +222,17 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
         }
         if (rot_box_ && rot_box_->handle_event(event)) {
             handled = true;
+        }
+        if (path_dropdown_ && path_dropdown_->handle_event(event)) {
+            handled = true;
+        }
+        if (add_path_button_ && add_path_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && on_add_path_) on_add_path_();
+        }
+        if (delete_path_button_ && delete_path_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && on_delete_path_) on_delete_path_();
         }
 
         if (!smooth_enabled()) {
@@ -283,6 +315,10 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
     if (rot_box_) {
         rot_box_->render(renderer);
     }
+    if (path_dropdown_) path_dropdown_->render(renderer);
+    if (add_path_button_) add_path_button_->render(renderer);
+    if (delete_path_button_) delete_path_button_->render(renderer);
+    DMDropdown::render_active_options(renderer);
 }
 
 bool RoomMovementToolsPanel::is_point_inside(int x, int y) const {
@@ -343,7 +379,13 @@ void RoomMovementToolsPanel::update_layout() const {
     cursor_y += dz_rect_.h + kFieldGap;
 
     rot_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(rot_box_)};
-    cursor_y += rot_rect_.h + kPanelPadding;
+    cursor_y += rot_rect_.h + kSectionGap;
+    path_select_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMDropdown::height()};
+    cursor_y += path_select_rect_.h + kFieldGap;
+    const int button_w = (content_w - kButtonGap) / 2;
+    path_add_rect_ = SDL_Rect{content_x, cursor_y, std::max(0, button_w), DMButton::height()};
+    path_delete_rect_ = SDL_Rect{content_x + std::max(0, button_w) + kButtonGap, cursor_y, std::max(0, button_w), DMButton::height()};
+    cursor_y += std::max(path_add_rect_.h, path_delete_rect_.h) + kPanelPadding;
 
     if (!panel_bounds_override_active_) {
         panel_rect_.h = std::max(panel_rect_.h, cursor_y - panel_rect_.y);
@@ -370,6 +412,9 @@ void RoomMovementToolsPanel::update_layout() const {
     if (rot_box_) {
         rot_box_->set_rect(rot_rect_);
     }
+    if (path_dropdown_) path_dropdown_->set_rect(path_select_rect_);
+    if (add_path_button_) add_path_button_->set_rect(path_add_rect_);
+    if (delete_path_button_) delete_path_button_->set_rect(path_delete_rect_);
 
     layout_dirty_ = false;
 }

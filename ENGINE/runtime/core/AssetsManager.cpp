@@ -989,7 +989,7 @@ void Assets::on_camera_settings_changed() {
 
 void Assets::mark_camera_dirty() {
     camera_settings_dirty_ = true;
-    note_frame_rebuild_request();
+    note_frame_rebuild_request(FrameRebuildReason::CameraChanged);
 }
 
 void Assets::reload_camera_settings() {
@@ -1741,7 +1741,7 @@ void Assets::run_camera_trap_escape_pass() {
         ++unstuck_count;
         trap_escape_candidates_.insert(asset);
         mark_collision_context_dirty();
-        note_frame_rebuild_request();
+        note_frame_rebuild_request(FrameRebuildReason::MovementFlushed);
     };
 
     process_asset(player);
@@ -2049,7 +2049,7 @@ void Assets::set_focus_filter(Asset* asset, const std::string& spawn_id) {
 
     needs_filtered_active_refresh_ = true;
     touch_dev_active_state_version();
-    note_frame_rebuild_request();
+    note_frame_rebuild_request(FrameRebuildReason::SettingsChanged);
 }
 
 void Assets::clear_focus_filter() {
@@ -2263,6 +2263,9 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         active_room = dev_controls_->resolve_current_room(detected_room);
     }
     room_changed = (current_room_ != active_room);
+    if (room_changed) {
+        note_frame_rebuild_request(FrameRebuildReason::RoomChanged);
+    }
     current_room_ = active_room;
     game_context_.begin_frame(
         this,
@@ -2415,6 +2418,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
             moving_assets_for_grid_.clear();
             grid_registration_buffer_.clear();
             touch_dev_active_state_version();
+            note_frame_rebuild_request(FrameRebuildReason::MovementFlushed);
             mark_grid_dirty();
         }
 
@@ -2442,7 +2446,7 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         camera_state_changed ||
         camera_.is_height_animating();
     if (camera_rebuild_request_needed) {
-        note_frame_rebuild_request();
+        note_frame_rebuild_request(FrameRebuildReason::CameraChanged);
     }
     runtime_stats::FrameStatsRecorder::instance().set("assets.world_camera_state_changed",
                                                       camera_state_changed);
@@ -2537,7 +2541,7 @@ void Assets::run_visibility_build_stage() {
 
 void Assets::run_post_flush_traversal_refresh_once() {
     post_runtime_traversal_refresh_pending_ = true;
-    note_frame_rebuild_request();
+    note_frame_rebuild_request(FrameRebuildReason::MovementFlushed);
     const bool frame_rebuilt = run_frame_rebuild_stage();
     const VisibleScalingRefreshReasons refresh_reasons =
         evaluate_visible_scaling_refresh_reasons(frame_rebuilt);
@@ -3697,7 +3701,7 @@ void Assets::mark_active_assets_dirty() {
     active_assets_dirty_.store(true, std::memory_order_release);
     needs_filtered_active_refresh_ = true;
     mark_collision_context_dirty();
-    note_frame_rebuild_request();
+    note_frame_rebuild_request(FrameRebuildReason::SettingsChanged);
 }
 
 std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
@@ -3910,18 +3914,26 @@ void Assets::track_asset_for_grid(Asset* asset) {
 
 }
 
+namespace {
+constexpr std::uint32_t to_reason_mask(Assets::FrameRebuildReason reason) {
+    return static_cast<std::uint32_t>(reason);
+}
+}
+
 void Assets::reset_frame_rebuild_stage() {
     frame_rebuild_metrics_frame_ = frame_id_;
     frame_rebuild_request_count_ = 0;
     frame_rebuild_execution_count_ = 0;
+    frame_rebuild_reasons_ = 0;
     frame_rebuild_metrics_initialized_ = true;
 }
 
-void Assets::note_frame_rebuild_request() {
+void Assets::note_frame_rebuild_request(FrameRebuildReason reason) {
     if (!frame_rebuild_metrics_initialized_ || frame_rebuild_metrics_frame_ != frame_id_) {
         reset_frame_rebuild_stage();
     }
     ++frame_rebuild_request_count_;
+    frame_rebuild_reasons_ |= to_reason_mask(reason);
 }
 
 bool Assets::run_frame_rebuild_stage() {
@@ -3941,6 +3953,7 @@ bool Assets::run_frame_rebuild_stage() {
         frame_stats.set("assets.frame_rebuild_requests", frame_rebuild_request_count_);
         frame_stats.set("assets.frame_rebuild_executions", frame_rebuild_execution_count_);
         frame_stats.set("assets.frame_rebuild_coalesced", frame_rebuild_request_count_ > 1);
+        frame_stats.set("assets.frame_rebuild_reason_mask", static_cast<std::uint64_t>(frame_rebuild_reasons_));
     }
     return rebuilt;
 }
@@ -3999,18 +4012,28 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
     const world::GridBounds render_bounds = screen_world_rect();
     const world::GridBounds work_bounds = runtime_work_bounds_from_render_bounds(render_bounds);
     if (allow_live_dynamic_sync && dynamic_spawn_runtime_) {
-        const auto transition = camera_.camera_transition_telemetry();
-        const bool camera_motion_active =
-            camera_.is_height_animating() ||
-            std::fabs(transition.velocity.x) > 1e-3f ||
-            std::fabs(transition.velocity.y) > 1e-3f;
-        const bool player_motion_active =
-            player && player->anim_runtime_ && player->anim_runtime_->has_active_plan();
-        const bool movement_active = camera_motion_active || player_motion_active;
-        constexpr std::size_t kMotionSyncCellBudget = 48;
-        dynamic_spawn_runtime_->sync(live_dynamic_work_bounds_from_render_bounds(render_bounds),
-                                     movement_active ? kMotionSyncCellBudget : 0,
-                                     movement_active);
+        constexpr std::uint32_t kDynamicSpawnReasons =
+            static_cast<std::uint32_t>(FrameRebuildReason::CameraChanged) |
+            static_cast<std::uint32_t>(FrameRebuildReason::RoomChanged) |
+            static_cast<std::uint32_t>(FrameRebuildReason::MovementFlushed) |
+            static_cast<std::uint32_t>(FrameRebuildReason::SpawnChanged);
+        const bool reasoned_dynamic_sync = (frame_rebuild_reasons_ & kDynamicSpawnReasons) != 0;
+        constexpr std::uint32_t kDynamicSpawnIntervalFrames = 6;
+        const bool budgeted_dynamic_sync = (frame_id_ % kDynamicSpawnIntervalFrames) == 0;
+        if (reasoned_dynamic_sync || budgeted_dynamic_sync) {
+            const auto transition = camera_.camera_transition_telemetry();
+            const bool camera_motion_active =
+                camera_.is_height_animating() ||
+                std::fabs(transition.velocity.x) > 1e-3f ||
+                std::fabs(transition.velocity.y) > 1e-3f;
+            const bool player_motion_active =
+                player && player->anim_runtime_ && player->anim_runtime_->has_active_plan();
+            const bool movement_active = camera_motion_active || player_motion_active;
+            constexpr std::size_t kMotionSyncCellBudget = 48;
+            dynamic_spawn_runtime_->sync(live_dynamic_work_bounds_from_render_bounds(render_bounds),
+                                         movement_active ? kMotionSyncCellBudget : 0,
+                                         movement_active);
+        }
     }
     world_grid_.update_active_chunks(work_bounds, 0);
     camera_.rebuild_grid(world_grid_,
@@ -4047,7 +4070,7 @@ void Assets::untrack_asset_for_grid(Asset* asset) {
 
 void Assets::mark_grid_dirty() {
     grid_dirty_ = true;
-    note_frame_rebuild_request();
+    note_frame_rebuild_request(FrameRebuildReason::SpawnChanged);
 }
 
 void Assets::register_pending_static_assets() {

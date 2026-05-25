@@ -584,7 +584,7 @@ bool Renderer::compose_chain(const std::vector<int>& chain,
                              SDL_FPoint optical_center,
                              float blur_quality_scale,
                              bool& out_has_content,
-                             std::uint32_t& in_out_blur_pass_count) const {
+                             std::uint32_t& in_out_blur_pass_count) {
     out_has_content = false;
     if (!renderer_ || !output_texture) {
         return false;
@@ -608,7 +608,10 @@ bool Renderer::compose_chain(const std::vector<int>& chain,
     }
 
     const int total_pass_budget = blur_enabled ? compute_total_pass_budget(chain.size(), blur_px, radial_blur_px) : 0;
-    const std::vector<int> repeat_schedule = blur_enabled ? build_repeat_schedule(chain.size(), total_pass_budget) : std::vector<int>{};
+    scratch_repeat_schedule_.clear();
+    if (blur_enabled) {
+        scratch_repeat_schedule_ = build_repeat_schedule(chain.size(), total_pass_budget);
+    }
 
     for (std::size_t step = 0; step < chain.size(); ++step) {
         SDL_Texture* layer_texture = texture_for_depth_layer(layers, chain[step]);
@@ -626,7 +629,7 @@ bool Renderer::compose_chain(const std::vector<int>& chain,
         }
         out_has_content = true;
 
-        const int repeat_count = (step < repeat_schedule.size()) ? std::max(0, repeat_schedule[step]) : 0;
+        const int repeat_count = (step < scratch_repeat_schedule_.size()) ? std::max(0, scratch_repeat_schedule_[step]) : 0;
         for (int pass = 0; pass < repeat_count; ++pass) {
             if (!blur_step(accum, temp, blur_work_, blur_px, optical_center, radial_blur_px, blur_quality_scale)) {
                 return false;
@@ -650,7 +653,7 @@ bool Renderer::compose_foreground_chain(const std::vector<int>& chain,
                                         SDL_FPoint optical_center,
                                         float blur_quality_scale,
                                         bool& out_has_content,
-                                        std::uint32_t& in_out_blur_pass_count) const {
+                                        std::uint32_t& in_out_blur_pass_count) {
     out_has_content = false;
     if (!renderer_ || !foreground_mid_ || !foreground_layer_ || !chain_temp_) {
         return false;
@@ -662,13 +665,16 @@ bool Renderer::compose_foreground_chain(const std::vector<int>& chain,
     }
 
     const int total_pass_budget = blur_enabled ? compute_total_pass_budget(chain.size(), blur_px, radial_blur_px) : 0;
-    const std::vector<int> repeat_schedule = blur_enabled ? build_repeat_schedule(chain.size(), total_pass_budget) : std::vector<int>{};
-    std::vector<int> blur_exposure(chain.size(), 0);
+    scratch_repeat_schedule_.clear();
+    if (blur_enabled) {
+        scratch_repeat_schedule_ = build_repeat_schedule(chain.size(), total_pass_budget);
+    }
+    scratch_blur_exposure_.assign(chain.size(), 0);
     int accumulated_exposure = 0;
     for (std::size_t reverse_index = chain.size(); reverse_index > 0; --reverse_index) {
         const std::size_t step = reverse_index - 1;
-        accumulated_exposure += (step < repeat_schedule.size()) ? std::max(0, repeat_schedule[step]) : 0;
-        blur_exposure[step] = accumulated_exposure;
+        accumulated_exposure += (step < scratch_repeat_schedule_.size()) ? std::max(0, scratch_repeat_schedule_[step]) : 0;
+        scratch_blur_exposure_[step] = accumulated_exposure;
     }
 
     for (std::size_t reverse_index = chain.size(); reverse_index > 0; --reverse_index) {
@@ -684,7 +690,7 @@ bool Renderer::compose_foreground_chain(const std::vector<int>& chain,
 
         SDL_Texture* accum = foreground_layer_;
         SDL_Texture* temp = chain_temp_;
-        const int repeat_count = (step < blur_exposure.size()) ? std::max(0, blur_exposure[step]) : 0;
+        const int repeat_count = (step < scratch_blur_exposure_.size()) ? std::max(0, scratch_blur_exposure_[step]) : 0;
         for (int pass = 0; pass < repeat_count; ++pass) {
             if (!blur_step(accum, temp, blur_work_, blur_px, optical_center, radial_blur_px, blur_quality_scale)) {
                 return false;
@@ -733,17 +739,17 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         ? compute_quality_scale(width_, height_, safe_blur_px, safe_radial_blur_px)
         : 1.0f;
 
-    std::vector<int> layer_ids;
-    layer_ids.reserve(layers.size());
+    scratch_layer_ids_.clear();
+    scratch_layer_ids_.reserve(std::max(scratch_layer_ids_.capacity(), layers.size()));
     for (const LayerTexture& layer : layers) {
         if (layer.texture) {
-            layer_ids.push_back(layer.depth_layer);
+            scratch_layer_ids_.push_back(layer.depth_layer);
         }
     }
 
     bool background_has_content = false;
     bool foreground_has_content = false;
-    if (!compose_chain(background_chain_layers(layer_ids, focus_depth_layer),
+    if (!compose_chain(background_chain_layers(scratch_layer_ids_, focus_depth_layer),
                        layers,
                        background_seed,
                        background_mid_,
@@ -769,7 +775,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         background_has_content = true;
     }
 
-    if (!compose_foreground_chain(foreground_chain_layers(layer_ids, focus_depth_layer),
+    if (!compose_foreground_chain(foreground_chain_layers(scratch_layer_ids_, focus_depth_layer),
                                   layers,
                                   blur_enabled,
                                   safe_blur_px,

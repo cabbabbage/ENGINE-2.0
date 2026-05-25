@@ -69,7 +69,7 @@ private:
                        SDL_FPoint optical_center,
                        float blur_quality_scale,
                        bool& out_has_content,
-                       std::uint32_t& in_out_blur_pass_count) const;
+                       std::uint32_t& in_out_blur_pass_count);
     bool compose_foreground_chain(const std::vector<int>& chain,
                                   const std::vector<LayerTexture>& layers,
                                   bool blur_enabled,
@@ -78,7 +78,7 @@ private:
                                   SDL_FPoint optical_center,
                                   float blur_quality_scale,
                                   bool& out_has_content,
-                                  std::uint32_t& in_out_blur_pass_count) const;
+                                  std::uint32_t& in_out_blur_pass_count);
 
     SDL_Texture* texture_for_depth_layer(const std::vector<LayerTexture>& layers, int depth_layer) const;
 
@@ -90,6 +90,9 @@ private:
     SDL_Texture* foreground_layer_ = nullptr;
     SDL_Texture* chain_temp_ = nullptr;
     SDL_Texture* blur_work_ = nullptr;
+    std::vector<int> scratch_repeat_schedule_{};
+    std::vector<int> scratch_blur_exposure_{};
+    std::vector<int> scratch_layer_ids_{};
 };
 
 } // namespace dof_blur_chain

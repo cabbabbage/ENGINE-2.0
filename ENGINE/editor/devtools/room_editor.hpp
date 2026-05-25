@@ -49,6 +49,7 @@ class Occupancy;
 class Grid;
 }
 class BottomNavigationPanel;
+class AssetStackAnimationListPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
 class RoomOvalToolsPanel;
@@ -496,8 +497,14 @@ private:
     void ensure_impassable_box_editor_widgets();
     void ensure_floor_box_editor_widgets();
     void ensure_attack_payload_editor_widget();
+    void ensure_stack_animation_list_panel();
     void update_asset_editor_layout();
     void sync_shared_footer_navigation();
+    void sync_stack_animation_list_panel();
+    bool is_stack_animation_list_subview_active() const;
+    Asset* stack_animation_list_target_asset() const;
+    std::optional<std::string> stack_animation_list_selected_animation_id() const;
+    bool apply_stack_animation_selection(const std::string& animation_id);
     std::string asset_editor_subview_label(AssetEditorSubview subview) const;
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
@@ -960,6 +967,7 @@ private:
     std::unique_ptr<RoomFloorBoxToolsPanel> floor_box_tools_panel_;
     std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
+    std::unique_ptr<AssetStackAnimationListPanel> stack_animation_list_panel_;
 
     struct AnchorHandleSample {
         std::string name;

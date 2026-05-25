@@ -13,6 +13,7 @@
 #include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_info_ui.hpp"
+#include "devtools/asset_stack_animation_list_panel.hpp"
 #include "devtools/sdl_modal_dialog.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
@@ -3375,6 +3376,7 @@ void RoomEditor::update_ui(const Input& input) {
         attack_payload_editor_->set_screen_dimensions(screen_w_, screen_h_);
         attack_payload_editor_->set_visible(attack_box_mode_active());
     }
+    sync_stack_animation_list_panel();
     update_asset_editor_layout();
 
     if (suppress_parent_asset_return_frames_ > 0) {
@@ -3535,6 +3537,27 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         }
         return result;
 };
+
+    auto route_stack_animation_list = [&]() -> RouteResult {
+        RouteResult result;
+        if (!enabled_) {
+            return result;
+        }
+        ensure_stack_animation_list_panel();
+        sync_stack_animation_list_panel();
+        if (!stack_animation_list_panel_ || !stack_animation_list_panel_->is_visible()) {
+            return result;
+        }
+        if (stack_animation_list_panel_->handle_event(event)) {
+            result.handled = true;
+            result.pointer_blocked = true;
+            return result;
+        }
+        if (pointer_based && stack_animation_list_panel_->is_point_inside(mx, my)) {
+            result.pointer_blocked = true;
+        }
+        return result;
+    };
 
     auto route_room_config = [&]() -> RouteResult {
         RouteResult result;
@@ -3781,6 +3804,9 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     };
 
     if (apply_result(route_info_panel(), pointer_blocked)) {
+        return true;
+    }
+    if (apply_result(route_stack_animation_list(), pointer_blocked)) {
         return true;
     }
     if (apply_result(route_room_config(), pointer_blocked)) {
@@ -5948,6 +5974,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
     }
     if (renderer && enabled_) {
         update_asset_editor_layout();
+        if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible()) {
+            stack_animation_list_panel_->render(renderer);
+        }
         if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible()) {
             anchor_navigation_panel_->render(renderer);
         }
@@ -10494,6 +10523,239 @@ void RoomEditor::ensure_attack_payload_editor_widget() {
     }
 }
 
+void RoomEditor::ensure_stack_animation_list_panel() {
+    if (stack_animation_list_panel_) {
+        return;
+    }
+    stack_animation_list_panel_ = std::make_unique<AssetStackAnimationListPanel>();
+    stack_animation_list_panel_->set_on_select([this](const std::string& animation_id) {
+        if (this->apply_stack_animation_selection(animation_id)) {
+            this->sync_stack_animation_list_panel();
+            this->update_asset_editor_layout();
+        }
+    });
+}
+
+bool RoomEditor::is_stack_animation_list_subview_active() const {
+    if (!enabled_ || !asset_editor_tab_scope_active()) {
+        return false;
+    }
+    switch (asset_editor_subview_) {
+        case AssetEditorSubview::AssetInfo:
+        case AssetEditorSubview::Anchor:
+        case AssetEditorSubview::Light:
+        case AssetEditorSubview::OvalAnchor:
+        case AssetEditorSubview::Movement:
+        case AssetEditorSubview::Hitbox:
+        case AssetEditorSubview::AttackBox:
+        case AssetEditorSubview::ImpassableBox:
+            return true;
+        case AssetEditorSubview::AnimationEditor:
+        case AssetEditorSubview::FloorBoxes:
+            return false;
+    }
+    return false;
+}
+
+Asset* RoomEditor::stack_animation_list_target_asset() const {
+    switch (asset_editor_subview_) {
+        case AssetEditorSubview::Anchor:
+        case AssetEditorSubview::Light:
+            return is_asset_pointer_live(anchor_edit_.target_asset) ? anchor_edit_.target_asset : nullptr;
+        case AssetEditorSubview::OvalAnchor:
+            return is_asset_pointer_live(oval_edit_.target_asset) ? oval_edit_.target_asset : nullptr;
+        case AssetEditorSubview::Movement:
+            return is_asset_pointer_live(movement_edit_.target_asset) ? movement_edit_.target_asset : nullptr;
+        case AssetEditorSubview::Hitbox:
+            return is_asset_pointer_live(hitbox_edit_.target_asset) ? hitbox_edit_.target_asset : nullptr;
+        case AssetEditorSubview::AttackBox:
+            return is_asset_pointer_live(attack_box_edit_.target_asset) ? attack_box_edit_.target_asset : nullptr;
+        case AssetEditorSubview::ImpassableBox:
+            return is_asset_pointer_live(impassable_box_edit_.target_asset) ? impassable_box_edit_.target_asset : nullptr;
+        case AssetEditorSubview::AssetInfo: {
+            Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+            if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
+                target = selected_assets_.front();
+            }
+            return is_asset_pointer_live(target) ? target : nullptr;
+        }
+        case AssetEditorSubview::AnimationEditor:
+        case AssetEditorSubview::FloorBoxes:
+            return nullptr;
+    }
+    return nullptr;
+}
+
+std::optional<std::string> RoomEditor::stack_animation_list_selected_animation_id() const {
+    switch (asset_editor_subview_) {
+        case AssetEditorSubview::Anchor:
+        case AssetEditorSubview::Light:
+            return anchor_edit_.animation_id.empty() ? std::nullopt : std::make_optional(anchor_edit_.animation_id);
+        case AssetEditorSubview::OvalAnchor:
+            return oval_edit_.animation_id.empty() ? std::nullopt : std::make_optional(oval_edit_.animation_id);
+        case AssetEditorSubview::Movement:
+            return movement_edit_.animation_id.empty() ? std::nullopt : std::make_optional(movement_edit_.animation_id);
+        case AssetEditorSubview::Hitbox:
+            return hitbox_edit_.animation_id.empty() ? std::nullopt : std::make_optional(hitbox_edit_.animation_id);
+        case AssetEditorSubview::AttackBox:
+            return attack_box_edit_.animation_id.empty() ? std::nullopt : std::make_optional(attack_box_edit_.animation_id);
+        case AssetEditorSubview::ImpassableBox:
+            return impassable_box_edit_.animation_id.empty() ? std::nullopt : std::make_optional(impassable_box_edit_.animation_id);
+        case AssetEditorSubview::AssetInfo: {
+            Asset* target = stack_animation_list_target_asset();
+            if (!target || target->current_animation.empty()) {
+                return std::nullopt;
+            }
+            return target->current_animation;
+        }
+        case AssetEditorSubview::AnimationEditor:
+        case AssetEditorSubview::FloorBoxes:
+            return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+void RoomEditor::sync_stack_animation_list_panel() {
+    ensure_stack_animation_list_panel();
+    if (!stack_animation_list_panel_) {
+        return;
+    }
+
+    stack_animation_list_panel_->set_screen_dimensions(screen_w_, screen_h_);
+    const bool list_visible = is_stack_animation_list_subview_active();
+    stack_animation_list_panel_->set_visible(list_visible);
+    if (!list_visible) {
+        stack_animation_list_panel_->set_rows({});
+        stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
+        return;
+    }
+
+    Asset* target = stack_animation_list_target_asset();
+    if (!target || !target->info) {
+        stack_animation_list_panel_->set_rows({});
+        stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
+        return;
+    }
+
+    const std::optional<std::string> requested = stack_animation_list_selected_animation_id();
+    const auto model = devmode::resolve_stack_animation_list_model(target->info.get(), requested.value_or(std::string{}));
+
+    std::vector<AssetStackAnimationListPanel::Row> rows;
+    rows.reserve(model.rows.size());
+    for (const auto& row : model.rows) {
+        AssetStackAnimationListPanel::Row panel_row;
+        panel_row.animation_id = row.animation_id;
+        panel_row.editable = row.editable_in_stack_mode;
+        panel_row.reason = row.reason;
+        rows.push_back(std::move(panel_row));
+    }
+    stack_animation_list_panel_->set_rows(std::move(rows));
+    if (requested.has_value() && !requested->empty()) {
+        stack_animation_list_panel_->set_selected_animation_id(requested);
+    } else if (model.has_selection()) {
+        stack_animation_list_panel_->set_selected_animation_id(model.resolved_animation_id);
+    } else {
+        stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
+    }
+}
+
+bool RoomEditor::apply_stack_animation_selection(const std::string& animation_id) {
+    if (animation_id.empty()) {
+        return false;
+    }
+
+    switch (asset_editor_subview_) {
+        case AssetEditorSubview::AssetInfo: {
+            Asset* target = stack_animation_list_target_asset();
+            if (!target || !target->info) {
+                return false;
+            }
+            int next_frame_index = 0;
+            auto current_anim_it = target->info->animations.find(target->current_animation);
+            if (current_anim_it != target->info->animations.end() && current_anim_it->second.has_frames()) {
+                for (std::size_t i = 0; i < current_anim_it->second.frame_count(); ++i) {
+                    if (current_anim_it->second.primary_frame_at(i) == target->current_frame) {
+                        next_frame_index = static_cast<int>(i);
+                        break;
+                    }
+                }
+            }
+            return apply_asset_preview_animation_and_frame(target, animation_id, next_frame_index);
+        }
+        case AssetEditorSubview::Anchor:
+        case AssetEditorSubview::Light: {
+            const int frame = resolve_anchor_mode_frame_index();
+            if (apply_anchor_animation_and_frame(animation_id, frame)) {
+                refresh_anchor_mode_handles();
+                sync_anchor_tools_panel();
+                return true;
+            }
+            return false;
+        }
+        case AssetEditorSubview::OvalAnchor: {
+            const int frame = resolve_oval_mode_frame_index();
+            return apply_oval_animation_and_frame(animation_id, frame);
+        }
+        case AssetEditorSubview::Movement: {
+            if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+                return false;
+            }
+            if (movement_edit_.dirty_since_last_flush) {
+                persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
+            }
+            int next_frame_index = movement_edit_.frame_index;
+            auto next_anim_it = movement_edit_.target_asset->info->animations.find(animation_id);
+            if (next_anim_it != movement_edit_.target_asset->info->animations.end() && next_anim_it->second.has_frames()) {
+                next_frame_index = devmode::room_anchor_mode::wrap_index(
+                    next_frame_index,
+                    static_cast<int>(next_anim_it->second.frame_count()));
+            } else {
+                next_frame_index = 0;
+            }
+            movement_edit_.frames = resolve_room_movement_frames_for_animation(movement_edit_.target_asset, animation_id);
+            if (!movement_edit_.has_frames()) {
+                movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
+            }
+            normalize_movement_frames_to_current_animation();
+            if (apply_movement_animation_and_frame(animation_id, next_frame_index)) {
+                refresh_movement_editor_selection(false);
+                sync_movement_panel_frame_values();
+                return true;
+            }
+            return false;
+        }
+        case AssetEditorSubview::Hitbox: {
+            const int frame = resolve_hitbox_mode_frame_index();
+            if (apply_hitbox_animation_and_frame(animation_id, frame)) {
+                sync_hitbox_tools_panel();
+                return true;
+            }
+            return false;
+        }
+        case AssetEditorSubview::AttackBox: {
+            const int frame = resolve_attack_box_mode_frame_index();
+            if (apply_attack_box_animation_and_frame(animation_id, frame)) {
+                sync_attack_box_tools_panel();
+                sync_attack_payload_editor();
+                return true;
+            }
+            return false;
+        }
+        case AssetEditorSubview::ImpassableBox: {
+            const int frame = resolve_impassable_box_mode_frame_index();
+            if (apply_impassable_box_animation_and_frame(animation_id, frame)) {
+                sync_impassable_box_tools_panel();
+                return true;
+            }
+            return false;
+        }
+        case AssetEditorSubview::AnimationEditor:
+        case AssetEditorSubview::FloorBoxes:
+            return false;
+    }
+    return false;
+}
+
 void RoomEditor::sync_floor_box_tools_panel() {
     if (!floor_box_tools_panel_) {
         return;
@@ -11988,8 +12250,6 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.frame_count = frame_count_for(anchor_edit_.target_asset, anchor_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(anchor_edit_.target_asset, anchor_edit_.animation_id);
         frame_nav.selected_frame = resolve_anchor_mode_frame_index();
-        frame_nav.on_prev_animation = [this]() { navigate_anchor_animation(-1); };
-        frame_nav.on_next_animation = [this]() { navigate_anchor_animation(1); };
         frame_nav.on_prev_frame = [this]() { navigate_anchor_frame(-1); };
         frame_nav.on_next_frame = [this]() { navigate_anchor_frame(1); };
         const std::string animation_id = anchor_edit_.animation_id;
@@ -12007,8 +12267,6 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.frame_count = frame_count_for(oval_edit_.target_asset, oval_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(oval_edit_.target_asset, oval_edit_.animation_id);
         frame_nav.selected_frame = resolve_oval_mode_frame_index();
-        frame_nav.on_prev_animation = [this]() { navigate_oval_animation(-1); };
-        frame_nav.on_next_animation = [this]() { navigate_oval_animation(1); };
         frame_nav.on_prev_frame = [this]() { navigate_oval_frame(-1); };
         frame_nav.on_next_frame = [this]() { navigate_oval_frame(1); };
         const std::string animation_id = oval_edit_.animation_id;
@@ -12024,8 +12282,6 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.frame_count = frame_count_for(movement_edit_.target_asset, movement_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(movement_edit_.target_asset, movement_edit_.animation_id);
         frame_nav.selected_frame = resolve_movement_mode_frame_index();
-        frame_nav.on_prev_animation = [this]() { navigate_movement_animation(-1); };
-        frame_nav.on_next_animation = [this]() { navigate_movement_animation(1); };
         frame_nav.on_prev_frame = [this]() { navigate_movement_frame(-1); };
         frame_nav.on_next_frame = [this]() { navigate_movement_frame(1); };
         const std::string animation_id = movement_edit_.animation_id;
@@ -12046,8 +12302,6 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.frame_count = frame_count_for(hitbox_edit_.target_asset, hitbox_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(hitbox_edit_.target_asset, hitbox_edit_.animation_id);
         frame_nav.selected_frame = resolve_hitbox_mode_frame_index();
-        frame_nav.on_prev_animation = [this]() { navigate_hitbox_animation(-1); };
-        frame_nav.on_next_animation = [this]() { navigate_hitbox_animation(1); };
         frame_nav.on_prev_frame = [this]() { navigate_hitbox_frame(-1); };
         frame_nav.on_next_frame = [this]() { navigate_hitbox_frame(1); };
         const std::string animation_id = hitbox_edit_.animation_id;
@@ -12065,8 +12319,6 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.frame_count = frame_count_for(attack_box_edit_.target_asset, attack_box_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(attack_box_edit_.target_asset, attack_box_edit_.animation_id);
         frame_nav.selected_frame = resolve_attack_box_mode_frame_index();
-        frame_nav.on_prev_animation = [this]() { navigate_attack_box_animation(-1); };
-        frame_nav.on_next_animation = [this]() { navigate_attack_box_animation(1); };
         frame_nav.on_prev_frame = [this]() { navigate_attack_box_frame(-1); };
         frame_nav.on_next_frame = [this]() { navigate_attack_box_frame(1); };
         const std::string animation_id = attack_box_edit_.animation_id;
@@ -12084,8 +12336,6 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.frame_count = frame_count_for(impassable_box_edit_.target_asset, impassable_box_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(impassable_box_edit_.target_asset, impassable_box_edit_.animation_id);
         frame_nav.selected_frame = resolve_impassable_box_mode_frame_index();
-        frame_nav.on_prev_animation = [this]() { navigate_impassable_box_animation(-1); };
-        frame_nav.on_next_animation = [this]() { navigate_impassable_box_animation(1); };
         frame_nav.on_prev_frame = [this]() { navigate_impassable_box_frame(-1); };
         frame_nav.on_next_frame = [this]() { navigate_impassable_box_frame(1); };
         const std::string animation_id = impassable_box_edit_.animation_id;
@@ -12117,8 +12367,6 @@ void RoomEditor::sync_shared_footer_navigation() {
                 }
             }
         }
-        frame_nav.on_prev_animation = [this]() { navigate_asset_info_preview_animation(-1); };
-        frame_nav.on_next_animation = [this]() { navigate_asset_info_preview_animation(1); };
         frame_nav.on_prev_frame = [this]() { navigate_asset_info_preview_frame(-1); };
         frame_nav.on_next_frame = [this]() { navigate_asset_info_preview_frame(1); };
         frame_nav.on_select_frame = [this](int frame_index) {
@@ -12489,18 +12737,19 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     SDL_Rect asset_info_rect{info_panel_x, usable.y, info_panel_w, usable.h};
 
     const int panel_margin = 12;
-    const int left_panel_y = usable.y + panel_margin;
-    const int left_panel_h = std::max(0, usable.h - panel_margin * 2);
-    const int left_panel_x = usable.x + panel_margin;
-    int left_panel_w = std::min(320, std::max(220, usable.w / 3));
-    left_panel_w = std::min(left_panel_w, std::max(0, info_panel_x - left_panel_x - panel_margin));
-    SDL_Rect left_panel_rect{left_panel_x, left_panel_y, left_panel_w, left_panel_h};
-    const int payload_panel_gap = 12;
-    const int payload_panel_x = left_panel_rect.x + left_panel_rect.w + payload_panel_gap;
-    const int payload_panel_right_limit = asset_info_rect.x - payload_panel_gap;
-    const int payload_panel_w = std::max(0, std::min(332, payload_panel_right_limit - payload_panel_x));
-    SDL_Rect attack_payload_rect{payload_panel_x, left_panel_y, payload_panel_w, left_panel_h};
-    SDL_Rect oval_point_child_rect{payload_panel_x, left_panel_y, payload_panel_w, left_panel_h};
+    const int panel_gap = 12;
+    const int right_panel_y = usable.y + panel_margin;
+    const int right_panel_h = std::max(0, usable.h - panel_margin * 2);
+    int right_panel_w = std::min(320, std::max(220, usable.w / 3));
+    const int rightmost_panel_x_limit = usable_right - panel_margin;
+    right_panel_w = std::min(right_panel_w, std::max(0, rightmost_panel_x_limit - usable_left));
+    const int right_panel_x = std::max(usable_left, rightmost_panel_x_limit - right_panel_w);
+    SDL_Rect right_panel_rect{right_panel_x, right_panel_y, right_panel_w, right_panel_h};
+    const int secondary_panel_right_edge = right_panel_rect.x - panel_gap;
+    const int secondary_panel_w = std::max(0, std::min(332, secondary_panel_right_edge - (usable_left + panel_margin)));
+    const int secondary_panel_x = std::max(usable_left + panel_margin, secondary_panel_right_edge - secondary_panel_w);
+    SDL_Rect attack_payload_rect{secondary_panel_x, right_panel_y, secondary_panel_w, right_panel_h};
+    SDL_Rect oval_point_child_rect{secondary_panel_x, right_panel_y, secondary_panel_w, right_panel_h};
 
     auto progress_for = [this]() -> float {
         if (!asset_editor_transition_.active || asset_editor_transition_.duration_frames <= 0) {
@@ -12527,14 +12776,13 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
         }
 
         const float t = progress_for();
-        const int off_left = -base_rect.w - 24;
         const int off_right = screen_w_ + 24;
         if (subject == asset_editor_transition_.from) {
             placed.x = lerp_int(base_rect.x, off_right, t);
             return placed;
         }
         if (subject == asset_editor_transition_.to) {
-            const int start_x = (subject == AssetEditorSubview::AssetInfo) ? off_right : off_left;
+            const int start_x = off_right;
             placed.x = lerp_int(start_x, base_rect.x, t);
             return placed;
         }
@@ -12561,19 +12809,33 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     ensure_impassable_box_editor_widgets();
     ensure_floor_box_editor_widgets();
     ensure_attack_payload_editor_widget();
+    ensure_stack_animation_list_panel();
+    if (stack_animation_list_panel_) {
+        if (is_stack_animation_list_subview_active()) {
+            const int list_panel_y = usable.y + panel_margin;
+            const int list_panel_h = std::max(0, usable.h - panel_margin * 2);
+            int list_panel_w = std::min(320, std::max(220, usable.w / 4));
+            const int max_list_right = secondary_panel_w > 0 ? secondary_panel_x - panel_gap : right_panel_x - panel_gap;
+            list_panel_w = std::min(list_panel_w, std::max(0, max_list_right - (usable_left + panel_margin)));
+            SDL_Rect list_panel_rect{usable_left + panel_margin, list_panel_y, list_panel_w, list_panel_h};
+            stack_animation_list_panel_->set_panel_bounds_override(list_panel_rect);
+        } else {
+            stack_animation_list_panel_->clear_panel_bounds_override();
+        }
+    }
     if (anchor_tools_panel_) {
         if (anchor_mode_active() || light_mode_active() || asset_editor_transition_.active) {
             const AssetEditorSubview anchor_subject = light_mode_active()
                 ? AssetEditorSubview::Light
                 : AssetEditorSubview::Anchor;
-            anchor_tools_panel_->set_panel_bounds_override(place_rect(anchor_subject, left_panel_rect));
+            anchor_tools_panel_->set_panel_bounds_override(place_rect(anchor_subject, right_panel_rect));
         } else {
             anchor_tools_panel_->clear_panel_bounds_override();
         }
     }
     if (oval_tools_panel_) {
         if (oval_mode_active() || asset_editor_transition_.active) {
-            oval_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::OvalAnchor, left_panel_rect));
+            oval_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::OvalAnchor, right_panel_rect));
         } else {
             oval_tools_panel_->clear_panel_bounds_override();
         }
@@ -12588,21 +12850,21 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     }
     if (movement_tools_panel_) {
         if (movement_mode_active() || asset_editor_transition_.active) {
-            movement_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Movement, left_panel_rect));
+            movement_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Movement, right_panel_rect));
         } else {
             movement_tools_panel_->clear_panel_bounds_override();
         }
     }
     if (hitbox_tools_panel_) {
         if (hitbox_mode_active() || asset_editor_transition_.active) {
-            hitbox_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Hitbox, left_panel_rect));
+            hitbox_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::Hitbox, right_panel_rect));
         } else {
             hitbox_tools_panel_->clear_panel_bounds_override();
         }
     }
     if (attack_box_tools_panel_) {
         if (attack_box_mode_active() || asset_editor_transition_.active) {
-            attack_box_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::AttackBox, left_panel_rect));
+            attack_box_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::AttackBox, right_panel_rect));
         } else {
             attack_box_tools_panel_->clear_panel_bounds_override();
         }
@@ -12610,14 +12872,14 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     if (impassable_box_tools_panel_) {
         if (impassable_box_mode_active() || asset_editor_transition_.active) {
             impassable_box_tools_panel_->set_panel_bounds_override(
-                place_rect(AssetEditorSubview::ImpassableBox, left_panel_rect));
+                place_rect(AssetEditorSubview::ImpassableBox, right_panel_rect));
         } else {
             impassable_box_tools_panel_->clear_panel_bounds_override();
         }
     }
     if (floor_box_tools_panel_) {
         if (floor_box_mode_active() || asset_editor_transition_.active) {
-            floor_box_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::FloorBoxes, left_panel_rect));
+            floor_box_tools_panel_->set_panel_bounds_override(place_rect(AssetEditorSubview::FloorBoxes, right_panel_rect));
         } else {
             floor_box_tools_panel_->clear_panel_bounds_override();
         }
@@ -12639,6 +12901,7 @@ void RoomEditor::update_asset_editor_layout() {
     ensure_attack_box_editor_widgets();
     ensure_impassable_box_editor_widgets();
     ensure_floor_box_editor_widgets();
+    ensure_stack_animation_list_panel();
 
     apply_asset_editor_panel_overrides();
     if (anchor_navigation_panel_) {
@@ -12648,6 +12911,7 @@ void RoomEditor::update_asset_editor_layout() {
     }
 
     sync_shared_footer_navigation();
+    sync_stack_animation_list_panel();
 
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -12683,6 +12947,10 @@ void RoomEditor::update_asset_editor_layout() {
     if (attack_payload_editor_) {
         attack_payload_editor_->set_screen_dimensions(screen_w_, screen_h_);
         attack_payload_editor_->set_visible(attack_box_mode_active());
+    }
+    if (stack_animation_list_panel_) {
+        stack_animation_list_panel_->set_screen_dimensions(screen_w_, screen_h_);
+        stack_animation_list_panel_->set_visible(is_stack_animation_list_subview_active());
     }
 }
 
@@ -20281,6 +20549,10 @@ bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
+    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
+        stack_animation_list_panel_->is_point_inside(x, y)) {
+        return true;
+    }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
     }
@@ -20298,6 +20570,10 @@ bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
 bool RoomEditor::is_oval_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
+        stack_animation_list_panel_->is_point_inside(x, y)) {
+        return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
@@ -20329,6 +20605,10 @@ bool RoomEditor::is_hitbox_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
+    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
+        stack_animation_list_panel_->is_point_inside(x, y)) {
+        return true;
+    }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
     }
@@ -20346,6 +20626,10 @@ bool RoomEditor::is_hitbox_ui_blocking_point(int x, int y) const {
 bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
+        stack_animation_list_panel_->is_point_inside(x, y)) {
+        return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
@@ -20369,6 +20653,10 @@ bool RoomEditor::is_impassable_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
+    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
+        stack_animation_list_panel_->is_point_inside(x, y)) {
+        return true;
+    }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
     }
@@ -20386,6 +20674,10 @@ bool RoomEditor::is_impassable_box_ui_blocking_point(int x, int y) const {
 bool RoomEditor::is_floor_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
+        stack_animation_list_panel_->is_point_inside(x, y)) {
+        return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
@@ -23269,6 +23561,10 @@ void RoomEditor::validate_floor_box_edit_target() {
 bool RoomEditor::is_anchor_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
+    }
+    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
+        stack_animation_list_panel_->is_point_inside(x, y)) {
+        return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;

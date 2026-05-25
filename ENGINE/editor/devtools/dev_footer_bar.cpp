@@ -289,14 +289,6 @@ void DevFooterBar::set_editor_frame_navigation(EditorFrameNavigation navigation)
                                                              editor_frame_navigation_.frame_count - 1);
     }
 
-    if (!editor_prev_animation_button_) {
-        editor_prev_animation_button_ =
-            std::make_unique<DMButton>("Anim -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
-    }
-    if (!editor_next_animation_button_) {
-        editor_next_animation_button_ =
-            std::make_unique<DMButton>("Anim +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
-    }
     if (!editor_prev_frame_button_) {
         editor_prev_frame_button_ =
             std::make_unique<DMButton>("Frame -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
@@ -306,12 +298,6 @@ void DevFooterBar::set_editor_frame_navigation(EditorFrameNavigation navigation)
             std::make_unique<DMButton>("Frame +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
     }
 
-    if (editor_prev_animation_button_) {
-        editor_prev_animation_button_->set_style(editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_animation)));
-    }
-    if (editor_next_animation_button_) {
-        editor_next_animation_button_->set_style(editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_next_animation)));
-    }
     if (editor_prev_frame_button_) {
         editor_prev_frame_button_->set_style(editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_frame)));
     }
@@ -839,14 +825,6 @@ void DevFooterBar::layout_editor_navigation() {
     editor_animation_label_rect_ = SDL_Rect{left, y, available_width, kEditorAnimationLabelHeight};
     y += kEditorAnimationLabelHeight + kEditorFrameRowGap;
 
-    if (!editor_prev_animation_button_) {
-        editor_prev_animation_button_ =
-            std::make_unique<DMButton>("Anim -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
-    }
-    if (!editor_next_animation_button_) {
-        editor_next_animation_button_ =
-            std::make_unique<DMButton>("Anim +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
-    }
     if (!editor_prev_frame_button_) {
         editor_prev_frame_button_ =
             std::make_unique<DMButton>("Frame -", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
@@ -856,14 +834,6 @@ void DevFooterBar::layout_editor_navigation() {
             std::make_unique<DMButton>("Frame +", &DMStyles::SecondaryButton(), kEditorFrameNavButtonWidth, DMButton::height());
     }
 
-    if (editor_prev_animation_button_) {
-        editor_prev_animation_button_->set_style(
-            editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_animation)));
-    }
-    if (editor_next_animation_button_) {
-        editor_next_animation_button_->set_style(
-            editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_next_animation)));
-    }
     if (editor_prev_frame_button_) {
         editor_prev_frame_button_->set_style(
             editor_nav_button_style(static_cast<bool>(editor_frame_navigation_.on_prev_frame)));
@@ -875,26 +845,23 @@ void DevFooterBar::layout_editor_navigation() {
 
     const int button_h = DMButton::height();
     const int button_gap = 6;
-    const int button_grid_gap = 4;
     const int nav_cluster_w = std::clamp(available_width / 5, 132, 168);
     const int nav_button_w = std::clamp((nav_cluster_w - button_gap) / 2, 54, 84);
     const int nav_cluster_real_w = (nav_button_w * 2) + button_gap;
-    const int nav_cluster_h = (button_h * 2) + button_grid_gap;
+    const int nav_cluster_h = button_h;
     const int row_h = std::max(kEditorFrameStripHeight, nav_cluster_h);
     const int button_top = y + (row_h - nav_cluster_h) / 2;
     const int nav_x = right - nav_cluster_real_w;
 
-    const SDL_Rect anim_prev_rect{nav_x, button_top, nav_button_w, button_h};
-    const SDL_Rect anim_next_rect{nav_x + nav_button_w + button_gap, button_top, nav_button_w, button_h};
-    const SDL_Rect frame_prev_rect{nav_x, button_top + button_h + button_grid_gap, nav_button_w, button_h};
+    const SDL_Rect frame_prev_rect{nav_x, button_top, nav_button_w, button_h};
     const SDL_Rect frame_next_rect{
         nav_x + nav_button_w + button_gap,
-        button_top + button_h + button_grid_gap,
+        button_top,
         nav_button_w,
         button_h};
 
-    editor_prev_animation_button_->set_rect(anim_prev_rect);
-    editor_next_animation_button_->set_rect(anim_next_rect);
+    if (editor_prev_animation_button_) editor_prev_animation_button_->set_rect(SDL_Rect{0, 0, 0, 0});
+    if (editor_next_animation_button_) editor_next_animation_button_->set_rect(SDL_Rect{0, 0, 0, 0});
     editor_prev_frame_button_->set_rect(frame_prev_rect);
     editor_next_frame_button_->set_rect(frame_next_rect);
 
@@ -931,9 +898,7 @@ bool DevFooterBar::editor_navigation_contains_point(const SDL_Point& point) cons
         const SDL_Rect rect = button->rect();
         return SDL_PointInRect(&point, &rect);
     };
-    return point_in_button(editor_prev_animation_button_) ||
-        point_in_button(editor_next_animation_button_) ||
-        point_in_button(editor_prev_frame_button_) ||
+    return point_in_button(editor_prev_frame_button_) ||
         point_in_button(editor_next_frame_button_);
 }
 
@@ -1026,8 +991,6 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
         }
     }
 
-    used = trigger_button(editor_prev_animation_button_.get()) || used;
-    used = trigger_button(editor_next_animation_button_.get()) || used;
     used = trigger_button(editor_prev_frame_button_.get()) || used;
     used = trigger_button(editor_next_frame_button_.get()) || used;
 
@@ -1053,9 +1016,7 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        if (point_in_button(pointer, editor_prev_animation_button_) ||
-            point_in_button(pointer, editor_next_animation_button_) ||
-            point_in_button(pointer, editor_prev_frame_button_) ||
+        if (point_in_button(pointer, editor_prev_frame_button_) ||
             point_in_button(pointer, editor_next_frame_button_)) {
             used = true;
         }
@@ -1081,13 +1042,7 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
                 break;
             }
         }
-        if (point_in_button(pointer, editor_prev_animation_button_) && editor_frame_navigation_.on_prev_animation) {
-            editor_frame_navigation_.on_prev_animation();
-            used = true;
-        } else if (point_in_button(pointer, editor_next_animation_button_) && editor_frame_navigation_.on_next_animation) {
-            editor_frame_navigation_.on_next_animation();
-            used = true;
-        } else if (point_in_button(pointer, editor_prev_frame_button_) && editor_frame_navigation_.on_prev_frame) {
+        if (point_in_button(pointer, editor_prev_frame_button_) && editor_frame_navigation_.on_prev_frame) {
             editor_frame_navigation_.on_prev_frame();
             used = true;
         } else if (point_in_button(pointer, editor_next_frame_button_) && editor_frame_navigation_.on_next_frame) {
@@ -1199,8 +1154,6 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
                        y);
     }
 
-    if (editor_prev_animation_button_) editor_prev_animation_button_->render(renderer);
-    if (editor_next_animation_button_) editor_next_animation_button_->render(renderer);
     if (editor_prev_frame_button_) editor_prev_frame_button_->render(renderer);
     if (editor_next_frame_button_) editor_next_frame_button_->render(renderer);
 

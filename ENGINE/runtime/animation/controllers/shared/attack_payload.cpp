@@ -172,6 +172,8 @@ bool object_has_any_payload_fields(const nlohmann::json& node) {
         "status_effects",
         "critical_hit_chance",
         "element_type",
+        "recharge_seconds",
+        "recharge_random_weight",
         "payload_id",
     };
     for (const char* key : kPayloadKeys) {
@@ -216,6 +218,13 @@ void apply_payload_fields(const nlohmann::json& source, AttackPayload& target) {
     if (source.contains("element_type")) {
         target.element_type = read_string_field(source, "element_type", target.element_type);
     }
+    if (source.contains("recharge_seconds")) {
+        target.recharge_seconds = read_float_field(source, "recharge_seconds", target.recharge_seconds);
+    }
+    if (source.contains("recharge_random_weight")) {
+        target.recharge_random_weight =
+            read_float_field(source, "recharge_random_weight", target.recharge_random_weight);
+    }
     if (source.contains("payload_id")) {
         target.payload_id = read_string_field(source, "payload_id", target.payload_id);
     }
@@ -237,6 +246,12 @@ AttackPayload sanitize_attack_payload(AttackPayload payload) {
         payload.critical_hit_chance = 0.0f;
     }
     payload.critical_hit_chance = std::clamp(payload.critical_hit_chance, 0.0f, 1.0f);
+    if (!std::isfinite(payload.recharge_seconds) || payload.recharge_seconds < 0.0f) {
+        payload.recharge_seconds = 0.0f;
+    }
+    if (!std::isfinite(payload.recharge_random_weight) || payload.recharge_random_weight <= 0.0f) {
+        payload.recharge_random_weight = 1.0f;
+    }
 
     payload.damage_type = trim_copy(payload.damage_type);
     if (!has_non_whitespace(payload.damage_type)) {
@@ -281,6 +296,8 @@ nlohmann::json attack_payload_to_json(const AttackPayload& payload) {
     json["status_effects"] = sanitized.status_effects;
     json["critical_hit_chance"] = sanitized.critical_hit_chance;
     json["element_type"] = sanitized.element_type;
+    json["recharge_seconds"] = sanitized.recharge_seconds;
+    json["recharge_random_weight"] = sanitized.recharge_random_weight;
     json["payload_id"] = sanitized.payload_id;
     return json;
 }

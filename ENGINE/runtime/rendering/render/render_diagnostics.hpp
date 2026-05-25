@@ -21,6 +21,21 @@ struct RenderFrameStats {
     double cpu_light_gather_ms = 0.0;
     double cpu_light_mask_generation_ms = 0.0;
     double draw_submission_cpu_ms = 0.0;
+    double draw_submission_packet_build_sort_ms = 0.0;
+    double draw_submission_resource_create_ms = 0.0;
+    double draw_submission_pipeline_bind_ms = 0.0;
+    double draw_submission_submit_present_handoff_ms = 0.0;
+    double draw_submission_unaccounted_ms = 0.0;
+    double render_target_sync_ms = 0.0;
+    double first_render_target_ensure_ms = 0.0;
+    double final_render_target_ensure_ms = 0.0;
+    double sdl_render_target_ms = 0.0;
+    double sdl_render_texture_ms = 0.0;
+    double sdl_render_geometry_ms = 0.0;
+    std::uint32_t draw_submission_packet_build_count = 0;
+    std::uint32_t draw_submission_resource_create_count = 0;
+    std::uint32_t draw_submission_pipeline_bind_count = 0;
+    std::uint32_t draw_submission_submit_handoff_count = 0;
     double ui_overlay_prepare_ms = 0.0;
     double present_block_ms = 0.0;
     double present_interval_ms = 0.0;
@@ -65,6 +80,25 @@ struct RenderFrameStats {
     bool ui_overlay_active = false;
     bool ui_overlay_redrawn = false;
     bool submit_succeeded = false;
+    std::uint32_t projection_calls_total = 0;
+    std::uint32_t projection_calls_saved_early = 0;
+    std::uint32_t assets_stageA_reject = 0;
+    std::uint32_t assets_stageC_entered = 0;
+    std::uint32_t projection_recompute_budget = 0;
+    std::uint32_t projection_points_deferred = 0;
+    std::uint32_t projection_points_updated = 0;
+    std::uint32_t creation_budget_limit = 0;
+    double creation_budget_ms_limit = 0.0;
+    std::uint32_t creation_attempted_this_frame = 0;
+    std::uint32_t creation_executed_this_frame = 0;
+    std::uint32_t creation_deferred_count = 0;
+    std::uint32_t creation_queue_depth_start = 0;
+    std::uint32_t creation_queue_depth_end = 0;
+    std::uint32_t creation_queue_age_max = 0;
+    std::uint32_t creation_permanent_failures = 0;
+    std::uint32_t creation_retried_count = 0;
+    bool held_scene_frame = false;
+    std::string held_scene_reason;
 };
 
 namespace render_diagnostics {
@@ -85,6 +119,14 @@ void add_render_target_switch_count(std::uint32_t count = 1);
 void add_cpu_light_gather_ms(double elapsed_ms);
 void add_cpu_light_mask_generation_ms(double elapsed_ms);
 void add_draw_submission_ms(double elapsed_ms);
+void add_draw_submission_packet_build_sort_ms(double elapsed_ms, std::uint32_t packet_count = 0);
+void add_draw_submission_resource_create_ms(double elapsed_ms, std::uint32_t create_count = 0);
+void add_draw_submission_pipeline_bind_ms(double elapsed_ms, std::uint32_t bind_count = 0);
+void add_draw_submission_submit_present_handoff_ms(double elapsed_ms, std::uint32_t handoff_count = 0);
+void set_draw_submission_breakdown(double unaccounted_ms,
+                                   double target_sync_ms,
+                                   double first_ensure_ms,
+                                   double final_ensure_ms);
 void set_ui_overlay_stats(bool active, bool redrawn, double prepare_ms);
 void set_present_pacing(double present_block_ms,
                         double present_interval_ms,
@@ -121,6 +163,24 @@ void set_render_stage_timings(const std::string& summary);
 void add_skipped_texture_count(std::uint32_t count = 1);
 void set_failed_texture_names(const std::string& names);
 void set_submit_result(bool succeeded);
+void set_visibility_projection_stats(std::uint32_t projection_calls_total,
+                                    std::uint32_t projection_calls_saved_early,
+                                    std::uint32_t assets_stageA_reject,
+                                    std::uint32_t assets_stageC_entered,
+                                    std::uint32_t projection_recompute_budget,
+                                    std::uint32_t projection_points_deferred,
+                                    std::uint32_t projection_points_updated);
+void set_creation_budget_stats(std::uint32_t budget_limit,
+                               double budget_ms_limit,
+                               std::uint32_t attempted,
+                               std::uint32_t executed,
+                               std::uint32_t deferred,
+                               std::uint32_t queue_depth_start,
+                               std::uint32_t queue_depth_end,
+                               std::uint32_t queue_age_max,
+                               std::uint32_t retried_count,
+                               std::uint32_t permanent_failures);
+void set_held_scene_frame(bool held, const std::string& reason);
 void note_texture_created(SDL_Texture* texture);
 void note_texture_destroyed(SDL_Texture* texture);
 void destroy_texture(SDL_Texture*& texture);

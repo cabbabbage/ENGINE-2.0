@@ -189,7 +189,6 @@ class GenerateRooms {
     std::vector<std::unique_ptr<Room>> build(AssetLibrary* asset_lib,
                                              double map_radius,
                                              const std::vector<double>& layer_radii,
-                                             const nlohmann::json& live_dynamic_spawns_data,
                                              nlohmann::json& rooms_data,
                                              nlohmann::json& trails_data,
                                              const MapGridSettings& grid_settings);

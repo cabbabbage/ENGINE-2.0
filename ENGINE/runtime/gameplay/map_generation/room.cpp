@@ -3,6 +3,8 @@
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "room_manifest_adapter.hpp"
+#include "room_legacy_migration.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <algorithm>
@@ -26,133 +28,6 @@ using vibble::strings::to_lower_copy;
 
 constexpr int kMinRoomDimension = 1;
 constexpr int kMaxRoomDimension = 40000;
-
-bool read_json_int(const nlohmann::json& src, const char* key, int& out_value) {
-        if (!src.is_object() || !key) {
-                return false;
-        }
-        auto it = src.find(key);
-        if (it == src.end()) {
-                return false;
-        }
-        if (it->is_number_integer()) {
-                out_value = it->get<int>();
-                return true;
-        }
-        if (it->is_number_float()) {
-                out_value = static_cast<int>(std::lround(it->get<double>()));
-                return true;
-        }
-        return false;
-}
-
-void migrate_legacy_radius_bounds_if_needed(const nlohmann::json& src,
-                                            int& min_w,
-                                            int& max_w,
-                                            int& min_h,
-                                            int& max_h) {
-        int legacy_min_radius = 0;
-        int legacy_max_radius = 0;
-        bool has_legacy_min_radius = false;
-        bool has_legacy_max_radius = false;
-
-        if (read_json_int(src, "min_radius", legacy_min_radius)) {
-                legacy_min_radius = std::max(0, legacy_min_radius);
-                has_legacy_min_radius = true;
-        }
-        if (read_json_int(src, "max_radius", legacy_max_radius)) {
-                legacy_max_radius = std::max(0, legacy_max_radius);
-                has_legacy_max_radius = true;
-        }
-
-        int legacy_radius = 0;
-        if (read_json_int(src, "radius", legacy_radius)) {
-                legacy_radius = std::max(0, legacy_radius);
-                if (!has_legacy_min_radius) {
-                        legacy_min_radius = legacy_radius;
-                        has_legacy_min_radius = true;
-                }
-                if (!has_legacy_max_radius) {
-                        legacy_max_radius = legacy_radius;
-                        has_legacy_max_radius = true;
-                }
-        }
-
-        if (!has_legacy_min_radius && !has_legacy_max_radius) {
-                return;
-        }
-
-        if (legacy_min_radius <= 0 && legacy_max_radius > 0) {
-                legacy_min_radius = legacy_max_radius;
-        }
-        if (legacy_max_radius <= 0 && legacy_min_radius > 0) {
-                legacy_max_radius = legacy_min_radius;
-        }
-        if (legacy_max_radius < legacy_min_radius) {
-                std::swap(legacy_min_radius, legacy_max_radius);
-        }
-
-        const int migrated_min_diameter = legacy_min_radius > 0 ? legacy_min_radius * 2 : 0;
-        const int migrated_max_diameter = legacy_max_radius > 0 ? legacy_max_radius * 2 : migrated_min_diameter;
-        if (migrated_min_diameter <= 0 || migrated_max_diameter <= 0) {
-                return;
-        }
-
-        if (min_w <= 0) min_w = migrated_min_diameter;
-        if (max_w <= 0) max_w = migrated_max_diameter;
-        if (min_h <= 0) min_h = migrated_min_diameter;
-        if (max_h <= 0) max_h = migrated_max_diameter;
-}
-
-vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& src,
-                                                                   const char* key,
-                                                                   const vibble::weighted_range::WeightedIntRange& fallback) {
-        if (!src.is_object() || !src.contains(key)) {
-                return fallback;
-        }
-        return vibble::weighted_range::from_json(src.at(key), fallback);
-}
-
-vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const nlohmann::json& src,
-                                                                         const char* min_key,
-                                                                         const char* max_key,
-                                                                         const vibble::weighted_range::WeightedIntRange& fallback) {
-        if (!src.is_object()) {
-                return fallback;
-        }
-        bool has_min = false;
-        bool has_max = false;
-        std::int64_t min_value = fallback.center;
-        std::int64_t max_value = fallback.center;
-        if (src.contains(min_key)) {
-                if (src.at(min_key).is_number_integer()) {
-                        min_value = src.at(min_key).get<std::int64_t>();
-                        has_min = true;
-                } else if (src.at(min_key).is_number_float()) {
-                        min_value = static_cast<std::int64_t>(std::llround(src.at(min_key).get<double>()));
-                        has_min = true;
-                }
-        }
-        if (src.contains(max_key)) {
-                if (src.at(max_key).is_number_integer()) {
-                        max_value = src.at(max_key).get<std::int64_t>();
-                        has_max = true;
-                } else if (src.at(max_key).is_number_float()) {
-                        max_value = static_cast<std::int64_t>(std::llround(src.at(max_key).get<double>()));
-                        has_max = true;
-                }
-        }
-        if (!has_min && !has_max) {
-                return fallback;
-        }
-        if (!has_min) {
-                min_value = max_value;
-        }
-        if (!has_max) {
-                max_value = min_value;
-        }
-        return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
-}
 
 int resolve_weighted_dimension(const vibble::weighted_range::WeightedIntRange& range, std::mt19937& rng) {
         const std::int64_t resolved = vibble::weighted_range::resolve(range, rng);
@@ -545,6 +420,11 @@ Room::Room(Point origin,
     }
     manifest_store_ = manifest_store;
     map_info_root_ = map_info_root;
+    if (manifest_store_ || map_info_root_ || manifest_writer_) {
+        sync_boundary_ = std::make_unique<RoomManifestAdapter::EditorSyncBoundary>();
+    } else {
+        sync_boundary_ = std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
+    }
 
     if (room_data_ptr_) {
         if (room_data_ptr_->is_null()) {
@@ -628,32 +508,16 @@ Room::Room(Point origin,
             geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
         }
 
-        std::string lowered_geometry = geometry;
-        std::transform(lowered_geometry.begin(),
-                       lowered_geometry.end(),
-                       lowered_geometry.begin(),
-                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-
         const auto default_range = vibble::weighted_range::make_legacy_uniform(64, 64);
-        vibble::weighted_range::WeightedIntRange width_range = assets_json.contains("width")
-            ? read_weighted_range_field(assets_json, "width", default_range)
-            : (assets_json.contains("min_width") || assets_json.contains("max_width")
-                   ? read_weighted_range_legacy_pair(assets_json, "min_width", "max_width", default_range)
-                   : default_range);
-        vibble::weighted_range::WeightedIntRange height_range = assets_json.contains("height")
-            ? read_weighted_range_field(assets_json, "height", width_range)
-            : (assets_json.contains("min_height") || assets_json.contains("max_height")
-                   ? read_weighted_range_legacy_pair(assets_json, "min_height", "max_height", width_range)
-                   : width_range);
-
-        if (lowered_geometry == "circle") {
-            if (assets_json.contains("min_radius") || assets_json.contains("max_radius") || assets_json.contains("radius")) {
-                width_range = read_weighted_range_legacy_pair(assets_json, "min_radius", "max_radius", default_range);
-                height_range = width_range;
-            } else {
-                height_range = width_range;
-            }
-        }
+        const auto ranges = room_legacy_migration::resolve_dimension_ranges(
+            assets_json,
+            default_range,
+            [this](const char* reason) {
+                std::cout << "[Room] Legacy room migration executed for '" << room_name
+                          << "' reason=" << (reason ? reason : "unknown") << "\n";
+            });
+        vibble::weighted_range::WeightedIntRange width_range = ranges.width;
+        vibble::weighted_range::WeightedIntRange height_range = ranges.height;
 
         std::mt19937 rng(std::random_device{}());
         const int width = std::max(1, resolve_weighted_dimension(width_range, rng));
@@ -710,26 +574,16 @@ Room::Room(Point origin,
             return payload;
         };
 
-        if (manifest_writer_ && !manifest_map_id_.empty()) {
-            nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
-            payload = apply_mutation(std::move(payload));
-            manifest_writer_(manifest_map_id_, payload);
-        } else if (manifest_store_ && !manifest_map_id_.empty()) {
-            nlohmann::json payload;
-            if (map_info_root_) {
-                payload = *map_info_root_;
-            } else if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
-                payload = *entry;
-            }
-            payload = apply_mutation(std::move(payload));
-            devmode::core::ManifestStore::MapPersistOptions options;
-            options.flush = false;
-            options.guard_reason = "Room::push_payload";
-            const bool ok = manifest_store_->persist_map_entry(manifest_map_id_, payload, options);
-            if (!ok) {
-                std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
-            }
-        }
+        nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
+        payload = apply_mutation(std::move(payload));
+        RoomManifestAdapter::SyncContext ctx;
+        ctx.data_section = data_section_;
+        ctx.room_name = room_name;
+        ctx.manifest_map_id = manifest_map_id_;
+        ctx.manifest_store = manifest_store_;
+        ctx.map_info_root = map_info_root_;
+        ctx.manifest_writer = manifest_writer_;
+        RoomManifestAdapter::write_payload(ctx, payload, "Room::push_payload");
     };
 
     json_sources.push_back(assets_json);
@@ -756,6 +610,8 @@ Room::Room(Point origin,
     AssetSpawner spawner(asset_lib, exclusion);
     spawner.spawn(*this);
 }
+
+Room::~Room() = default;
 
 void Room::set_sibling_left(Room* left_room) {
 	left_sibling = left_room;
@@ -812,28 +668,9 @@ std::pair<int, int> Room::current_room_dimensions() const {
         }
 
         const auto default_range = vibble::weighted_range::make_legacy_uniform(64, 64);
-        vibble::weighted_range::WeightedIntRange width_range = assets_json.contains("width")
-            ? read_weighted_range_field(assets_json, "width", default_range)
-            : (assets_json.contains("min_width") || assets_json.contains("max_width")
-                   ? read_weighted_range_legacy_pair(assets_json, "min_width", "max_width", default_range)
-                   : default_range);
-        vibble::weighted_range::WeightedIntRange height_range = assets_json.contains("height")
-            ? read_weighted_range_field(assets_json, "height", width_range)
-            : (assets_json.contains("min_height") || assets_json.contains("max_height")
-                   ? read_weighted_range_legacy_pair(assets_json, "min_height", "max_height", width_range)
-                   : width_range);
-        if (assets_json.contains("geometry")) {
-                std::string lowered = assets_json.value("geometry", std::string{"square"});
-                std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
-                        return static_cast<char>(std::tolower(ch));
-                });
-                if (lowered == "circle") {
-                        if (assets_json.contains("min_radius") || assets_json.contains("max_radius") || assets_json.contains("radius")) {
-                                width_range = read_weighted_range_legacy_pair(assets_json, "min_radius", "max_radius", default_range);
-                        }
-                        height_range = width_range;
-                }
-        }
+        const auto ranges = room_legacy_migration::resolve_dimension_ranges(assets_json, default_range, nullptr);
+        vibble::weighted_range::WeightedIntRange width_range = ranges.width;
+        vibble::weighted_range::WeightedIntRange height_range = ranges.height;
         std::mt19937 rng(std::random_device{}());
         const int width = std::max(1, resolve_weighted_dimension(width_range, rng));
         const int height = std::max(1, resolve_weighted_dimension(height_range, rng));
@@ -878,6 +715,8 @@ void Room::load_named_areas_from_json() {
                         const int stored_width = item.value("origional_width", 0);
                         const int stored_height = item.value("origional_height", 0);
 
+                        // Relative points are manifest-owned serialized coordinates.
+                        // They are normalized into runtime-owned `areas` snapshots below.
                         auto relative_points = RoomAreaSerialization::decode_relative_points(item);
 
                         std::vector<SDL_Point> pts;
@@ -1378,39 +1217,39 @@ void Room::set_manifest_store(devmode::core::ManifestStore* store,
         if (manifest_writer) {
                 manifest_writer_ = std::move(manifest_writer);
         }
+        if (manifest_store_ || map_info_root_ || manifest_writer_) {
+                sync_boundary_ = std::make_unique<RoomManifestAdapter::EditorSyncBoundary>();
+        } else {
+                sync_boundary_ = std::make_unique<RoomManifestAdapter::RuntimeSyncBoundary>();
+        }
 }
 
 nlohmann::json Room::build_room_payload_for_save() const {
         assets_save_dirty_ = true;
         const_cast<Room*>(this)->load_named_areas_from_json();
 
-        const_cast<Room*>(this)->assets_json["camera_height_px"] = camera_height_px;
-        const_cast<Room*>(this)->assets_json["camera_tilt_deg"] = camera_tilt_deg;
-        const_cast<Room*>(this)->assets_json["camera_zoom_percent"] = camera_zoom_percent;
-        const_cast<Room*>(this)->assets_json["camera_center_dx"] = camera_center_dx;
-        const_cast<Room*>(this)->assets_json["camera_center_dz"] = camera_center_dz;
+        const nlohmann::json normalized = RoomManifestAdapter::normalize_room_snapshot(
+                assets_json,
+                camera_height_px,
+                camera_tilt_deg,
+                camera_zoom_percent,
+                camera_center_dx,
+                camera_center_dz);
 
-        nlohmann::json payload;
-        if (map_info_root_) {
-                payload = *map_info_root_;
-        } else if (manifest_store_ && !manifest_map_id_.empty()) {
-                if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
-                        payload = *entry;
-                }
-        }
-
-        if (!payload.is_object()) {
-                payload = nlohmann::json::object();
-        }
-        nlohmann::json& section = payload[data_section_];
-        if (!section.is_object()) {
-                section = nlohmann::json::object();
-        }
-        section[room_name] = assets_json;
-        return payload;
+        RoomManifestAdapter::SyncContext ctx;
+        ctx.data_section = data_section_;
+        ctx.room_name = room_name;
+        ctx.manifest_map_id = manifest_map_id_;
+        ctx.manifest_store = manifest_store_;
+        ctx.map_info_root = map_info_root_;
+        ctx.manifest_writer = manifest_writer_;
+        return RoomManifestAdapter::build_payload_from_snapshot(ctx, normalized);
 }
 
 void Room::snapshot_assets_to_map_info() {
+        if (!sync_boundary_ || !sync_boundary_->enabled()) {
+                return;
+        }
         // Keep the in-memory manifest representation aligned with the live room state
         // without letting stale runtime copies overwrite map-mode edits.
         if (!assets_json.is_object()) {
@@ -1467,22 +1306,17 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
                 *map_info_root_ = payload;
         }
 
-        bool success = true;
-        if (manifest_writer_ && !manifest_map_id_.empty()) {
-                manifest_writer_(manifest_map_id_, payload);
-        } else if (manifest_store_ && !manifest_map_id_.empty()) {
-                devmode::core::ManifestStore::MapPersistOptions options;
-                options.flush = false;
-                options.guard_reason = "Room::apply_room_payload_for_save";
-                success = manifest_store_->persist_map_entry(manifest_map_id_, payload, options);
-                if (!success) {
-                        std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
-                }
-        }
+        RoomManifestAdapter::SyncContext ctx;
+        ctx.data_section = data_section_;
+        ctx.room_name = room_name;
+        ctx.manifest_map_id = manifest_map_id_;
+        ctx.manifest_store = manifest_store_;
+        ctx.map_info_root = map_info_root_;
+        ctx.manifest_writer = manifest_writer_;
+        const bool success = RoomManifestAdapter::write_payload(ctx, payload, "Room::apply_room_payload_for_save");
 
         if (success) {
                 assets_save_dirty_ = false;
         }
         return success;
 }
-

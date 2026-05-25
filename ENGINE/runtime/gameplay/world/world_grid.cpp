@@ -284,7 +284,15 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     }
     std::unique_ptr<Asset> owned = std::move(*it);
     point.occupants.erase(it);
+    if (point.occupants.empty() && point.chunk) {
+        auto& resident_ids = point.chunk->resident_point_ids;
+        resident_ids.erase(std::remove(resident_ids.begin(), resident_ids.end(), point.id), resident_ids.end());
+#ifndef NDEBUG
+        SDL_assert(std::find(resident_ids.begin(), resident_ids.end(), point.id) == resident_ids.end());
+#endif
+    }
     decrement_xz_occupancy(point);
+    update_sticky_empty_state(point);
     point.invalidate_screen_data();
     if (clear_mapping) {
         asset_to_key_.erase(a);
@@ -301,6 +309,7 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     if (had_assets_before && !has_after) {
         propagate_branch_inactive(&point);
         mark_point_for_deferred_prune(&point);
+        update_sticky_empty_state(point);
     }
     return owned;
 }
@@ -311,7 +320,17 @@ void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, GridPoi
         return;
     }
     const bool had_assets_before = point.has_assets_or_active_children();
+    if (point.occupants.empty() && point.chunk) {
+        auto& resident_ids = point.chunk->resident_point_ids;
+        if (std::find(resident_ids.begin(), resident_ids.end(), point.id) == resident_ids.end()) {
+            resident_ids.push_back(point.id);
+        }
+#ifndef NDEBUG
+        SDL_assert(std::find(resident_ids.begin(), resident_ids.end(), point.id) != resident_ids.end());
+#endif
+    }
     point.occupants.push_back(std::move(owned));
+    invalidate_sticky_empty_state(point);
     bind_asset_to_point(target, point);
     increment_xz_occupancy(point);
     point.invalidate_screen_data();
@@ -520,6 +539,7 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
         }
 
         if (skip_inactive_branches && !node->has_assets_or_active_children()) {
+            if (node->empty_resolved && empty_point_skips_ < std::numeric_limits<std::uint32_t>::max()) ++empty_point_skips_;
             if (metrics) ++metrics->branches_skipped;
             continue;
         }
@@ -639,6 +659,23 @@ WorldGrid::OccupancyXZKey WorldGrid::occupancy_key_for_point(const GridPoint& po
     return OccupancyXZKey{point.world_x(), point.world_z(), point.resolution_layer()};
 }
 
+bool WorldGrid::point_can_resolve_empty(const GridPoint& point) const {
+    return point.occupants.empty() && point.active_child_mask == 0 && point.children_with_assets == 0;
+}
+void WorldGrid::update_sticky_empty_state(GridPoint& point) {
+    if (point_can_resolve_empty(point)) {
+        point.empty_resolved = true;
+        point.empty_resolved_revision = empty_state_revision_;
+    }
+}
+void WorldGrid::invalidate_sticky_empty_state(GridPoint& point) {
+    if (point.empty_resolved) {
+        point.empty_resolved = false;
+        point.empty_resolved_revision = ++empty_state_revision_;
+        if (empty_point_invalidations_ < std::numeric_limits<std::uint32_t>::max()) ++empty_point_invalidations_;
+    }
+}
+
 void WorldGrid::increment_xz_occupancy(const GridPoint& point) {
     const OccupancyXZKey key = occupancy_key_for_point(point);
     auto [it, inserted] = occupancy_xz_counts_.try_emplace(key, 0u);
@@ -664,6 +701,7 @@ void WorldGrid::mark_point_for_deferred_prune(GridPoint* point) {
         return;
     }
     deferred_empty_point_ids_.insert(point->id);
+    update_sticky_empty_state(*point);
 }
 
 void WorldGrid::prune_empty_points() {
@@ -692,6 +730,11 @@ std::size_t WorldGrid::flush_deferred_empty_points(std::size_t max_points) {
         const GridId id = *it;
         auto point_it = points_.find(id);
         if (point_it == points_.end() || point_it->second.has_assets_or_active_children()) {
+            it = deferred_empty_point_ids_.erase(it);
+            continue;
+        }
+        if (!point_it->second.empty_resolved) {
+            update_sticky_empty_state(point_it->second);
             it = deferred_empty_point_ids_.erase(it);
             continue;
         }

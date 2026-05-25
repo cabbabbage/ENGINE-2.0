@@ -42,6 +42,7 @@
 #include "DockManager.hpp"
 #include "devtools/dev_footer_bar.hpp"
 #include "devtools/camera_ui.hpp"
+#include "devtools/animation_frame_import_service.hpp"
 #include "devtools/frame_importer.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/sdl_pointer_utils.hpp"
@@ -49,6 +50,7 @@
 #include "dev_mode_utils.hpp"
 #include "asset_paths.hpp"
 #include "utils/log.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
@@ -63,16 +65,9 @@
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/map_generation/room.hpp"
-#include "gameplay/spawn/asset_spawn_planner.hpp"
-#include "gameplay/spawn/asset_spawner.hpp"
-#include "gameplay/spawn/check.hpp"
-#include "gameplay/spawn/methods/spawn_method.hpp"
-#include "gameplay/spawn/spacing_util.hpp"
 #include "utils/map_grid_settings.hpp"
-#include "gameplay/spawn/spawn_context.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
-#include "utils/grid_occupancy.hpp"
 #include "utils/input.hpp"
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
@@ -191,6 +186,7 @@ constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
 constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
+constexpr const char* kImpassFloorDebugEnabledKey = "dev.impass_floor.debug.enabled";
 constexpr const char* kDevMapSettingsKey = "dev_map_settings";
 constexpr const char* kMapColorKey = "default_floor_color";
 constexpr const char* kLegacyMapColorKey = "map_color";
@@ -874,6 +870,12 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     grid_cell_size_px_ = grid_world_spacing_for_resolution(grid_overlay_resolution_r_);
     movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
     anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
+    impass_floor_debug_enabled_ = devmode::ui_settings::load_bool(kImpassFloorDebugEnabledKey, false);
+    if (assets_) {
+        assets_->set_movement_debug_enabled(movement_debug_enabled_);
+        assets_->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
+        assets_->set_impass_floor_debug_enabled(impass_floor_debug_enabled_);
+    }
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_parent_window(parent_window_);
@@ -1365,6 +1367,9 @@ void DevControls::rebuild_settings_schema() {
         [this](bool enabled) {
             movement_debug_enabled_ = enabled;
             persist_dev_bool(kMovementDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_movement_debug_enabled(enabled);
+            }
             if (map_mode_ui_) {
                 if (auto* footer = map_mode_ui_->get_footer_bar()) {
                     footer->set_movement_debug_enabled(enabled);
@@ -1387,6 +1392,27 @@ void DevControls::rebuild_settings_schema() {
         [this](bool enabled) {
             anchor_point_debug_enabled_ = enabled;
             persist_dev_bool(kAnchorPointDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_anchor_point_debug_enabled(enabled);
+            }
+        },
+        {},
+        {},
+    });
+    global_settings_schema_.push_back(SettingSchema{
+        OtherSettingsAndControls::kImpassFloorDebugSettingId,
+        "Debug Impass Floor",
+        SettingGroup::Debug,
+        SettingControl::Toggle,
+        0,
+        0,
+        [this]() { return impass_floor_debug_enabled_; },
+        [this](bool enabled) {
+            impass_floor_debug_enabled_ = enabled;
+            persist_dev_bool(kImpassFloorDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_impass_floor_debug_enabled(enabled);
+            }
         },
         {},
         {},
@@ -1404,6 +1430,29 @@ void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
             footer->set_grid_overlay_enabled(enabled, false);
         }
     }
+}
+
+void DevControls::sync_debug_flags_from_assets() {
+    if (!assets_) {
+        return;
+    }
+
+    movement_debug_enabled_ = assets_->movement_debug_enabled();
+    anchor_point_debug_enabled_ = assets_->anchor_point_debug_enabled();
+    impass_floor_debug_enabled_ = assets_->impass_floor_debug_enabled();
+
+    persist_dev_bool(kMovementDebugEnabledKey, movement_debug_enabled_);
+    persist_dev_bool(kAnchorPointDebugEnabledKey, anchor_point_debug_enabled_);
+    persist_dev_bool(kImpassFloorDebugEnabledKey, impass_floor_debug_enabled_);
+
+    if (map_mode_ui_) {
+        if (auto* footer = map_mode_ui_->get_footer_bar()) {
+            footer->set_movement_debug_enabled(movement_debug_enabled_);
+        }
+    }
+
+    update_movement_debug_visibility();
+    other_settings_.refresh_setting_values();
 }
 
 void DevControls::apply_bool_setting(const char* id, bool value, bool sync_other_settings) {
@@ -1516,6 +1565,9 @@ void DevControls::ensure_misc_options_widgets() {
 
     if (!misc_map_color_button_) {
         misc_map_color_button_ = std::make_unique<DMButton>("Pick Floor Color", &DMStyles::AccentButton(), 0, DMButton::height());
+    }
+    if (!misc_delete_map_button_) {
+        misc_delete_map_button_ = std::make_unique<DMButton>("Delete This Map", &DMStyles::DeleteButton(), 0, DMButton::height());
     }
     if (!color_picker_) {
         color_picker_ = std::make_unique<DevColorPicker>();
@@ -1648,28 +1700,18 @@ void DevControls::layout_misc_options_panel() {
     }
     ensure_misc_options_widgets();
 
-    const int panel_w = 320;
+    const int panel_w = 360;
     const int padding = DMSpacing::panel_padding();
     const int gap = DMSpacing::item_gap();
     const int content_w = std::max(0, panel_w - padding * 2);
     const int label_h = DMStyles::Label().font_size;
     const int tile_h = misc_tile_size_stepper_ ? misc_tile_size_stepper_->preferred_height(content_w) : DMNumericStepper::height();
     const int color_h = DMButton::height();
+    const int delete_h = DMButton::height();
     const int preview_h = 26;
-    const int panel_h = padding + label_h + gap + tile_h + gap + label_h + gap + color_h + gap + preview_h + padding;
-
-    int footer_top = screen_h_;
-    if (map_mode_ui_) {
-        if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible()) {
-                SDL_Rect footer_rect = footer->rect();
-                footer_top = footer_rect.y;
-            }
-        }
-    }
-
-    const int x = std::max(0, screen_w_ - panel_w - 16);
-    const int y = std::max(0, footer_top - panel_h - 10);
+    const int panel_h = std::max(220, screen_h_ - 120);
+    const int x = std::max(0, screen_w_ - panel_w - 8);
+    const int y = 56;
     misc_options_panel_rect_ = SDL_Rect{x, y, panel_w, panel_h};
 
     int cursor_y = y + padding + label_h + gap;
@@ -1680,6 +1722,12 @@ void DevControls::layout_misc_options_panel() {
     cursor_y += label_h + gap;
     if (misc_map_color_button_) {
         misc_map_color_button_->set_rect(SDL_Rect{x + padding, cursor_y, content_w, color_h});
+    }
+    if (misc_delete_map_button_) {
+        misc_delete_map_button_->set_rect(SDL_Rect{x + padding,
+                                                   y + panel_h - padding - delete_h,
+                                                   content_w,
+                                                   delete_h});
     }
 }
 
@@ -1707,6 +1755,13 @@ bool DevControls::handle_misc_options_panel_event(const SDL_Event& event) {
                         (misc_map_color_.g != misc_map_color_saved_.g) ||
                         (misc_map_color_.b != misc_map_color_saved_.b);
                 });
+        }
+    }
+    if (misc_delete_map_button_ && misc_delete_map_button_->handle_event(event)) {
+        used = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            delete_current_map_and_exit_to_start_menu();
+            return true;
         }
     }
     if (color_picker_ && color_picker_->is_open()) {
@@ -1772,10 +1827,36 @@ void DevControls::render_misc_options_panel(SDL_Renderer* renderer) {
     sdl_render::FillRect(renderer, &preview_rect);
     SDL_SetRenderDrawColor(renderer, panel_border.r, panel_border.g, panel_border.b, panel_border.a);
     sdl_render::Rect(renderer, &preview_rect);
+    if (misc_delete_map_button_) {
+        misc_delete_map_button_->render(renderer);
+    }
 
     if (color_picker_ && color_picker_->is_open()) {
         color_picker_->render(renderer);
     }
+}
+
+void DevControls::delete_current_map_and_exit_to_start_menu() {
+    if (!assets_) {
+        return;
+    }
+    const std::string map_id = assets_->map_id();
+    if (map_id.empty()) {
+        assets_->show_dev_notice("Cannot delete map: missing map id", 2000);
+        return;
+    }
+    devmode::core::ManifestStore::MapPersistOptions options;
+    options.flush = true;
+    options.guard_reason = "delete_map_from_misc_options";
+    const bool removed = manifest_store_.remove_map_entry(map_id, options);
+    if (!removed) {
+        assets_->show_dev_notice("Map not found in manifest maps", 2000);
+        return;
+    }
+    (void)run_exit_save_sequence("delete_map_from_misc_options");
+    SDL_Event quit_event{};
+    quit_event.type = SDL_EVENT_QUIT;
+    SDL_PushEvent(&quit_event);
 }
 
 void DevControls::open_misc_options_panel() {
@@ -1820,6 +1901,10 @@ bool DevControls::is_misc_options_panel_open() const {
     return misc_options_panel_open_;
 }
 
+bool DevControls::layout_dirty() const {
+    return !layout_cache_.valid || has_dirty(kDirtyLayout);
+}
+
 void DevControls::set_player(Asset* player) {
     player_ = player;
     if (room_editor_) room_editor_->set_player(player);
@@ -1827,13 +1912,16 @@ void DevControls::set_player(Asset* player) {
 
 void DevControls::set_active_assets(std::vector<Asset*>& actives, std::uint64_t version) {
     const bool assets_changed = (active_assets_ != &actives) || (active_assets_version_ != version);
+    if (!assets_changed) {
+        return;
+    }
     active_assets_ = &actives;
     active_assets_version_ = version;
     if (room_editor_) {
         room_editor_->set_active_assets(actives, version);
     }
 
-    if (assets_changed) mark_layout_dirty();
+    mark_layout_dirty();
 }
 
 void DevControls::set_screen_dimensions(int width, int height) {
@@ -2028,11 +2116,15 @@ Room* DevControls::resolve_current_room(Room* detected_room) {
     }
     if (!enabled_) {
         dev_selected_room_ = nullptr;
-        set_current_room(target);
+        if (current_room_ != target) {
+            set_current_room(target);
+        }
         return current_room_;
     }
     dev_selected_room_ = target;
-    set_current_room(target);
+    if (current_room_ != target) {
+        set_current_room(target);
+    }
     return current_room_;
 }
 
@@ -2222,6 +2314,10 @@ void DevControls::sync_camera_tilt_override() {
 void DevControls::update(const Input& input) {
     save_coordinator_.begin_frame();
     if (!enabled_) return;
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    auto elapsed_ms = [](Uint64 begin, Uint64 end) -> double {
+        return runtime_stats::FrameStatsRecorder::elapsed_ms(begin, end);
+    };
     if (map_info_dirty_ && assets_) {
         other_settings_.set_map_info(&assets_->map_info_json());
         map_info_dirty_ = false;
@@ -2298,24 +2394,37 @@ void DevControls::update(const Input& input) {
                 camera_panel_ && camera_panel_->is_visible() && pointer_over_camera_panel_;
             const bool depth_guide_blocking = depth_guide_drag_active_ || depth_guide_selection_ != DepthGuideSelection::None;
             if (!camera_panel_blocking && !depth_guide_blocking) {
+                const Uint64 room_update_begin = SDL_GetPerformanceCounter();
                 room_editor_->update(input);
+                update_movement_debug_visibility();
+                frame_stats.set("dev.room_editor_update_ms",
+                                elapsed_ms(room_update_begin, SDL_GetPerformanceCounter()));
             }
         } else {
             room_editor_->clear_highlighted_assets();
         }
     }
 
-    if (camera_panel_) {
+    if (camera_panel_ && camera_panel_->is_visible()) {
+        const Uint64 camera_panel_begin = SDL_GetPerformanceCounter();
         camera_panel_->update(input, screen_w_, screen_h_);
+        frame_stats.set("dev.camera_panel_ms",
+                        elapsed_ms(camera_panel_begin, SDL_GetPerformanceCounter()));
     }
     if (regenerate_popup_ && regenerate_popup_->visible()) {
         regenerate_popup_->update(input);
     }
     other_settings_.set_enabled(enabled_);
     apply_header_suppression();
+    const Uint64 other_settings_begin = SDL_GetPerformanceCounter();
     other_settings_.update(input);
+    frame_stats.set("dev.other_settings_ms",
+                    elapsed_ms(other_settings_begin, SDL_GetPerformanceCounter()));
     if (map_mode_ui_) {
+        const Uint64 map_mode_begin = SDL_GetPerformanceCounter();
         map_mode_ui_->update(input);
+        frame_stats.set("dev.map_mode_ui_ms",
+                        elapsed_ms(map_mode_begin, SDL_GetPerformanceCounter()));
     }
     if (depth_guide_selection_ == DepthGuideSelection::BlueLayer &&
         depth_guide_blue_wheel_last_change_ms_ > 0 &&
@@ -2340,8 +2449,19 @@ void DevControls::update(const Input& input) {
 
     
 
-    ensure_layout_cache();
-    layout_misc_options_panel();
+    const bool layout_was_dirty = layout_dirty();
+    frame_stats.set("dev.layout_dirty", layout_was_dirty);
+    const Uint64 layout_begin = SDL_GetPerformanceCounter();
+    if (layout_was_dirty) {
+        ensure_layout_cache();
+    } else {
+        update_header_and_footer_bounds();
+    }
+    if (misc_options_panel_open_ || layout_was_dirty) {
+        layout_misc_options_panel();
+    }
+    frame_stats.set("dev.layout_ms",
+                    elapsed_ms(layout_begin, SDL_GetPerformanceCounter()));
 
     if (room_editor_ && room_editor_->is_enabled()) {
         SDL_Point pointer{input.getX(), input.getY()};
@@ -2375,6 +2495,7 @@ void DevControls::update(const Input& input) {
         }
     }
 
+    const Uint64 save_begin = SDL_GetPerformanceCounter();
     if (save_manager_.has_dirty_saveables()) {
         try {
             save_manager_.save_dirty_with_reason(devmode::core::DevSaveCoordinator::Priority::Debounced,
@@ -2392,6 +2513,7 @@ void DevControls::update(const Input& input) {
             }
         }
     }
+    frame_stats.set("dev.save_ms", elapsed_ms(save_begin, SDL_GetPerformanceCounter()));
 
     save_coordinator_.tick();
 }
@@ -3193,112 +3315,26 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         return false;
     }
 
-    const std::filesystem::path asset_dir = devmode::asset_paths::asset_folder_path(sanitized);
-    if (std::filesystem::exists(asset_dir)) {
-        error_out = "Asset folder already exists on disk.";
-        return false;
-    }
-    const std::filesystem::path default_dir = asset_dir / "default";
-
-    auto cleanup_on_failure = [&]() {
-        std::error_code ec;
-        std::filesystem::remove_all(asset_dir, ec);
-    };
-
-    try {
-        std::filesystem::create_directories(default_dir);
-    } catch (const std::exception& ex) {
-        error_out = std::string("Failed to create asset folder: ") + ex.what();
-        return false;
-    }
-
-    devmode::frame_importer::FrameImportResult import_result;
-    switch (validation.kind) {
-    case DropContentKind::SinglePng:
-    case DropContentKind::MultiImages:
-    case DropContentKind::PngFolder:
-        import_result = devmode::frame_importer::import_frames_to_directory(validation.files, default_dir);
-        break;
-    case DropContentKind::Gif: {
-        const std::filesystem::path gif_path = !validation.files.empty() ? validation.files.front() : std::filesystem::path{};
-        import_result = devmode::frame_importer::import_gif_to_directory(gif_path, default_dir);
-        break;
-    }
-    default:
-        break;
-    }
+    devmode::animation_import::CreateAssetRequest import_request;
+    import_request.asset_name = sanitized;
+    import_request.input_paths = validation.files;
+    import_request.manifest_store = &manifest_store_;
+    import_request.assets = assets_;
+    devmode::animation_import::ImportResult import_result =
+        devmode::animation_import::create_asset_from_frames(import_request);
 
     for (const auto& warning : import_result.warnings) {
         SDL_Log("[DevControls] Frame import warning for '%s': %s", sanitized.c_str(), warning.c_str());
     }
 
-    if (!import_result.success()) {
-        error_out = import_result.error_message.empty() ? "No frames were imported." : import_result.error_message;
-        cleanup_on_failure();
+    if (!import_result.success) {
+        error_out = import_result.message.empty() ? "No frames were imported." : import_result.message;
         return false;
     }
-    const int frames_written = import_result.frames_written;
-
-    nlohmann::json default_anim = {
-        {"on_end", "default"},
-        {"locked", false},
-        {"reverse_source", false},
-        {"invert_x", false},
-        {"invert_y", false},
-        {"invert_z", false},
-        {"rnd_start", false},
-        {"source", nlohmann::json{{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
-        {"number_of_frames", frames_written}
-    };
-
-    nlohmann::json manifest_entry = {
-        {"asset_name", sanitized},
-        {"asset_type", "Object"},
-        {"movement_enabled", false},
-        {"attack_box_enabled", false},
-        {"hitbox_enabled", false},
-        {"floor_boxes_enabled", false},
-        {"animations", nlohmann::json{{"default", default_anim}}},
-        {"start", "default"},
-        {"asset_directory", asset_dir.lexically_normal().generic_string()}
-    };
-    manifest_entry["tags"] = nlohmann::json::array();
-    manifest_entry["anti_tags"] = nlohmann::json::array();
-    manifest_entry["neighbor_search_distance"] = 500;
-    manifest_entry["render_radius"] = 0;
-    manifest_entry["update_radius"] = 0;
-    manifest_entry["min_same_type_distance"] = 0;
-    manifest_entry["min_distance_all"] = 0;
-    manifest_entry["can_invert"] = false;
-    manifest_entry["tilt_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
-    manifest_entry["y_position_range"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
-    manifest_entry["size_settings"] = {
-        {"scale_percentage", 100.0},
-        {"size_variation", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))}
-    };
-
-    auto session = manifest_store_.begin_asset_edit(sanitized, true);
-    if (!session || !session.is_new_asset()) {
-        error_out = "Manifest entry already exists.";
-        cleanup_on_failure();
-        return false;
-    }
-    session.data() = manifest_entry;
-    if (!session.commit()) {
-        error_out = "Failed to write manifest entry.";
-        cleanup_on_failure();
-        return false;
-    }
-    manifest_store_.flush();
 
     std::shared_ptr<AssetInfo> info;
     if (assets_) {
-        auto& lib = assets_->library();
-        lib.add_asset(sanitized, manifest_entry);
-        if (SDL_Renderer* r = assets_->renderer()) {
-            lib.ensureAnimationsLoadedFor(r, std::unordered_set<std::string>{sanitized});
-        }
-        info = lib.get(sanitized);
+        info = assets_->library().get(sanitized);
     }
 
     if (open_editor_and_spawn && assets_ && info) {
@@ -4882,160 +4918,11 @@ void DevControls::integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& 
     refresh_active_asset_filters();
 }
 
-void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
-    if (!assets_ || !entry.is_object()) {
-        return;
-    }
-    const std::string spawn_id = entry.value("spawn_id", std::string{});
-    if (spawn_id.empty()) {
-        return;
-    }
-
-    remove_spawn_group_assets(spawn_id);
-
-    const auto& asset_info_library = assets_->library().all();
-    std::vector<std::unique_ptr<Asset>> spawned;
-    Check checker(false);
-    std::mt19937 rng(std::random_device{}());
-
-    const auto& rooms = assets_->rooms();
-    SpawnMethod spawn_method;
-
-    for (Room* room : rooms) {
-        if (!room || !room->room_area) {
-            continue;
-        }
-        nlohmann::json& room_json = room->assets_data();
-        if (!room_json.is_object()) {
-            continue;
-        }
-        if (!room_json.value("inherits_map_assets", false)) {
-            continue;
-        }
-
-        nlohmann::json root = nlohmann::json::object();
-        root["spawn_groups"] = nlohmann::json::array();
-        root["spawn_groups"].push_back(entry);
-        std::vector<nlohmann::json> sources{root};
-        AssetSpawnPlanner planner(sources, *room->room_area, assets_->library());
-
-        MapGridSettings grid_settings = room->map_grid_settings();
-
-        int resolution = std::max(0, grid_settings.grid_resolution);
-        try {
-            if (entry.contains("grid_resolution")) {
-                resolution = std::max(5, entry.value("grid_resolution", resolution));
-            }
-        } catch (...) {
-
-        }
-        resolution = vibble::grid::clamp_resolution(resolution);
-        vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-        vibble::grid::Occupancy occupancy(*room->room_area, resolution, grid_service);
-        checker.begin_session(grid_service, resolution);
-        std::vector<Area> exclusion;
-        SpawnContext ctx(rng, checker, exclusion, asset_info_library, spawned, &assets_->library(), grid_service, &occupancy);
-        ctx.set_map_grid_settings(grid_settings);
-        ctx.set_spawn_resolution(resolution);
-        std::vector<const Area*> trail_areas;
-        auto add_trail_area = [&trail_areas](const Area* candidate, const std::string& type) {
-            if (!candidate) return;
-            std::string lowered = type;
-            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::tolower(ch));
-            });
-            if (lowered == "trail") {
-                trail_areas.push_back(candidate);
-            }
-};
-        if (room) {
-            if (room->room_area) {
-                add_trail_area(room->room_area.get(), room->room_area->get_type());
-            }
-            for (const auto& named : room->areas) {
-                add_trail_area(named.area.get(), named.type);
-            }
-        }
-        ctx.set_trail_areas(std::move(trail_areas));
-
-        const auto& queue = planner.get_spawn_queue();
-        const vibble::spawn::RuntimeCandidates::AssetCatalogView spawn_catalog{&ctx.info_library(), false};
-        ctx.set_spacing_filter(collect_spacing_asset_names(queue, spawn_catalog));
-        const Area* area_ptr = room->room_area.get();
-        for (const auto& info : queue) {
-            if (info.name == "batch_map_assets") {
-                auto vertices = occupancy.vertices_in_area(*area_ptr);
-                if (vertices.empty()) {
-                    continue;
-                }
-
-                std::shuffle(vertices.begin(), vertices.end(), ctx.rng());
-
-                for (auto* vertex : vertices) {
-                    if (!vertex) continue;
-                    SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
-                    bool placed = false;
-                    std::unordered_set<int> attempted_entries;
-                    const size_t max_candidate_attempts = info.candidates.entries().size();
-                    const bool enforce_spacing = info.check_min_spacing;
-                    for (size_t attempt = 0; attempt < max_candidate_attempts; ++attempt) {
-                        const auto candidate = info.select_candidate_excluding(
-                            ctx.rng(), spawn_catalog, attempted_entries);
-                        if (!candidate) {
-                            break;
-                        }
-                        if (candidate->entry_index >= 0) {
-                            attempted_entries.insert(candidate->entry_index);
-                        }
-                        if (candidate->is_null || !candidate->info) {
-                            occupancy.set_occupied(vertex, true);
-                            placed = true;
-                            break;
-                        }
-                        if (ctx.checker().check(candidate->info,
-                                                spawn_pos,
-                                                ctx.exclusion_zones(),
-                                                ctx.all_assets(),
-                                                true,
-                                                enforce_spacing,
-                                                false,
-                                                false,
-                                                5)) {
-                            continue;
-                        }
-                        auto* result = ctx.spawnAsset(candidate->resolved_asset_name,
-                                                      candidate->info,
-                                                      *area_ptr,
-                                                      spawn_pos,
-                                                      0,
-                                                      info.spawn_id,
-                                                      info.position);
-                        if (!result) {
-                            continue;
-                        }
-                        const bool track_spacing = ctx.track_spacing_for(result->info, enforce_spacing);
-                        ctx.checker().register_asset(result, enforce_spacing, track_spacing);
-                        occupancy.set_occupied(vertex, true);
-                        placed = true;
-                        break;
-                    }
-                    if (!placed) {
-                        occupancy.set_occupied(vertex, true);
-                    }
-                }
-
-                continue;
-            }
-            spawn_method.spawn(info, area_ptr, ctx);
-        }
-        checker.reset_session();
-    }
-
-    integrate_spawned_assets(spawned);
-}
-
 void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
     (void)entry;
+    if (assets_) {
+        assets_->rebuild_dynamic_spawn_runtime_from_map();
+    }
 }
 
 void DevControls::apply_camera_area_render_flag() {
@@ -5069,8 +4956,21 @@ void DevControls::set_mode(Mode new_mode) {
 }
 
 void DevControls::update_movement_debug_visibility() {
-    (void)enabled_;
-    (void)movement_debug_enabled_;
+    if (!assets_) {
+        return;
+    }
+
+    // Suppress debug overlays in shape-authoring submodes where handles and
+    // projected geometry are the primary interaction targets.
+    bool suppress_for_room_editor_submode = false;
+    if (room_editor_) {
+        suppress_for_room_editor_submode =
+            room_editor_->impassable_box_mode_active() ||
+            room_editor_->floor_box_mode_active();
+    }
+
+    assets_->set_movement_debug_visible(!suppress_for_room_editor_submode);
+    assets_->set_impass_floor_debug_visible(!suppress_for_room_editor_submode);
 }
 
 void DevControls::restore_filter_hidden_assets() const {

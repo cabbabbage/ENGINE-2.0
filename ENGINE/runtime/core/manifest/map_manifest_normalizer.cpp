@@ -10,7 +10,7 @@
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 
 namespace manifest {
 namespace {
@@ -537,7 +537,6 @@ void normalize_layer_candidate_entry(nlohmann::json& candidate, bool& changed) {
 
     candidate["source_type"] = source_type;
     candidate["value"] = value;
-    candidate["name"] = value; // compatibility mirror
     candidate["min_instances"] = min_instances;
     candidate["max_instances"] = max_instances;
 }
@@ -587,7 +586,6 @@ bool ensure_layer_zero_defaults(nlohmann::json& map_manifest, const std::string&
         nlohmann::json spawn_candidate = nlohmann::json::object({
             {"source_type", "room_name"},
             {"value", std::string("Spawn")},
-            {"name", std::string("Spawn")},
             {"min_instances", 1},
             {"max_instances", 1},
             {"required_children", nlohmann::json::array()}
@@ -787,10 +785,6 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
 
     bool changed = false;
 
-    if (normalize_spawn_group_array(map_manifest, "candidate_selectors", lookup)) {
-        changed = true;
-    }
-
     if (map_manifest.contains("live_dynamic_spawns") && map_manifest["live_dynamic_spawns"].is_object()) {
         nlohmann::json& live_dynamic_spawns = map_manifest["live_dynamic_spawns"];
         if (normalize_spawn_group_array(live_dynamic_spawns, "boundary_area_selectors", lookup)) {
@@ -965,51 +959,6 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     if (map_manifest.erase("map_assets_data") > 0) {
         changed = true;
     }
-    if (map_manifest.contains("candidate_selectors") && map_manifest["candidate_selectors"].is_array()) {
-        nlohmann::json& live = map_manifest["live_dynamic_spawns"];
-        if (!live.is_object()) {
-            live = nlohmann::json::object();
-        }
-        const bool missing_boundary =
-            !live.contains("boundary_area_selectors") ||
-            !live["boundary_area_selectors"].is_array() ||
-            live["boundary_area_selectors"].empty();
-        if (missing_boundary) {
-            live["boundary_area_selectors"] = map_manifest["candidate_selectors"];
-        }
-        map_manifest.erase("candidate_selectors");
-        changed = true;
-    }
-    if (map_manifest.contains("map_boundary_data") && map_manifest["map_boundary_data"].is_object()) {
-        nlohmann::json& live = map_manifest["live_dynamic_spawns"];
-        if (!live.is_object()) {
-            live = nlohmann::json::object();
-        }
-        const bool missing_boundary =
-            !live.contains("boundary_area_selectors") ||
-            !live["boundary_area_selectors"].is_array() ||
-            live["boundary_area_selectors"].empty();
-        if (missing_boundary) {
-            const nlohmann::json& legacy = map_manifest["map_boundary_data"];
-            auto candidates = legacy.find("candidate_selectors");
-            if (candidates != legacy.end() && candidates->is_array()) {
-                live["boundary_area_selectors"] = *candidates;
-                changed = true;
-            }
-        }
-        map_manifest.erase("map_boundary_data");
-        changed = true;
-    }
-    if (map_manifest["live_dynamic_spawns"].is_object()) {
-        nlohmann::json& live = map_manifest["live_dynamic_spawns"];
-        // Canonical authored representation uses one shared selector source:
-        // live_dynamic_spawns.boundary_area_selectors.
-        // inherited_map_selectors is deprecated and removed during normalization.
-        if (live.erase("inherited_map_selectors") > 0) {
-            changed = true;
-        }
-    }
-
     if (ensure_map_layers_settings_defaults(map_manifest)) {
         changed = true;
     }

@@ -120,13 +120,13 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
         const std::string effective_key = explicit_key.empty() ? asset_key : explicit_key;
 
         if (effective_key.empty()) {
-                return std::make_unique<CustomAssetController>(self);
+                return std::make_unique<CustomAssetController>(self, true);
         }
 
         const auto& registry = controller_registry();
         const auto it = registry.find(effective_key);
         if (it == registry.end()) {
-                return std::make_unique<CustomAssetController>(self);
+                return std::make_unique<CustomAssetController>(self, true);
         }
 
         try {
@@ -140,7 +140,7 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
                 vibble::log::error("Failed to construct controller '" + effective_key + "' for asset '" +
                                    asset_name + "': " + ex.what());
         }
-        return std::make_unique<CustomAssetController>(self);
+        return std::make_unique<CustomAssetController>(self, true);
 }
 
 std::unique_ptr<AssetController>

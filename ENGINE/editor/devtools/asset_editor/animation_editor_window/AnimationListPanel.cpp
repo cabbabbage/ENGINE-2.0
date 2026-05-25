@@ -429,8 +429,6 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         }
 
         if (hit.target == HitTarget::Empty || !hit.row_index) {
-            SDL_Log("[AnimationListPanel] Click hit empty list area; rows=%d bounds=%d,%d %dx%d point=%d,%d",
-                    static_cast<int>(display_rows_.size()), bounds_.x, bounds_.y, bounds_.w, bounds_.h, p.x, p.y);
             if (e.button.button == SDL_BUTTON_RIGHT && on_context_menu_) {
                 on_context_menu_(std::nullopt, p);
             }
@@ -449,7 +447,6 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
             selected_animation_id_ = animation_id;
             scroll_selection_into_view();
             if (on_selection_changed_) {
-                SDL_Log("[AnimationListPanel] Row clicked; activating '%s'.", animation_id.c_str());
                 on_selection_changed_(selected_animation_id_);
             }
             return true;
@@ -629,8 +626,6 @@ void AnimationListPanel::rebuild_rows() {
         row_geometry_.clear();
         layout_dirty_ = true;
         hovered_row_.reset();
-        SDL_Log("[AnimationListPanel] Rows rebuilt: count=%d bounds=%d,%d %dx%d",
-                static_cast<int>(display_rows_.size()), bounds_.x, bounds_.y, bounds_.w, bounds_.h);
     }
 
     if (selected_animation_id_) {
@@ -789,7 +784,6 @@ void AnimationListPanel::record_hit_result(const char* phase, const SDL_Point& p
         ss << " row=" << *hit.row_index << " id=" << hit.animation_id;
     }
     last_hit_result_ = ss.str();
-    SDL_Log("[AnimationListPanel] %s", last_hit_result_.c_str());
 }
 
 void AnimationListPanel::ensure_layout() const {

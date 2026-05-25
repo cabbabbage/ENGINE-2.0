@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -11,6 +12,7 @@ public:
     enum Button { LEFT, RIGHT, MIDDLE, X1, X2, COUNT };
 
     void handleEvent(const SDL_Event& e);
+    std::uint32_t sync_live_keyboard_state();
     void update();
 
     bool isDown(Button b) const { return buttons_[b]; }
@@ -49,6 +51,11 @@ public:
     bool wasScancodePressed(SDL_Scancode sc) const { return keys_pressed_[sc]; }
     bool wasScancodeReleased(SDL_Scancode sc) const { return keys_released_[sc]; }
 
+    void setScancodeDownForTest(SDL_Scancode sc, bool down);
+    void setMousePositionForTest(int x, int y);
+    void setMouseButtonDownForTest(Button button, bool down);
+    void applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w, int screen_h);
+
     bool has_activity() const;
 
     using ScreenToWorldFunction = std::function<SDL_Point(SDL_Point)>;
@@ -83,11 +90,15 @@ private:
 
     void refresh_click_buffer_active();
     void refresh_button_transition_active();
+    void mark_scancode_dirty(SDL_Scancode sc);
+    void clear_all_state();
 
     bool button_state_dirty_ = false;
     bool button_transition_active_ = false;
     bool mouse_motion_dirty_ = false;
     bool scroll_dirty_ = false;
     bool click_buffer_active_ = false;
+    bool focus_loss_cleared_since_sync_ = false;
+    bool keyboard_focus_active_ = true;
 };
 

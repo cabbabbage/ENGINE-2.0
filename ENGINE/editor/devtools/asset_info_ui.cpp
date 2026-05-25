@@ -975,7 +975,9 @@ AssetInfoUI::AssetInfoUI() {
             }
             if (section->handle_event(e)) {
                 container_.request_layout();
-                if (focused_section_ != section) {
+                const bool should_focus_from_click =
+                    (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT);
+                if (should_focus_from_click && focused_section_ != section) {
                     focus_section(section);
                 }
                 return true;
@@ -2946,5 +2948,4 @@ bool AssetInfoUI::handle_delete_modal_event(const SDL_Event& e) {
     }
     return false;
 }
-
 

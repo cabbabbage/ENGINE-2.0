@@ -9,9 +9,9 @@
 
 #include <string>
 #include <vector>
-#include <memory>
 #include <optional>
 #include <utility>
+#include <memory>
 #include <tuple>
 #include <functional>
 #include <nlohmann/json.hpp>
@@ -43,6 +43,8 @@ AnchorData resolve_anchor(const nlohmann::json& entry, axis::WorldPos default_an
 void write_anchor(nlohmann::json& entry, const AnchorData& anchor, Kind kind);
 }
 
+namespace RoomManifestAdapter { class SyncBoundary; }
+
 class Room {
 
         public:
@@ -64,6 +66,7 @@ class Room {
         std::string manifest_map_id = {},
         ManifestWriter manifest_writer = {},
         bool auto_populate_assets = true);
+    ~Room();
     void set_sibling_left(Room* left_room);
     void set_sibling_right(Room* right_room);
     void add_connecting_room(Room* room);
@@ -132,6 +135,8 @@ class Room {
         std::optional<OriginRoomMeta> origin_room;
 };
 
+    // Runtime-owned cache of normalized room areas.
+    // Lifecycle: rebuilt from assets_json snapshots and never shared across room instances/modes.
     std::vector<NamedArea> areas;
 
     Area* find_area(const std::string& name);
@@ -150,6 +155,7 @@ class Room {
     std::string manifest_map_id_;
     nlohmann::json* map_info_root_ = nullptr;
     ManifestWriter manifest_writer_{};
+    std::unique_ptr<RoomManifestAdapter::SyncBoundary> sync_boundary_;
     mutable bool assets_save_dirty_ = false;
     int clamp_int(int v, int lo, int hi) const;
     void bounds_to_size(const std::tuple<int,int,int,int>& b, int& w, int& h) const;

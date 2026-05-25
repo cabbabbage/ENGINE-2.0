@@ -2,7 +2,7 @@
 
 #include "animation.hpp"
 #include "utils/area.hpp"
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 #include <map>
 #include <nlohmann/json.hpp>
 #include <cmath>

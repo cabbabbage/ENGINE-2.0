@@ -15556,7 +15556,7 @@
                 "texture_y": 727
               },
               {
-                "depth_offset": -15.0,
+                "depth_offset": -12.499994277954102,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -15564,8 +15564,8 @@
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 915,
-                "texture_y": 1583
+                "texture_x": 913,
+                "texture_y": 1590
               },
               {
                 "depth_offset": -24.0000057220459,
@@ -15588,8 +15588,8 @@
                 "resolve_x": false,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 471,
-                "texture_y": 1553
+                "texture_x": 475,
+                "texture_y": 1566
               },
               {
                 "depth_offset": -15.0,
@@ -15727,6 +15727,51 @@
               }
             ]
           ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 249,
+                    "texture_y": 672
+                  },
+                  {
+                    "texture_x": 1472,
+                    "texture_y": 672
+                  },
+                  {
+                    "texture_x": 1472,
+                    "texture_y": 1546
+                  },
+                  {
+                    "texture_x": 249,
+                    "texture_y": 1546
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 169,
+                "extrusion_forward": 156,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 249,
+                  "y": 672
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 874,
+                  "w": 1223
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -15751,8 +15796,37 @@
       "bounce_amount": 0,
       "can_invert": false,
       "floor_boxes_enabled": false,
-      "hitbox_enabled": false,
-      "impassable_enabled": false,
+      "hitbox_enabled": true,
+      "impassable_enabled": true,
+      "impassable_shapes": [
+        {
+          "enabled": true,
+          "id": "impassable_shape_1_1",
+          "name": "Impassable Shape",
+          "points": [
+            {
+              "x": 545,
+              "y": 1265
+            },
+            {
+              "x": 683,
+              "y": 1205
+            },
+            {
+              "x": 1781,
+              "y": 1485
+            },
+            {
+              "x": 1153,
+              "y": 1849
+            },
+            {
+              "x": 77,
+              "y": 1789
+            }
+          ]
+        }
+      ],
       "lighting_height_bias": 0.0,
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
@@ -15847,13 +15921,26 @@
       "y_pos_min": 0
     },
     "cropped_output": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
       "asset_directory": "resources/assets/cropped_output",
       "asset_name": "cropped_output",
       "attack_box_enabled": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
-      "movement_enabled": false
+      "movement_enabled": false,
+      "start": "default"
     },
     "curse_circle": {
       "anchor_point_child_candidates": [],
@@ -20036,6 +20123,27 @@
           },
           "tags": []
         },
+        "down": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up",
+            "path": ""
+          },
+          "tags": []
+        },
         "left": {
           "invert_x": false,
           "invert_y": false,
@@ -20045,7 +20153,94 @@
             [
               0,
               0,
-              0
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -20,
+              0,
+              0,
+              0.0
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": -100,
+            "dy": 0,
+            "dz": 0.0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "left"
+          },
+          "tags": []
+        },
+        "right": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": true,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          },
+          "tags": []
+        },
+        "up": {
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "movement": [
+            [
+              0,
+              0,
+              0,
+              0.0
             ]
           ],
           "movement_total": {
@@ -20059,9 +20254,9 @@
           "reverse_source": false,
           "rnd_start": false,
           "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "left"
+            "kind": "animation",
+            "name": "left",
+            "path": ""
           },
           "tags": []
         }
@@ -26242,7 +26437,7 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 2069.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.20999999344348907,
         "layer_depth_curve": 68.61000061035156,
@@ -26312,7 +26507,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 6,
+            "grid_resolution": 7,
             "jitter": 32,
             "locked": false,
             "max_number": 1,
@@ -26324,8 +26519,8 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "max_spawn_from_room": 250,
-        "regen_seed": 2
+        "max_spawn_from_room": 779,
+        "regen_seed": 4
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -26393,9 +26588,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            240,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26482,9 +26677,9 @@
             }
           },
           "display_color": [
-            140,
-            204,
-            31,
+            36,
+            149,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26541,9 +26736,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            37,
+            242,
+            61,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26600,9 +26795,9 @@
             }
           },
           "display_color": [
-            242,
-            117,
-            85,
+            31,
+            204,
+            127,
             255
           ],
           "edge_smoothness": 4,
@@ -26689,9 +26884,9 @@
             }
           },
           "display_color": [
-            71,
-            178,
             204,
+            80,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26753,9 +26948,9 @@
             }
           },
           "display_color": [
-            242,
-            36,
-            103,
+            188,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 70,
@@ -26836,11 +27031,11 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -1596,
-          "camera_center_dz": -5885,
+          "camera_center_dx": -2701,
+          "camera_center_dz": -6461,
           "camera_height_px": 700,
-          "camera_tilt_deg": 17.815427780151367,
-          "camera_zoom_percent": 100,
+          "camera_tilt_deg": 44.61542892456055,
+          "camera_zoom_percent": 49,
           "curvyness": {
             "center": 2,
             "falloff": 0,
@@ -26853,9 +27048,9 @@
             }
           },
           "display_color": [
+            71,
+            92,
             204,
-            160,
-            31,
             255
           ],
           "edge_smoothness": 101,
@@ -27039,36 +27234,6 @@
                 },
                 {
                   "chance": 100,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "spider",
-              "dx": -5116,
-              "dz": 1050,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 15488,
-              "origional_width": 15496,
-              "position": "Exact",
-              "priority": 5,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-d6ae7afe99c6"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "axe_in_stump"
                 }
               ],
@@ -27084,7 +27249,7 @@
               "origional_height": 15488,
               "origional_width": 15496,
               "position": "Exact",
-              "priority": 6,
+              "priority": 5,
               "quantity": 1,
               "resolution": 7,
               "resolve_geometry_to_room_size": true,
@@ -27114,7 +27279,7 @@
               "origional_height": 18496,
               "origional_width": 18504,
               "position": "Exact",
-              "priority": 7,
+              "priority": 6,
               "quantity": 1,
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
@@ -27133,8 +27298,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -3229,
-              "dz": -3233,
+              "dx": -3675,
+              "dz": -1951,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27144,12 +27309,12 @@
               "origional_height": 15488,
               "origional_width": 15496,
               "position": "Exact",
-              "priority": 8,
+              "priority": 7,
               "quantity": 1,
-              "resolution": 6,
+              "resolution": 8,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-23687fb6e8ed"
+              "spawn_id": "spn-df1781471a53"
             }
           ],
           "trail_connection_sector": {
@@ -27233,9 +27398,9 @@
             }
           },
           "display_color": [
-            168,
-            79,
-            224,
+            204,
+            31,
+            186,
             255
           ],
           "edge_smoothness": 96,
@@ -28259,237 +28424,6 @@
               "falloff": 0.3333333333333333
             }
           }
-        }
-      }
-    },
-    "test": {
-      "audio": {
-        "music": {
-          "content_root": "content/test/music",
-          "tracks": []
-        }
-      },
-      "camera_settings": {
-        "base_height_px": 720.0,
-        "blur_px": 12.0,
-        "boundary_min_visible_screen_ratio": 0.014999999664723873,
-        "camera_height_max_px": 100000,
-        "camera_height_min_px": 1,
-        "depth_of_field_enabled": false,
-        "layer_depth_curve": 1.0,
-        "layer_depth_interval": 250.0,
-        "max_cull_depth": 5000.0,
-        "min_visible_screen_ratio": 0.009999999776482582,
-        "radial_blur_px": 48.0
-      },
-      "content_root": "content/test",
-      "map_boundary_data": {
-        "candidate_selectors": [
-          {
-            "candidates": [
-              {
-                "chance": 100,
-                "name": "null"
-              }
-            ],
-            "display_name": "batch_map_boundary",
-            "enforce_spacing": false,
-            "execution_mode": "batch_grid",
-            "explicit_flip": false,
-            "force_flipped": false,
-            "grid_resolution": 6,
-            "jitter": 0,
-            "locked": false,
-            "max_number": 1,
-            "min_number": 1,
-            "position": "Random",
-            "priority": 0,
-            "resolution": 0,
-            "resolve_geometry_to_room_size": false,
-            "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-test-map_boundary"
-          }
-        ],
-        "inherits_map_assets": false
-      },
-      "map_grid_settings": {
-        "grid_resolution": 7,
-        "position_jitter_px": 0
-      },
-      "map_layers": [
-        {
-          "bounding_extent": 3000.0,
-          "level": 0,
-          "max_rooms": 1,
-          "min_rooms": 1,
-          "name": "layer_0",
-          "ring_radius": 0.0,
-          "rooms": [
-            {
-              "max_instances": 1,
-              "min_instances": 1,
-              "name": "spawn",
-              "required_children": []
-            }
-          ]
-        }
-      ],
-      "map_layers_settings": {
-        "min_edge_distance": 200
-      },
-      "map_name": "test",
-      "rooms_data": {
-        "spawn": {
-          "areas": [
-            {
-              "anchor": {
-                "x": 0,
-                "y": 0,
-                "z": 0
-              },
-              "anchor_relative_to_center": true,
-              "kind": "Spawn",
-              "name": "spawn_center",
-              "origin_room": {
-                "anchor": {
-                  "x": 3800,
-                  "y": 0,
-                  "z": 3800
-                },
-                "anchor_relative_to_center": true,
-                "height": 3000,
-                "name": "spawn",
-                "width": 3000
-              },
-              "points": [
-                {
-                  "x": -256,
-                  "y": 0,
-                  "z": 0
-                },
-                {
-                  "x": 256,
-                  "y": 0,
-                  "z": 0
-                },
-                {
-                  "x": 256,
-                  "y": 0,
-                  "z": 0
-                },
-                {
-                  "x": -256,
-                  "y": 0,
-                  "z": 0
-                }
-              ],
-              "resolution": 3,
-              "type": "spawning"
-            }
-          ],
-          "curvyness": 2,
-          "display_color": [
-            242,
-            36,
-            36,
-            255
-          ],
-          "edge_smoothness": 2,
-          "geometry": "Circle",
-          "inherits_map_assets": true,
-          "is_boss": false,
-          "is_spawn": true,
-          "max_height": 3000,
-          "max_radius": 1500,
-          "max_width": 3000,
-          "min_height": 3000,
-          "min_radius": 1500,
-          "min_width": 3000,
-          "name": "spawn",
-          "radius": 1500,
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "Vibble"
-                }
-              ],
-              "display_name": "Vibble",
-              "dx": 0,
-              "dz": 0,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 3000,
-              "origional_width": 3000,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 6,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-test-Vibble"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "attack_speed"
-                }
-              ],
-              "display_name": "attack_speed",
-              "dx": -876,
-              "dz": -155,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 3056,
-              "origional_width": 6256,
-              "position": "Exact",
-              "quantity": 1,
-              "resolution": 3,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-998e7292dc7b"
-            }
-          ]
-        }
-      },
-      "schema_version": 1,
-      "trails_data": {
-        "basic": {
-          "display_color": [
-            85,
-            242,
-            143,
-            255
-          ],
-          "edge_smoothness": 2,
-          "geometry": "Line",
-          "inherits_map_assets": false,
-          "is_boss": false,
-          "is_spawn": false,
-          "max_height": 800,
-          "max_width": 800,
-          "min_height": 400,
-          "min_width": 400,
-          "name": "basic",
-          "spawn_groups": []
         }
       }
     }

@@ -9,7 +9,6 @@
 #include <optional>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 #include <memory>
 #include <nlohmann/json.hpp>
 
@@ -167,6 +166,11 @@ public:
         world::GridPoint* grid_point = nullptr;
         double depth_from_anchor = 0.0;
     };
+    struct AnchorVisibilityDebugCounters {
+        std::uint64_t anchor_null_cache_hits = 0;
+        std::uint64_t anchor_force_recompute_calls = 0;
+        std::uint64_t anchor_force_recompute_skipped = 0;
+    };
 
     WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
@@ -279,9 +283,18 @@ public:
     const SDL_Rect& get_cached_world_rect() const { return cached_world_rect_; }
     std::uint32_t last_nodes_visited() const { return last_nodes_visited_; }
     std::uint32_t last_branches_skipped() const { return last_branches_skipped_; }
+    std::uint32_t last_active_chunk_points_scanned() const { return last_active_chunk_points_scanned_; }
+    std::uint32_t last_asset_to_point_lookups_avoided() const { return last_asset_to_point_lookups_avoided_; }
     int last_min_world_z() const { return last_min_world_z_; }
     int last_max_world_z() const { return last_max_world_z_; }
     std::uint32_t last_depth_culled() const { return last_depth_culled_; }
+    std::uint32_t projection_calls_total() const { return projection_calls_total_; }
+    std::uint32_t projection_calls_saved_early() const { return projection_calls_saved_early_; }
+    std::uint32_t assets_stageA_reject() const { return assets_stageA_reject_; }
+    std::uint32_t assets_stageC_entered() const { return assets_stageC_entered_; }
+    std::uint32_t projection_recompute_budget() const { return projection_recompute_budget_; }
+    std::uint32_t projection_points_deferred() const { return projection_points_deferred_; }
+    std::uint32_t projection_points_updated() const { return projection_points_updated_; }
     void set_frustum_padding_world(float padding);
     float frustum_padding_world() const { return frustum_padding_world_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
@@ -293,6 +306,7 @@ public:
     std::uint64_t camera_state_version() const;
     std::uint64_t projection_state_version() const { return camera_state_version(); }
     const std::vector<VisibleTraversalEntry>& visible_traversal_entries() const { return visible_traversal_entries_; }
+    const AnchorVisibilityDebugCounters& anchor_visibility_debug_counters() const { return anchor_visibility_debug_counters_; }
     SDL_FPoint WarpedScreenGrid::getAnchorPoint();
     
 private:
@@ -326,6 +340,15 @@ private:
                    has_tilt_override == other.has_tilt_override &&
                    tilt_override_q == other.tilt_override_q;
         }
+    };
+    struct SpriteProjectionCacheEntry {
+        std::uint64_t camera_state_version = 0;
+        std::uint64_t transform_revision = 0;
+        bool valid = false;
+        float min_x = 0.0f;
+        float max_x = 0.0f;
+        float min_y = 0.0f;
+        float max_y = 0.0f;
     };
 
     const CameraState& camera_state_cached() const;
@@ -368,15 +391,23 @@ private:
     std::vector<world::GridPoint*> warped_points_;
     std::vector<VisibleTraversalEntry> visible_traversal_entries_;
     std::vector<world::GridPoint*> active_chunk_grid_point_scratch_;
-    std::unordered_set<world::GridPoint*> active_chunk_seen_point_scratch_;
     std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
     std::unordered_map<const Asset*, std::uint8_t> visibility_reason_flags_;
     std::uint64_t frame_counter_ = 0;
     mutable std::uint64_t camera_state_version_ = 0;
-    std::uint64_t last_projection_cache_invalidation_version_ = 0;
     std::uint32_t last_nodes_visited_ = 0;
     std::uint32_t last_branches_skipped_ = 0;
+    std::uint32_t last_active_chunk_points_scanned_ = 0;
+    std::uint32_t last_asset_to_point_lookups_avoided_ = 0;
     std::uint32_t last_depth_culled_ = 0;
+    std::uint32_t projection_calls_total_ = 0;
+    std::uint32_t projection_calls_saved_early_ = 0;
+    std::uint32_t assets_stageA_reject_ = 0;
+    std::uint32_t assets_stageC_entered_ = 0;
+    std::uint32_t projection_recompute_budget_ = 0;
+    std::uint32_t projection_points_deferred_ = 0;
+    std::uint32_t projection_points_updated_ = 0;
+    std::unordered_map<const Asset*, SpriteProjectionCacheEntry> sprite_projection_cache_;
     int last_min_world_z_ = 0;
     int last_max_world_z_ = 0;
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
@@ -388,6 +419,7 @@ private:
     const Asset* tracked_player_asset_ = nullptr;
     CameraTransitionSettings transition_settings_{};
     CameraTransitionTelemetry transition_telemetry_{};
+    AnchorVisibilityDebugCounters anchor_visibility_debug_counters_{};
     Room* previous_transition_room_ = nullptr;
     SDL_FPoint previous_player_world_{0.0f, 0.0f};
     bool previous_player_world_valid_ = false;

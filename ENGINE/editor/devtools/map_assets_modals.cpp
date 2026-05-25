@@ -17,6 +17,7 @@
 
 #include "DockableCollapsible.hpp"
 #include "DockManager.hpp"
+#include "core/AssetsManager.hpp"
 #include "dm_styles.hpp"
 #include "tag_library.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
@@ -1005,6 +1006,9 @@ private:
         const int clamped = std::clamp(value, kMaxSpawnFromRoomMin, kMaxSpawnFromRoomMax);
         (*section_)["max_spawn_from_room"] = clamped;
         notify_save(false);
+        if (assets_) {
+            assets_->notify_dynamic_spawn_distance_changed();
+        }
     }
 
     static int clamp_jitter(int value) {
@@ -1145,21 +1149,20 @@ private:
         }
 
         const int max_spawn_from_room = current_max_spawn_from_room();
-        if (!max_spawn_from_room_stepper_) {
-            max_spawn_from_room_stepper_ = std::make_unique<DMNumericStepper>(
-                "max_spawn_from_room",
+        if (!max_spawn_from_room_slider_) {
+            max_spawn_from_room_slider_ = std::make_unique<DMSlider>(
+                "Dynamic Radius Range (px)",
                 kMaxSpawnFromRoomMin,
                 kMaxSpawnFromRoomMax,
                 max_spawn_from_room);
-            max_spawn_from_room_stepper_->set_step(1);
-            max_spawn_from_room_stepper_->set_on_change([this](int value) {
+            max_spawn_from_room_slider_->set_on_value_changed([this](int value) {
                 this->set_max_spawn_from_room(value);
             });
             max_spawn_from_room_widget_ =
-                std::make_unique<StepperWidget>(max_spawn_from_room_stepper_.get());
+                std::make_unique<SliderWidget>(max_spawn_from_room_slider_.get());
         }
-        if (max_spawn_from_room_stepper_) {
-            max_spawn_from_room_stepper_->set_value(max_spawn_from_room);
+        if (max_spawn_from_room_slider_) {
+            max_spawn_from_room_slider_->set_value(max_spawn_from_room);
         }
         if (max_spawn_from_room_widget_) {
             rows.push_back({max_spawn_from_room_widget_.get()});
@@ -1217,7 +1220,7 @@ private:
             group.pie_widget->set_assets(assets_);
             group.pie_widget->set_search_extra_results_provider([search_extras]() { return *search_extras; });
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
-            // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
+            // Boundary edits update JSON only; the panel rebuild button applies catalog changes.
             group.pie_widget->set_defer_adjust_until_release(true);
             group.pie_widget->set_on_adjust([this, spawn_id = group.spawn_id](int idx, double delta) {
                 this->adjust_candidate_weight(spawn_id, idx, delta);
@@ -1373,9 +1376,6 @@ private:
                 break;
             }
         }
-        if (regen_callback_) {
-            regen_callback_(*entry);
-        }
     }
 
     void adjust_candidate_weight(const std::string& spawn_id, int index, double delta) {
@@ -1506,8 +1506,8 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
-    std::unique_ptr<DMNumericStepper> max_spawn_from_room_stepper_{};
-    std::unique_ptr<StepperWidget> max_spawn_from_room_widget_{};
+    std::unique_ptr<DMSlider> max_spawn_from_room_slider_{};
+    std::unique_ptr<SliderWidget> max_spawn_from_room_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
     int pie_callback_depth_ = 0;
     bool pending_rebuild_ = false;

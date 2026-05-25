@@ -62,6 +62,8 @@ public:
     void rebuild_chunks();
     std::size_t flush_deferred_empty_points(std::size_t max_points = std::numeric_limits<std::size_t>::max());
     bool is_occupied_at_xz(int world_x, int world_z, int resolution_layer) const;
+    std::uint32_t empty_point_skips() const { return empty_point_skips_; }
+    std::uint32_t empty_point_invalidations() const { return empty_point_invalidations_; }
 
     void update_active_chunks(const GridBounds& camera_world, int margin_px);
 
@@ -131,6 +133,9 @@ private:
     GridPoint& ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent = nullptr, int world_y = 0, int resolution_layer = -1);
     void bind_asset_to_point(Asset* a, GridPoint& point);
     void mark_point_for_deferred_prune(GridPoint* point);
+    bool point_can_resolve_empty(const GridPoint& point) const;
+    void update_sticky_empty_state(GridPoint& point);
+    void invalidate_sticky_empty_state(GridPoint& point);
     void propagate_branch_active(GridPoint* node);
     void propagate_branch_inactive(GridPoint* node);
     void prune_empty_points();
@@ -181,6 +186,9 @@ private:
     std::unordered_map<GridKey, GridId, GridKeyHash> key_to_id_;
     std::vector<GridId> roots_;
     std::unordered_set<GridId> deferred_empty_point_ids_;
+    std::uint64_t empty_state_revision_ = 1;
+    std::uint32_t empty_point_skips_ = 0;
+    std::uint32_t empty_point_invalidations_ = 0;
     std::unordered_map<OccupancyXZKey, std::uint32_t, OccupancyXZKeyHash> occupancy_xz_counts_;
 
     void add_root_id(GridId id);

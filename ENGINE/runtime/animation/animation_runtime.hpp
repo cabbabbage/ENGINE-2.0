@@ -75,7 +75,7 @@ public:
     void begin_reverse_current_animation_until_stop();
     void begin_reverse_current_animation_to_default();
     void stop_reverse_current_animation();
-    ReversePlaybackMode reverse_playback_mode() const { return reverse_playback_mode_; }
+    ReversePlaybackMode reverse_playback_mode() const { return playback_state_.reverse_mode; }
 
     void reset_plan_progress();
     void set_debug_enabled(bool enabled);
@@ -96,6 +96,36 @@ private:
         bool ok = true;
         bool advanced_any = false;
         std::vector<FrameAdvanceEvent> entered_frames{};
+    };
+
+    struct FrameUpdateContext {
+        bool freeze_for_frame_editor = false;
+        bool movement_blocked_for_dev_mode = false;
+        bool movement_disabled_for_asset = false;
+        std::uint32_t frame_id = 0;
+        int max_replan_attempts_per_frame = 3;
+        std::uint32_t attack_cycle_debounce_frames = 8;
+    };
+
+    struct MovementState {
+        std::uint32_t replan_budget_frame_id = 0;
+        int replan_attempts_this_frame = 0;
+    };
+
+    struct PlaybackState {
+        ReversePlaybackMode reverse_mode = ReversePlaybackMode::None;
+        std::string reverse_animation_id{};
+        bool lock_on_end_active = false;
+    };
+
+    struct CombatState {
+        std::uint32_t next_attack_cycle_eval_frame = 0;
+        std::optional<std::string> committed_attack_target_asset_id = std::nullopt;
+        std::string committed_attack_animation_id{};
+        int committed_attack_last_dispatched_frame_index = -1;
+        std::string committed_attack_last_payload_id{};
+        bool attack_recovery_pending = false;
+        std::string attack_recovery_animation_id{};
     };
 
     int        effective_grid_resolution(std::optional<int> override_resolution) const;
@@ -136,6 +166,9 @@ private:
 
 private:
     friend class MovementPlanExecutor;
+    friend struct MovementController;
+    friend struct PlaybackController;
+    friend struct CombatController;
     friend void animation_runtime::test_hooks::force_committed_attack_target(
         AnimationRuntime& runtime,
         std::string target_asset_id);
@@ -158,22 +191,13 @@ private:
     std::unordered_map<std::string, std::size_t> active_paths_{};
 
     bool debug_enabled_ = false;
-    ReversePlaybackMode reverse_playback_mode_ = ReversePlaybackMode::None;
-    std::string reverse_playback_animation_id_{};
-    bool lock_on_end_active_ = false;
+    PlaybackState playback_state_{};
     int  suppress_root_motion_frames_ = 0;
-    std::uint32_t replan_budget_frame_id_ = 0;
-    int replan_attempts_this_frame_ = 0;
+    MovementState movement_state_{};
     static constexpr int kMaxReplanAttemptsPerFrame = 3;
     std::uint32_t local_runtime_frame_id_ = 0;
-    std::uint32_t next_attack_cycle_eval_frame_ = 0;
     static constexpr std::uint32_t kAttackCycleDebounceFrames = 8;
-    std::optional<std::string> committed_attack_target_asset_id_ = std::nullopt;
-    std::string committed_attack_animation_id_{};
-    int committed_attack_last_dispatched_frame_index_ = -1;
-    std::string committed_attack_last_payload_id_{};
-    bool attack_recovery_pending_ = false;
-    std::string attack_recovery_animation_id_{};
+    CombatState combat_state_{};
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }
 };

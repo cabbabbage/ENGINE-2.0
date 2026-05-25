@@ -36,3 +36,9 @@ __pycache__/
 *.out
 assets_coppy/
 docs/screen_shots/
+codex_playtest_report.md
+codex_playtest_launcher.log
+codex_playtest_stdout.log
+codex_playtest_stderr.log
+codex_playtest_metadata.json
+*.codex_prev

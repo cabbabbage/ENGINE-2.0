@@ -12,6 +12,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/core/save_orchestrator.hpp"
+#include "devtools/sdl_modal_dialog.hpp"
 #include "devtools/widgets.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -137,9 +138,18 @@ class AnimationEditorWindow {
     };
 
     struct SourceFrameImportOutcome {
+        enum class FailureStage {
+            None,
+            Copy,
+            Payload,
+            Save,
+            RuntimeVerify
+        };
+
         bool success = false;
         int frames_written = 0;
         std::string message;
+        FailureStage failure_stage = FailureStage::None;
     };
 
     void handle_document_saved();
@@ -193,6 +203,7 @@ class AnimationEditorWindow {
     bool ensure_animation_exists(const std::string& animation_id);
     bool create_or_replace_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
     std::optional<int> parse_defaults_total_movement() const;
+    bool defaults_base_direction_selected() const;
     bool defaults_base_faces_right() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
@@ -210,6 +221,10 @@ class AnimationEditorWindow {
     nlohmann::json build_derived_movement_payload(const std::string& animation_id,
                                                   const std::string& source_animation_id,
                                                   int frame_count,
+                                                  bool inherit_data,
+                                                  int dx,
+                                                  int dy,
+                                                  int dz,
                                                   bool invert_x,
                                                   bool invert_y,
                                                   bool invert_z,
@@ -228,7 +243,7 @@ class AnimationEditorWindow {
 
     std::optional<std::filesystem::path> pick_folder() const;
     std::optional<std::filesystem::path> pick_gif() const;
-    std::vector<std::filesystem::path> pick_png_sequence() const;
+    devmode::dialogs::FileDialogResult pick_png_sequence() const;
     std::optional<std::string> pick_animation_reference() const;
     std::optional<std::filesystem::path> pick_audio_file() const;
 
@@ -280,12 +295,14 @@ class AnimationEditorWindow {
     std::unique_ptr<DMCheckbox> defaults_basic_movement_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_elevation_checkbox_;
     std::unique_ptr<DMCheckbox> defaults_3d_diagonals_checkbox_;
-    std::unique_ptr<DMCheckbox> defaults_base_faces_right_checkbox_;
+    std::unique_ptr<DMButton> defaults_base_faces_left_button_;
+    std::unique_ptr<DMButton> defaults_base_faces_right_button_;
     std::unique_ptr<DMTextBox> defaults_distance_box_;
     std::unique_ptr<DMButton> defaults_base_frames_button_;
     std::unique_ptr<DMButton> defaults_create_button_;
     std::unique_ptr<DMButton> defaults_cancel_button_;
     std::vector<std::filesystem::path> defaults_base_frame_paths_;
+    std::optional<bool> defaults_base_faces_right_;
     SDL_Rect defaults_modal_rect_{0, 0, 0, 0};
     SDL_Rect defaults_modal_scroll_rect_{0, 0, 0, 0};
     int defaults_modal_scroll_offset_ = 0;
@@ -325,7 +342,7 @@ class AnimationEditorWindow {
     Asset* target_asset_ = nullptr;
     SDL_Window* parent_window_ = nullptr;
     std::unique_ptr<CustomControllerService> custom_controller_service_;
-    std::function<std::vector<std::filesystem::path>()> png_sequence_picker_override_;
+    std::function<devmode::dialogs::FileDialogResult()> png_sequence_picker_override_;
     std::function<std::optional<std::string>(const std::string&, const std::string&, const std::string&)> text_prompt_override_;
     std::function<std::optional<int>(const std::string&, const std::string&, const std::vector<int>&)> choice_prompt_override_;
     std::function<bool(const std::string&, const std::vector<std::filesystem::path>&)> defaults_copy_frames_override_;

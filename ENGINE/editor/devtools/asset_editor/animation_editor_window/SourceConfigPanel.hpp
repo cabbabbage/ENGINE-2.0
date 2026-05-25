@@ -13,6 +13,7 @@
 #include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
+#include "devtools/sdl_modal_dialog.hpp"
 
 class DMButton;
 class DMDropdown;
@@ -61,7 +62,7 @@ class SourceConfigPanel {
     void set_task_queue(std::shared_ptr<AsyncTaskQueue> tasks);
 
     using PathPicker = std::function<std::optional<std::filesystem::path>()>;
-    using MultiPathPicker = std::function<std::vector<std::filesystem::path>()>;
+    using MultiPathPicker = std::function<devmode::dialogs::FileDialogResult()>;
     using AnimationPicker = std::function<std::optional<std::string>()>;
     using FrameImportHandler = std::function<FrameImportResult(const std::string&,
                                                                const std::vector<std::filesystem::path>&)>;
@@ -118,6 +119,10 @@ class SourceConfigPanel {
     bool clean_output_frames() const;
     std::vector<std::filesystem::path> collect_image_files(const std::filesystem::path& folder) const;
     std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) const;
+    bool validate_picker_path(const std::filesystem::path& path,
+                              bool expect_directory,
+                              const char* invalid_selection_message,
+                              const char* context_label) const;
     void layout_controls();
     void update_status(const std::string& message) const;
     void refresh_animation_options();
@@ -180,4 +185,3 @@ class SourceConfigPanel {
 };
 
 }
-

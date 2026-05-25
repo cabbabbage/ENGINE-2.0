@@ -88,7 +88,6 @@ inline void rename_room_references_in_layers(nlohmann::json& map_info,
             if (source_type == "room_name" && value == old_name) {
                 entry["source_type"] = "room_name";
                 entry["value"] = new_name;
-                entry["name"] = new_name; // Backward-compat mirror for older editor/runtime readers.
             }
 
             auto& children = entry["required_children"];
@@ -106,4 +105,3 @@ inline void rename_room_references_in_layers(nlohmann::json& map_info,
 }
 
 }
-

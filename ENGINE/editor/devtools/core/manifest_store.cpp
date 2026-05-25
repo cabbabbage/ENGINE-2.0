@@ -355,6 +355,36 @@ bool ManifestStore::update_map_entry(const std::string& map_id, const nlohmann::
     return apply_map_edit(map_id, payload, generation);
 }
 
+bool ManifestStore::remove_map_entry(const std::string& map_id, MapPersistOptions options) {
+    ensure_loaded();
+    ensure_asset_container();
+
+    auto maps_it = manifest_cache_.find("maps");
+    if (maps_it == manifest_cache_.end() || !maps_it->is_object()) {
+        return false;
+    }
+
+    auto entry_it = maps_it->find(map_id);
+    if (entry_it == maps_it->end()) {
+        return false;
+    }
+
+    if (!options.guard_reason.empty()) {
+        auto guard = scoped_guard(options.guard_reason);
+        maps_it->erase(entry_it);
+    } else {
+        maps_it->erase(entry_it);
+    }
+    mark_dirty();
+    if (submit_) {
+        submit_(manifest_path_, manifest_cache_, indent_);
+    }
+    if (options.flush && flush_) {
+        flush_();
+    }
+    return true;
+}
+
 const nlohmann::json* ManifestStore::find_map_entry(const std::string& map_id) const {
     if (map_id.empty()) {
         return nullptr;
@@ -549,4 +579,3 @@ void ManifestStore::ensure_asset_container() {
 }
 
 }
-

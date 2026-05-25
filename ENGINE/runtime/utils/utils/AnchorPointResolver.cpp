@@ -16,6 +16,7 @@
 #include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
+#include "utils/frame_stats_recorder.hpp"
 
 namespace {
 
@@ -568,13 +569,13 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     }
     if (should_trace_anchor_resolver(asset) &&
         should_emit_anchor_trace_for_camera_state(asset, camera_state_version)) {
-        vibble::log::debug(std::string("[ScaleTrace][Anchor] asset='") +
-                           (asset.info ? asset.info->name : std::string{"<unknown>"}) +
-                           "' camera_state=" + std::to_string(camera_state_version) +
-                           " source=" + Asset::perspective_source_label(perspective_sample.source) +
-                           " resolver=" + std::to_string(perspective_scale) +
-                           " render=" + std::to_string(render_perspective) +
-                           " delta=" + std::to_string(perspective_delta));
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("scale_trace.anchor_asset_name", asset.info ? asset.info->name : std::string{"<unknown>"});
+        frame_stats.set("scale_trace.anchor_camera_state", camera_state_version);
+        frame_stats.set("scale_trace.anchor_source", Asset::perspective_source_label(perspective_sample.source));
+        frame_stats.set("scale_trace.anchor_resolver", static_cast<double>(perspective_scale));
+        frame_stats.set("scale_trace.anchor_render", static_cast<double>(render_perspective));
+        frame_stats.set("scale_trace.anchor_delta", static_cast<double>(perspective_delta));
     }
 
     render_projection::SpriteProjectionInput projection_input{};

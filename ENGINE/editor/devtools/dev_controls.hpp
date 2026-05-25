@@ -79,7 +79,9 @@ public:
     bool run_exit_save_sequence(const std::string& reason);
     bool is_enabled() const { return enabled_; }
     Mode mode() const { return mode_; }
+    bool layout_dirty() const;
     void sync_camera_tilt_override();
+    void sync_debug_flags_from_assets();
 
     void set_camera_override_for_testing(WarpedScreenGrid* camera_override);
 
@@ -273,6 +275,7 @@ public:
     void layout_misc_options_panel();
     bool handle_misc_options_panel_event(const SDL_Event& event);
     void render_misc_options_panel(SDL_Renderer* renderer);
+    void delete_current_map_and_exit_to_start_menu();
     int read_map_tile_size_or_default8() const;
     void write_map_tile_size(int resolution);
     SDL_Color read_map_color_or_default() const;
@@ -348,7 +351,6 @@ private:
     int map_radius_or_default() const;
     void remove_spawn_group_assets(const std::string& spawn_id);
     void integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned);
-    void regenerate_map_spawn_group(const nlohmann::json& entry);
     void regenerate_boundary_spawn_group(const nlohmann::json& boundary_data);
     
     void ensure_boundary_assets_modal_open();
@@ -418,11 +420,13 @@ private:
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
     bool anchor_point_debug_enabled_ = false;
+    bool impass_floor_debug_enabled_ = false;
     bool misc_options_panel_open_ = false;
     bool misc_options_panel_suppress_callbacks_ = false;
     SDL_Rect misc_options_panel_rect_{0, 0, 0, 0};
     std::unique_ptr<DMNumericStepper> misc_tile_size_stepper_;
     std::unique_ptr<DMButton> misc_map_color_button_;
+    std::unique_ptr<DMButton> misc_delete_map_button_;
     SDL_Color misc_map_color_{0, 0, 0, 255};
     SDL_Color misc_map_color_saved_{0, 0, 0, 255};
     bool misc_map_color_dirty_ = false;

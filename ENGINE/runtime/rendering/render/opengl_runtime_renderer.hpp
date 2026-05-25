@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <deque>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -119,7 +120,8 @@ private:
     bool build_gpu_scene_frame_data(std::uint32_t target_width,
                                     std::uint32_t target_height,
                                     GpuSceneFrameData& out_data,
-                                    std::string& out_error) const;
+                                    std::string& out_error,
+                                    bool allow_dof_depth_layers = true) const;
     bool render_packet_batch(const std::vector<GpuSpriteDrawPacket>& packets,
                             std::uint32_t target_width,
                             std::uint32_t target_height,
@@ -127,6 +129,8 @@ private:
     bool ensure_depth_layer_targets(const GpuSceneFrameData& frame_data, std::string& out_error);
     void destroy_depth_layer_targets();
     bool ensure_far_background_textures();
+    bool process_creation_queue(const GpuSceneFrameData& frame_data, std::string& out_error);
+    void clear_creation_queue();
     void destroy_far_background_textures();
     bool render_far_background(const WarpedScreenGrid& camera,
                                std::uint32_t target_width,
@@ -134,7 +138,6 @@ private:
                                std::string& out_error);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
-    SDL_Color update_smoothed_floor_clear_color(SDL_Color target);
 
     static SDL_Texture* create_render_target(SDL_Renderer* renderer,
                                              int width,
@@ -159,6 +162,8 @@ private:
     std::uint32_t last_complete_scene_width_ = 0;
     std::uint32_t last_complete_scene_height_ = 0;
     std::uint32_t consecutive_held_incomplete_scene_frames_ = 0;
+    std::uint32_t hold_after_target_resize_frames_remaining_ = 0;
+    std::uint32_t hold_empty_scene_frames_remaining_ = 1;
     int output_target_width_ = 1;
     int output_target_height_ = 1;
     SDL_Texture* floor_target_ = nullptr;
@@ -168,9 +173,32 @@ private:
     SDL_Texture* far_background_mountains_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
+    mutable std::vector<GpuSpriteDrawPacket> scratch_floor_grid_overlay_draws_{};
+    mutable std::vector<GpuSpriteDrawPacket> scratch_floor_marker_draws_{};
+    mutable std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> scratch_depth_xy_sprite_packets_{};
+    mutable std::vector<int> scratch_depth_layer_ids_{};
+    std::vector<int> scratch_active_layer_ids_{};
+    std::vector<SDL_Vertex> scratch_batch_vertices_{};
+    std::vector<int> scratch_batch_indices_{};
     dof_blur_chain::Renderer dof_blur_chain_{};
-    SDL_Color smoothed_floor_clear_color_{0, 0, 0, 255};
-    bool smoothed_floor_color_valid_ = false;
-    SDL_Point last_floor_color_player_xz_{0, 0};
-    bool last_floor_color_player_xz_valid_ = false;
+    std::uint64_t last_dof_camera_state_version_ = 0;
+    std::uint32_t dof_motion_skip_frames_remaining_ = 0;
+    double last_dof_path_ms_ = 0.0;
+    struct CreationBudgetConfig {
+        std::uint32_t max_creations_per_frame = 3;
+        double max_creation_ms_per_frame = 2.5;
+        std::uint32_t max_retry_count = 2;
+    };
+    struct DeferredCreationJob {
+        enum class Type { MainTarget, DepthLayerTarget };
+        Type type = Type::MainTarget;
+        int layer_id = 0;
+        std::string label;
+        std::uint64_t enqueue_frame = 0;
+        std::uint32_t retries = 0;
+        std::uint64_t sequence = 0;
+    };
+    CreationBudgetConfig creation_budget_config_{};
+    std::deque<DeferredCreationJob> deferred_creation_queue_{};
+    std::uint64_t creation_job_sequence_ = 0;
 };

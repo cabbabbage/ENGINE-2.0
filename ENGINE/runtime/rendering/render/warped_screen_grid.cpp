@@ -10,11 +10,14 @@
 #include "gameplay/world/chunk.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/screen_space_math.hpp"
+#include "rendering/render/render_diagnostics.hpp"
+#include "utils/frame_stats_recorder.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -22,7 +25,9 @@
 #include <string>
 #include <limits>
 #include <optional>
-#include <unordered_set>
+#include <deque>
+#include <cstdlib>
+#include <sstream>
 #include <nlohmann/json.hpp>
 
 template <typename T>
@@ -40,6 +45,66 @@ namespace {
     constexpr float  kMinNearHorizonSampleOffsetPx = 8.0f;
     constexpr float  kCameraMovementSpeedEpsilon = 1.0f;
     constexpr float  kLookAheadTimeSeconds = 0.12f;
+
+    bool render_profiler_enabled() {
+        static const bool enabled = [](){ const char* e=std::getenv("ENGINE_RENDER_GRID_PROFILER"); return e && std::string(e)!="0"; }();
+        return enabled;
+    }
+    double render_profiler_spike_ms() {
+        static const double threshold = [](){ const char* e=std::getenv("ENGINE_RENDER_GRID_SPIKE_MS"); return e ? std::max(0.0, std::atof(e)) : 16.0; }();
+        return threshold;
+    }
+    struct RollingCosts { std::deque<double> values; };
+    RollingCosts& rolling_costs(){ static RollingCosts r; return r; }
+    double percentile(const std::deque<double>& v, double p){ if(v.empty()) return 0.0; std::vector<double> t(v.begin(),v.end()); std::sort(t.begin(),t.end()); size_t idx=std::min(t.size()-1, static_cast<size_t>(std::floor((p/100.0)*(t.size()-1)))); return t[idx]; }
+
+    std::uint64_t stable_dynamic_asset_hash(const Asset& asset) {
+        if (!asset.spawn_id.empty()) {
+            return static_cast<std::uint64_t>(std::hash<std::string>{}(asset.spawn_id));
+        }
+        if (asset.info && !asset.info->name.empty()) {
+            std::uint64_t hash = static_cast<std::uint64_t>(std::hash<std::string>{}(asset.info->name));
+            hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_x())) * 0x9e3779b185ebca87ull;
+            hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_z())) * 0xc2b2ae3d27d4eb4full;
+            return hash;
+        }
+        return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&asset));
+    }
+
+    bool keep_dynamic_asset_for_visibility(const WarpedScreenGrid::RealismSettings& settings,
+                                           const Asset& asset,
+                                           double depth_distance) {
+        if (!asset.is_dynamic_spawned_asset()) {
+            return true;
+        }
+        if (!std::isfinite(depth_distance)) {
+            return false;
+        }
+        const double efficiency_depth = std::max(
+            0.0,
+            std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)
+                ? static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth)
+                : 0.0);
+        if (efficiency_depth <= 0.0 || depth_distance <= efficiency_depth) {
+            return true;
+        }
+
+        const double max_depth = std::max(efficiency_depth + 1.0,
+                                          static_cast<double>(settings.max_cull_depth));
+        const double t = std::clamp((depth_distance - efficiency_depth) /
+                                    std::max(1.0, max_depth - efficiency_depth),
+                                    0.0,
+                                    1.0);
+        const double configured_min = std::clamp(
+            static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
+            0.0,
+            1.0);
+        const double min_ratio = std::min(configured_min, 0.045);
+        const double keep_ratio = min_ratio + (1.0 - min_ratio) * (1.0 - t) * (1.0 - t) * 0.45;
+        constexpr double kHashScale = 1.0 / 10000.0;
+        const double sample = static_cast<double>(stable_dynamic_asset_hash(asset) % 10000u) * kHashScale;
+        return sample <= keep_ratio;
+    }
 
     static inline Area make_rect_area(const std::string& name, SDL_Point center, int w, int h, int resolution) {
         const int left   = center.x - (w / 2);
@@ -159,6 +224,21 @@ namespace {
         const bool overlap_x = right >= bounds.left && left <= bounds.right;
         const bool overlap_y = bottom >= bounds.top && top <= bounds.bottom;
         return overlap_x && overlap_y;
+    }
+
+
+    bool rect_contains_screen_point(const ScreenBounds& bounds,
+                                    float x,
+                                    float y,
+                                    float margin) {
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(margin)) {
+            return false;
+        }
+        const float clamped_margin = std::max(0.0f, margin);
+        return x >= (bounds.left - clamped_margin) &&
+               x <= (bounds.right + clamped_margin) &&
+               y >= (bounds.top - clamped_margin) &&
+               y <= (bounds.bottom + clamped_margin);
     }
 
     float horizon_fade_for_height(double camera_height) {
@@ -1259,6 +1339,16 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     transition_telemetry_.settle_time_remaining = settle_time_remaining_;
 
     if (camera_transition_trace_enabled()) {
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("camera.transition_state", transition_state_name(transition_state));
+        frame_stats.set("camera.transition_target_x", static_cast<double>(desired_center.x));
+        frame_stats.set("camera.transition_target_y", static_cast<double>(desired_center.y));
+        frame_stats.set("camera.transition_velocity_x", static_cast<double>(controller_state.center_velocity.x));
+        frame_stats.set("camera.transition_velocity_y", static_cast<double>(controller_state.center_velocity.y));
+        frame_stats.set("camera.transition_blend_factor", static_cast<double>(static_cast<float>(t)));
+        frame_stats.set("camera.transition_settle_time_remaining", static_cast<double>(settle_time_remaining_));
+    }
+    if (false && camera_transition_trace_enabled()) {
         vibble::log::debug(
             std::string("[CameraTransition] מצב=") + transition_state_name(transition_state) +
             " מטרה=(" + std::to_string(desired_center.x) + "," + std::to_string(desired_center.y) + ")" +
@@ -1782,9 +1872,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     frame_counter_ = frame_id;
     const std::uint64_t frame_stamp = frame_id;
     clear_grid_state();
+    const bool profiler_enabled = render_profiler_enabled();
+    const std::uint64_t profiler_begin = profiler_enabled ? SDL_GetPerformanceCounter() : 0;
+    const std::uint64_t profiler_freq = profiler_enabled ? SDL_GetPerformanceFrequency() : 0;
+    auto ms_since = [&](std::uint64_t start)->double { if (!profiler_enabled || profiler_freq==0) return 0.0; return (static_cast<double>(SDL_GetPerformanceCounter()-start)*1000.0)/static_cast<double>(profiler_freq); };
+    double phase_view_ms=0, phase_candidate_ms=0, phase_projection_ms=0, phase_visibility_ms=0, phase_traversal_ms=0;
 
     // רענן את אזור התצוגה במרחב העולם לפי פרמטרי המצלמה האחרונים.
+    const std::uint64_t phase_view_begin = profiler_enabled ? SDL_GetPerformanceCounter() : 0;
     recompute_current_view();
+    phase_view_ms = ms_since(phase_view_begin);
 
     int minx, miny, maxx, maxy;
     std::tie(minx, miny, maxx, maxy) = current_view_.get_bounds();
@@ -1812,29 +1909,33 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     std::vector<world::GridPoint*> query_grid_points;
     std::vector<world::GridPoint*>* grid_points = &query_grid_points;
     const std::vector<world::Chunk*>& active_chunks = world_grid.active_chunks();
+    std::uint32_t active_chunk_points_scanned = 0;
+    std::uint32_t asset_to_point_lookups_avoided = 0;
     if (!active_chunks.empty()) {
-        std::size_t estimated_assets = 0;
+        std::size_t estimated_points = 0;
         for (const world::Chunk* chunk : active_chunks) {
             if (chunk) {
-                estimated_assets += chunk->assets.size();
+                estimated_points += chunk->resident_point_ids.size();
+                asset_to_point_lookups_avoided = static_cast<std::uint32_t>(
+                    std::min<std::size_t>(static_cast<std::size_t>(asset_to_point_lookups_avoided) + chunk->assets.size(),
+                                          static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
             }
         }
         active_chunk_grid_point_scratch_.clear();
-        active_chunk_grid_point_scratch_.reserve(estimated_assets);
-        active_chunk_seen_point_scratch_.clear();
-        active_chunk_seen_point_scratch_.reserve(estimated_assets);
+        active_chunk_grid_point_scratch_.reserve(estimated_points);
         for (const world::Chunk* chunk : active_chunks) {
             if (!chunk) {
                 continue;
             }
-            for (Asset* asset : chunk->assets) {
-                if (!asset || asset->dead) {
+            for (world::GridId point_id : chunk->resident_point_ids) {
+                world::GridPoint* point = world_grid.point_for_id(point_id);
+                if (!point) {
                     continue;
                 }
-                world::GridPoint* point = world_grid.point_for_asset(asset);
                 if (!point || !point->has_assets_or_active_children()) {
                     continue;
                 }
+                ++active_chunk_points_scanned;
                 if (point->resolution_layer() < 0 ||
                     point->resolution_layer() > world_grid.max_resolution_layers()) {
                     continue;
@@ -1849,17 +1950,25 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                 if (point->occupants.empty()) {
                     continue;
                 }
-                if (active_chunk_seen_point_scratch_.insert(point).second) {
-                    active_chunk_grid_point_scratch_.push_back(point);
+                active_chunk_grid_point_scratch_.push_back(point);
+#ifndef NDEBUG
+                bool has_live_occupant = false;
+                for (const std::unique_ptr<Asset>& occupant : point->occupants) {
+                    if (occupant && !occupant->dead) {
+                        has_live_occupant = true;
+                        break;
+                    }
                 }
+                SDL_assert(has_live_occupant && "Chunk resident point list should only contain points with live occupants.");
+#endif
             }
         }
-        region_metrics.nodes_visited = static_cast<std::uint32_t>(
-            std::min<std::size_t>(active_chunk_seen_point_scratch_.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
+        region_metrics.nodes_visited = active_chunk_points_scanned;
         if (!active_chunk_grid_point_scratch_.empty()) {
             grid_points = &active_chunk_grid_point_scratch_;
         }
     }
+    phase_candidate_ms = ms_since(profiler_enabled ? profiler_begin : 0);
     if (grid_points->empty()) {
         query_grid_points = world_grid.query_region(
             world_bounds,
@@ -1874,6 +1983,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     }
     last_nodes_visited_ = region_metrics.nodes_visited;
     last_branches_skipped_ = region_metrics.branches_skipped;
+    last_active_chunk_points_scanned_ = active_chunk_points_scanned;
+    last_asset_to_point_lookups_avoided_ = asset_to_point_lookups_avoided;
     warped_points_.reserve(grid_points->size());
     visible_traversal_entries_.reserve(grid_points->size() * 2);
 
@@ -1885,10 +1996,17 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     runtime_pitch_rad_ = cam_state.pitch_radians;
     runtime_pitch_deg_ = cam_state.pitch_degrees;
     runtime_depth_offset_px_ = static_cast<float>(cam_state.reference_depth);
-    if (last_projection_cache_invalidation_version_ != camera_state_version_) {
-        world_grid.invalidate_projection_cache();
-        last_projection_cache_invalidation_version_ = camera_state_version_;
-    }
+    projection_calls_total_ = 0;
+    projection_calls_saved_early_ = 0;
+    assets_stageA_reject_ = 0;
+    assets_stageC_entered_ = 0;
+    constexpr std::uint32_t kProjectionBudgetBase = 2048;
+    projection_recompute_budget_ = static_cast<std::uint32_t>(std::min<std::size_t>(
+        grid_points->size(),
+        static_cast<std::size_t>(kProjectionBudgetBase)));
+    projection_points_deferred_ = 0;
+    projection_points_updated_ = 0;
+    std::uint32_t projection_budget_remaining = projection_recompute_budget_;
     if (!cam_state.valid) {
         last_min_world_z_ = 0;
         last_max_world_z_ = 0;
@@ -1965,6 +2083,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         bool had_any_projection_success = false;
         auto try_project = [&](double world_x, double world_y, double world_z, SDL_FPoint& out) -> bool {
             had_any_projection_sample = true;
+            ++projection_calls_total_;
             if (!project_screen_point(world_x, world_y, world_z, out)) {
                 return false;
             }
@@ -2056,7 +2175,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
         }
 
-        if (asset->current_frame) {
+        if (asset->current_frame && settings_.light_radius_overlap_culling_enabled && !result.visible) {
             for (const DisplacedAssetAnchorPoint& frame_anchor : asset->current_frame->anchor_points) {
                 if (!frame_anchor.is_valid() || !frame_anchor.has_light_data || frame_anchor.hidden) {
                     continue;
@@ -2066,10 +2185,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                     anchor_points::GridMaterialization::None,
                     Asset::AnchorResolveMode::Cached);
                 if (!resolved.has_value() || !resolved->exists) {
-                    resolved = asset->anchor_state(
-                        frame_anchor.name,
-                        anchor_points::GridMaterialization::None,
-                        Asset::AnchorResolveMode::ForceRecompute);
+                    if (asset->is_anchor_cached_unresolved(frame_anchor.name)) {
+                        ++anchor_visibility_debug_counters_.anchor_null_cache_hits;
+                        ++anchor_visibility_debug_counters_.anchor_force_recompute_skipped;
+                    } else {
+                        ++anchor_visibility_debug_counters_.anchor_force_recompute_calls;
+                        resolved = asset->anchor_state(
+                            frame_anchor.name,
+                            anchor_points::GridMaterialization::None,
+                            Asset::AnchorResolveMode::ForceRecompute);
+                    }
                 }
                 if (!resolved.has_value() || !resolved->exists) {
                     continue;
@@ -2166,15 +2291,35 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             continue;
         }
 
-        const bool needs_projection = gp->needs_projection_update(frame_stamp, camera_state_version_);
+        const auto& projection_cache = gp->projection_cache();
+        const bool camera_mismatch = projection_cache.last_camera_state_version != camera_state_version_;
+        const bool stale_for_frame = projection_cache.screen_data_frame_updated != frame_stamp;
+        bool needs_projection = !projection_cache.screen_data_valid || camera_mismatch || stale_for_frame;
 
         if (needs_projection) {
+            const bool has_cached_screen = projection_cache.screen_data_valid;
+            const bool near_visible_region = has_cached_screen &&
+                rect_contains_screen_point(cull_bounds, projection_cache.screen.x, projection_cache.screen.y, 64.0f);
+            const bool can_defer = has_cached_screen && camera_mismatch && !near_visible_region;
+            if (can_defer && projection_budget_remaining == 0) {
+                ++projection_points_deferred_;
+                needs_projection = false;
+            }
+        }
+
+        if (needs_projection) {
+            if (projection_budget_remaining == 0) {
+                ++projection_points_deferred_;
+                continue;
+            }
             world::CameraProjectionParams params = camera_state_to_projection_params(
                 cam_state, screen_width_, screen_height_, horizon_band);
             params.state_version = camera_state_version_;
 
             gp->project_to_screen(params);
             gp->mark_screen_data_updated(frame_stamp);
+            --projection_budget_remaining;
+            ++projection_points_updated_;
         }
 
         const int z_floor = static_cast<int>(std::floor(base_world_z));
@@ -2189,6 +2334,13 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
 
             asset_to_point_[owned.get()] = gp;
+            const double asset_depth_distance = std::fabs(render_depth::depth_from_anchor(
+                anchor_depth,
+                static_cast<double>(owned->world_z()),
+                owned->render_depth_bias()));
+            if (!keep_dynamic_asset_for_visibility(settings_, *owned, asset_depth_distance)) {
+                continue;
+            }
             const AssetVisibilityResult visibility = evaluate_asset_visibility(owned.get(), gp, base_world_z);
             if (visibility.reason_flags != 0) {
                 visibility_reason_flags_[owned.get()] = visibility.reason_flags;
@@ -2264,6 +2416,42 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         last_min_world_z_ = 0;
         last_max_world_z_ = 0;
     }
+
+    if (profiler_enabled) {
+        const double total_ms = ms_since(profiler_begin);
+        auto& rc = rolling_costs();
+        rc.values.push_back(total_ms);
+        if (rc.values.size() > 240) rc.values.pop_front();
+        const double p50 = percentile(rc.values, 50.0);
+        const double p95 = percentile(rc.values, 95.0);
+        const double p99 = percentile(rc.values, 99.0);
+        phase_traversal_ms = total_ms - (phase_view_ms + phase_candidate_ms + phase_projection_ms + phase_visibility_ms);
+        std::ostringstream ss;
+        ss << "grid:view_ms=" << phase_view_ms
+           << ",candidate_ms=" << phase_candidate_ms
+           << ",projection_ms=" << phase_projection_ms
+           << ",visibility_ms=" << phase_visibility_ms
+           << ",traversal_ms=" << phase_traversal_ms
+           << ",points_scanned=" << grid_points->size()
+           << ",assets_scanned=" << assets_stageC_entered_
+           << ",assets_projected=" << projection_calls_total_
+           << ",anchors_recomputed=" << anchor_visibility_debug_counters_.anchor_force_recompute_calls
+           << ",frame_ms=" << total_ms << ",p50=" << p50 << ",p95=" << p95 << ",p99=" << p99;
+        render_diagnostics::set_render_stage_timings(ss.str());
+        if (total_ms > render_profiler_spike_ms()) {
+            vibble::log::warn("[WarpedScreenGridProfiler] spike frame_ms=" + std::to_string(total_ms) +
+                              " projection_calls=" + std::to_string(projection_calls_total_) +
+                              " assets_stageC=" + std::to_string(assets_stageC_entered_) +
+                              " points=" + std::to_string(grid_points->size()));
+        }
+    }
+    render_diagnostics::set_visibility_projection_stats(projection_calls_total_,
+                                                     projection_calls_saved_early_,
+                                                     assets_stageA_reject_,
+                                                     assets_stageC_entered_,
+                                                     projection_recompute_budget_,
+                                                     projection_points_deferred_,
+                                                     projection_points_updated_);
 
     rebuild_grid_bounds();
     bounds_.left   = cull_bounds.left;

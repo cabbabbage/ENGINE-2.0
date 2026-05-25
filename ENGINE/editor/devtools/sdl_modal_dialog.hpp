@@ -28,6 +28,19 @@ struct FileDialogFilter {
     std::string pattern;
 };
 
+enum class FileDialogStatus {
+    Selected,
+    Cancelled,
+    DialogError,
+    MalformedResult,
+};
+
+struct FileDialogResult {
+    FileDialogStatus status = FileDialogStatus::Cancelled;
+    std::vector<std::filesystem::path> paths;
+    std::optional<std::string> error_message;
+};
+
 std::optional<int> show_choice(SDL_Window* parent,
                                const std::string& title,
                                const std::string& message,
@@ -51,11 +64,11 @@ std::optional<std::string> prompt_text(SDL_Window* parent,
                                        const std::string& label,
                                        const std::string& initial_value);
 
-std::vector<std::filesystem::path> open_files(SDL_Window* parent,
-                                              const std::string& title,
-                                              const std::filesystem::path& default_location,
-                                              const std::vector<FileDialogFilter>& filters,
-                                              bool allow_many);
+FileDialogResult open_files(SDL_Window* parent,
+                            const std::string& title,
+                            const std::filesystem::path& default_location,
+                            const std::vector<FileDialogFilter>& filters,
+                            bool allow_many);
 
 std::optional<std::filesystem::path> open_file(SDL_Window* parent,
                                                const std::string& title,

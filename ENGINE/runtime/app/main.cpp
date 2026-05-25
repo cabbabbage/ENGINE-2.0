@@ -1,6 +1,9 @@
 #include "main.hpp"
 #include "app/bootstrap.hpp"
 #include "app/frame_pacing.hpp"
+#include "app/event_loop_runtime.hpp"
+#include "app/window_mode_runtime.hpp"
+#include "app/startup_runtime.hpp"
 #include "utils/text_style.hpp"
 #include "ui/main_menu.hpp"
 #include "ui/menu_ui.hpp"
@@ -18,6 +21,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/string_utils.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -31,6 +35,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <deque>
 #include <algorithm>
 #include <optional>
 #include <iomanip>
@@ -45,83 +50,6 @@
 namespace fs = std::filesystem;
 
 namespace {
-
-struct WindowedPlacement {
-        int x;
-        int y;
-        int w;
-        int h;
-};
-
-WindowedPlacement compute_windowed_fallback(SDL_Window* window) {
-        WindowedPlacement placement{SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720};
-
-        if (!window) {
-                return placement;
-        }
-
-        const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
-        if (display != 0) {
-                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
-                        const int margin = 120;
-                        const int preferred_w = (desktop_mode->w * 3) / 4;
-                        const int preferred_h = (desktop_mode->h * 3) / 4;
-
-                        const int max_w = std::max(640, desktop_mode->w - margin);
-                        const int max_h = std::max(360, desktop_mode->h - margin);
-
-                        placement.w = std::max(960, preferred_w);
-                        placement.h = std::max(540, preferred_h);
-
-                        placement.w = std::min(placement.w, max_w);
-                        placement.h = std::min(placement.h, max_h);
-                }
-        }
-
-        return placement;
-}
-
-bool env_flag_enabled(const char* name, bool default_value) {
-        if (!name || !*name) {
-                return default_value;
-        }
-        const char* raw = std::getenv(name);
-        if (!raw || !*raw) {
-                return default_value;
-        }
-
-        std::string value(raw);
-        std::transform(value.begin(),
-                       value.end(),
-                       value.begin(),
-                       [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-        if (value == "1" || value == "true" || value == "yes" || value == "on" || value == "y" || value == "t") {
-                return true;
-        }
-        if (value == "0" || value == "false" || value == "no" || value == "off" || value == "n" || value == "f") {
-                return false;
-        }
-        return default_value;
-}
-
-int env_int_clamped(const char* name, int default_value, int min_value, int max_value) {
-        const int safe_min = std::min(min_value, max_value);
-        const int safe_max = std::max(min_value, max_value);
-        const int safe_default = std::clamp(default_value, safe_min, safe_max);
-        if (!name || !*name) {
-                return safe_default;
-        }
-        const char* raw = std::getenv(name);
-        if (!raw || !*raw) {
-                return safe_default;
-        }
-        try {
-                const int value = std::stoi(raw);
-                return std::clamp(value, safe_min, safe_max);
-        } catch (...) {
-                return safe_default;
-        }
-}
 
 void show_gpu_required_dialog_and_wait(SDL_Window* window, const std::string& details) {
         const SDL_MessageBoxButtonData buttons[] = {
@@ -155,20 +83,53 @@ void show_gpu_required_dialog_and_wait(SDL_Window* window, const std::string& de
         }
 }
 
-bool is_resize_or_scale_event(Uint32 event_type) {
-        switch (event_type) {
-        case SDL_EVENT_WINDOW_RESIZED:
-        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-#ifdef SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED
-        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-#endif
-#ifdef SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED
-        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
-#endif
-                return true;
-        default:
-                return false;
+bool codex_playtest_input_enabled() {
+        static const bool enabled = app::startup_runtime::env_flag_enabled("VIBBLE_CODEX_PLAYTEST_INPUT", false);
+        return enabled;
+}
+
+bool main_verbose_frame_stat_defaults_enabled() {
+        static const bool enabled =
+                app::startup_runtime::env_flag_enabled("VIBBLE_VERBOSE_FRAME_STAT_DEFAULTS", false);
+        return enabled;
+}
+
+void begin_main_frame_stats(runtime_stats::FrameStatsRecorder& frame_stats,
+                            std::uint64_t runtime_frame_counter) {
+        frame_stats.begin_frame(runtime_frame_counter);
+        frame_stats.set("main.telemetry_schema", "freeze_watchdog_v1");
+        frame_stats.set("main.keyboard_sync_ms", 0.0);
+
+        if (!main_verbose_frame_stat_defaults_enabled()) {
+                return;
         }
+
+        frame_stats.set("input.keyboard_reconciled", false);
+        frame_stats.set("input.keyboard_reconciled_changed_count", static_cast<std::uint64_t>(0));
+        frame_stats.set("input.keyboard_focus_active", false);
+        frame_stats.set("input.focus_loss_cleared", false);
+        frame_stats.set("input.live.w", false);
+        frame_stats.set("input.live.a", false);
+        frame_stats.set("input.live.s", false);
+        frame_stats.set("input.live.d", false);
+        frame_stats.set("input.live.space", false);
+        frame_stats.set("input.stored.w", false);
+        frame_stats.set("input.stored.a", false);
+        frame_stats.set("input.stored.s", false);
+        frame_stats.set("input.stored.d", false);
+        frame_stats.set("input.stored.space", false);
+}
+
+void apply_codex_playtest_input(Input& input,
+                                std::uint64_t frame_id,
+                                int screen_w,
+                                int screen_h) {
+        static bool logged = false;
+        if (!logged) {
+                logged = true;
+                vibble::log::info("[CodexPlaytest] In-engine input driver enabled.");
+        }
+        input.applyCodexPlaytestDriverForTest(frame_id, screen_w, screen_h);
 }
 
 }
@@ -207,14 +168,14 @@ MainApp::MainApp(MapDescriptor map,
                         }
                         SDL_GetWindowPosition(window_, &windowed_x_, &windowed_y_);
                 } else {
-                        const WindowedPlacement fallback = compute_windowed_fallback(window_);
+                        const auto fallback = app::window_mode_runtime::compute_windowed_fallback(window_);
                         windowed_x_ = fallback.x;
                         windowed_y_ = fallback.y;
                         windowed_width_ = fallback.w;
                         windowed_height_ = fallback.h;
                 }
         }
-        render_diagnostics_enabled_ = env_flag_enabled("VIBBLE_RENDER_DIAGNOSTICS", false);
+        render_diagnostics_enabled_ = app::startup_runtime::env_flag_enabled("VIBBLE_RENDER_DIAGNOSTICS", false);
 }
 
 MainApp::~MainApp() {
@@ -392,73 +353,187 @@ void MainApp::game_loop() {
         const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
         const double target_counts  = app::frame_pacing::target_frame_counts(perf_frequency);
 
-        double idle_counts_accum = 0.0;
-        int idle_frame_counter   = 0;
-        constexpr int IDLE_REPORT_INTERVAL = 120;
+        std::uint64_t runtime_frame_counter = 0;
         bool quit = false;
-        SDL_Event e;
+        const int auto_exit_frame_limit =
+                app::startup_runtime::env_int_clamped("VIBBLE_RUNTIME_FRAME_LIMIT", 0, 0, 1000000);
 
         vibble::log::info("[MainApp] Game loop started.");
         vibble::log::info("[MainApp] Frame pacing target: " + app::frame_pacing::target_summary());
+        vibble::log::info("[RuntimeFrameStats] telemetry_schema=freeze_watchdog_v1");
+        if (auto_exit_frame_limit > 0) {
+                vibble::log::info("[MainApp] Runtime frame limit: " + std::to_string(auto_exit_frame_limit));
+        }
 
         while (!quit) {
+                ++runtime_frame_counter;
+                auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+                begin_main_frame_stats(frame_stats, runtime_frame_counter);
+                struct RuntimeFrameScope {
+                        runtime_stats::FrameStatsRecorder& stats;
+                        bool active = true;
+
+                        explicit RuntimeFrameScope(runtime_stats::FrameStatsRecorder& recorder)
+                            : stats(recorder) {}
+
+                        ~RuntimeFrameScope() {
+                                if (active) {
+                                        stats.end_frame();
+                                }
+                        }
+
+                        void end() {
+                                if (active) {
+                                        stats.end_frame();
+                                        active = false;
+                                }
+                        }
+                } runtime_frame_scope(frame_stats);
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 SDL_Renderer* renderer = raw_renderer();
 
-                while (SDL_PollEvent(&e)) {
-                        if (renderer) {
-                                // Keep event coordinates aligned with renderer-space hit testing (DPI/scaling aware).
-                                SDL_ConvertEventToRenderCoordinates(renderer, &e);
+                int event_count = 0;
+                int deferred_event_count = 0;
+                bool event_budget_hit_count = false;
+                bool event_budget_hit_time = false;
+                bool resize_or_scale_seen_this_frame = false;
+                static std::deque<SDL_Event> deferred_events;
+                const int max_events_per_frame = app::startup_runtime::env_int_clamped("VIBBLE_EVENT_MAX_COUNT", 1000, 64, 5000);
+                const int max_poll_ms_per_frame = app::startup_runtime::env_int_clamped("VIBBLE_EVENT_MAX_MS", 4, 1, 33);
+                frame_stats.mark_stage("event_poll_begin");
+                const Uint64 event_begin = SDL_GetPerformanceCounter();
+
+                auto process_event = [&](SDL_Event& event) {
+                        ++event_count;
+                        if (renderer && app::event_loop_runtime::event_uses_pointer_coordinates(event.type)) {
+                                // Keep pointer/touch event coordinates aligned with renderer-space hit testing.
+                                SDL_ConvertEventToRenderCoordinates(renderer, &event);
                         }
-                        if (renderer && is_resize_or_scale_event(e.type)) {
-                                sync_output_dimensions(renderer);
-                        }
-                        handle_global_shortcuts(e);
-                        if (e.type == SDL_EVENT_QUIT) {
+                        handle_global_shortcuts(event);
+                        if (event.type == SDL_EVENT_QUIT) {
                                 quit = true;
                         }
                         if (input_) {
-                                input_->handleEvent(e);
+                                input_->handleEvent(event);
                         }
                         if (game_assets_) {
-                                game_assets_->handle_sdl_event(e);
+                                game_assets_->handle_sdl_event(event);
                         }
+                };
+
+                app::event_loop_runtime::EventPumpConfig event_config{max_events_per_frame, max_poll_ms_per_frame};
+                auto event_state = app::event_loop_runtime::pump_events(renderer,
+                                                                        event_config,
+                                                                        deferred_events,
+                                                                        process_event,
+                                                                        event_begin);
+                event_count = event_state.event_count;
+                deferred_event_count = event_state.deferred_event_count;
+                event_budget_hit_count = event_state.event_budget_hit_count;
+                event_budget_hit_time = event_state.event_budget_hit_time;
+                resize_or_scale_seen_this_frame = event_state.resize_or_scale_seen;
+                const Uint64 event_end = SDL_GetPerformanceCounter();
+                frame_stats.mark_stage("event_poll_end");
+                frame_stats.set("main.event_count", event_count);
+                frame_stats.set("main.event_deferred_count", deferred_event_count);
+                frame_stats.set("main.event_deferred_queue_size", static_cast<std::uint64_t>(deferred_events.size()));
+                frame_stats.set("main.event_budget_hit_count_cap", event_budget_hit_count);
+                frame_stats.set("main.event_budget_hit_time_cap", event_budget_hit_time);
+                frame_stats.set("main.event_poll_budget_reason",
+                                event_budget_hit_count && event_budget_hit_time
+                                        ? "count+time"
+                                        : (event_budget_hit_count ? "count" : (event_budget_hit_time ? "time" : "none")));
+                frame_stats.set("main.event_poll_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(event_begin, event_end));
+
+                if (input_) {
+                        frame_stats.mark_stage("keyboard_sync_begin");
+                        const Uint64 keyboard_sync_begin = SDL_GetPerformanceCounter();
+                        input_->sync_live_keyboard_state();
+                        frame_stats.set("main.keyboard_sync_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(keyboard_sync_begin,
+                                                                                      SDL_GetPerformanceCounter()));
+                        if (codex_playtest_input_enabled()) {
+                                frame_stats.mark_stage("codex_playtest_input_begin");
+                                apply_codex_playtest_input(*input_,
+                                                           runtime_frame_counter,
+                                                           screen_w_,
+                                                           screen_h_);
+                                frame_stats.mark_stage("codex_playtest_input_end");
+                        }
+                        frame_stats.mark_stage("keyboard_sync_end");
                 }
 
                 if (renderer) {
+                        frame_stats.mark_stage("sync_output_begin");
+                        const Uint64 sync_begin = SDL_GetPerformanceCounter();
                         sync_output_dimensions(renderer);
+                        const double sync_output_ms = runtime_stats::FrameStatsRecorder::elapsed_ms(sync_begin,
+                                                                                                     SDL_GetPerformanceCounter());
+                        frame_stats.set("main.sync_output_ms", sync_output_ms);
+                        frame_stats.set("main.resize_sync_ms", resize_or_scale_seen_this_frame ? sync_output_ms : 0.0);
+                        frame_stats.mark_stage("sync_output_end");
+                } else {
+                        frame_stats.set("main.resize_sync_ms", 0.0);
                 }
                 if (game_assets_ && input_) {
+                        frame_stats.mark_stage("assets_update_begin");
+                        const Uint64 assets_begin = SDL_GetPerformanceCounter();
                         game_assets_->update(*input_);
+                        frame_stats.set("main.assets_update_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(assets_begin,
+                                                                                      SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("assets_update_end");
                 }
                 if (renderer) {
+                        frame_stats.mark_stage("render_diagnostics_begin");
                         log_render_diagnostics(renderer, "MainApp");
+                        frame_stats.mark_stage("render_diagnostics_end");
                 }
                 if (input_) {
+                        frame_stats.mark_stage("input_update_begin");
+                        const Uint64 input_begin = SDL_GetPerformanceCounter();
                         input_->update();
+                        frame_stats.set("main.input_update_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(input_begin,
+                                                                                      SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("input_update_end");
                 }
 
                 const double remaining_counts =
                         app::frame_pacing::remaining_frame_counts(frame_begin,
                                                                   target_counts,
                                                                   perf_frequency);
+                frame_stats.set("main.idle_pacing_requested_ms",
+                                remaining_counts > 0.0
+                                        ? (remaining_counts * 1000.0) / perf_frequency
+                                        : 0.0);
                 if (remaining_counts > 0.0) {
-                        idle_counts_accum += remaining_counts;
-                        ++idle_frame_counter;
+                        frame_stats.mark_stage("frame_pacing_begin");
+                        const Uint64 idle_begin = SDL_GetPerformanceCounter();
                         app::frame_pacing::delay_from_remaining_counts(remaining_counts,
                                                                        perf_frequency);
+                        frame_stats.set("main.idle_pacing_delay_ms",
+                                        runtime_stats::FrameStatsRecorder::elapsed_ms(idle_begin,
+                                                                                      SDL_GetPerformanceCounter()));
+                        frame_stats.mark_stage("frame_pacing_end");
+                } else {
+                        frame_stats.set("main.idle_pacing_delay_ms", 0.0);
                 }
 
-                if (idle_frame_counter >= IDLE_REPORT_INTERVAL) {
-                        const double total_idle_ms =
-                                (idle_counts_accum * 1000.0) / perf_frequency;
-                        const double average_idle_ms =
-                                total_idle_ms / static_cast<double>(idle_frame_counter);
-                        vibble::log::debug("[MainApp] Idle pacing: total " + std::to_string(total_idle_ms) + "ms over " + std::to_string(idle_frame_counter) + " frame(s); avg " + std::to_string(average_idle_ms) + "ms.");
-                        idle_counts_accum = 0.0;
-                        idle_frame_counter = 0;
+                if (auto_exit_frame_limit > 0 &&
+                    runtime_frame_counter >= static_cast<std::uint64_t>(auto_exit_frame_limit)) {
+                        quit = true;
                 }
+
+                frame_stats.set("main.quit_requested", quit);
+                frame_stats.set("main.frame_total_ms",
+                                runtime_stats::FrameStatsRecorder::elapsed_ms(frame_begin,
+                                                                              SDL_GetPerformanceCounter()));
+                runtime_frame_scope.end();
         }
+
+        runtime_stats::FrameStatsRecorder::instance().shutdown();
 }
 
 bool MainApp::sync_output_dimensions(SDL_Renderer* renderer) {
@@ -488,7 +563,8 @@ bool MainApp::sync_output_dimensions(SDL_Renderer* renderer) {
 }
 
 void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_label) {
-        if (!render_diagnostics_enabled_ || !renderer) {
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        if (!frame_stats.enabled() || !renderer) {
                 return;
         }
 
@@ -543,6 +619,7 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
         if (game_assets_) {
                 const WarpedScreenGrid& cam = game_assets_->getView();
                 const world::CameraProjectionParams params = cam.projection_params();
+                const auto& camera_state = cam.camera_state();
                 projection_w = params.screen_width;
                 projection_h = params.screen_height;
                 const auto bounds = cam.get_bounds();
@@ -555,145 +632,156 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                 frustum_max_z = cam.last_max_world_z();
                 frustum_nodes = static_cast<int>(cam.last_nodes_visited());
                 frustum_skipped = static_cast<int>(cam.last_branches_skipped());
+                frame_stats.set("camera.center_x", static_cast<double>(camera_state.center.x));
+                frame_stats.set("camera.center_y", static_cast<double>(camera_state.center.y));
+                frame_stats.set("camera.target_center_x", static_cast<double>(camera_state.target_center.x));
+                frame_stats.set("camera.target_center_y", static_cast<double>(camera_state.target_center.y));
+                frame_stats.set("camera.velocity_x", static_cast<double>(camera_state.center_velocity.x));
+                frame_stats.set("camera.velocity_y", static_cast<double>(camera_state.center_velocity.y));
+                frame_stats.set("camera.state_version", cam.camera_state_version());
                 if (const std::optional<SDL_Point> pp_size = game_assets_->opengl_postprocess_target_size()) {
                         postprocess_text = std::to_string(pp_size->x) + "x" + std::to_string(pp_size->y);
                 }
         }
 
-        std::ostringstream frame_line;
         const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
+        const bool render_diagnostics_stale =
+            stats.frame_index == 0 || stats.frame_index == last_render_stats_frame_index_;
+        last_render_stats_frame_index_ = stats.frame_index;
         const std::string backend_name = !stats.backend_name.empty()
             ? stats.backend_name
             : (renderer_ ? renderer_->renderer_name() : std::string("unknown"));
         const std::string present_mode = !stats.present_mode.empty()
             ? stats.present_mode
             : (renderer_ ? renderer_->present_mode_name() : std::string("unknown"));
-        frame_line << "[RenderDiag][" << (loop_label ? loop_label : "loop")
-                   << "] frame=" << frame_diagnostics_counter_
-                   << " window=" << window_w << "x" << window_h
-                   << " window_px=" << window_px_w << "x" << window_px_h
-                   << " output=" << output_w << "x" << output_h
-                   << " target=" << target_w << "x" << target_h << (target_is_backbuffer ? "(backbuffer)" : "(texture)")
-                   << " viewport=(" << viewport.x << "," << viewport.y << "," << viewport.w << "," << viewport.h << ")"
-                   << " clip=(" << clip.x << "," << clip.y << "," << clip.w << "," << clip.h << ")"
-                   << " projection=" << projection_w << "x" << projection_h
-                   << " visible_rect=(" << visible_l << "," << visible_t << "," << visible_r << "," << visible_b << ")"
-                   << " frustum_z=[" << frustum_min_z << "," << frustum_max_z << "]"
-                   << " depth_culled=" << depth_culled
-                   << " nodes=" << frustum_nodes
-                   << " branches_skipped=" << frustum_skipped
-                   << " postprocess=" << postprocess_text
-                   << " frame_cpu_ms=" << stats.frame_cpu_ms
-                   << " render_thread_cpu_ms=" << stats.render_thread_cpu_ms
-                   << " draw_submission_ms=" << stats.draw_submission_cpu_ms
-                   << " present_block_ms=" << stats.present_block_ms
-                   << " present_interval_ms=" << (stats.present_interval_known ? stats.present_interval_ms : -1.0)
-                   << " pass_count=" << stats.render_pass_count
-                   << " copy_pass_count=" << stats.copy_pass_count
-                   << " compute_pass_count=" << stats.compute_pass_count
-                   << " draw_calls=" << stats.draw_call_count
-                   << " rt_switches=" << stats.render_target_switch_count
-                   << " tex_create=" << stats.texture_create_count
-                   << " tex_destroy=" << stats.texture_destroy_count
-                   << " gpu_buf_create=" << stats.gpu_buffer_create_count
-                   << " gpu_buf_destroy=" << stats.gpu_buffer_destroy_count
-                   << " cpu_light_gather_ms=" << stats.cpu_light_gather_ms
-                   << " cpu_light_mask_ms=" << stats.cpu_light_mask_generation_ms
-                   << " gpu_light_tiles=" << stats.gpu_light_tile_assignments
-                   << " gpu_light_naive=" << stats.gpu_light_naive_evaluations
-                   << " gpu_light_tiled=" << stats.gpu_light_tiled_evaluations
-                   << " pipeline_cache_hits=" << stats.gpu_pipeline_cache_hits
-                   << " pipeline_cache_misses=" << stats.gpu_pipeline_cache_misses
-                   << " pipeline_cache_hit_rate=" << stats.gpu_pipeline_cache_hit_rate
-                   << " sdl_target_calls=" << stats.sdl_renderer_target_call_count
-                   << " sdl_draw_calls=" << stats.sdl_renderer_draw_call_count
-                   << " present_calls=" << stats.present_call_count
-                   << " gpu_failed_frames=" << stats.gpu_failed_frame_count
-                   << " renderer_path=" << (stats.renderer_path.empty() ? "unknown" : stats.renderer_path)
-                   << " backend=" << backend_name
-                   << " present_mode=" << present_mode;
-        if (stats.texture_memory_known) {
-                frame_line << " texture_mem_mb="
-                           << static_cast<double>(stats.texture_memory_bytes) / (1024.0 * 1024.0);
-        }
-        vibble::log::debug(frame_line.str());
-
-        if (output_h > 0 && std::abs(target_h - output_h / 2) <= 1) {
-                vibble::log::warn("[RenderDiag] target height is half of output height (possible mismatch).");
-        }
-        if (viewport.y != 0) {
-                vibble::log::warn("[RenderDiag] viewport has non-zero Y offset: " + std::to_string(viewport.y));
-        }
-        if (clip.y != 0) {
-                vibble::log::warn("[RenderDiag] clip rect has non-zero Y offset: " + std::to_string(clip.y));
-        }
-        if (projection_w > 0 && projection_h > 0 && (projection_w != output_w || projection_h != output_h)) {
-                vibble::log::warn("[RenderDiag] camera projection size does not match render output.");
-        }
+        frame_stats.set("render.loop_label", loop_label ? loop_label : "loop");
+        frame_stats.set("render.diagnostics_frame", frame_diagnostics_counter_);
+        frame_stats.set("render.diagnostics_stale", render_diagnostics_stale);
+        frame_stats.set("render.window_w", window_w);
+        frame_stats.set("render.window_h", window_h);
+        frame_stats.set("render.window_px_w", window_px_w);
+        frame_stats.set("render.window_px_h", window_px_h);
+        frame_stats.set("render.output_w", output_w);
+        frame_stats.set("render.output_h", output_h);
+        frame_stats.set("render.target_w", target_w);
+        frame_stats.set("render.target_h", target_h);
+        frame_stats.set("render.target_is_backbuffer", target_is_backbuffer);
+        frame_stats.set("render.viewport_x", viewport.x);
+        frame_stats.set("render.viewport_y", viewport.y);
+        frame_stats.set("render.viewport_w", viewport.w);
+        frame_stats.set("render.viewport_h", viewport.h);
+        frame_stats.set("render.clip_x", clip.x);
+        frame_stats.set("render.clip_y", clip.y);
+        frame_stats.set("render.clip_w", clip.w);
+        frame_stats.set("render.clip_h", clip.h);
+        frame_stats.set("camera.projection_w", projection_w);
+        frame_stats.set("camera.projection_h", projection_h);
+        frame_stats.set("camera.visible_left", static_cast<double>(visible_l));
+        frame_stats.set("camera.visible_top", static_cast<double>(visible_t));
+        frame_stats.set("camera.visible_right", static_cast<double>(visible_r));
+        frame_stats.set("camera.visible_bottom", static_cast<double>(visible_b));
+        frame_stats.set("camera.frustum_min_z", frustum_min_z);
+        frame_stats.set("camera.frustum_max_z", frustum_max_z);
+        frame_stats.set("camera.depth_culled", depth_culled);
+        frame_stats.set("camera.nodes_visited", frustum_nodes);
+        frame_stats.set("camera.branches_skipped", frustum_skipped);
+        frame_stats.set("render.postprocess_target", postprocess_text);
+        frame_stats.set("render.frame_cpu_ms", stats.frame_cpu_ms);
+        frame_stats.set("render.render_thread_cpu_ms", stats.render_thread_cpu_ms);
+        frame_stats.set("render.draw_submission_ms", stats.draw_submission_cpu_ms);
+        frame_stats.set("render.draw_submission_packet_build_sort_ms", stats.draw_submission_packet_build_sort_ms);
+        frame_stats.set("render.draw_submission_resource_create_ms", stats.draw_submission_resource_create_ms);
+        frame_stats.set("render.draw_submission_pipeline_bind_ms", stats.draw_submission_pipeline_bind_ms);
+        frame_stats.set("render.draw_submission_submit_handoff_ms", stats.draw_submission_submit_present_handoff_ms);
+        frame_stats.set("render.submit_unaccounted_ms", stats.draw_submission_unaccounted_ms);
+        frame_stats.set("render.target_sync_ms", stats.render_target_sync_ms);
+        frame_stats.set("render.first_ensure_targets_ms", stats.first_render_target_ensure_ms);
+        frame_stats.set("render.final_ensure_targets_ms", stats.final_render_target_ensure_ms);
+        frame_stats.set("render.sdl_render_target_ms", stats.sdl_render_target_ms);
+        frame_stats.set("render.sdl_render_texture_ms", stats.sdl_render_texture_ms);
+        frame_stats.set("render.sdl_render_geometry_ms", stats.sdl_render_geometry_ms);
+        frame_stats.set("render.draw_submission_packet_build_count", stats.draw_submission_packet_build_count);
+        frame_stats.set("render.draw_submission_resource_create_count", stats.draw_submission_resource_create_count);
+        frame_stats.set("render.draw_submission_pipeline_bind_count", stats.draw_submission_pipeline_bind_count);
+        frame_stats.set("render.draw_submission_submit_handoff_count", stats.draw_submission_submit_handoff_count);
+        frame_stats.set("render.present_block_ms", stats.present_block_ms);
+        frame_stats.set("render.present_interval_ms", stats.present_interval_known ? stats.present_interval_ms : -1.0);
+        frame_stats.set("render.pass_count", stats.render_pass_count);
+        frame_stats.set("render.copy_pass_count", stats.copy_pass_count);
+        frame_stats.set("render.compute_pass_count", stats.compute_pass_count);
+        frame_stats.set("render.draw_calls", stats.draw_call_count);
+        frame_stats.set("render.target_switches", stats.render_target_switch_count);
+        frame_stats.set("render.texture_create_count", stats.texture_create_count);
+        frame_stats.set("render.texture_destroy_count", stats.texture_destroy_count);
+        frame_stats.set("render.gpu_buffer_create_count", stats.gpu_buffer_create_count);
+        frame_stats.set("render.gpu_buffer_destroy_count", stats.gpu_buffer_destroy_count);
+        frame_stats.set("render.cpu_light_gather_ms", stats.cpu_light_gather_ms);
+        frame_stats.set("render.cpu_light_mask_ms", stats.cpu_light_mask_generation_ms);
+        frame_stats.set("render.gpu_light_tiles", stats.gpu_light_tile_assignments);
+        frame_stats.set("render.gpu_light_naive", stats.gpu_light_naive_evaluations);
+        frame_stats.set("render.gpu_light_tiled", stats.gpu_light_tiled_evaluations);
+        frame_stats.set("render.pipeline_cache_hits", stats.gpu_pipeline_cache_hits);
+        frame_stats.set("render.pipeline_cache_misses", stats.gpu_pipeline_cache_misses);
+        frame_stats.set("render.pipeline_cache_hit_rate", stats.gpu_pipeline_cache_hit_rate);
+        frame_stats.set("render.sdl_target_calls", stats.sdl_renderer_target_call_count);
+        frame_stats.set("render.sdl_draw_calls", stats.sdl_renderer_draw_call_count);
+        frame_stats.set("render.present_calls", stats.present_call_count);
+        frame_stats.set("render.gpu_failed_frames", stats.gpu_failed_frame_count);
+        frame_stats.set("render.renderer_path", stats.renderer_path.empty() ? "unknown" : stats.renderer_path);
+        frame_stats.set("render.backend", backend_name);
+        frame_stats.set("render.present_mode", present_mode);
+        frame_stats.set("render.texture_memory_known", stats.texture_memory_known);
+        frame_stats.set("render.texture_memory_mb",
+                        stats.texture_memory_known
+                                ? static_cast<double>(stats.texture_memory_bytes) / (1024.0 * 1024.0)
+                                : 0.0);
+        frame_stats.set("render.floor_packet_count", stats.floor_packet_count);
+        frame_stats.set("render.xy_sprite_packet_count", stats.xy_sprite_packet_count);
+        frame_stats.set("render.active_depth_layer_count", stats.active_depth_layer_count);
+        frame_stats.set("render.blur_pass_count", stats.blur_pass_count);
+        frame_stats.set("render.skipped_texture_count", stats.skipped_texture_count);
+        frame_stats.set("render.failed_texture_names", stats.failed_texture_names);
+        frame_stats.set("render.packets_per_depth_layer", stats.packets_per_depth_layer);
+        frame_stats.set("render.blur_strength_per_layer", stats.blur_strength_per_layer);
+        frame_stats.set("render.composite_layers_submitted", stats.composite_layers_submitted);
+        frame_stats.set("render.stage_timings", stats.render_stage_timings);
+        frame_stats.set("render.ui_overlay_active", stats.ui_overlay_active);
+        frame_stats.set("render.ui_overlay_redrawn", stats.ui_overlay_redrawn);
+        frame_stats.set("render.ui_overlay_prepare_ms", stats.ui_overlay_prepare_ms);
+        frame_stats.set("render.submit_succeeded", stats.submit_succeeded);
+        frame_stats.set("render.projection_calls_total", stats.projection_calls_total);
+        frame_stats.set("render.projection_calls_saved_early", stats.projection_calls_saved_early);
+        frame_stats.set("render.assets_stageA_reject", stats.assets_stageA_reject);
+        frame_stats.set("render.assets_stageC_entered", stats.assets_stageC_entered);
+        frame_stats.set("render.projection_recompute_budget", stats.projection_recompute_budget);
+        frame_stats.set("render.projection_points_deferred", stats.projection_points_deferred);
+        frame_stats.set("render.projection_points_updated", stats.projection_points_updated);
+        frame_stats.set("render.creation_budget_limit", stats.creation_budget_limit);
+        frame_stats.set("render.creation_budget_ms_limit", stats.creation_budget_ms_limit);
+        frame_stats.set("render.creation_attempted_this_frame", stats.creation_attempted_this_frame);
+        frame_stats.set("render.creation_executed_this_frame", stats.creation_executed_this_frame);
+        frame_stats.set("render.creation_deferred_count", stats.creation_deferred_count);
+        frame_stats.set("render.creation_queue_depth_start", stats.creation_queue_depth_start);
+        frame_stats.set("render.creation_queue_depth_end", stats.creation_queue_depth_end);
+        frame_stats.set("render.creation_queue_age_max", stats.creation_queue_age_max);
+        frame_stats.set("render.creation_retried_count", stats.creation_retried_count);
+        frame_stats.set("render.creation_permanent_failures", stats.creation_permanent_failures);
+        frame_stats.set("render.warn_target_half_output",
+                        output_h > 0 && std::abs(target_h - output_h / 2) <= 1);
+        frame_stats.set("render.warn_viewport_y_nonzero", viewport.y != 0);
+        frame_stats.set("render.warn_clip_y_nonzero", clip.y != 0);
+        frame_stats.set("render.warn_projection_output_mismatch",
+                        projection_w > 0 && projection_h > 0 &&
+                                (projection_w != output_w || projection_h != output_h));
 }
 
 void MainApp::toggle_fullscreen() {
-        if (!window_) {
-                return;
-        }
-
-        if (is_fullscreen_) {
-                WindowedPlacement target{windowed_x_, windowed_y_, windowed_width_, windowed_height_};
-
-                if (target.w <= 0 || target.h <= 0) {
-                        target = compute_windowed_fallback(window_);
-                } else {
-                        const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
-                        if (display != 0) {
-                                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
-                                        if (target.w >= desktop_mode->w - 16 || target.h >= desktop_mode->h - 16) {
-                                                target = compute_windowed_fallback(window_);
-                                        }
-                                }
-                        }
-                }
-
-                const bool result = SDL_SetWindowFullscreen(window_, false);
-                if (!result) {
-                        vibble::log::warn(std::string("[MainApp] Failed to switch to windowed mode: ") + SDL_GetError());
-                        return;
-                }
-
-                SDL_SetWindowResizable(window_, true);
-                SDL_SetWindowBordered(window_, true);
-                SDL_SetWindowSize(window_, target.w, target.h);
-                SDL_SetWindowPosition(window_, target.x, target.y);
-
-                is_fullscreen_ = false;
-                windowed_x_ = target.x;
-                windowed_y_ = target.y;
-                windowed_width_ = target.w;
-                windowed_height_ = target.h;
-                vibble::log::info("[MainApp] Window mode switched to windowed.");
-                return;
-        }
-
-        int current_x = 0;
-        int current_y = 0;
-        int current_width = 0;
-        int current_height = 0;
-        SDL_GetWindowPosition(window_, &current_x, &current_y);
-        SDL_GetWindowSize(window_, &current_width, &current_height);
-        if (current_width > 0 && current_height > 0) {
-                windowed_x_ = current_x;
-                windowed_y_ = current_y;
-                windowed_width_ = current_width;
-                windowed_height_ = current_height;
-        }
-
-        const bool result = SDL_SetWindowFullscreen(window_, true);
-        if (!result) {
-                vibble::log::warn(std::string("[MainApp] Failed to switch to fullscreen mode: ") + SDL_GetError());
-                return;
-        }
-
-        is_fullscreen_ = true;
-        vibble::log::info("[MainApp] Window mode switched to fullscreen.");
+        app::window_mode_runtime::toggle_fullscreen(window_,
+                                                    is_fullscreen_,
+                                                    windowed_x_,
+                                                    windowed_y_,
+                                                    windowed_width_,
+                                                    windowed_height_);
 }
 
 void MainApp::handle_global_shortcuts(const SDL_Event& e) {
@@ -860,7 +948,7 @@ void run(SDL_Window* window,
                 shared_asset_library->load_all_from_resources();
     { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
     vibble::log::info(std::string("[Main] Asset metadata cache ready for ") + std::to_string(shared_asset_library->all().size()) + " asset(s).");
-    const bool safe_loading_enabled = env_flag_enabled("VIBBLE_SAFE_LOADING", true);
+    const bool safe_loading_enabled = app::startup_runtime::env_flag_enabled("VIBBLE_SAFE_LOADING", true);
     if (!safe_loading_enabled) {
         vibble::log::info("[Main] Loading cached asset resources...");
         shared_asset_library->loadAllAnimations(renderer);
@@ -903,8 +991,8 @@ void run(SDL_Window* window,
         } else {
             menu = std::make_unique<MainMenu>(renderer, screen_w, screen_h, manifest_data.maps);
             vibble::log::info("[Main] Main menu displayed.");
-            SDL_Event e;
             bool choosing = true;
+            SDL_Event e{};
             while (choosing) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 while (SDL_PollEvent(&e)) {
@@ -987,7 +1075,6 @@ int main(int argc, char* argv[]) {
         (void)argv;
         vibble::log::info("[Main] Starting game engine...");
         vibble::log::info("[Main] Startup uses existing asset caches; missing cache entries regenerate on demand.");
-
         const SDL_InitFlags init_flags =
                 static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
         if (!SDL_Init(init_flags)) {

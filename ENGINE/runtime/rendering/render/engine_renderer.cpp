@@ -6,6 +6,7 @@
 
 #include "rendering/render/render_diagnostics.hpp"
 #include "utils/log.hpp"
+#include "utils/frame_stats_recorder.hpp"
 
 namespace {
 
@@ -119,37 +120,19 @@ void EngineRenderer::present() {
         return;
     }
 
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.mark_stage("render_present_begin");
     render_diagnostics::note_present_call();
-    static std::uint64_t present_log_count = 0;
-    const std::uint64_t present_index = present_log_count + 1;
-    const bool log_present_guard = present_index <= 8 || (present_index % 120) == 0;
-    if (log_present_guard) {
-        const std::string message = "[RenderGuard] before frame present call=" + std::to_string(present_index);
-        if (present_index <= 8) {
-            vibble::log::info(message);
-        } else {
-            vibble::log::debug(message);
-        }
-    }
     const std::uint64_t perf_frequency = SDL_GetPerformanceFrequency();
     const std::uint64_t present_begin = SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer_);
     const std::uint64_t present_end = SDL_GetPerformanceCounter();
-    ++present_log_count;
+    frame_stats.mark_stage("render_present_end");
 
     const double present_block_ms =
         (perf_frequency > 0 && present_end >= present_begin)
             ? (static_cast<double>(present_end - present_begin) * 1000.0 / static_cast<double>(perf_frequency))
             : 0.0;
-    if (log_present_guard) {
-        const std::string message = "[RenderGuard] after frame present call=" + std::to_string(present_index) +
-                                    " block_ms=" + std::to_string(present_block_ms);
-        if (present_index <= 8) {
-            vibble::log::info(message);
-        } else {
-            vibble::log::debug(message);
-        }
-    }
 
     bool interval_known = false;
     double present_interval_ms = 0.0;
@@ -160,6 +143,9 @@ void EngineRenderer::present() {
     }
     last_present_counter_ = present_end;
     render_diagnostics::set_present_pacing(present_block_ms, present_interval_ms, interval_known);
+    frame_stats.set("render.present_block_ms", present_block_ms);
+    frame_stats.set("render.present_interval_ms", interval_known ? present_interval_ms : -1.0);
+    frame_stats.set("render.present_interval_known", interval_known);
 }
 
 void EngineRenderer::set_scale(float scale_x, float scale_y) {

@@ -471,9 +471,6 @@ bool ensure_animation_metadata(const std::string& asset_name,
                                const std::filesystem::path& assets_root) {
         const auto asset_dir = (assets_root / asset_name).lexically_normal();
         const auto folders = discover_animation_folders(asset_dir);
-        if (folders.empty()) {
-                return false;
-        }
 
         bool mutated = false;
         if (!metadata.contains("animations") || !metadata["animations"].is_object()) {
@@ -481,6 +478,21 @@ bool ensure_animation_metadata(const std::string& asset_name,
                 mutated = true;
         }
         nlohmann::json& animations = metadata["animations"];
+
+        if (folders.empty() && animations.empty()) {
+                animations["default"] = nlohmann::json::object({
+                    {"source", nlohmann::json::object({
+                        {"kind", "folder"},
+                        {"path", "default"},
+                        {"name", ""}
+                    })},
+                    {"number_of_frames", 1},
+                    {"locked", false},
+                    {"on_end", "default"}
+                });
+                metadata["start"] = "default";
+                return true;
+        }
 
         for (const auto& folder : folders) {
                 nlohmann::json& slot = animations[folder.name];

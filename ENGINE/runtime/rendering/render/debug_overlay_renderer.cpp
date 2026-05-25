@@ -2,7 +2,6 @@
 
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/AnchorPointResolver.hpp"
-#include "utils/log.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation.hpp"
 #include "assets/asset/animation_frame.hpp"
@@ -12,9 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <optional>
-#include <string>
 
 namespace {
 
@@ -202,14 +199,10 @@ void DebugOverlayRenderer::render_anchor_debug(const WarpedScreenGrid& cam,
                                                int screen_width,
                                                int screen_height,
                                                const std::vector<Asset*>& visible_assets,
-                                               bool dev_mode) const {
+                                               bool /*dev_mode*/) const {
     if (!renderer_ || visible_assets.empty()) {
         return;
     }
-
-    static std::uint64_t s_anchor_debug_frame_counter = 0;
-    ++s_anchor_debug_frame_counter;
-    const bool emit_parity_logs = (s_anchor_debug_frame_counter % 30u) == 0u;
 
     const SDL_Color flat_color{255, 32, 32, 220};
     const SDL_Color final_color{48, 128, 255, 255};
@@ -325,23 +318,46 @@ void DebugOverlayRenderer::render_anchor_debug(const WarpedScreenGrid& cam,
                            actual_child_screen.y);
         }
 
-        if (!emit_parity_logs) {
+    }
+}
+
+void DebugOverlayRenderer::render_impass_floor_debug(
+    const WarpedScreenGrid& cam,
+    int screen_width,
+    int screen_height,
+    const std::vector<render_debug::ImpassFloorDebugPolygon>& polygons) const {
+    if (!renderer_ || polygons.empty()) {
+        return;
+    }
+
+    const SDL_Color edge_color{255, 64, 180, 230};
+    const SDL_Color point_color{255, 200, 80, 220};
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer_, edge_color.r, edge_color.g, edge_color.b, edge_color.a);
+    for (const auto& polygon : polygons) {
+        if (polygon.world_points.size() < 3) {
             continue;
         }
-
-        const float dx = actual_child_screen.x - expected.child_screen_px.x;
-        const float dy = actual_child_screen.y - expected.child_screen_px.y;
-        const float delta_px = std::sqrt(dx * dx + dy * dy);
-        if (delta_px <= 0.5f) {
+        std::vector<SDL_FPoint> screen_points;
+        screen_points.reserve(polygon.world_points.size());
+        for (const SDL_Point& pt : polygon.world_points) {
+            SDL_FPoint projected{};
+            if (project_floor_point_to_screen(cam, static_cast<float>(pt.x), static_cast<float>(pt.y), projected)) {
+                screen_points.push_back(projected);
+            }
+        }
+        if (screen_points.size() < 3) {
             continue;
         }
-
-        const std::string mode_label = dev_mode ? "פיתוח" : "רגיל";
-        vibble::log::warn(std::string("[AnchorParity][") + mode_label + "] בעלים='" +
-                          (owner->info ? owner->info->name : std::string{"<unknown>"}) +
-                          "' ילד='" +
-                          (child->info ? child->info->name : std::string{"<unknown>"}) +
-                          "' עוגן='" + binding.anchor_name +
-                          "' דלתא_פיקסלים=" + std::to_string(delta_px));
+        for (std::size_t i = 0; i < screen_points.size(); ++i) {
+            const SDL_FPoint& a = screen_points[i];
+            const SDL_FPoint& b = screen_points[(i + 1) % screen_points.size()];
+            if (!is_debug_marker_in_bounds(a, screen_width, screen_height) &&
+                !is_debug_marker_in_bounds(b, screen_width, screen_height)) {
+                continue;
+            }
+            SDL_RenderLine(renderer_, a.x, a.y, b.x, b.y);
+            draw_filled_debug_dot(renderer_, a, 2, point_color);
+        }
     }
 }

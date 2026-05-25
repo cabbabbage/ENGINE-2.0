@@ -708,7 +708,13 @@ private:
     devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,
                                                                                               const std::string& animation_id) const;
     int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px, const std::string& preferred_anchor = {}) const;
+    int find_anchor_floor_crosshair_at_point(SDL_Point screen_point,
+                                             int radius_px,
+                                             int center_exclusion_px,
+                                             const std::string& preferred_anchor = {}) const;
     bool handle_anchor_mode_mouse_input(const Input& input);
+    bool begin_anchor_depth_drag(const std::string& anchor_name, SDL_Point screen_point);
+    bool drag_anchor_depth_to_screen(const std::string& anchor_name, SDL_Point screen_point);
     int find_oval_point_handle_at_point(SDL_Point screen_point, int radius_px, int preferred_point_index = -1) const;
     bool handle_oval_mode_mouse_input(const Input& input);
     bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
@@ -985,6 +991,10 @@ private:
         std::string dragging_anchor_name;
         bool point_selected = false;
         bool dragging = false;
+        bool dragging_depth = false;
+        float depth_drag_start_depth_offset = 0.0f;
+        float depth_drag_start_floor_z = 0.0f;
+        float depth_drag_start_pointer_floor_z = 0.0f;
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;

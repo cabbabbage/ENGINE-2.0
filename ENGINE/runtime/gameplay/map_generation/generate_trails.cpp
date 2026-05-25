@@ -3,7 +3,7 @@
 #include "utils/display_color.hpp"
 #include "utils/log.hpp"
 #include "utils/map_grid_settings.hpp"
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 #include "rendering/render/camera_controller.hpp"
 
 #include <algorithm>

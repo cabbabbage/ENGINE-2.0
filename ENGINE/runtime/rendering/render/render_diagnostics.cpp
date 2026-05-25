@@ -103,6 +103,21 @@ void begin_frame() {
     g_frame_stats.cpu_light_gather_ms = 0.0;
     g_frame_stats.cpu_light_mask_generation_ms = 0.0;
     g_frame_stats.draw_submission_cpu_ms = 0.0;
+    g_frame_stats.draw_submission_packet_build_sort_ms = 0.0;
+    g_frame_stats.draw_submission_resource_create_ms = 0.0;
+    g_frame_stats.draw_submission_pipeline_bind_ms = 0.0;
+    g_frame_stats.draw_submission_submit_present_handoff_ms = 0.0;
+    g_frame_stats.draw_submission_unaccounted_ms = 0.0;
+    g_frame_stats.render_target_sync_ms = 0.0;
+    g_frame_stats.first_render_target_ensure_ms = 0.0;
+    g_frame_stats.final_render_target_ensure_ms = 0.0;
+    g_frame_stats.sdl_render_target_ms = 0.0;
+    g_frame_stats.sdl_render_texture_ms = 0.0;
+    g_frame_stats.sdl_render_geometry_ms = 0.0;
+    g_frame_stats.draw_submission_packet_build_count = 0;
+    g_frame_stats.draw_submission_resource_create_count = 0;
+    g_frame_stats.draw_submission_pipeline_bind_count = 0;
+    g_frame_stats.draw_submission_submit_handoff_count = 0;
     g_frame_stats.ui_overlay_prepare_ms = 0.0;
     g_frame_stats.present_block_ms = g_has_present_sample ? g_last_present_block_ms : 0.0;
     g_frame_stats.present_interval_ms = g_has_present_sample ? g_last_present_interval_ms : 0.0;
@@ -144,6 +159,25 @@ void begin_frame() {
     g_frame_stats.ui_overlay_active = false;
     g_frame_stats.ui_overlay_redrawn = false;
     g_frame_stats.submit_succeeded = false;
+    g_frame_stats.projection_calls_total = 0;
+    g_frame_stats.projection_calls_saved_early = 0;
+    g_frame_stats.assets_stageA_reject = 0;
+    g_frame_stats.assets_stageC_entered = 0;
+    g_frame_stats.projection_recompute_budget = 0;
+    g_frame_stats.projection_points_deferred = 0;
+    g_frame_stats.projection_points_updated = 0;
+    g_frame_stats.creation_budget_limit = 0;
+    g_frame_stats.creation_budget_ms_limit = 0.0;
+    g_frame_stats.creation_attempted_this_frame = 0;
+    g_frame_stats.creation_executed_this_frame = 0;
+    g_frame_stats.creation_deferred_count = 0;
+    g_frame_stats.creation_queue_depth_start = 0;
+    g_frame_stats.creation_queue_depth_end = 0;
+    g_frame_stats.creation_queue_age_max = 0;
+    g_frame_stats.creation_permanent_failures = 0;
+    g_frame_stats.creation_retried_count = 0;
+    g_frame_stats.held_scene_frame = false;
+    g_frame_stats.held_scene_reason.clear();
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -203,6 +237,37 @@ void add_cpu_light_mask_generation_ms(double elapsed_ms_value) {
 
 void add_draw_submission_ms(double elapsed_ms_value) {
     g_frame_stats.draw_submission_cpu_ms += std::max(0.0, elapsed_ms_value);
+}
+
+
+void add_draw_submission_packet_build_sort_ms(double elapsed_ms_value, std::uint32_t packet_count) {
+    g_frame_stats.draw_submission_packet_build_sort_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_packet_build_count += packet_count;
+}
+
+void add_draw_submission_resource_create_ms(double elapsed_ms_value, std::uint32_t create_count) {
+    g_frame_stats.draw_submission_resource_create_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_resource_create_count += create_count;
+}
+
+void add_draw_submission_pipeline_bind_ms(double elapsed_ms_value, std::uint32_t bind_count) {
+    g_frame_stats.draw_submission_pipeline_bind_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_pipeline_bind_count += bind_count;
+}
+
+void add_draw_submission_submit_present_handoff_ms(double elapsed_ms_value, std::uint32_t handoff_count) {
+    g_frame_stats.draw_submission_submit_present_handoff_ms += std::max(0.0, elapsed_ms_value);
+    g_frame_stats.draw_submission_submit_handoff_count += handoff_count;
+}
+
+void set_draw_submission_breakdown(double unaccounted_ms,
+                                   double target_sync_ms,
+                                   double first_ensure_ms,
+                                   double final_ensure_ms) {
+    g_frame_stats.draw_submission_unaccounted_ms = std::max(0.0, unaccounted_ms);
+    g_frame_stats.render_target_sync_ms = std::max(0.0, target_sync_ms);
+    g_frame_stats.first_render_target_ensure_ms = std::max(0.0, first_ensure_ms);
+    g_frame_stats.final_render_target_ensure_ms = std::max(0.0, final_ensure_ms);
 }
 
 void set_ui_overlay_stats(bool active, bool redrawn, double prepare_ms) {
@@ -298,6 +363,49 @@ void set_composite_layers_submitted(const std::string& summary) { g_frame_stats.
 void set_render_stage_timings(const std::string& summary) { g_frame_stats.render_stage_timings = summary; }
 void add_skipped_texture_count(std::uint32_t count) { g_frame_stats.skipped_texture_count += count; }
 void set_failed_texture_names(const std::string& names) { g_frame_stats.failed_texture_names = names; }
+
+void set_visibility_projection_stats(std::uint32_t projection_calls_total,
+                                    std::uint32_t projection_calls_saved_early,
+                                    std::uint32_t assets_stageA_reject,
+                                    std::uint32_t assets_stageC_entered,
+                                    std::uint32_t projection_recompute_budget,
+                                    std::uint32_t projection_points_deferred,
+                                    std::uint32_t projection_points_updated) {
+    g_frame_stats.projection_calls_total = projection_calls_total;
+    g_frame_stats.projection_calls_saved_early = projection_calls_saved_early;
+    g_frame_stats.assets_stageA_reject = assets_stageA_reject;
+    g_frame_stats.assets_stageC_entered = assets_stageC_entered;
+    g_frame_stats.projection_recompute_budget = projection_recompute_budget;
+    g_frame_stats.projection_points_deferred = projection_points_deferred;
+    g_frame_stats.projection_points_updated = projection_points_updated;
+}
+void set_creation_budget_stats(std::uint32_t budget_limit,
+                               double budget_ms_limit,
+                               std::uint32_t attempted,
+                               std::uint32_t executed,
+                               std::uint32_t deferred,
+                               std::uint32_t queue_depth_start,
+                               std::uint32_t queue_depth_end,
+                               std::uint32_t queue_age_max,
+                               std::uint32_t retried_count,
+                               std::uint32_t permanent_failures) {
+    g_frame_stats.creation_budget_limit = budget_limit;
+    g_frame_stats.creation_budget_ms_limit = std::max(0.0, budget_ms_limit);
+    g_frame_stats.creation_attempted_this_frame = attempted;
+    g_frame_stats.creation_executed_this_frame = executed;
+    g_frame_stats.creation_deferred_count = deferred;
+    g_frame_stats.creation_queue_depth_start = queue_depth_start;
+    g_frame_stats.creation_queue_depth_end = queue_depth_end;
+    g_frame_stats.creation_queue_age_max = queue_age_max;
+    g_frame_stats.creation_retried_count = retried_count;
+    g_frame_stats.creation_permanent_failures = permanent_failures;
+}
+
+void set_held_scene_frame(bool held, const std::string& reason) {
+    g_frame_stats.held_scene_frame = held;
+    g_frame_stats.held_scene_reason = held ? reason : std::string{};
+}
+
 void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }
 
 void note_texture_created(SDL_Texture* texture) {
@@ -373,7 +481,9 @@ bool set_render_target(SDL_Renderer* renderer, SDL_Texture* texture) {
         ++g_frame_stats.render_target_switch_count;
         g_last_render_target = texture;
     }
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
     const bool ok = SDL_SetRenderTarget(renderer, texture);
+    g_frame_stats.sdl_render_target_ms += elapsed_ms(begin, SDL_GetPerformanceCounter());
     if (ok) {
         add_render_pass();
     }
@@ -384,7 +494,9 @@ bool render_texture(SDL_Renderer* renderer,
                     SDL_Texture* texture,
                     const SDL_FRect* srcrect,
                     const SDL_FRect* dstrect) {
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
     const bool ok = SDL_RenderTexture(renderer, texture, srcrect, dstrect);
+    g_frame_stats.sdl_render_texture_ms += elapsed_ms(begin, SDL_GetPerformanceCounter());
     if (ok) {
         ++g_frame_stats.sdl_renderer_draw_call_count;
         add_draw_call_count();
@@ -398,7 +510,9 @@ bool render_geometry(SDL_Renderer* renderer,
                      int num_vertices,
                      const int* indices,
                      int num_indices) {
+    const std::uint64_t begin = SDL_GetPerformanceCounter();
     const bool ok = SDL_RenderGeometry(renderer, texture, vertices, num_vertices, indices, num_indices);
+    g_frame_stats.sdl_render_geometry_ms += elapsed_ms(begin, SDL_GetPerformanceCounter());
     if (ok) {
         ++g_frame_stats.sdl_renderer_draw_call_count;
         add_draw_call_count();

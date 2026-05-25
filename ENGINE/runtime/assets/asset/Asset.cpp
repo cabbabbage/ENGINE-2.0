@@ -13,8 +13,9 @@
 #include "utils/grid.hpp"
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include "utils/oval_anchor_math.hpp"
-#include "utils/weighted_range.hpp"
+#include "utils/utils/weighted_range.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <iostream>
@@ -33,6 +34,7 @@
 #include <exception>
 #include <cassert>
 #include <new>
+#include <chrono>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -955,14 +957,14 @@ void Asset::update_scale_values(bool force) {
     const bool trace_scale = should_trace_asset_scale(*this) &&
                              should_emit_scale_trace_for_frame(*this, frame_id);
     if (trace_scale) {
-        vibble::log::debug(std::string("[ScaleTrace][Asset] asset='") +
-                           (info ? info->name : std::string{"<unknown>"}) +
-                           "' frame=" + std::to_string(frame_id) +
-                           " source=" + perspective_source +
-                           " perspective=" + std::to_string(perspective_scale) +
-                           " base=" + std::to_string(base_scale) +
-                           " scale=" + std::to_string(prospective_scale) +
-                           " delta=" + std::to_string(scale_delta));
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("scale_trace.asset_name", info ? info->name : std::string{"<unknown>"});
+        frame_stats.set("scale_trace.asset_frame_id", static_cast<std::uint64_t>(frame_id));
+        frame_stats.set("scale_trace.asset_source", perspective_source);
+        frame_stats.set("scale_trace.asset_perspective", static_cast<double>(perspective_scale));
+        frame_stats.set("scale_trace.asset_base", static_cast<double>(base_scale));
+        frame_stats.set("scale_trace.asset_scale", static_cast<double>(prospective_scale));
+        frame_stats.set("scale_trace.asset_delta", static_cast<double>(scale_delta));
     }
 
     if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&
@@ -993,6 +995,7 @@ void Asset::update_scale_values(bool force) {
     hysteresis_state.min_scale = scale_variant_state_.hysteresis_min;
     hysteresis_state.max_scale = scale_variant_state_.hysteresis_max;
 
+    const int previous_variant_index = current_variant_index;
     auto selection = render_pipeline::ScalingLogic::Choose(
         desired_variant_scale,
         steps,
@@ -1002,6 +1005,9 @@ void Asset::update_scale_values(bool force) {
 
     current_nearest_variant_scale = selection.stored_scale;
     current_variant_index = selection.index;
+    if (current_variant_index != previous_variant_index) {
+        refresh_cached_dimensions();
+    }
 
     scale_variant_state_.last_variant_index = selection.index;
     scale_variant_state_.hysteresis_min = selection.hysteresis_min;
@@ -1193,9 +1199,43 @@ void Asset::set_current_animation(const std::string& name)
 
 	auto it = info->animations.find(name);
         if (it == info->animations.end() && assets_) {
-                if (SDL_Renderer* renderer = assets_->renderer()) {
-                        info->loadAnimations(renderer, true);
-                        it = info->animations.find(name);
+                auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+                frame_stats.set("asset_runtime_animation_load.attempted", true);
+                frame_stats.set("asset_runtime_animation_load.asset_name", info ? info->name : std::string{});
+                frame_stats.set("asset_runtime_animation_load.animation_name", name);
+                frame_stats.set("asset_runtime_animation_load.loaded", false);
+                frame_stats.set("asset_runtime_animation_load.fallback_used", true);
+                frame_stats.set("asset_runtime_animation_load.ms", 0.0);
+
+                const bool allow_editor_sync_load = assets_->is_dev_mode();
+                if (allow_editor_sync_load) {
+                        if (SDL_Renderer* renderer = assets_->renderer()) {
+                                const auto load_begin = std::chrono::steady_clock::now();
+                                info->loadAnimations(renderer, true);
+                                const auto load_end = std::chrono::steady_clock::now();
+                                const double load_ms =
+                                    static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count());
+                                it = info->animations.find(name);
+                                frame_stats.set("asset_runtime_animation_load.ms", load_ms);
+                                frame_stats.set("asset_runtime_animation_load.loaded", it != info->animations.end());
+                                frame_stats.set("asset_runtime_animation_load.deferred", false);
+                        }
+                } else {
+                        frame_stats.set("asset_runtime_animation_load.deferred", true);
+                        static std::mutex missing_animation_log_mutex;
+                        static std::unordered_set<std::string> missing_animation_log_keys;
+                        const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                        const std::string key = asset_name + "\n" + name;
+                        bool should_log = false;
+                        {
+                                std::lock_guard<std::mutex> lock(missing_animation_log_mutex);
+                                should_log = missing_animation_log_keys.insert(key).second;
+                        }
+                        if (should_log) {
+                                vibble::log::warn("[Asset] Deferred missing runtime animation load in normal mode: asset='" +
+                                                  asset_name + "' animation='" + name +
+                                                  "'. Keeping current/default frame to avoid a gameplay stall.");
+                        }
                 }
         }
 	if (it != info->animations.end()) {
@@ -1313,6 +1353,25 @@ void Asset::update() {
         assert(anchor_world_revision_ != anchor_debug_start_revision);
     }
 #endif
+}
+
+bool Asset::can_skip_static_runtime_update() {
+    if (!info || dead) {
+        return false;
+    }
+    if (!static_frame) {
+        return false;
+    }
+    if (has_pending_attacks()) {
+        return false;
+    }
+    if (anim_runtime_ && anim_runtime_->has_active_plan()) {
+        return false;
+    }
+    if (controller_ && controller_->requires_runtime_update()) {
+        return false;
+    }
+    return true;
 }
 
 void Asset::refresh_anchor_point_cache_from_frame() {
@@ -2217,6 +2276,10 @@ std::vector<animation_update::Attack> Asset::process_pending_attacks() {
 }
 
 void Asset::mark_anchors_dirty() {
+        ++anchor_lookup_invalidation_generation_;
+        if (anchor_lookup_invalidation_generation_ == 0) {
+                ++anchor_lookup_invalidation_generation_;
+        }
         for (auto& handle : anchor_handles_) {
                 handle.dirty = true;
         }
@@ -2235,6 +2298,7 @@ void Asset::invalidate_anchor_registry() {
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
+        anchor_lookup_cache_.clear();
         mark_anchors_dirty();
 }
 
@@ -2436,6 +2500,15 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
 std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                                                anchor_points::GridMaterialization grid_policy,
                                                AnchorResolveMode resolve_mode) {
+        auto& cache_entry = anchor_lookup_cache_[name];
+        if (cache_entry.invalidation_generation != anchor_lookup_invalidation_generation_) {
+                cache_entry.state = AnchorLookupTriState::Unknown;
+                cache_entry.invalidation_generation = anchor_lookup_invalidation_generation_;
+        }
+        if (resolve_mode == AnchorResolveMode::Cached &&
+            cache_entry.state == AnchorLookupTriState::Unresolved) {
+                return std::nullopt;
+        }
         if (!anchors_initialized_) {
                 initialize_anchor_registry_from_animations();
         }
@@ -2471,6 +2544,7 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                 }
         }
         if (resolved_index >= anchor_handles_.size() || resolved_index >= anchor_points_.size()) {
+                cache_entry.state = AnchorLookupTriState::Unresolved;
                 return std::nullopt;
         }
 
@@ -2628,6 +2702,7 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                         if (resolved_index < anchor_points_.size()) {
                                 anchor_points_[resolved_index] = resolved;
                         }
+                        cache_entry.state = AnchorLookupTriState::Resolved;
                         return resolved;
                 }
         }
@@ -2636,7 +2711,18 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                                                            grid_policy,
                                                            frame_anchor,
                                                            resolve_mode);
+        cache_entry.state = resolved.exists ? AnchorLookupTriState::Resolved : AnchorLookupTriState::Unresolved;
         return resolved;
+}
+
+bool Asset::is_anchor_cached_unresolved(const std::string& name) const {
+        auto it = anchor_lookup_cache_.find(name);
+        if (it == anchor_lookup_cache_.end()) {
+                return false;
+        }
+        const AnchorLookupCacheEntry& entry = it->second;
+        return entry.invalidation_generation == anchor_lookup_invalidation_generation_ &&
+               entry.state == AnchorLookupTriState::Unresolved;
 }
 
 
@@ -2921,6 +3007,9 @@ SDL_FlipMode Asset::effective_render_flip() const {
 }
 
 double Asset::effective_render_angle() const {
+        if (dynamic_spawned_asset_) {
+                return 0.0;
+        }
         const double base_tilt = std::isfinite(base_spawn_tilt_degrees_)
                 ? base_spawn_tilt_degrees_
                 : 0.0;

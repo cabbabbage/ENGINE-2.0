@@ -67,13 +67,21 @@ bool should_use_auto_move_attack_dispatch(const Asset* self) {
 
 } // namespace
 
-CustomAssetController::CustomAssetController(Asset* self)
-    : self_(self) {
+CustomAssetController::CustomAssetController(Asset* self, bool generic_fallback)
+    : self_(self),
+      generic_fallback_(generic_fallback) {
     initialize_anchor_candidate_children();
     on_init();
 }
 
 CustomAssetController::~CustomAssetController() = default;
+
+bool CustomAssetController::requires_runtime_update() const {
+    if (!generic_fallback_) {
+        return true;
+    }
+    return orphan_fall_state_.active || !anchor_candidate_children_.empty() || surface_child_.has_value();
+}
 
 void CustomAssetController::update(const Input& in) {
     game_context_ = custom_controllers::build_controller_game_context(self_, assets(), &fly_orbit_target_state_);

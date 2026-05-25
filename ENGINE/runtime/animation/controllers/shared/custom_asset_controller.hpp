@@ -30,11 +30,12 @@ class RandomOrbit3DControllerBehavior;
 // engine callbacks into controller-specific hooks.
 class CustomAssetController : public AssetController {
 public:
-    explicit CustomAssetController(Asset* self);
+    explicit CustomAssetController(Asset* self, bool generic_fallback = false);
     ~CustomAssetController() override;
 
     void update(const Input& in) final;
     void process_pending_attacks(Asset& self) final;
+    bool requires_runtime_update() const override;
     void on_pre_delete(Asset& self) final;
     void on_orphaned(Asset& self,
                      Asset* former_parent,
@@ -101,4 +102,5 @@ private:
     animation_update::custom_controllers::ControllerGameContext game_context_{};
     OrphanFallState orphan_fall_state_{};
     Asset* self_ = nullptr;
+    bool generic_fallback_ = false;
 };

@@ -8368,6 +8368,9 @@ Asset* RoomEditor::hit_test_asset_anchor(SDL_Point screen_point, int pick_radius
         if (!asset_belongs_to_room(asset)) {
             return;
         }
+        if (asset->info && type_is_fog(*asset->info)) {
+            return;
+        }
         if (selected_assets_.empty() && !asset_matches_selection_filter(asset)) {
             return;
         }
@@ -9523,24 +9526,15 @@ void RoomEditor::handle_click(const Input& input) {
         };
 
         Asset* target = nullptr;
-        if (selection_allowed) {
-            if (shift_modifier) {
-                if (hovered_asset_ && asset_belongs_to_room(hovered_asset_)) {
-                    target = hovered_asset_;
-                }
-                if (!target) {
-                    target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
-                }
-                if (!target) {
-                    target = hit_test_asset(screen_mouse, nullptr);
-                }
-            } else if (!selected_assets_.empty()) {
-                target = selected_asset_within_interaction_radius(screen_mouse);
-            } else {
+        if (selection_allowed && shift_modifier) {
+            if (hovered_asset_ && asset_belongs_to_room(hovered_asset_)) {
+                target = hovered_asset_;
+            }
+            if (!target) {
+                target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
+            }
+            if (!target) {
                 target = hit_test_asset(screen_mouse, nullptr);
-                if (!target && shift_modifier) {
-                    target = hit_test_asset_anchor(screen_mouse, kShiftAnchorSelectRadiusPx);
-                }
             }
         }
         if (target) {
@@ -9556,7 +9550,7 @@ void RoomEditor::handle_click(const Input& input) {
             return;
         }
 
-        if (selection_allowed) {
+        if (selection_allowed && shift_modifier) {
             if (auto boundary_hit = hit_test_dynamic_boundary_sprite(screen_mouse)) {
                 open_asset_info_for_dynamic_boundary(*boundary_hit);
                 return;

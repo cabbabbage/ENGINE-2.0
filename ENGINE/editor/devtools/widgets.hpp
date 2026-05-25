@@ -341,6 +341,7 @@ public:
                           std::int64_t min_allowed,
                           std::int64_t max_allowed,
                           bool loop);
+    ~DMWeightedRangeWidget();
     void set_rect(const SDL_Rect& r);
     const SDL_Rect& rect() const { return rect_; }
     void set_label(const std::string& label);
@@ -351,6 +352,8 @@ public:
     void set_tooltip_state(DMWidgetTooltipState* state);
     void set_enabled(bool enabled);
     bool enabled() const { return enabled_; }
+    bool selected() const { return active_selected_ == this; }
+    void clear_selection();
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* r) const;
     int preferred_height(int width) const;
@@ -434,6 +437,7 @@ private:
     ValueChangedCallback on_value_changed_{};
     DMWidgetTooltipState* tooltip_state_ = nullptr;
     static constexpr double kMaxRawWeight = 3.0;
+    static DMWeightedRangeWidget* active_selected_;
 };
 
 class DMDropdown {

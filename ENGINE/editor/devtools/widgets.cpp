@@ -2296,6 +2296,8 @@ std::int64_t weighted_range_floor_to_step(std::int64_t value, std::int64_t step)
 }
 }
 
+DMWeightedRangeWidget* DMWeightedRangeWidget::active_selected_ = nullptr;
+
 DMWeightedRangeWidget::DMWeightedRangeWidget(const std::string& label,
                                              const vibble::weighted_range::WeightedIntRange& value,
                                              std::int64_t min_allowed,
@@ -2308,6 +2310,10 @@ DMWeightedRangeWidget::DMWeightedRangeWidget(const std::string& label,
     sanitize_value();
     sync_visual_range_from_value();
     update_geometry();
+}
+
+DMWeightedRangeWidget::~DMWeightedRangeWidget() {
+    clear_selection();
 }
 
 void DMWeightedRangeWidget::set_rect(const SDL_Rect& r) {
@@ -2338,6 +2344,21 @@ void DMWeightedRangeWidget::set_tooltip_state(DMWidgetTooltipState* state) {
 
 void DMWeightedRangeWidget::set_enabled(bool enabled) {
     enabled_ = enabled;
+    if (!enabled_ && active_selected_ == this) {
+        clear_selection();
+    }
+}
+
+void DMWeightedRangeWidget::clear_selection() {
+    if (active_selected_ == this) {
+        active_selected_ = nullptr;
+    }
+    if (dragging_) {
+        end_drag();
+    } else {
+        set_slider_scroll_capture(this, false);
+    }
+    wheel_scroll_accumulator_ = 0.0;
 }
 
 int DMWeightedRangeWidget::height() {
@@ -2736,7 +2757,7 @@ void DMWeightedRangeWidget::end_drag() {
     dragging_ = false;
     drag_started_ = false;
     drag_mode_ = DragMode::None;
-    set_slider_scroll_capture(this, false);
+    set_slider_scroll_capture(this, active_selected_ == this);
 }
 
 bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
@@ -2798,48 +2819,84 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state_);
     }
     bool used = false;
+    const auto is_selected = [this]() { return active_selected_ == this; };
+    const auto deselect = [this]() {
+        if (active_selected_ != this) {
+            return;
+        }
+        clear_selection();
+    };
+    const auto select_widget = [this]() {
+        active_selected_ = this;
+        set_slider_scroll_capture(this, true);
+        wheel_scroll_accumulator_ = 0.0;
+    };
     switch (e.type) {
     case SDL_EVENT_MOUSE_MOTION: {
         SDL_Point p{static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
         update_hover(p);
-        set_slider_scroll_capture(this, hovered_ || dragging_);
+        set_slider_scroll_capture(this, is_selected() || dragging_);
         if (dragging_) {
             used = apply_drag_delta(p);
+        } else if (is_selected()) {
+            used = true;
         }
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        SDL_Point p{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+        update_hover(p);
+        const bool inside_widget = SDL_PointInRect(&p, &rect_);
+        if (!inside_widget) {
+            if (e.button.button == SDL_BUTTON_LEFT && is_selected()) {
+                deselect();
+            }
+            break;
+        }
+        if (!enabled_) {
+            used = true;
+            break;
+        }
+        if (e.button.button == SDL_BUTTON_LEFT && !is_selected()) {
+            select_widget();
+            used = true;
+            break;
+        }
+        if (is_selected()) {
+            used = true;
+        }
         if (e.button.button != SDL_BUTTON_LEFT) {
             break;
         }
-        SDL_Point p{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
-        update_hover(p);
-        if (!SDL_PointInRect(&p, &rect_)) {
-            break;
-        }
         if (SDL_PointInRect(&p, &checkbox_rect())) {
-            used = toggle_random();
+            used = toggle_random() || used;
             break;
         }
-        used = begin_drag(p);
+        used = begin_drag(p) || used;
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_UP:
-        if (dragging_ && e.button.button == SDL_BUTTON_LEFT) {
-            end_drag();
+        if (is_selected()) {
             used = true;
+            if (dragging_ && e.button.button == SDL_BUTTON_LEFT) {
+                end_drag();
+            }
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL:
         {
+            if (!is_selected()) {
+                break;
+            }
+            used = true;
             int mx = 0;
             int my = 0;
             sdl_mouse_util::GetMouseState(&mx, &my);
             update_hover(SDL_Point{mx, my});
             SDL_Point wheel_point{mx, my};
             const bool pointer_over_widget = SDL_PointInRect(&wheel_point, &rect_);
+            set_slider_scroll_capture(this, true);
             if (pointer_over_widget || dragging_) {
-                set_slider_scroll_capture(this, value_.random || dragging_);
                 double delta = static_cast<double>(e.wheel.y);
                 if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
                     delta = -delta;
@@ -2857,9 +2914,7 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
                     --steps;
                 }
                 if (steps != 0) {
-                    used = apply_wheel_delta(steps);
-                } else if (value_.random || dragging_) {
-                    used = true;
+                    (void)apply_wheel_delta(steps);
                 }
             } else {
                 wheel_scroll_accumulator_ = 0.0;
@@ -2872,7 +2927,7 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         random_hovered_ = false;
         hovered_handle_index_ = -1;
         wheel_scroll_accumulator_ = 0.0;
-        set_slider_scroll_capture(this, false);
+        set_slider_scroll_capture(this, is_selected());
         if (dragging_) {
             end_drag();
         }
@@ -2891,7 +2946,9 @@ void DMWeightedRangeWidget::draw_text(SDL_Renderer* r, const std::string& s, int
 void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
     const SDL_Rect box = rect_;
     const SDL_Color fill = enabled_ ? DMStyles::PanelHeader() : SDL_Color{32, 36, 46, 220};
-    const SDL_Color border = hovered_ ? DMStyles::HighlightColor() : DMStyles::Border();
+    const bool is_selected = (active_selected_ == this);
+    const SDL_Color border = is_selected ? SDL_Color{255, 199, 120, 255}
+                                         : (hovered_ ? DMStyles::HighlightColor() : DMStyles::Border());
     dm_draw::DrawBeveledRect(r, box, DMStyles::CornerRadius(), DMStyles::BevelDepth(), fill, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
     dm_draw::DrawRoundedOutline(r, box, DMStyles::CornerRadius(), kControlOutlineThickness, border);
 

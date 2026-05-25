@@ -173,6 +173,13 @@ private:
     SDL_Texture* far_background_mountains_texture_ = nullptr;
     std::vector<int> cached_depth_layer_ids_{};
     std::unordered_map<int, SDL_Texture*> depth_layer_targets_{};
+    mutable std::vector<GpuSpriteDrawPacket> scratch_floor_grid_overlay_draws_{};
+    mutable std::vector<GpuSpriteDrawPacket> scratch_floor_marker_draws_{};
+    mutable std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> scratch_depth_xy_sprite_packets_{};
+    mutable std::vector<int> scratch_depth_layer_ids_{};
+    std::vector<int> scratch_active_layer_ids_{};
+    std::vector<SDL_Vertex> scratch_batch_vertices_{};
+    std::vector<int> scratch_batch_indices_{};
     dof_blur_chain::Renderer dof_blur_chain_{};
     std::uint64_t last_dof_camera_state_version_ = 0;
     std::uint32_t dof_motion_skip_frames_remaining_ = 0;

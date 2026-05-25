@@ -1524,21 +1524,22 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     if (assets_->dev_grid_overlay_enabled() &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.x) &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.y)) {
-        std::vector<GpuSpriteDrawPacket> floor_grid_overlay_draws{};
+        scratch_floor_grid_overlay_draws_.clear();
+        scratch_floor_grid_overlay_draws_.reserve(scratch_floor_grid_overlay_draws_.capacity());
         if (!opengl_runtime_renderer_detail::build_dev_floor_grid_overlay_draw_packets(
                 camera,
                 dev_grid_overlay_context,
                 assets_->dev_grid_overlay_cell_size_px(),
                 target_width,
                 target_height,
-                floor_grid_overlay_draws,
+                scratch_floor_grid_overlay_draws_,
                 out_error)) {
             return false;
         }
-        if (!floor_grid_overlay_draws.empty()) {
+        if (!scratch_floor_grid_overlay_draws_.empty()) {
             out_data.floor_draws.insert(out_data.floor_draws.end(),
-                                        std::make_move_iterator(floor_grid_overlay_draws.begin()),
-                                        std::make_move_iterator(floor_grid_overlay_draws.end()));
+                                        std::make_move_iterator(scratch_floor_grid_overlay_draws_.begin()),
+                                        std::make_move_iterator(scratch_floor_grid_overlay_draws_.end()));
             if (!std::is_sorted(out_data.floor_draws.begin(),
                                 out_data.floor_draws.end(),
                                 opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor)) {
@@ -1549,20 +1550,20 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         }
     }
 
-    std::vector<GpuSpriteDrawPacket> floor_marker_draws{};
+    scratch_floor_marker_draws_.clear();
     const std::vector<Assets::DevFloorProjectionMarker> floor_markers = assets_->dev_floor_projection_markers();
     if (!opengl_runtime_renderer_detail::build_floor_marker_draw_packets(camera,
                                                                          floor_markers,
                                                                          target_width,
                                                                          target_height,
-                                                                         floor_marker_draws,
+                                                                         scratch_floor_marker_draws_,
                                                                          out_error)) {
         return false;
     }
-    if (!floor_marker_draws.empty()) {
+    if (!scratch_floor_marker_draws_.empty()) {
         out_data.floor_draws.insert(out_data.floor_draws.end(),
-                                    std::make_move_iterator(floor_marker_draws.begin()),
-                                    std::make_move_iterator(floor_marker_draws.end()));
+                                    std::make_move_iterator(scratch_floor_marker_draws_.begin()),
+                                    std::make_move_iterator(scratch_floor_marker_draws_.end()));
         if (!std::is_sorted(out_data.floor_draws.begin(),
                             out_data.floor_draws.end(),
                             opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor)) {
@@ -1605,26 +1606,28 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             const int delta = std::clamp(layer - focus, -bucket_radius, bucket_radius);
             return focus + delta;
         };
-        std::unordered_map<int, std::vector<GpuSpriteDrawPacket>> depth_xy_sprite_packets{};
-        depth_xy_sprite_packets.reserve(out_data.xy_sprite_draws.size());
+        scratch_depth_xy_sprite_packets_.clear();
+        scratch_depth_xy_sprite_packets_.reserve(std::max(scratch_depth_xy_sprite_packets_.capacity(),
+                                                          out_data.xy_sprite_draws.size()));
         for (const GpuSpriteDrawPacket& packet : out_data.xy_sprite_draws) {
-            depth_xy_sprite_packets[bucket_depth_layer(packet.depth_layer)].push_back(packet);
+            scratch_depth_xy_sprite_packets_[bucket_depth_layer(packet.depth_layer)].push_back(packet);
         }
 
-        std::vector<int> depth_layer_ids{};
-        depth_layer_ids.reserve(depth_xy_sprite_packets.size());
-        for (const auto& entry : depth_xy_sprite_packets) {
-            depth_layer_ids.push_back(entry.first);
+        scratch_depth_layer_ids_.clear();
+        scratch_depth_layer_ids_.reserve(std::max(scratch_depth_layer_ids_.capacity(),
+                                                  scratch_depth_xy_sprite_packets_.size()));
+        for (const auto& entry : scratch_depth_xy_sprite_packets_) {
+            scratch_depth_layer_ids_.push_back(entry.first);
         }
-        std::sort(depth_layer_ids.begin(), depth_layer_ids.end(), [](int lhs, int rhs) {
+        std::sort(scratch_depth_layer_ids_.begin(), scratch_depth_layer_ids_.end(), [](int lhs, int rhs) {
             return lhs > rhs;
         });
 
-        out_data.depth_layers.reserve(depth_layer_ids.size());
-        for (int layer_id : depth_layer_ids) {
+        out_data.depth_layers.reserve(scratch_depth_layer_ids_.size());
+        for (int layer_id : scratch_depth_layer_ids_) {
             GpuDepthLayerDrawPackets layer{};
             layer.depth_layer = layer_id;
-            layer.packets = std::move(depth_xy_sprite_packets[layer_id]);
+            layer.packets = std::move(scratch_depth_xy_sprite_packets_[layer_id]);
             if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
                 std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
             }
@@ -1729,15 +1732,15 @@ bool OpenGLRuntimeRenderer::ensure_depth_layer_targets(const GpuSceneFrameData& 
         return false;
     }
 
-    std::vector<int> active_layer_ids;
-    active_layer_ids.reserve(frame_data.depth_layers.size());
+    scratch_active_layer_ids_.clear();
+    scratch_active_layer_ids_.reserve(std::max(scratch_active_layer_ids_.capacity(), frame_data.depth_layers.size()));
     for (const GpuDepthLayerDrawPackets& layer : frame_data.depth_layers) {
-        active_layer_ids.push_back(layer.depth_layer);
+        scratch_active_layer_ids_.push_back(layer.depth_layer);
     }
-    std::sort(active_layer_ids.begin(), active_layer_ids.end());
+    std::sort(scratch_active_layer_ids_.begin(), scratch_active_layer_ids_.end());
 
     for (auto it = depth_layer_targets_.begin(); it != depth_layer_targets_.end();) {
-        if (!std::binary_search(active_layer_ids.begin(), active_layer_ids.end(), it->first)) {
+        if (!std::binary_search(scratch_active_layer_ids_.begin(), scratch_active_layer_ids_.end(), it->first)) {
             render_diagnostics::destroy_texture(it->second);
             it = depth_layer_targets_.erase(it);
         } else {
@@ -1745,7 +1748,7 @@ bool OpenGLRuntimeRenderer::ensure_depth_layer_targets(const GpuSceneFrameData& 
         }
     }
 
-    for (int layer_id : active_layer_ids) {
+    for (int layer_id : scratch_active_layer_ids_) {
         SDL_Texture*& target = depth_layer_targets_[layer_id];
         if (target) {
             continue;
@@ -1767,14 +1770,14 @@ bool OpenGLRuntimeRenderer::ensure_depth_layer_targets(const GpuSceneFrameData& 
     if (!process_creation_queue(frame_data, out_error)) {
         return false;
     }
-    for (int layer_id : active_layer_ids) {
+    for (int layer_id : scratch_active_layer_ids_) {
         if (!depth_layer_targets_[layer_id]) {
             out_error = "Depth layer target creation deferred by per-frame budget.";
             return false;
         }
     }
 
-    cached_depth_layer_ids_ = std::move(active_layer_ids);
+    cached_depth_layer_ids_ = scratch_active_layer_ids_;
     return true;
 }
 
@@ -1794,29 +1797,29 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
     constexpr std::size_t kMaxBatchVertices = 4096;
     constexpr std::size_t kMaxBatchIndices = 8192;
     std::array<SDL_Vertex, render_sink::kMaxClippedVertices> packet_vertices{};
-    std::vector<SDL_Vertex> batch_vertices{};
-    std::vector<int> batch_indices{};
-    batch_vertices.reserve(kMaxBatchVertices);
-    batch_indices.reserve(kMaxBatchIndices);
+    scratch_batch_vertices_.clear();
+    scratch_batch_indices_.clear();
+    scratch_batch_vertices_.reserve(std::max(scratch_batch_vertices_.capacity(), kMaxBatchVertices));
+    scratch_batch_indices_.reserve(std::max(scratch_batch_indices_.capacity(), kMaxBatchIndices));
     SDL_Texture* batch_texture = nullptr;
 
     auto flush_batch = [&]() -> bool {
-        if (batch_vertices.empty() || batch_indices.empty()) {
-            batch_vertices.clear();
-            batch_indices.clear();
+        if (scratch_batch_vertices_.empty() || scratch_batch_indices_.empty()) {
+            scratch_batch_vertices_.clear();
+            scratch_batch_indices_.clear();
             return true;
         }
         if (!render_diagnostics::render_geometry(renderer_,
                                                  batch_texture,
-                                                 batch_vertices.data(),
-                                                 static_cast<int>(batch_vertices.size()),
-                                                 batch_indices.data(),
-                                                 static_cast<int>(batch_indices.size()))) {
+                                                 scratch_batch_vertices_.data(),
+                                                 static_cast<int>(scratch_batch_vertices_.size()),
+                                                 scratch_batch_indices_.data(),
+                                                 static_cast<int>(scratch_batch_indices_.size()))) {
             out_error = "SDL_RenderGeometry failed for batched packets: " + safe_string(SDL_GetError());
             return false;
         }
-        batch_vertices.clear();
-        batch_indices.clear();
+        scratch_batch_vertices_.clear();
+        scratch_batch_indices_.clear();
         return true;
     };
 
@@ -1826,7 +1829,7 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
         if (vertex_count < 3 || index_count < 3) {
             continue;
         }
-        if (batch_texture != packet.source_texture && !batch_vertices.empty()) {
+        if (batch_texture != packet.source_texture && !scratch_batch_vertices_.empty()) {
             if (!flush_batch()) {
                 return false;
             }
@@ -1836,9 +1839,9 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
             batch_texture = packet.source_texture;
         }
 
-        const std::size_t required_vertices = batch_vertices.size() + static_cast<std::size_t>(vertex_count);
-        const std::size_t required_indices = batch_indices.size() + static_cast<std::size_t>(index_count);
-        if ((required_vertices > kMaxBatchVertices || required_indices > kMaxBatchIndices) && !batch_vertices.empty()) {
+        const std::size_t required_vertices = scratch_batch_vertices_.size() + static_cast<std::size_t>(vertex_count);
+        const std::size_t required_indices = scratch_batch_indices_.size() + static_cast<std::size_t>(index_count);
+        if ((required_vertices > kMaxBatchVertices || required_indices > kMaxBatchIndices) && !scratch_batch_vertices_.empty()) {
             if (!flush_batch()) {
                 return false;
             }
@@ -1846,10 +1849,10 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
         }
 
         packet_to_vertices(packet, target_width, target_height, packet_vertices);
-        const int base_vertex = static_cast<int>(batch_vertices.size());
-        batch_vertices.insert(batch_vertices.end(), packet_vertices.begin(), packet_vertices.begin() + vertex_count);
+        const int base_vertex = static_cast<int>(scratch_batch_vertices_.size());
+        scratch_batch_vertices_.insert(scratch_batch_vertices_.end(), packet_vertices.begin(), packet_vertices.begin() + vertex_count);
         for (int i = 0; i < index_count; ++i) {
-            batch_indices.push_back(packet.indices[static_cast<std::size_t>(i)] + base_vertex);
+            scratch_batch_indices_.push_back(packet.indices[static_cast<std::size_t>(i)] + base_vertex);
         }
     }
 

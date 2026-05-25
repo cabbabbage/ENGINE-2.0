@@ -17046,7 +17046,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 180.0,
+        "scale_percentage": 79.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -17055,29 +17055,29 @@
       ],
       "tillable": false,
       "tilt_range": {
-        "center": -59,
-        "falloff": 0,
+        "center": 0,
+        "falloff": 10,
         "random": true,
-        "span": 180,
+        "span": 17,
         "weights": {
-          "center": 0.3333333333333333,
-          "edge": 0.3333333333333333,
+          "center": 0.3950617283950617,
+          "edge": 0.271604938271605,
           "falloff": 0.3333333333333333
         }
       },
-      "tilt_range_max_deg": 121,
-      "tilt_range_min_deg": -180,
+      "tilt_range_max_deg": 17,
+      "tilt_range_min_deg": -17,
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -10,
+        "center": -11,
         "falloff": 2,
         "random": true,
-        "span": 5,
+        "span": 6,
         "weights": {
-          "center": 0.33333333333333337,
-          "edge": 0.3717948717948718,
-          "falloff": 0.2948717948717949
+          "center": 0.25065047701647875,
+          "edge": 0.41790646474080995,
+          "falloff": 0.3314430582427113
         }
       }
     },
@@ -17124,8 +17124,8 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 180.0,
-        "size_variation": 10.0
+        "scale_percentage": 79.0,
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [
@@ -17134,13 +17134,13 @@
       "tillable": false,
       "tilt_range": {
         "center": 0,
-        "falloff": 0,
-        "random": false,
-        "span": 0,
+        "falloff": 10,
+        "random": true,
+        "span": 17,
         "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
+          "center": 0.3950617283950617,
+          "edge": 0.271604938271605,
+          "falloff": 0.3333333333333333
         }
       },
       "tilt_range_max_deg": 0,
@@ -17148,14 +17148,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -10,
+        "center": -11,
         "falloff": 2,
         "random": true,
-        "span": 5,
+        "span": 6,
         "weights": {
-          "center": 0.33333333333333337,
-          "edge": 0.3717948717948718,
-          "falloff": 0.2948717948717949
+          "center": 0.25065047701647875,
+          "edge": 0.41790646474080995,
+          "falloff": 0.3314430582427113
         }
       }
     },
@@ -17193,8 +17193,8 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 180.0,
-        "size_variation": 10.0
+        "scale_percentage": 79.0,
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [
@@ -17203,26 +17203,26 @@
       "tillable": false,
       "tilt_range": {
         "center": 0,
-        "falloff": 0,
-        "random": false,
-        "span": 0,
+        "falloff": 10,
+        "random": true,
+        "span": 17,
         "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
+          "center": 0.3950617283950617,
+          "edge": 0.271604938271605,
+          "falloff": 0.3333333333333333
         }
       },
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -10,
+        "center": -11,
         "falloff": 2,
         "random": true,
-        "span": 5,
+        "span": 6,
         "weights": {
-          "center": 0.33333333333333337,
-          "edge": 0.3717948717948718,
-          "falloff": 0.2948717948717949
+          "center": 0.25065047701647875,
+          "edge": 0.41790646474080995,
+          "falloff": 0.3314430582427113
         }
       }
     },
@@ -17266,8 +17266,8 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 180.0,
-        "size_variation": 10.0
+        "scale_percentage": 79.0,
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [
@@ -17276,13 +17276,13 @@
       "tillable": false,
       "tilt_range": {
         "center": 0,
-        "falloff": 0,
-        "random": false,
-        "span": 0,
+        "falloff": 10,
+        "random": true,
+        "span": 17,
         "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
+          "center": 0.3950617283950617,
+          "edge": 0.271604938271605,
+          "falloff": 0.3333333333333333
         }
       },
       "tilt_range_max_deg": 0,
@@ -17290,14 +17290,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -10,
+        "center": -11,
         "falloff": 2,
         "random": true,
-        "span": 5,
+        "span": 6,
         "weights": {
-          "center": 0.33333333333333337,
-          "edge": 0.3717948717948718,
-          "falloff": 0.2948717948717949
+          "center": 0.25065047701647875,
+          "edge": 0.41790646474080995,
+          "falloff": 0.3314430582427113
         }
       }
     },
@@ -26650,11 +26650,11 @@
             "spawn_id": "spn-e8fa833dc553"
           }
         ],
-        "fog_far_distance_px": 5296,
-        "fog_near_distance_px": 2451,
-        "max_spawn_from_room": 1806,
+        "fog_far_distance_px": 3636,
+        "fog_near_distance_px": 1107,
+        "max_spawn_from_room": 1949,
         "regen_seed": 4,
-        "render_radius": 8419
+        "render_radius": 7708
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -26705,15 +26705,15 @@
       "map_name": "forrest",
       "rooms_data": {
         "Loot_Room": {
-          "camera_center_dx": -7,
-          "camera_center_dz": 75,
-          "camera_height_px": 456,
-          "camera_tilt_deg": 37.47359085083008,
-          "camera_zoom_percent": 40,
+          "camera_center_dx": -5476,
+          "camera_center_dz": 1214,
+          "camera_height_px": 222,
+          "camera_tilt_deg": 31.507720947265625,
+          "camera_zoom_percent": 3,
           "display_color": [
-            36,
+            85,
+            166,
             242,
-            113,
             255
           ],
           "geometry": "Square",
@@ -26788,9 +26788,9 @@
         },
         "NewRoom": {
           "display_color": [
-            242,
-            139,
+            149,
             85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -26834,9 +26834,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            67,
-            204,
-            31,
+            36,
+            242,
+            214,
             255
           ],
           "geometry": "Square",
@@ -26880,9 +26880,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            36,
             242,
-            208,
+            36,
+            87,
             255
           ],
           "geometry": "Square",
@@ -26957,9 +26957,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            31,
-            32,
-            204,
+            242,
+            85,
+            238,
             255
           ],
           "geometry": "Square",
@@ -27009,8 +27009,8 @@
           "camera_zoom_percent": 40,
           "display_color": [
             242,
+            164,
             85,
-            168,
             255
           ],
           "geometry": "Circle",
@@ -27090,15 +27090,15 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -5195,
-          "camera_center_dz": 2061,
-          "camera_height_px": 56,
-          "camera_tilt_deg": 10.0,
+          "camera_center_dx": -4093,
+          "camera_center_dz": 1641,
+          "camera_height_px": 213,
+          "camera_tilt_deg": 29.0,
           "camera_zoom_percent": 8,
           "display_color": [
+            31,
             115,
-            242,
-            85,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -27430,8 +27430,8 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
+            106,
             31,
-            120,
             204,
             255
           ],

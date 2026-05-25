@@ -5491,10 +5491,6 @@ bool Assets::should_advance_animation_for(const Asset* asset) const {
         return false;
     }
 
-    if (asset->is_dynamic_spawned_asset()) {
-        return false;
-    }
-
     const bool frame_editor_session_active =
         dev_controls_ && dev_controls_->is_frame_editor_session_active();
 

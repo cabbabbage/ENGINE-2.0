@@ -920,7 +920,7 @@ private:
     static constexpr int kMaxBoundaryJitter = 500;
     static constexpr int kRadiusMin = 0;
     static constexpr int kRenderRadiusMax = 20000;
-    static constexpr int kMaxSpawnFromRoomMax = 2000;
+    static constexpr int kMaxSpawnFromRoomMax = 20000;
     static constexpr int kFogDistanceMax = 20000;
     static constexpr int kRenderRadiusDefault = 128;
     static constexpr int kMaxSpawnFromRoomDefault = 128;

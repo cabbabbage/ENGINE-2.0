@@ -25,7 +25,7 @@
             "types": {
                 "area": true,
                 "boundary": true,
-                "dynamic": false,
+                "dynamic": true,
                 "enemy": true,
                 "npc": true,
                 "object": true,
@@ -36,7 +36,7 @@
         "grid": {
             "cell_size_px": 128.0,
             "overlay": {
-                "enabled": true,
+                "enabled": false,
                 "r": 7.0
             },
             "snap": {

@@ -7343,6 +7343,7 @@ Asset* RoomEditor::selected_asset_within_interaction_radius(SDL_Point screen_poi
     for (Asset* asset : selected_assets_) {
         if (!asset || asset->dead) continue;
         if (!asset_belongs_to_room(asset)) continue;
+        if (asset->info && type_is_fog(*asset->info)) continue;
         SDL_Rect bounds{0, 0, 0, 0};
         int screen_y = 0;
         bool have_bounds = false;
@@ -7781,6 +7782,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                 if (!asset || asset->dead || !asset_belongs_to_room(asset)) {
                     continue;
                 }
+                if (asset->info && type_is_fog(*asset->info)) {
+                    continue;
+                }
                 SDL_Point anchor_screen{0, 0};
                 if (!asset_anchor_screen_position(cam, asset, anchor_screen)) {
                     continue;
@@ -7872,6 +7876,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                 inside.reserve(64);
                 for (Asset* asset : assets_->all) {
                     if (!asset || asset->dead || !asset_belongs_to_room(asset)) {
+                        continue;
+                    }
+                    if (asset->info && type_is_fog(*asset->info)) {
                         continue;
                     }
                     SDL_Point anchor_screen{0, 0};
@@ -26495,6 +26502,7 @@ devmode::room_selection_filter::SpawnOwnership RoomEditor::classify_asset_owners
 
 bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     if (!asset) return false;
+    if (asset->info && type_is_fog(*asset->info)) return false;
     using UtilFilter = devmode::room_selection_filter::SelectionFilter;
     using Traits = devmode::room_selection_filter::SelectionTraits;
 

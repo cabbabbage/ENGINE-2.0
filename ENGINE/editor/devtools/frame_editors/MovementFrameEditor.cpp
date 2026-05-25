@@ -372,15 +372,10 @@ void MovementFrameEditor::end() {
 bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     SDL_Rect overlay_rect{0, 0, 0, 0};
     bool overlay_valid = false;
-    // Handle Point3DEditor events
+    // Cache Point3DEditor overlay bounds for hit-testing and deferred input handling.
     if (point_3d_editor_) {
-        // Use the cached container from Point3DEditor (set during render_overlays)
-        // This avoids issues with SDL_GetCurrentRenderOutputSize(nullptr, ...) failing
         overlay_rect = point_3d_editor_->get_cached_container();
         overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
-        if (point_3d_editor_->handle_event(e, overlay_rect)) {
-            return true;
-        }
     }
     bool consumed = false;
 
@@ -405,6 +400,12 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         if (smooth_enabled_ != prev_smooth || curve_enabled_ != prev_curve) {
             consumed = true;
         }
+    }
+
+    // Let the tool panel consume clicks first so path buttons remain clickable even
+    // when point-editor textboxes currently have focus.
+    if (!consumed && point_3d_editor_ && point_3d_editor_->handle_event(e, overlay_rect)) {
+        consumed = true;
     }
 
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
@@ -1022,5 +1023,4 @@ void MovementFrameEditor::apply_selected_frame_to_target() {
 }
 
 }  // namespace devmode::frame_editors
-
 

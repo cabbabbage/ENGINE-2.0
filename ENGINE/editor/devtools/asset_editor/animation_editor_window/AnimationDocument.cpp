@@ -749,6 +749,7 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
     start_animation_.reset();
     use_nested_container_ = false;
     container_metadata_.clear();
+    touched_animation_ids_.clear();
     dirty_ = false;
     last_load_report_ = {};
 
@@ -836,8 +837,25 @@ bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
         }
     }
 
+    nlohmann::json existing_animations_json = nlohmann::json::object();
+    if (root.contains("animations") && root["animations"].is_object()) {
+        const nlohmann::json& animations_node = root["animations"];
+        if (animations_node.contains("animations") && animations_node["animations"].is_object()) {
+            existing_animations_json = animations_node["animations"];
+        } else {
+            existing_animations_json = animations_node;
+        }
+    }
+
     nlohmann::json animations_json = nlohmann::json::object();
     for (const auto& [id, payload_dump] : animations_) {
+        (void)payload_dump;
+        const bool touched = touched_animation_ids_.find(id) != touched_animation_ids_.end();
+        if (!touched && existing_animations_json.contains(id) && existing_animations_json[id].is_object()) {
+            animations_json[id] = existing_animations_json[id];
+            continue;
+        }
+
         const auto raw_payload = raw_animation_payload_json(id);
         animations_json[id] = normalize_payload_for_storage(
             id,
@@ -896,6 +914,7 @@ bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
             devmode::core::DevJsonStore::instance().flush_path(info_path_);
         }
         dirty_ = false;
+        touched_animation_ids_.clear();
     }
     if (saved && fire_callback && on_saved_callback_) {
         on_saved_callback_();
@@ -945,6 +964,7 @@ AnimationDocument::CreateAnimationResult AnimationDocument::create_animation(con
     if (!start_animation_.has_value() || start_animation_->empty()) {
         start_animation_ = candidate;
     }
+    touched_animation_ids_.insert(candidate);
     rebuild_animation_cache();
     mark_dirty();
     if (on_structure_changed_callback_) {
@@ -962,6 +982,7 @@ void AnimationDocument::delete_animation(const std::string& animation_id) {
     auto it = animations_.find(animation_id);
     if (it == animations_.end()) return;
     animations_.erase(it);
+    touched_animation_ids_.erase(animation_id);
 
     if (start_animation_ && *start_animation_ == animation_id) {
         auto ids = animation_ids();
@@ -1045,6 +1066,8 @@ void AnimationDocument::rename_animation(const std::string& old_id, const std::s
     if (start_animation_ && *start_animation_ == old_id) {
         start_animation_ = candidate;
     }
+    touched_animation_ids_.erase(old_id);
+    touched_animation_ids_.insert(candidate);
 
     for (auto& entry : animations_) {
         const std::string& id = entry.first;
@@ -1127,6 +1150,7 @@ void AnimationDocument::rename_animation(const std::string& old_id, const std::s
 
         if (changed) {
             entry.second = serialize_payload(normalize_payload_for_storage(id, payload));
+            touched_animation_ids_.insert(id);
         }
     }
 
@@ -1169,6 +1193,7 @@ bool AnimationDocument::update_animation_payload(const std::string& animation_id
         return false;
     }
     it->second = std::move(normalized);
+    touched_animation_ids_.insert(animation_id);
     mark_dirty();
     return true;
 }

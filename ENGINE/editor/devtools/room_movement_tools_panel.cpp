@@ -39,8 +39,8 @@ RoomMovementToolsPanel::RoomMovementToolsPanel() {
     dz_box_ = std::make_unique<DMTextBox>("DZ", "0");
     rot_box_ = std::make_unique<DMTextBox>("Rotation", "0");
     path_dropdown_ = std::make_unique<DMDropdown>("Movement Path", std::vector<std::string>{"Path 1"}, 0);
-    add_path_button_ = std::make_unique<DMButton>("+ New Path");
-    delete_path_button_ = std::make_unique<DMButton>("Delete Path");
+    add_path_button_ = std::make_unique<DMButton>("+ New Path", &DMStyles::CreateButton(), 140, DMButton::height());
+    delete_path_button_ = std::make_unique<DMButton>("Delete Path", &DMStyles::DeleteButton(), 140, DMButton::height());
     if (path_dropdown_) {
         path_dropdown_->set_on_selection_changed([this](int index) {
             if (on_path_selection_changed_) on_path_selection_changed_(index);

@@ -27824,6 +27824,7 @@
         "size_variation": 0.0
       },
       "start": "default",
+      "starting_health": 10000,
       "tags": [],
       "tillable": false,
       "tilt_range": {
@@ -29007,9 +29008,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            85,
             242,
-            140,
+            225,
+            36,
             255
           ],
           "geometry": "Square",
@@ -29114,9 +29115,9 @@
         },
         "NewRoom": {
           "display_color": [
-            136,
-            71,
-            204,
+            242,
+            127,
+            85,
             255
           ],
           "geometry": "Square",
@@ -29160,9 +29161,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            128,
-            242,
-            36,
+            143,
+            204,
+            71,
             255
           ],
           "geometry": "Square",
@@ -29206,9 +29207,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            242,
-            242,
+            129,
             85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -29283,9 +29284,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            36,
             242,
-            220,
+            85,
+            173,
             255
           ],
           "geometry": "Square",
@@ -29334,9 +29335,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            242,
-            110,
-            85,
+            31,
+            204,
+            105,
             255
           ],
           "geometry": "Circle",
@@ -29422,9 +29423,9 @@
           "camera_tilt_deg": 31.760265350341797,
           "camera_zoom_percent": 1,
           "display_color": [
-            204,
-            31,
-            114,
+            36,
+            242,
+            216,
             255
           ],
           "geometry": "Circle",
@@ -29786,9 +29787,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            31,
             204,
-            105,
+            160,
+            31,
             255
           ],
           "geometry": "Square",

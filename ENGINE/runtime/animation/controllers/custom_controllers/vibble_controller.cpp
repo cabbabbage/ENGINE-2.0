@@ -1,4 +1,5 @@
 #include "vibble_controller.hpp"
+#include "animation/attack.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
@@ -8,11 +9,13 @@
 #include "core/AssetsManager.hpp"
 #include "utils/frame_stats_recorder.hpp"
 #include "utils/input.hpp"
+#include "utils/log.hpp"
 #include "utils/range_util.hpp"
 #include "utils/string_utils.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <sstream>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
@@ -512,6 +515,29 @@ void vibble_controller::start_dash() {
 
 void vibble_controller::on_process_pending_attacks(Asset& self) {
     CustomAssetController::on_process_pending_attacks(self);
+}
+
+void vibble_controller::on_hit(const animation_update::Attack& attack) {
+    Asset* player = self_ptr();
+    const int health_after = player ? player->runtime_health : 0;
+    const int damage = std::max(attack.payload.damage_amount, attack.damage_amount);
+
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("combat.vibble_took_damage", true);
+    frame_stats.set("combat.vibble_last_damage", damage);
+    frame_stats.set("combat.vibble_health_after_damage", health_after);
+    frame_stats.set("combat.vibble_last_attacker", attack.attacker_asset_name);
+
+    std::ostringstream oss;
+    oss << "[Combat] Vibble took damage attacker='" << attack.attacker_asset_name
+        << "' type='" << attack.attack_type
+        << "' damage=" << damage
+        << " health_after=" << health_after;
+    vibble::log::info(oss.str());
+}
+
+void vibble_controller::on_death() {
+    vibble::log::info("[Combat] Vibble died from accumulated damage");
 }
 
 bool vibble_controller::has_tag(const Asset& asset, std::string_view tag) const {

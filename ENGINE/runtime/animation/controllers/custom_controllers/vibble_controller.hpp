@@ -22,6 +22,8 @@ public:
 protected:
     void on_update(const Input& in) override;
     custom_controller_api::AttackProcessingConfig attack_processing_config() const override;
+    void on_hit(const animation_update::Attack& attack) override;
+    void on_death() override;
     void on_process_pending_attacks(Asset& self) override;
 
 private:

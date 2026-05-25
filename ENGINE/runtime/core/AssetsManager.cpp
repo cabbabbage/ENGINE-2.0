@@ -2897,10 +2897,14 @@ void Assets::render_runtime_frame() {
                                             ui_overlay_prepare_ms,
                                             ui_overlay_active,
                                             runtime_ui_overlay_redrawn_last_prepare_)) {
-            render_diagnostics::set_renderer_runtime_info("opengl", "failed", "fatal");
-            render_diagnostics::set_submit_result(false);
             const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
             const std::string reason = frame_error.empty() ? std::string("Unknown OpenGL frame failure.") : frame_error;
+            const bool deferred_budget_failure =
+                reason.find("deferred by per-frame budget") != std::string::npos;
+            render_diagnostics::set_renderer_runtime_info("opengl",
+                                                          "failed",
+                                                          deferred_budget_failure ? "recoverable" : "fatal");
+            render_diagnostics::set_submit_result(false);
             vibble::log::error("[Assets] OpenGL runtime frame failed: reason='" + reason +
                                "' floor_packet_count=" + std::to_string(stats.floor_packet_count) +
                                " xy_sprite_packet_count=" + std::to_string(stats.xy_sprite_packet_count) +
@@ -2908,6 +2912,13 @@ void Assets::render_runtime_frame() {
                                " skipped_textures=" + std::to_string(stats.skipped_texture_count) +
                                " failed_texture_names='" + stats.failed_texture_names + "'" +
                                " submit_succeeded=" + (stats.submit_succeeded ? std::string("true") : "false"));
+            if (deferred_budget_failure) {
+                vibble::log::warn(
+                    "[Assets] Recoverable OpenGL runtime frame deferral detected. "
+                    "Skipping this frame and allowing deferred target creation to complete.");
+                frame_stats.set("assets.render_submit_succeeded", false);
+                return;
+            }
             throw std::runtime_error("[Assets] Fatal OpenGL runtime failure: " + reason);
         }
         frame_stats.set("assets.render_submit_succeeded", true);

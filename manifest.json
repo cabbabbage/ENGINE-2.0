@@ -20155,13 +20155,43 @@
               0,
               0,
               0.0
+            ],
+            [
+              -10,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -10,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -10,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -10,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -10,
+              0,
+              0,
+              0.0
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": -50,
             "dy": 0,
-            "dz": 0
+            "dz": 0.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -20211,13 +20241,43 @@
               0,
               0,
               0.0
+            ],
+            [
+              -1,
+              0,
+              -9,
+              0.0
+            ],
+            [
+              -1,
+              0,
+              -9,
+              0.0
+            ],
+            [
+              -1,
+              0,
+              -9,
+              0.0
+            ],
+            [
+              -1,
+              0,
+              -9,
+              0.0
+            ],
+            [
+              -1,
+              0,
+              -9,
+              0.0
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": -5,
             "dy": 0,
-            "dz": 0
+            "dz": -45.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -20808,14 +20868,14 @@
       "tilt_range_min_deg": -15,
       "weight_kg": 584.0,
       "y_position_range": {
-        "center": -3,
-        "falloff": 1,
+        "center": -5,
+        "falloff": 2,
         "random": true,
-        "span": 2,
+        "span": 4,
         "weights": {
-          "center": 0.3934426229508196,
-          "edge": 0.2786885245901639,
-          "falloff": 0.3278688524590164
+          "center": 0.42528735632183906,
+          "edge": 0.19540229885057472,
+          "falloff": 0.3793103448275862
         }
       }
     },
@@ -26559,9 +26619,9 @@
             }
           },
           "display_color": [
-            36,
-            232,
-            242,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,
@@ -26648,9 +26708,9 @@
             }
           },
           "display_color": [
-            31,
-            112,
-            204,
+            85,
+            242,
+            133,
             255
           ],
           "edge_smoothness": 4,
@@ -26707,9 +26767,9 @@
             }
           },
           "display_color": [
-            85,
+            134,
             242,
-            140,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -26766,9 +26826,9 @@
             }
           },
           "display_color": [
-            242,
             85,
-            153,
+            121,
+            242,
             255
           ],
           "edge_smoothness": 4,
@@ -26855,9 +26915,9 @@
             }
           },
           "display_color": [
-            204,
-            116,
-            31,
+            242,
+            85,
+            165,
             255
           ],
           "edge_smoothness": 4,
@@ -26919,8 +26979,8 @@
             }
           },
           "display_color": [
-            167,
             242,
+            91,
             85,
             255
           ],
@@ -27002,8 +27062,8 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -1820,
-          "camera_center_dz": -6376,
+          "camera_center_dx": -3080,
+          "camera_center_dz": -1982,
           "camera_height_px": 297,
           "camera_tilt_deg": 22.218433380126953,
           "camera_zoom_percent": 49,
@@ -27019,9 +27079,9 @@
             }
           },
           "display_color": [
-            37,
-            36,
-            242,
+            31,
+            204,
+            169,
             255
           ],
           "edge_smoothness": 101,
@@ -27239,8 +27299,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -3675,
-              "dz": -1951,
+              "dx": -3278,
+              "dz": -2477,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -27339,9 +27399,9 @@
             }
           },
           "display_color": [
-            85,
-            161,
+            190,
             242,
+            85,
             255
           ],
           "edge_smoothness": 96,
@@ -27686,9 +27746,9 @@
             }
           },
           "display_color": [
+            71,
+            191,
             204,
-            116,
-            31,
             255
           ],
           "edge_smoothness": 101,

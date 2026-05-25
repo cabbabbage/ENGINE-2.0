@@ -13,7 +13,7 @@
 #include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_info_ui.hpp"
-#include "devtools/asset_stack_animation_list_panel.hpp"
+#include "devtools/asset_editor/animation_editor_window/AnimationListPanel.hpp"
 #include "devtools/sdl_modal_dialog.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
@@ -3549,7 +3549,7 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         }
         ensure_stack_animation_list_panel();
         sync_stack_animation_list_panel();
-        if (!stack_animation_list_panel_ || !stack_animation_list_panel_->is_visible()) {
+        if (!stack_animation_list_panel_ || !stack_animation_list_visible_) {
             return result;
         }
         if (stack_animation_list_panel_->handle_event(event)) {
@@ -3557,7 +3557,7 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             result.pointer_blocked = true;
             return result;
         }
-        if (pointer_based && stack_animation_list_panel_->is_point_inside(mx, my)) {
+        if (pointer_based && is_point_inside_stack_animation_list(mx, my)) {
             result.pointer_blocked = true;
         }
         return result;
@@ -5978,7 +5978,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
     }
     if (renderer && enabled_) {
         update_asset_editor_layout();
-        if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible()) {
+        if (stack_animation_list_panel_ && stack_animation_list_visible_) {
             stack_animation_list_panel_->render(renderer);
         }
         if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible()) {
@@ -10531,9 +10531,13 @@ void RoomEditor::ensure_stack_animation_list_panel() {
     if (stack_animation_list_panel_) {
         return;
     }
-    stack_animation_list_panel_ = std::make_unique<AssetStackAnimationListPanel>();
-    stack_animation_list_panel_->set_on_select([this](const std::string& animation_id) {
-        if (this->apply_stack_animation_selection(animation_id)) {
+    stack_animation_list_panel_ = std::make_unique<animation_editor::AnimationListPanel>();
+    stack_animation_list_panel_->set_show_delete_button(false);
+    stack_animation_list_panel_->set_on_selection_changed([this](const std::optional<std::string>& animation_id) {
+        if (!animation_id.has_value() || animation_id->empty()) {
+            return;
+        }
+        if (this->apply_stack_animation_selection(*animation_id)) {
             this->sync_stack_animation_list_panel();
             this->update_asset_editor_layout();
         }
@@ -10619,24 +10623,39 @@ std::optional<std::string> RoomEditor::stack_animation_list_selected_animation_i
     return std::nullopt;
 }
 
+bool RoomEditor::is_stack_animation_editable_id(const std::string& animation_id) const {
+    if (animation_id.empty()) {
+        return false;
+    }
+    return stack_animation_list_selectable_ids_.find(animation_id) != stack_animation_list_selectable_ids_.end();
+}
+
+bool RoomEditor::is_point_inside_stack_animation_list(int x, int y) const {
+    if (!enabled_ || !stack_animation_list_visible_) {
+        return false;
+    }
+    SDL_Point p{x, y};
+    return SDL_PointInRect(&p, &stack_animation_list_bounds_) != 0;
+}
+
 void RoomEditor::sync_stack_animation_list_panel() {
     ensure_stack_animation_list_panel();
     if (!stack_animation_list_panel_) {
         return;
     }
 
-    stack_animation_list_panel_->set_screen_dimensions(screen_w_, screen_h_);
+    stack_animation_list_selectable_ids_.clear();
     const bool list_visible = is_stack_animation_list_subview_active();
-    stack_animation_list_panel_->set_visible(list_visible);
+    stack_animation_list_visible_ = list_visible;
     if (!list_visible) {
-        stack_animation_list_panel_->set_rows({});
+        stack_animation_list_panel_->set_external_rows(std::vector<animation_editor::AnimationListPanel::ExternalRow>{});
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
         return;
     }
 
     Asset* target = stack_animation_list_target_asset();
     if (!target || !target->info) {
-        stack_animation_list_panel_->set_rows({});
+        stack_animation_list_panel_->set_external_rows(std::vector<animation_editor::AnimationListPanel::ExternalRow>{});
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
         return;
     }
@@ -10644,16 +10663,20 @@ void RoomEditor::sync_stack_animation_list_panel() {
     const std::optional<std::string> requested = stack_animation_list_selected_animation_id();
     const auto model = devmode::resolve_stack_animation_list_model(target->info.get(), requested.value_or(std::string{}));
 
-    std::vector<AssetStackAnimationListPanel::Row> rows;
+    std::vector<animation_editor::AnimationListPanel::ExternalRow> rows;
     rows.reserve(model.rows.size());
     for (const auto& row : model.rows) {
-        AssetStackAnimationListPanel::Row panel_row;
-        panel_row.animation_id = row.animation_id;
-        panel_row.editable = row.editable_in_stack_mode;
-        panel_row.reason = row.reason;
+        animation_editor::AnimationListPanel::ExternalRow panel_row;
+        panel_row.id = row.animation_id;
+        panel_row.level = row.level;
+        panel_row.missing_source = row.missing_source;
+        panel_row.selectable = row.editable_in_stack_mode;
+        if (row.editable_in_stack_mode) {
+            stack_animation_list_selectable_ids_.insert(row.animation_id);
+        }
         rows.push_back(std::move(panel_row));
     }
-    stack_animation_list_panel_->set_rows(std::move(rows));
+    stack_animation_list_panel_->set_external_rows(std::move(rows));
     if (requested.has_value() && !requested->empty()) {
         stack_animation_list_panel_->set_selected_animation_id(requested);
     } else if (model.has_selection()) {
@@ -10665,6 +10688,9 @@ void RoomEditor::sync_stack_animation_list_panel() {
 
 bool RoomEditor::apply_stack_animation_selection(const std::string& animation_id) {
     if (animation_id.empty()) {
+        return false;
+    }
+    if (!is_stack_animation_editable_id(animation_id)) {
         return false;
     }
 
@@ -12814,6 +12840,7 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     ensure_floor_box_editor_widgets();
     ensure_attack_payload_editor_widget();
     ensure_stack_animation_list_panel();
+    stack_animation_list_bounds_ = SDL_Rect{0, 0, 0, 0};
     if (stack_animation_list_panel_) {
         if (is_stack_animation_list_subview_active()) {
             const int list_panel_y = usable.y + panel_margin;
@@ -12822,9 +12849,8 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
             const int max_list_right = secondary_panel_w > 0 ? secondary_panel_x - panel_gap : right_panel_x - panel_gap;
             list_panel_w = std::min(list_panel_w, std::max(0, max_list_right - (usable_left + panel_margin)));
             SDL_Rect list_panel_rect{usable_left + panel_margin, list_panel_y, list_panel_w, list_panel_h};
-            stack_animation_list_panel_->set_panel_bounds_override(list_panel_rect);
-        } else {
-            stack_animation_list_panel_->clear_panel_bounds_override();
+            stack_animation_list_bounds_ = list_panel_rect;
+            stack_animation_list_panel_->set_bounds(list_panel_rect);
         }
     }
     if (anchor_tools_panel_) {
@@ -12953,8 +12979,7 @@ void RoomEditor::update_asset_editor_layout() {
         attack_payload_editor_->set_visible(attack_box_mode_active());
     }
     if (stack_animation_list_panel_) {
-        stack_animation_list_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        stack_animation_list_panel_->set_visible(is_stack_animation_list_subview_active());
+        stack_animation_list_visible_ = is_stack_animation_list_subview_active();
     }
 }
 
@@ -20553,8 +20578,7 @@ bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
-        stack_animation_list_panel_->is_point_inside(x, y)) {
+    if (is_point_inside_stack_animation_list(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
@@ -20575,8 +20599,7 @@ bool RoomEditor::is_oval_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
-        stack_animation_list_panel_->is_point_inside(x, y)) {
+    if (is_point_inside_stack_animation_list(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
@@ -20609,8 +20632,7 @@ bool RoomEditor::is_hitbox_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
-        stack_animation_list_panel_->is_point_inside(x, y)) {
+    if (is_point_inside_stack_animation_list(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
@@ -20631,8 +20653,7 @@ bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
-        stack_animation_list_panel_->is_point_inside(x, y)) {
+    if (is_point_inside_stack_animation_list(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
@@ -20657,8 +20678,7 @@ bool RoomEditor::is_impassable_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
-        stack_animation_list_panel_->is_point_inside(x, y)) {
+    if (is_point_inside_stack_animation_list(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
@@ -20679,8 +20699,7 @@ bool RoomEditor::is_floor_box_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
-        stack_animation_list_panel_->is_point_inside(x, y)) {
+    if (is_point_inside_stack_animation_list(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
@@ -23566,8 +23585,7 @@ bool RoomEditor::is_anchor_ui_blocking_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    if (stack_animation_list_panel_ && stack_animation_list_panel_->is_visible() &&
-        stack_animation_list_panel_->is_point_inside(x, y)) {
+    if (is_point_inside_stack_animation_list(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {

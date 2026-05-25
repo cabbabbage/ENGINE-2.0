@@ -18,10 +18,10 @@ enum class StackAnimationEditabilityReason {
 
 struct StackAnimationRow {
     std::string animation_id;
+    int level = 0;
+    bool missing_source = false;
     bool editable_in_stack_mode = false;
     StackAnimationEditabilityReason reason = StackAnimationEditabilityReason::Editable;
-    std::optional<std::string> resolved_edit_target_id;
-    int source_chain_depth = 0;
 };
 
 struct StackAnimationListModel {

@@ -20156,6 +20156,9 @@
           "tags": []
         },
         "default": {
+          "anchor_points": [
+            []
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -26719,8 +26722,8 @@
             }
           },
           "display_color": [
-            36,
-            185,
+            146,
+            85,
             242,
             255
           ],
@@ -26808,9 +26811,9 @@
             }
           },
           "display_color": [
-            146,
-            85,
-            242,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 4,
@@ -26867,9 +26870,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            51,
+            36,
+            242,
+            155,
             255
           ],
           "edge_smoothness": 4,
@@ -26926,9 +26929,9 @@
             }
           },
           "display_color": [
-            71,
-            113,
-            204,
+            242,
+            45,
+            36,
             255
           ],
           "edge_smoothness": 4,
@@ -27015,9 +27018,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            201,
+            71,
+            110,
+            204,
             255
           ],
           "edge_smoothness": 4,
@@ -27079,9 +27082,9 @@
             }
           },
           "display_color": [
-            242,
             85,
-            88,
+            242,
+            218,
             255
           ],
           "edge_smoothness": 70,
@@ -27179,9 +27182,9 @@
             }
           },
           "display_color": [
-            179,
+            106,
+            31,
             204,
-            71,
             255
           ],
           "edge_smoothness": 101,
@@ -27525,9 +27528,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            158,
+            242,
+            102,
+            85,
             255
           ],
           "edge_smoothness": 96,

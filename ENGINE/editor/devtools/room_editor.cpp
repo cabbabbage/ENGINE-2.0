@@ -652,10 +652,20 @@ movement_frames_from_runtime_animation(const Animation& animation) {
     return frames;
 }
 
+std::vector<std::vector<devmode::room_movement_payload::MovementFrame>>
+resolve_room_movement_paths_for_animation(const Asset* target, const std::string& animation_id);
+
 std::vector<devmode::room_movement_payload::MovementFrame>
 resolve_room_movement_frames_for_animation(const Asset* target, const std::string& animation_id) {
+    auto paths = resolve_room_movement_paths_for_animation(target, animation_id);
+    if (!paths.empty()) return paths.front();
+    return {devmode::room_movement_payload::MovementFrame{}};
+}
+
+std::vector<std::vector<devmode::room_movement_payload::MovementFrame>>
+resolve_room_movement_paths_for_animation(const Asset* target, const std::string& animation_id) {
     if (!target || !target->info || animation_id.empty()) {
-        return {devmode::room_movement_payload::MovementFrame{}};
+        return {{devmode::room_movement_payload::MovementFrame{}}};
     }
 
     nlohmann::json manifest_payload = target->info->manifest_payload();
@@ -666,16 +676,27 @@ resolve_room_movement_frames_for_animation(const Asset* target, const std::strin
         existing_payload.contains("movement") &&
         existing_payload["movement"].is_array();
 
-    if (has_local_movement) {
-        return devmode::room_movement_payload::parse_frames_from_payload(existing_payload);
+    if (has_local_movement || (existing_payload.contains("movement_paths") && existing_payload["movement_paths"].is_array())) {
+        std::vector<std::vector<devmode::room_movement_payload::MovementFrame>> paths;
+        if (existing_payload.contains("movement_paths") && existing_payload["movement_paths"].is_array()) {
+            for (const auto& path_payload : existing_payload["movement_paths"]) {
+                nlohmann::json wrapped = nlohmann::json::object();
+                wrapped["movement"] = path_payload;
+                paths.push_back(devmode::room_movement_payload::parse_frames_from_payload(wrapped));
+            }
+        }
+        if (paths.empty() && has_local_movement) {
+            paths.push_back(devmode::room_movement_payload::parse_frames_from_payload(existing_payload));
+        }
+        if (!paths.empty()) return paths;
     }
 
     auto anim_it = target->info->animations.find(animation_id);
     if (anim_it != target->info->animations.end()) {
-        return movement_frames_from_runtime_animation(anim_it->second);
+        return {movement_frames_from_runtime_animation(anim_it->second)};
     }
 
-    return {devmode::room_movement_payload::MovementFrame{}};
+    return {{devmode::room_movement_payload::MovementFrame{}}};
 }
 
 std::string make_unique_floor_box_id(const std::vector<AssetInfo::FloorBox>& boxes,
@@ -10281,6 +10302,32 @@ void RoomEditor::ensure_movement_editor_widgets() {
         movement_tools_panel_->set_on_system_enabled_toggle([this](bool enabled) {
             set_movement_system_enabled(enabled);
         });
+        movement_tools_panel_->set_on_path_selection_changed([this](int index) {
+            if (!movement_mode_active()) return;
+            if (movement_edit_.dirty_since_last_flush) {
+                (void)persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
+            }
+            if (movement_edit_.paths.empty()) return;
+            movement_edit_.selected_path_index = std::clamp(index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
+            movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
+            rebuild_movement_rel_positions();
+            refresh_movement_runtime_animation();
+        });
+        movement_tools_panel_->set_on_add_path([this]() {
+            if (!movement_mode_active()) return;
+            movement_edit_.paths.push_back(movement_edit_.frames);
+            movement_edit_.selected_path_index = static_cast<int>(movement_edit_.paths.size()) - 1;
+            movement_edit_.dirty_since_last_flush = true;
+        });
+        movement_tools_panel_->set_on_delete_path([this]() {
+            if (!movement_mode_active() || movement_edit_.paths.size() <= 1) return;
+            movement_edit_.paths.erase(movement_edit_.paths.begin() + movement_edit_.selected_path_index);
+            movement_edit_.selected_path_index = std::clamp(movement_edit_.selected_path_index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
+            movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
+            rebuild_movement_rel_positions();
+            refresh_movement_runtime_animation();
+            movement_edit_.dirty_since_last_flush = true;
+        });
     }
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -10292,6 +10339,10 @@ void RoomEditor::ensure_movement_editor_widgets() {
         movement_tools_panel_->set_system_enabled(movement_enabled);
         movement_tools_panel_->set_smooth_enabled(movement_edit_.smooth_enabled);
         movement_tools_panel_->set_curve_enabled(movement_edit_.curve_enabled);
+        std::vector<std::string> labels;
+        labels.reserve(movement_edit_.paths.size());
+        for (std::size_t i = 0; i < movement_edit_.paths.size(); ++i) labels.push_back("Path " + std::to_string(i + 1));
+        movement_tools_panel_->set_path_options(labels, movement_edit_.selected_path_index);
     }
 }
 
@@ -10794,7 +10845,9 @@ bool RoomEditor::apply_stack_animation_selection(const std::string& animation_id
             } else {
                 next_frame_index = 0;
             }
-            movement_edit_.frames = resolve_room_movement_frames_for_animation(movement_edit_.target_asset, animation_id);
+            movement_edit_.paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, animation_id);
+            movement_edit_.selected_path_index = std::clamp(movement_edit_.selected_path_index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
+            movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
             if (!movement_edit_.has_frames()) {
                 movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
             }
@@ -19039,6 +19092,12 @@ bool RoomEditor::persist_movement_current_animation(devmode::core::DevSaveCoordi
 
     normalize_movement_frames_to_current_animation();
     rebuild_movement_frames_from_positions();
+    if (movement_edit_.paths.empty()) {
+        movement_edit_.paths.push_back(movement_edit_.frames);
+    } else if (movement_edit_.selected_path_index >= 0 &&
+               movement_edit_.selected_path_index < static_cast<int>(movement_edit_.paths.size())) {
+        movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)] = movement_edit_.frames;
+    }
     refresh_movement_runtime_animation();
 
     nlohmann::json manifest_payload = target_info->manifest_payload();
@@ -19047,6 +19106,12 @@ bool RoomEditor::persist_movement_current_animation(devmode::core::DevSaveCoordi
             .value_or(nlohmann::json::object());
     nlohmann::json updated_payload =
         devmode::room_movement_payload::build_payload_from_frames(movement_edit_.frames, existing_payload);
+    nlohmann::json movement_paths = nlohmann::json::array();
+    for (const auto& path_frames : movement_edit_.paths) {
+        nlohmann::json tmp = devmode::room_movement_payload::build_payload_from_frames(path_frames, nlohmann::json::object());
+        movement_paths.push_back(tmp.value("movement", nlohmann::json::array()));
+    }
+    updated_payload["movement_paths"] = std::move(movement_paths);
     if (!target_info->update_animation_properties(movement_edit_.animation_id, updated_payload)) {
         return false;
     }
@@ -19185,7 +19250,9 @@ bool RoomEditor::set_movement_system_enabled(bool enabled) {
         movement_edit_.dragging_point = false;
         movement_edit_.dirty_since_last_flush = false;
     } else {
-        movement_edit_.frames = resolve_room_movement_frames_for_animation(target, movement_edit_.animation_id);
+        movement_edit_.paths = resolve_room_movement_paths_for_animation(target, movement_edit_.animation_id);
+        movement_edit_.selected_path_index = 0;
+        movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
         if (movement_edit_.frames.empty()) {
             movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
         }
@@ -19832,7 +19899,9 @@ void RoomEditor::navigate_movement_animation(int delta) {
     } else {
         next_frame_index = 0;
     }
-    movement_edit_.frames = resolve_room_movement_frames_for_animation(movement_edit_.target_asset, next_animation);
+    movement_edit_.paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, next_animation);
+    movement_edit_.selected_path_index = 0;
+    movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
     if (!movement_edit_.has_frames()) {
         movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
     }
@@ -20174,7 +20243,9 @@ bool RoomEditor::enter_movement_edit_mode() {
     }
     movement_edit_.anchor_snap_active = true;
 
-    movement_edit_.frames = resolve_room_movement_frames_for_animation(target, movement_edit_.animation_id);
+    movement_edit_.paths = resolve_room_movement_paths_for_animation(target, movement_edit_.animation_id);
+        movement_edit_.selected_path_index = 0;
+        movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
     if (!movement_edit_.has_frames()) {
         movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
     }
@@ -20608,7 +20679,9 @@ void RoomEditor::validate_movement_edit_target() {
     }
     if (selection.resolved_animation_id != movement_edit_.animation_id) {
         movement_edit_.animation_id = selection.resolved_animation_id;
-        movement_edit_.frames = resolve_room_movement_frames_for_animation(target, movement_edit_.animation_id);
+        movement_edit_.paths = resolve_room_movement_paths_for_animation(target, movement_edit_.animation_id);
+        movement_edit_.selected_path_index = 0;
+        movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
         normalize_movement_frames_to_current_animation();
         rebuild_movement_rel_positions();
         apply_movement_animation_and_frame(movement_edit_.animation_id, 0);
@@ -27400,6 +27473,3 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         }
     }
 }
-
-
-

@@ -1109,6 +1109,8 @@ private:
         int original_world_y = 0;
         int original_world_z = 0;
         std::vector<devmode::room_movement_payload::MovementFrame> frames;
+        std::vector<std::vector<devmode::room_movement_payload::MovementFrame>> paths;
+        int selected_path_index = 0;
         std::vector<SDL_FPoint> rel_positions;
         std::vector<float> rel_positions_z;
 
@@ -1414,5 +1416,4 @@ private:
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };
-
 

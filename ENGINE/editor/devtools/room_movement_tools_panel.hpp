@@ -8,10 +8,14 @@
 
 class DMCheckbox;
 class DMTextBox;
+class DMDropdown;
+class DMButton;
 
 class RoomMovementToolsPanel {
 public:
     using SystemEnabledToggleCallback = std::function<void(bool)>;
+    using PathSelectionChangedCallback = std::function<void(int)>;
+    using PathActionCallback = std::function<void()>;
     struct NumericValues {
         float dx = 0.0f;
         float dy = 0.0f;
@@ -39,6 +43,10 @@ public:
     NumericValues numeric_values() const;
     bool any_numeric_editing() const;
     void set_on_system_enabled_toggle(SystemEnabledToggleCallback callback);
+    void set_path_options(const std::vector<std::string>& options, int selected_index);
+    void set_on_path_selection_changed(PathSelectionChangedCallback callback);
+    void set_on_add_path(PathActionCallback callback);
+    void set_on_delete_path(PathActionCallback callback);
 
     bool handle_event(const SDL_Event& event);
     void render(SDL_Renderer* renderer) const;
@@ -66,6 +74,9 @@ private:
     mutable SDL_Rect dy_rect_{0, 0, 0, 0};
     mutable SDL_Rect dz_rect_{0, 0, 0, 0};
     mutable SDL_Rect rot_rect_{0, 0, 0, 0};
+    mutable SDL_Rect path_select_rect_{0, 0, 0, 0};
+    mutable SDL_Rect path_add_rect_{0, 0, 0, 0};
+    mutable SDL_Rect path_delete_rect_{0, 0, 0, 0};
 
     std::unique_ptr<DMCheckbox> enabled_checkbox_;
     std::unique_ptr<DMCheckbox> smooth_checkbox_;
@@ -74,5 +85,11 @@ private:
     std::unique_ptr<DMTextBox> dy_box_;
     std::unique_ptr<DMTextBox> dz_box_;
     std::unique_ptr<DMTextBox> rot_box_;
+    std::unique_ptr<DMDropdown> path_dropdown_;
+    std::unique_ptr<DMButton> add_path_button_;
+    std::unique_ptr<DMButton> delete_path_button_;
     SystemEnabledToggleCallback on_system_enabled_toggle_;
+    PathSelectionChangedCallback on_path_selection_changed_;
+    PathActionCallback on_add_path_;
+    PathActionCallback on_delete_path_;
 };

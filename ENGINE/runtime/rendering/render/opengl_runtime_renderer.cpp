@@ -1579,6 +1579,10 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             return lhs > rhs;
         });
 
+        const float focus_depth_key = assets_->player
+            ? static_cast<float>(compute_asset_camera_depth_key(camera, *assets_->player))
+            : 0.0f;
+
         out_data.depth_layers.reserve(scratch_depth_layer_ids_.size());
         for (int layer_id : scratch_depth_layer_ids_) {
             GpuDepthLayerDrawPackets layer{};
@@ -1596,13 +1600,10 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                 layer_depth_max = std::max(layer_depth_max, packet.camera_depth_key);
             }
             const float layer_depth_center = layer.packets.empty() ? 0.0f : (layer_depth_sum / static_cast<float>(layer.packets.size()));
-            const float layer_depth_range = std::max(0.0f, layer_depth_max - layer_depth_min);
-            const float focus_depth_center = static_cast<float>(out_data.focus_depth_layer);
-            const float focus_distance = std::fabs(layer_depth_center - focus_depth_center);
+            const float focus_distance = std::fabs(layer_depth_center - focus_depth_key);
             const float norm_distance = focus_distance / std::max(1.0f, static_cast<float>(kDofFarNearBucketRadius));
             const float coc_like = 1.0f - std::exp(-1.35f * norm_distance);
-            const float range_boost = std::clamp(layer_depth_range / 8.0f, 0.0f, 0.2f);
-            layer.blur_strength_px = std::clamp(coc_like + range_boost, 0.0f, 1.0f);
+            layer.blur_strength_px = std::clamp(coc_like, 0.0f, 1.0f);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }

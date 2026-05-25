@@ -950,7 +950,7 @@ int DynamicSpawnRuntime::max_spawn_from_room_px() const {
     if (live_it == map.end()) {
         return 128;
     }
-    return read_int_setting(*live_it, "max_spawn_from_room", 128, 0, 2000);
+    return read_int_setting(*live_it, "max_spawn_from_room", 128, 0, 20000);
 }
 
 int DynamicSpawnRuntime::preload_margin_px() const {

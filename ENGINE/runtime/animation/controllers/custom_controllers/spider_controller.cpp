@@ -1,5 +1,6 @@
 #include "spider_controller.hpp"
 #include "animation/animation_update.hpp"
+#include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/custom_controller_api.hpp"
 #include "assets/asset/Asset.hpp"
 
@@ -31,6 +32,13 @@ void spider_controller::on_update(const Input& in) {
         combat_overrides.attacking_enabled = true;
         self->anim_->auto_move(player, 0, true, combat_overrides);
     }
+
+    // Auto-move combat animations do not always trigger the generic controller
+    // attack dispatch path, so explicitly dispatch runtime attack-box collisions
+    // from spider to valid active targets (including Vibble).
+    animation_update::custom_controllers::AttackDetectionHelper::send_attacks_to_active_targets(
+        self,
+        ctx.assets);
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {

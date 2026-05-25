@@ -28,8 +28,14 @@ void spider_controller::on_update(const Input& in) {
     }
 
     if (self->needs_target) {
-        self->anim_->auto_move(player);
+        AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
+        combat_overrides.attacking_enabled = true;
+        self->anim_->auto_move(player, 0, true, combat_overrides);
     }
+
+    // Ensure close-range attack candidates are still evaluated while
+    // pathing updates are throttled by planner cooldowns.
+    custom_controller_api::dispatch_contact_attack(ctx);
 
     // Auto-move combat animations do not always trigger the generic controller
     // attack dispatch path, so explicitly dispatch runtime attack-box collisions

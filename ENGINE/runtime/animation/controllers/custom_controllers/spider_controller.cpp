@@ -15,7 +15,7 @@ spider_controller::spider_controller(Asset* self)
 }
 
 void spider_controller::on_update(const Input& in) {
-    (void)in;
+    CustomAssetController::on_update(in);
     const auto& ctx = game_context();
     Asset* self = self_ptr();
     if (!self || !self->anim_ || !ctx.has_assets()) {
@@ -28,9 +28,7 @@ void spider_controller::on_update(const Input& in) {
     }
 
     if (self->needs_target) {
-        AnimationUpdate::AutoMoveCombatOverrides combat_overrides{};
-        combat_overrides.attacking_enabled = true;
-        self->anim_->auto_move(player, 0, true, combat_overrides);
+        self->anim_->auto_move(player);
     }
 
     // Auto-move combat animations do not always trigger the generic controller

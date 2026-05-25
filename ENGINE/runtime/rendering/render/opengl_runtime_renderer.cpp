@@ -1975,7 +1975,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     }
     const SDL_Color floor_clear_color = resolve_runtime_floor_clear_color();
 
-    const bool camera_motion_active = camera_state_changed;
+    const bool scene_motion_active = camera_state_changed || dof_suppressed_for_motion;
     const bool can_hold_previous_scene =
         last_complete_scene_frame_data_.has_value() &&
         last_complete_scene_width_ == frame_data.target_width &&
@@ -1991,15 +1991,20 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     // Recovery holds are limited to genuinely incomplete scene builds during stable frames.
     const bool hold_incomplete_scene_frame =
         frame_data.suspected_incomplete_scene &&
-        !camera_motion_active &&
+        !scene_motion_active &&
         can_hold_previous_scene &&
         consecutive_held_incomplete_scene_frames_ < kMaxGameplayRecoveryHolds;
     const bool hold_zero_sprite_scene_frame = false;
     const bool hold_empty_scene_frame =
         empty_scene_submission &&
         can_hold_previous_scene &&
-        !camera_motion_active &&
+        !scene_motion_active &&
         hold_empty_scene_frames_remaining_ > 0;
+    const bool motion_gated_hold_suppressed =
+        scene_motion_active &&
+        can_hold_previous_scene &&
+        (frame_data.suspected_incomplete_scene ||
+         (empty_scene_submission && hold_empty_scene_frames_remaining_ > 0));
 
     GpuSceneFrameData held_frame_data{};
     const GpuSceneFrameData* frame_to_render = &frame_data;
@@ -2390,6 +2395,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " xy=" << xy_pass_ms
                   << " dof=" << dof_pass_ms
                   << " dof_motion_skip=" << (dof_suppressed_for_motion && dof_requested_by_settings ? 1 : 0)
+                  << " scene_motion_active=" << (scene_motion_active ? 1 : 0)
+                  << " hold_motion_gated_suppressed=" << (motion_gated_hold_suppressed ? 1 : 0)
                   << " dof_last_ms=" << last_dof_path_ms_
                   << " composite=" << composite_pass_ms
                   << " ui_prepare=" << ui_overlay_prepare_ms

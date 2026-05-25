@@ -170,8 +170,16 @@ public:
                                   std::vector<const FrameCollisionEntry*>& out) const;
     int max_impassable_query_radius() const;
     void mark_collision_context_dirty() {
+        collision_structure_invalidated_ = true;
         frame_collision_context_dirty_ = true;
         frame_collision_query_scratch_.clear();
+    }
+    void mark_collision_asset_dirty(const Asset* asset) {
+        if (!asset) {
+            return;
+        }
+        collision_dirty_assets_.insert(asset);
+        frame_collision_context_dirty_ = true;
     }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
@@ -416,6 +424,8 @@ private:
     mutable std::uint64_t frame_collision_context_version_ = 1;
     mutable std::uint32_t frame_collision_context_frame_id_ = 0;
     mutable bool frame_collision_context_dirty_ = true;
+    mutable bool collision_structure_invalidated_ = true;
+    mutable std::unordered_set<const Asset*> collision_dirty_assets_;
     std::vector<Asset*> removal_queue;
     std::mutex removal_queue_mutex_;
     std::vector<Asset*> non_player_update_buffer_;

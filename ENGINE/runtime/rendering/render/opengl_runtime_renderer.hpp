@@ -183,10 +183,7 @@ private:
     std::vector<SDL_Vertex> scratch_batch_vertices_{};
     std::vector<int> scratch_batch_indices_{};
     dof_blur_chain::Renderer dof_blur_chain_{};
-    std::uint64_t last_dof_camera_state_version_ = 0;
-    std::uint32_t dof_motion_skip_frames_remaining_ = 0;
     double last_dof_path_ms_ = 0.0;
-    bool last_scene_motion_signal_ = false;
     struct CreationBudgetConfig {
         std::uint32_t max_creations_per_frame = 3;
         double max_creation_ms_per_frame = 2.5;

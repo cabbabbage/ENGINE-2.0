@@ -123,18 +123,6 @@ double env_double_clamped_renderer(const char* name, double default_value, doubl
     return std::clamp(parsed, min_value, max_value);
 }
 
-std::uint32_t dof_motion_skip_frames() {
-    static const std::uint32_t frames = static_cast<std::uint32_t>(
-        env_int_clamped_renderer("VIBBLE_DOF_MOTION_SKIP_FRAMES", 4, 0, 60));
-    return frames;
-}
-
-double dof_motion_budget_ms() {
-    static const double budget_ms =
-        env_double_clamped_renderer("VIBBLE_DOF_MOTION_BUDGET_MS", 12.0, 0.0, 1000.0);
-    return budget_ms;
-}
-
 std::uint32_t creation_budget_count_per_frame() {
     static const std::uint32_t count = static_cast<std::uint32_t>(
         env_int_clamped_renderer("VIBBLE_RENDER_MAX_CREATIONS_PER_FRAME", 3, 1, 1024));
@@ -1936,31 +1924,13 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         consecutive_held_incomplete_scene_frames_ = 0;
     }
 
-    const std::uint64_t current_camera_state_version = assets_->getView().camera_state_version();
-    const bool camera_state_changed =
-        last_dof_camera_state_version_ != 0 &&
-        current_camera_state_version != last_dof_camera_state_version_;
-    last_dof_camera_state_version_ = current_camera_state_version;
-
-    const std::uint32_t configured_dof_skip_frames = dof_motion_skip_frames();
-    const double dof_budget_ms = dof_motion_budget_ms();
-    const bool dof_cost_over_budget = last_dof_path_ms_ <= 0.0 || last_dof_path_ms_ >= dof_budget_ms;
-    if (camera_state_changed && configured_dof_skip_frames > 0 && dof_cost_over_budget) {
-        dof_motion_skip_frames_remaining_ =
-            std::max(dof_motion_skip_frames_remaining_, configured_dof_skip_frames);
-    }
-    const bool dof_suppressed_for_motion = dof_motion_skip_frames_remaining_ > 0;
-    if (dof_suppressed_for_motion) {
-        --dof_motion_skip_frames_remaining_;
-    }
-
     GpuSceneFrameData frame_data{};
     const std::uint64_t frame_build_begin = SDL_GetPerformanceCounter();
     if (!build_gpu_scene_frame_data(static_cast<std::uint32_t>(effective_target->x),
                                     static_cast<std::uint32_t>(effective_target->y),
                                     frame_data,
                                     out_error,
-                                    !dof_suppressed_for_motion)) {
+                                    true)) {
         render_diagnostics::set_submit_result(false);
         render_diagnostics::end_frame();
         return false;
@@ -1975,9 +1945,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     }
     const SDL_Color floor_clear_color = resolve_runtime_floor_clear_color();
 
-    const bool scene_motion_active = camera_state_changed || dof_suppressed_for_motion;
-    const bool previous_scene_motion_active = last_scene_motion_signal_;
-    last_scene_motion_signal_ = scene_motion_active;
+    const bool scene_motion_active = false;
     const bool empty_scene_submission =
         frame_data.floor_draw_count == 0 &&
         frame_data.xy_sprite_draw_count == 0;
@@ -1986,8 +1954,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     render_diagnostics::set_scene_hold_gating_stats(scene_motion_active,
                                                     false,
                                                     false,
-                                                    scene_motion_active,
-                                                    previous_scene_motion_active);
+                                                    false,
+                                                    false);
     render_diagnostics::set_renderer_runtime_info("opengl", backend_name(), present_mode());
     render_diagnostics::set_floor_pass_target_dimensions(frame_to_render->target_width, frame_to_render->target_height);
     render_diagnostics::set_xy_sprite_pass_target_dimensions(frame_to_render->target_width, frame_to_render->target_height);
@@ -2045,12 +2013,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                 camera_settings.radial_blur_px);
     const bool dof_active =
         dof_requested_by_settings &&
-        !dof_suppressed_for_motion &&
         !frame_to_render->depth_layers.empty();
-    if (dof_suppressed_for_motion && dof_requested_by_settings) {
-        render_diagnostics::set_active_depth_layer_count(0);
-        render_diagnostics::set_blur_pass_count(0);
-    }
     bool dof_composited = false;
     const bool draw_movement_debug = assets_->is_dev_mode() &&
                                      assets_->movement_debug_enabled() &&
@@ -2231,7 +2194,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         dof_pass_ms += elapsed_ms(dof_begin, SDL_GetPerformanceCounter());
         last_dof_path_ms_ = floor_pass_ms + dof_pass_ms;
     } else {
-        if (!dof_suppressed_for_motion || !dof_requested_by_settings) {
+        if (!dof_requested_by_settings) {
             destroy_depth_layer_targets();
         }
         render_diagnostics::set_blur_pass_count(0);
@@ -2354,8 +2317,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " floor=" << floor_pass_ms
                   << " xy=" << xy_pass_ms
                   << " dof=" << dof_pass_ms
-                  << " dof_motion_skip=" << (dof_suppressed_for_motion && dof_requested_by_settings ? 1 : 0)
-                  << " scene_motion_active=" << (scene_motion_active ? 1 : 0)
+                  << " dof_motion_skip=0"
+                  << " scene_motion_active=0"
                   << " hold_motion_gated_suppressed=0"
                   << " empty_scene_post_startup_count=" << post_startup_empty_scene_frame_count_
                   << " empty_scene_hold_bypassed_runtime_motion=0"

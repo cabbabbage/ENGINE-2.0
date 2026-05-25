@@ -178,6 +178,11 @@ void begin_frame() {
     g_frame_stats.creation_retried_count = 0;
     g_frame_stats.held_scene_frame = false;
     g_frame_stats.held_scene_reason.clear();
+    g_frame_stats.scene_motion_active = false;
+    g_frame_stats.held_scene_attempted = false;
+    g_frame_stats.held_scene_suppressed_by_motion = false;
+    g_frame_stats.scene_motion_signal_current = false;
+    g_frame_stats.scene_motion_signal_previous = false;
     g_last_render_target = nullptr;
     g_frame_begin_counter = SDL_GetPerformanceCounter();
 }
@@ -404,6 +409,18 @@ void set_creation_budget_stats(std::uint32_t budget_limit,
 void set_held_scene_frame(bool held, const std::string& reason) {
     g_frame_stats.held_scene_frame = held;
     g_frame_stats.held_scene_reason = held ? reason : std::string{};
+}
+
+void set_scene_hold_gating_stats(bool scene_motion_active,
+                                 bool held_scene_attempted,
+                                 bool held_scene_suppressed_by_motion,
+                                 bool scene_motion_signal_current,
+                                 bool scene_motion_signal_previous) {
+    g_frame_stats.scene_motion_active = scene_motion_active;
+    g_frame_stats.held_scene_attempted = held_scene_attempted;
+    g_frame_stats.held_scene_suppressed_by_motion = held_scene_suppressed_by_motion;
+    g_frame_stats.scene_motion_signal_current = scene_motion_signal_current;
+    g_frame_stats.scene_motion_signal_previous = scene_motion_signal_previous;
 }
 
 void set_submit_result(bool succeeded) { g_frame_stats.submit_succeeded = succeeded; }

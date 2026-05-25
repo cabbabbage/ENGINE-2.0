@@ -737,6 +737,13 @@ void MainApp::log_render_diagnostics(SDL_Renderer* renderer, const char* loop_la
                                 : 0.0);
         frame_stats.set("render.floor_packet_count", stats.floor_packet_count);
         frame_stats.set("render.xy_sprite_packet_count", stats.xy_sprite_packet_count);
+        frame_stats.set("render.held_scene_frame", stats.held_scene_frame);
+        frame_stats.set("render.held_scene_reason", stats.held_scene_reason);
+        frame_stats.set("render.scene_motion_active", stats.scene_motion_active);
+        frame_stats.set("render.held_scene_attempted", stats.held_scene_attempted);
+        frame_stats.set("render.held_scene_suppressed_by_motion", stats.held_scene_suppressed_by_motion);
+        frame_stats.set("render.scene_motion_signal_current", stats.scene_motion_signal_current);
+        frame_stats.set("render.scene_motion_signal_previous", stats.scene_motion_signal_previous);
         frame_stats.set("render.active_depth_layer_count", stats.active_depth_layer_count);
         frame_stats.set("render.blur_pass_count", stats.blur_pass_count);
         frame_stats.set("render.skipped_texture_count", stats.skipped_texture_count);

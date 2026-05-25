@@ -21,6 +21,8 @@ struct AttackPayload {
 
     float critical_hit_chance = 0.0f;
     std::string element_type = "none";
+    float recharge_seconds = 0.0f;
+    float recharge_random_weight = 1.0f;
 
     std::string payload_id;
 };

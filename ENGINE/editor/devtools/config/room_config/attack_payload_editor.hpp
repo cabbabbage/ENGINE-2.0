@@ -9,6 +9,7 @@
 
 class DMCheckbox;
 class DMTextBox;
+class FloatSliderWidget;
 
 namespace devmode::room_config {
 
@@ -66,6 +67,8 @@ private:
     std::unique_ptr<DMTextBox> status_effects_textbox_;
     std::unique_ptr<DMTextBox> critical_hit_chance_textbox_;
     std::unique_ptr<DMTextBox> element_type_textbox_;
+    std::unique_ptr<DMTextBox> recharge_seconds_textbox_;
+    std::unique_ptr<FloatSliderWidget> recharge_random_weight_slider_;
 
     bool has_payload_ = false;
     bool applying_payload_to_widgets_ = false;

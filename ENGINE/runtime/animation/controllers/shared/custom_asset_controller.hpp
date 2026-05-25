@@ -54,6 +54,7 @@ protected:
     virtual void on_hit(const animation_update::Attack& attack);
     virtual void on_death();
     virtual void on_no_pending_attacks();
+    virtual void on_after_attack();
     virtual animation_update::custom_controllers::AttackProcessingConfig attack_processing_config() const;
     virtual void on_process_pending_attacks(Asset& self);
     virtual void on_pre_delete_hook(Asset& self);

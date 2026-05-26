@@ -19056,12 +19056,23 @@ SDL_Point RoomEditor::movement_asset_anchor_world() const {
     if (!movement_edit_.target_asset) {
         return SDL_Point{0, 0};
     }
+    if (movement_mode_active()) {
+        return animation_update::detail::bottom_middle_for(
+            *movement_edit_.target_asset,
+            SDL_Point{movement_edit_.original_world_x, movement_edit_.original_world_y});
+    }
     return animation_update::detail::bottom_middle_for(*movement_edit_.target_asset,
                                                        movement_edit_.target_asset->world_xz_point());
 }
 
 float RoomEditor::movement_base_world_z() const {
-    return movement_edit_.target_asset ? movement_edit_.target_asset->world_z_offset() : 0.0f;
+    if (!movement_edit_.target_asset) {
+        return 0.0f;
+    }
+    if (movement_mode_active()) {
+        return static_cast<float>(movement_edit_.original_world_z) + movement_edit_.target_asset->world_z_offset();
+    }
+    return movement_edit_.target_asset->world_z_offset();
 }
 
 axis::WorldPos RoomEditor::movement_relative_position_for_frame(std::size_t frame_index) const {
@@ -19093,9 +19104,9 @@ void RoomEditor::apply_movement_preview_pose_to_target() {
     const int index = std::clamp(
         movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
     const axis::WorldPos rel = movement_relative_position_for_frame(static_cast<std::size_t>(index));
-    const int base_x = movement_edit_.anchor_snap_active ? movement_edit_.original_world_x : movement_edit_.target_asset->world_x();
-    const int base_y = movement_edit_.anchor_snap_active ? movement_edit_.original_world_y : movement_edit_.target_asset->world_y();
-    const int base_z = movement_edit_.anchor_snap_active ? movement_edit_.original_world_z : movement_edit_.target_asset->world_z();
+    const int base_x = movement_edit_.original_world_x;
+    const int base_y = movement_edit_.original_world_y;
+    const int base_z = movement_edit_.original_world_z;
     movement_edit_.target_asset->move_to_world_position(base_x + rel.x, base_y + rel.y, base_z + rel.z);
 }
 

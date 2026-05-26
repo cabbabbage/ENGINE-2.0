@@ -59,6 +59,14 @@ std::vector<std::string> normalize_tag_list(const std::vector<std::string>& valu
     return normalized;
 }
 
+float wrap_degrees_180(float degrees) {
+    float wrapped = std::fmod(degrees + 180.0f, 360.0f);
+    if (wrapped < 0.0f) {
+        wrapped += 360.0f;
+    }
+    return wrapped - 180.0f;
+}
+
 int consume_axis(float& accumulator) {
     const int whole = static_cast<int>(accumulator);
     if (whole != 0) {
@@ -175,6 +183,18 @@ void vibble_controller::movement(const Input& input) {
     }
 
     const float dt = player->frame_delta_seconds_clamped();
+    const Assets* owner_assets = player->get_assets();
+    const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
+    if (!dev_mode && !normal_mode_active_) {
+        yaw_angle_degrees_ = yaw_degrees_for_animation(last_facing_animation_);
+        normal_mode_active_ = true;
+    } else if (dev_mode) {
+        normal_mode_active_ = false;
+    }
+    constexpr float kYawSensitivity = 0.20f;
+    if (!dev_mode) {
+        yaw_angle_degrees_ = wrap_degrees_180(yaw_angle_degrees_ + static_cast<float>(input.getDX()) * kYawSensitivity);
+    }
 
     const int input_x =
         ((input.isScancodeDown(SDL_SCANCODE_D) || input.isScancodeDown(SDL_SCANCODE_RIGHT)) ? 1 : 0)
@@ -276,7 +296,9 @@ void vibble_controller::movement(const Input& input) {
     const std::string movement_animation =
         animation_for_direction(input_x, input_y);
     const CardinalVector movement_vector = movement_cardinal_vector(input_x, input_y);
-    const FacingSelection facing = facing_from_mouse(*player, input, last_facing_animation_);
+    const FacingSelection facing = dev_mode
+        ? facing_from_mouse(*player, input, last_facing_animation_)
+        : facing_from_yaw(yaw_angle_degrees_, last_facing_animation_);
     if (facing.valid) {
         last_facing_animation_ = facing.animation_id;
     }
@@ -342,21 +364,35 @@ void vibble_controller::on_update(const Input& input) {
     Asset* player = self_ptr();
 
     if (player) {
+        const Assets* owner_assets = player->get_assets();
+        const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
         bool anchor_heading_changed = false;
-        if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
-            anchor_heading_changed =
-                player->set_directional_target_world_xz(static_cast<float>(mouse_world->x),
-                                                        static_cast<float>(mouse_world->y)) ||
-                anchor_heading_changed;
-            const float dx = static_cast<float>(mouse_world->x - player->world_x());
-            const float dy = static_cast<float>(mouse_world->y - player->world_z());
-            constexpr float kMinHeadingVectorLengthSq = 1e-4f;
-            const float length_sq = dx * dx + dy * dy;
-            if (length_sq > kMinHeadingVectorLengthSq) {
-                const float heading_radians = std::atan2(dy, dx);
+        if (dev_mode) {
+            if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
                 anchor_heading_changed =
-                    player->set_directional_heading_radians(heading_radians) || anchor_heading_changed;
+                    player->set_directional_target_world_xz(static_cast<float>(mouse_world->x),
+                                                            static_cast<float>(mouse_world->y)) ||
+                    anchor_heading_changed;
+                const float dx = static_cast<float>(mouse_world->x - player->world_x());
+                const float dy = static_cast<float>(mouse_world->y - player->world_z());
+                constexpr float kMinHeadingVectorLengthSq = 1e-4f;
+                const float length_sq = dx * dx + dy * dy;
+                if (length_sq > kMinHeadingVectorLengthSq) {
+                    const float heading_radians = std::atan2(dy, dx);
+                    anchor_heading_changed =
+                        player->set_directional_heading_radians(heading_radians) || anchor_heading_changed;
+                }
             }
+        } else {
+            const float heading_radians =
+                wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
+            anchor_heading_changed =
+                player->set_directional_heading_radians(heading_radians) || anchor_heading_changed;
+            constexpr float kDirectionalTargetDistancePx = 128.0f;
+            const float target_x = static_cast<float>(player->world_x()) + std::cos(heading_radians) * kDirectionalTargetDistancePx;
+            const float target_y = static_cast<float>(player->world_z()) + std::sin(heading_radians) * kDirectionalTargetDistancePx;
+            anchor_heading_changed =
+                player->set_directional_target_world_xz(target_x, target_y) || anchor_heading_changed;
         }
         if (anchor_heading_changed) {
             anchor_bound_asset_helper::AnchorBoundAssetHelper::instance().notify_anchor_changed(
@@ -484,6 +520,19 @@ vibble_controller::FacingSelection vibble_controller::facing_from_mouse(
     return selection;
 }
 
+vibble_controller::FacingSelection vibble_controller::facing_from_yaw(
+    float yaw_angle_degrees,
+    const std::string& fallback_animation) const {
+    FacingSelection selection{};
+    selection.animation_id = animation_for_yaw_degrees(yaw_angle_degrees);
+    if (selection.animation_id == animation_update::detail::kDefaultAnimation && !fallback_animation.empty()) {
+        selection.animation_id = fallback_animation;
+    }
+    selection.vector = cardinal_vector_for_animation(selection.animation_id);
+    selection.valid = (selection.vector.x != 0 || selection.vector.y != 0);
+    return selection;
+}
+
 vibble_controller::CardinalVector vibble_controller::movement_cardinal_vector(int world_x, int world_y) const {
     const std::string animation_id = animation_for_direction(world_x, world_y);
     return cardinal_vector_for_animation(animation_id);
@@ -503,6 +552,22 @@ vibble_controller::CardinalVector vibble_controller::cardinal_vector_for_animati
         return CardinalVector{0, -1};
     }
     return CardinalVector{0, 0};
+}
+
+float vibble_controller::yaw_degrees_for_animation(const std::string& animation_id) {
+    if (animation_id == "right") return 0.0f;
+    if (animation_id == "up") return 90.0f;
+    if (animation_id == "left") return 180.0f;
+    if (animation_id == "down") return -90.0f;
+    return 0.0f;
+}
+
+std::string vibble_controller::animation_for_yaw_degrees(float yaw_angle_degrees) {
+    const float yaw = wrap_degrees_180(yaw_angle_degrees);
+    if (yaw >= -45.0f && yaw < 45.0f) return "right";
+    if (yaw >= 45.0f && yaw < 135.0f) return "up";
+    if (yaw >= -135.0f && yaw < -45.0f) return "down";
+    return "left";
 }
 
 void vibble_controller::apply_idle_facing(const std::string& animation_id) {

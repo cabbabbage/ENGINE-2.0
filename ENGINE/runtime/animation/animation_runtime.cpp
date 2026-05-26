@@ -1170,8 +1170,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         current_animation_is_attack() &&
         (auto_attack_commitment_active() || committed_attack_execution_active());
     const bool static_blocked = self_->static_frame && !reverse_command_active && !attack_follow_through;
-    const bool locked_blocked = anim->locked && !reverse_command_active && !attack_follow_through;
-    bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || playback_state_.lock_on_end_active);
+    bool should_skip = !is_player && (static_blocked || anim->is_frozen() || playback_state_.lock_on_end_active);
     bool has_overriding_plan = false;
     if (planner_iface_) {
         if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D) {
@@ -1183,7 +1182,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         }
     }
     if (should_skip && !has_overriding_plan) {
-        self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || playback_state_.lock_on_end_active;
+        self_->static_frame = self_->static_frame || anim->is_frozen() || playback_state_.lock_on_end_active;
         return report;
     }
     if (is_player) {
@@ -1410,7 +1409,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     }
     {
         const bool is_player = self_->info && self_->info->type == asset_types::player;
-        self_->static_frame  = is_player ? false : (anim.is_frozen() || anim.locked);
+        self_->static_frame  = is_player ? false : anim.is_frozen();
     }
     self_->frame_progress    = 0.0f;
     active_paths_[self_->current_animation] = path_index;

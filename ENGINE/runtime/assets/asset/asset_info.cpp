@@ -4090,10 +4090,12 @@ bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& 
 
 		if (!has_existing) {
 			mark_texture_rebuild_on_close(name, kTextureVariantAll);
+            bump_animation_metadata_revision();
 		} else {
 			const auto variants = classify_texture_rebuild_variants(existing_payload, clean_payload);
 			if (variants != kTextureVariantNone) {
 				mark_texture_rebuild_on_close(name, variants);
+                bump_animation_metadata_revision();
 			}
 		}
 		return true;
@@ -4120,6 +4122,7 @@ bool AssetInfo::remove_animation(const std::string& name) {
 	}
 	if (removed) {
 		mark_bundle_refresh_on_close();
+        bump_animation_metadata_revision();
 	}
 	return removed;
 }
@@ -4146,6 +4149,7 @@ bool AssetInfo::rename_animation(const std::string& old_name, const std::string&
 		}
 		mark_texture_rebuild_on_close(new_name, kTextureVariantAll);
 		mark_bundle_refresh_on_close();
+        bump_animation_metadata_revision();
 		return true;
 	} catch (...) {
 		return false;
@@ -4154,14 +4158,25 @@ bool AssetInfo::rename_animation(const std::string& old_name, const std::string&
 
 void AssetInfo::set_start_animation_name(const std::string& name) {
         try {
+                if (start_animation == name) {
+                    return;
+                }
                 start_animation = name;
                 info_json_["start"] = name;
+                bump_animation_metadata_revision();
         } catch (...) {
 
         }
 }
 
 bool AssetInfo::reload_animations_from_disk() {
+    auto animation_reload_snapshot = [this]() {
+        nlohmann::json snapshot = nlohmann::json::object();
+        snapshot["start"] = start_animation;
+        snapshot["animations"] = anims_json_.is_object() ? anims_json_ : nlohmann::json::object();
+        return snapshot;
+    };
+    const nlohmann::json previous_snapshot = animation_reload_snapshot();
     auto apply_payload = [this](const nlohmann::json& payload) -> bool {
         if (!payload.is_object()) {
             return false;
@@ -4252,7 +4267,14 @@ bool AssetInfo::reload_animations_from_disk() {
     if (!view || !view.data) {
         return false;
     }
-    return apply_payload(*view.data);
+    const bool applied = apply_payload(*view.data);
+    if (applied) {
+        const nlohmann::json updated_snapshot = animation_reload_snapshot();
+        if (updated_snapshot != previous_snapshot) {
+            bump_animation_metadata_revision();
+        }
+    }
+    return applied;
 }
 
 AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed(
@@ -4317,6 +4339,7 @@ AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed
             start_animation = animation_name;
             info_json_["start"] = start_animation;
         }
+        bump_animation_metadata_revision();
 
         result.changed = true;
         result.animation_changed = animation_changed;
@@ -4344,6 +4367,10 @@ AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed
 
 bool AssetInfo::update_animation_properties(const std::string& animation_name, const nlohmann::json& properties) {
     return update_animation_properties_detailed(animation_name, properties).changed;
+}
+
+void AssetInfo::bump_animation_metadata_revision() {
+    ++animation_metadata_revision_;
 }
 
 AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer* renderer,

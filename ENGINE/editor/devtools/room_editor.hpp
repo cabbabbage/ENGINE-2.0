@@ -983,18 +983,18 @@ private:
     std::unique_ptr<animation_editor::AnimationListPanel> stack_animation_list_panel_;
     std::shared_ptr<animation_editor::AnimationDocument> stack_animation_preview_document_;
     std::shared_ptr<animation_editor::PreviewProvider> stack_animation_preview_provider_;
-    std::string stack_animation_preview_signature_;
+    std::uint64_t stack_animation_preview_revision_ = 0;
     struct StackAnimationListSyncKey {
         const Asset* target_asset = nullptr;
         AssetEditorSubview subview = AssetEditorSubview::AssetInfo;
         std::string selected_animation_id;
-        std::string animation_revision_signature;
+        std::uint64_t animation_revision = 0;
 
         bool operator==(const StackAnimationListSyncKey& other) const {
             return target_asset == other.target_asset &&
                    subview == other.subview &&
                    selected_animation_id == other.selected_animation_id &&
-                   animation_revision_signature == other.animation_revision_signature;
+                   animation_revision == other.animation_revision;
         }
     };
     std::optional<StackAnimationListSyncKey> stack_animation_list_sync_key_cache_;

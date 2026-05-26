@@ -388,8 +388,8 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
         return;
     }
 
-    DMFontCache::instance().draw_text(renderer, label_style, "Drag selected point on ground", hint_rect_.x, hint_rect_.y);
-    DMFontCache::instance().draw_text(renderer, label_style, "Mouse wheel adjusts height", hint_rect_.x, hint_rect_.y + kHintLineGap);
+    DMFontCache::instance().draw_text(renderer, label_style, "Ground crosshair drag edits X/Z", hint_rect_.x, hint_rect_.y);
+    DMFontCache::instance().draw_text(renderer, label_style, "Elevated handle + wheel edits Y", hint_rect_.x, hint_rect_.y + kHintLineGap);
 
     if (smooth_checkbox_) {
         smooth_checkbox_->render(renderer);

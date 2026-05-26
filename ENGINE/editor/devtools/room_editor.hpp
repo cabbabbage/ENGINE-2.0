@@ -702,12 +702,21 @@ private:
     void refresh_movement_editor_selection(bool reset_drag_state);
     void sync_movement_panel_frame_values();
     bool apply_movement_panel_numeric_edits();
+    void clamp_selected_movement_path_index();
+    void bind_selected_movement_path(bool reset_drag_state);
+    void commit_selected_movement_path();
+    void reload_movement_paths_for_animation(const std::string& animation_id, int preferred_frame_index, bool reset_drag_state);
     int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
+    int find_movement_floor_handle_at_screen_point(SDL_Point screen_point, int radius_px) const;
     bool project_movement_relative_point(const std::vector<SDL_FPoint>& rel_positions,
                                          const std::vector<float>& rel_positions_z,
                                          std::size_t index,
                                          SDL_FPoint& out_screen) const;
     bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;
+    bool project_movement_floor_point(std::size_t index, SDL_FPoint& out_screen) const;
+    bool movement_point_has_non_zero_dy(int point_index) const;
+    void begin_movement_vertical_wheel_edit(int point_index);
+    void end_movement_vertical_wheel_edit(bool restore_preview_state);
     axis::WorldPos movement_relative_position_for_frame(std::size_t frame_index) const;
     void apply_movement_preview_pose_to_target();
     bool handle_movement_mode_mouse_input(const Input& input);
@@ -723,6 +732,7 @@ private:
                                          int last_index) const;
     void quantize_selected_movement_path_to_reference(const std::vector<devmode::room_movement_payload::MovementFrame>& reference_frames);
     void redistribute_movement_points_after_adjustment(int adjusted_index);
+    void redistribute_movement_points_after_adjustment(int adjusted_index, bool horizontal_only);
     SDL_Point movement_asset_anchor_world() const;
     float movement_base_world_z() const;
     devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,
@@ -1116,13 +1126,32 @@ private:
     FloorBoxCandidateEditorState floor_box_candidate_editor_;
 
     struct MovementEditState {
+        enum class PointEditMode {
+            None,
+            HorizontalXZ,
+            VerticalY,
+        };
+
+        struct VerticalWheelEditState {
+            bool active = false;
+            int selected_point_index = -1;
+            SDL_FPoint fixed_floor_world_xz{0.0f, 0.0f};
+            bool restore_floor_preview_state = false;
+            bool restore_xy_preview_state = false;
+        };
+
         Asset* target_asset = nullptr;
         std::string animation_id;
         int frame_index = 0;
         bool point_selected = false;
         bool selected_point_active = false;
         int hovered_point_index = -1;
+        int hovered_floor_point_index = -1;
+        int hovered_elevated_point_index = -1;
         bool dragging_point = false;
+        PointEditMode active_point_edit_mode = PointEditMode::None;
+        int active_handle_point_index = -1;
+        VerticalWheelEditState vertical_wheel_edit{};
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;

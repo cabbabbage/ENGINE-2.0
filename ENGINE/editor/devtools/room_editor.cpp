@@ -721,11 +721,6 @@ resolve_room_movement_paths_for_animation(const Asset* target, const std::string
         if (!paths.empty()) return paths;
     }
 
-    auto anim_it = target->info->animations.find(animation_id);
-    if (anim_it != target->info->animations.end()) {
-        return {movement_frames_from_runtime_animation(anim_it->second)};
-    }
-
     return {{devmode::room_movement_payload::MovementFrame{}}};
 }
 
@@ -3474,8 +3469,21 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
 
     if (pointer_button_event &&
         (scroll_preview_floor_overlay_active_ || scroll_preview_xy_overlay_active_for_movement_)) {
-        scroll_preview_floor_overlay_active_ = false;
-        scroll_preview_xy_overlay_active_for_movement_ = false;
+        if (event.button.button == SDL_BUTTON_LEFT &&
+            movement_mode_active() &&
+            movement_edit_.vertical_wheel_edit.active) {
+            end_movement_vertical_wheel_edit(false);
+        }
+        const bool clear_movement_xy_preview =
+            !scroll_preview_xy_overlay_active_for_movement_ ||
+            !(movement_mode_active() && movement_edit_.vertical_wheel_edit.active) ||
+            event.button.button == SDL_BUTTON_LEFT;
+        if (scroll_preview_floor_overlay_active_) {
+            scroll_preview_floor_overlay_active_ = false;
+        }
+        if (clear_movement_xy_preview) {
+            scroll_preview_xy_overlay_active_for_movement_ = false;
+        }
     } else if (wheel_event) {
         if (movement_mode_active() &&
             movement_edit_.point_selected &&
@@ -4729,7 +4737,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (assets_ && assets_->dev_grid_overlay_enabled()) {
             const Assets::DevGridOverlayContext overlay_ctx = dev_grid_overlay_context();
             if (overlay_ctx.kind == Assets::DevGridOverlayKind::XYPlaneAtAssetDepth) {
-                const int cell = std::max(1, assets_->dev_grid_overlay_cell_size_px());
+                const int cell = std::max(1, vibble::grid::delta(current_grid_resolution()));
                 const float target_world_z = overlay_ctx.target_world_z;
 
                 auto mode_target_asset = [&]() -> Asset* {
@@ -5464,7 +5472,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 }
                 const SDL_FPoint screen = projected_points[static_cast<std::size_t>(i)];
                 const bool selected = movement_edit_.selected_point_active && i == movement_edit_.frame_index;
-                const bool hovered = i == movement_edit_.hovered_point_index;
+                const bool hovered = i == movement_edit_.hovered_elevated_point_index;
                 const int cx = static_cast<int>(std::lround(screen.x));
                 const int cy = static_cast<int>(std::lround(screen.y));
                 const int radius = selected ? 7 : 5;
@@ -5491,7 +5499,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     continue;
                 }
                 const bool selected = movement_edit_.selected_point_active && i == movement_edit_.frame_index;
-                const bool hovered = i == movement_edit_.hovered_point_index;
+                const bool hovered = i == movement_edit_.hovered_floor_point_index;
                 const SDL_FPoint screen = projected_points[static_cast<std::size_t>(i)];
                 const SDL_FPoint floor_screen = floor_projected_points[static_cast<std::size_t>(i)];
                 const int cx = static_cast<int>(std::lround(screen.x));
@@ -10471,43 +10479,45 @@ void RoomEditor::ensure_movement_editor_widgets() {
             if (movement_edit_.dirty_since_last_flush) {
                 (void)persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
             }
+            end_movement_vertical_wheel_edit(false);
             if (movement_edit_.paths.empty()) return;
-            movement_edit_.selected_path_index = std::clamp(index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
-            movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
-            normalize_movement_frames_to_current_animation();
-            rebuild_movement_rel_positions();
-            refresh_movement_runtime_animation();
-            refresh_movement_editor_selection(true);
+            commit_selected_movement_path();
+            movement_edit_.selected_path_index = index;
+            bind_selected_movement_path(true);
+            if (movement_mode_active() && !movement_edit_.animation_id.empty()) {
+                (void)apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index);
+            }
         });
         movement_tools_panel_->set_on_add_path([this]() {
             if (!movement_mode_active()) return;
-            if (!movement_edit_.paths.empty() &&
-                movement_edit_.selected_path_index >= 0 &&
-                movement_edit_.selected_path_index < static_cast<int>(movement_edit_.paths.size())) {
-                movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)] = movement_edit_.frames;
-            }
+            end_movement_vertical_wheel_edit(false);
+            commit_selected_movement_path();
             std::vector<devmode::room_movement_payload::MovementFrame> new_path(movement_edit_.frames.size());
             if (new_path.empty()) {
                 new_path.push_back(devmode::room_movement_payload::MovementFrame{});
             }
             movement_edit_.paths.push_back(std::move(new_path));
             movement_edit_.selected_path_index = static_cast<int>(movement_edit_.paths.size()) - 1;
-            movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
-            normalize_movement_frames_to_current_animation();
-            rebuild_movement_rel_positions();
-            refresh_movement_runtime_animation();
-            refresh_movement_editor_selection(true);
+            bind_selected_movement_path(true);
+            if (movement_mode_active() && !movement_edit_.animation_id.empty()) {
+                (void)apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index);
+            }
             movement_edit_.dirty_since_last_flush = true;
         });
         movement_tools_panel_->set_on_delete_path([this]() {
             if (!movement_mode_active() || movement_edit_.paths.size() <= 1) return;
+            end_movement_vertical_wheel_edit(false);
+            commit_selected_movement_path();
+            clamp_selected_movement_path_index();
+            if (movement_edit_.selected_path_index < 0 ||
+                movement_edit_.selected_path_index >= static_cast<int>(movement_edit_.paths.size())) {
+                return;
+            }
             movement_edit_.paths.erase(movement_edit_.paths.begin() + movement_edit_.selected_path_index);
-            movement_edit_.selected_path_index = std::clamp(movement_edit_.selected_path_index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
-            movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
-            normalize_movement_frames_to_current_animation();
-            rebuild_movement_rel_positions();
-            refresh_movement_runtime_animation();
-            refresh_movement_editor_selection(true);
+            bind_selected_movement_path(true);
+            if (movement_mode_active() && !movement_edit_.animation_id.empty()) {
+                (void)apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index);
+            }
             movement_edit_.dirty_since_last_flush = true;
         });
         movement_tools_panel_->set_on_quantize_path_selected([this](int index) {
@@ -11061,6 +11071,7 @@ bool RoomEditor::apply_stack_animation_selection(const std::string& animation_id
             if (movement_edit_.dirty_since_last_flush) {
                 persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
             }
+            end_movement_vertical_wheel_edit(false);
             int next_frame_index = movement_edit_.frame_index;
             auto next_anim_it = movement_edit_.target_asset->info->animations.find(animation_id);
             if (next_anim_it != movement_edit_.target_asset->info->animations.end() && next_anim_it->second.has_frames()) {
@@ -11070,14 +11081,7 @@ bool RoomEditor::apply_stack_animation_selection(const std::string& animation_id
             } else {
                 next_frame_index = 0;
             }
-            movement_edit_.paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, animation_id);
-            movement_edit_.selected_path_index = 0;
-            movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
-            if (!movement_edit_.has_frames()) {
-                movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
-            }
-            normalize_movement_frames_to_current_animation();
-            rebuild_movement_rel_positions();
+            reload_movement_paths_for_animation(animation_id, next_frame_index, true);
             if (apply_movement_animation_and_frame(animation_id, next_frame_index)) {
                 refresh_movement_editor_selection(false);
                 sync_movement_panel_frame_values();
@@ -19363,12 +19367,7 @@ bool RoomEditor::persist_movement_current_animation(devmode::core::DevSaveCoordi
 
     normalize_movement_frames_to_current_animation();
     rebuild_movement_frames_from_positions();
-    if (movement_edit_.paths.empty()) {
-        movement_edit_.paths.push_back(movement_edit_.frames);
-    } else if (movement_edit_.selected_path_index >= 0 &&
-               movement_edit_.selected_path_index < static_cast<int>(movement_edit_.paths.size())) {
-        movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)] = movement_edit_.frames;
-    }
+    commit_selected_movement_path();
     refresh_movement_runtime_animation();
 
     nlohmann::json manifest_payload = target_info->manifest_payload();
@@ -19479,6 +19478,64 @@ std::vector<std::string> RoomEditor::system_editable_animation_names(const Asset
     return resolve_file_sourced_animation_selection_for_target(target, animation_id).navigable_animation_ids;
 }
 
+void RoomEditor::clamp_selected_movement_path_index() {
+    if (movement_edit_.paths.empty()) {
+        movement_edit_.selected_path_index = 0;
+        return;
+    }
+    movement_edit_.selected_path_index =
+        std::clamp(movement_edit_.selected_path_index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
+}
+
+void RoomEditor::bind_selected_movement_path(bool reset_drag_state) {
+    if (movement_edit_.paths.empty()) {
+        movement_edit_.paths.push_back(std::vector<devmode::room_movement_payload::MovementFrame>{
+            devmode::room_movement_payload::MovementFrame{}});
+    }
+    clamp_selected_movement_path_index();
+    movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
+    if (!movement_edit_.has_frames()) {
+        movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
+    }
+    normalize_movement_frames_to_current_animation();
+    rebuild_movement_rel_positions();
+    refresh_movement_runtime_animation();
+    refresh_movement_editor_selection(reset_drag_state);
+}
+
+void RoomEditor::commit_selected_movement_path() {
+    if (movement_edit_.frames.empty()) {
+        movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
+    }
+    if (movement_edit_.paths.empty()) {
+        movement_edit_.paths.push_back(movement_edit_.frames);
+    }
+    clamp_selected_movement_path_index();
+    if (movement_edit_.selected_path_index >= 0 &&
+        movement_edit_.selected_path_index < static_cast<int>(movement_edit_.paths.size())) {
+        movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)] = movement_edit_.frames;
+    }
+}
+
+void RoomEditor::reload_movement_paths_for_animation(const std::string& animation_id,
+                                                     int preferred_frame_index,
+                                                     bool reset_drag_state) {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
+        return;
+    }
+    movement_edit_.animation_id = animation_id;
+    movement_edit_.paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, movement_edit_.animation_id);
+    movement_edit_.selected_path_index = 0;
+    bind_selected_movement_path(reset_drag_state);
+    movement_edit_.frame_index = preferred_frame_index;
+    if (movement_edit_.has_frames()) {
+        movement_edit_.frame_index =
+            std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
+    } else {
+        movement_edit_.frame_index = 0;
+    }
+}
+
 bool RoomEditor::set_movement_system_enabled(bool enabled) {
     if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
         return false;
@@ -19512,23 +19569,21 @@ bool RoomEditor::set_movement_system_enabled(bool enabled) {
     }
 
     if (!enabled) {
+        end_movement_vertical_wheel_edit(false);
         movement_edit_.frames.clear();
         movement_edit_.rel_positions.clear();
         movement_edit_.rel_positions_z.clear();
         movement_edit_.point_selected = false;
         movement_edit_.selected_point_active = false;
         movement_edit_.hovered_point_index = -1;
+        movement_edit_.hovered_floor_point_index = -1;
+        movement_edit_.hovered_elevated_point_index = -1;
         movement_edit_.dragging_point = false;
+        movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::None;
+        movement_edit_.active_handle_point_index = -1;
         movement_edit_.dirty_since_last_flush = false;
     } else {
-        movement_edit_.paths = resolve_room_movement_paths_for_animation(target, movement_edit_.animation_id);
-        movement_edit_.selected_path_index = 0;
-        movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
-        if (movement_edit_.frames.empty()) {
-            movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
-        }
-        normalize_movement_frames_to_current_animation();
-        rebuild_movement_rel_positions();
+        reload_movement_paths_for_animation(movement_edit_.animation_id, movement_edit_.frame_index, true);
     }
 
     if (!persist_asset_manifest_from_info(target_info,
@@ -19798,7 +19853,12 @@ void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
         movement_edit_.point_selected = false;
         movement_edit_.selected_point_active = false;
         movement_edit_.hovered_point_index = -1;
+        movement_edit_.hovered_floor_point_index = -1;
+        movement_edit_.hovered_elevated_point_index = -1;
         movement_edit_.dragging_point = false;
+        movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::None;
+        movement_edit_.active_handle_point_index = -1;
+        end_movement_vertical_wheel_edit(false);
         return;
     }
     movement_edit_.frame_index =
@@ -19806,6 +19866,10 @@ void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
     movement_edit_.selected_point_active = movement_edit_.point_selected;
     if (reset_drag_state) {
         movement_edit_.dragging_point = false;
+        if (!movement_edit_.vertical_wheel_edit.active) {
+            movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::None;
+            movement_edit_.active_handle_point_index = -1;
+        }
     }
     sync_movement_panel_frame_values();
 }
@@ -19842,6 +19906,26 @@ bool RoomEditor::project_movement_point(std::size_t index, SDL_FPoint& out_scree
                                            out_screen);
 }
 
+bool RoomEditor::project_movement_floor_point(std::size_t index, SDL_FPoint& out_screen) const {
+    if (!movement_mode_active() || !assets_ || !movement_edit_.target_asset) {
+        return false;
+    }
+    if (index >= movement_edit_.rel_positions.size()) {
+        return false;
+    }
+    const WarpedScreenGrid& cam = assets_->getView();
+    const SDL_Point anchor = movement_asset_anchor_world();
+    const SDL_FPoint floor_world_xy{
+        movement_edit_.rel_positions[index].x + static_cast<float>(anchor.x),
+        movement_base_world_z()};
+    const float floor_world_z = movement_edit_.rel_positions[index].y + static_cast<float>(anchor.y);
+    if (cam.project_world_point(floor_world_xy, floor_world_z, out_screen)) {
+        return true;
+    }
+    out_screen = cam.map_to_screen_f(SDL_FPoint{floor_world_xy.x, floor_world_z});
+    return true;
+}
+
 int RoomEditor::find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const {
     if (!movement_mode_active()) {
         return -1;
@@ -19863,6 +19947,79 @@ int RoomEditor::find_movement_point_at_screen_point(SDL_Point screen_point, int 
         }
     }
     return best_index;
+}
+
+int RoomEditor::find_movement_floor_handle_at_screen_point(SDL_Point screen_point, int radius_px) const {
+    if (!movement_mode_active()) {
+        return -1;
+    }
+    const float radius_sq = static_cast<float>(radius_px * radius_px);
+    int best_index = -1;
+    float best_distance_sq = radius_sq;
+    for (std::size_t i = 0; i < movement_edit_.rel_positions.size(); ++i) {
+        SDL_FPoint projected{};
+        if (!project_movement_floor_point(i, projected)) {
+            continue;
+        }
+        const float dx = projected.x - static_cast<float>(screen_point.x);
+        const float dy = projected.y - static_cast<float>(screen_point.y);
+        const float distance_sq = dx * dx + dy * dy;
+        if (distance_sq <= best_distance_sq) {
+            best_distance_sq = distance_sq;
+            best_index = static_cast<int>(i);
+        }
+    }
+    return best_index;
+}
+
+bool RoomEditor::movement_point_has_non_zero_dy(int point_index) const {
+    if (!movement_mode_active() || !movement_edit_.has_frames()) {
+        return false;
+    }
+    const int clamped = std::clamp(point_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
+    if (clamped <= 0) {
+        return false;
+    }
+    const auto& frame = movement_edit_.frames[static_cast<std::size_t>(clamped)];
+    return std::fabs(frame.dy) > 1e-5f;
+}
+
+void RoomEditor::begin_movement_vertical_wheel_edit(int point_index) {
+    if (!movement_mode_active() || !movement_edit_.target_asset || !movement_edit_.has_frames()) {
+        return;
+    }
+    const int index = std::clamp(point_index, 0, static_cast<int>(movement_edit_.frame_count()) - 1);
+    if (index <= 0) {
+        return;
+    }
+    movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::VerticalY;
+    movement_edit_.active_handle_point_index = index;
+    movement_edit_.vertical_wheel_edit.active = true;
+    movement_edit_.vertical_wheel_edit.selected_point_index = index;
+    movement_edit_.vertical_wheel_edit.restore_floor_preview_state = scroll_preview_floor_overlay_active_;
+    movement_edit_.vertical_wheel_edit.restore_xy_preview_state = scroll_preview_xy_overlay_active_for_movement_;
+    const SDL_Point anchor = movement_asset_anchor_world();
+    movement_edit_.vertical_wheel_edit.fixed_floor_world_xz = SDL_FPoint{
+        movement_edit_.rel_positions[static_cast<std::size_t>(index)].x + static_cast<float>(anchor.x),
+        movement_edit_.rel_positions[static_cast<std::size_t>(index)].y + static_cast<float>(anchor.y)};
+    scroll_preview_xy_overlay_active_for_movement_ = true;
+    scroll_preview_floor_overlay_active_ = false;
+}
+
+void RoomEditor::end_movement_vertical_wheel_edit(bool restore_preview_state) {
+    if (!movement_edit_.vertical_wheel_edit.active) {
+        return;
+    }
+    if (restore_preview_state) {
+        scroll_preview_floor_overlay_active_ = movement_edit_.vertical_wheel_edit.restore_floor_preview_state;
+        scroll_preview_xy_overlay_active_for_movement_ = movement_edit_.vertical_wheel_edit.restore_xy_preview_state;
+    } else {
+        scroll_preview_floor_overlay_active_ = false;
+        scroll_preview_xy_overlay_active_for_movement_ = false;
+    }
+    movement_edit_.vertical_wheel_edit = MovementEditState::VerticalWheelEditState{};
+    movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::None;
+    movement_edit_.active_handle_point_index = -1;
 }
 
 void RoomEditor::apply_movement_linear_smoothing(int adjusted_index,
@@ -19955,6 +20112,10 @@ void RoomEditor::apply_movement_curved_smoothing(int adjusted_index,
 }
 
 void RoomEditor::redistribute_movement_points_after_adjustment(int adjusted_index) {
+    redistribute_movement_points_after_adjustment(adjusted_index, false);
+}
+
+void RoomEditor::redistribute_movement_points_after_adjustment(int adjusted_index, bool horizontal_only) {
     const int count = static_cast<int>(movement_edit_.rel_positions.size());
     if (!movement_edit_.smooth_enabled || count < 3 || adjusted_index <= 0) {
         rebuild_movement_frames_from_positions();
@@ -19981,7 +20142,11 @@ void RoomEditor::redistribute_movement_points_after_adjustment(int adjusted_inde
     }
 
     movement_edit_.rel_positions = std::move(redistributed_xy);
-    movement_edit_.rel_positions_z = std::move(redistributed_z);
+    if (horizontal_only) {
+        movement_edit_.rel_positions_z = original_z;
+    } else {
+        movement_edit_.rel_positions_z = std::move(redistributed_z);
+    }
     rebuild_movement_frames_from_positions();
     refresh_movement_runtime_animation();
     movement_edit_.dirty_since_last_flush = true;
@@ -20189,14 +20354,8 @@ void RoomEditor::navigate_movement_animation(int delta) {
     } else {
         next_frame_index = 0;
     }
-    movement_edit_.paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, next_animation);
-    movement_edit_.selected_path_index = 0;
-    movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
-    if (!movement_edit_.has_frames()) {
-        movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
-    }
-    normalize_movement_frames_to_current_animation();
-    rebuild_movement_rel_positions();
+    end_movement_vertical_wheel_edit(false);
+    reload_movement_paths_for_animation(next_animation, next_frame_index, true);
     if (apply_movement_animation_and_frame(next_animation, next_frame_index)) {
         refresh_movement_editor_selection(true);
     }
@@ -20206,6 +20365,7 @@ void RoomEditor::navigate_movement_frame(int delta) {
     if (!movement_mode_active() || delta == 0 || !movement_edit_.target_asset || !movement_edit_.target_asset->info) {
         return;
     }
+    end_movement_vertical_wheel_edit(false);
     if (movement_edit_.dirty_since_last_flush) {
         persist_movement_current_animation(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
@@ -20518,19 +20678,13 @@ bool RoomEditor::enter_movement_edit_mode() {
     movement_edit_.original_world_x = target->world_x();
     movement_edit_.original_world_y = target->world_y();
     movement_edit_.original_world_z = target->world_z();
-
-    movement_edit_.paths = resolve_room_movement_paths_for_animation(target, movement_edit_.animation_id);
-        movement_edit_.selected_path_index = 0;
-        movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
-    if (!movement_edit_.has_frames()) {
-        movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
-    }
-    normalize_movement_frames_to_current_animation();
+    scroll_preview_floor_overlay_active_ = false;
+    scroll_preview_xy_overlay_active_for_movement_ = false;
 
     const EditorMode previous_mode = editor_mode_;
     editor_mode_ = EditorMode::MovementEdit;
     reconcile_mode_ownership_state(previous_mode);
-    rebuild_movement_rel_positions();
+    reload_movement_paths_for_animation(movement_edit_.animation_id, 0, true);
     movement_edit_.frame_index = resolve_movement_mode_frame_index();
     if (!apply_movement_animation_and_frame(movement_edit_.animation_id, movement_edit_.frame_index)) {
         const EditorMode failed_mode = editor_mode_;
@@ -20810,6 +20964,8 @@ void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
         return;
     }
 
+    end_movement_vertical_wheel_edit(false);
+
     const bool target_live = is_asset_pointer_live(movement_edit_.target_asset);
 
     if (persist_changes && target_live && movement_edit_.dirty_since_last_flush) {
@@ -20945,12 +21101,8 @@ void RoomEditor::validate_movement_edit_target() {
         return;
     }
     if (selection.resolved_animation_id != movement_edit_.animation_id) {
-        movement_edit_.animation_id = selection.resolved_animation_id;
-        movement_edit_.paths = resolve_room_movement_paths_for_animation(target, movement_edit_.animation_id);
-        movement_edit_.selected_path_index = 0;
-        movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
-        normalize_movement_frames_to_current_animation();
-        rebuild_movement_rel_positions();
+        end_movement_vertical_wheel_edit(false);
+        reload_movement_paths_for_animation(selection.resolved_animation_id, 0, true);
         apply_movement_animation_and_frame(movement_edit_.animation_id, 0);
         return;
     }
@@ -21165,6 +21317,7 @@ bool RoomEditor::any_editor_point_selected() const {
 bool RoomEditor::is_xy_overlay_mode_active() const {
     if (scroll_preview_xy_overlay_active_for_movement_ &&
         movement_mode_active() &&
+        movement_edit_.vertical_wheel_edit.active &&
         movement_edit_.point_selected &&
         movement_edit_.frame_index > 0) {
         return true;
@@ -21332,6 +21485,7 @@ bool RoomEditor::resolve_selected_overlay_point_floor_xz(SDL_FPoint& out_world_x
 void RoomEditor::refresh_scroll_overlay_preview() {
     if (scroll_preview_xy_overlay_active_for_movement_) {
         if (!(movement_mode_active() &&
+              movement_edit_.vertical_wheel_edit.active &&
               movement_edit_.point_selected &&
               movement_edit_.frame_index > 0)) {
             scroll_preview_xy_overlay_active_for_movement_ = false;
@@ -21436,7 +21590,7 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
                 break;
             }
             const bool selected = movement_edit_.selected_point_active && static_cast<int>(i) == movement_edit_.frame_index;
-            const bool hovered = static_cast<int>(i) == movement_edit_.hovered_point_index;
+            const bool hovered = static_cast<int>(i) == movement_edit_.hovered_floor_point_index;
             SDL_Color color{255, 165, 0, 235};
             if (selected) {
                 color = SDL_Color{255, 255, 255, 255};
@@ -21601,6 +21755,7 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
 
     if (movement_mode_active()) {
         if (!scroll_preview_xy_overlay_active_for_movement_ ||
+            !movement_edit_.vertical_wheel_edit.active ||
             !movement_edit_.point_selected ||
             movement_edit_.frame_index <= 0 ||
             movement_edit_.rel_positions.empty()) {
@@ -23719,37 +23874,90 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
     }
 
     if (!movement_edit_.dragging_point) {
-        movement_edit_.hovered_point_index = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
+        movement_edit_.hovered_elevated_point_index = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
+        movement_edit_.hovered_floor_point_index =
+            find_movement_floor_handle_at_screen_point(screen_pt, kMovementPointPickRadiusPx + 4);
+        if (movement_edit_.active_point_edit_mode == MovementEditState::PointEditMode::VerticalY) {
+            movement_edit_.hovered_point_index = movement_edit_.hovered_elevated_point_index;
+        } else if (movement_edit_.active_point_edit_mode == MovementEditState::PointEditMode::HorizontalXZ) {
+            movement_edit_.hovered_point_index =
+                (movement_edit_.hovered_floor_point_index >= 0)
+                    ? movement_edit_.hovered_floor_point_index
+                    : movement_edit_.hovered_elevated_point_index;
+        } else if (movement_edit_.hovered_elevated_point_index > 0 &&
+                   movement_point_has_non_zero_dy(movement_edit_.hovered_elevated_point_index)) {
+            movement_edit_.hovered_point_index = movement_edit_.hovered_elevated_point_index;
+        } else if (movement_edit_.hovered_floor_point_index >= 0) {
+            movement_edit_.hovered_point_index = movement_edit_.hovered_floor_point_index;
+        } else {
+            movement_edit_.hovered_point_index = movement_edit_.hovered_elevated_point_index;
+        }
     }
 
     if (left_pressed && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
-        const int hit = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
+        if (movement_edit_.vertical_wheel_edit.active) {
+            end_movement_vertical_wheel_edit(true);
+            movement_edit_.dragging_point = false;
+            return true;
+        }
+
+        const int elevated_hit = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);
+        const int floor_hit = find_movement_floor_handle_at_screen_point(screen_pt, kMovementPointPickRadiusPx + 4);
+        int hit = -1;
+        MovementEditState::PointEditMode next_mode = MovementEditState::PointEditMode::None;
+
+        if (elevated_hit > 0 && movement_point_has_non_zero_dy(elevated_hit)) {
+            hit = elevated_hit;
+            next_mode = MovementEditState::PointEditMode::VerticalY;
+        } else if (floor_hit >= 0) {
+            hit = floor_hit;
+            next_mode = MovementEditState::PointEditMode::HorizontalXZ;
+        } else if (elevated_hit >= 0) {
+            hit = elevated_hit;
+            next_mode = MovementEditState::PointEditMode::HorizontalXZ;
+        }
+
         if (hit > 0) {
             movement_edit_.frame_index = hit;
             movement_edit_.point_selected = true;
             movement_edit_.selected_point_active = true;
-            movement_edit_.dragging_point = true;
+            movement_edit_.active_point_edit_mode = next_mode;
+            movement_edit_.active_handle_point_index = hit;
+            movement_edit_.dragging_point = (next_mode == MovementEditState::PointEditMode::HorizontalXZ);
             apply_movement_animation_and_frame(movement_edit_.animation_id, hit);
             // apply_movement_animation_and_frame refreshes selection and clears drag state.
             // Restore drag so a press+move gesture actually updates the selected point.
             movement_edit_.point_selected = true;
-            movement_edit_.dragging_point = true;
             movement_edit_.selected_point_active = true;
+            movement_edit_.active_point_edit_mode = next_mode;
+            movement_edit_.active_handle_point_index = hit;
+            movement_edit_.dragging_point = (next_mode == MovementEditState::PointEditMode::HorizontalXZ);
         } else if (hit == 0) {
             movement_edit_.frame_index = 0;
             movement_edit_.point_selected = true;
             movement_edit_.selected_point_active = true;
+            movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::HorizontalXZ;
+            movement_edit_.active_handle_point_index = 0;
             movement_edit_.dragging_point = false;
+            end_movement_vertical_wheel_edit(false);
             apply_movement_animation_and_frame(movement_edit_.animation_id, 0);
         } else {
             movement_edit_.point_selected = false;
             movement_edit_.selected_point_active = false;
             movement_edit_.hovered_point_index = -1;
+            movement_edit_.hovered_floor_point_index = -1;
+            movement_edit_.hovered_elevated_point_index = -1;
             movement_edit_.dragging_point = false;
+            movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::None;
+            movement_edit_.active_handle_point_index = -1;
+            end_movement_vertical_wheel_edit(false);
         }
     }
 
-    if (movement_edit_.dragging_point && left_down && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
+    if (movement_edit_.dragging_point &&
+        movement_edit_.active_point_edit_mode == MovementEditState::PointEditMode::HorizontalXZ &&
+        left_down &&
+        !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
         SDL_FPoint world = assets_->getView().screen_to_map(screen_pt);
         SDL_Point anchor = movement_asset_anchor_world();
         SDL_Point world_px{static_cast<int>(std::lround(world.x)), static_cast<int>(std::lround(world.y))};
@@ -23764,7 +23972,7 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
         movement_edit_.rel_positions[static_cast<std::size_t>(index)] = SDL_FPoint{
             static_cast<float>(world_px.x - anchor.x),
             static_cast<float>(world_px.y - anchor.y)};
-        redistribute_movement_points_after_adjustment(index);
+        redistribute_movement_points_after_adjustment(index, true);
         sync_movement_panel_frame_values();
     }
 
@@ -23777,6 +23985,10 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
                 assets_->mark_active_assets_dirty();
             }
         }
+        if (movement_edit_.active_point_edit_mode == MovementEditState::PointEditMode::HorizontalXZ) {
+            movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::None;
+            movement_edit_.active_handle_point_index = -1;
+        }
     }
 
     const int scroll_y = input.getScrollY();
@@ -23785,16 +23997,44 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
         movement_edit_.frame_index > 0 &&
         !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
         const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions_z.size()) - 1);
-        float next_z = movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] + static_cast<float>(scroll_y * 4);
+        if (!movement_edit_.vertical_wheel_edit.active ||
+            movement_edit_.vertical_wheel_edit.selected_point_index != index) {
+            begin_movement_vertical_wheel_edit(index);
+        }
+        movement_edit_.active_point_edit_mode = MovementEditState::PointEditMode::VerticalY;
+        movement_edit_.active_handle_point_index = index;
+
+        auto next_snapped_level = [](float current, float cell, int direction) {
+            if (!std::isfinite(current) || !std::isfinite(cell) || cell <= 0.0f || direction == 0) {
+                return current;
+            }
+            const float scaled = current / cell;
+            const float nearest = std::round(scaled);
+            const bool on_level = std::fabs(scaled - nearest) < 1e-5f;
+            if (direction > 0) {
+                const float next_level = on_level ? (nearest + 1.0f) : std::ceil(scaled);
+                return next_level * cell;
+            }
+            const float next_level = on_level ? (nearest - 1.0f) : std::floor(scaled);
+            return next_level * cell;
+        };
+
+        float next_z = movement_edit_.rel_positions_z[static_cast<std::size_t>(index)];
+        const int direction = (scroll_y > 0) ? 1 : -1;
+        const int ticks = std::max(1, std::abs(scroll_y));
         if (snap_to_grid_enabled_) {
             const int resolution = current_grid_resolution();
             const float cell = std::ldexp(1.0f, std::max(0, resolution));
-            if (std::isfinite(cell) && cell > 0.0f) {
-                next_z = std::round(next_z / cell) * cell;
+            for (int i = 0; i < ticks; ++i) {
+                next_z = next_snapped_level(next_z, cell, direction);
             }
+        } else {
+            next_z += static_cast<float>(direction * ticks);
         }
         movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] = next_z;
-        redistribute_movement_points_after_adjustment(index);
+        rebuild_movement_frames_from_positions();
+        refresh_movement_runtime_animation();
+        movement_edit_.dirty_since_last_flush = true;
         sync_movement_panel_frame_values();
         apply_movement_preview_pose_to_target();
         if (movement_tools_panel_) {

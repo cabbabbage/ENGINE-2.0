@@ -266,6 +266,7 @@ struct CombatController {
     static void clear_commitment(AnimationRuntime& runtime) {
         runtime.combat_state_.committed_attack_target_asset_id = std::nullopt;
         runtime.combat_state_.committed_attack_animation_id.clear();
+        runtime.combat_state_.committed_attack_path_index = 0;
         runtime.combat_state_.committed_attack_last_dispatched_frame_index = -1;
         runtime.combat_state_.committed_attack_last_payload_id.clear();
         runtime.combat_state_.attack_recovery_pending = false;
@@ -285,6 +286,8 @@ void force_committed_attack_target(AnimationRuntime& runtime, std::string target
     runtime.combat_state_.committed_attack_target_asset_id = std::move(target_asset_id);
     runtime.combat_state_.committed_attack_animation_id =
         runtime.self_ ? runtime.self_->current_animation : std::string{};
+    runtime.combat_state_.committed_attack_path_index =
+        runtime.self_ ? runtime.path_index_for(runtime.self_->current_animation) : 0;
     runtime.combat_state_.committed_attack_last_dispatched_frame_index = -1;
     runtime.combat_state_.committed_attack_last_payload_id.clear();
 }
@@ -313,9 +316,6 @@ std::uint32_t AnimationRuntime::resolve_frame_id_for_cooldown() {
 
 bool AnimationRuntime::attacking_enabled_for_self() const {
     if (!self_ || !self_->info) {
-        return false;
-    }
-    if (asset_types::canonicalize(self_->info->type) != asset_types::enemy) {
         return false;
     }
     for (const auto& [animation_id, animation] : self_->info->animations) {
@@ -472,6 +472,7 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
             animation_update::AttackValidation::AttackWindowScore::Miss;
         int facing_score = -2;
         std::string animation_id{};
+        std::size_t path_index = 0;
         std::string target_asset_id{};
     } best{};
     bool has_best = false;
@@ -488,6 +489,9 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         if (candidate.target_asset_id != current_best.target_asset_id) {
             return candidate.target_asset_id < current_best.target_asset_id;
         }
+        if (candidate.path_index != current_best.path_index) {
+            return candidate.path_index < current_best.path_index;
+        }
         return candidate.animation_id < current_best.animation_id;
     };
 
@@ -498,37 +502,38 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         if (target_id.empty()) {
             continue;
         }
+        const auto ranked =
+            animation_update::AttackValidation::rank_attack_candidates(
+                *self_,
+                *target,
+                attack_candidates,
+                8,
+                true);
+        if (!ranked.has_value()) {
+            continue;
+        }
+
+        const auto& candidate_ranked = *ranked;
         const int target_delta_x = target->world_x() - self_->world_x();
-        for (const std::string& attack_animation_id : attack_candidates) {
-            const auto evaluation =
-                animation_update::AttackValidation::evaluate_attack_window(
-                    *self_,
-                    *target,
-                    attack_animation_id,
-                    8);
-            if (evaluation.score == animation_update::AttackValidation::AttackWindowScore::Miss) {
-                continue;
-            }
+        int facing_score = 0;
+        const auto attack_it = self_->info->animations.find(candidate_ranked.animation_id);
+        if (attack_it != self_->info->animations.end()) {
+            facing_score =
+                attack_facing_match_score_impl(attack_it->second.tags,
+                                               candidate_ranked.animation_id,
+                                               target_delta_x,
+                                               kAttackFacingDeadzonePx);
+        }
 
-            int facing_score = 0;
-            const auto attack_it = self_->info->animations.find(attack_animation_id);
-            if (attack_it != self_->info->animations.end()) {
-                facing_score =
-                    attack_facing_match_score_impl(attack_it->second.tags,
-                                                   attack_animation_id,
-                                                   target_delta_x,
-                                                   kAttackFacingDeadzonePx);
-            }
-
-            RankedChoice candidate{};
-            candidate.score = evaluation.score;
-            candidate.facing_score = facing_score;
-            candidate.animation_id = attack_animation_id;
-            candidate.target_asset_id = target_id;
-            if (!has_best || better_choice(candidate, best)) {
-                best = std::move(candidate);
-                has_best = true;
-            }
+        RankedChoice candidate{};
+        candidate.score = candidate_ranked.evaluation.score;
+        candidate.facing_score = facing_score;
+        candidate.animation_id = candidate_ranked.animation_id;
+        candidate.path_index = candidate_ranked.path_index;
+        candidate.target_asset_id = target_id;
+        if (!has_best || better_choice(candidate, best)) {
+            best = std::move(candidate);
+            has_best = true;
         }
     }
 
@@ -541,9 +546,10 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     }
     combat_state_.committed_attack_target_asset_id = best.target_asset_id;
     combat_state_.committed_attack_animation_id = best.animation_id;
+    combat_state_.committed_attack_path_index = best.path_index;
     combat_state_.committed_attack_last_dispatched_frame_index = -1;
     combat_state_.committed_attack_last_payload_id.clear();
-    switch_to(best.animation_id, 0);
+    switch_to(best.animation_id, best.path_index);
     combat_state_.next_attack_cycle_eval_frame = frame_id + kAttackCycleDebounceFrames;
     return true;
 }
@@ -595,6 +601,10 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     if (!combat_state_.committed_attack_target_asset_id.has_value()) {
         return;
     }
+    if (path_index_for(self_->current_animation) != combat_state_.committed_attack_path_index) {
+        clear_attack_commitment();
+        return;
+    }
 
     Asset* target = resolve_asset_by_stable_id(*combat_state_.committed_attack_target_asset_id);
     if (!target || !target->active || target->dead || !target->isHitboxEnabled()) {
@@ -613,9 +623,19 @@ void AnimationRuntime::dispatch_active_attack_payload() {
         return;
     }
 
+    bool one_shot_attack = false;
+    auto anim_it = self_->info->animations.find(self_->current_animation);
+    if (anim_it != self_->info->animations.end()) {
+        one_shot_attack =
+            animation_update::tag_utils::has_normalized_tag(anim_it->second.tags, "die");
+    }
+
     target->send_attack(attack);
     combat_state_.committed_attack_last_dispatched_frame_index = attack.source_frame_index;
     combat_state_.committed_attack_last_payload_id = attack.attack_payload_id;
+    if (one_shot_attack) {
+        clear_attack_commitment();
+    }
 }
 
 void AnimationRuntime::refresh_runtime_frame_geometry() {
@@ -1382,8 +1402,11 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         clear_attack_commitment();
     } else if (combat_state_.committed_attack_animation_id != self_->current_animation) {
         combat_state_.committed_attack_animation_id = self_->current_animation;
+        combat_state_.committed_attack_path_index = path_index;
         combat_state_.committed_attack_last_dispatched_frame_index = -1;
         combat_state_.committed_attack_last_payload_id.clear();
+    } else {
+        combat_state_.committed_attack_path_index = path_index;
     }
     {
         const bool is_player = self_->info && self_->info->type == asset_types::player;

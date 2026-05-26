@@ -652,6 +652,36 @@ movement_frames_from_runtime_animation(const Animation& animation) {
     return frames;
 }
 
+struct MovementRelativePath {
+    std::vector<SDL_FPoint> xy;
+    std::vector<float> z;
+};
+
+MovementRelativePath build_movement_relative_path(
+    const std::vector<devmode::room_movement_payload::MovementFrame>& frames) {
+    MovementRelativePath path{};
+    path.xy.assign(frames.size(), SDL_FPoint{0.0f, 0.0f});
+    path.z.assign(frames.size(), 0.0f);
+    if (frames.empty()) {
+        return path;
+    }
+
+    for (std::size_t i = 1; i < frames.size(); ++i) {
+        const auto& frame = frames[i];
+        AnimationFrame runtime_frame{};
+        runtime_frame.dx = static_cast<int>(std::lround(frame.dx));
+        runtime_frame.dy = static_cast<int>(std::lround(frame.dy));
+        runtime_frame.dz = static_cast<int>(std::lround(frame.dz));
+        runtime_frame.rotation_degrees = frame.rotation_degrees;
+        const axis::WorldPos delta =
+            animation_update::movement_rotation::frame_world_delta_absolute_yaw(runtime_frame);
+        path.xy[i].x = path.xy[i - 1].x + static_cast<float>(delta.x);
+        path.xy[i].y = path.xy[i - 1].y + static_cast<float>(delta.z);
+        path.z[i] = path.z[i - 1] + static_cast<float>(delta.y);
+    }
+    return path;
+}
+
 std::vector<std::vector<devmode::room_movement_payload::MovementFrame>>
 resolve_room_movement_paths_for_animation(const Asset* target, const std::string& animation_id);
 
@@ -5337,6 +5367,64 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
         if (movement_mode_active()) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            auto render_readonly_movement_path =
+                [&](const std::vector<devmode::room_movement_payload::MovementFrame>& frames,
+                    SDL_Color color,
+                    bool blurred) {
+                    MovementRelativePath path = build_movement_relative_path(frames);
+                    const int path_count = static_cast<int>(path.xy.size());
+                    if (path_count < 2) {
+                        return;
+                    }
+                    const int blur_offsets[] = {-2, -1, 0, 1, 2};
+                    for (int pass = 0; pass < (blurred ? 5 : 1); ++pass) {
+                        const int offset = blurred ? blur_offsets[pass] : 0;
+                        const Uint8 alpha = blurred
+                            ? static_cast<Uint8>(std::max(18, static_cast<int>(color.a) - std::abs(offset) * 24))
+                            : color.a;
+                        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, alpha);
+                        for (int i = 1; i < path_count; ++i) {
+                            SDL_FPoint a{};
+                            SDL_FPoint b{};
+                            if (!project_movement_relative_point(path.xy, path.z, static_cast<std::size_t>(i - 1), a) ||
+                                !project_movement_relative_point(path.xy, path.z, static_cast<std::size_t>(i), b)) {
+                                continue;
+                            }
+                            SDL_RenderLine(renderer,
+                                           static_cast<int>(std::lround(a.x)) + offset,
+                                           static_cast<int>(std::lround(a.y)) + offset,
+                                           static_cast<int>(std::lround(b.x)) + offset,
+                                           static_cast<int>(std::lround(b.y)) + offset);
+                        }
+                    }
+                };
+
+            if (movement_edit_.target_asset && movement_edit_.target_asset->info) {
+                const SDL_Color same_animation_path_color{190, 190, 190, 92};
+                const SDL_Color other_animation_path_color{224, 178, 206, 82};
+
+                for (std::size_t path_index = 0; path_index < movement_edit_.paths.size(); ++path_index) {
+                    if (static_cast<int>(path_index) == movement_edit_.selected_path_index) {
+                        continue;
+                    }
+                    render_readonly_movement_path(movement_edit_.paths[path_index],
+                                                  same_animation_path_color,
+                                                  true);
+                }
+
+                for (const auto& [animation_id, animation] : movement_edit_.target_asset->info->animations) {
+                    (void)animation;
+                    if (animation_id == movement_edit_.animation_id) {
+                        continue;
+                    }
+                    const auto other_paths =
+                        resolve_room_movement_paths_for_animation(movement_edit_.target_asset, animation_id);
+                    for (const auto& path_frames : other_paths) {
+                        render_readonly_movement_path(path_frames, other_animation_path_color, true);
+                    }
+                }
+            }
+
             const int count = static_cast<int>(movement_edit_.rel_positions.size());
             for (int i = 1; i < count; ++i) {
                 SDL_FPoint a{};
@@ -18987,26 +19075,9 @@ void RoomEditor::apply_movement_preview_pose_to_target() {
 }
 
 void RoomEditor::rebuild_movement_rel_positions() {
-    movement_edit_.rel_positions.assign(movement_edit_.frame_count(), SDL_FPoint{0.0f, 0.0f});
-    movement_edit_.rel_positions_z.assign(movement_edit_.frame_count(), 0.0f);
-    if (!movement_edit_.has_frames()) {
-        return;
-    }
-    // Frame 0 is the movement origin and must remain fixed at zero.
-    movement_edit_.rel_positions_z[0] = 0.0f;
-    for (std::size_t i = 1; i < movement_edit_.frame_count(); ++i) {
-        const auto& frame = movement_edit_.frames[i];
-        AnimationFrame runtime_frame{};
-        runtime_frame.dx = static_cast<int>(std::lround(frame.dx));
-        runtime_frame.dy = static_cast<int>(std::lround(frame.dy));
-        runtime_frame.dz = static_cast<int>(std::lround(frame.dz));
-        runtime_frame.rotation_degrees = frame.rotation_degrees;
-        const axis::WorldPos delta =
-            animation_update::movement_rotation::frame_world_delta_absolute_yaw(runtime_frame);
-        movement_edit_.rel_positions[i].x = movement_edit_.rel_positions[i - 1].x + static_cast<float>(delta.x);
-        movement_edit_.rel_positions[i].y = movement_edit_.rel_positions[i - 1].y + static_cast<float>(delta.z);
-        movement_edit_.rel_positions_z[i] = movement_edit_.rel_positions_z[i - 1] + static_cast<float>(delta.y);
-    }
+    MovementRelativePath path = build_movement_relative_path(movement_edit_.frames);
+    movement_edit_.rel_positions = std::move(path.xy);
+    movement_edit_.rel_positions_z = std::move(path.z);
 }
 
 void RoomEditor::rebuild_movement_frames_from_positions() {
@@ -19585,26 +19656,36 @@ void RoomEditor::refresh_movement_editor_selection(bool reset_drag_state) {
     sync_movement_panel_frame_values();
 }
 
-bool RoomEditor::project_movement_point(std::size_t index, SDL_FPoint& out_screen) const {
+bool RoomEditor::project_movement_relative_point(const std::vector<SDL_FPoint>& rel_positions,
+                                                 const std::vector<float>& rel_positions_z,
+                                                 std::size_t index,
+                                                 SDL_FPoint& out_screen) const {
     if (!movement_mode_active() || !assets_ || !movement_edit_.target_asset) {
         return false;
     }
-    if (index >= movement_edit_.rel_positions.size() || index >= movement_edit_.rel_positions_z.size()) {
+    if (index >= rel_positions.size() || index >= rel_positions_z.size()) {
         return false;
     }
     const WarpedScreenGrid& cam = assets_->getView();
     const SDL_Point anchor = movement_asset_anchor_world();
     SDL_FPoint world{
-        movement_edit_.rel_positions[index].x + static_cast<float>(anchor.x),
-        movement_base_world_z() + movement_edit_.rel_positions_z[index]};
-    const float world_z = movement_edit_.rel_positions[index].y + static_cast<float>(anchor.y);
+        rel_positions[index].x + static_cast<float>(anchor.x),
+        movement_base_world_z() + rel_positions_z[index]};
+    const float world_z = rel_positions[index].y + static_cast<float>(anchor.y);
     if (cam.project_world_point(world, world_z, out_screen)) {
         return true;
     }
     out_screen = cam.map_to_screen_f(SDL_FPoint{
-        movement_edit_.rel_positions[index].x + static_cast<float>(anchor.x),
-        movement_edit_.rel_positions[index].y + static_cast<float>(anchor.y)});
+        rel_positions[index].x + static_cast<float>(anchor.x),
+        rel_positions[index].y + static_cast<float>(anchor.y)});
     return true;
+}
+
+bool RoomEditor::project_movement_point(std::size_t index, SDL_FPoint& out_screen) const {
+    return project_movement_relative_point(movement_edit_.rel_positions,
+                                           movement_edit_.rel_positions_z,
+                                           index,
+                                           out_screen);
 }
 
 int RoomEditor::find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const {

@@ -703,6 +703,10 @@ private:
     void sync_movement_panel_frame_values();
     bool apply_movement_panel_numeric_edits();
     int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
+    bool project_movement_relative_point(const std::vector<SDL_FPoint>& rel_positions,
+                                         const std::vector<float>& rel_positions_z,
+                                         std::size_t index,
+                                         SDL_FPoint& out_screen) const;
     bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;
     axis::WorldPos movement_relative_position_for_frame(std::size_t frame_index) const;
     void apply_movement_preview_pose_to_target();

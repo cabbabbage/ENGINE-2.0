@@ -628,6 +628,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
         self_->target_reached = false;
     }
     const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    const MovementTagFilter movement_tag_filter = resolve_movement_tag_filter(combat_overrides);
     auto_move_attacking_enabled_ = combat_options.attacking_enabled;
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};

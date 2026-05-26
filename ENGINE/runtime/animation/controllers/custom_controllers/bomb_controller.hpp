@@ -2,8 +2,8 @@
 #define bomb_CONTROLLER_HPP
 
 #include "animation/controllers/shared/custom_controller_api.hpp"
+#include "animation/controllers/shared/enemy_auto_combat_behavior.hpp"
 #include "animation/controllers/shared/enemy_combat_steering.hpp"
-#include <string>
 
 class Asset;
 class Input;
@@ -20,17 +20,8 @@ protected:
     void on_process_pending_attacks(Asset& self) override;
 
 private:
-    enum class State {
-        Chasing,
-        Detonating
-    };
-
-    void begin_detonation(Asset* player, const std::string& animation_id = "die");
-    void dispatch_explosion_once(Asset* player);
-
     custom_controller_api::EnemyCombatSteering steering_;
-    State state_ = State::Chasing;
-    bool explosion_dispatched_ = false;
+    custom_controller_api::EnemyAutoCombatBehavior behavior_;
 };
 
 #endif

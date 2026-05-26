@@ -5,6 +5,7 @@
 
 #include "animation/animation_tag_utils.hpp"
 #include "assets/asset/Asset.hpp"
+#include "utils/grid.hpp"
 
 namespace animation_update::custom_controllers {
 
@@ -33,6 +34,13 @@ int adaptive_visit_threshold_for_step(int requested_visit_threshold_px, int step
         threshold = (clamped_step <= 1) ? 0 : (clamped_step - 1);
     }
     return threshold;
+}
+
+int actionable_min_step_for_resolution(const Asset& self) {
+    const int grid_step = vibble::grid::delta(self.grid_resolution);
+    // convert_resolution rounds when moving from world px to higher layers, so half-step
+    // moves can collapse to zero. Keep move intents above half-step to ensure progress.
+    return std::max(1, (grid_step / 2) + 1);
 }
 
 } // namespace
@@ -131,11 +139,26 @@ bool EnemyCombatSteering::approach(Asset& self,
     const double to_target_x = static_cast<double>(target.world_x() - self.world_x());
     const double to_target_z = static_cast<double>(target.world_z() - self.world_z());
     const double dist = std::sqrt(std::max(1.0, to_target_x * to_target_x + to_target_z * to_target_z));
-    int step_px = static_cast<int>(std::lround(dist - static_cast<double>(std::max(0, desired_range_px))));
-    step_px = std::clamp(step_px, 1, std::max(1, config_.max_plan_distance_px));
+    const int actionable_min_step_px = actionable_min_step_for_resolution(self);
+    const int raw_step_px =
+        static_cast<int>(std::lround(dist - static_cast<double>(std::max(0, desired_range_px))));
+    const bool close_reposition = raw_step_px <= 0;
+    int step_px = close_reposition ? actionable_min_step_px : raw_step_px;
+    step_px = std::clamp(step_px, actionable_min_step_px, std::max(actionable_min_step_px, config_.max_plan_distance_px));
     const int effective_visit_threshold_px = adaptive_visit_threshold_for_step(visit_threshold_px, step_px);
 
     SDL_Point delta = normalized_scaled_delta(to_target_x, to_target_z, step_px);
+    if (close_reposition) {
+        const SDL_Point tangent{
+            static_cast<int>(std::lround((-to_target_z / dist) * static_cast<double>(step_px) * detour_side_)),
+            static_cast<int>(std::lround((to_target_x / dist) * static_cast<double>(step_px) * detour_side_))
+        };
+        delta = tangent;
+        if (delta.x == 0 && delta.y == 0) {
+            delta = SDL_Point{detour_side_ * step_px, 0};
+        }
+        detour_side_ = -detour_side_;
+    }
     if (is_stuck()) {
         const SDL_Point tangent{
             static_cast<int>(std::lround((-to_target_z / dist) * static_cast<double>(config_.detour_px) * detour_side_)),
@@ -165,7 +188,7 @@ bool EnemyCombatSteering::evade(Asset& self,
     const double away_x = static_cast<double>(self.world_x() - target.world_x());
     const double away_z = static_cast<double>(self.world_z() - target.world_z());
     const double len = std::sqrt(std::max(1.0, away_x * away_x + away_z * away_z));
-    const int escape_step_px = std::max(1, evade_distance_px);
+    const int escape_step_px = std::max(actionable_min_step_for_resolution(self), evade_distance_px);
     const int effective_visit_threshold_px =
         adaptive_visit_threshold_for_step(visit_threshold_px, escape_step_px);
     SDL_Point delta = normalized_scaled_delta(away_x, away_z, escape_step_px);

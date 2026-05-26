@@ -10107,82 +10107,6 @@
     "spider": {
       "anchor_point_child_candidates": [],
       "animations": {
-        "animatione": {
-          "box_schema_version": 1,
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 0,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 813,
-                    "texture_y": 0
-                  },
-                  {
-                    "texture_x": 813,
-                    "texture_y": 308
-                  },
-                  {
-                    "texture_x": 0,
-                    "texture_y": 308
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 0,
-                  "y": 0
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 308,
-                  "w": 813
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              0,
-              0.0,
-              true
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": 0,
-            "dy": 0,
-            "dz": 0.0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "animatione"
-          },
-          "tags": []
-        },
         "attack_left": {
           "anchor_points": [
             [],
@@ -10555,20 +10479,20 @@
                 "anchor_link": "",
                 "corners": [
                   {
-                    "texture_x": 450,
-                    "texture_y": 368
+                    "texture_x": 0,
+                    "texture_y": 0
                   },
                   {
-                    "texture_x": 1601,
-                    "texture_y": 368
+                    "texture_x": 1151,
+                    "texture_y": 0
                   },
                   {
-                    "texture_x": 1601,
-                    "texture_y": 1015
+                    "texture_x": 1151,
+                    "texture_y": 647
                   },
                   {
-                    "texture_x": 450,
-                    "texture_y": 1015
+                    "texture_x": 0,
+                    "texture_y": 647
                   }
                 ],
                 "enabled": true,
@@ -10581,8 +10505,8 @@
                 "id": "hit_box_id",
                 "name": "hit_box",
                 "position": {
-                  "x": 450,
-                  "y": 368
+                  "x": 0,
+                  "y": 0
                 },
                 "rotation_degrees": 0.0,
                 "size": {
@@ -11437,282 +11361,6 @@
             "die"
           ]
         },
-        "down": {
-          "box_schema_version": 1,
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "inherit_data": true,
-          "invert_frames_horizontal": false,
-          "invert_frames_vertical": false,
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": true,
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "up",
-            "path": ""
-          },
-          "tags": []
-        },
         "left": {
           "anchor_points": [
             [],
@@ -12435,351 +12083,6 @@
             "path": ""
           },
           "tags": []
-        },
-        "up": {
-          "box_schema_version": 1,
-          "derived_modifiers": {
-            "reverse": false
-          },
-          "hit_boxes": [
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ],
-            [
-              {
-                "anchor_link": "",
-                "corners": [
-                  {
-                    "texture_x": 450,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 368
-                  },
-                  {
-                    "texture_x": 1601,
-                    "texture_y": 1015
-                  },
-                  {
-                    "texture_x": 450,
-                    "texture_y": 1015
-                  }
-                ],
-                "enabled": true,
-                "extrusion_backward": 10,
-                "extrusion_forward": 10,
-                "frame_range": {
-                  "end": 0,
-                  "start": 0
-                },
-                "id": "hit_box_id",
-                "name": "hit_box",
-                "position": {
-                  "x": 450,
-                  "y": 368
-                },
-                "rotation_degrees": 0.0,
-                "size": {
-                  "h": 647,
-                  "w": 1151
-                },
-                "type": "hitbox"
-              }
-            ]
-          ],
-          "inherit_data": false,
-          "invert_frames_horizontal": true,
-          "invert_frames_vertical": false,
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "movement": [
-            [
-              0,
-              0,
-              0,
-              0.0,
-              true
-            ],
-            [
-              0,
-              0,
-              -15,
-              0.0,
-              true
-            ],
-            [
-              0,
-              0,
-              -15,
-              0.0,
-              true
-            ],
-            [
-              0,
-              0,
-              -15,
-              0.0,
-              true
-            ],
-            [
-              0,
-              0,
-              -15,
-              0.0,
-              true
-            ],
-            [
-              0,
-              0,
-              -15,
-              0.0,
-              true
-            ]
-          ],
-          "movement_paths": [
-            [
-              [
-                0,
-                0,
-                0,
-                0.0,
-                true
-              ]
-            ]
-          ],
-          "movement_total": {
-            "dr": 0.0,
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "movement_totals": [
-            {
-              "dr": 0.0,
-              "dx": 0,
-              "dy": 0,
-              "dz": 0
-            }
-          ],
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "left",
-            "path": ""
-          },
-          "tags": []
         }
       },
       "anti_tags": [],
@@ -12827,12 +12130,12 @@
       "y_position_range": {
         "center": 0,
         "falloff": 0,
-        "random": false,
-        "span": 0,
+        "random": true,
+        "span": 5,
         "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
+          "center": 0.36,
+          "edge": 0.28,
+          "falloff": 0.36
         }
       }
     },
@@ -19199,8 +18502,8 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
-        "dynamic_renderer_depth_efficiency_depth": 2047.0,
+        "depth_of_field_enabled": false,
+        "dynamic_renderer_depth_efficiency_depth": 1715.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.8399999737739563,
         "layer_depth_curve": 88.33999633789063,
         "layer_depth_interval": 21.0,
@@ -19265,7 +18568,7 @@
                 "name": "blue_flower"
               },
               {
-                "chance": 32.2,
+                "chance": 8.200000000000003,
                 "display_name": "#fog",
                 "name": "#fog",
                 "tag": true,
@@ -19276,7 +18579,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 7,
+            "grid_resolution": 6,
             "jitter": 32,
             "locked": false,
             "max_number": 1,
@@ -19290,9 +18593,9 @@
         ],
         "fog_near_distance_px": 712,
         "fog_render_boundary_spacing": 16,
-        "max_spawn_from_room": 2095,
+        "max_spawn_from_room": 3202,
         "regen_seed": 4,
-        "render_radius": 4625
+        "render_radius": 7233
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -19350,8 +18653,8 @@
           "camera_zoom_percent": 100,
           "display_color": [
             242,
-            61,
-            242,
+            36,
+            165,
             255
           ],
           "geometry": "Square",
@@ -19486,8 +18789,8 @@
         },
         "NewRoom": {
           "display_color": [
-            85,
-            242,
+            37,
+            36,
             242,
             255
           ],
@@ -19532,9 +18835,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            137,
-            71,
-            204,
+            85,
+            242,
+            242,
             255
           ],
           "geometry": "Square",
@@ -19578,9 +18881,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            242,
-            85,
-            133,
+            204,
+            118,
+            31,
             255
           ],
           "geometry": "Square",
@@ -19655,9 +18958,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            185,
-            204,
-            31,
+            203,
+            242,
+            36,
             255
           ],
           "geometry": "Square",
@@ -19699,6 +19002,52 @@
             }
           }
         },
+        "NewRoom4": {
+          "display_color": [
+            31,
+            204,
+            144,
+            255
+          ],
+          "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": false,
+          "is_boss": false,
+          "name": "NewRoom4",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "spawn_groups": [],
+          "tags": [],
+          "trail_connection_sector": {
+            "direction_deg": 0.0,
+            "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
+        },
         "Random_Enemy_Easy": {
           "camera_center_dx": 144,
           "camera_center_dz": -103,
@@ -19706,9 +19055,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            36,
-            242,
-            70,
+            115,
+            31,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -19794,9 +19143,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
+            53,
             242,
-            159,
-            85,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -20221,8 +19570,8 @@
           "camera_zoom_percent": 2,
           "display_color": [
             204,
-            31,
-            177,
+            71,
+            105,
             255
           ],
           "geometry": "Square",
@@ -20576,9 +19925,6 @@
           }
         },
         "NewTrail": {
-          "anti_tags": [],
-          "curviness": 0,
-          "curvyness": 0,
           "display_color": [
             242,
             155,
@@ -20588,16 +19934,15 @@
           "geometry": "Square",
           "name": "NewTrail",
           "spawn_groups": [],
-          "tags": [],
           "width": {
-            "center": 750,
+            "center": 1166,
             "falloff": 75,
             "random": true,
             "span": 150,
             "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.3333333333333333,
-              "falloff": 0.3333333333333333
+              "center": 0.48513556386339146,
+              "edge": 0.25743221806830424,
+              "falloff": 0.25743221806830424
             }
           }
         },

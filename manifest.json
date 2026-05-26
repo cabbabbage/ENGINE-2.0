@@ -13302,12 +13302,29 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -13337,7 +13354,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 319.0,
+        "scale_percentage": 100.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -13357,8 +13374,8 @@
           "falloff": 0.0
         }
       },
-      "tilt_range_max_deg": 8,
-      "tilt_range_min_deg": -8,
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
       "y_position_range": {
         "center": 0,
@@ -13387,11 +13404,29 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -13400,7 +13435,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -13413,11 +13449,14 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 319.0,
+        "scale_percentage": 100.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -13437,6 +13476,8 @@
           "falloff": 0.0
         }
       },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
       "y_position_range": {
         "center": 0,
@@ -13481,15 +13522,125 @@
           "invert_y": false,
           "invert_z": false,
           "locked": false,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
           "movement_paths": [
             [
               [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
                 0,
                 0
               ]
@@ -13509,7 +13660,7 @@
               "dz": 0
             }
           ],
-          "number_of_frames": 1,
+          "number_of_frames": 24,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -13538,7 +13689,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 319.0,
+        "scale_percentage": 100.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -19059,7 +19210,7 @@
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 5158.0,
+        "max_cull_depth": 5353.0,
         "min_visible_screen_ratio": 0.00800000037997961,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
@@ -19168,12 +19319,12 @@
           ]
         },
         {
-          "bounding_extent": 11057.23876019687,
+          "bounding_extent": 10972.86771997184,
           "level": 1,
           "max_rooms": 2,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 19806.0,
+          "ring_radius": 19722.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -19192,15 +19343,15 @@
       "map_name": "forrest",
       "rooms_data": {
         "Loot_Room": {
-          "camera_center_dx": 3143,
-          "camera_center_dz": 6630,
-          "camera_height_px": 698,
-          "camera_tilt_deg": 28.950923919677734,
-          "camera_zoom_percent": 1,
+          "camera_center_dx": 675,
+          "camera_center_dz": 5108,
+          "camera_height_px": 2429,
+          "camera_tilt_deg": 51.847171783447266,
+          "camera_zoom_percent": 100,
           "display_color": [
-            137,
-            31,
-            204,
+            242,
+            61,
+            242,
             255
           ],
           "geometry": "Square",
@@ -19381,9 +19532,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            242,
-            36,
-            36,
+            137,
+            71,
+            204,
             255
           ],
           "geometry": "Square",
@@ -19428,8 +19579,8 @@
         "NewRoom2": {
           "display_color": [
             242,
-            187,
             85,
+            133,
             255
           ],
           "geometry": "Square",
@@ -19504,9 +19655,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            113,
+            185,
             204,
-            71,
+            31,
             255
           ],
           "geometry": "Square",
@@ -19555,9 +19706,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            85,
-            154,
+            36,
             242,
+            70,
             255
           ],
           "geometry": "Circle",
@@ -19643,9 +19794,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            224,
-            34,
-            183,
+            242,
+            159,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -20069,9 +20220,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            68,
-            36,
-            242,
+            204,
+            31,
+            177,
             255
           ],
           "geometry": "Square",
@@ -20503,9 +20654,6 @@
           }
         },
         "NewTrail3": {
-          "anti_tags": [],
-          "curviness": 0,
-          "curvyness": 0,
           "display_color": [
             31,
             204,
@@ -20515,16 +20663,15 @@
           "geometry": "Square",
           "name": "NewTrail3",
           "spawn_groups": [],
-          "tags": [],
           "width": {
-            "center": 750,
+            "center": 960,
             "falloff": 75,
             "random": true,
             "span": 150,
             "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.3333333333333333,
-              "falloff": 0.3333333333333333
+              "center": 0.3287697895947894,
+              "edge": 0.3356151052026053,
+              "falloff": 0.3356151052026053
             }
           }
         }

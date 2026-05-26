@@ -696,14 +696,14 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
             }
             const auto fog_spawn_chunks =
                 chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
-                                                        world::GridPoint{min_x, boundary_z},
-                                                        world::GridPoint{max_x, boundary_z}},
+                                                        world::GridPoint::make_virtual(min_x, 0, boundary_z),
+                                                        world::GridPoint::make_virtual(max_x, 0, boundary_z)},
                                                     preload_margin_px()));
             spawn_chunks.insert(fog_spawn_chunks.begin(), fog_spawn_chunks.end());
             const auto fog_keep_chunks =
                 chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
-                                                        world::GridPoint{min_x, boundary_z},
-                                                        world::GridPoint{max_x, boundary_z}},
+                                                        world::GridPoint::make_virtual(min_x, 0, boundary_z),
+                                                        world::GridPoint::make_virtual(max_x, 0, boundary_z)},
                                                     despawn_margin_px()));
             keep_chunks.insert(fog_keep_chunks.begin(), fog_keep_chunks.end());
         }

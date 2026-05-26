@@ -4042,7 +4042,8 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 }
             }
         }
-        const int room_edge_z = dynamic_spawn::geometry::collect_area_geometry(*assets_).max_z + render_radius;
+        const auto area_geometry = dynamic_spawn::geometry::collect_area_geometry(*assets_);
+        const int room_edge_z = area_geometry.max_z + render_radius;
         const int boundary_z = std::max(render_edge_z, room_edge_z);
         SDL_FPoint left{};
         SDL_FPoint right{};

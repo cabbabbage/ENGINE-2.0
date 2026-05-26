@@ -520,7 +520,7 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
                 editing_ = true;
                 SDL_StartTextInput(SDL_GetKeyboardFocus());
             }
-            caret_pos_ = text_.size();
+            caret_pos_ = caret_pos_from_point(p.x, p.y);
             // Consume click inside textbox to block propagation
             return true;
         } else if (editing_) {
@@ -570,6 +570,50 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
         update_geometry(true);
     }
     return changed;
+}
+
+size_t DMTextBox::caret_pos_from_point(int mouse_x, int mouse_y) const {
+    const DMLabelStyle label_style = DMStyles::Label();
+    TTF_Font* font = DMFontCache::instance().get_font(label_style.font_path, label_style.font_size);
+    if (!font || text_.empty()) {
+        return text_.size();
+    }
+
+    const int content_w = std::max(1, box_rect_.w - 16);
+    const std::vector<std::string> lines = wrap_lines(font, text_, content_w);
+    if (lines.empty()) {
+        return 0;
+    }
+
+    int line_height = 0;
+    if (!TTF_GetStringSize(font, "A", 1, nullptr, &line_height) || line_height <= 0) {
+        line_height = 18;
+    }
+    const int local_y = std::max(0, mouse_y - (box_rect_.y + 6));
+    const size_t line_index = std::min(lines.size() - 1, static_cast<size_t>(local_y / std::max(1, line_height)));
+
+    size_t char_offset = 0;
+    for (size_t i = 0; i < line_index; ++i) {
+        char_offset += lines[i].size();
+    }
+
+    const std::string& target_line = lines[line_index];
+    const int local_x = mouse_x - (box_rect_.x + 8);
+    if (local_x <= 0) {
+        return char_offset;
+    }
+
+    for (size_t i = 0; i <= target_line.size(); ++i) {
+        const std::string prefix = target_line.substr(0, i);
+        int prefix_w = 0;
+        if (!prefix.empty()) {
+            TTF_GetStringSize(font, prefix.c_str(), static_cast<int>(prefix.size()), &prefix_w, nullptr);
+        }
+        if (prefix_w >= local_x) {
+            return char_offset + i;
+        }
+    }
+    return char_offset + target_line.size();
 }
 
 void DMTextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, int max_width, const DMLabelStyle& ls) const {
@@ -3694,6 +3738,5 @@ void DMDropdown::begin_focus() {
     has_pending_index_ = true;
     hovered_option_index_ = pending_index_;
 }
-
 
 

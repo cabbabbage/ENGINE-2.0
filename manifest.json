@@ -6364,7 +6364,7 @@
               "dz": 0
             }
           ],
-          "number_of_frames": 1,
+          "number_of_frames": 12,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -6452,140 +6452,6 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/fog_2",
       "asset_name": "fog_2",
-      "asset_type": "Object",
-      "attack_box_enabled": false,
-      "bounce_amount": 0,
-      "can_invert": true,
-      "floor_boxes_enabled": false,
-      "hitbox_enabled": false,
-      "impassable_enabled": false,
-      "min_distance_all": 0,
-      "min_same_type_distance": 0,
-      "movement_enabled": false,
-      "neighbor_search_distance": 500,
-      "render_radius": 0,
-      "size_settings": {
-        "scale_percentage": 100.0,
-        "size_variation": 20.0
-      },
-      "start": "default",
-      "tags": [
-        "fog"
-      ],
-      "tillable": false,
-      "tilt_range": {
-        "center": 0,
-        "falloff": 0,
-        "random": false,
-        "span": 0,
-        "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
-        }
-      },
-      "update_radius": 0,
-      "weight_kg": 0.0,
-      "y_position_range": {
-        "center": -6,
-        "falloff": 6,
-        "random": true,
-        "span": 16,
-        "weights": {
-          "center": 0.3478260869565218,
-          "edge": 0.3130434782608696,
-          "falloff": 0.3391304347826087
-        }
-      }
-    },
-    "fog_3": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "anti_tags": [],
-      "asset_directory": "resources/assets/fog_3",
-      "asset_name": "fog_3",
-      "asset_type": "Object",
-      "attack_box_enabled": false,
-      "bounce_amount": 0,
-      "can_invert": true,
-      "floor_boxes_enabled": false,
-      "hitbox_enabled": false,
-      "impassable_enabled": false,
-      "min_distance_all": 0,
-      "min_same_type_distance": 0,
-      "movement_enabled": false,
-      "neighbor_search_distance": 500,
-      "render_radius": 0,
-      "size_settings": {
-        "scale_percentage": 100.0,
-        "size_variation": 20.0
-      },
-      "start": "default",
-      "tags": [
-        "fog"
-      ],
-      "tillable": false,
-      "tilt_range": {
-        "center": 0,
-        "falloff": 0,
-        "random": false,
-        "span": 0,
-        "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
-        }
-      },
-      "update_radius": 0,
-      "weight_kg": 0.0,
-      "y_position_range": {
-        "center": -6,
-        "falloff": 6,
-        "random": true,
-        "span": 16,
-        "weights": {
-          "center": 0.3478260869565218,
-          "edge": 0.3130434782608696,
-          "falloff": 0.3391304347826087
-        }
-      }
-    },
-    "fog_4": {
-      "animations": {
-        "default": {
-          "invert_x": false,
-          "invert_y": false,
-          "invert_z": false,
-          "locked": false,
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "anti_tags": [],
-      "asset_directory": "resources/assets/fog_4",
-      "asset_name": "fog_4",
       "asset_type": "Object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
@@ -18593,7 +18459,7 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 3218.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.5099999904632568,
         "layer_depth_curve": 29.369998931884766,
@@ -18685,9 +18551,9 @@
         "fog_far_distance_px": 5929,
         "fog_near_distance_px": 751,
         "fog_render_boundary_spacing": 16,
-        "max_spawn_from_room": 4862,
+        "max_spawn_from_room": 3518,
         "regen_seed": 4,
-        "render_radius": 5099
+        "render_radius": 4229
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -18744,9 +18610,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            36,
-            242,
-            40,
+            204,
+            31,
+            31,
             255
           ],
           "geometry": "Square",
@@ -18851,9 +18717,9 @@
         },
         "NewRoom": {
           "display_color": [
-            144,
-            242,
-            85,
+            31,
+            129,
+            204,
             255
           ],
           "geometry": "Square",
@@ -18897,9 +18763,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            234,
-            85,
             242,
+            36,
+            227,
             255
           ],
           "geometry": "Square",
@@ -18943,9 +18809,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            51,
+            71,
             204,
-            141,
+            148,
             255
           ],
           "geometry": "Square",
@@ -19020,9 +18886,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            31,
-            115,
-            204,
+            122,
+            242,
+            85,
             255
           ],
           "geometry": "Square",
@@ -19071,9 +18937,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            178,
-            31,
-            204,
+            85,
+            177,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -19159,9 +19025,9 @@
           "camera_tilt_deg": 30.68971061706543,
           "camera_zoom_percent": 0,
           "display_color": [
-            242,
-            87,
-            85,
+            204,
+            31,
+            161,
             255
           ],
           "geometry": "Circle",
@@ -19583,7 +19449,7 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            104,
+            89,
             204,
             31,
             255

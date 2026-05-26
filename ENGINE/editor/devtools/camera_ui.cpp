@@ -76,7 +76,7 @@ public:
 private:
     std::string compose_label() const {
         const bool expanded = expanded_getter_ ? expanded_getter_() : true;
-        return std::string(expanded ? "[-] " : "[+] ") + title_;
+        return std::string(expanded ? "▾ " : "▸ ") + title_;
     }
 
 private:
@@ -90,6 +90,10 @@ private:
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     : DockableCollapsible("Camera Settings", true, x, y),
       assets_(assets) {
+    movement_section_expanded_ = true;
+    framing_section_expanded_ = true;
+    lighting_section_expanded_ = false;
+    debug_section_expanded_ = false;
     set_expanded(true);
     set_visible(false);
     set_padding(16);
@@ -424,12 +428,14 @@ void CameraUIPanel::rebuild_rows() {
     if (movement_section_expanded_) {
         if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
         if (camera_height_max_widget_) rows.push_back({ camera_height_max_widget_.get() });
+        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     }
 
     if (framing_section_widget_) rows.push_back({ framing_section_widget_.get() });
     if (framing_section_expanded_) {
         if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
         if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
+        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     }
 
     if (lighting_section_widget_) rows.push_back({ lighting_section_widget_.get() });
@@ -437,6 +443,7 @@ void CameraUIPanel::rebuild_rows() {
         if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
         if (blur_px_slider_) rows.push_back({ blur_px_slider_.get() });
         if (radial_blur_px_slider_) rows.push_back({ radial_blur_px_slider_.get() });
+        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     }
 
     if (debug_section_widget_) rows.push_back({ debug_section_widget_.get() });
@@ -550,4 +557,3 @@ void CameraUIPanel::apply_settings_if_needed() {
         dirty_callback_();
     }
 }
-

@@ -538,7 +538,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
             chip_x += chip_rect.w + DMSpacing::small_gap();
         }
 
-        if (show_delete_button_) {
+        if (show_delete_button_ && row.selectable) {
             SDL_Rect delete_rect{rect.x + geometry.delete_button_rel.x,
                                  rect.y + geometry.delete_button_rel.y,
                                  geometry.delete_button_rel.w,
@@ -600,7 +600,10 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
             hovered_row_ = hit.row_index;
         }
         hovered_delete_row_.reset();
-        if (hit.target == HitTarget::Delete && hit.row_index) {
+        if (hit.target == HitTarget::Delete &&
+            hit.row_index &&
+            *hit.row_index < display_rows_.size() &&
+            display_rows_[*hit.row_index].selectable) {
             hovered_delete_row_ = *hit.row_index;
         }
         return hovered_row_.has_value() || hovered_delete_row_.has_value();
@@ -624,7 +627,8 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         const std::string& animation_id = hit.animation_id;
         if (e.button.button == SDL_BUTTON_LEFT) {
             if (hit.target == HitTarget::Delete) {
-                if (on_delete_animation_) {
+                const DisplayRow& row = display_rows_[*hit.row_index];
+                if (row.selectable && on_delete_animation_) {
                     on_delete_animation_(animation_id);
                 }
                 return true;
@@ -655,6 +659,12 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         HitTestResult hit = hit_test(p);
         record_hit_result("up", p, hit);
         if (hit.target == HitTarget::Outside) {
+            return false;
+        }
+        if (hit.target == HitTarget::Delete &&
+            hit.row_index &&
+            *hit.row_index < display_rows_.size() &&
+            !display_rows_[*hit.row_index].selectable) {
             return false;
         }
         return hit.target == HitTarget::Row || hit.target == HitTarget::Delete;
@@ -1010,7 +1020,7 @@ AnimationListPanel::HitTestResult AnimationListPanel::hit_test(const SDL_Point& 
                              geometry.delete_button_rel.w,
                              geometry.delete_button_rel.h};
         delete_rect = scroll_controller_.apply(delete_rect);
-        if (show_delete_button_ && SDL_PointInRect(&p, &delete_rect)) {
+        if (show_delete_button_ && display_rows_[i].selectable && SDL_PointInRect(&p, &delete_rect)) {
             result.target = HitTarget::Delete;
         }
         return result;

@@ -14,6 +14,7 @@
 
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/spawn/dynamic_spawn_geometry.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 
 class Asset;
 class AssetInfo;
@@ -174,6 +175,7 @@ private:
     void suspend_outside_keep_chunks(const std::unordered_set<ChunkKey, ChunkKeyHash>& keep_chunks);
     void activate_chunk(const ChunkKey& chunk);
     std::size_t activate_chunk_budgeted(const ChunkKey& chunk, std::size_t& remaining_budget);
+    std::size_t activate_deferred_fog_cells_budgeted(const ChunkKey& chunk, std::size_t& remaining_budget);
     ChunkKey chunk_key_for_world(int world_x, int world_z) const;
     std::unordered_set<ChunkKey, ChunkKeyHash> chunk_keys_for_bounds(const world::GridBounds& bounds) const;
     world::GridBounds expanded_bounds(const world::GridBounds& bounds, int margin_px) const;
@@ -182,6 +184,7 @@ private:
     const Candidate* pick_candidate(const Selector& selector, const CellKey& key) const;
     SDL_Point jittered_world_point(const Selector& selector, const CellKey& key, SDL_Point base_point) const;
     bool info_allowed(const AssetInfo* info, Mode mode) const;
+    bool fog_cell_spawn_eligible_now(const PlannedCell& cell) const;
     int max_spawn_from_room_px() const;
     int preload_margin_px() const;
     int despawn_margin_px() const;
@@ -192,6 +195,7 @@ private:
     PlanByChunk cells_by_chunk_;
     std::unordered_map<CellKey, Asset*, CellKeyHash> active_;
     std::unordered_map<CellKey, std::unique_ptr<Asset>, CellKeyHash> suspended_;
+    std::unordered_map<ChunkKey, std::vector<PlannedCell>, ChunkKeyHash> deferred_fog_cells_;
     std::unordered_map<Asset*, CellKey> asset_to_key_;
     std::unordered_set<ChunkKey, ChunkKeyHash> active_chunks_;
     std::vector<ChunkKey> pending_activation_chunks_;

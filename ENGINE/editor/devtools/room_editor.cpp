@@ -20147,6 +20147,39 @@ void RoomEditor::redistribute_movement_points_after_adjustment(int adjusted_inde
     movement_edit_.dirty_since_last_flush = true;
 }
 
+void RoomEditor::redistribute_movement_points_vertical_only_after_adjustment(int adjusted_index) {
+    const int count = static_cast<int>(movement_edit_.rel_positions.size());
+    if (!movement_edit_.smooth_enabled || count < 3 || adjusted_index <= 0) {
+        rebuild_movement_frames_from_positions();
+        refresh_movement_runtime_animation();
+        movement_edit_.dirty_since_last_flush = true;
+        return;
+    }
+
+    std::vector<SDL_FPoint> redistributed_xy = movement_edit_.rel_positions;
+    std::vector<float> redistributed_z = movement_edit_.rel_positions_z;
+    const std::vector<SDL_FPoint> original_xy = movement_edit_.rel_positions;
+    const std::vector<float> original_z = movement_edit_.rel_positions_z;
+    const int last_index = count - 1;
+
+    if (movement_edit_.curve_enabled) {
+        apply_movement_curved_smoothing(adjusted_index,
+                                        original_xy,
+                                        original_z,
+                                        redistributed_xy,
+                                        redistributed_z,
+                                        last_index);
+    } else {
+        apply_movement_linear_smoothing(adjusted_index, redistributed_xy, redistributed_z, last_index);
+    }
+
+    movement_edit_.rel_positions = original_xy;
+    movement_edit_.rel_positions_z = std::move(redistributed_z);
+    rebuild_movement_frames_from_positions();
+    refresh_movement_runtime_animation();
+    movement_edit_.dirty_since_last_flush = true;
+}
+
 void RoomEditor::quantize_selected_movement_path_to_reference(const std::vector<devmode::room_movement_payload::MovementFrame>& reference_frames) {
     if (!movement_mode_active() || movement_edit_.frames.size() < 2 || reference_frames.size() < 2) return;
     if (movement_edit_.rel_positions.size() != movement_edit_.frames.size() ||
@@ -24027,9 +24060,7 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
             next_z += static_cast<float>(direction * ticks);
         }
         movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] = next_z;
-        rebuild_movement_frames_from_positions();
-        refresh_movement_runtime_animation();
-        movement_edit_.dirty_since_last_flush = true;
+        redistribute_movement_points_vertical_only_after_adjustment(index);
         sync_movement_panel_frame_values();
         apply_movement_preview_pose_to_target();
         if (movement_tools_panel_) {

@@ -733,6 +733,7 @@ private:
     void quantize_selected_movement_path_to_reference(const std::vector<devmode::room_movement_payload::MovementFrame>& reference_frames);
     void redistribute_movement_points_after_adjustment(int adjusted_index);
     void redistribute_movement_points_after_adjustment(int adjusted_index, bool horizontal_only);
+    void redistribute_movement_points_vertical_only_after_adjustment(int adjusted_index);
     SDL_Point movement_asset_anchor_world() const;
     float movement_base_world_z() const;
     devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,

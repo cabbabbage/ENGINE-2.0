@@ -6852,7 +6852,7 @@
       "asset_type": "Object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
-      "can_invert": false,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -6867,7 +6867,7 @@
       "render_radius": 0,
       "size_settings": {
         "scale_percentage": 100.0,
-        "size_variation": 0.0
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [
@@ -6891,13 +6891,13 @@
       "weight_kg": 0.0,
       "y_position_range": {
         "center": 0,
-        "falloff": 0,
-        "random": false,
-        "span": 0,
+        "falloff": 30,
+        "random": true,
+        "span": 39,
         "weights": {
-          "center": 1.0,
-          "edge": 0.0,
-          "falloff": 0.0
+          "center": 0.23076923076923075,
+          "edge": 0.21153846153846156,
+          "falloff": 0.5576923076923077
         }
       }
     },
@@ -6974,13 +6974,13 @@
       "weight_kg": 0.0,
       "y_position_range": {
         "center": 0,
-        "falloff": 2,
+        "falloff": 30,
         "random": true,
-        "span": 4,
+        "span": 39,
         "weights": {
-          "center": 0.358695652173913,
-          "edge": 0.2826086956521739,
-          "falloff": 0.358695652173913
+          "center": 0.23076923076923075,
+          "edge": 0.21153846153846156,
+          "falloff": 0.5576923076923077
         }
       }
     },
@@ -19125,7 +19125,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 6,
+            "grid_resolution": 7,
             "jitter": 32,
             "locked": false,
             "max_number": 1,
@@ -19192,15 +19192,15 @@
       "map_name": "forrest",
       "rooms_data": {
         "Loot_Room": {
-          "camera_center_dx": -5476,
-          "camera_center_dz": 1214,
-          "camera_height_px": 222,
-          "camera_tilt_deg": 31.507720947265625,
-          "camera_zoom_percent": 3,
+          "camera_center_dx": 3143,
+          "camera_center_dz": 6630,
+          "camera_height_px": 698,
+          "camera_tilt_deg": 28.950923919677734,
+          "camera_zoom_percent": 1,
           "display_color": [
+            137,
             31,
             204,
-            78,
             255
           ],
           "geometry": "Square",
@@ -19322,7 +19322,7 @@
             "width_percent": 79
           },
           "width": {
-            "center": 18504,
+            "center": 18302,
             "falloff": 0,
             "random": false,
             "span": 0,
@@ -19335,9 +19335,9 @@
         },
         "NewRoom": {
           "display_color": [
+            85,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "geometry": "Square",
@@ -19381,9 +19381,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            85,
-            174,
             242,
+            36,
+            36,
             255
           ],
           "geometry": "Square",
@@ -19427,9 +19427,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            93,
-            31,
-            204,
+            242,
+            187,
+            85,
             255
           ],
           "geometry": "Square",
@@ -19504,9 +19504,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            85,
-            242,
-            128,
+            113,
+            204,
+            71,
             255
           ],
           "geometry": "Square",
@@ -19555,9 +19555,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            190,
-            242,
             85,
+            154,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -19643,9 +19643,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            228,
-            36,
-            242,
+            224,
+            34,
+            183,
             255
           ],
           "geometry": "Circle",
@@ -20069,9 +20069,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            79,
-            242,
+            68,
             36,
+            242,
             255
           ],
           "geometry": "Square",

@@ -54,7 +54,7 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
 }
 
 float fog_opacity_multiplier(const Asset& asset) {
-    if (!asset.is_dynamic_spawned_asset()) {
+    if (!asset.info || !asset.info->has_tag("fog")) {
         return 1.0f;
     }
     if (Assets* assets = asset.get_assets()) {
@@ -64,22 +64,15 @@ float fog_opacity_multiplier(const Asset& asset) {
             cam.current_anchor_world_z(),
             static_cast<double>(asset.world_z()),
             asset.render_depth_bias()));
-        const double efficiency_depth =
-            std::max(0.0, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
-        const double max_cull_depth = std::max(1.0, static_cast<double>(settings.max_cull_depth));
-        const render_depth::DynamicDepthBand band = render_depth::classify_dynamic_depth_band(
-            depth,
-            efficiency_depth,
-            max_cull_depth);
-        if (band != render_depth::DynamicDepthBand::PausedFogged) {
-            return 1.0f;
-        }
-
+        const double efficiency_depth = std::max(
+            1.0,
+            static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
         const double fog_near = std::max(1.0, static_cast<double>(assets->live_dynamic_fog_near_distance_px()));
-        const double start_depth = std::max(efficiency_depth, fog_near);
-        const double range = std::max(1.0, max_cull_depth - start_depth);
+        const double start_depth = std::min(fog_near, efficiency_depth);
+        const double end_depth = std::max(fog_near, efficiency_depth);
+        const double range = std::max(1.0, end_depth - start_depth);
         const double t = std::clamp((depth - start_depth) / range, 0.0, 1.0);
-        return static_cast<float>(1.0 - t);
+        return static_cast<float>(t);
     }
 
     return 1.0f;

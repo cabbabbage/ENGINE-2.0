@@ -226,6 +226,9 @@ void CameraUIPanel::sync_debug_controls_from_settings(const WarpedScreenGrid::Re
     }
     if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
     if (layer_depth_falloff_slider_) layer_depth_falloff_slider_->set_value(settings.layer_depth_curve);
+    if (near_fog_distance_slider_ && assets_) {
+        near_fog_distance_slider_->set_value(assets_->live_dynamic_fog_near_distance_px());
+    }
 }
 
 void CameraUIPanel::build_ui() {
@@ -274,7 +277,7 @@ void CameraUIPanel::build_ui() {
         defaults.dynamic_renderer_depth_efficiency_depth,
         0);
     dynamic_renderer_depth_efficiency_depth_slider_->set_tooltip(
-        "World depth where dynamic boundary thinning and animation freeze begin.");
+        "World depth where dynamic assets switch from full-update to paused+fogged behavior.");
     dynamic_renderer_depth_efficiency_depth_slider_->set_on_value_changed(
         [this](float) { on_control_value_changed(); });
     dynamic_renderer_depth_efficiency_min_density_ratio_slider_ = std::make_unique<FloatSliderWidget>(
@@ -285,7 +288,7 @@ void CameraUIPanel::build_ui() {
         defaults.dynamic_renderer_depth_efficiency_min_density_ratio,
         2);
     dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_tooltip(
-        "Relative spawn density floor at Max Cull Depth after distance-based thinning.");
+        "Legacy setting retained for compatibility. Dynamic thinning is disabled by depth-band behavior.");
     dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_on_value_changed(
         [this](float) { on_control_value_changed(); });
     layer_depth_interval_slider_ = std::make_unique<FloatSliderWidget>(
@@ -306,6 +309,15 @@ void CameraUIPanel::build_ui() {
         2);
     layer_depth_falloff_slider_->set_tooltip("Non-linear DoF bin growth with distance. Higher values create fewer far-depth layers.");
     layer_depth_falloff_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    near_fog_distance_slider_ = std::make_unique<DMSlider>(
+        "Near Fog (px)",
+        1,
+        1000000,
+        assets_ ? assets_->live_dynamic_fog_near_distance_px() : 64);
+    near_fog_distance_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
+    near_fog_distance_widget_ = std::make_unique<SliderWidget>(near_fog_distance_slider_.get());
+    near_fog_distance_widget_->set_tooltip(
+        "Dynamic asset fog attenuation starts from this depth (px) in the paused+fogged band.");
     blur_px_slider_ = std::make_unique<FloatSliderWidget>("Blur (px)", 0.0f, 128.0f, 0.01f, defaults.blur_px, 3);
     blur_px_slider_->set_tooltip("Per-layer Gaussian-like blur budget. Larger values produce softer focus transitions and increase blur processing cost.");
     blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
@@ -457,6 +469,7 @@ void CameraUIPanel::rebuild_rows() {
         }
         if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
         if (layer_depth_falloff_slider_) rows.push_back({ layer_depth_falloff_slider_.get() });
+        if (near_fog_distance_widget_) rows.push_back({ near_fog_distance_widget_.get() });
     }
 
     set_rows(rows);
@@ -519,6 +532,11 @@ void CameraUIPanel::apply_settings_if_needed() {
     const bool boundary_changed =
         boundary_min_render_size_slider_ &&
         float_changed(boundary_value, assets_->boundary_min_visible_screen_ratio());
+    const int near_fog_distance = near_fog_distance_slider_
+        ? near_fog_distance_slider_->value()
+        : assets_->live_dynamic_fog_near_distance_px();
+    const bool near_fog_changed = near_fog_distance_slider_ &&
+        near_fog_distance != assets_->live_dynamic_fog_near_distance_px();
 
     bool changed = false;
     if (realism_changed) {
@@ -529,8 +547,12 @@ void CameraUIPanel::apply_settings_if_needed() {
         assets_->set_boundary_min_visible_screen_ratio(boundary_value);
         changed = true;
     }
+    if (near_fog_changed) {
+        assets_->set_live_dynamic_fog_near_distance_px(near_fog_distance);
+        changed = true;
+    }
 
-    if (realism_changed || boundary_changed) {
+    if (realism_changed || boundary_changed || near_fog_changed) {
         assets_->on_camera_settings_changed();
     }
 

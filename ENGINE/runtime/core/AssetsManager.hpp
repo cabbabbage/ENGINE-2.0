@@ -225,6 +225,8 @@ public:
     bool live_dynamic_assets_visible() const;
     float boundary_min_visible_screen_ratio() const;
     void set_boundary_min_visible_screen_ratio(float value);
+    int live_dynamic_fog_near_distance_px() const;
+    void set_live_dynamic_fog_near_distance_px(int value, bool persist = true);
     std::pair<int, int> camera_height_bounds_px() const;
     void set_camera_height_bounds_px(int min_value, int max_value);
     void sync_camera_settings_to_map_info_json();
@@ -699,4 +701,5 @@ private:
 
     int dynamic_spawn_preload_margin_world_px_ = 192;
     int dynamic_spawn_despawn_margin_world_px_ = 256;
+    int live_dynamic_fog_near_distance_px_ = 64;
 };

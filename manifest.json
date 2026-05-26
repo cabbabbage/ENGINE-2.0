@@ -10299,35 +10299,35 @@
             [
               -26,
               0,
-              13,
+              -13,
               0.0,
               false
             ],
             [
               -26,
               0,
-              13,
+              -13,
               0.0,
               false
             ],
             [
               -26,
               0,
-              13,
+              -13,
               0.0,
               false
             ],
             [
               -26,
               0,
-              13,
+              -13,
               0.0,
               false
             ],
             [
               -26,
               0,
-              13,
+              -13,
               0.0,
               false
             ]
@@ -10340,11 +10340,33 @@
                 0,
                 0.0,
                 true
-              ]
-            ],
-            [
+              ],
               [
+                -26,
                 0,
+                0,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -26,
                 0,
                 0,
                 0.0
@@ -10355,15 +10377,83 @@
                 0,
                 0,
                 0,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                13,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                -13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                -13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                -13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                -13,
+                0.0
+              ],
+              [
+                -26,
+                0,
+                -13,
                 0.0
               ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": -130,
             "dy": 0,
-            "dz": 0
+            "dz": -65.0
           },
           "movement_totals": [
             {
@@ -11381,37 +11471,37 @@
               true
             ],
             [
-              -51,
-              -12,
-              38,
-              0.0,
-              false
-            ],
-            [
-              -51,
-              -12,
-              38,
-              0.0,
-              false
-            ],
-            [
-              -51,
-              -12,
-              38,
-              0.0,
-              false
-            ],
-            [
-              -51,
               -13,
-              38,
+              0,
+              0,
               0.0,
               false
             ],
             [
-              -51,
-              -14,
-              38,
+              -13,
+              0,
+              0,
+              0.0,
+              false
+            ],
+            [
+              -13,
+              0,
+              0,
+              0.0,
+              false
+            ],
+            [
+              -13,
+              0,
+              0,
+              0.0,
+              false
+            ],
+            [
+              -13,
+              0,
+              0,
               0.0,
               false
             ]
@@ -11426,33 +11516,33 @@
                 true
               ],
               [
-                -51,
-                -12,
-                38,
-                0.0
-              ],
-              [
-                -51,
-                -12,
-                38,
-                0.0
-              ],
-              [
-                -51,
-                -12,
-                38,
-                0.0
-              ],
-              [
-                -51,
                 -13,
-                38,
+                0,
+                0,
                 0.0
               ],
               [
-                -51,
-                -14,
-                38,
+                -13,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -13,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -13,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -13,
+                0,
+                0,
                 0.0
               ]
             ],
@@ -11465,33 +11555,33 @@
                 true
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                -13,
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                -13,
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                -13,
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                -13,
                 0.0
               ],
               [
-                -38,
+                -13,
                 0,
-                0,
+                -13,
                 0.0
               ]
             ],
@@ -11503,42 +11593,42 @@
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                13,
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                13,
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                13,
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                13,
                 0.0
               ],
               [
+                -13,
                 0,
-                0,
-                0,
+                13,
                 0.0
               ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -255,
-            "dy": -63,
-            "dz": 190.0
+            "dx": -65,
+            "dy": 0,
+            "dz": 0.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -18351,7 +18441,7 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 2004.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.19999998807907104,
         "layer_depth_curve": 29.369998931884766,
@@ -18441,7 +18531,7 @@
           }
         ],
         "fog_far_distance_px": 949,
-        "fog_near_distance_px": 949,
+        "fog_near_distance_px": 666,
         "fog_render_boundary_spacing": 16,
         "max_spawn_from_room": 1107,
         "regen_seed": 4,
@@ -18502,9 +18592,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            36,
-            120,
             242,
+            139,
+            85,
             255
           ],
           "geometry": "Square",
@@ -18589,6 +18679,35 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-e88349fed95a"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -380,
+              "dz": 456,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 13504,
+              "origional_width": 23464,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-34b42c8175f4"
             }
           ],
           "trail_connection_sector": {
@@ -18611,7 +18730,7 @@
           "display_color": [
             242,
             36,
-            139,
+            131,
             255
           ],
           "geometry": "Square",
@@ -18655,9 +18774,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            52,
-            31,
-            204,
+            68,
+            36,
+            242,
             255
           ],
           "geometry": "Square",
@@ -18701,9 +18820,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            31,
-            204,
-            105,
+            242,
+            219,
+            36,
             255
           ],
           "geometry": "Square",
@@ -18829,9 +18948,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            204,
-            188,
             31,
+            204,
+            117,
             255
           ],
           "geometry": "Circle",
@@ -18911,15 +19030,15 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -265,
-          "camera_center_dz": -2064,
-          "camera_height_px": 2660,
-          "camera_tilt_deg": 68.55995178222656,
-          "camera_zoom_percent": 100,
+          "camera_center_dx": -2650,
+          "camera_center_dz": -2244,
+          "camera_height_px": 315,
+          "camera_tilt_deg": 19.57892608642578,
+          "camera_zoom_percent": 70,
           "display_color": [
+            126,
+            85,
             242,
-            36,
-            56,
             255
           ],
           "geometry": "Circle",
@@ -19233,7 +19352,7 @@
               "min_number": 2,
               "origional_height": 16568,
               "origional_width": 16192,
-              "perimeter_radius": 375,
+              "perimeter_radius": 448,
               "position": "Perimeter",
               "priority": 9,
               "radius": 448,
@@ -19313,8 +19432,8 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            106,
             85,
+            157,
             242,
             255
           ],

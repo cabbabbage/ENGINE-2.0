@@ -73,6 +73,7 @@ constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
 constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
+constexpr int kDefaultLiveDynamicFogNearDistancePx = 64;
 constexpr int kDefaultCameraHeightMinPx = 1;
 constexpr int kDefaultCameraHeightMaxPx = 100000;
 constexpr std::size_t kRuntimeAnchorConvergenceIterationCap = 8;
@@ -868,7 +869,25 @@ void Assets::load_camera_settings_from_json() {
         despawn_margin = preload_margin;
     }
 
+    int fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
+    if (map_info_json_.contains("live_dynamic_spawns") && map_info_json_["live_dynamic_spawns"].is_object()) {
+        const nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
+        auto fog_it = live_dynamic.find("fog_near_distance_px");
+        if (fog_it != live_dynamic.end() && fog_it->is_number()) {
+            try {
+                if (fog_it->is_number_integer()) {
+                    fog_near_distance = fog_it->get<int>();
+                } else {
+                    fog_near_distance = static_cast<int>(std::lround(fog_it->get<double>()));
+                }
+            } catch (...) {
+                fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
+            }
+        }
+    }
+
     set_boundary_min_visible_screen_ratio(boundary_ratio);
+    set_live_dynamic_fog_near_distance_px(fog_near_distance);
     set_camera_height_bounds_px(min_height, max_height);
     dynamic_spawn_preload_margin_world_px_ = preload_margin;
     dynamic_spawn_despawn_margin_world_px_ = despawn_margin;
@@ -1144,6 +1163,22 @@ float Assets::boundary_min_visible_screen_ratio() const {
 
 void Assets::set_boundary_min_visible_screen_ratio(float value) {
     boundary_min_visible_screen_ratio_ = std::clamp(value, 0.0f, 0.5f);
+}
+
+int Assets::live_dynamic_fog_near_distance_px() const {
+    return live_dynamic_fog_near_distance_px_;
+}
+
+void Assets::set_live_dynamic_fog_near_distance_px(int value, bool persist) {
+    live_dynamic_fog_near_distance_px_ = std::clamp(value, 1, 1000000);
+    if (!persist || !map_info_json_.is_object()) {
+        return;
+    }
+    nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
+    if (!live_dynamic.is_object()) {
+        live_dynamic = nlohmann::json::object();
+    }
+    live_dynamic["fog_near_distance_px"] = live_dynamic_fog_near_distance_px_;
 }
 
 std::pair<int, int> Assets::camera_height_bounds_px() const {
@@ -5614,9 +5649,25 @@ bool Assets::should_advance_animation_for(const Asset* asset) const {
     const bool frame_editor_session_active =
         dev_controls_ && dev_controls_->is_frame_editor_session_active();
 
-    return runtime::dev_mode_policy::should_advance_animation_for_asset(
+    const bool should_advance = runtime::dev_mode_policy::should_advance_animation_for_asset(
         dev_mode,
         should_run_runtime_updates(),
         frame_editor_session_active,
         is_frame_editor_target_active(asset));
+    if (!should_advance) {
+        return false;
+    }
+    if (!asset->is_dynamic_spawned_asset()) {
+        return true;
+    }
+    const auto& settings = camera_.get_settings();
+    const double depth = std::fabs(render_depth::depth_from_anchor(
+        camera_.current_anchor_world_z(),
+        static_cast<double>(asset->world_z()),
+        asset->render_depth_bias()));
+    const render_depth::DynamicDepthBand band = render_depth::classify_dynamic_depth_band(
+        depth,
+        static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth),
+        static_cast<double>(settings.max_cull_depth));
+    return band != render_depth::DynamicDepthBand::PausedFogged;
 }

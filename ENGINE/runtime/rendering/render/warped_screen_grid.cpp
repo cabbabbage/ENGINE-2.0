@@ -58,19 +58,6 @@ namespace {
     RollingCosts& rolling_costs(){ static RollingCosts r; return r; }
     double percentile(const std::deque<double>& v, double p){ if(v.empty()) return 0.0; std::vector<double> t(v.begin(),v.end()); std::sort(t.begin(),t.end()); size_t idx=std::min(t.size()-1, static_cast<size_t>(std::floor((p/100.0)*(t.size()-1)))); return t[idx]; }
 
-    std::uint64_t stable_dynamic_asset_hash(const Asset& asset) {
-        if (!asset.spawn_id.empty()) {
-            return static_cast<std::uint64_t>(std::hash<std::string>{}(asset.spawn_id));
-        }
-        if (asset.info && !asset.info->name.empty()) {
-            std::uint64_t hash = static_cast<std::uint64_t>(std::hash<std::string>{}(asset.info->name));
-            hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_x())) * 0x9e3779b185ebca87ull;
-            hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_z())) * 0xc2b2ae3d27d4eb4full;
-            return hash;
-        }
-        return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&asset));
-    }
-
     bool keep_dynamic_asset_for_visibility(const WarpedScreenGrid::RealismSettings& settings,
                                            const Asset& asset,
                                            double depth_distance) {
@@ -80,30 +67,11 @@ namespace {
         if (!std::isfinite(depth_distance)) {
             return false;
         }
-        const double efficiency_depth = std::max(
-            0.0,
-            std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)
-                ? static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth)
-                : 0.0);
-        if (efficiency_depth <= 0.0 || depth_distance <= efficiency_depth) {
-            return true;
-        }
-
-        const double max_depth = std::max(efficiency_depth + 1.0,
-                                          static_cast<double>(settings.max_cull_depth));
-        const double t = std::clamp((depth_distance - efficiency_depth) /
-                                    std::max(1.0, max_depth - efficiency_depth),
-                                    0.0,
-                                    1.0);
-        const double configured_min = std::clamp(
-            static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
-            0.0,
-            1.0);
-        const double min_ratio = std::min(configured_min, 0.045);
-        const double keep_ratio = min_ratio + (1.0 - min_ratio) * (1.0 - t) * (1.0 - t) * 0.45;
-        constexpr double kHashScale = 1.0 / 10000.0;
-        const double sample = static_cast<double>(stable_dynamic_asset_hash(asset) % 10000u) * kHashScale;
-        return sample <= keep_ratio;
+        const render_depth::DynamicDepthBand band = render_depth::classify_dynamic_depth_band(
+            depth_distance,
+            static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth),
+            static_cast<double>(settings.max_cull_depth));
+        return band != render_depth::DynamicDepthBand::Culled;
     }
 
     static inline Area make_rect_area(const std::string& name, SDL_Point center, int w, int h, int resolution) {

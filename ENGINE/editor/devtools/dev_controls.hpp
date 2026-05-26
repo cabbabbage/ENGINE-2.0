@@ -451,8 +451,9 @@ private:
         Uint64 started_ms = 0;
     } import_busy_;
     MultiAssetImportState multi_asset_import_;
-    enum class DepthGuideSelection { None, RedCull, OrangeEfficiency, BlueLayer };
+    enum class DepthGuideSelection { None, RedCull, OrangeEfficiency, GreenNearFog, BlueLayer };
     DepthGuideSelection depth_guide_selection_ = DepthGuideSelection::None;
+    DepthGuideSelection depth_guide_hover_selection_ = DepthGuideSelection::None;
     bool depth_guide_drag_active_ = false;
     int depth_guide_drag_start_y_ = 0;
     WarpedScreenGrid::RealismSettings depth_guide_preview_settings_{};

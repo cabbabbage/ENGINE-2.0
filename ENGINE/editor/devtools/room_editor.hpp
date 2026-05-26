@@ -1120,6 +1120,7 @@ private:
         std::vector<SDL_FPoint> rel_positions;
         std::vector<float> rel_positions_z;
         std::vector<std::vector<devmode::room_movement_payload::MovementFrame>> quantize_reference_paths;
+        std::vector<int> quantize_option_to_reference_index;
 
         bool has_frames() const { return !frames.empty(); }
         std::size_t frame_count() const { return frames.size(); }

@@ -28,6 +28,8 @@ constexpr int kButtonGap = 8;
 constexpr int kHintHeight = 44;
 constexpr int kHintLineGap = 20;
 constexpr int kPathListGap = 6;
+constexpr int kQuantizePanelPadding = 10;
+constexpr int kQuantizeHeaderHeight = 18;
 
 }  // namespace
 
@@ -196,13 +198,10 @@ void RoomMovementToolsPanel::set_path_options(const std::vector<std::string>& op
 void RoomMovementToolsPanel::set_on_path_selection_changed(PathSelectionChangedCallback callback) { on_path_selection_changed_ = std::move(callback); }
 void RoomMovementToolsPanel::set_on_add_path(PathActionCallback callback) { on_add_path_ = std::move(callback); }
 void RoomMovementToolsPanel::set_on_delete_path(PathActionCallback callback) { on_delete_path_ = std::move(callback); }
-void RoomMovementToolsPanel::set_quantize_options(const std::vector<std::string>& options) {
+void RoomMovementToolsPanel::set_quantize_options(const std::vector<QuantizeOption>& options) {
     quantize_options_ = options;
-    quantize_option_buttons_.clear();
-    quantize_option_buttons_.reserve(quantize_options_.size());
-    for (const std::string& label : quantize_options_) {
-        quantize_option_buttons_.push_back(std::make_unique<DMButton>(label, &DMStyles::ListButton(), 220, DMButton::height()));
-    }
+    quantize_option_rects_.assign(quantize_options_.size(), SDL_Rect{0, 0, 0, 0});
+    quantize_hover_index_ = -1;
 }
 void RoomMovementToolsPanel::set_on_quantize_path_selected(PathSelectionChangedCallback callback) { on_quantize_path_selected_ = std::move(callback); }
 
@@ -307,15 +306,39 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
             }
         }
         if (quantize_open_) {
-            for (std::size_t i = 0; i < quantize_option_buttons_.size(); ++i) {
-                auto& b = quantize_option_buttons_[i];
-                if (!b) continue;
-                if (b->handle_event(event)) {
-                    handled = true;
-                    if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && on_quantize_path_selected_) {
-                        on_quantize_path_selected_(static_cast<int>(i));
-                        quantize_open_ = false;
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+                quantize_open_ = false;
+                quantize_hover_index_ = -1;
+                handled = true;
+            } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+                quantize_hover_index_ = -1;
+                for (std::size_t i = 0; i < quantize_option_rects_.size(); ++i) {
+                    if (quantize_options_[i].selectable && point_in_rect(pointer.x, pointer.y, quantize_option_rects_[i])) {
+                        quantize_hover_index_ = static_cast<int>(i);
+                        break;
                     }
+                }
+            } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+                bool clicked_row = false;
+                int selectable_index = -1;
+                for (std::size_t i = 0; i < quantize_option_rects_.size(); ++i) {
+                    if (!quantize_options_[i].selectable) continue;
+                    ++selectable_index;
+                    if (point_in_rect(pointer.x, pointer.y, quantize_option_rects_[i])) {
+                        clicked_row = true;
+                        handled = true;
+                        if (on_quantize_path_selected_) {
+                            on_quantize_path_selected_(selectable_index);
+                            quantize_open_ = false;
+                            quantize_hover_index_ = -1;
+                        }
+                        break;
+                    }
+                }
+                if (!clicked_row && !point_in_rect(pointer.x, pointer.y, quantize_panel_rect_) && !point_in_rect(pointer.x, pointer.y, quantize_rect_)) {
+                    quantize_open_ = false;
+                    quantize_hover_index_ = -1;
+                    handled = true;
                 }
             }
         }
@@ -406,8 +429,32 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
     if (delete_path_button_) delete_path_button_->render(renderer);
     if (quantize_button_) quantize_button_->render(renderer);
     if (quantize_open_) {
-        for (const auto& b : quantize_option_buttons_) {
-            if (b) b->render(renderer);
+        dm_draw::DrawBeveledRect(renderer,
+                                 quantize_panel_rect_,
+                                 DMStyles::CornerRadius(),
+                                 DMStyles::BevelDepth(),
+                                 DMStyles::PanelBG(),
+                                 DMStyles::HighlightColor(),
+                                 DMStyles::ShadowColor(),
+                                 true,
+                                 DMStyles::HighlightIntensity(),
+                                 DMStyles::ShadowIntensity());
+        dm_draw::DrawRoundedOutline(renderer, quantize_panel_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
+        for (std::size_t i = 0; i < quantize_options_.size(); ++i) {
+            const SDL_Rect& row = quantize_option_rects_[i];
+            if (quantize_options_[i].selectable) {
+                if (static_cast<int>(i) == quantize_hover_index_) {
+                    SDL_SetRenderDrawColor(renderer, 95, 105, 130, 120);
+                    SDL_RenderFillRect(renderer, &row);
+                }
+                const SDL_Color accent = quantize_options_[i].current_animation
+                    ? SDL_Color{219, 126, 247, 255}
+                    : SDL_Color{109, 202, 255, 255};
+                SDL_Rect swatch{row.x + 8, row.y + (row.h - 10) / 2, 10, 10};
+                SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, accent.a);
+                SDL_RenderFillRect(renderer, &swatch);
+            }
+            DMFontCache::instance().draw_text(renderer, label_style, quantize_options_[i].label, row.x + 24, row.y + 4);
         }
     }
 }
@@ -527,13 +574,22 @@ void RoomMovementToolsPanel::update_layout() const {
     if (add_path_button_) add_path_button_->set_rect(path_add_rect_);
     if (delete_path_button_) delete_path_button_->set_rect(path_delete_rect_);
     if (quantize_button_) quantize_button_->set_rect(quantize_rect_);
-    int qy = quantize_rect_.y + quantize_rect_.h + kPathListGap;
-    for (auto& b : quantize_option_buttons_) {
-        if (!b) continue;
-        b->set_rect(SDL_Rect{quantize_rect_.x, qy, quantize_rect_.w, DMButton::height()});
-        b->set_style(&DMStyles::ListButton());
-        qy += DMButton::height() + kPathListGap;
+    const int quantize_panel_w = std::max(220, quantize_rect_.w);
+    int quantize_panel_x = quantize_rect_.x + quantize_rect_.w + kPathListGap;
+    if (quantize_panel_x + quantize_panel_w > panel_rect_.x + panel_rect_.w) {
+        quantize_panel_x = quantize_rect_.x;
     }
+    int qy = quantize_rect_.y + quantize_rect_.h + kPathListGap + kQuantizePanelPadding;
+    for (std::size_t i = 0; i < quantize_options_.size(); ++i) {
+        const int row_h = quantize_options_[i].selectable ? DMButton::height() : kQuantizeHeaderHeight;
+        quantize_option_rects_[i] = SDL_Rect{quantize_panel_x + kQuantizePanelPadding, qy, quantize_panel_w - (kQuantizePanelPadding * 2), row_h};
+        qy += row_h + kPathListGap;
+    }
+    quantize_panel_rect_ = SDL_Rect{
+        quantize_panel_x,
+        quantize_rect_.y + quantize_rect_.h + kPathListGap,
+        quantize_panel_w,
+        std::max(0, qy - (quantize_rect_.y + quantize_rect_.h + kPathListGap) + kQuantizePanelPadding - kPathListGap)};
 
     layout_dirty_ = false;
 }

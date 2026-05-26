@@ -355,6 +355,29 @@ void DynamicSpawnRuntime::parse_selectors() {
         append_selector(selector_json, Mode::BoundaryArea);
         append_selector(selector_json, Mode::InheritedMap);
     }
+    Selector fog_selector;
+    fog_selector.id = next_selector_id_++;
+    fog_selector.mode = Mode::FogBoundaryLane;
+    fog_selector.spawn_id = "fog_boundary_lane";
+    fog_selector.display_name = "Fog Boundary Lane";
+    fog_selector.grid_resolution = vibble::grid::clamp_resolution(5);
+    fog_selector.jitter_px = 0;
+    fog_selector.jitter_seed = mix_u64(static_cast<std::uint64_t>(std::hash<std::string>{}(assets_.map_id())), 0xA87E1133ULL);
+    fog_selector.candidate_seed = mix_u64(fog_selector.jitter_seed, 0xB91F22C7ULL);
+    for (const auto& [asset_name, info] : catalog) {
+        if (info && type_is_fog(info.get())) {
+            fog_selector.candidates.push_back(Candidate{asset_name, info, 1.0, false});
+        }
+    }
+    if (!fog_selector.candidates.empty()) {
+        double cumulative = 0.0;
+        for (const Candidate& candidate : fog_selector.candidates) {
+            cumulative += 1.0;
+            fog_selector.cumulative_weights.push_back(cumulative);
+        }
+        fog_selector.total_weight = cumulative;
+        selectors_.push_back(std::move(fog_selector));
+    }
     selector_index_.clear();
     for (const Selector& s : selectors_) { selector_index_[ (static_cast<std::uint64_t>(s.id) << 32) | static_cast<std::uint64_t>(s.mode)] = &s; }
 }
@@ -643,6 +666,36 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
 
     const auto spawn_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, preload_margin_px()));
     const auto keep_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, despawn_margin_px()));
+    {
+        for (auto it = cells_by_chunk_.begin(); it != cells_by_chunk_.end(); ++it) {
+            auto& cells = it->second;
+            cells.erase(std::remove_if(cells.begin(), cells.end(), [](const PlannedCell& c) {
+                return c.key.mode == Mode::FogBoundaryLane;
+            }), cells.end());
+        }
+        const int spacing = std::max(16, fog_render_boundary_spacing_px());
+        const int min_x = std::min(work_bounds.min.world_x(), work_bounds.max.world_x()) - despawn_margin_px();
+        const int max_x = std::max(work_bounds.min.world_x(), work_bounds.max.world_x()) + despawn_margin_px();
+        const int render_edge_z = std::max(work_bounds.min.world_z(), work_bounds.max.world_z());
+        const int room_edge_z = dynamic_spawn::geometry::collect_area_geometry(assets_).max_z + max_spawn_from_room_px();
+        const int boundary_z = std::max(render_edge_z, room_edge_z);
+        const Selector* fog_selector = nullptr;
+        for (const Selector& selector : selectors_) {
+            if (selector.mode == Mode::FogBoundaryLane) {
+                fog_selector = &selector;
+                break;
+            }
+        }
+        if (fog_selector) {
+            const int first = vibble::math::floor_div(min_x, spacing) * spacing;
+            for (int x = first; x <= max_x; x += spacing) {
+                const int gx = vibble::math::floor_div(x, spacing);
+                const int gz = vibble::math::floor_div(boundary_z, spacing);
+                CellKey key{Mode::FogBoundaryLane, fog_selector->id, spacing, gx, gz};
+                add_planned_cell(*fog_selector, key, x, boundary_z, assets_.map_id(), cells_by_chunk_);
+            }
+        }
+    }
 
     suspend_outside_keep_chunks(keep_chunks);
 
@@ -783,11 +836,17 @@ std::unique_ptr<Asset> DynamicSpawnRuntime::create_asset_for_cell(const PlannedC
     }
     Area spawn_area(cell.owner_name.empty() ? std::string("dynamic_spawn") : cell.owner_name,
                     cell.key.grid_resolution);
-    const std::string stable_spawn_id =
+    std::string stable_spawn_id =
         std::string("live_dynamic:") + cell.selector_spawn_id +
         ":" + std::to_string(cell.key.grid_resolution) +
         ":" + std::to_string(cell.key.grid_x) +
         ":" + std::to_string(cell.key.grid_z);
+    if (cell.key.mode == Mode::FogBoundaryLane) {
+        stable_spawn_id = std::string("live_dynamic:fog_boundary:") +
+                          std::to_string(cell.key.grid_resolution) + ":" +
+                          std::to_string(cell.key.grid_x) + ":" +
+                          std::to_string(cell.key.grid_z);
+    }
     auto asset = std::make_unique<Asset>(cell.info,
                                          spawn_area,
                                          SDL_Point{cell.world_x, cell.world_z},
@@ -951,6 +1010,18 @@ int DynamicSpawnRuntime::max_spawn_from_room_px() const {
         return 128;
     }
     return read_int_setting(*live_it, "max_spawn_from_room", 128, 0, 20000);
+}
+
+int DynamicSpawnRuntime::fog_render_boundary_spacing_px() const {
+    const nlohmann::json& map = assets_.map_info_json();
+    if (!map.is_object()) {
+        return 128;
+    }
+    auto live_it = map.find("live_dynamic_spawns");
+    if (live_it == map.end()) {
+        return 128;
+    }
+    return read_int_setting(*live_it, "fog_render_boundary_spacing", 128, 16, 2000);
 }
 
 int DynamicSpawnRuntime::preload_margin_px() const {

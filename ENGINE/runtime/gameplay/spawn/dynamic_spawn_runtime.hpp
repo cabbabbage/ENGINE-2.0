@@ -68,6 +68,7 @@ private:
     enum class Mode {
         BoundaryArea = 0,
         InheritedMap = 1,
+        FogBoundaryLane = 2,
     };
 
     struct Candidate {
@@ -183,6 +184,7 @@ private:
     SDL_Point jittered_world_point(const Selector& selector, const CellKey& key, SDL_Point base_point) const;
     bool info_allowed(const AssetInfo* info, Mode mode) const;
     int max_spawn_from_room_px() const;
+    int fog_render_boundary_spacing_px() const;
     int preload_margin_px() const;
     int despawn_margin_px() const;
 

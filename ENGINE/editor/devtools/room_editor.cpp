@@ -3469,11 +3469,6 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
 
     if (pointer_button_event &&
         (scroll_preview_floor_overlay_active_ || scroll_preview_xy_overlay_active_for_movement_)) {
-        if (event.button.button == SDL_BUTTON_LEFT &&
-            movement_mode_active() &&
-            movement_edit_.vertical_wheel_edit.active) {
-            end_movement_vertical_wheel_edit(false);
-        }
         const bool clear_movement_xy_preview =
             !scroll_preview_xy_overlay_active_for_movement_ ||
             !(movement_mode_active() && movement_edit_.vertical_wheel_edit.active) ||

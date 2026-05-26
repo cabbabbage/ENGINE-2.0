@@ -400,9 +400,11 @@ nlohmann::json canonical_movement_entry(const nlohmann::json& entry) {
 std::vector<nlohmann::json> canonical_movement_frames(const nlohmann::json& payload, std::size_t frame_count) {
     std::vector<nlohmann::json> movement(frame_count, nlohmann::json::array({0, 0, 0}));
     const nlohmann::json* raw_movement = nullptr;
-    if (payload.contains("movement_paths") && payload["movement_paths"].is_array() &&
-        !payload["movement_paths"].empty() && payload["movement_paths"][0].is_array()) {
-        raw_movement = &payload["movement_paths"][0];
+    const bool has_paths_key = payload.contains("movement_paths") && payload["movement_paths"].is_array();
+    if (has_paths_key) {
+        if (!payload["movement_paths"].empty() && payload["movement_paths"][0].is_array()) {
+            raw_movement = &payload["movement_paths"][0];
+        }
     } else if (payload.contains("movement") && payload["movement"].is_array()) {
         raw_movement = &payload["movement"];
     }
@@ -419,7 +421,8 @@ std::vector<nlohmann::json> canonical_movement_frames(const nlohmann::json& payl
 std::vector<std::vector<nlohmann::json>> canonical_movement_paths(const nlohmann::json& payload,
                                                                   std::size_t frame_count) {
     std::vector<std::vector<nlohmann::json>> paths;
-    if (payload.contains("movement_paths") && payload["movement_paths"].is_array()) {
+    const bool has_paths_key = payload.contains("movement_paths") && payload["movement_paths"].is_array();
+    if (has_paths_key) {
         for (const auto& path : payload["movement_paths"]) {
             if (!path.is_array()) {
                 continue;
@@ -430,7 +433,11 @@ std::vector<std::vector<nlohmann::json>> canonical_movement_paths(const nlohmann
         }
     }
     if (paths.empty()) {
-        paths.push_back(canonical_movement_frames(payload, frame_count));
+        if (has_paths_key) {
+            paths.push_back(std::vector<nlohmann::json>(frame_count, nlohmann::json::array({0, 0, 0})));
+        } else {
+            paths.push_back(canonical_movement_frames(payload, frame_count));
+        }
     }
     if (paths.empty()) {
         paths.push_back(std::vector<nlohmann::json>(frame_count, nlohmann::json::array({0, 0, 0})));

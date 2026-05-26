@@ -327,7 +327,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
 
     if (!derived_from_animation || (derived_from_animation && !inherit_data)) {
         nlohmann::json movement_paths = nlohmann::json::array();
-        if (payload.contains("movement_paths") && payload["movement_paths"].is_array()) {
+        const bool has_authored_movement_paths =
+            payload.contains("movement_paths") && payload["movement_paths"].is_array();
+        if (has_authored_movement_paths) {
             for (const auto& path : payload["movement_paths"]) {
                 if (path.is_array()) {
                     movement_paths.push_back(normalize_movement_sequence(path, frames));
@@ -335,11 +337,15 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
             }
         }
         if (movement_paths.empty()) {
-            const nlohmann::json legacy_movement =
-                payload.contains("movement") && payload["movement"].is_array()
-                    ? payload["movement"]
-                    : nlohmann::json::array();
-            movement_paths.push_back(normalize_movement_sequence(legacy_movement, frames));
+            if (has_authored_movement_paths) {
+                movement_paths.push_back(normalize_movement_sequence(nlohmann::json::array(), frames));
+            } else {
+                const nlohmann::json legacy_movement =
+                    payload.contains("movement") && payload["movement"].is_array()
+                        ? payload["movement"]
+                        : nlohmann::json::array();
+                movement_paths.push_back(normalize_movement_sequence(legacy_movement, frames));
+            }
         }
 
         nlohmann::json movement_totals = nlohmann::json::array();

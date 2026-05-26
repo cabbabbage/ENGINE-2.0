@@ -311,6 +311,9 @@ void AnimationInspectorPanel::set_audio_file_picker(AudioFilePicker picker) {
 void AnimationInspectorPanel::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
 }
+void AnimationInspectorPanel::set_delete_animation_callback(DeleteAnimationCallback callback) {
+    delete_animation_callback_ = std::move(callback);
+}
 
 int AnimationInspectorPanel::height_for_width(int width) const {
     const int padding = kInspectorPadding;
@@ -338,6 +341,8 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     total += kSectionHeaderHeight;
     total += item_gap;
     total += kPreviewHeight;
+    total += item_gap;
+    total += DMButton::height();
 
     auto add_section = [&](auto* widget) {
         if (!widget) {
@@ -427,6 +432,7 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
 
     if (name_box_) name_box_->render(renderer);
     if (start_button_) start_button_->render(renderer);
+    if (delete_button_) delete_button_->render(renderer);
 
     if (is_start_animation_) {
         const DMLabelStyle& style = DMStyles::Label();
@@ -610,6 +616,8 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
             clicked = FocusTarget::kName;
         } else if (start_button_ && SDL_PointInRect(&p, &start_button_->rect())) {
             clicked = FocusTarget::kStart;
+        } else if (delete_button_ && SDL_PointInRect(&p, &delete_button_->rect())) {
+            clicked = FocusTarget::kDelete;
         } else if (source_frames_button_ && SDL_PointInRect(&p, &source_frames_button_->rect())) {
             clicked = FocusTarget::kSourceFrames;
         } else if (source_animation_button_ && SDL_PointInRect(&p, &source_animation_button_->rect())) {
@@ -687,6 +695,20 @@ void AnimationInspectorPanel::rebuild_widgets() {
             }
             if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
                 activate_focus_target(FocusTarget::kStart);
+            }
+            return true;
+        });
+    }
+    if (!delete_button_) {
+        delete_button_ = std::make_unique<DMButton>("Delete", &DMStyles::DeleteButton(), kHeaderButtonWidth, DMButton::height());
+    }
+    if (delete_button_) {
+        widget_registry_.add_handler([this](const SDL_Event& ev) {
+            if (!delete_button_ || !delete_button_->handle_event(ev)) {
+                return false;
+            }
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
+                activate_focus_target(FocusTarget::kDelete);
             }
             return true;
         });
@@ -866,6 +888,12 @@ void AnimationInspectorPanel::layout_widgets() const {
 
     self->preview_rect_ = SDL_Rect{x, cursor.visual_y(), width, kPreviewHeight};
     cursor.advance(kPreviewHeight);
+    cursor.advance(item_gap);
+    if (delete_button_) {
+        self->preview_controls_rect_ = SDL_Rect{x, cursor.visual_y(), width, DMButton::height()};
+        delete_button_->set_rect(self->preview_controls_rect_);
+        cursor.advance(DMButton::height());
+    }
 
     auto place_static_section = [&](auto* widget,
                                     SDL_Rect& header_rect,
@@ -1279,6 +1307,7 @@ std::vector<AnimationInspectorPanel::FocusTarget> AnimationInspectorPanel::focus
     std::vector<FocusTarget> order;
     if (name_box_) order.push_back(FocusTarget::kName);
     if (start_button_) order.push_back(FocusTarget::kStart);
+    if (delete_button_) order.push_back(FocusTarget::kDelete);
     if (source_frames_button_) order.push_back(FocusTarget::kSourceFrames);
     if (source_animation_button_) order.push_back(FocusTarget::kSourceAnimation);
     return order;
@@ -1317,6 +1346,9 @@ void AnimationInspectorPanel::announce_focus(FocusTarget target) const {
         case FocusTarget::kStart:
             status_callback_("Focus: Mark animation as start. Press Enter or Space to apply.");
             break;
+        case FocusTarget::kDelete:
+            status_callback_("Focus: Delete this animation. Press Enter or Space to delete immediately.");
+            break;
         case FocusTarget::kSourceFrames:
             status_callback_("Focus: Select frame-based source mode. Press Enter or Space to choose.");
             break;
@@ -1343,6 +1375,11 @@ void AnimationInspectorPanel::activate_focus_target(FocusTarget target) {
             refresh_start_indicator();
             if (status_callback_) {
                 status_callback_("Animation marked as start animation.");
+            }
+            break;
+        case FocusTarget::kDelete:
+            if (delete_animation_callback_ && !animation_id_.empty()) {
+                delete_animation_callback_(animation_id_);
             }
             break;
 
@@ -1464,7 +1501,5 @@ void AnimationInspectorPanel::refresh_start_indicator() {
 }
 
 }
-
-
 
 

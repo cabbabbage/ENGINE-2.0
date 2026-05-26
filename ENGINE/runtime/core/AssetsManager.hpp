@@ -58,6 +58,8 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
+
+    world::GridBounds screen_world_rect() const;
     enum class DevGridOverlayKind {
         FloorMouseCentered,
         XYPlaneAtAssetDepth,
@@ -665,7 +667,7 @@ private:
     void rebuild_asset_dimension_cache(float camera_scale);
     bool compute_asset_dimension_cache(const Asset* asset, float camera_scale, AssetDimensionCache& out) const;
     void finalize_max_asset_dimensions(float max_width, float max_height);
-    world::GridBounds screen_world_rect() const;
+
     int audio_effect_max_distance_world() const;
 
     void mark_non_player_update_buffer_dirty() {

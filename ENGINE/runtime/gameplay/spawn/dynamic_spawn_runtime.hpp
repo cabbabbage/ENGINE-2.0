@@ -48,10 +48,6 @@ struct DynamicSpawnDiagnostics {
 
 class DynamicSpawnRuntime {
 public:
-    struct FogBoundarySample {
-        int world_x = 0;
-        int world_z = 0;
-    };
     explicit DynamicSpawnRuntime(Assets& assets);
     ~DynamicSpawnRuntime();
 
@@ -65,8 +61,6 @@ public:
     void forget_asset(Asset* asset);
     std::size_t delete_for_spawn_group(const std::string& spawn_id);
     std::size_t delete_for_spawn_groups(const std::vector<std::string>& spawn_ids);
-    std::vector<FogBoundarySample> sample_fog_boundary_lane(const world::GridBounds& work_bounds,
-                                                            int spacing_override_px = 0) const;
 
     const DynamicSpawnDiagnostics& diagnostics() const { return diagnostics_; }
 
@@ -74,7 +68,6 @@ private:
     enum class Mode {
         BoundaryArea = 0,
         InheritedMap = 1,
-        FogBoundaryLane = 2,
     };
 
     struct Candidate {
@@ -190,7 +183,6 @@ private:
     SDL_Point jittered_world_point(const Selector& selector, const CellKey& key, SDL_Point base_point) const;
     bool info_allowed(const AssetInfo* info, Mode mode) const;
     int max_spawn_from_room_px() const;
-    int fog_render_boundary_spacing_px() const;
     int preload_margin_px() const;
     int despawn_margin_px() const;
 

@@ -924,7 +924,6 @@ private:
     static constexpr int kFogDistanceMax = 20000;
     static constexpr int kRenderRadiusDefault = 128;
     static constexpr int kMaxSpawnFromRoomDefault = 128;
-    static constexpr int kFogRenderBoundarySpacingDefault = 128;
     static constexpr int kFogNearDistanceDefault = 64;
     static constexpr int kFogFarDistanceDefault = 256;
 
@@ -1045,14 +1044,6 @@ private:
         }
         return std::clamp(value, kRadiusMin, kFogDistanceMax);
     }
-    int current_fog_render_boundary_spacing() const {
-        if (!section_ || !section_->is_object()) return kFogRenderBoundarySpacingDefault;
-        auto it = section_->find("fog_render_boundary_spacing");
-        if (it == section_->end() || !it->is_number()) return kFogRenderBoundarySpacingDefault;
-        int value = kFogRenderBoundarySpacingDefault;
-        try { value = it->is_number_integer() ? it->get<int>() : static_cast<int>(std::lround(it->get<double>())); } catch (...) {}
-        return std::clamp(value, 16, kFogDistanceMax);
-    }
 
     int current_fog_far_distance() const {
         if (!section_ || !section_->is_object()) {
@@ -1111,13 +1102,6 @@ private:
         (*section_)["fog_near_distance_px"] = clamped;
         (*section_)["fog_far_distance_px"] = far;
         notify_save(false);
-    }
-    void set_fog_render_boundary_spacing(int value) {
-        if (!section_) return;
-        if (!section_->is_object()) *section_ = json::object();
-        (*section_)["fog_render_boundary_spacing"] = std::clamp(value, 16, kFogDistanceMax);
-        notify_save(false);
-        if (assets_) assets_->notify_dynamic_spawn_distance_changed();
     }
 
     void set_fog_far_distance(int value) {
@@ -1179,7 +1163,6 @@ private:
         const int max_spawn_from_room = current_max_spawn_from_room();
         const int fog_near_distance = current_fog_near_distance();
         const int fog_far_distance = current_fog_far_distance();
-        const int fog_spacing = current_fog_render_boundary_spacing();
         if (!section_->contains("render_radius") ||
             !(*section_)["render_radius"].is_number_integer() ||
             (*section_)["render_radius"].get<int>() != render_radius) {
@@ -1196,12 +1179,6 @@ private:
             !(*section_)["fog_near_distance_px"].is_number_integer() ||
             (*section_)["fog_near_distance_px"].get<int>() != fog_near_distance) {
             (*section_)["fog_near_distance_px"] = fog_near_distance;
-            changed = true;
-        }
-        if (!section_->contains("fog_render_boundary_spacing") ||
-            !(*section_)["fog_render_boundary_spacing"].is_number_integer() ||
-            (*section_)["fog_render_boundary_spacing"].get<int>() != fog_spacing) {
-            (*section_)["fog_render_boundary_spacing"] = fog_spacing;
             changed = true;
         }
         if (!section_->contains("fog_far_distance_px") ||
@@ -1301,7 +1278,6 @@ private:
         const int max_spawn_from_room = current_max_spawn_from_room();
         const int fog_near_distance = current_fog_near_distance();
         const int fog_far_distance = current_fog_far_distance();
-        const int fog_spacing = current_fog_render_boundary_spacing();
         if (!render_radius_slider_) {
             render_radius_slider_ = std::make_unique<DMSlider>(
                 "Render Radius (px)",
@@ -1338,14 +1314,6 @@ private:
             fog_near_distance_widget_ =
                 std::make_unique<SliderWidget>(fog_near_distance_slider_.get());
         }
-        if (!fog_boundary_spacing_slider_) {
-            fog_boundary_spacing_slider_ = std::make_unique<DMSlider>(
-                "Fog Boundary Spacing (px)", 16, kFogDistanceMax, fog_spacing);
-            fog_boundary_spacing_slider_->set_on_value_changed([this](int value) {
-                this->set_fog_render_boundary_spacing(value);
-            });
-            fog_boundary_spacing_widget_ = std::make_unique<SliderWidget>(fog_boundary_spacing_slider_.get());
-        }
         if (!fog_far_distance_slider_) {
             fog_far_distance_slider_ = std::make_unique<DMSlider>(
                 "Fog Far (px)",
@@ -1367,9 +1335,6 @@ private:
         if (fog_near_distance_slider_) {
             fog_near_distance_slider_->set_value(fog_near_distance);
         }
-        if (fog_boundary_spacing_slider_) {
-            fog_boundary_spacing_slider_->set_value(fog_spacing);
-        }
         if (fog_far_distance_slider_) {
             fog_far_distance_slider_->set_value(fog_far_distance);
         }
@@ -1381,9 +1346,6 @@ private:
         }
         if (fog_near_distance_widget_) {
             rows.push_back({fog_near_distance_widget_.get()});
-        }
-        if (fog_boundary_spacing_widget_) {
-            rows.push_back({fog_boundary_spacing_widget_.get()});
         }
         if (fog_far_distance_widget_) {
             rows.push_back({fog_far_distance_widget_.get()});
@@ -1733,8 +1695,6 @@ private:
     std::unique_ptr<SliderWidget> max_spawn_from_room_widget_{};
     std::unique_ptr<DMSlider> fog_near_distance_slider_{};
     std::unique_ptr<SliderWidget> fog_near_distance_widget_{};
-    std::unique_ptr<DMSlider> fog_boundary_spacing_slider_{};
-    std::unique_ptr<SliderWidget> fog_boundary_spacing_widget_{};
     std::unique_ptr<DMSlider> fog_far_distance_slider_{};
     std::unique_ptr<SliderWidget> fog_far_distance_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
@@ -2075,4 +2035,3 @@ void BoundarySpawnGroupModal::ensure_visible_position() {
 
     position_initialized_ = true;
 }
-

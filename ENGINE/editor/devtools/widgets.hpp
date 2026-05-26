@@ -87,6 +87,7 @@ public:
     int height_for_width(int w) const;
     void set_on_height_changed(std::function<void()> cb);
 private:
+    size_t caret_pos_from_point(int mouse_x, int mouse_y) const;
     void draw_text(SDL_Renderer* r, const std::string& s, int x, int y, int max_width, const DMLabelStyle& ls) const;
     std::vector<std::string> wrap_lines(TTF_Font* f, const std::string& s, int max_width) const;
     int compute_label_height(int width) const;
@@ -825,6 +826,5 @@ private:
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
 };
-
 
 

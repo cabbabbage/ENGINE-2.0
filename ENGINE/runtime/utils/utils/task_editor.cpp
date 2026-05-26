@@ -296,7 +296,9 @@ bool TaskEditor::handle_event(const SDL_Event& event) {
 
     bool consumed = false;
     if (add_button_ && add_button_->handle_event(event)) {
-        add_task();
+        if (should_trigger_add_task(event)) {
+            add_task();
+        }
         consumed = true;
     }
     if (close_button_ && close_button_->handle_event(event)) {
@@ -372,6 +374,17 @@ bool TaskEditor::handle_event(const SDL_Event& event) {
         break;
     }
     return false;
+}
+
+bool TaskEditor::should_trigger_add_task(const SDL_Event& event) {
+    if (event.type != SDL_EVENT_MOUSE_BUTTON_UP || event.button.button != SDL_BUTTON_LEFT) {
+        return false;
+    }
+    if (event.button.timestamp == last_add_task_click_timestamp_) {
+        return false;
+    }
+    last_add_task_click_timestamp_ = event.button.timestamp;
+    return true;
 }
 
 void TaskEditor::load_tasks() {

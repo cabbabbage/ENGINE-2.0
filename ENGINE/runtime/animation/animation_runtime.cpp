@@ -1560,7 +1560,7 @@ bool AnimationRuntime::apply_frame_root_motion_delta(AnimationFrame* frame,
     if (suppress_root_motion_active()) {
         return true;
     }
-    const axis::WorldPos delta = animation_update::detail::frame_world_delta_3d(*frame, *self, grid());
+    const axis::WorldPos delta = animation_update::detail::frame_world_delta_3d(*frame, *self_, grid());
     if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
         return true;
     }

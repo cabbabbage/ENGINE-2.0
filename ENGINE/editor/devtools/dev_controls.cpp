@@ -68,6 +68,7 @@
 #include "utils/map_grid_settings.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
+#include "utils/integer_grid_math.hpp"
 #include "utils/input.hpp"
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
@@ -4043,23 +4044,40 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             }
         }
         const auto area_geometry = dynamic_spawn::geometry::collect_area_geometry(*assets_);
-        const int room_edge_z = area_geometry.max_z + render_radius;
-        const int boundary_z = std::max(render_edge_z, room_edge_z);
-        SDL_FPoint left{};
-        SDL_FPoint right{};
-        if (try_floor_warped_screen_position(view_cam, SDL_Point{render_min_x, boundary_z}, left) &&
-            try_floor_warped_screen_position(view_cam, SDL_Point{render_max_x, boundary_z}, right)) {
+        const int spacing = std::max(16, render_radius / 24);
+        const int sample_min_x = std::min(render_min_x, render_max_x);
+        const int sample_max_x = std::max(render_min_x, render_max_x);
+        const int first = vibble::math::floor_div(sample_min_x, spacing) * spacing;
+        std::vector<SDL_FPoint> points;
+        points.reserve(static_cast<std::size_t>((sample_max_x - sample_min_x) / spacing + 4));
+        for (int x = first; x <= sample_max_x; x += spacing) {
+            const int room_edge_z =
+                dynamic_spawn::geometry::max_allowed_boundary_z_for_x(area_geometry, x, render_radius);
+            if (room_edge_z == std::numeric_limits<int>::min()) {
+                continue;
+            }
+            const int boundary_z = std::min(render_edge_z, room_edge_z);
+            SDL_FPoint p{};
+            if (try_floor_warped_screen_position(view_cam, SDL_Point{x, boundary_z}, p)) {
+                points.push_back(p);
+            }
+        }
+        if (points.size() >= 2) {
             SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
             SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
             Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
             SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, 255, 32, 32, 235);
-            SDL_RenderLine(renderer,
-                           static_cast<int>(std::lround(left.x)),
-                           static_cast<int>(std::lround(left.y)),
-                           static_cast<int>(std::lround(right.x)),
-                           static_cast<int>(std::lround(right.y)));
+            for (int t = -1; t <= 1; ++t) {
+                for (std::size_t i = 1; i < points.size(); ++i) {
+                    SDL_RenderLine(renderer,
+                                   static_cast<int>(std::lround(points[i - 1].x)),
+                                   static_cast<int>(std::lround(points[i - 1].y)) + t,
+                                   static_cast<int>(std::lround(points[i].x)),
+                                   static_cast<int>(std::lround(points[i].y)) + t);
+                }
+            }
             SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
             SDL_SetRenderDrawBlendMode(renderer, prev_mode);
         }

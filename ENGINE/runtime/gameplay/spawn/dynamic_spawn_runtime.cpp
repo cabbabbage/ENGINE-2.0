@@ -677,8 +677,8 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
         const int min_x = std::min(work_bounds.min.world_x(), work_bounds.max.world_x()) - despawn_margin_px();
         const int max_x = std::max(work_bounds.min.world_x(), work_bounds.max.world_x()) + despawn_margin_px();
         const int render_edge_z = std::max(work_bounds.min.world_z(), work_bounds.max.world_z());
-        const int room_edge_z = dynamic_spawn::geometry::collect_area_geometry(assets_).max_z + max_spawn_from_room_px();
-        const int boundary_z = std::max(render_edge_z, room_edge_z);
+        const auto area_geometry = dynamic_spawn::geometry::collect_area_geometry(assets_);
+        const int room_limit_px = max_spawn_from_room_px();
         const Selector* fog_selector = nullptr;
         for (const Selector& selector : selectors_) {
             if (selector.mode == Mode::FogBoundaryLane) {
@@ -688,24 +688,36 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
         }
         if (fog_selector) {
             const int first = vibble::math::floor_div(min_x, spacing) * spacing;
+            int lane_min_z = std::numeric_limits<int>::max();
+            int lane_max_z = std::numeric_limits<int>::min();
             for (int x = first; x <= max_x; x += spacing) {
+                const int room_edge_z =
+                    dynamic_spawn::geometry::max_allowed_boundary_z_for_x(area_geometry, x, room_limit_px);
+                if (room_edge_z == std::numeric_limits<int>::min()) {
+                    continue;
+                }
+                const int boundary_z = std::min(render_edge_z, room_edge_z);
                 const int gx = vibble::math::floor_div(x, spacing);
                 const int gz = vibble::math::floor_div(boundary_z, spacing);
                 CellKey key{Mode::FogBoundaryLane, fog_selector->id, spacing, gx, gz};
                 add_planned_cell(*fog_selector, key, x, boundary_z, assets_.map_id(), cells_by_chunk_);
+                lane_min_z = std::min(lane_min_z, boundary_z);
+                lane_max_z = std::max(lane_max_z, boundary_z);
             }
-            const auto fog_spawn_chunks =
-                chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
-                                                        world::GridPoint::make_virtual(min_x, 0, boundary_z),
-                                                        world::GridPoint::make_virtual(max_x, 0, boundary_z)},
-                                                    preload_margin_px()));
-            spawn_chunks.insert(fog_spawn_chunks.begin(), fog_spawn_chunks.end());
-            const auto fog_keep_chunks =
-                chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
-                                                        world::GridPoint::make_virtual(min_x, 0, boundary_z),
-                                                        world::GridPoint::make_virtual(max_x, 0, boundary_z)},
-                                                    despawn_margin_px()));
-            keep_chunks.insert(fog_keep_chunks.begin(), fog_keep_chunks.end());
+            if (lane_min_z <= lane_max_z) {
+                const auto fog_spawn_chunks =
+                    chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
+                                                            world::GridPoint::make_virtual(min_x, 0, lane_min_z),
+                                                            world::GridPoint::make_virtual(max_x, 0, lane_max_z)},
+                                                        preload_margin_px()));
+                spawn_chunks.insert(fog_spawn_chunks.begin(), fog_spawn_chunks.end());
+                const auto fog_keep_chunks =
+                    chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
+                                                            world::GridPoint::make_virtual(min_x, 0, lane_min_z),
+                                                            world::GridPoint::make_virtual(max_x, 0, lane_max_z)},
+                                                        despawn_margin_px()));
+                keep_chunks.insert(fog_keep_chunks.begin(), fog_keep_chunks.end());
+            }
         }
     }
 

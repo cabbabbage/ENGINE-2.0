@@ -22,5 +22,6 @@ struct AreaGeometry {
 bool point_inside_any_area(SDL_Point point, const AreaGeometry& geometry);
 bool point_near_geometry(SDL_Point point, const AreaGeometry& geometry, int threshold_px);
 AreaGeometry collect_area_geometry(const Assets& assets);
+int max_allowed_boundary_z_for_x(const AreaGeometry& geometry, int world_x, int max_spawn_from_room_px);
 
 } // namespace dynamic_spawn::geometry

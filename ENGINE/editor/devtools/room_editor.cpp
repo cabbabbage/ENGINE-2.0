@@ -10816,6 +10816,7 @@ void RoomEditor::ensure_stack_animation_list_panel() {
             return;
         }
         if (this->apply_stack_animation_selection(*animation_id)) {
+            this->force_stack_animation_sync_ = true;
             this->sync_stack_animation_list_panel();
             this->update_asset_editor_layout();
         }
@@ -13015,6 +13016,7 @@ void RoomEditor::apply_asset_editor_subview_change(AssetEditorSubview subview, b
     }
 
     asset_editor_subview_ = subview;
+    force_stack_animation_sync_ = true;
     if (animate) {
         begin_asset_editor_transition(previous, subview);
     } else {
@@ -13263,7 +13265,39 @@ void RoomEditor::update_asset_editor_layout() {
     }
 
     sync_shared_footer_navigation();
-    sync_stack_animation_list_panel();
+    ++stack_animation_sync_frames_;
+    StackAnimationListSyncKey next_sync_key;
+    next_sync_key.subview = asset_editor_subview_;
+    next_sync_key.target_asset = stack_animation_list_target_asset();
+    if (const std::optional<std::string> selected = stack_animation_list_selected_animation_id(); selected.has_value()) {
+        next_sync_key.selected_animation_id = *selected;
+    }
+    if (next_sync_key.target_asset && next_sync_key.target_asset->info) {
+        next_sync_key.animation_revision_signature =
+            build_stack_animation_preview_signature(*next_sync_key.target_asset->info);
+    }
+
+    const bool key_unchanged = stack_animation_list_sync_key_cache_.has_value() &&
+                               (*stack_animation_list_sync_key_cache_ == next_sync_key);
+    if (force_stack_animation_sync_ || !key_unchanged) {
+        ++stack_animation_sync_invocations_;
+        stack_animation_list_sync_key_cache_ = next_sync_key;
+        sync_stack_animation_list_panel();
+        force_stack_animation_sync_ = false;
+        if ((stack_animation_sync_invocations_ % 120) == 0) {
+            SDL_Log("[RoomEditor] stack animation sync stats: invocations=%llu skipped=%llu frames=%llu",
+                    static_cast<unsigned long long>(stack_animation_sync_invocations_),
+                    static_cast<unsigned long long>(stack_animation_sync_skipped_),
+                    static_cast<unsigned long long>(stack_animation_sync_frames_));
+        }
+    } else {
+        ++stack_animation_sync_skipped_;
+        if ((stack_animation_sync_skipped_ % 240) == 0) {
+            SDL_Log("[RoomEditor] stack animation sync skipped (idle): skipped=%llu frames=%llu",
+                    static_cast<unsigned long long>(stack_animation_sync_skipped_),
+                    static_cast<unsigned long long>(stack_animation_sync_frames_));
+        }
+    }
 
     if (anchor_tools_panel_) {
         anchor_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);

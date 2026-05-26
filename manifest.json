@@ -11547,35 +11547,35 @@
               true
             ],
             [
-              -15,
+              -13,
               0,
               0,
               0.0,
               true
             ],
             [
-              -15,
+              -13,
               0,
               0,
               0.0,
               true
             ],
             [
-              -15,
+              -13,
               0,
               0,
               0.0,
               true
             ],
             [
-              -15,
+              -13,
               0,
               0,
               0.0,
               true
             ],
             [
-              -15,
+              -13,
               0,
               0,
               0.0,
@@ -11592,37 +11592,37 @@
                 true
               ],
               [
-                -25,
-                0,
                 -13,
+                0,
+                0,
                 0.0,
                 true
               ],
               [
-                -25,
-                0,
                 -13,
+                0,
+                0,
                 0.0,
                 true
               ],
               [
-                -25,
-                0,
                 -13,
+                0,
+                0,
                 0.0,
                 true
               ],
               [
-                -25,
-                0,
                 -13,
+                0,
+                0,
                 0.0,
                 true
               ],
               [
-                -25,
-                0,
                 -13,
+                0,
+                0,
                 0.0,
                 true
               ]
@@ -11674,7 +11674,7 @@
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -75,
+            "dx": -65,
             "dy": 0,
             "dz": 0.0
           },
@@ -18640,7 +18640,7 @@
           "camera_zoom_percent": 3,
           "display_color": [
             242,
-            242,
+            139,
             85,
             255
           ],
@@ -18792,9 +18792,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            138,
-            242,
-            36,
+            147,
+            204,
+            31,
             255
           ],
           "geometry": "Square",
@@ -18838,9 +18838,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            71,
-            136,
             204,
+            31,
+            175,
             255
           ],
           "geometry": "Square",
@@ -18915,9 +18915,9 @@
         },
         "NewRoom3": {
           "display_color": [
+            31,
             204,
             31,
-            189,
             255
           ],
           "geometry": "Square",
@@ -18966,9 +18966,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
+            36,
+            114,
             242,
-            159,
-            85,
             255
           ],
           "geometry": "Circle",
@@ -19054,9 +19054,9 @@
           "camera_tilt_deg": 30.68971061706543,
           "camera_zoom_percent": 0,
           "display_color": [
-            115,
-            31,
             204,
+            96,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -19273,20 +19273,20 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -3446,
-              "dz": -2823,
+              "dx": -2996,
+              "dz": -2244,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 14864,
-              "origional_width": 15720,
+              "origional_height": 15656,
+              "origional_width": 16584,
               "position": "Exact",
               "priority": 6,
               "quantity": 1,
-              "resolution": 8,
+              "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-df1781471a53"
@@ -19480,7 +19480,7 @@
           "display_color": [
             242,
             85,
-            145,
+            137,
             255
           ],
           "geometry": "Square",

@@ -1197,6 +1197,15 @@ private:
     XYOverlayCursorState xy_overlay_cursor_state_{};
     SDL_Point last_pointer_screen_{0, 0};
     bool has_last_pointer_screen_ = false;
+    struct AssetInfoSnapSessionState {
+        bool initialized = false;
+        bool aligned_first_target = false;
+        Asset* first_target = nullptr;
+        int original_world_x = 0;
+        int original_world_y = 0;
+        int original_world_z = 0;
+    };
+    AssetInfoSnapSessionState asset_info_snap_session_{};
 
     struct AssetEditorTransitionState {
         bool active = false;

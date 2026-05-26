@@ -1388,25 +1388,8 @@ constexpr std::array<std::array<int, 2>, 12> kBoxVolumeEdges{{
 }};
 constexpr float kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond = 1400.0f;
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
-    MapGridSettings settings;
-    settings.grid_resolution = resolution;
-    const int spacing = settings.spacing();
-    if (spacing <= 0) {
-        return world;
-    }
-    auto snap_axis = [spacing](int value) -> int {
-        const long double ratio = static_cast<long double>(value) / static_cast<long double>(spacing);
-        const long long rounded = static_cast<long long>(std::llround(ratio));
-        const long long scaled = rounded * static_cast<long long>(spacing);
-        if (scaled > std::numeric_limits<int>::max()) {
-            return std::numeric_limits<int>::max();
-        }
-        if (scaled < std::numeric_limits<int>::min()) {
-            return std::numeric_limits<int>::min();
-        }
-        return static_cast<int>(scaled);
-    };
-    return SDL_Point{ snap_axis(world.x), snap_axis(world.y) };
+    const int clamped = vibble::grid::clamp_resolution(resolution);
+    return vibble::grid::global_grid().snap_to_vertex(world, clamped);
 }
 
 SDL_Point grid_point_for_asset(const Asset* asset) {
@@ -6254,6 +6237,10 @@ void RoomEditor::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo
 
 void RoomEditor::open_asset_info_editor_for_asset(Asset* asset, bool focus_camera) {
     if (!asset || !asset->info) return;
+    const bool session_open_before = is_asset_info_modal_blocking() || (info_ui_ && info_ui_->is_visible());
+    if (!session_open_before) {
+        asset_info_snap_session_ = AssetInfoSnapSessionState{};
+    }
     std::cout << "Opening AssetInfoUI for asset: " << asset->info->name << std::endl;
     if (asset_belongs_to_room(asset)) {
         clear_geometry_selection();
@@ -6272,6 +6259,29 @@ void RoomEditor::open_asset_info_editor_for_asset(Asset* asset, bool focus_camer
         info_ui_->set_target_asset(asset);
     }
     set_focus_asset(asset, true);
+
+    if (!asset_info_snap_session_.initialized) {
+        asset_info_snap_session_.initialized = true;
+        asset_info_snap_session_.first_target = asset;
+        asset_info_snap_session_.original_world_x = asset->world_x();
+        asset_info_snap_session_.original_world_y = asset->world_y();
+        asset_info_snap_session_.original_world_z = asset->world_z();
+
+        const bool can_auto_align = assets_ &&
+                                    snap_to_grid_enabled_ &&
+                                    assets_->dev_grid_overlay_enabled();
+        if (can_auto_align) {
+            const SDL_Point snapped_world =
+                snap_world_point_to_overlay_grid(asset->world_xz_point(), current_grid_resolution());
+            if (snapped_world.x != asset->world_x() || snapped_world.y != asset->world_z()) {
+                asset->move_to_world_position(snapped_world.x, asset->world_y(), snapped_world.y);
+                if (assets_) {
+                    assets_->mark_active_assets_dirty();
+                }
+            }
+            asset_info_snap_session_.aligned_first_target = true;
+        }
+    }
 }
 
 void RoomEditor::open_movement_editor_for_asset(Asset* asset, const std::string& animation_id) {
@@ -6337,6 +6347,20 @@ void RoomEditor::close_asset_info_editor() {
     if (floor_box_mode_active()) {
         exit_floor_box_edit_mode(true);
     }
+
+    if (asset_info_snap_session_.aligned_first_target &&
+        asset_info_snap_session_.first_target &&
+        is_asset_pointer_live(asset_info_snap_session_.first_target)) {
+        asset_info_snap_session_.first_target->move_to_world_position(
+            asset_info_snap_session_.original_world_x,
+            asset_info_snap_session_.original_world_y,
+            asset_info_snap_session_.original_world_z);
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
+    }
+    asset_info_snap_session_ = AssetInfoSnapSessionState{};
+
     clear_focus();
     if (info_ui_) info_ui_->close();
     if (info_ui_) info_ui_->clear_panel_bounds_override();
@@ -6396,6 +6420,7 @@ void RoomEditor::clear_stale_asset_info_modal_state() {
         return;
     }
     active_modal_ = ActiveModal::None;
+    asset_info_snap_session_ = AssetInfoSnapSessionState{};
     pending_animation_editor_close_subview_.reset();
     asset_info_parent_history_.clear();
     preserve_asset_info_parent_history_on_next_open_ = false;
@@ -20355,20 +20380,6 @@ bool RoomEditor::enter_movement_edit_mode() {
     movement_edit_.original_world_y = target->world_y();
     movement_edit_.original_world_z = target->world_z();
 
-    const int resolution = current_grid_resolution();
-    const SDL_Point current_anchor =
-        animation_update::detail::bottom_middle_for(*target, target->world_xz_point());
-    const SDL_Point snapped_anchor = vibble::grid::snap_world_to_vertex(current_anchor, resolution);
-    const int snap_dx = snapped_anchor.x - current_anchor.x;
-    const int snap_dz = snapped_anchor.y - current_anchor.y;
-    if (snap_dx != 0 || snap_dz != 0) {
-        target->move_to_world_position(target->world_x() + snap_dx, target->world_y(), target->world_z() + snap_dz);
-        if (assets_) {
-            assets_->mark_active_assets_dirty();
-        }
-    }
-    movement_edit_.anchor_snap_active = true;
-
     movement_edit_.paths = resolve_room_movement_paths_for_animation(target, movement_edit_.animation_id);
         movement_edit_.selected_path_index = 0;
         movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
@@ -20668,15 +20679,6 @@ void RoomEditor::exit_movement_edit_mode(bool persist_changes) {
 
     if (target_live && movement_edit_.target_asset && movement_edit_.had_static_frame_before) {
         movement_edit_.target_asset->static_frame = movement_edit_.static_frame_before;
-    }
-    if (target_live && movement_edit_.target_asset && movement_edit_.anchor_snap_active) {
-        movement_edit_.target_asset->move_to_world_position(
-            movement_edit_.original_world_x,
-            movement_edit_.original_world_y,
-            movement_edit_.original_world_z);
-        if (assets_) {
-            assets_->mark_active_assets_dirty();
-        }
     }
 
     const EditorMode previous_mode = editor_mode_;
@@ -21452,8 +21454,7 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
 
     if (has_last_raw_mouse_world_) {
         const int resolution = current_grid_resolution();
-        const SDL_Point snapped_floor_xz =
-            vibble::grid::global_grid().snap_to_vertex(last_raw_mouse_world_, resolution);
+        const SDL_Point snapped_floor_xz = snap_world_point_to_overlay_grid(last_raw_mouse_world_, resolution);
         ctx.exact_floor_xz = SDL_FPoint{
             static_cast<float>(last_raw_mouse_world_.x),
             static_cast<float>(last_raw_mouse_world_.y)};
@@ -21504,8 +21505,7 @@ Assets::DevGridOverlayContext RoomEditor::dev_grid_overlay_context() const {
             const SDL_Point selected_world_point{
                 static_cast<int>(std::lround(selected_world_xz.x)),
                 static_cast<int>(std::lround(selected_world_xz.y))};
-            const SDL_Point snapped_floor_xz =
-                vibble::grid::global_grid().snap_to_vertex(selected_world_point, resolution);
+            const SDL_Point snapped_floor_xz = snap_world_point_to_overlay_grid(selected_world_point, resolution);
 
             ctx.kind = Assets::DevGridOverlayKind::FloorCenteredOnSelectedPoint;
             ctx.exact_floor_xz = selected_world_xz;

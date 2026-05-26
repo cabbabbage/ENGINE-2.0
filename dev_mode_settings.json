@@ -25,19 +25,19 @@
             "types": {
                 "area": true,
                 "boundary": true,
-                "dynamic": true,
+                "dynamic": false,
                 "enemy": true,
                 "npc": true,
-                "object": true,
+                "object": false,
                 "player": true,
                 "texture": true
             }
         },
         "grid": {
-            "cell_size_px": 128.0,
+            "cell_size_px": 64.0,
             "overlay": {
                 "enabled": true,
-                "r": 7.0
+                "r": 6.0
             },
             "snap": {
                 "enabled": true

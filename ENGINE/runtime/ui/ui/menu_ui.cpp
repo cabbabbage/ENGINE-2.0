@@ -278,6 +278,7 @@ void MenuUI::game_loop() {
                 frame_stats.mark_stage("sync_output_end");
 
                 const bool should_update = !menu_active_ && game_assets_ && input_;
+                update_mouse_capture_state();
                 frame_stats.set("main.gameplay_active", should_update);
                 if (should_update) {
                         if (codex_playtest_input_enabled()) {
@@ -405,12 +406,14 @@ void MenuUI::openMenu() {
         exitDevModeForPause();
         menu_active_ = true;
         if (game_assets_) game_assets_->set_render_suppressed(menu_active_);
+        update_mouse_capture_state();
 }
 
 void MenuUI::closeMenu() {
         if (!menu_active_) return;
         menu_active_ = false;
         if (game_assets_) game_assets_->set_render_suppressed(menu_active_);
+        update_mouse_capture_state();
 }
 
 void MenuUI::exitDevModeForPause() {
@@ -419,6 +422,28 @@ void MenuUI::exitDevModeForPause() {
         if (game_assets_) game_assets_->set_dev_mode(dev_mode_);
         std::cout << "[MenuUI] Dev Mode disabled for pause menu\n";
         rebuildButtons();
+        update_mouse_capture_state();
+}
+
+void MenuUI::update_mouse_capture_state() {
+        if (!window_) {
+                mouse_capture_active_ = false;
+                return;
+        }
+
+        const bool window_has_input_focus = (SDL_GetWindowFlags(window_) & SDL_WINDOW_INPUT_FOCUS) != 0;
+        const bool should_capture = window_has_input_focus && !menu_active_ && !dev_mode_;
+        if (mouse_capture_active_ == should_capture) {
+                return;
+        }
+
+        mouse_capture_active_ = should_capture;
+        SDL_SetWindowRelativeMouseMode(window_, should_capture);
+        SDL_SetWindowMouseGrab(window_, should_capture);
+        SDL_HideCursor();
+        if (!should_capture) {
+                SDL_ShowCursor();
+        }
 }
 
 void MenuUI::handle_event(const SDL_Event& e) {
@@ -706,6 +731,5 @@ void MenuUI::doToggleDevMode() {
                 if (game_assets_) game_assets_->set_render_suppressed(false);
                 std::cout << "[MenuUI] Closing menu after mode switch\n";
         }
+        update_mouse_capture_state();
 }
-
-

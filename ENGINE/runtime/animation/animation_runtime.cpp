@@ -1836,6 +1836,8 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         }
         CollisionQueryContext collision_context;
         collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+        collision_context.required_animation_tags = planner_iface_->plan_.movement_tag_filter.required_tags;
+        collision_context.excluded_animation_tags = planner_iface_->plan_.movement_tag_filter.excluded_tags;
         collision_context.path_variance_seed =
             path_variance_seed_for_retry(*self_,
                                          next_checkpoint_index_,
@@ -1847,6 +1849,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
         new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
         new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
+        new_plan.movement_tag_filter = planner_iface_->plan_.movement_tag_filter;
         if (new_plan.strides.empty()) return false;
         planner_iface_->plan_ = std::move(new_plan);
         planner_iface_->final_dest = planner_iface_->plan_.final_dest;
@@ -1999,6 +2002,8 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
 
         CollisionQueryContext collision_context;
         collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+        collision_context.required_animation_tags = planner_iface_->plan3d_.movement_tag_filter.required_tags;
+        collision_context.excluded_animation_tags = planner_iface_->plan3d_.movement_tag_filter.excluded_tags;
         collision_context.path_variance_seed =
             path_variance_seed_for_retry(*self_,
                                          next_checkpoint_index_,
@@ -2008,6 +2013,7 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
         new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
         new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
         new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
+        new_plan.movement_tag_filter = planner_iface_->plan3d_.movement_tag_filter;
         if (new_plan.strides.empty()) {
             return false;
         }
@@ -2135,6 +2141,8 @@ bool AnimationRuntime::replan_to_destination() {
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    collision_context.required_animation_tags = planner_iface_->plan_.movement_tag_filter.required_tags;
+    collision_context.excluded_animation_tags = planner_iface_->plan_.movement_tag_filter.excluded_tags;
     collision_context.path_variance_seed =
         path_variance_seed_for_retry(*self_,
                                      next_checkpoint_index_,
@@ -2148,6 +2156,7 @@ bool AnimationRuntime::replan_to_destination() {
     new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
     new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
     new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
+    new_plan.movement_tag_filter = planner_iface_->plan_.movement_tag_filter;
     if (new_plan.strides.empty()) {
         return false;
     }
@@ -2194,6 +2203,8 @@ bool AnimationRuntime::replan_to_destination_3d() {
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+    collision_context.required_animation_tags = planner_iface_->plan3d_.movement_tag_filter.required_tags;
+    collision_context.excluded_animation_tags = planner_iface_->plan3d_.movement_tag_filter.excluded_tags;
     collision_context.path_variance_seed =
         path_variance_seed_for_retry(*self_,
                                      next_checkpoint_index_,
@@ -2208,6 +2219,7 @@ bool AnimationRuntime::replan_to_destination_3d() {
     new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
     new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
     new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
+    new_plan.movement_tag_filter = planner_iface_->plan3d_.movement_tag_filter;
     if (new_plan.strides.empty()) {
         return false;
     }

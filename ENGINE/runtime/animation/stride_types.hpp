@@ -15,6 +15,11 @@ struct Stride {
     std::size_t path_index = 0;
 };
 
+struct MovementTagFilter {
+    std::vector<std::string> required_tags;
+    std::vector<std::string> excluded_tags;
+};
+
 struct Plan {
     std::vector<SDL_Point> sanitized_checkpoints;
     std::vector<Stride>    strides;
@@ -23,6 +28,7 @@ struct Plan {
     std::optional<std::string> engagement_target_asset_id{};
     bool                   override_non_locked = true;
     bool                   attacking_enabled = false;
+    MovementTagFilter      movement_tag_filter{};
 };
 
 struct Plan3D {
@@ -33,4 +39,5 @@ struct Plan3D {
     std::optional<std::string>  engagement_target_asset_id{};
     bool                        override_non_locked = true;
     bool                        attacking_enabled = false;
+    MovementTagFilter           movement_tag_filter{};
 };

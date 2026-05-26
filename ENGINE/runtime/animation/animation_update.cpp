@@ -487,6 +487,7 @@ void AnimationUpdate::auto_move(Asset* target_asset,
         self_->target_reached = false;
     }
     const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    const MovementTagFilter movement_tag_filter = resolve_movement_tag_filter(combat_overrides);
     auto_move_attacking_enabled_ = combat_options.attacking_enabled;
     const SDL_Point checkpoint = animation_update::movement_targets::world_checkpoint(*target_asset);
     SDL_Point delta = animation_update::movement_targets::world_delta_to_checkpoint(*self_, checkpoint);
@@ -678,6 +679,8 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    collision_context.required_animation_tags = movement_tag_filter.required_tags;
+    collision_context.excluded_animation_tags = movement_tag_filter.excluded_tags;
     collision_context.path_variance_seed = auto_move_variance_seed(*self_, ++plan_variance_attempt_counter_);
     collision_context.set_furthest_checkpoint_distance_px(furthest_checkpoint_distance_px);
     const std::vector<axis::WorldPos> sanitized_checkpoints =
@@ -687,6 +690,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     plan3d_.override_non_locked = override_non_locked;
     plan3d_.engagement_target_asset_id = pending_engagement_target_asset_id_;
     plan3d_.attacking_enabled = combat_options.attacking_enabled;
+    plan3d_.movement_tag_filter = movement_tag_filter;
     final_dest_3d = plan3d_.final_dest;
 
     // 3D plan runs in its own mode and must not reuse stale 2D plan state.
@@ -696,6 +700,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     plan_.world_start = self_->world_xz_point();
     plan_.engagement_target_asset_id = std::nullopt;
     plan_.attacking_enabled = false;
+    plan_.movement_tag_filter = {};
     final_dest = plan_.final_dest;
 
     if (debug_logging) {
@@ -763,6 +768,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
 
     const std::string asset_name = self_->info ? self_->info->name : std::string{"<unknown>"};
     const AutoMoveCombatOptions combat_options = resolve_auto_move_combat_options(combat_overrides);
+    const MovementTagFilter movement_tag_filter = resolve_movement_tag_filter(combat_overrides);
     auto_move_attacking_enabled_ = combat_options.attacking_enabled;
     const int resolution = effective_grid_resolution(checkpoint_resolution);
     visited_thresh_      = std::max(0, visited_thresh_px);
@@ -800,6 +806,8 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = pending_engagement_target_asset_id_;
+    collision_context.required_animation_tags = movement_tag_filter.required_tags;
+    collision_context.excluded_animation_tags = movement_tag_filter.excluded_tags;
     collision_context.path_variance_seed = auto_move_variance_seed(*self_, ++plan_variance_attempt_counter_);
     collision_context.set_furthest_checkpoint_distance_px(furthest_checkpoint_distance_px);
     const std::vector<SDL_Point> sanitized_checkpoints =
@@ -810,6 +818,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     plan_.override_non_locked = override_non_locked;
     plan_.engagement_target_asset_id = pending_engagement_target_asset_id_;
     plan_.attacking_enabled = combat_options.attacking_enabled;
+    plan_.movement_tag_filter = movement_tag_filter;
 
     // 2D plan runs in its own mode and must not reuse stale 3D plan state.
     plan3d_.strides.clear();
@@ -818,6 +827,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     plan3d_.world_start = plan3d_.final_dest;
     plan3d_.engagement_target_asset_id = std::nullopt;
     plan3d_.attacking_enabled = false;
+    plan3d_.movement_tag_filter = {};
     final_dest_3d = plan3d_.final_dest;
 
     if (debug_logging) {
@@ -914,6 +924,7 @@ void AnimationUpdate::clear_movement_plan() {
     plan_.engagement_target_asset_id = std::nullopt;
     plan_.override_non_locked = true;
     plan_.attacking_enabled = false;
+    plan_.movement_tag_filter = {};
     final_dest = plan_.final_dest;
 
     plan3d_.strides.clear();
@@ -925,6 +936,7 @@ void AnimationUpdate::clear_movement_plan() {
     plan3d_.engagement_target_asset_id = std::nullopt;
     plan3d_.override_non_locked = true;
     plan3d_.attacking_enabled = false;
+    plan3d_.movement_tag_filter = {};
     final_dest_3d = plan3d_.final_dest;
 
     active_plan_mode_ = ActivePlanMode::None;

@@ -118,6 +118,28 @@ MovementAnimationBuckets gather_movement_animations(const Asset& self) {
     return buckets;
 }
 
+bool descriptor_matches_tag_filter(const AnimationDescriptor& descriptor,
+                                   const CollisionQueryContext& context) {
+    if (!descriptor.animation) {
+        return false;
+    }
+
+    const auto& tags = descriptor.animation->tags;
+    for (const std::string& required_tag : context.required_animation_tags) {
+        if (!animation_update::tag_utils::has_normalized_tag(tags, required_tag)) {
+            return false;
+        }
+    }
+
+    for (const std::string& excluded_tag : context.excluded_animation_tags) {
+        if (animation_update::tag_utils::has_normalized_tag(tags, excluded_tag)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct CandidateStride {
     std::string animation_id;
     world::GridPoint end_position = world::GridPoint::make_virtual(0, 0, 0, 0);
@@ -202,7 +224,18 @@ Plan GetBestPath::operator()(const Asset& self,
     };
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
     const MovementAnimationBuckets animation_buckets = gather_movement_animations(self);
-    const auto& movement_anims = animation_buckets.locomotion;
+    std::vector<AnimationDescriptor> movement_anims;
+    movement_anims.reserve(animation_buckets.locomotion.size() + animation_buckets.attack.size());
+    for (const auto& descriptor : animation_buckets.locomotion) {
+        if (descriptor_matches_tag_filter(descriptor, context)) {
+            movement_anims.push_back(descriptor);
+        }
+    }
+    for (const auto& descriptor : animation_buckets.attack) {
+        if (descriptor_matches_tag_filter(descriptor, context)) {
+            movement_anims.push_back(descriptor);
+        }
+    }
 
     const std::uint64_t path_seed_base = context.path_variance_seed;
     bool aborted = false;

@@ -69,6 +69,9 @@ public:
 
     struct AutoMoveCombatOverrides {
         std::optional<bool> attacking_enabled = std::nullopt;
+        std::optional<bool> force_attacking_enabled = std::nullopt;
+        std::vector<std::string> required_movement_tags{};
+        std::vector<std::string> excluded_movement_tags{};
     };
 
     enum class ReversePlaybackCommand {
@@ -192,4 +195,5 @@ private:
     int effective_grid_resolution(std::optional<int> override_resolution) const;
     AutoMoveCombatOptions resolve_auto_move_combat_options(AutoMoveCombatOverrides overrides = {}) const;
     bool should_defer_auto_move_for_committed_attack() const;
+    MovementTagFilter resolve_movement_tag_filter(const AutoMoveCombatOverrides& overrides) const;
 };

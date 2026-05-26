@@ -21,6 +21,8 @@ struct CollisionQueryContext {
     int furthest_checkpoint_distance_px = 0;
     std::uint64_t path_variance_seed = 0;
     std::optional<std::string> engagement_target_asset_id = std::nullopt;
+    std::vector<std::string> required_animation_tags{};
+    std::vector<std::string> excluded_animation_tags{};
 
     void set_furthest_checkpoint_distance_px(int extent_px) {
         furthest_checkpoint_distance_px = std::max(0, extent_px);

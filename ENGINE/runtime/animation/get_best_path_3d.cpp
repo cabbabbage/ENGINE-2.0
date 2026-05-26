@@ -122,6 +122,28 @@ MovementAnimationBuckets3D gather_movement_animations_3d(const Asset& self) {
     return buckets;
 }
 
+bool descriptor_matches_tag_filter(const AnimationDescriptor3D& descriptor,
+                                   const CollisionQueryContext& context) {
+    if (!descriptor.animation) {
+        return false;
+    }
+
+    const auto& tags = descriptor.animation->tags;
+    for (const std::string& required_tag : context.required_animation_tags) {
+        if (!animation_update::tag_utils::has_normalized_tag(tags, required_tag)) {
+            return false;
+        }
+    }
+
+    for (const std::string& excluded_tag : context.excluded_animation_tags) {
+        if (animation_update::tag_utils::has_normalized_tag(tags, excluded_tag)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 struct CandidateStride3D {
     std::string animation_id;
     axis::WorldPos end_position{0, 0, 0};
@@ -193,7 +215,18 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     };
     const long long visited_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const MovementAnimationBuckets3D animation_buckets = gather_movement_animations_3d(self);
-    const auto& movement_anims = animation_buckets.locomotion;
+    std::vector<AnimationDescriptor3D> movement_anims;
+    movement_anims.reserve(animation_buckets.locomotion.size() + animation_buckets.attack.size());
+    for (const auto& descriptor : animation_buckets.locomotion) {
+        if (descriptor_matches_tag_filter(descriptor, context)) {
+            movement_anims.push_back(descriptor);
+        }
+    }
+    for (const auto& descriptor : animation_buckets.attack) {
+        if (descriptor_matches_tag_filter(descriptor, context)) {
+            movement_anims.push_back(descriptor);
+        }
+    }
 
     axis::WorldPos cursor = plan.world_start;
     const std::uint64_t path_seed_base = context.path_variance_seed;

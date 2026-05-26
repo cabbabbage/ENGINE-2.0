@@ -28,6 +28,15 @@ class AnimationListPanel {
 
     AnimationListPanel();
 
+    struct ExternalRowsFingerprint {
+        std::size_t count = 0;
+        std::uint64_t rolling_hash = 0;
+
+        bool operator==(const ExternalRowsFingerprint& other) const {
+            return count == other.count && rolling_hash == other.rolling_hash;
+        }
+    };
+
     void set_document(std::shared_ptr<AnimationDocument> document);
     void set_external_rows(std::optional<std::vector<ExternalRow>> rows);
     void set_show_delete_button(bool show);
@@ -75,15 +84,6 @@ class AnimationListPanel {
         bool missing_source = false;
         bool selectable = true;
 };
-    struct ExternalRowsFingerprint {
-        std::size_t count = 0;
-        std::uint64_t rolling_hash = 0;
-
-        bool operator==(const ExternalRowsFingerprint& other) const {
-            return count == other.count && rolling_hash == other.rolling_hash;
-        }
-    };
-
     struct RowGeometry {
         SDL_Rect outer{0, 0, 0, 0};
         SDL_Rect delete_button_rel{0, 0, 0, 0};

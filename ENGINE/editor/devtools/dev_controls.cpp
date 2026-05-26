@@ -4028,8 +4028,8 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     }
     if (renderer && boundary_assets_modal_ && boundary_assets_modal_->visible() && assets_) {
         const WarpedScreenGrid& view_cam = assets_->getView();
-        const auto render_bounds = view_cam.get_current_view();
-        const int render_edge_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
+        auto [render_min_x, render_min_z, render_max_x, render_max_z] = view_cam.get_current_view().get_bounds();
+        const int render_edge_z = std::max(render_min_z, render_max_z);
         int render_radius = 1024;
         const nlohmann::json& map_json = assets_->map_info_json();
         if (map_json.is_object()) {
@@ -4047,8 +4047,8 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         const int boundary_z = std::max(render_edge_z, room_edge_z);
         SDL_FPoint left{};
         SDL_FPoint right{};
-        if (try_floor_warped_screen_position(view_cam, SDL_Point{render_bounds.min.world_x(), boundary_z}, left) &&
-            try_floor_warped_screen_position(view_cam, SDL_Point{render_bounds.max.world_x(), boundary_z}, right)) {
+        if (try_floor_warped_screen_position(view_cam, SDL_Point{render_min_x, boundary_z}, left) &&
+            try_floor_warped_screen_position(view_cam, SDL_Point{render_max_x, boundary_z}, right)) {
             SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
             SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
             Uint8 pr = 0, pg = 0, pb = 0, pa = 0;

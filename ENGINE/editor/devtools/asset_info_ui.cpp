@@ -217,7 +217,7 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_tilt.get() });
     widgets_.push_back(std::move(w_tilt));
 
-    wr_y_pos_range_ = std::make_unique<DMWeightedRangeWidget>("Y Position", info_->y_position_range, -50, 200, false);
+    wr_y_pos_range_ = std::make_unique<DMWeightedRangeWidget>("Y Position (%)", info_->y_position_range, -100, 500, false);
     wr_y_pos_range_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
         this->on_y_position_range_changed(range);
     });
@@ -261,10 +261,8 @@ inline void Section_BasicInfo::build() {
 }
 
 inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
-    bool used = DockableCollapsible::handle_event(e);
-    if (!info_) return used;
-
-    if (!used) {
+    bool used = false;
+    if (info_ && is_expanded()) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
         if (wr_size_variation_ && wr_size_variation_->handle_event(e)) used = true;
@@ -276,6 +274,15 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
     }
+    if (!used) {
+        used = DockableCollapsible::handle_event(e);
+    }
+    if (!is_expanded()) {
+        if (wr_size_variation_) wr_size_variation_->clear_selection();
+        if (wr_tilt_range_) wr_tilt_range_->clear_selection();
+        if (wr_y_pos_range_) wr_y_pos_range_->clear_selection();
+    }
+    if (!info_) return used;
 
     bool changed = false;
     bool rebuild_needed = false;
@@ -598,14 +605,16 @@ class Section_Spacing : public DockableCollapsible {
     }
 
     bool handle_event(const SDL_Event& e) override {
-      bool used = DockableCollapsible::handle_event(e);
-      if (!info_ || !expanded_) return used;
-
-      if (!used) {
+      bool used = false;
+      if (info_ && expanded_) {
         if (s_min_same_ && s_min_same_->handle_event(e)) used = true;
         if (s_min_all_ && s_min_all_->handle_event(e)) used = true;
         if (s_neighbor_search_ && s_neighbor_search_->handle_event(e)) used = true;
       }
+      if (!used) {
+        used = DockableCollapsible::handle_event(e);
+      }
+      if (!info_ || !expanded_) return used;
 
       bool changed = false;
 
@@ -1384,6 +1393,22 @@ void AssetInfoUI::layout_widgets(int screen_w, int screen_h) const {
 }
 
 bool AssetInfoUI::handle_event(const SDL_Event& e) {
+    if (DMWeightedRangeWidget::has_active_expanded()) {
+        if (DMWeightedRangeWidget::handle_active_expanded_event(e)) {
+            return true;
+        }
+        switch (e.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_TEXT_INPUT:
+                return true;
+            default:
+                break;
+        }
+    }
 
     if (color_sampling_active_) {
         const bool pointer_event =
@@ -1698,6 +1723,7 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
         asset_selector_->render(r);
 
     DMDropdown::render_active_options(r);
+    DMWeightedRangeWidget::render_active_expanded(r);
 
     if (color_sampling_active_ && r) {
         SDL_Rect sample_rect{ color_sampling_cursor_.x, color_sampling_cursor_.y, 1, 1 };

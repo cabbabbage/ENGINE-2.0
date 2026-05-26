@@ -878,8 +878,8 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
                                       const std::vector<bool>& point_selectable) {
     // Allow initial click-selection when no target is active yet.
-    // MovementFrameEditor starts with SelectionTarget::None and promotes
-    // to MovementPoint via on_point_selected_ once a point is clicked.
+    // Some editor hosts start with SelectionTarget::None and promote
+    // selection via on_point_selected_ once a point is clicked.
     if (!selection_) {
         return false;
     }

@@ -1263,9 +1263,8 @@ void AnimationEditorWindow::configure_list_panel() {
     list_panel_->set_on_context_menu([this](const std::optional<std::string>& animation_id, const SDL_Point& location) {
         this->handle_list_context_menu(animation_id, location);
     });
-    list_panel_->set_on_delete_animation([this](const std::string& animation_id) {
-        this->delete_animation_with_confirmation(animation_id);
-    });
+    list_panel_->set_show_delete_button(false);
+    list_panel_->set_on_delete_animation({});
     list_panel_->set_selected_animation_id(selected_animation_id_);
 }
 
@@ -1315,6 +1314,9 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_audio_importer(audio_importer_);
     inspector_panel_->set_audio_file_picker([this]() { return this->pick_audio_file(); });
     inspector_panel_->set_manifest_store(manifest_store_);
+    inspector_panel_->set_delete_animation_callback([this](const std::string& animation_id) {
+        this->delete_animation_immediate(animation_id);
+    });
     refresh_inspector_animation_callback();
     if (selected_animation_id_) {
         inspector_panel_->set_animation_id(*selected_animation_id_);
@@ -1412,10 +1414,6 @@ void AnimationEditorWindow::handle_list_context_menu(const std::optional<std::st
         options.push_back(AnimationListContextMenu::Option{
             "Duplicate",
             [this, row_id]() { this->duplicate_animation(row_id); },
-        });
-        options.push_back(AnimationListContextMenu::Option{
-            "Delete",
-            [this, row_id]() { this->delete_animation_with_confirmation(row_id); },
         });
     }
 
@@ -1811,40 +1809,48 @@ void AnimationEditorWindow::duplicate_animation(const std::string& animation_id)
     }
 }
 
-void AnimationEditorWindow::delete_animation_with_confirmation(const std::string& animation_id) {
+void AnimationEditorWindow::delete_animation_immediate(const std::string& animation_id) {
     if (!document_) return;
-
-    std::string message = "Delete animation '" + animation_id + "'? This cannot be undone.";
-    bool confirmed = false;
-    if (choice_prompt_override_) {
-        auto result = choice_prompt_override_("Delete Animation", message, {0, 1});
-        confirmed = result && *result == 1;
-    } else {
-        confirmed = devmode::dialogs::confirm(parent_window_, "Delete Animation", message, "Delete", "Cancel", true);
-    }
-    if (!confirmed) {
-        set_status_message("Deletion cancelled.", 120);
-        if (list_context_menu_) {
-            list_context_menu_->close();
+    std::unordered_set<std::string> pending{animation_id};
+    std::vector<std::string> deletion_order;
+    while (!pending.empty()) {
+        const std::string current = *pending.begin();
+        pending.erase(pending.begin());
+        deletion_order.push_back(current);
+        for (const auto& id : document_->animation_ids()) {
+            if (std::find(deletion_order.begin(), deletion_order.end(), id) != deletion_order.end()) continue;
+            auto payload_dump = document_->animation_payload(id);
+            if (!payload_dump) continue;
+            nlohmann::json payload = nlohmann::json::parse(*payload_dump, nullptr, false);
+            if (!payload.is_object()) continue;
+            const auto source_it = payload.find("source");
+            if (source_it == payload.end() || !source_it->is_object()) continue;
+            if (source_it->value("kind", std::string{}) != "animation") continue;
+            const std::string source_name = source_it->value("name", std::string{});
+            if (source_name == current) pending.insert(id);
         }
-        return;
     }
-
-    std::string source_delete_error;
-    const bool removed_source_folder = remove_animation_source_folder(animation_id, source_delete_error);
-
-    if (!removed_source_folder && !source_delete_error.empty()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AnimationEditor] %s",
-                    source_delete_error.c_str());
+    bool removed_all_sources = true;
+    for (const auto& id : deletion_order) {
+        std::string source_delete_error;
+        const bool removed_source_folder = remove_animation_source_folder(id, source_delete_error);
+        removed_all_sources = removed_all_sources && removed_source_folder;
+        if (!removed_source_folder && !source_delete_error.empty()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AnimationEditor] %s", source_delete_error.c_str());
+        }
+        document_->delete_animation(id);
+        preview_provider_->invalidate(id);
     }
-
-    document_->delete_animation(animation_id);
-    preview_provider_->invalidate(animation_id);
-    if (!removed_source_folder) {
-        set_status_message("Deleted animation '" + animation_id + "' (some files could not be removed).", 300);
+    const bool saved_delete = document_->save_to_file_checked(true);
+    if (auto info_ptr = info_.lock()) {
+        devmode::refresh_loaded_animation_instances(assets_, info_ptr);
+    }
+    if (!saved_delete) {
+        set_status_message("Deleted animation(s) from '" + animation_id + "' but save failed.", 300);
+    } else if (!removed_all_sources) {
+        set_status_message("Deleted animation(s) from '" + animation_id + "' (some files could not be removed).", 300);
     } else {
-        set_status_message("Deleted animation '" + animation_id + "'.", 240);
+        set_status_message("Deleted animation(s) from '" + animation_id + "'.", 240);
     }
     if (list_context_menu_) {
         list_context_menu_->close();
@@ -4202,140 +4208,6 @@ std::string AnimationEditorWindow::generate_controller_key(const std::string& as
 std::string AnimationEditorWindow::generate_class_name(const std::string& asset_name) const {
     if (asset_name.empty()) return "";
     return asset_name + "_controller";
-}
-
-std::vector<std::string> AnimationEditorWindow::collect_available_animation_ids() const {
-    std::vector<std::string> ids;
-    if (document_) {
-        ids = document_->animation_ids();
-    } else if (auto info_ptr = info_.lock()) {
-        ids.reserve(info_ptr->animations.size());
-        for (const auto& entry : info_ptr->animations) {
-            ids.push_back(entry.first);
-        }
-    }
-    std::sort(ids.begin(), ids.end());
-    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
-    return ids;
-}
-
-std::string AnimationEditorWindow::build_controller_metadata(const std::string& controller_key) const {
-    auto info_ptr = info_.lock();
-    std::ostringstream oss;
-    oss << "// CONTROLLER_META_BEGIN\n";
-    oss << "// Controller: " << controller_key << "\n";
-    if (info_ptr) {
-        oss << "// Asset: " << info_ptr->name;
-        if (!info_ptr->type.empty()) {
-            oss << " (type: " << info_ptr->type << ")";
-        }
-        oss << "\n";
-    }
-    const auto ids = collect_available_animation_ids();
-    oss << "// Available animations [" << ids.size() << "]:";
-    if (ids.empty()) {
-        oss << " <none>\n";
-    } else {
-        oss << "\n";
-        for (const auto& id : ids) {
-            oss << "//   - " << id << "\n";
-        }
-    }
-    const auto now = std::chrono::system_clock::now();
-    const std::time_t now_c = std::chrono::system_clock::to_time_t(now);
-    oss << "// Generated: " << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S") << "\n";
-    oss << "// CONTROLLER_META_END\n\n";
-    return oss.str();
-}
-
-bool AnimationEditorWindow::write_or_update_controller_metadata(const std::filesystem::path& path,
-                                                                 const std::string& metadata) const {
-    if (path.empty()) return false;
-    std::error_code ec;
-    if (!std::filesystem::exists(path, ec)) {
-        return false;
-    }
-
-    std::ifstream in(path);
-    if (!in.is_open()) return false;
-    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    in.close();
-
-    const std::string begin_tag = "// CONTROLLER_META_BEGIN";
-    const std::string end_tag = "// CONTROLLER_META_END";
-    std::size_t begin_pos = content.find(begin_tag);
-    std::size_t end_pos = content.find(end_tag);
-
-    std::string new_content;
-    if (begin_pos != std::string::npos && end_pos != std::string::npos && end_pos > begin_pos) {
-        end_pos = content.find('\n', end_pos);
-        if (end_pos == std::string::npos) end_pos = content.size();
-        new_content = content.substr(0, begin_pos) + metadata + content.substr(end_pos);
-    } else {
-        new_content = metadata + content;
-    }
-
-    if (new_content == content) return true;
-
-    std::ofstream out(path, std::ios::trunc);
-    if (!out.is_open()) return false;
-    out << new_content;
-    return true;
-}
-
-void AnimationEditorWindow::ensure_controller_factory_registration(const std::string& key,
-                                                                   const std::string& class_name) const {
-    const std::filesystem::path factory_path = "ENGINE/runtime/assets/asset/controller_factory.cpp";
-    std::error_code ec;
-    if (!std::filesystem::exists(factory_path, ec)) {
-        return;
-    }
-
-    std::ifstream in(factory_path);
-    if (!in.is_open()) return;
-    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    in.close();
-
-    bool modified = false;
-    const std::string include_line = "#include \"animation/controllers/custom_controllers/" + key + ".hpp\"";
-    if (content.find(include_line) == std::string::npos) {
-        const std::string include_marker = "// <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>";
-        auto include_pos = content.find(include_marker);
-        if (include_pos != std::string::npos) {
-            content.insert(include_pos, include_line + "\n");
-        } else {
-            include_pos = content.find("#include \"animation/controllers/custom_controllers/default_controller.hpp\"");
-            if (include_pos != std::string::npos) {
-                content.insert(include_pos, include_line + "\n");
-            } else {
-                content = include_line + "\n" + content;
-            }
-        }
-        modified = true;
-    }
-
-    const std::string entry = "        { \"" + key + "\", [](Asset* asset) {\n"
-                              "                return std::make_unique<" + class_name + ">(asset);\n"
-                              "        } },\n";
-
-    const std::string marker = "// <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>";
-    auto marker_pos = content.find(marker);
-    if (marker_pos != std::string::npos) {
-        auto insert_pos = content.find('\n', marker_pos);
-        if (insert_pos != std::string::npos) {
-            insert_pos += 1;
-            if (content.find(entry, marker_pos) == std::string::npos) {
-                content.insert(insert_pos, entry);
-                modified = true;
-            }
-        }
-    }
-
-    if (!modified) return;
-
-    std::ofstream out(factory_path, std::ios::trunc);
-    if (!out.is_open()) return;
-    out << content;
 }
 
 void AnimationEditorWindow::add_controller() {

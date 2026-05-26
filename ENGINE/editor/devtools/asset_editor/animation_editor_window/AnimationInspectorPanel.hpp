@@ -62,6 +62,7 @@ class AnimationInspectorPanel {
     using FrameModeEditCallback = std::function<void(const std::string&, FrameEditorLaunchMode)>;
     using AudioFilePicker = std::function<std::optional<std::filesystem::path>()>;
     using AnimationNavigateCallback = std::function<void(const std::string&)>;
+    using DeleteAnimationCallback = std::function<void(const std::string&)>;
 
     AnimationInspectorPanel();
 
@@ -84,6 +85,7 @@ class AnimationInspectorPanel {
     void set_audio_importer(std::shared_ptr<AudioImporter> importer);
     void set_audio_file_picker(AudioFilePicker picker);
     void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_delete_animation_callback(DeleteAnimationCallback callback);
     void set_on_animation_properties_changed(std::function<void(const std::string&, const nlohmann::json&)> callback) {
         on_animation_properties_changed_ = std::move(callback);
         apply_dependencies();
@@ -129,6 +131,7 @@ class AnimationInspectorPanel {
         kNone = -1,
         kName = 0,
         kStart,
+        kDelete,
         kSourceFrames,
         kSourceAnimation,
 };
@@ -149,6 +152,7 @@ class AnimationInspectorPanel {
     std::unique_ptr<AudioPanel> audio_panel_;
     std::unique_ptr<DMTextBox> name_box_;
     std::unique_ptr<DMButton> start_button_;
+    std::unique_ptr<DMButton> delete_button_;
     std::unique_ptr<DMButton> source_frames_button_;
     std::unique_ptr<DMButton> source_animation_button_;
     std::string animation_id_;
@@ -211,6 +215,7 @@ class AnimationInspectorPanel {
     FrameEditCallback frame_edit_callback_;
     FrameModeEditCallback frame_mode_edit_callback_;
     AnimationNavigateCallback navigate_to_animation_callback_;
+    DeleteAnimationCallback delete_animation_callback_;
     std::shared_ptr<AudioImporter> audio_importer_;
     AudioFilePicker audio_file_picker_;
     std::function<void(const std::string&, const nlohmann::json&)> on_animation_properties_changed_;

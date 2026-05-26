@@ -295,6 +295,11 @@ public:
     std::uint32_t projection_recompute_budget() const { return projection_recompute_budget_; }
     std::uint32_t projection_points_deferred() const { return projection_points_deferred_; }
     std::uint32_t projection_points_updated() const { return projection_points_updated_; }
+    bool last_traversal_complete() const { return last_traversal_complete_; }
+    bool last_traversal_projection_budget_exhausted() const { return last_traversal_projection_budget_exhausted_; }
+    std::uint32_t last_traversal_points_without_projection() const { return last_traversal_points_without_projection_; }
+    std::uint32_t last_traversal_camera_mismatch_deferred() const { return last_traversal_camera_mismatch_deferred_; }
+    std::uint64_t last_traversal_frame_id() const { return last_traversal_frame_id_; }
     void set_frustum_padding_world(float padding);
     float frustum_padding_world() const { return frustum_padding_world_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
@@ -407,6 +412,11 @@ private:
     std::uint32_t projection_recompute_budget_ = 0;
     std::uint32_t projection_points_deferred_ = 0;
     std::uint32_t projection_points_updated_ = 0;
+    bool last_traversal_complete_ = true;
+    bool last_traversal_projection_budget_exhausted_ = false;
+    std::uint32_t last_traversal_points_without_projection_ = 0;
+    std::uint32_t last_traversal_camera_mismatch_deferred_ = 0;
+    std::uint64_t last_traversal_frame_id_ = 0;
     std::unordered_map<const Asset*, SpriteProjectionCacheEntry> sprite_projection_cache_;
     int last_min_world_z_ = 0;
     int last_max_world_z_ = 0;

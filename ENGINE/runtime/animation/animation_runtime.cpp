@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -90,6 +91,47 @@ bool same_point(SDL_Point lhs, SDL_Point rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y;
 }
 
+std::uint64_t fnv1a_64(std::string_view text) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (unsigned char ch : text) {
+        hash ^= static_cast<std::uint64_t>(ch);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+std::uint64_t mix64(std::uint64_t value) {
+    value ^= value >> 30;
+    value *= 0xbf58476d1ce4e5b9ULL;
+    value ^= value >> 27;
+    value *= 0x94d049bb133111ebULL;
+    value ^= value >> 31;
+    return value;
+}
+
+std::uint64_t path_variance_seed_for_retry(const Asset& self,
+                                           std::size_t checkpoint_index,
+                                           std::uint32_t retry_counter,
+                                           std::uint64_t salt = 0) {
+    const std::string stable_id = animation_update::detail::stable_asset_id(self);
+    std::uint64_t seed = fnv1a_64(stable_id);
+    seed ^= mix64((static_cast<std::uint64_t>(checkpoint_index) + 1) * 0x9e3779b97f4a7c15ULL);
+    seed ^= mix64((static_cast<std::uint64_t>(retry_counter) + 1) * 0xd6e8feb86659fd93ULL);
+    seed ^= mix64(salt + 0xa0761d6478bd642fULL);
+    return mix64(seed);
+}
+
+void reorder_directions_for_retry(std::vector<SDL_Point>& directions, std::uint64_t seed) {
+    if (directions.size() < 2) {
+        return;
+    }
+    const std::size_t offset = static_cast<std::size_t>(seed % directions.size());
+    std::rotate(directions.begin(), directions.begin() + offset, directions.end());
+    if (((seed >> 8) & 1ULL) != 0ULL) {
+        std::reverse(directions.begin(), directions.end());
+    }
+}
+
 template <typename Fn>
 bool visit_impassable_neighbors_for_segment(const Asset& asset,
                                             SDL_Point from,
@@ -164,6 +206,37 @@ std::string lower_ascii_copy(const std::string& value) {
     return out;
 }
 
+bool frame_has_damage_attack_box(const AnimationFrame& frame) {
+    for (const auto& attack_box : frame.attack_boxes.boxes) {
+        if (!attack_box.enabled) {
+            continue;
+        }
+        const int damage_amount = std::max(attack_box.damage_amount, attack_box.payload.damage_amount);
+        if (damage_amount > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool animation_has_damage_attack_boxes(const Animation& animation) {
+    const std::size_t path_count = animation.movement_path_count();
+    for (std::size_t path_index = 0; path_index < path_count; ++path_index) {
+        const auto& path = animation.movement_path(path_index);
+        for (const auto& frame : path) {
+            if (frame_has_damage_attack_box(frame)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool animation_is_attack_candidate(const Animation& animation) {
+    return animation_update::tag_utils::has_normalized_tag(animation.tags, "attack") ||
+           animation_has_damage_attack_boxes(animation);
+}
+
 HorizontalFacingIntent attack_facing_intent(const std::vector<std::string>& tags,
                                             const std::string& animation_id) {
     const bool has_left_tag = animation_update::tag_utils::has_normalized_tag(tags, "left");
@@ -208,6 +281,7 @@ struct MovementController {
             return false;
         }
         ++runtime.movement_state_.replan_attempts_this_frame;
+        ++runtime.movement_state_.replan_attempt_counter;
         return true;
     }
 };
@@ -223,6 +297,7 @@ struct CombatController {
     static void clear_commitment(AnimationRuntime& runtime) {
         runtime.combat_state_.committed_attack_target_asset_id = std::nullopt;
         runtime.combat_state_.committed_attack_animation_id.clear();
+        runtime.combat_state_.committed_attack_path_index = 0;
         runtime.combat_state_.committed_attack_last_dispatched_frame_index = -1;
         runtime.combat_state_.committed_attack_last_payload_id.clear();
         runtime.combat_state_.attack_recovery_pending = false;
@@ -242,6 +317,8 @@ void force_committed_attack_target(AnimationRuntime& runtime, std::string target
     runtime.combat_state_.committed_attack_target_asset_id = std::move(target_asset_id);
     runtime.combat_state_.committed_attack_animation_id =
         runtime.self_ ? runtime.self_->current_animation : std::string{};
+    runtime.combat_state_.committed_attack_path_index =
+        runtime.self_ ? runtime.path_index_for(runtime.self_->current_animation) : 0;
     runtime.combat_state_.committed_attack_last_dispatched_frame_index = -1;
     runtime.combat_state_.committed_attack_last_payload_id.clear();
 }
@@ -272,12 +349,9 @@ bool AnimationRuntime::attacking_enabled_for_self() const {
     if (!self_ || !self_->info) {
         return false;
     }
-    if (asset_types::canonicalize(self_->info->type) != asset_types::enemy) {
-        return false;
-    }
     for (const auto& [animation_id, animation] : self_->info->animations) {
         (void)animation_id;
-        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+        if (animation_is_attack_candidate(animation)) {
             return true;
         }
     }
@@ -326,7 +400,7 @@ std::vector<std::string> AnimationRuntime::attack_animation_candidates() const {
         if (!animation.has_frames()) {
             continue;
         }
-        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+        if (animation_is_attack_candidate(animation)) {
             out.push_back(animation_id);
         }
     }
@@ -429,6 +503,7 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
             animation_update::AttackValidation::AttackWindowScore::Miss;
         int facing_score = -2;
         std::string animation_id{};
+        std::size_t path_index = 0;
         std::string target_asset_id{};
     } best{};
     bool has_best = false;
@@ -445,6 +520,9 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         if (candidate.target_asset_id != current_best.target_asset_id) {
             return candidate.target_asset_id < current_best.target_asset_id;
         }
+        if (candidate.path_index != current_best.path_index) {
+            return candidate.path_index < current_best.path_index;
+        }
         return candidate.animation_id < current_best.animation_id;
     };
 
@@ -455,37 +533,38 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         if (target_id.empty()) {
             continue;
         }
+        const auto ranked =
+            animation_update::AttackValidation::rank_attack_candidates(
+                *self_,
+                *target,
+                attack_candidates,
+                8,
+                true);
+        if (!ranked.has_value()) {
+            continue;
+        }
+
+        const auto& candidate_ranked = *ranked;
         const int target_delta_x = target->world_x() - self_->world_x();
-        for (const std::string& attack_animation_id : attack_candidates) {
-            const auto evaluation =
-                animation_update::AttackValidation::evaluate_attack_window(
-                    *self_,
-                    *target,
-                    attack_animation_id,
-                    8);
-            if (evaluation.score == animation_update::AttackValidation::AttackWindowScore::Miss) {
-                continue;
-            }
+        int facing_score = 0;
+        const auto attack_it = self_->info->animations.find(candidate_ranked.animation_id);
+        if (attack_it != self_->info->animations.end()) {
+            facing_score =
+                attack_facing_match_score_impl(attack_it->second.tags,
+                                               candidate_ranked.animation_id,
+                                               target_delta_x,
+                                               kAttackFacingDeadzonePx);
+        }
 
-            int facing_score = 0;
-            const auto attack_it = self_->info->animations.find(attack_animation_id);
-            if (attack_it != self_->info->animations.end()) {
-                facing_score =
-                    attack_facing_match_score_impl(attack_it->second.tags,
-                                                   attack_animation_id,
-                                                   target_delta_x,
-                                                   kAttackFacingDeadzonePx);
-            }
-
-            RankedChoice candidate{};
-            candidate.score = evaluation.score;
-            candidate.facing_score = facing_score;
-            candidate.animation_id = attack_animation_id;
-            candidate.target_asset_id = target_id;
-            if (!has_best || better_choice(candidate, best)) {
-                best = std::move(candidate);
-                has_best = true;
-            }
+        RankedChoice candidate{};
+        candidate.score = candidate_ranked.evaluation.score;
+        candidate.facing_score = facing_score;
+        candidate.animation_id = candidate_ranked.animation_id;
+        candidate.path_index = candidate_ranked.path_index;
+        candidate.target_asset_id = target_id;
+        if (!has_best || better_choice(candidate, best)) {
+            best = std::move(candidate);
+            has_best = true;
         }
     }
 
@@ -498,9 +577,10 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     }
     combat_state_.committed_attack_target_asset_id = best.target_asset_id;
     combat_state_.committed_attack_animation_id = best.animation_id;
+    combat_state_.committed_attack_path_index = best.path_index;
     combat_state_.committed_attack_last_dispatched_frame_index = -1;
     combat_state_.committed_attack_last_payload_id.clear();
-    switch_to(best.animation_id, 0);
+    switch_to(best.animation_id, best.path_index);
     combat_state_.next_attack_cycle_eval_frame = frame_id + kAttackCycleDebounceFrames;
     return true;
 }
@@ -513,7 +593,7 @@ bool AnimationRuntime::current_animation_is_attack() const {
     if (it == self_->info->animations.end()) {
         return false;
     }
-    return animation_update::tag_utils::has_normalized_tag(it->second.tags, "attack");
+    return animation_is_attack_candidate(it->second);
 }
 
 bool AnimationRuntime::auto_attack_commitment_active() const {
@@ -552,6 +632,10 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     if (!combat_state_.committed_attack_target_asset_id.has_value()) {
         return;
     }
+    if (path_index_for(self_->current_animation) != combat_state_.committed_attack_path_index) {
+        clear_attack_commitment();
+        return;
+    }
 
     Asset* target = resolve_asset_by_stable_id(*combat_state_.committed_attack_target_asset_id);
     if (!target || !target->active || target->dead || !target->isHitboxEnabled()) {
@@ -570,9 +654,19 @@ void AnimationRuntime::dispatch_active_attack_payload() {
         return;
     }
 
+    bool one_shot_attack = false;
+    auto anim_it = self_->info->animations.find(self_->current_animation);
+    if (anim_it != self_->info->animations.end()) {
+        one_shot_attack =
+            animation_update::tag_utils::has_normalized_tag(anim_it->second.tags, "die");
+    }
+
     target->send_attack(attack);
     combat_state_.committed_attack_last_dispatched_frame_index = attack.source_frame_index;
     combat_state_.committed_attack_last_payload_id = attack.attack_payload_id;
+    if (one_shot_attack) {
+        clear_attack_commitment();
+    }
 }
 
 void AnimationRuntime::refresh_runtime_frame_geometry() {
@@ -594,7 +688,7 @@ bool AnimationRuntime::committed_attack_execution_active() const {
         return false;
     }
     const Animation& anim = it->second;
-    return anim.locked && animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+    return anim.locked && animation_is_attack_candidate(anim);
 }
 
 animation_update::detail::PathBlockingContext AnimationRuntime::active_path_blocking_context() const {
@@ -735,6 +829,11 @@ void AnimationRuntime::update() {
     }
 
     if (freeze_for_frame_editor) {
+        dispatch_active_attack_payload();
+        return;
+    }
+
+    if (movement_blocked_for_dev_mode) {
         dispatch_active_attack_payload();
         return;
     }
@@ -1102,8 +1201,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         current_animation_is_attack() &&
         (auto_attack_commitment_active() || committed_attack_execution_active());
     const bool static_blocked = self_->static_frame && !reverse_command_active && !attack_follow_through;
-    const bool locked_blocked = anim->locked && !reverse_command_active && !attack_follow_through;
-    bool should_skip = !is_player && (static_blocked || locked_blocked || anim->is_frozen() || playback_state_.lock_on_end_active);
+    bool should_skip = !is_player && (static_blocked || anim->is_frozen() || playback_state_.lock_on_end_active);
     bool has_overriding_plan = false;
     if (planner_iface_) {
         if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D) {
@@ -1115,7 +1213,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         }
     }
     if (should_skip && !has_overriding_plan) {
-        self_->static_frame = self_->static_frame || anim->is_frozen() || anim->locked || playback_state_.lock_on_end_active;
+        self_->static_frame = self_->static_frame || anim->is_frozen() || playback_state_.lock_on_end_active;
         return report;
     }
     if (is_player) {
@@ -1328,18 +1426,20 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         combat_state_.attack_recovery_pending = false;
         combat_state_.attack_recovery_animation_id.clear();
     }
-    const bool switched_to_attack =
-        animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+    const bool switched_to_attack = animation_is_attack_candidate(anim);
     if (!switched_to_attack) {
         clear_attack_commitment();
     } else if (combat_state_.committed_attack_animation_id != self_->current_animation) {
         combat_state_.committed_attack_animation_id = self_->current_animation;
+        combat_state_.committed_attack_path_index = path_index;
         combat_state_.committed_attack_last_dispatched_frame_index = -1;
         combat_state_.committed_attack_last_payload_id.clear();
+    } else {
+        combat_state_.committed_attack_path_index = path_index;
     }
     {
         const bool is_player = self_->info && self_->info->type == asset_types::player;
-        self_->static_frame  = is_player ? false : (anim.is_frozen() || anim.locked);
+        self_->static_frame  = is_player ? false : anim.is_frozen();
     }
     self_->frame_progress    = 0.0f;
     active_paths_[self_->current_animation] = path_index;
@@ -1769,6 +1869,9 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
     directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
     if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
+    const std::uint64_t retry_seed =
+        path_variance_seed_for_retry(*self_, next_checkpoint_index_, movement_state_.replan_attempt_counter, 0x21ULL);
+    reorder_directions_for_retry(directions, retry_seed);
     std::vector<SDL_Point> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan_.sanitized_checkpoints.size(); ++i) {
         tail.push_back(planner_iface_->plan_.sanitized_checkpoints[i]);
@@ -1785,11 +1888,20 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         }
         CollisionQueryContext collision_context;
         collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+        collision_context.required_animation_tags = planner_iface_->plan_.movement_tag_filter.required_tags;
+        collision_context.excluded_animation_tags = planner_iface_->plan_.movement_tag_filter.excluded_tags;
+        collision_context.path_variance_seed =
+            path_variance_seed_for_retry(*self_,
+                                         next_checkpoint_index_,
+                                         movement_state_.replan_attempt_counter,
+                                         static_cast<std::uint64_t>(targets.size()));
         auto sanitized = sanitizer_.sanitize(*self_, targets, planner_iface_->visited_thresh_, &collision_context);
         if (sanitized.empty()) return false;
         Plan new_plan = planner_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
+        new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
         new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
+        new_plan.movement_tag_filter = planner_iface_->plan_.movement_tag_filter;
         if (new_plan.strides.empty()) return false;
         planner_iface_->plan_ = std::move(new_plan);
         planner_iface_->final_dest = planner_iface_->plan_.final_dest;
@@ -1914,6 +2026,9 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
     directions.erase(std::remove_if(directions.begin(), directions.end(), [](const SDL_Point& p){ return p.x == 0 && p.y == 0; }), directions.end());
     directions.erase(std::unique(directions.begin(), directions.end(), [](const SDL_Point& a, const SDL_Point& b){ return a.x == b.x && a.y == b.y; }), directions.end());
     if (directions.empty()) { directions = {{1,0},{-1,0},{0,1},{0,-1}}; }
+    const std::uint64_t retry_seed_3d =
+        path_variance_seed_for_retry(*self_, next_checkpoint_index_, movement_state_.replan_attempt_counter, 0x31ULL);
+    reorder_directions_for_retry(directions, retry_seed_3d);
 
     std::vector<axis::WorldPos> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan3d_.sanitized_checkpoints.size(); ++i) {
@@ -1939,10 +2054,18 @@ bool AnimationRuntime::adjust_next_checkpoint_3d(const std::vector<const Asset*>
 
         CollisionQueryContext collision_context;
         collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+        collision_context.required_animation_tags = planner_iface_->plan3d_.movement_tag_filter.required_tags;
+        collision_context.excluded_animation_tags = planner_iface_->plan3d_.movement_tag_filter.excluded_tags;
+        collision_context.path_variance_seed =
+            path_variance_seed_for_retry(*self_,
+                                         next_checkpoint_index_,
+                                         movement_state_.replan_attempt_counter,
+                                         static_cast<std::uint64_t>(targets.size()));
         Plan3D new_plan = planner_3d_(*self_, sanitized, planner_iface_->visited_thresh_, grid(), &collision_context);
         new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
         new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
         new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
+        new_plan.movement_tag_filter = planner_iface_->plan3d_.movement_tag_filter;
         if (new_plan.strides.empty()) {
             return false;
         }
@@ -2003,7 +2126,13 @@ bool AnimationRuntime::handle_blocked_path(const world::GridPoint& from,
         return false;
     }
 
-    bool moved = attempt_unstick(from, to, blockers);
+    const bool auto_plan_active =
+        planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan2D ||
+        planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D;
+    bool moved = false;
+    if (!auto_plan_active) {
+        moved = attempt_unstick(from, to, blockers);
+    }
     if (planner_iface_->active_plan_mode_ == AnimationUpdate::ActivePlanMode::Plan3D) {
         if (moved) {
             mark_progress_toward_checkpoints_3d();
@@ -2064,6 +2193,13 @@ bool AnimationRuntime::replan_to_destination() {
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
+    collision_context.required_animation_tags = planner_iface_->plan_.movement_tag_filter.required_tags;
+    collision_context.excluded_animation_tags = planner_iface_->plan_.movement_tag_filter.excluded_tags;
+    collision_context.path_variance_seed =
+        path_variance_seed_for_retry(*self_,
+                                     next_checkpoint_index_,
+                                     movement_state_.replan_attempt_counter,
+                                     0x41ULL);
     auto sanitized = sanitizer_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_, &collision_context);
     if (sanitized.empty()) {
         return false;
@@ -2072,6 +2208,7 @@ bool AnimationRuntime::replan_to_destination() {
     new_plan.override_non_locked = planner_iface_->plan_.override_non_locked;
     new_plan.engagement_target_asset_id = planner_iface_->plan_.engagement_target_asset_id;
     new_plan.attacking_enabled = planner_iface_->plan_.attacking_enabled;
+    new_plan.movement_tag_filter = planner_iface_->plan_.movement_tag_filter;
     if (new_plan.strides.empty()) {
         return false;
     }
@@ -2118,6 +2255,13 @@ bool AnimationRuntime::replan_to_destination_3d() {
     }
     CollisionQueryContext collision_context;
     collision_context.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
+    collision_context.required_animation_tags = planner_iface_->plan3d_.movement_tag_filter.required_tags;
+    collision_context.excluded_animation_tags = planner_iface_->plan3d_.movement_tag_filter.excluded_tags;
+    collision_context.path_variance_seed =
+        path_variance_seed_for_retry(*self_,
+                                     next_checkpoint_index_,
+                                     movement_state_.replan_attempt_counter,
+                                     0x51ULL);
     auto sanitized = sanitizer_3d_.sanitize(*self_, checkpoints, planner_iface_->visited_thresh_);
     if (sanitized.empty()) {
         return false;
@@ -2127,6 +2271,7 @@ bool AnimationRuntime::replan_to_destination_3d() {
     new_plan.override_non_locked = planner_iface_->plan3d_.override_non_locked;
     new_plan.engagement_target_asset_id = planner_iface_->plan3d_.engagement_target_asset_id;
     new_plan.attacking_enabled = planner_iface_->plan3d_.attacking_enabled;
+    new_plan.movement_tag_filter = planner_iface_->plan3d_.movement_tag_filter;
     if (new_plan.strides.empty()) {
         return false;
     }

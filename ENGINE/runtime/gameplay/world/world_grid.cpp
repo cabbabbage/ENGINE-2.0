@@ -1074,6 +1074,20 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
                     }
                 }
             }
+            if (active.empty() && !chunks_.storage().empty()) {
+                // Conservative one-ring retry avoids transient empty windows on boundary crossings.
+                const int retry_min_i = min_i - 1;
+                const int retry_max_i = max_i + 1;
+                const int retry_min_k = min_k - 1;
+                const int retry_max_k = max_k + 1;
+                for (int i = retry_min_i; i <= retry_max_i; ++i) {
+                    for (int k = retry_min_k; k <= retry_max_k; ++k) {
+                        if (Chunk* chunk = chunks_.find(i, k)) {
+                            active.push_back(chunk);
+                        }
+                    }
+                }
+            }
         }
     }
 

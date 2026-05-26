@@ -87,12 +87,55 @@ target_link_libraries(room_legacy_migration_regression_test PRIVATE
     nlohmann_json::nlohmann_json
 )
 
+add_executable(map_template_data_cleanup_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/map_template_data_cleanup_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core/manifest/map_manifest_normalizer.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core/manifest/manifest_loader.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/map_generation/map_layers_geometry.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils/utils/map_grid_settings.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils/utils/weighted_range.cpp
+)
+target_include_directories(map_template_data_cleanup_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+target_link_libraries(map_template_data_cleanup_test PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
 add_executable(spawn_trail_classification_test
     ${CMAKE_SOURCE_DIR}/ENGINE/tests/spawn_trail_classification_test.cpp
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn/trail_classification.cpp
 )
 target_include_directories(spawn_trail_classification_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
+add_executable(sprite_floor_clip_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/sprite_floor_clip_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/rendering/render/sprite_floor_clip.cpp
+)
+target_include_directories(sprite_floor_clip_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
+add_executable(dof_blur_strength_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/dof_blur_strength_test.cpp
+)
+target_include_directories(dof_blur_strength_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
+add_executable(movement_paths_frame_edit_state_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/movement_paths_frame_edit_state_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/frame_editors/shared/FrameEditState.cpp
+)
+target_include_directories(movement_paths_frame_edit_state_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+)
+target_link_libraries(movement_paths_frame_edit_state_test PRIVATE
+    nlohmann_json::nlohmann_json
 )
 
 # Unity build (jumbo) for faster compiles
@@ -139,6 +182,9 @@ endif()
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(SDL3_ttf CONFIG REQUIRED)
+target_link_libraries(sprite_floor_clip_test PRIVATE
+    SDL3::SDL3
+)
 
 # Try glad via package config first (vcpkg provides this)
 find_package(glad CONFIG QUIET)

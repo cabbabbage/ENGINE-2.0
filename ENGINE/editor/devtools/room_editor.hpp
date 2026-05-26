@@ -62,6 +62,11 @@ class DevFooterBar;
 class DevControls;
 namespace animation_update { struct AttackPayload; }
 namespace devmode::room_config { class AttackPayloadEditor; }
+namespace animation_editor {
+class AnimationDocument;
+class AnimationListPanel;
+class PreviewProvider;
+}
 
 namespace devmode::core {
 class ManifestStore;
@@ -126,6 +131,7 @@ public:
     void open_asset_info_editor(const std::shared_ptr<AssetInfo>& info);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void open_asset_info_editor_for_asset(Asset* asset, bool focus_camera = true);
+    void open_movement_editor_for_asset(Asset* asset, const std::string& animation_id);
     void close_asset_info_editor();
     bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;
@@ -138,6 +144,7 @@ public:
     void open_room_config();
     void close_room_config();
     void create_room_from_footer();
+    // Seeds a trail template for orthogonal centerline corridor generation (90° turns only).
     void create_trail_from_footer();
     bool is_room_config_open() const;
     bool is_camera_settings_open() const;
@@ -496,8 +503,25 @@ private:
     void ensure_impassable_box_editor_widgets();
     void ensure_floor_box_editor_widgets();
     void ensure_attack_payload_editor_widget();
+    void ensure_stack_animation_list_panel();
     void update_asset_editor_layout();
     void sync_shared_footer_navigation();
+    void sync_stack_animation_list_panel();
+    bool is_stack_animation_list_subview_active() const;
+    Asset* stack_animation_list_target_asset() const;
+    std::optional<std::string> stack_animation_list_selected_animation_id() const;
+    bool is_stack_animation_editable_id(const std::string& animation_id) const;
+    bool is_point_inside_stack_animation_list(int x, int y) const;
+    void sync_stack_animation_list_preview_provider(const AssetInfo* info);
+    bool apply_stack_animation_selection(const std::string& animation_id);
+    bool delete_stack_animation_from_list(const std::string& animation_id);
+    void request_stack_animation_delete(const std::string& animation_id);
+    void cancel_stack_animation_delete_request();
+    bool confirm_stack_animation_delete_request();
+    void clear_stack_animation_delete_state();
+    void update_stack_animation_delete_modal_geometry();
+    bool handle_stack_animation_delete_modal_event(const SDL_Event& event);
+    void render_stack_animation_delete_modal(SDL_Renderer* renderer) const;
     std::string asset_editor_subview_label(AssetEditorSubview subview) const;
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
@@ -687,8 +711,21 @@ private:
     void refresh_movement_editor_selection(bool reset_drag_state);
     void sync_movement_panel_frame_values();
     bool apply_movement_panel_numeric_edits();
+    void clamp_selected_movement_path_index();
+    void bind_selected_movement_path(bool reset_drag_state);
+    void commit_selected_movement_path();
+    void reload_movement_paths_for_animation(const std::string& animation_id, int preferred_frame_index, bool reset_drag_state);
     int find_movement_point_at_screen_point(SDL_Point screen_point, int radius_px) const;
+    int find_movement_floor_handle_at_screen_point(SDL_Point screen_point, int radius_px) const;
+    bool project_movement_relative_point(const std::vector<SDL_FPoint>& rel_positions,
+                                         const std::vector<float>& rel_positions_z,
+                                         std::size_t index,
+                                         SDL_FPoint& out_screen) const;
     bool project_movement_point(std::size_t index, SDL_FPoint& out_screen) const;
+    bool project_movement_floor_point(std::size_t index, SDL_FPoint& out_screen) const;
+    bool movement_point_has_non_zero_dy(int point_index) const;
+    void begin_movement_vertical_wheel_edit(int point_index);
+    void end_movement_vertical_wheel_edit(bool restore_preview_state);
     axis::WorldPos movement_relative_position_for_frame(std::size_t frame_index) const;
     void apply_movement_preview_pose_to_target();
     bool handle_movement_mode_mouse_input(const Input& input);
@@ -702,7 +739,10 @@ private:
                                          std::vector<SDL_FPoint>& redistributed_xy,
                                          std::vector<float>& redistributed_z,
                                          int last_index) const;
+    void quantize_selected_movement_path_to_reference(const std::vector<devmode::room_movement_payload::MovementFrame>& reference_frames);
     void redistribute_movement_points_after_adjustment(int adjusted_index);
+    void redistribute_movement_points_after_adjustment(int adjusted_index, bool horizontal_only);
+    void redistribute_movement_points_vertical_only_after_adjustment(int adjusted_index);
     SDL_Point movement_asset_anchor_world() const;
     float movement_base_world_z() const;
     devmode::FileSourcedAnimationSelection resolve_file_sourced_animation_selection_for_target(const Asset* target,
@@ -960,6 +1000,40 @@ private:
     std::unique_ptr<RoomFloorBoxToolsPanel> floor_box_tools_panel_;
     std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
+    std::unique_ptr<animation_editor::AnimationListPanel> stack_animation_list_panel_;
+    std::shared_ptr<animation_editor::AnimationDocument> stack_animation_preview_document_;
+    std::shared_ptr<animation_editor::PreviewProvider> stack_animation_preview_provider_;
+    std::uint64_t stack_animation_preview_revision_ = 0;
+    struct StackAnimationListSyncKey {
+        const Asset* target_asset = nullptr;
+        AssetEditorSubview subview = AssetEditorSubview::AssetInfo;
+        std::string selected_animation_id;
+        std::uint64_t animation_revision = 0;
+
+        bool operator==(const StackAnimationListSyncKey& other) const {
+            return target_asset == other.target_asset &&
+                   subview == other.subview &&
+                   selected_animation_id == other.selected_animation_id &&
+                   animation_revision == other.animation_revision;
+        }
+    };
+    std::optional<StackAnimationListSyncKey> stack_animation_list_sync_key_cache_;
+    bool force_stack_animation_sync_ = false;
+    std::uint64_t stack_animation_sync_invocations_ = 0;
+    std::uint64_t stack_animation_sync_skipped_ = 0;
+    std::uint64_t stack_animation_sync_frames_ = 0;
+    SDL_Rect stack_animation_list_bounds_{0, 0, 0, 0};
+    bool stack_animation_list_visible_ = false;
+    std::unordered_set<std::string> stack_animation_list_selectable_ids_;
+    bool showing_stack_animation_delete_popup_ = false;
+    std::optional<std::string> pending_stack_animation_delete_id_{};
+    SDL_Rect stack_animation_delete_modal_rect_{0, 0, 0, 0};
+    SDL_Rect stack_animation_delete_yes_rect_{0, 0, 0, 0};
+    SDL_Rect stack_animation_delete_no_rect_{0, 0, 0, 0};
+    bool stack_animation_delete_yes_hovered_ = false;
+    bool stack_animation_delete_no_hovered_ = false;
+    bool stack_animation_delete_yes_pressed_ = false;
+    bool stack_animation_delete_no_pressed_ = false;
 
     struct AnchorHandleSample {
         std::string name;
@@ -1071,25 +1145,48 @@ private:
     FloorBoxCandidateEditorState floor_box_candidate_editor_;
 
     struct MovementEditState {
+        enum class PointEditMode {
+            None,
+            HorizontalXZ,
+            VerticalY,
+        };
+
+        struct VerticalWheelEditState {
+            bool active = false;
+            int selected_point_index = -1;
+            SDL_FPoint fixed_floor_world_xz{0.0f, 0.0f};
+            bool restore_floor_preview_state = false;
+            bool restore_xy_preview_state = false;
+        };
+
         Asset* target_asset = nullptr;
         std::string animation_id;
         int frame_index = 0;
         bool point_selected = false;
         bool selected_point_active = false;
         int hovered_point_index = -1;
+        int hovered_floor_point_index = -1;
+        int hovered_elevated_point_index = -1;
         bool dragging_point = false;
+        PointEditMode active_point_edit_mode = PointEditMode::None;
+        int active_handle_point_index = -1;
+        VerticalWheelEditState vertical_wheel_edit{};
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
-        bool smooth_enabled = false;
-        bool curve_enabled = false;
+        bool smooth_enabled = true;
+        bool curve_enabled = true;
         bool anchor_snap_active = false;
         int original_world_x = 0;
         int original_world_y = 0;
         int original_world_z = 0;
         std::vector<devmode::room_movement_payload::MovementFrame> frames;
+        std::vector<std::vector<devmode::room_movement_payload::MovementFrame>> paths;
+        int selected_path_index = 0;
         std::vector<SDL_FPoint> rel_positions;
         std::vector<float> rel_positions_z;
+        std::vector<std::vector<devmode::room_movement_payload::MovementFrame>> quantize_reference_paths;
+        std::vector<int> quantize_option_to_reference_index;
 
         bool has_frames() const { return !frames.empty(); }
         std::size_t frame_count() const { return frames.size(); }
@@ -1169,6 +1266,15 @@ private:
     XYOverlayCursorState xy_overlay_cursor_state_{};
     SDL_Point last_pointer_screen_{0, 0};
     bool has_last_pointer_screen_ = false;
+    struct AssetInfoSnapSessionState {
+        bool initialized = false;
+        bool aligned_first_target = false;
+        Asset* first_target = nullptr;
+        int original_world_x = 0;
+        int original_world_y = 0;
+        int original_world_z = 0;
+    };
+    AssetInfoSnapSessionState asset_info_snap_session_{};
 
     struct AssetEditorTransitionState {
         bool active = false;
@@ -1393,5 +1499,3 @@ private:
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };
-
-

@@ -585,11 +585,12 @@ struct SpawnGroupConfig::Entry {
         const DMButtonStyle* icon_style = &DMStyles::IconButton();
         toggle_button_ = std::make_unique<DMButton>(std::string(DMIcons::CollapseCollapsed()), icon_style, 28, DMButton::height());
         toggle_widget_ = std::make_unique<ButtonWidget>(toggle_button_.get(), [this]() {
-            expanded_state_ = !expanded_state_;
-            if (expanded_state_) owner_->expand_group(spawn_id());
-            else owner_->collapse_group(spawn_id());
-            update_toggle_label();
-            owner_->mark_layout_dirty();
+            if (!owner_) return;
+            const std::string id = spawn_id();
+            if (!id.empty() && owner_->callbacks_.on_open_floating) {
+                SDL_Point anchor{header_rect().x + header_rect().w / 2, header_rect().y + header_rect().h / 2};
+                owner_->callbacks_.on_open_floating(id, anchor);
+            }
         });
 
         ownership_label_widget_ = std::make_unique<SpawnGroupLabelWidget>();
@@ -1311,7 +1312,7 @@ private:
 
     void update_toggle_label() {
         if (!toggle_button_) return;
-        std::string label = expanded_state_ ? std::string(DMIcons::CollapseExpanded()) : std::string(DMIcons::CollapseCollapsed());
+        std::string label = std::string(DMIcons::CollapseCollapsed());
         toggle_button_->set_text(label);
         toggle_button_->set_style(&DMStyles::IconButton());
     }
@@ -2161,17 +2162,7 @@ void SpawnGroupConfig::update(const Input& input, int screen_w, int screen_h) {
 bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
-    auto entry_at_header_point = [this](const SDL_Point& pointer) -> Entry* {
-        for (const auto& entry : entries_) {
-            if (!entry) continue;
-            const SDL_Rect header = entry->header_rect();
-            if (header.w <= 0 || header.h <= 0) continue;
-            if (SDL_PointInRect(&pointer, &header)) {
-                return entry.get();
-            }
-        }
-        return nullptr;
-    };
+
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         int mx = 0;
@@ -2186,21 +2177,6 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
             graph->handle_event(e);
             process_pending_notifications();
             return true;  // Keep wheel input from bubbling to parent panel while over embedded search.
-        }
-    }
-
-    if (!drag_state_.active &&
-        e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-        e.button.button == SDL_BUTTON_LEFT &&
-        e.button.clicks == 2) {
-        const SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
-        if (Entry* entry = entry_at_header_point(pointer)) {
-            const std::string id = entry->spawn_id();
-            if (!id.empty() && callbacks_.on_open_floating) {
-                callbacks_.on_open_floating(id, pointer);
-            }
-            process_pending_notifications();
-            return true;
         }
     }
 

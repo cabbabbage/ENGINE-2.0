@@ -158,6 +158,7 @@ class Asset {
                                          std::optional<int> resolution_layer_override = std::nullopt);
     bool clear_anchor_perspective_override();
     bool has_anchor_perspective_override() const { return anchor_perspective_override_active_; }
+    void resample_spawn_y_position();
     void move_to_world_position(int world_x, int world_y, int world_z = 0,
                                 std::optional<int> resolution_layer_override = std::nullopt);
     void set_world_z(int world_z);
@@ -261,7 +262,6 @@ class Asset {
     bool has_anchor_sprite_transform_override() const { return anchor_sprite_transform_override_active_; }
     SDL_FlipMode effective_render_flip() const;
     double effective_render_angle() const;
-    bool resolve_static_sink_burial_offset(float& out_offset_px);
 
     bool is_composite_dirty() const { return composite_dirty_; }
     void mark_composite_dirty() { composite_dirty_ = true; }
@@ -545,7 +545,6 @@ private:
     friend class Move;
     friend class AssetInfoUI;
     friend class RenderAsset;
-    friend class FrameEditorSession;
     friend class Assets;
     friend class CompositeAssetRenderer;
     friend class world::WorldGrid;
@@ -627,14 +626,6 @@ private:
     float        directional_target_world_z_ = 0.0f;
     bool         directional_target_valid_ = false;
     bool         mesh_dirty_        = true;
-    bool sink_burial_tracking_initialized_ = false;
-    int sink_burial_last_world_x_ = 0;
-    int sink_burial_last_world_y_ = 0;
-    int sink_burial_last_world_z_ = 0;
-    int sink_burial_last_resolution_layer_ = 0;
-    bool sink_burial_locked_ = false;
-    float sink_burial_locked_offset_px_ = 0.0f;
-    bool sink_burial_disabled_due_to_motion_ = false;
 
     void initialize_anchor_registry_from_animations();
     AnchorHandle* find_anchor_handle(const std::string& name);

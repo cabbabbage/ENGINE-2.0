@@ -6,6 +6,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
@@ -98,11 +99,11 @@ class AnimationDocument {
     std::string manifest_asset_key_debug_;
     LoadReport last_load_report_;
     std::function<bool(const nlohmann::json&)> persist_callback_;
+    mutable std::unordered_set<std::string> touched_animation_ids_;
     std::function<void()> on_saved_callback_;
     std::function<void(const StructureChangeEvent&)> on_structure_changed_callback_;
 };
 
 }
-
 
 

@@ -69,6 +69,9 @@ public:
 
     struct AutoMoveCombatOverrides {
         std::optional<bool> attacking_enabled = std::nullopt;
+        std::optional<bool> force_attacking_enabled = std::nullopt;
+        std::vector<std::string> required_movement_tags{};
+        std::vector<std::string> excluded_movement_tags{};
     };
 
     enum class ReversePlaybackCommand {
@@ -119,6 +122,7 @@ public:
     ActivePlanMode current_plan_mode() const { return active_plan_mode_; }
 
     void cancel_all_movement();
+    void stop_movement();
 
 private:
 
@@ -179,6 +183,7 @@ private:
     std::optional<std::string> pending_engagement_target_asset_id_ = std::nullopt;
     std::uint32_t next_plan_retry_frame_ = 0;
     std::uint32_t local_plan_frame_counter_ = 0;
+    std::uint32_t plan_variance_attempt_counter_ = 0;
     static constexpr std::uint32_t kPlanRetryCooldownFrames = 4;
 
     std::uint32_t resolve_plan_frame_id();
@@ -190,4 +195,5 @@ private:
     int effective_grid_resolution(std::optional<int> override_resolution) const;
     AutoMoveCombatOptions resolve_auto_move_combat_options(AutoMoveCombatOverrides overrides = {}) const;
     bool should_defer_auto_move_for_committed_attack() const;
+    MovementTagFilter resolve_movement_tag_filter(const AutoMoveCombatOverrides& overrides) const;
 };

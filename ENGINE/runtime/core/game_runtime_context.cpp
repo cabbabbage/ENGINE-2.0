@@ -37,6 +37,9 @@ void GameRuntimeContext::begin_frame(Assets* assets,
     player_ = player;
     camera_view_ = camera_view;
     runtime_config_ = runtime_config;
+    player_motion_disturbance_.active = false;
+    player_motion_disturbance_.is_dashing = false;
+    player_motion_disturbance_.is_sprinting = false;
     map_graph_.set_current_room(current_room_);
     prune_expired_room_fly_aggression();
 }
@@ -86,7 +89,15 @@ const RoomFlyAggressionState* GameRuntimeContext::room_fly_aggression_state(
 }
 
 void GameRuntimeContext::rebuild_runtime_map_graph(const std::vector<Room*>& rooms) {
-    map_graph_.build_from_rooms(rooms);
+    // Skip null pointers so runtime connectivity stays deterministic across editor/runtime rebuild passes.
+    std::vector<Room*> filtered;
+    filtered.reserve(rooms.size());
+    for (Room* room : rooms) {
+        if (room) {
+            filtered.push_back(room);
+        }
+    }
+    map_graph_.build_from_rooms(filtered);
     map_graph_.set_current_room(current_room_);
 }
 
@@ -112,6 +123,42 @@ bool GameRuntimeContext::are_rooms_connected(Room* a, Room* b) const {
 
 Room* GameRuntimeContext::trail_between(Room* a, Room* b) const {
     return map_graph_.trail_between(a, b);
+}
+
+void GameRuntimeContext::set_player_motion_disturbance(bool active,
+                                                       bool is_sprinting,
+                                                       bool is_dashing) {
+    player_motion_disturbance_.active = active;
+    player_motion_disturbance_.is_sprinting = is_sprinting;
+    player_motion_disturbance_.is_dashing = is_dashing;
+    if (!active) {
+        return;
+    }
+    ++player_motion_disturbance_.pulse_id;
+    player_motion_disturbance_.pulse_frame = frame_id_;
+    player_motion_disturbance_.pulse_time_seconds = elapsed_seconds_;
+}
+
+void GameRuntimeContext::emit_player_damage_pulse(int damage_amount,
+                                                  int health_after,
+                                                  int starting_health) {
+    const int sanitized_damage = std::max(0, damage_amount);
+    if (sanitized_damage <= 0) {
+        return;
+    }
+
+    const int safe_starting_health = std::max(1, starting_health);
+    const int safe_health_after = std::max(0, health_after);
+    const float ratio_after = std::clamp(
+        static_cast<float>(safe_health_after) / static_cast<float>(safe_starting_health),
+        0.0f,
+        1.0f);
+
+    ++player_damage_pulse_.pulse_id;
+    player_damage_pulse_.pulse_time_seconds = elapsed_seconds_;
+    player_damage_pulse_.damage_amount = sanitized_damage;
+    player_damage_pulse_.health_after = safe_health_after;
+    player_damage_pulse_.health_ratio_after = ratio_after;
 }
 
 void GameRuntimeContext::prune_expired_room_fly_aggression() {

@@ -19,9 +19,27 @@ class PreviewProvider;
 
 class AnimationListPanel {
   public:
+    struct ExternalRow {
+        std::string id;
+        int level = 0;
+        bool missing_source = false;
+        bool selectable = true;
+    };
+
     AnimationListPanel();
 
+    struct ExternalRowsFingerprint {
+        std::size_t count = 0;
+        std::uint64_t rolling_hash = 0;
+
+        bool operator==(const ExternalRowsFingerprint& other) const {
+            return count == other.count && rolling_hash == other.rolling_hash;
+        }
+    };
+
     void set_document(std::shared_ptr<AnimationDocument> document);
+    void set_external_rows(std::optional<std::vector<ExternalRow>> rows);
+    void set_show_delete_button(bool show);
     void set_bounds(const SDL_Rect& bounds);
     void set_preview_provider(std::shared_ptr<PreviewProvider> provider);
     void set_selected_animation_id(const std::optional<std::string>& animation_id);
@@ -32,6 +50,7 @@ class AnimationListPanel {
     void update();
     void render(SDL_Renderer* renderer) const;
     bool handle_event(const SDL_Event& e);
+    bool is_point_inside(int x, int y) const;
     const std::optional<std::string>& debug_selected_animation_id() const { return selected_animation_id_; }
     int debug_row_count() const { return static_cast<int>(display_rows_.size()); }
     const std::string& debug_last_hit_result() const { return last_hit_result_; }
@@ -63,8 +82,8 @@ class AnimationListPanel {
         std::string id;
         int level = 0;
         bool missing_source = false;
+        bool selectable = true;
 };
-
     struct RowGeometry {
         SDL_Rect outer{0, 0, 0, 0};
         SDL_Rect delete_button_rel{0, 0, 0, 0};
@@ -75,6 +94,10 @@ class AnimationListPanel {
 };
 
     std::shared_ptr<AnimationDocument> document_;
+    std::optional<std::vector<ExternalRow>> external_rows_;
+    std::optional<ExternalRowsFingerprint> last_external_rows_fingerprint_;
+    std::uint64_t row_update_applied_count_ = 0;
+    std::uint64_t row_update_skipped_count_ = 0;
     std::vector<RowGeometry> row_geometry_;
     std::vector<DisplayRow> display_rows_;
     std::optional<std::string> start_animation_id_;
@@ -91,9 +114,9 @@ class AnimationListPanel {
     ui::ScrollController scroll_controller_;
     std::optional<std::uint64_t> last_document_revision_;
     mutable std::string last_hit_result_ = "none";
+    bool show_delete_button_ = true;
 
     std::unordered_map<std::string, std::string> root_for_id_;
 };
 
 }
-

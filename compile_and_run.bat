@@ -188,9 +188,16 @@ for %%P in (
     "C:\Program Files\CMake\bin\cmake.exe"
     "C:\Program Files (x86)\CMake\bin\cmake.exe"
     "%ProgramFiles(x86)%\CMake\bin\cmake.exe"
+    "%ProgramData%\chocolatey\bin\cmake.exe"
+    "%USERPROFILE%\scoop\apps\cmake\current\bin\cmake.exe"
+    "%LOCALAPPDATA%\Programs\CMake\bin\cmake.exe"
+    "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
 ) do (
     if not defined CMAKE_CMD if exist %%~P set "CMAKE_CMD=%%~fP"
 )
+
+if not defined CMAKE_CMD if defined CMAKE_ROOT if exist "%CMAKE_ROOT%\bin\cmake.exe" set "CMAKE_CMD=%CMAKE_ROOT%\bin\cmake.exe"
+if not defined CMAKE_CMD if defined CMAKE_HOME if exist "%CMAKE_HOME%\bin\cmake.exe" set "CMAKE_CMD=%CMAKE_HOME%\bin\cmake.exe"
 
 :locate_done
 if defined CMAKE_CMD (
@@ -208,4 +215,3 @@ echo [compile_and_run.bat] Build failed.
 popd >nul
 if not defined VIBBLE_SUPPRESS_PAUSE pause
 exit /b 1
-

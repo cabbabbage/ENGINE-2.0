@@ -236,19 +236,13 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        int idx = frame_index_at_point(p);
-        pressed_thumb_index_ = idx;
-        if (idx >= 0) {
-            consumed = true;
-        }
+        // Frame stepping is intentionally restricted to the explicit prev/next
+        // navigator arrow buttons to avoid accidental frame advances while
+        // editing with mouse-driven tools in dev mode.
+        pressed_thumb_index_ = -1;
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        int idx = frame_index_at_point(p);
-        if (idx >= 0 && idx == pressed_thumb_index_) {
-            request_frame_change(idx);
-            consumed = true;
-        }
         pressed_thumb_index_ = -1;
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {

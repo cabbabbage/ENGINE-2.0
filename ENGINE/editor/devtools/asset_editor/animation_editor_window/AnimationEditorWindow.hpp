@@ -168,7 +168,7 @@ class AnimationEditorWindow {
     void prompt_rename_animation(const std::string& animation_id);
     void set_animation_as_start(const std::string& animation_id);
     void duplicate_animation(const std::string& animation_id);
-    void delete_animation_with_confirmation(const std::string& animation_id);
+    void delete_animation_immediate(const std::string& animation_id);
     void render_background(SDL_Renderer* renderer) const;
     void render_status(SDL_Renderer* renderer) const;
     void render_debug_overlay(SDL_Renderer* renderer) const;
@@ -253,10 +253,6 @@ class AnimationEditorWindow {
     std::string sanitize_asset_name(const std::string& name) const;
     std::string generate_controller_key(const std::string& asset_name) const;
     std::string generate_class_name(const std::string& asset_name) const;
-    std::vector<std::string> collect_available_animation_ids() const;
-    std::string build_controller_metadata(const std::string& controller_key) const;
-    bool write_or_update_controller_metadata(const std::filesystem::path& path, const std::string& metadata) const;
-    void ensure_controller_factory_registration(const std::string& key, const std::string& class_name) const;
     void add_controller();
     void open_controller();
     void refresh_inspector_animation_callback();

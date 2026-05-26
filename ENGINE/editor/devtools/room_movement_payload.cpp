@@ -26,10 +26,20 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
         return frames;
     }
 
-    const nlohmann::json movement =
-        (payload.contains("movement") && payload["movement"].is_array())
-            ? payload["movement"]
-            : nlohmann::json::array();
+    const nlohmann::json movement = [&]() -> nlohmann::json {
+        if (payload.contains("movement_paths") &&
+            payload["movement_paths"].is_array() &&
+            !payload["movement_paths"].empty()) {
+            const auto& first_path = payload["movement_paths"][0];
+            if (first_path.is_array()) {
+                return first_path;
+            }
+        }
+        if (payload.contains("movement") && payload["movement"].is_array()) {
+            return payload["movement"];
+        }
+        return nlohmann::json::array();
+    }();
     if (movement.empty()) {
         frames.push_back(MovementFrame{});
         return frames;

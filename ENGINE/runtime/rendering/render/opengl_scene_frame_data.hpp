@@ -8,7 +8,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
-#include "rendering/render/sink_clip.hpp"
+#include "rendering/render/sprite_packet_geometry.hpp"
 
 struct GpuSpriteVertex {
     float clip_x = 0.0f;
@@ -25,8 +25,8 @@ struct GpuSpriteDrawPacket {
     std::string source_texture_id{};
     int source_frame_index = -1;
     int source_variant_index = -1;
-    std::array<GpuSpriteVertex, render_sink::kMaxClippedVertices> vertices{};
-    std::array<int, render_sink::kMaxClippedIndices> indices{0, 1, 2, 0, 2, 3};
+    std::array<GpuSpriteVertex, render_sprite_geometry::kMaxClippedVertices> vertices{};
+    std::array<int, render_sprite_geometry::kMaxClippedIndices> indices{0, 1, 2, 0, 2, 3};
     int vertex_count = 4;
     int index_count = 6;
     SDL_FColor modulate{1.0f, 1.0f, 1.0f, 1.0f};
@@ -70,3 +70,4 @@ struct GpuSceneFrameData {
     bool suspected_incomplete_scene = false;
     bool has_valid_composite_source = false;
 };
+

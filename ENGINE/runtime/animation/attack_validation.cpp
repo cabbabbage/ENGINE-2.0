@@ -501,11 +501,20 @@ AttackValidation::AttackWindowEvaluation AttackValidation::evaluate_attack_windo
     const Asset& target,
     const std::string& attack_animation_id,
     int horizon_frames) {
+    return evaluate_attack_window(attacker, target, attack_animation_id, 0, horizon_frames);
+}
+
+AttackValidation::AttackWindowEvaluation AttackValidation::evaluate_attack_window(
+    const Asset& attacker,
+    const Asset& target,
+    const std::string& attack_animation_id,
+    std::size_t path_index,
+    int horizon_frames) {
     AttackWindowEvaluation evaluation{};
     if (!attacker.info || !target.info || !attacker.isAttackBoxEnabled() || !target.isHitboxEnabled()) {
         return evaluation;
     }
-    const auto* metadata = get_or_build_attack_metadata(attacker, attack_animation_id, 0);
+    const auto* metadata = get_or_build_attack_metadata(attacker, attack_animation_id, path_index);
     if (!metadata || metadata->frames.empty()) {
         return evaluation;
     }
@@ -695,6 +704,66 @@ AttackValidation::AttackWindowEvaluation AttackValidation::evaluate_attack_windo
     }
 
     return evaluation;
+}
+
+std::optional<AttackValidation::RankedAttackCandidate> AttackValidation::rank_attack_candidates(
+    const Asset& attacker,
+    const Asset& target,
+    const std::vector<std::string>& attack_animation_ids,
+    int horizon_frames,
+    bool require_clear_hit) {
+    if (!attacker.info || attack_animation_ids.empty()) {
+        return std::nullopt;
+    }
+
+    RankedAttackCandidate best{};
+    bool has_best = false;
+
+    auto is_better = [](const RankedAttackCandidate& lhs, const RankedAttackCandidate& rhs) {
+        const int lhs_score = static_cast<int>(lhs.evaluation.score);
+        const int rhs_score = static_cast<int>(rhs.evaluation.score);
+        if (lhs_score != rhs_score) {
+            return lhs_score > rhs_score;
+        }
+        if (lhs.path_index != rhs.path_index) {
+            return lhs.path_index < rhs.path_index;
+        }
+        return lhs.animation_id < rhs.animation_id;
+    };
+
+    for (const std::string& animation_id : attack_animation_ids) {
+        const auto it = attacker.info->animations.find(animation_id);
+        if (it == attacker.info->animations.end()) {
+            continue;
+        }
+        const Animation& animation = it->second;
+        const std::size_t path_count = std::max<std::size_t>(1, animation.movement_path_count());
+        for (std::size_t path_index = 0; path_index < path_count; ++path_index) {
+            AttackWindowEvaluation evaluation =
+                evaluate_attack_window(attacker, target, animation_id, path_index, horizon_frames);
+            if (require_clear_hit &&
+                evaluation.score != AttackWindowScore::ClearHit) {
+                continue;
+            }
+            if (evaluation.score == AttackWindowScore::Miss) {
+                continue;
+            }
+
+            RankedAttackCandidate candidate{};
+            candidate.animation_id = animation_id;
+            candidate.path_index = path_index;
+            candidate.evaluation = std::move(evaluation);
+            if (!has_best || is_better(candidate, best)) {
+                best = std::move(candidate);
+                has_best = true;
+            }
+        }
+    }
+
+    if (!has_best) {
+        return std::nullopt;
+    }
+    return best;
 }
 
 }  // namespace animation_update

@@ -79,6 +79,118 @@ nlohmann::json canonicalize_tags_field(const nlohmann::json& payload) {
     return tags;
 }
 
+int read_payload_movement_component(const nlohmann::json& entry, int index) {
+    if (entry.is_array()) {
+        // Canonical arrays are [dx, y(height), z(depth)]. Legacy arrays may only include [dx, depth].
+        if (index == 2 && entry.size() == 2 && entry[1].is_number()) {
+            return read_int_like(entry[1], 0);
+        }
+        if (index == 1 && entry.size() == 2 && entry[1].is_number()) {
+            return 0;
+        }
+        if (index < static_cast<int>(entry.size()) && entry[index].is_number()) {
+            try {
+                return entry[index].get<int>();
+            } catch (...) {
+            }
+            try {
+                return static_cast<int>(entry[index].get<double>());
+            } catch (...) {
+            }
+        }
+        return 0;
+    }
+    if (entry.is_object()) {
+        if (index == 0) {
+            if (entry.contains("dx")) return read_int_like(entry["dx"], 0);
+            if (entry.contains("x")) return read_int_like(entry["x"], 0);
+            return 0;
+        }
+        if (index == 1) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const int legacy_height = entry.contains("dy")
+                ? read_int_like(entry["dy"], 0)
+                : (entry.contains("y") ? read_int_like(entry["y"], 0) : 0);
+            const int explicit_depth = entry.contains("dz")
+                ? read_int_like(entry["dz"], 0)
+                : (entry.contains("z") ? read_int_like(entry["z"], 0) : 0);
+            if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_height != 0) {
+                return 0;
+            }
+            if (entry.contains("dy")) return read_int_like(entry["dy"], 0);
+            if (entry.contains("y")) return read_int_like(entry["y"], 0);
+            return 0;
+        }
+        if (index == 2) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const int legacy_depth = entry.contains("dy")
+                ? read_int_like(entry["dy"], 0)
+                : (entry.contains("y") ? read_int_like(entry["y"], 0) : 0);
+            const int explicit_depth = entry.contains("dz")
+                ? read_int_like(entry["dz"], 0)
+                : (entry.contains("z") ? read_int_like(entry["z"], 0) : 0);
+            if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_depth != 0) {
+                return legacy_depth;
+            }
+            if (entry.contains("dz")) return read_int_like(entry["dz"], 0);
+            if (entry.contains("z")) return read_int_like(entry["z"], 0);
+            if (!entry.contains("dz") && !entry.contains("z")) {
+                if (entry.contains("dy")) return read_int_like(entry["dy"], 0);
+                if (entry.contains("y")) return read_int_like(entry["y"], 0);
+            }
+        }
+    }
+    return 0;
+}
+
+float read_payload_movement_rotation(const nlohmann::json& entry) {
+    if (entry.is_array()) {
+        if (entry.size() > 3 && entry[3].is_number()) {
+            return static_cast<float>(entry[3].get<double>());
+        }
+        return 0.0f;
+    }
+    if (entry.is_object() && entry.contains("rotation_degrees") && entry["rotation_degrees"].is_number()) {
+        return static_cast<float>(entry["rotation_degrees"].get<double>());
+    }
+    return 0.0f;
+}
+
+nlohmann::json movement_total_for_sequence(const nlohmann::json& movement) {
+    int total_dx = 0;
+    int total_dy = 0;
+    int total_dz = 0;
+    float total_dr = 0.0f;
+    if (movement.is_array()) {
+        for (const auto& entry : movement) {
+            total_dx += read_payload_movement_component(entry, 0);
+            total_dy += read_payload_movement_component(entry, 1);
+            total_dz += read_payload_movement_component(entry, 2);
+            total_dr += read_payload_movement_rotation(entry);
+        }
+    }
+    return nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
+}
+
+nlohmann::json normalize_movement_sequence(nlohmann::json movement, int frame_count) {
+    if (!movement.is_array()) {
+        movement = nlohmann::json::array();
+    }
+    const auto frames = static_cast<std::size_t>(std::max(frame_count, 1));
+    while (movement.size() < frames) {
+        movement.push_back(nlohmann::json::array({0, 0, 0}));
+    }
+    if (movement.size() > frames) {
+        movement.erase(movement.begin() + static_cast<std::ptrdiff_t>(frames), movement.end());
+    }
+    if (movement.empty()) {
+        movement.push_back(nlohmann::json::array({0, 0, 0}));
+    }
+    return movement;
+}
+
 nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::json& source_payload) {
     nlohmann::json payload = source_payload.is_object() ? source_payload : nlohmann::json::object();
 
@@ -128,11 +240,12 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     }
 
     const bool has_movement_json = payload.contains("movement") && payload["movement"].is_array();
+    const bool has_movement_paths_json = payload.contains("movement_paths") && payload["movement_paths"].is_array();
     const bool has_anchor_points_json = payload.contains("anchor_points") && payload["anchor_points"].is_array();
     const bool has_hit_boxes_json = payload.contains("hit_boxes") && payload["hit_boxes"].is_array();
     const bool has_attack_boxes_json = payload.contains("attack_boxes") && payload["attack_boxes"].is_array();
     const bool has_any_local_frame_data =
-        has_movement_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
+        has_movement_json || has_movement_paths_json || has_anchor_points_json || has_hit_boxes_json || has_attack_boxes_json;
     if (!payload.contains("inherit_data")) {
         const bool legacy_inherit_source_movement =
             read_bool_field_like(payload, "inherit_source_movement", derived_from_animation);
@@ -157,7 +270,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
 
         if (inherit_data) {
             payload.erase("movement");
+            payload.erase("movement_paths");
             payload.erase("movement_total");
+            payload.erase("movement_totals");
             payload.erase("movement_variants");
             payload.erase("anchor_points");
             payload.erase("hit_boxes");
@@ -211,121 +326,43 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload["number_of_frames"] = frames;
 
     if (!derived_from_animation || (derived_from_animation && !inherit_data)) {
-        nlohmann::json movement = payload.contains("movement") && payload["movement"].is_array() ? payload["movement"] : nlohmann::json::array();
-        if (!movement.is_array()) {
-            movement = nlohmann::json::array();
-        }
-        if (movement.size() < static_cast<size_t>(frames)) {
-            while (movement.size() < static_cast<size_t>(frames)) {
-                movement.push_back(nlohmann::json::array({0, 0, 0}));
+        nlohmann::json movement_paths = nlohmann::json::array();
+        const bool has_authored_movement_paths =
+            payload.contains("movement_paths") && payload["movement_paths"].is_array();
+        if (has_authored_movement_paths) {
+            for (const auto& path : payload["movement_paths"]) {
+                if (path.is_array()) {
+                    movement_paths.push_back(normalize_movement_sequence(path, frames));
+                }
             }
-        } else if (movement.size() > static_cast<size_t>(frames)) {
-            movement.erase(movement.begin() + frames, movement.end());
         }
-        if (movement.empty()) {
-            movement.push_back(nlohmann::json::array({0, 0, 0}));
+        if (movement_paths.empty()) {
+            if (has_authored_movement_paths) {
+                movement_paths.push_back(normalize_movement_sequence(nlohmann::json::array(), frames));
+            } else {
+                const nlohmann::json legacy_movement =
+                    payload.contains("movement") && payload["movement"].is_array()
+                        ? payload["movement"]
+                        : nlohmann::json::array();
+                movement_paths.push_back(normalize_movement_sequence(legacy_movement, frames));
+            }
         }
-        payload["movement"] = movement;
 
-        auto read_component = [](const nlohmann::json& entry, int index) -> int {
-            if (entry.is_array()) {
-                // Canonical arrays are [dx, y(height), z(depth)].
-                // Legacy arrays may only include [dx, depth].
-                if (index == 2 && entry.size() == 2 && entry[1].is_number()) {
-                    return read_int_like(entry[1], 0);
-                }
-                if (index == 1 && entry.size() == 2 && entry[1].is_number()) {
-                    return 0;
-                }
-                if (index < static_cast<int>(entry.size()) && entry[index].is_number()) {
-                    try {
-                        return entry[index].get<int>();
-                    } catch (...) {
-                    }
-                    try {
-                        return static_cast<int>(entry[index].get<double>());
-                    } catch (...) {
-                    }
-                }
-                return 0;
-            }
-            if (entry.is_object()) {
-                if (index == 0) {
-                    if (entry.contains("dx")) return read_int_like(entry["dx"], 0);
-                    if (entry.contains("x")) return read_int_like(entry["x"], 0);
-                    return 0;
-                }
-                if (index == 1) {
-                    const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
-                    const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
-                    const int legacy_height = entry.contains("dy")
-                        ? read_int_like(entry["dy"], 0)
-                        : (entry.contains("y") ? read_int_like(entry["y"], 0) : 0);
-                    const int explicit_depth = entry.contains("dz")
-                        ? read_int_like(entry["dz"], 0)
-                        : (entry.contains("z") ? read_int_like(entry["z"], 0) : 0);
-                    if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_height != 0) {
-                        return 0;
-                    }
-                    if (entry.contains("dy")) return read_int_like(entry["dy"], 0);
-                    if (entry.contains("y")) return read_int_like(entry["y"], 0);
-                    return 0;
-                }
-                if (index == 2) {
-                    const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
-                    const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
-                    const int legacy_depth = entry.contains("dy")
-                        ? read_int_like(entry["dy"], 0)
-                        : (entry.contains("y") ? read_int_like(entry["y"], 0) : 0);
-                    const int explicit_depth = entry.contains("dz")
-                        ? read_int_like(entry["dz"], 0)
-                        : (entry.contains("z") ? read_int_like(entry["z"], 0) : 0);
-                    if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_depth != 0) {
-                        return legacy_depth;
-                    }
-                    if (entry.contains("dz")) return read_int_like(entry["dz"], 0);
-                    if (entry.contains("z")) return read_int_like(entry["z"], 0);
-                    // Legacy object movement used `dy/y` for floor depth.
-                    if (!entry.contains("dz") && !entry.contains("z")) {
-                        if (entry.contains("dy")) return read_int_like(entry["dy"], 0);
-                        if (entry.contains("y")) return read_int_like(entry["y"], 0);
-                    }
-                }
-            }
-            return 0;
-};
-
-        int total_dx = 0;
-        int total_dy = 0;
-        int total_dz = 0;
-        float total_dr = 0.0f;
-        auto read_rotation_component = [](const nlohmann::json& entry) -> float {
-            if (entry.is_array()) {
-                if (entry.size() > 3 && entry[3].is_number()) {
-                    return static_cast<float>(entry[3].get<double>());
-                }
-                return 0.0f;
-            }
-            if (!entry.is_object()) {
-                return 0.0f;
-            }
-            if (entry.contains("rotation_degrees") && entry["rotation_degrees"].is_number()) {
-                return static_cast<float>(entry["rotation_degrees"].get<double>());
-            }
-            return 0.0f;
-        };
-        for (std::size_t i = 0; i < movement.size(); ++i) {
-            const nlohmann::json& entry = movement[i];
-            total_dx += read_component(entry, 0);
-            total_dy += read_component(entry, 1);
-            total_dz += read_component(entry, 2);
-            total_dr += read_rotation_component(entry);
+        nlohmann::json movement_totals = nlohmann::json::array();
+        for (const auto& path : movement_paths) {
+            movement_totals.push_back(movement_total_for_sequence(path));
         }
-        payload["movement_total"] =
-            nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
+        payload["movement_paths"] = std::move(movement_paths);
+        payload["movement_total"] = movement_totals.empty()
+            ? nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0}, {"dr", 0.0f}}
+            : movement_totals.front();
+        payload["movement_totals"] = std::move(movement_totals);
+        payload.erase("movement");
     } else {
         payload.erase("movement");
+        payload.erase("movement_paths");
         payload.erase("movement_total");
+        payload.erase("movement_totals");
     }
 
     std::string on_end = "default";
@@ -749,6 +786,7 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
     start_animation_.reset();
     use_nested_container_ = false;
     container_metadata_.clear();
+    touched_animation_ids_.clear();
     dirty_ = false;
     last_load_report_ = {};
 
@@ -836,8 +874,25 @@ bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
         }
     }
 
+    nlohmann::json existing_animations_json = nlohmann::json::object();
+    if (root.contains("animations") && root["animations"].is_object()) {
+        const nlohmann::json& animations_node = root["animations"];
+        if (animations_node.contains("animations") && animations_node["animations"].is_object()) {
+            existing_animations_json = animations_node["animations"];
+        } else {
+            existing_animations_json = animations_node;
+        }
+    }
+
     nlohmann::json animations_json = nlohmann::json::object();
     for (const auto& [id, payload_dump] : animations_) {
+        (void)payload_dump;
+        const bool touched = touched_animation_ids_.find(id) != touched_animation_ids_.end();
+        if (!touched && existing_animations_json.contains(id) && existing_animations_json[id].is_object()) {
+            animations_json[id] = existing_animations_json[id];
+            continue;
+        }
+
         const auto raw_payload = raw_animation_payload_json(id);
         animations_json[id] = normalize_payload_for_storage(
             id,
@@ -896,6 +951,7 @@ bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
             devmode::core::DevJsonStore::instance().flush_path(info_path_);
         }
         dirty_ = false;
+        touched_animation_ids_.clear();
     }
     if (saved && fire_callback && on_saved_callback_) {
         on_saved_callback_();
@@ -945,6 +1001,7 @@ AnimationDocument::CreateAnimationResult AnimationDocument::create_animation(con
     if (!start_animation_.has_value() || start_animation_->empty()) {
         start_animation_ = candidate;
     }
+    touched_animation_ids_.insert(candidate);
     rebuild_animation_cache();
     mark_dirty();
     if (on_structure_changed_callback_) {
@@ -962,6 +1019,7 @@ void AnimationDocument::delete_animation(const std::string& animation_id) {
     auto it = animations_.find(animation_id);
     if (it == animations_.end()) return;
     animations_.erase(it);
+    touched_animation_ids_.erase(animation_id);
 
     if (start_animation_ && *start_animation_ == animation_id) {
         auto ids = animation_ids();
@@ -971,6 +1029,7 @@ void AnimationDocument::delete_animation(const std::string& animation_id) {
             start_animation_.reset();
         }
     }
+    rebuild_animation_cache();
     mark_dirty();
     if (on_structure_changed_callback_) {
         on_structure_changed_callback_(StructureChangeEvent{
@@ -1045,6 +1104,8 @@ void AnimationDocument::rename_animation(const std::string& old_id, const std::s
     if (start_animation_ && *start_animation_ == old_id) {
         start_animation_ = candidate;
     }
+    touched_animation_ids_.erase(old_id);
+    touched_animation_ids_.insert(candidate);
 
     for (auto& entry : animations_) {
         const std::string& id = entry.first;
@@ -1127,6 +1188,7 @@ void AnimationDocument::rename_animation(const std::string& old_id, const std::s
 
         if (changed) {
             entry.second = serialize_payload(normalize_payload_for_storage(id, payload));
+            touched_animation_ids_.insert(id);
         }
     }
 
@@ -1169,6 +1231,7 @@ bool AnimationDocument::update_animation_payload(const std::string& animation_id
         return false;
     }
     it->second = std::move(normalized);
+    touched_animation_ids_.insert(animation_id);
     mark_dirty();
     return true;
 }

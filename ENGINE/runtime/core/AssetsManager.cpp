@@ -73,6 +73,7 @@ constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
 constexpr float kDefaultBoundaryMinVisibleScreenRatio = 0.015f;
+constexpr int kDefaultLiveDynamicFogNearDistancePx = 64;
 constexpr int kDefaultCameraHeightMinPx = 1;
 constexpr int kDefaultCameraHeightMaxPx = 100000;
 constexpr std::size_t kRuntimeAnchorConvergenceIterationCap = 8;
@@ -164,6 +165,9 @@ void begin_assets_frame_stats(runtime_stats::FrameStatsRecorder& frame_stats,
     frame_stats.set("assets.visibility_traversal_count", static_cast<std::uint64_t>(0));
     frame_stats.set("assets.active_candidate_count", static_cast<std::uint64_t>(active_count));
     frame_stats.set("assets.active_publish_count", static_cast<std::uint64_t>(active_count));
+    frame_stats.set("assets.active_activation_count", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.active_activation_skipped_count", static_cast<std::uint64_t>(0));
+    frame_stats.set("assets.active_rebuild_forced_same_frame", false);
     frame_stats.set("assets.active_fail_open_applied", false);
     frame_stats.set("assets.active_fail_open_reason", "");
     frame_stats.set("dev.set_active_assets_called", false);
@@ -865,7 +869,25 @@ void Assets::load_camera_settings_from_json() {
         despawn_margin = preload_margin;
     }
 
+    int fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
+    if (map_info_json_.contains("live_dynamic_spawns") && map_info_json_["live_dynamic_spawns"].is_object()) {
+        const nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
+        auto fog_it = live_dynamic.find("fog_near_distance_px");
+        if (fog_it != live_dynamic.end() && fog_it->is_number()) {
+            try {
+                if (fog_it->is_number_integer()) {
+                    fog_near_distance = fog_it->get<int>();
+                } else {
+                    fog_near_distance = static_cast<int>(std::lround(fog_it->get<double>()));
+                }
+            } catch (...) {
+                fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
+            }
+        }
+    }
+
     set_boundary_min_visible_screen_ratio(boundary_ratio);
+    set_live_dynamic_fog_near_distance_px(fog_near_distance);
     set_camera_height_bounds_px(min_height, max_height);
     dynamic_spawn_preload_margin_world_px_ = preload_margin;
     dynamic_spawn_despawn_margin_world_px_ = despawn_margin;
@@ -1109,6 +1131,7 @@ const dynamic_spawn::DynamicSpawnDiagnostics& Assets::dynamic_spawn_diagnostics(
     return dynamic_spawn_runtime_ ? dynamic_spawn_runtime_->diagnostics() : kEmpty;
 }
 
+
 bool Assets::dev_grid_overlay_enabled() const {
     return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_grid_overlay_enabled();
 }
@@ -1140,6 +1163,22 @@ float Assets::boundary_min_visible_screen_ratio() const {
 
 void Assets::set_boundary_min_visible_screen_ratio(float value) {
     boundary_min_visible_screen_ratio_ = std::clamp(value, 0.0f, 0.5f);
+}
+
+int Assets::live_dynamic_fog_near_distance_px() const {
+    return live_dynamic_fog_near_distance_px_;
+}
+
+void Assets::set_live_dynamic_fog_near_distance_px(int value, bool persist) {
+    live_dynamic_fog_near_distance_px_ = std::clamp(value, 1, 1000000);
+    if (!persist || !map_info_json_.is_object()) {
+        return;
+    }
+    nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
+    if (!live_dynamic.is_object()) {
+        live_dynamic = nlohmann::json::object();
+    }
+    live_dynamic["fog_near_distance_px"] = live_dynamic_fog_near_distance_px_;
 }
 
 std::pair<int, int> Assets::camera_height_bounds_px() const {
@@ -2439,6 +2478,10 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
         grid_registration_buffer_.clear();
     }
     movement_flush_end = SDL_GetPerformanceCounter();
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.movement_flush_frame",
+                                                      static_cast<std::uint64_t>(frame_id_));
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.movement_flush_camera_state",
+                                                      camera_.camera_state_version());
 
     const bool camera_motion_active_before_update = camera_.is_height_animating();
     const bool camera_refresh_needed = room_changed || player_moved || camera_motion_active_before_update || camera_settings_dirty_;
@@ -2463,6 +2506,10 @@ void Assets::run_world_update_stage(const Input& input, bool& room_changed, bool
                                                       camera_state_changed);
     runtime_stats::FrameStatsRecorder::instance().set("assets.world_camera_rebuild_requested",
                                                       camera_rebuild_request_needed);
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.camera_state_before_world_update",
+                                                      camera_state_before_update);
+    runtime_stats::FrameStatsRecorder::instance().set("assets.pipeline.camera_state_after_world_update",
+                                                      camera_state_after_update);
     camera_settings_dirty_ = false;
     camera_end = SDL_GetPerformanceCounter();
 
@@ -2886,10 +2933,14 @@ void Assets::render_runtime_frame() {
                                             ui_overlay_prepare_ms,
                                             ui_overlay_active,
                                             runtime_ui_overlay_redrawn_last_prepare_)) {
-            render_diagnostics::set_renderer_runtime_info("opengl", "failed", "fatal");
-            render_diagnostics::set_submit_result(false);
             const RenderFrameStats& stats = render_diagnostics::current_frame_stats();
             const std::string reason = frame_error.empty() ? std::string("Unknown OpenGL frame failure.") : frame_error;
+            const bool deferred_budget_failure =
+                reason.find("deferred by per-frame budget") != std::string::npos;
+            render_diagnostics::set_renderer_runtime_info("opengl",
+                                                          "failed",
+                                                          deferred_budget_failure ? "recoverable" : "fatal");
+            render_diagnostics::set_submit_result(false);
             vibble::log::error("[Assets] OpenGL runtime frame failed: reason='" + reason +
                                "' floor_packet_count=" + std::to_string(stats.floor_packet_count) +
                                " xy_sprite_packet_count=" + std::to_string(stats.xy_sprite_packet_count) +
@@ -2897,6 +2948,13 @@ void Assets::render_runtime_frame() {
                                " skipped_textures=" + std::to_string(stats.skipped_texture_count) +
                                " failed_texture_names='" + stats.failed_texture_names + "'" +
                                " submit_succeeded=" + (stats.submit_succeeded ? std::string("true") : "false"));
+            if (deferred_budget_failure) {
+                vibble::log::warn(
+                    "[Assets] Recoverable OpenGL runtime frame deferral detected. "
+                    "Skipping this frame and allowing deferred target creation to complete.");
+                frame_stats.set("assets.render_submit_succeeded", false);
+                return;
+            }
             throw std::runtime_error("[Assets] Fatal OpenGL runtime failure: " + reason);
         }
         frame_stats.set("assets.render_submit_succeeded", true);
@@ -3475,12 +3533,34 @@ world::GridBounds Assets::live_dynamic_work_bounds_from_render_bounds(const worl
 
     const auto& settings = camera_.get_settings();
     const int despawn_margin = std::max(0, dynamic_spawn_despawn_margin_world_px_);
-    const double dynamic_depth = std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)
-        ? static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth)
-        : 1200.0;
-    const int unclamped_radius = static_cast<int>(std::lround(dynamic_depth)) + despawn_margin;
-    constexpr int kMinDynamicWorkRadiusWorldPx = 700;
-    constexpr int kMaxDynamicWorkRadiusWorldPx = 2600;
+    const nlohmann::json* live_dynamic_spawns = nullptr;
+    if (map_info_json_.is_object()) {
+        auto live_it = map_info_json_.find("live_dynamic_spawns");
+        if (live_it != map_info_json_.end() && live_it->is_object()) {
+            live_dynamic_spawns = &(*live_it);
+        }
+    }
+
+    int render_radius = 1200;
+    if (live_dynamic_spawns) {
+        auto radius_it = live_dynamic_spawns->find("render_radius");
+        if (radius_it != live_dynamic_spawns->end() && radius_it->is_number()) {
+            try {
+                const double parsed = radius_it->get<double>();
+                if (std::isfinite(parsed)) {
+                    render_radius = static_cast<int>(std::lround(parsed));
+                }
+            } catch (...) {
+            }
+        }
+    } else if (std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)) {
+        render_radius = static_cast<int>(std::lround(settings.dynamic_renderer_depth_efficiency_depth));
+    }
+    render_radius = std::clamp(render_radius, 0, 20000);
+
+    const int unclamped_radius = render_radius + despawn_margin;
+    constexpr int kMinDynamicWorkRadiusWorldPx = 1;
+    constexpr int kMaxDynamicWorkRadiusWorldPx = 200000;
     const int work_radius = std::clamp(unclamped_radius,
                                        kMinDynamicWorkRadiusWorldPx,
                                        kMaxDynamicWorkRadiusWorldPx);
@@ -4017,6 +4097,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                                   double current_pitch,
                                                   std::uint64_t current_projection_version,
                                                   bool allow_live_dynamic_sync) {
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     last_grid_rebuild_frame_ = frame_id_;
     camera_.recompute_current_view();
     const world::GridBounds pre_rebuild_render_bounds = screen_world_rect();
@@ -4045,14 +4126,27 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                          movement_active);
         }
     }
+    frame_stats.set("assets.pipeline.camera_state_before_grid_rebuild", camera_.camera_state_version());
     world_grid_.update_active_chunks(pre_rebuild_work_bounds, 0);
+    frame_stats.set("assets.pipeline.pre_rebuild_active_chunk_count",
+                    static_cast<std::uint64_t>(world_grid_.active_chunks().size()));
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
                          frame_id_);
+    frame_stats.set("assets.pipeline.traversal_count_after_camera_rebuild",
+                    static_cast<std::uint64_t>(camera_.visible_traversal_entries().size()));
+    frame_stats.set("assets.pipeline.traversal_complete_after_camera_rebuild",
+                    camera_.last_traversal_complete());
+    frame_stats.set("assets.pipeline.traversal_budget_exhausted_after_camera_rebuild",
+                    camera_.last_traversal_projection_budget_exhausted());
     const world::GridBounds post_rebuild_render_bounds = screen_world_rect();
     const world::GridBounds post_rebuild_work_bounds = runtime_work_bounds_from_render_bounds(post_rebuild_render_bounds);
     world_grid_.update_active_chunks(post_rebuild_work_bounds, 0);
-    rebuild_active_from_screen_grid();
+    frame_stats.set("assets.pipeline.post_rebuild_active_chunk_count",
+                    static_cast<std::uint64_t>(world_grid_.active_chunks().size()));
+    rebuild_active_from_screen_grid(true);
+    frame_stats.set("assets.pipeline.active_publish_count_after_rebuild",
+                    static_cast<std::uint64_t>(active_assets.size()));
     const bool projection_changed =
         current_projection_version != last_camera_projection_state_version_for_grid_ ||
         std::fabs(current_scale - last_camera_scale_for_grid_) > 1e-4 ||
@@ -5188,12 +5282,15 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
     }
 }
 
-void Assets::rebuild_active_from_screen_grid() {
+void Assets::rebuild_active_from_screen_grid(bool force_same_frame) {
     const std::uint32_t current_frame_id = frame_id_;
-    if (current_frame_id == last_active_rebuild_frame_id_) {
+    const bool same_frame_rebuild = current_frame_id == last_active_rebuild_frame_id_;
+    if (same_frame_rebuild && !force_same_frame) {
         return;
     }
     auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("assets.active_rebuild_forced_same_frame",
+                    same_frame_rebuild && force_same_frame);
     bool active_changed = false;
     if (++active_rebuild_epoch_ == 0) {
         active_rebuild_epoch_ = 1;
@@ -5210,12 +5307,11 @@ void Assets::rebuild_active_from_screen_grid() {
         active_assets.begin(),
         active_assets.end());
 
-    const auto& visible_traversal = camera_.visible_traversal_entries();
-    const bool traversal_empty = visible_traversal.empty();
+    const std::vector<WarpedScreenGrid::VisibleTraversalEntry>* visible_traversal_ptr = &camera_.visible_traversal_entries();
     std::vector<Asset*> candidate_active_assets;
     std::unordered_set<Asset*> candidate_seen;
-    candidate_active_assets.reserve(visible_traversal.size() + 1);
-    candidate_seen.reserve(visible_traversal.size() + scratch_previous_active_assets_.size() + 1);
+    candidate_active_assets.reserve(visible_traversal_ptr->size() + 1);
+    candidate_seen.reserve(visible_traversal_ptr->size() + scratch_previous_active_assets_.size() + 1);
 
     auto add_candidate = [&](Asset* asset) {
         if (!asset || asset->dead) {
@@ -5227,9 +5323,45 @@ void Assets::rebuild_active_from_screen_grid() {
         candidate_active_assets.push_back(asset);
     };
 
-    for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : visible_traversal) {
-        add_candidate(source_entry.asset);
+    auto populate_candidates = [&]() {
+        candidate_active_assets.clear();
+        candidate_seen.clear();
+        candidate_active_assets.reserve(visible_traversal_ptr->size() + 1);
+        candidate_seen.reserve(visible_traversal_ptr->size() + scratch_previous_active_assets_.size() + 1);
+        for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : *visible_traversal_ptr) {
+            add_candidate(source_entry.asset);
+        }
+    };
+    populate_candidates();
+
+    bool traversal_complete = camera_.last_traversal_complete();
+    bool traversal_budget_exhausted = camera_.last_traversal_projection_budget_exhausted();
+    std::uint32_t traversal_points_without_projection = camera_.last_traversal_points_without_projection();
+    std::uint32_t traversal_camera_mismatch_deferred = camera_.last_traversal_camera_mismatch_deferred();
+    std::uint64_t traversal_frame_id = camera_.last_traversal_frame_id();
+    bool traversal_retry_attempted = false;
+    bool traversal_retry_produced_candidates = false;
+    if (candidate_active_assets.empty() &&
+        !scratch_previous_active_assets_.empty() &&
+        (!traversal_complete || traversal_budget_exhausted) &&
+        traversal_frame_id == current_frame_id) {
+        traversal_retry_attempted = true;
+        const world::GridBounds retry_work_bounds = runtime_work_bounds_from_render_bounds(screen_world_rect());
+        world_grid_.update_active_chunks(retry_work_bounds, 0);
+        camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_, frame_id_);
+        visible_traversal_ptr = &camera_.visible_traversal_entries();
+        populate_candidates();
+
+        traversal_complete = camera_.last_traversal_complete();
+        traversal_budget_exhausted = camera_.last_traversal_projection_budget_exhausted();
+        traversal_points_without_projection = camera_.last_traversal_points_without_projection();
+        traversal_camera_mismatch_deferred = camera_.last_traversal_camera_mismatch_deferred();
+        traversal_frame_id = camera_.last_traversal_frame_id();
+        traversal_retry_produced_candidates = !candidate_active_assets.empty();
     }
+
+    const auto& visible_traversal = *visible_traversal_ptr;
+    const bool traversal_empty = visible_traversal.empty();
 
     const std::size_t traversal_candidate_count = candidate_active_assets.size();
     const bool fail_open_applied = false;
@@ -5242,16 +5374,29 @@ void Assets::rebuild_active_from_screen_grid() {
                     static_cast<std::uint64_t>(visible_traversal.size()));
     frame_stats.set("assets.active_candidate_count",
                     static_cast<std::uint64_t>(traversal_candidate_count));
-    frame_stats.set("assets.active_publish_count",
-                    static_cast<std::uint64_t>(candidate_active_assets.size()));
     frame_stats.set("assets.active_fail_open_applied", fail_open_applied);
     frame_stats.set("assets.active_fail_open_frames", visibility_fail_open_consecutive_frames_);
     frame_stats.set("assets.active_fail_open_reason", fail_open_reason);
+    frame_stats.set("assets.traversal_complete", traversal_complete);
+    frame_stats.set("assets.traversal_projection_budget_exhausted", traversal_budget_exhausted);
+    frame_stats.set("assets.traversal_points_without_projection",
+                    static_cast<std::uint64_t>(traversal_points_without_projection));
+    frame_stats.set("assets.traversal_camera_mismatch_deferred",
+                    static_cast<std::uint64_t>(traversal_camera_mismatch_deferred));
+    frame_stats.set("assets.traversal_retry_attempted", traversal_retry_attempted);
+    frame_stats.set("assets.traversal_retry_produced_candidates", traversal_retry_produced_candidates);
+    frame_stats.set("assets.traversal_frame_id", traversal_frame_id);
 
     if (traversal_empty && candidate_active_assets.empty() && !scratch_previous_active_assets_.empty()) {
         vibble::log::warn("[Assets] Empty visibility traversal produced no publishable active set. frame=" +
                           std::to_string(current_frame_id) +
                           " previous_active=" + std::to_string(scratch_previous_active_assets_.size()) +
+                          " traversal_complete=" + (traversal_complete ? std::string("true") : std::string("false")) +
+                          " traversal_budget_exhausted=" + (traversal_budget_exhausted ? std::string("true") : std::string("false")) +
+                          " traversal_points_without_projection=" + std::to_string(traversal_points_without_projection) +
+                          " traversal_camera_mismatch_deferred=" + std::to_string(traversal_camera_mismatch_deferred) +
+                          " traversal_retry_attempted=" + (traversal_retry_attempted ? std::string("true") : std::string("false")) +
+                          " traversal_retry_produced_candidates=" + (traversal_retry_produced_candidates ? std::string("true") : std::string("false")) +
                           " dev_mode=" + (dev_mode ? std::string("true") : "false") +
                           " camera_state=" + std::to_string(camera_.camera_state_version()) +
                           " depth_culled=" + std::to_string(camera_.last_depth_culled()) +
@@ -5276,17 +5421,22 @@ void Assets::rebuild_active_from_screen_grid() {
     std::vector<Asset*> next_movement_enabled_active_assets;
     next_active_assets.reserve(candidate_active_assets.size());
     next_movement_enabled_active_assets.reserve(candidate_active_assets.size());
+    std::uint64_t active_activation_count = 0;
+    std::uint64_t active_activation_skipped_count = 0;
 
     auto activate_asset = [&](Asset* asset) {
         if (!asset || asset->dead) {
+            ++active_activation_skipped_count;
             return;
         }
         const std::size_t slot = ensure_runtime_asset_state_slot(asset);
         if (slot == std::numeric_limits<std::size_t>::max()) {
+            ++active_activation_skipped_count;
             return;
         }
         RuntimeAssetState& state = runtime_asset_states_[slot];
         if (state.active_seen_epoch == build_epoch) {
+            ++active_activation_skipped_count;
             return;
         }
         const bool was_active = state.active_membership_epoch == (build_epoch - 1);
@@ -5300,6 +5450,7 @@ void Assets::rebuild_active_from_screen_grid() {
         asset->last_visible_frame_id = current_frame_id;
         asset->active = true;
         next_active_assets.push_back(asset);
+        ++active_activation_count;
         if (asset->isMovementEnabled()) {
             next_movement_enabled_active_assets.push_back(asset);
             state.movement_enabled_active = true;
@@ -5334,6 +5485,10 @@ void Assets::rebuild_active_from_screen_grid() {
 
     active_assets.swap(next_active_assets);
     movement_enabled_active_assets_.swap(next_movement_enabled_active_assets);
+    frame_stats.set("assets.active_activation_count", active_activation_count);
+    frame_stats.set("assets.active_activation_skipped_count", active_activation_skipped_count);
+    frame_stats.set("assets.active_publish_count",
+                    static_cast<std::uint64_t>(active_assets.size()));
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {
@@ -5494,9 +5649,25 @@ bool Assets::should_advance_animation_for(const Asset* asset) const {
     const bool frame_editor_session_active =
         dev_controls_ && dev_controls_->is_frame_editor_session_active();
 
-    return runtime::dev_mode_policy::should_advance_animation_for_asset(
+    const bool should_advance = runtime::dev_mode_policy::should_advance_animation_for_asset(
         dev_mode,
         should_run_runtime_updates(),
         frame_editor_session_active,
         is_frame_editor_target_active(asset));
+    if (!should_advance) {
+        return false;
+    }
+    if (!asset->is_dynamic_spawned_asset()) {
+        return true;
+    }
+    const auto& settings = camera_.get_settings();
+    const double depth = std::fabs(render_depth::depth_from_anchor(
+        camera_.current_anchor_world_z(),
+        static_cast<double>(asset->world_z()),
+        asset->render_depth_bias()));
+    const render_depth::DynamicDepthBand band = render_depth::classify_dynamic_depth_band(
+        depth,
+        static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth),
+        static_cast<double>(settings.max_cull_depth));
+    return band != render_depth::DynamicDepthBand::PausedFogged;
 }

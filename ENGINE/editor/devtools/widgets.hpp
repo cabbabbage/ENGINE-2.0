@@ -87,6 +87,7 @@ public:
     int height_for_width(int w) const;
     void set_on_height_changed(std::function<void()> cb);
 private:
+    size_t caret_pos_from_point(int mouse_x, int mouse_y) const;
     void draw_text(SDL_Renderer* r, const std::string& s, int x, int y, int max_width, const DMLabelStyle& ls) const;
     std::vector<std::string> wrap_lines(TTF_Font* f, const std::string& s, int max_width) const;
     int compute_label_height(int width) const;
@@ -341,6 +342,7 @@ public:
                           std::int64_t min_allowed,
                           std::int64_t max_allowed,
                           bool loop);
+    ~DMWeightedRangeWidget();
     void set_rect(const SDL_Rect& r);
     const SDL_Rect& rect() const { return rect_; }
     void set_label(const std::string& label);
@@ -351,8 +353,13 @@ public:
     void set_tooltip_state(DMWidgetTooltipState* state);
     void set_enabled(bool enabled);
     bool enabled() const { return enabled_; }
+    bool selected() const { return active_selected_ == this; }
+    void clear_selection();
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* r) const;
+    static bool has_active_expanded();
+    static bool handle_active_expanded_event(const SDL_Event& e);
+    static void render_active_expanded(SDL_Renderer* r);
     int preferred_height(int width) const;
     static int height();
 
@@ -374,8 +381,19 @@ private:
     bool begin_drag(SDL_Point point);
     void end_drag();
     bool apply_drag_delta(SDL_Point point);
+    bool apply_drag_delta_in_surface(SDL_Point point, const SDL_Rect& surface);
     bool apply_wheel_delta(int wheel_y);
+    bool apply_node_wheel_delta(int wheel_y, int node_index);
     bool toggle_random();
+    bool toggle_popup_editor();
+    void ensure_popup_controls();
+    void sync_popup_controls_from_value();
+    void sync_value_from_popup_controls();
+    void update_popup_geometry();
+    SDL_Rect popup_toggle_rect() const;
+    SDL_Rect popup_rect() const;
+    SDL_Rect popup_histogram_rect() const;
+    double velocity_scaled_pixels(int delta_pixels) const;
     void sanitize_value();
     void notify_value_changed();
     void sync_visual_range_from_value();
@@ -413,9 +431,14 @@ private:
     bool hovered_ = false;
     bool checkbox_hovered_ = false;
     bool random_hovered_ = false;
+    bool popup_toggle_hovered_ = false;
     int hovered_handle_index_ = -1;
+    int hovered_popup_handle_index_ = -1;
+    int selected_node_index_ = -1;
     bool dragging_ = false;
     bool drag_started_ = false;
+    bool drag_in_popup_ = false;
+    bool popup_open_ = false;
     DragMode drag_mode_ = DragMode::None;
     int drag_handle_index_ = 2;
     int drag_start_x_ = 0;
@@ -427,12 +450,22 @@ private:
     bool has_random_snapshot_ = false;
     double visual_span_px_ = 0.0;
     double visual_falloff_px_ = 0.0;
+    double wheel_scroll_accumulator_ = 0.0;
+    std::unique_ptr<DMNumericStepper> popup_center_stepper_{};
+    std::unique_ptr<DMNumericStepper> popup_span_stepper_{};
+    std::unique_ptr<DMNumericStepper> popup_falloff_stepper_{};
+    std::unique_ptr<DMNumericStepper> popup_center_weight_stepper_{};
+    std::unique_ptr<DMNumericStepper> popup_falloff_weight_stepper_{};
+    std::unique_ptr<DMNumericStepper> popup_edge_weight_stepper_{};
+    SDL_Rect popup_rect_{0,0,0,0};
     ColumnGeometry columns_[5]{};
     mutable std::array<SDL_Rect, 5> label_rects_{};
     mutable std::array<SDL_Rect, 5> value_rects_{};
     ValueChangedCallback on_value_changed_{};
     DMWidgetTooltipState* tooltip_state_ = nullptr;
     static constexpr double kMaxRawWeight = 3.0;
+    static DMWeightedRangeWidget* active_selected_;
+    static DMWeightedRangeWidget* active_expanded_;
 };
 
 class DMDropdown {
@@ -820,6 +853,5 @@ private:
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
 };
-
 
 

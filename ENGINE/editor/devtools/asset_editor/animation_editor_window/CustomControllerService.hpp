@@ -42,5 +42,3 @@ class CustomControllerService {
 };
 
 }
-
-#include "devtools/core/manifest_store.hpp"

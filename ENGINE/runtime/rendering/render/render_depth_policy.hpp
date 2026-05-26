@@ -2,6 +2,8 @@
 
 #include "core/axis_convention.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <cmath>
 
 // קבועים וכלי עזר למדיניות עומק הרינדור.
@@ -14,6 +16,12 @@
 // עקביים עם כיוון הצירים הקנוני.
 
 namespace render_depth {
+
+enum class DynamicDepthBand : std::uint8_t {
+    FullUpdate = 0,
+    PausedFogged = 1,
+    Culled = 2,
+};
 
 static constexpr axis::Axis kVerticalPlacementAxis = axis::Axis::Y;
 static constexpr axis::Axis kOrderingAxis = axis::Axis::Z;
@@ -36,6 +44,23 @@ inline float world_z_from_depth_offset(float depth_offset, float anchor_world_z,
 
 inline double depth_from_anchor(double anchor_depth, double object_depth, double bias = 0.0) {
     return anchor_depth - object_depth + bias;
+}
+
+inline DynamicDepthBand classify_dynamic_depth_band(double depth_distance,
+                                                    double efficiency_depth,
+                                                    double max_cull_depth) {
+    if (!std::isfinite(depth_distance)) {
+        return DynamicDepthBand::Culled;
+    }
+    const double clamped_efficiency = std::max(0.0, efficiency_depth);
+    const double clamped_max_cull = std::max(1.0, max_cull_depth);
+    if (depth_distance > clamped_max_cull) {
+        return DynamicDepthBand::Culled;
+    }
+    if (depth_distance < clamped_efficiency) {
+        return DynamicDepthBand::FullUpdate;
+    }
+    return DynamicDepthBand::PausedFogged;
 }
 
 inline double bias_for_quantized_depth(double exact_object_depth, double quantized_object_depth) {

@@ -301,7 +301,14 @@ void MenuUI::game_loop() {
                         frame_stats.mark_stage("menu_render_end");
                         frame_stats.mark_stage("menu_action_begin");
                         switch (consumeAction()) {
-                                case MenuAction::EXIT:     doExit();    closeMenu(); quit = true; break;
+                                case MenuAction::EXIT: {
+                                        const bool should_exit = doExit();
+                                        if (should_exit) {
+                                                closeMenu();
+                                                quit = true;
+                                        }
+                                        break;
+                                }
                                 case MenuAction::QUIT:     doQuit();    closeMenu(); quit = true; break;
                                 case MenuAction::SETTINGS: doSettings();             break;
                                 default: break;
@@ -667,11 +674,15 @@ bool MenuUI::run_exit_save_sequence(const std::string& reason) {
         return ok;
 }
 
-void MenuUI::doExit() {
+bool MenuUI::doExit() {
         const bool saved = run_exit_save_sequence("pause_menu_end_run");
 	std::cout << "[MenuUI] End Run -> return to main menu (exit_save="
                   << (saved ? "ok" : "FAILED") << ")\n";
+        if (!saved) {
+                std::cerr << "[MenuUI] End Run continuing despite exit-save failure; returning to main menu.\n";
+        }
 	return_to_main_menu_ = true;
+        return true;
 }
 
 void MenuUI::doSettings() {

@@ -27,7 +27,8 @@
 #include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/opengl_runtime_renderer.hpp"
 #include "rendering/render/debug_overlay_renderer.hpp"
-#include "rendering/render/sink_clip.hpp"
+#include "rendering/render/sprite_packet_geometry.hpp"
+#include "rendering/render/sprite_floor_clip.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "animation/animation_update.hpp"
 #include "utils/grid.hpp"
@@ -135,19 +136,6 @@ double creation_budget_ms_per_frame() {
     return budget_ms;
 }
 
-std::uint64_t stable_asset_render_hash(const Asset& asset) {
-    if (!asset.spawn_id.empty()) {
-        return static_cast<std::uint64_t>(std::hash<std::string>{}(asset.spawn_id));
-    }
-    if (asset.info && !asset.info->name.empty()) {
-        std::uint64_t hash = static_cast<std::uint64_t>(std::hash<std::string>{}(asset.info->name));
-        hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_x())) * 0x9e3779b185ebca87ull;
-        hash ^= static_cast<std::uint64_t>(static_cast<std::uint32_t>(asset.world_z())) * 0xc2b2ae3d27d4eb4full;
-        return hash;
-    }
-    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&asset));
-}
-
 bool should_emit_dynamic_asset_sprite(const WarpedScreenGrid& camera, const Asset& asset) {
     if (!asset.is_dynamic_spawned_asset()) {
         return true;
@@ -159,33 +147,11 @@ bool should_emit_dynamic_asset_sprite(const WarpedScreenGrid& camera, const Asse
         return false;
     }
 
-    const double max_depth = std::max(1.0, static_cast<double>(settings.max_cull_depth));
-    if (depth > max_depth) {
-        return false;
-    }
-
-    const double efficiency_depth =
-        std::max(0.0, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
-    if (efficiency_depth <= 0.0 || depth <= efficiency_depth) {
-        return true;
-    }
-
-    const double configured_min = std::clamp(
-        static_cast<double>(settings.dynamic_renderer_depth_efficiency_min_density_ratio),
-        0.0,
-        1.0);
-    const double min_ratio = std::min(configured_min, 0.045);
-    if (min_ratio >= 0.999) {
-        return true;
-    }
-
-    const double range = std::max(1.0, max_depth - efficiency_depth);
-    const double t = std::clamp((depth - efficiency_depth) / range, 0.0, 1.0);
-    const double keep_ratio = min_ratio + (1.0 - min_ratio) * (1.0 - t) * (1.0 - t) * 0.45;
-    const std::uint64_t hash = stable_asset_render_hash(asset);
-    constexpr double kHashScale = 1.0 / 10000.0;
-    const double sample = static_cast<double>(hash % 10000u) * kHashScale;
-    return sample <= keep_ratio;
+    const render_depth::DynamicDepthBand band = render_depth::classify_dynamic_depth_band(
+        depth,
+        static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth),
+        static_cast<double>(settings.max_cull_depth));
+    return band != render_depth::DynamicDepthBand::Culled;
 }
 
 float to_clip_x(float screen_x, float target_width) {
@@ -226,7 +192,7 @@ void fill_quad_packet_vertices(const SDL_FPoint& tl,
     out_packet.vertices[1] = make_vertex(tr, u1, v0);
     out_packet.vertices[2] = make_vertex(br, u1, v1);
     out_packet.vertices[3] = make_vertex(bl, u0, v1);
-    out_packet.indices = std::array<int, render_sink::kMaxClippedIndices>{0, 1, 2, 0, 2, 3};
+    out_packet.indices = std::array<int, render_sprite_geometry::kMaxClippedIndices>{0, 1, 2, 0, 2, 3};
     out_packet.vertex_count = 4;
     out_packet.index_count = 6;
 }
@@ -244,31 +210,10 @@ void fill_screen_quad_packet_vertices(float center_x,
     fill_quad_packet_vertices(tl, tr, br, bl, 0.0f, 0.0f, 1.0f, 1.0f, target_width, target_height, out_packet);
 }
 
-void fill_sprite_packet_vertices(const render_projection::ProjectedSpriteFrame& projected,
-                                 float u0,
-                                 float v0,
-                                 float u1,
-                                 float v1,
-                                 float target_width,
-                                 float target_height,
-                                 GpuSpriteDrawPacket& out_packet) {
-    fill_quad_packet_vertices(projected.screen_tl,
-                              projected.screen_tr,
-                              projected.screen_br,
-                              projected.screen_bl,
-                              u0,
-                              v0,
-                              u1,
-                              v1,
-                              target_width,
-                              target_height,
-                              out_packet);
-}
-
 bool clip_quad_against_v_threshold(const SDL_Vertex (&quad)[4],
                                    float visible_v,
-                                   std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices,
-                                   std::array<int, render_sink::kMaxClippedIndices>& out_indices,
+                                   std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices,
+                                   std::array<int, render_sprite_geometry::kMaxClippedIndices>& out_indices,
                                    int& out_vertex_count,
                                    int& out_index_count) {
     out_vertices = {};
@@ -295,7 +240,7 @@ bool clip_quad_against_v_threshold(const SDL_Vertex (&quad)[4],
         return out;
     };
 
-    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> poly{};
+    std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices> poly{};
     int poly_count = 0;
     SDL_Vertex prev = quad[3];
     bool prev_inside = inside(prev);
@@ -389,7 +334,7 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
                             std::uint32_t target_width,
                             std::uint32_t target_height,
-                            std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices) {
+                            std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices) {
     const float width = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float height = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
     const auto convert_position = [width, height](float clip_x, float clip_y) -> SDL_FPoint {
@@ -873,8 +818,6 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
     out_xy_sprite_draws.reserve(visible_assets.size());
     out_error.clear();
 
-    const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
-    const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
     std::uintptr_t xy_sequence = 0u;
 
     for (Asset* asset : visible_assets) {
@@ -922,12 +865,6 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
             u1 = static_cast<float>(object.src_rect.x + object.src_rect.w) / atlas_w;
             v1 = static_cast<float>(object.src_rect.y + object.src_rect.h) / atlas_h;
         }
-        if ((object.flip & SDL_FLIP_HORIZONTAL) != 0) {
-            std::swap(u0, u1);
-        }
-        if ((object.flip & SDL_FLIP_VERTICAL) != 0) {
-            std::swap(v0, v1);
-        }
 
         GpuSpriteDrawPacket packet{};
         packet.source_texture = object.texture;
@@ -952,17 +889,16 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
             camera,
             *asset,
             cached_depth_edges);
-        const bool packet_geometry_valid = object.sink_clip_enabled
-            ? opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(projected,
-                                                                                u0,
-                                                                                v0,
-                                                                                u1,
-                                                                                v1,
-                                                                                object.sink_height_offset_px,
-                                                                                target_width,
-                                                                                target_height,
-                                                                                packet)
-            : (fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, packet), true);
+        const bool packet_geometry_valid =
+            opengl_runtime_renderer_detail::build_floor_clipped_sprite_packet(camera,
+                                                                              projected,
+                                                                              u0,
+                                                                              v0,
+                                                                              u1,
+                                                                              v1,
+                                                                              target_width,
+                                                                              target_height,
+                                                                              packet);
         if (!packet_geometry_valid) {
             continue;
         }
@@ -1313,35 +1249,35 @@ SDL_FPoint OpenGLRuntimeRenderer::clip_to_screen(float clip_x, float clip_y, flo
 void OpenGLRuntimeRenderer::packet_to_vertices(const GpuSpriteDrawPacket& packet,
                                                std::uint32_t target_width,
                                                std::uint32_t target_height,
-                                               std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices) {
+                                               std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices) {
     fill_geometry_vertices(packet, target_width, target_height, out_vertices);
 }
 
-bool opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
+bool opengl_runtime_renderer_detail::build_floor_clipped_sprite_packet(
+    const WarpedScreenGrid&,
     const render_projection::ProjectedSpriteFrame& projected,
     float u0,
     float v0,
     float u1,
     float v1,
-    float sink_height_offset_px,
     std::uint32_t target_width,
     std::uint32_t target_height,
     GpuSpriteDrawPacket& out_packet) {
     const float output_w = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
     const float output_h = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
-
-    if (!std::isfinite(sink_height_offset_px) || sink_height_offset_px >= 0.0f ||
-        projected.final_height_px <= 0) {
-        fill_sprite_packet_vertices(projected, u0, v0, u1, v1, output_w, output_h, out_packet);
-        return true;
-    }
-
-    const float final_height = static_cast<float>(std::max(1, projected.final_height_px));
-    const float visible_v = std::clamp((final_height + sink_height_offset_px) / final_height, 0.0f, 1.0f);
-    if (visible_v <= 1.0e-4f) {
+    const render_floor_clip::ClipResult clip =
+        render_floor_clip::compute_floor_clip(render_floor_clip::ClipInput{
+            projected.world_y,
+            projected.anchor_uv.y,
+            projected.world_height
+        });
+    if (!clip.valid || clip.visibility == render_floor_clip::Visibility::FullyBuried) {
         return false;
     }
 
+    const float bottom_v = clip.visibility == render_floor_clip::Visibility::PartiallyVisible
+        ? clip.visible_v
+        : 1.0f;
     const auto make_vertex = [](const SDL_FPoint& point, float u, float v) {
         SDL_Vertex vertex{};
         vertex.position = point;
@@ -1349,27 +1285,20 @@ bool opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
         vertex.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
         return vertex;
     };
-
     SDL_Vertex quad[4]{
         make_vertex(projected.screen_tl, u0, v0),
         make_vertex(projected.screen_tr, u1, v0),
         make_vertex(projected.screen_br, u1, v1),
         make_vertex(projected.screen_bl, u0, v1),
     };
-
-    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> clipped_vertices{};
-    std::array<int, render_sink::kMaxClippedIndices> clipped_indices{};
+    std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices> clipped_vertices{};
+    std::array<int, render_sprite_geometry::kMaxClippedIndices> clipped_indices{};
     int clipped_vertex_count = 0;
     int clipped_index_count = 0;
-    if (!clip_quad_against_v_threshold(quad,
-                                       visible_v,
-                                       clipped_vertices,
-                                       clipped_indices,
-                                       clipped_vertex_count,
-                                       clipped_index_count)) {
+    if (!clip_quad_against_v_threshold(
+            quad, bottom_v, clipped_vertices, clipped_indices, clipped_vertex_count, clipped_index_count)) {
         return false;
     }
-
     const auto to_gpu_vertex = [output_w, output_h](const SDL_Vertex& vertex) {
         GpuSpriteVertex out{};
         out.clip_x = to_clip_x(vertex.position.x, output_w);
@@ -1378,7 +1307,6 @@ bool opengl_runtime_renderer_detail::build_sink_clipped_sprite_packet(
         out.uv_y = vertex.tex_coord.y;
         return out;
     };
-
     out_packet.vertices = {};
     out_packet.indices = {};
     for (int i = 0; i < clipped_vertex_count; ++i) {
@@ -1416,6 +1344,47 @@ const std::string& OpenGLRuntimeRenderer::present_mode() const {
 
 const std::string& OpenGLRuntimeRenderer::backend_name() const {
     return renderer_name_;
+}
+
+void OpenGLRuntimeRenderer::ingest_player_damage_pulse(float now_seconds) {
+    if (!assets_) {
+        return;
+    }
+
+    const runtime::context::PlayerDamagePulseState& pulse = assets_->game_context().player_damage_pulse();
+    if (pulse.pulse_id == 0 || pulse.pulse_id == last_damage_pulse_id_) {
+        return;
+    }
+    last_damage_pulse_id_ = pulse.pulse_id;
+
+    ActiveDamagePulse active{};
+    active.pulse_id = pulse.pulse_id;
+    active.pulse_time_seconds = pulse.pulse_time_seconds;
+    active.amplitude = std::clamp(
+        static_cast<float>(std::max(0, pulse.damage_amount)) / dof_blur_chain::damage_pulse_tuning::kDamageReference,
+        0.0f,
+        1.0f);
+    active.health_ratio_after = std::clamp(pulse.health_ratio_after, 0.0f, 1.0f);
+    if (active.amplitude <= 0.0f) {
+        return;
+    }
+
+    active_damage_pulses_.push_back(active);
+    while (active_damage_pulses_.size() > dof_blur_chain::damage_pulse_tuning::kMaxConcurrentPulses) {
+        active_damage_pulses_.pop_front();
+    }
+    prune_expired_damage_pulses(now_seconds);
+}
+
+void OpenGLRuntimeRenderer::prune_expired_damage_pulses(float now_seconds) {
+    const float lifetime = dof_blur_chain::damage_pulse_tuning::kPulseLifetimeSeconds;
+    while (!active_damage_pulses_.empty()) {
+        const float age = now_seconds - active_damage_pulses_.front().pulse_time_seconds;
+        if (age <= lifetime) {
+            break;
+        }
+        active_damage_pulses_.pop_front();
+    }
 }
 
 std::vector<world::Chunk*> OpenGLRuntimeRenderer::runtime_floor_chunks() const {
@@ -1496,6 +1465,15 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                           " filtered_count=" + std::to_string(filtered_active_assets.size()) +
                           " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false") +
                           " traversal_count=" + std::to_string(traversal_count));
+    }
+    if (selected_visible_assets.empty() && !active_assets.empty() && traversal_count > 0) {
+        vibble::log::warn("[OpenGLRuntimeRenderer] Observed empty selected_visible_assets despite non-empty active traversal state. "
+                          "active_count=" + std::to_string(active_assets.size()) +
+                          " filtered_count=" + std::to_string(filtered_active_assets.size()) +
+                          " selected_count=" + std::to_string(selected_visible_assets.size()) +
+                          " traversal_count=" + std::to_string(traversal_count) +
+                          " dev_mode=" + std::string(assets_->is_dev_mode() ? "true" : "false") +
+                          " focus_filter_active=" + std::string(assets_->focus_filter_active() ? "true" : "false"));
     }
 
     if (!opengl_runtime_renderer_detail::build_floor_tile_draw_packets(
@@ -1581,16 +1559,12 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const bool dof_requested_by_settings = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
                                                                    camera_settings.blur_px,
                                                                    camera_settings.radial_blur_px);
-    constexpr std::size_t kDofPacketBudget = 420;
-    constexpr std::uint32_t kDofEmittedAssetBudget = 900;
     const bool dof_requested = allow_dof_depth_layers &&
-        dof_requested_by_settings &&
-        out_data.xy_sprite_draws.size() <= kDofPacketBudget &&
-        out_data.xy_sprite_draw_count <= kDofEmittedAssetBudget;
+        dof_requested_by_settings;
     if (dof_requested) {
-        constexpr int kDofFarNearBucketRadius = 2;
         const auto bucket_depth_layer =
-            [focus = out_data.focus_depth_layer, bucket_radius = kDofFarNearBucketRadius](int layer) {
+            [focus = out_data.focus_depth_layer](int layer) {
+            constexpr int bucket_radius = render_depth::kDofFocusBucketRadius;
             const int delta = std::clamp(layer - focus, -bucket_radius, bucket_radius);
             return focus + delta;
         };
@@ -1619,15 +1593,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
                 std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
             }
-            const float blur_distance = kDofFarNearBucketRadius > 0
-                ? static_cast<float>(std::abs(layer_id - out_data.focus_depth_layer)) /
-                      static_cast<float>(kDofFarNearBucketRadius)
-                : 0.0f;
-            const float blur_strength = std::clamp(
-                static_cast<float>(assets_->getView().get_settings().blur_px) * blur_distance,
-                0.0f,
-                static_cast<float>(assets_->getView().get_settings().blur_px));
-            layer.blur_strength_px = blur_strength;
+            layer.blur_strength_px = render_depth::dof_blur_strength_for_layer_distance(
+                layer.depth_layer,
+                out_data.focus_depth_layer);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }
@@ -1784,7 +1752,7 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
 
     constexpr std::size_t kMaxBatchVertices = 4096;
     constexpr std::size_t kMaxBatchIndices = 8192;
-    std::array<SDL_Vertex, render_sink::kMaxClippedVertices> packet_vertices{};
+    std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices> packet_vertices{};
     scratch_batch_vertices_.clear();
     scratch_batch_indices_.clear();
     scratch_batch_vertices_.reserve(std::max(scratch_batch_vertices_.capacity(), kMaxBatchVertices));
@@ -2011,9 +1979,10 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
                                 camera_settings.blur_px,
                                 camera_settings.radial_blur_px);
-    const bool dof_active =
-        dof_requested_by_settings &&
-        !frame_to_render->depth_layers.empty();
+    const float now_seconds = assets_->game_context().elapsed_seconds();
+    ingest_player_damage_pulse(now_seconds);
+    prune_expired_damage_pulses(now_seconds);
+    const bool dof_active = dof_requested_by_settings;
     bool dof_composited = false;
     const bool draw_movement_debug = assets_->is_dev_mode() &&
                                      assets_->movement_debug_enabled() &&
@@ -2129,28 +2098,119 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         floor_pass_ms += elapsed_ms(floor_begin, SDL_GetPerformanceCounter());
 
         const std::uint64_t dof_begin = SDL_GetPerformanceCounter();
-        if (!ensure_depth_layer_targets(*frame_to_render, out_error)) {
-            render_diagnostics::end_frame();
-            return false;
-        }
-
         std::vector<dof_blur_chain::LayerTexture> dof_layers;
-        dof_layers.reserve(frame_to_render->depth_layers.size());
-        for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
-            SDL_Texture* layer_target = depth_layer_targets_[layer.depth_layer];
-            if (!bind_target(layer_target, transparent_clear)) {
-                render_diagnostics::end_frame();
+        auto apply_damage_pulse_to_layers = [&]() {
+            constexpr float kTwoPi = 6.28318530717958647692f;
+            for (dof_blur_chain::LayerTexture& layer : dof_layers) {
+                layer.warp_px = 0.0f;
+                layer.tint_strength = 0.0f;
+                layer.phase = 0.0f;
+                if (!layer.texture || active_damage_pulses_.empty()) {
+                    continue;
+                }
+
+                const float layer_distance = static_cast<float>(std::abs(layer.depth_layer - frame_to_render->focus_depth_layer));
+                float accum_warp = 0.0f;
+                float accum_tint = 0.0f;
+                float accum_phase_sin = 0.0f;
+                float accum_phase_cos = 0.0f;
+                float accum_phase_weight = 0.0f;
+
+                for (const ActiveDamagePulse& pulse : active_damage_pulses_) {
+                    const float age = now_seconds - pulse.pulse_time_seconds;
+                    if (age < 0.0f || age > dof_blur_chain::damage_pulse_tuning::kPulseLifetimeSeconds) {
+                        continue;
+                    }
+
+                    float envelope = 1.0f;
+                    if (age < dof_blur_chain::damage_pulse_tuning::kEnvelopeRiseSeconds) {
+                        envelope = age / std::max(1.0e-4f, dof_blur_chain::damage_pulse_tuning::kEnvelopeRiseSeconds);
+                    } else {
+                        envelope = std::exp(-(age - dof_blur_chain::damage_pulse_tuning::kEnvelopeRiseSeconds) /
+                                            std::max(1.0e-4f, dof_blur_chain::damage_pulse_tuning::kEnvelopeDecaySeconds));
+                    }
+
+                    const float health_speed_scale =
+                        dof_blur_chain::damage_pulse_tuning::kLowHealthSpeedScaleMin +
+                        (1.0f - dof_blur_chain::damage_pulse_tuning::kLowHealthSpeedScaleMin) *
+                            std::clamp(pulse.health_ratio_after, 0.0f, 1.0f);
+                    const float propagation_speed =
+                        dof_blur_chain::damage_pulse_tuning::kBasePropagationLayersPerSecond * health_speed_scale;
+                    const float wave_front_distance = age * propagation_speed;
+                    const float wave_delta = std::abs(layer_distance - wave_front_distance);
+                    const float arrival = std::clamp(
+                        1.0f - (wave_delta / std::max(1.0e-4f, dof_blur_chain::damage_pulse_tuning::kWaveFrontSoftnessLayers)),
+                        0.0f,
+                        1.0f);
+                    const float wave_strength = envelope * arrival * pulse.amplitude;
+                    if (wave_strength <= 1.0e-4f) {
+                        continue;
+                    }
+
+                    accum_warp += wave_strength * dof_blur_chain::damage_pulse_tuning::kMaxWarpPx;
+                    accum_tint += wave_strength * dof_blur_chain::damage_pulse_tuning::kMaxTintStrength;
+                    const float phase =
+                        age * dof_blur_chain::damage_pulse_tuning::kPhaseFrequencyHz * kTwoPi +
+                        layer_distance * 0.85f;
+                    accum_phase_sin += std::sin(phase) * wave_strength;
+                    accum_phase_cos += std::cos(phase) * wave_strength;
+                    accum_phase_weight += wave_strength;
+                }
+
+                layer.warp_px = std::clamp(accum_warp, 0.0f, dof_blur_chain::damage_pulse_tuning::kMaxWarpPx);
+                layer.tint_strength = std::clamp(accum_tint, 0.0f, dof_blur_chain::damage_pulse_tuning::kMaxTintStrength);
+                if (accum_phase_weight > 1.0e-4f) {
+                    layer.phase = std::atan2(accum_phase_sin, accum_phase_cos);
+                }
+            }
+        };
+        bool used_flattened_xy_dof_layer = false;
+        auto rebuild_flattened_xy_dof_layer = [&]() -> bool {
+            dof_layers.clear();
+            if (!bind_target(xy_sprite_target_, transparent_clear)) {
                 return false;
             }
-            if (!render_packet_batch(layer.packets,
+            if (!frame_to_render->xy_sprite_draws.empty() &&
+                !render_packet_batch(frame_to_render->xy_sprite_draws,
                                      frame_to_render->target_width,
                                      frame_to_render->target_height,
                                      out_error)) {
+                return false;
+            }
+            dof_layers.push_back(dof_blur_chain::LayerTexture{
+                frame_to_render->focus_depth_layer + 1,
+                1.0f,
+                xy_sprite_target_});
+            used_flattened_xy_dof_layer = true;
+            return true;
+        };
+
+        if (!frame_to_render->depth_layers.empty()) {
+            if (!ensure_depth_layer_targets(*frame_to_render, out_error)) {
                 render_diagnostics::end_frame();
                 return false;
             }
-            dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer_target});
+            dof_layers.reserve(frame_to_render->depth_layers.size());
+            for (const GpuDepthLayerDrawPackets& layer : frame_to_render->depth_layers) {
+                SDL_Texture* layer_target = depth_layer_targets_[layer.depth_layer];
+                if (!bind_target(layer_target, transparent_clear)) {
+                    render_diagnostics::end_frame();
+                    return false;
+                }
+                if (!render_packet_batch(layer.packets,
+                                         frame_to_render->target_width,
+                                         frame_to_render->target_height,
+                                         out_error)) {
+                    render_diagnostics::end_frame();
+                    return false;
+                }
+                dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer.blur_strength_px, layer_target});
+            }
+        } else if (!rebuild_flattened_xy_dof_layer()) {
+            render_diagnostics::end_frame();
+            return false;
         }
+        apply_damage_pulse_to_layers();
 
         const SDL_Point screen_center = assets_->getView().get_screen_center();
         const SDL_FPoint optical_center{
@@ -2167,25 +2227,49 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                     optical_center,
                                     frame_to_render->focus_depth_layer);
 
-        if (dof_result.valid) {
+        dof_blur_chain::CompositeResult resolved_dof_result = dof_result;
+        if (resolved_dof_result.valid &&
+            resolved_dof_result.blur_pass_count == 0 &&
+            !used_flattened_xy_dof_layer &&
+            !frame_to_render->xy_sprite_draws.empty()) {
+            if (!rebuild_flattened_xy_dof_layer()) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+            apply_damage_pulse_to_layers();
+            resolved_dof_result =
+                dof_blur_chain_.compose(dof_layers,
+                                        floor_target_,
+                                        camera_settings.depth_of_field_enabled,
+                                        camera_settings.blur_px,
+                                        camera_settings.radial_blur_px,
+                                        optical_center,
+                                        frame_to_render->focus_depth_layer);
+        }
+
+        if (resolved_dof_result.valid) {
             if (!bind_target(composite_target_, transparent_clear)) {
                 render_diagnostics::end_frame();
                 return false;
             }
-            if (dof_result.background_mid &&
-                !render_diagnostics::render_texture(renderer_, dof_result.background_mid, nullptr, &full_rect)) {
+            if (resolved_dof_result.background_mid &&
+                !render_diagnostics::render_texture(renderer_, resolved_dof_result.background_mid, nullptr, &full_rect)) {
                 out_error = "Failed to composite DoF background target: " + safe_string(SDL_GetError());
                 render_diagnostics::end_frame();
                 return false;
             }
-            if (dof_result.foreground_mid &&
-                !render_diagnostics::render_texture(renderer_, dof_result.foreground_mid, nullptr, &full_rect)) {
+            if (resolved_dof_result.foreground_mid &&
+                !render_diagnostics::render_texture(renderer_, resolved_dof_result.foreground_mid, nullptr, &full_rect)) {
                 out_error = "Failed to composite DoF foreground target: " + safe_string(SDL_GetError());
                 render_diagnostics::end_frame();
                 return false;
             }
-            render_diagnostics::set_blur_pass_count(dof_result.blur_pass_count);
-            render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->ui_overlay");
+            render_diagnostics::set_blur_pass_count(resolved_dof_result.blur_pass_count);
+            if (used_flattened_xy_dof_layer) {
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_flattened_xy_layer->ui_overlay");
+            } else {
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->ui_overlay");
+            }
             dof_composited = true;
         } else {
             vibble::log::warn("[OpenGLRuntimeRenderer] DoF blur chain failed; falling back to non-DoF XY sprite composite for this frame.");

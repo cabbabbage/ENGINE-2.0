@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,36 @@ inline int clamp_candidate_max(int min_value, int max_value) {
     return std::clamp(max_value, clamped_min, kCandidateRangeMax);
 }
 
+inline bool template_name_exists(const nlohmann::json& section,
+                                 const std::string& candidate,
+                                 const std::string& exclude_key = {}) {
+    return section.is_object() && section.contains(candidate) && candidate != exclude_key;
+}
+
+inline std::string make_unique_template_key(const nlohmann::json& map_info,
+                                            const std::string& preferred_base,
+                                            const std::string& fallback_base,
+                                            const std::string& exclude_key = {}) {
+    const auto rooms_it = map_info.find("rooms_data");
+    const auto trails_it = map_info.find("trails_data");
+    const nlohmann::json empty = nlohmann::json::object();
+    const nlohmann::json& rooms =
+        (rooms_it != map_info.end() && rooms_it->is_object()) ? *rooms_it : empty;
+    const nlohmann::json& trails =
+        (trails_it != map_info.end() && trails_it->is_object()) ? *trails_it : empty;
+    std::string base = preferred_base.empty() ? fallback_base : preferred_base;
+    if (base.empty()) {
+        base = "Template";
+    }
+    std::string candidate = base;
+    int suffix = 1;
+    while (template_name_exists(rooms, candidate, exclude_key) ||
+           template_name_exists(trails, candidate, exclude_key)) {
+        candidate = base + std::to_string(suffix++);
+    }
+    return candidate;
+}
+
 inline std::string create_room_entry(nlohmann::json& map_info) {
     if (!map_info.is_object()) {
         return std::string{};
@@ -31,12 +62,7 @@ inline std::string create_room_entry(nlohmann::json& map_info) {
     if (!rooms.is_object()) {
         rooms = nlohmann::json::object();
     }
-    std::string base = "NewRoom";
-    std::string key = base;
-    int suffix = 1;
-    while (rooms.contains(key)) {
-        key = base + std::to_string(suffix++);
-    }
+    std::string key = make_unique_template_key(map_info, "NewRoom", "NewRoom");
     std::vector<SDL_Color> colors = utils::display_color::collect(rooms);
     nlohmann::json& entry = rooms[key];
     entry = nlohmann::json{
@@ -44,10 +70,9 @@ inline std::string create_room_entry(nlohmann::json& map_info) {
         {"geometry", "Square"},
         {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800))},
         {"height", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(1200, 1800))},
-        {"edge_smoothness", 4},
-        {"curvyness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(2))},
         {"is_boss", false},
-        {"inherits_map_assets", false},
+        {"inherits_live_dynamic_assets", false},
+        {"inherit_map_floor_color", true},
         {"tags", nlohmann::json::array()},
         {"spawn_groups", nlohmann::json::array()},
     };

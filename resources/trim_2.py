@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import shutil
@@ -21,6 +22,58 @@ def find_alpha_bounds(img: Image.Image) -> Optional[tuple[int, int, int, int]]:
     rgba = img.convert("RGBA")
     alpha = rgba.getchannel("A")
     return alpha.getbbox()
+
+
+def bottom_transparent_rows(img_rgba: Image.Image) -> int:
+    """
+    Return the number of fully transparent rows at the bottom of the image.
+    Fully transparent images return 0 so they are left unchanged.
+    """
+    alpha = img_rgba.getchannel("A")
+    bbox = alpha.getbbox()
+
+    if bbox is None:
+        return 0
+
+    h = img_rgba.height
+    lower_exclusive = bbox[3]
+    shift = h - lower_exclusive
+
+    return shift if shift > 0 else 0
+
+
+def shift_down_image(img_rgba: Image.Image) -> tuple[Image.Image, bool]:
+    """
+    Move fully transparent bottom rows to the top.
+    Returns the shifted image and whether it changed.
+    """
+    shift = bottom_transparent_rows(img_rgba)
+
+    if shift <= 0:
+        return img_rgba, False
+
+    w, h = img_rgba.size
+    new_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+
+    upper_part = img_rgba.crop((0, 0, w, h - shift))
+    new_img.paste(upper_part, (0, shift))
+
+    return new_img, True
+
+
+def shift_down_in_place(image_path: Path) -> bool:
+    """
+    Shift one image downward in place before crop analysis.
+    Returns True if changed.
+    """
+    with Image.open(image_path) as img:
+        rgba = img.convert("RGBA")
+        shifted, changed = shift_down_image(rgba)
+
+        if changed:
+            shifted.save(image_path)
+
+        return changed
 
 
 def iter_asset_folders(assets_folder: Path) -> Iterable[Path]:
@@ -60,11 +113,31 @@ def iter_images_for_asset(asset_folder: Path) -> Iterable[Path]:
             yield image_path
 
 
+def shift_down_asset_images(asset_folder: Path) -> tuple[int, int]:
+    """
+    Shift every image for one asset before crop calculation.
+
+    Returns:
+    - images_seen
+    - images_shifted
+    """
+    images_seen = 0
+    images_shifted = 0
+
+    for image_path in iter_images_for_asset(asset_folder):
+        images_seen += 1
+
+        if shift_down_in_place(image_path):
+            images_shifted += 1
+
+    return images_seen, images_shifted
+
+
 def analyze_asset(
     asset_folder: Path,
 ) -> tuple[int, int, list[tuple[Path, Optional[tuple[int, int, int, int]]]]]:
     """
-    Analyze every image across every animation folder for one asset.
+    Analyze every shifted image across every animation folder for one asset.
 
     Returns:
     - shared_width
@@ -167,19 +240,33 @@ def main() -> None:
 
     total_assets_processed = 0
     total_images_processed = 0
+    total_images_shifted = 0
 
     for asset_folder in asset_folders:
+        print(f"[ASSET] {asset_folder.name}")
+
+        images_seen, images_shifted = shift_down_asset_images(asset_folder)
+        total_images_shifted += images_shifted
+
+        if images_seen <= 0:
+            print("  [SKIP] no supported images found in animation folders.")
+            print()
+            continue
+
+        print(f"  Shifted before crop analysis: {images_shifted}/{images_seen}")
+
         shared_width, shared_height, results = analyze_asset(asset_folder)
 
         if not results:
-            print(f"[SKIP] {asset_folder.name}: no supported images found in animation folders.")
+            print("  [SKIP] no supported images found in animation folders.")
+            print()
             continue
 
         if shared_width <= 0 or shared_height <= 0:
-            print(f"[SKIP] {asset_folder.name}: all images were fully transparent.")
+            print("  [SKIP] all images were fully transparent.")
+            print()
             continue
 
-        print(f"[ASSET] {asset_folder.name}")
         print(f"  Shared crop size: {shared_width}x{shared_height}")
         print(f"  Images found: {len(results)}")
 
@@ -199,8 +286,9 @@ def main() -> None:
     print("Done.")
     print(f"Assets processed: {total_assets_processed}")
     print(f"Images processed: {total_images_processed}")
+    print(f"Images shifted before crop: {total_images_shifted}")
     print(f'Backup copy: "{backup_folder}"')
-    print(f'Original cropped in place: "{assets_folder}"')
+    print(f'Original shifted and cropped in place: "{assets_folder}"')
 
 
 if __name__ == "__main__":

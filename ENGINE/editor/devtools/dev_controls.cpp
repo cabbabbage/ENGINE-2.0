@@ -37,7 +37,6 @@
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/map_mode_ui.hpp"
-#include "devtools/frame_editor_session.hpp"
 #include "devtools/dev_color_picker.hpp"
 #include "DockManager.hpp"
 #include "devtools/dev_footer_bar.hpp"
@@ -58,6 +57,7 @@
 #include "rendering/render/layer_depth_bins.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
+#include "gameplay/spawn/dynamic_spawn_geometry.hpp"
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_types.hpp"
@@ -68,6 +68,7 @@
 #include "utils/map_grid_settings.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
+#include "utils/integer_grid_math.hpp"
 #include "utils/input.hpp"
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
@@ -1423,6 +1424,15 @@ void DevControls::rebuild_settings_schema() {
 }
 
 void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
+    if (grid_overlay_enabled_ == enabled) {
+        if (update_footer && map_mode_ui_) {
+            if (auto* footer = map_mode_ui_->get_footer_bar()) {
+                footer->set_grid_overlay_enabled(enabled, false);
+            }
+        }
+        other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, enabled);
+        return;
+    }
     grid_overlay_enabled_ = enabled;
     persist_dev_bool(kGridOverlayEnabledKey, enabled);
     if (update_footer && map_mode_ui_) {
@@ -1430,6 +1440,7 @@ void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
             footer->set_grid_overlay_enabled(enabled, false);
         }
     }
+    other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, enabled);
 }
 
 void DevControls::sync_debug_flags_from_assets() {
@@ -1499,9 +1510,6 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
                 footer->set_grid_resolution(clamped, false);
             }
         }
-    }
-    if (frame_editor_session_ && frame_editor_session_->is_active()) {
-        frame_editor_session_->set_snap_resolution(clamped);
     }
     if (room_editor_) {
         room_editor_->set_overlay_snap_resolution(clamped);
@@ -2294,10 +2302,6 @@ void DevControls::sync_camera_tilt_override() {
         return;
     }
 
-    if (frame_editor_session_ && frame_editor_session_->is_active()) {
-        return;
-    }
-
     const bool camera_settings_open = room_editor_ && room_editor_->is_camera_settings_open();
     if (camera_settings_open) {
         cam.clear_tilt_override();
@@ -2354,6 +2358,7 @@ void DevControls::update(const Input& input) {
         camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_point_inside(input.getX(), input.getY());
     if (!(camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_debug_section_expanded())) {
         depth_guide_selection_ = DepthGuideSelection::None;
+        depth_guide_hover_selection_ = DepthGuideSelection::None;
         depth_guide_drag_active_ = false;
         depth_guide_preview_active_ = false;
         depth_guide_blue_wheel_last_change_ms_ = 0;
@@ -2388,20 +2393,15 @@ void DevControls::update(const Input& input) {
     }
     if (room_editor_ && room_editor_->is_enabled()) {
 
-        const bool frame_editing = frame_editor_session_ && frame_editor_session_->is_active();
-        if (!frame_editing) {
-            const bool camera_panel_blocking =
-                camera_panel_ && camera_panel_->is_visible() && pointer_over_camera_panel_;
-            const bool depth_guide_blocking = depth_guide_drag_active_ || depth_guide_selection_ != DepthGuideSelection::None;
-            if (!camera_panel_blocking && !depth_guide_blocking) {
-                const Uint64 room_update_begin = SDL_GetPerformanceCounter();
-                room_editor_->update(input);
-                update_movement_debug_visibility();
-                frame_stats.set("dev.room_editor_update_ms",
-                                elapsed_ms(room_update_begin, SDL_GetPerformanceCounter()));
-            }
-        } else {
-            room_editor_->clear_highlighted_assets();
+        const bool camera_panel_blocking =
+            camera_panel_ && camera_panel_->is_visible() && pointer_over_camera_panel_;
+        const bool depth_guide_blocking = depth_guide_drag_active_ || depth_guide_selection_ != DepthGuideSelection::None;
+        if (!camera_panel_blocking && !depth_guide_blocking) {
+            const Uint64 room_update_begin = SDL_GetPerformanceCounter();
+            room_editor_->update(input);
+            update_movement_debug_visibility();
+            frame_stats.set("dev.room_editor_update_ms",
+                            elapsed_ms(room_update_begin, SDL_GetPerformanceCounter()));
         }
     }
 
@@ -2479,10 +2479,6 @@ void DevControls::update(const Input& input) {
 
 
     sync_header_button_states();
-
-    if (frame_editor_session_ && frame_editor_session_->is_active()) {
-        frame_editor_session_->update(input);
-    }
 
     if (render_suppression_in_progress_) {
         WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
@@ -2840,9 +2836,6 @@ void DevControls::process_next_multi_asset_item() {
 
 bool DevControls::handle_drop_event(const SDL_Event& event) {
     if (!enabled_ || mode_ != Mode::RoomEditor || !room_editor_ || !room_editor_->is_enabled()) {
-        return false;
-    }
-    if (frame_editor_session_ && frame_editor_session_->is_active()) {
         return false;
     }
     if (drop_modal_.visible || drop_choice_modal_.visible || drop_conflict_modal_.visible || drop_error_popup_.visible) {
@@ -3430,7 +3423,6 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     }
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
     if (map_mode_ui_) {
         DevFooterBar* footer = map_mode_ui_->get_footer_bar();
@@ -3440,7 +3432,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     }
     const bool hide_headers_pre =
         modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre ||
-        frame_editor_active || asset_editor_tab_active || shift_block_headers_footers_;
+        asset_editor_tab_active || shift_block_headers_footers_;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = DockManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
@@ -3466,7 +3458,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     modal_headers_hidden_ = modal_hide;
     const bool hide_headers =
         modal_hide || sliding_headers_hidden_ || layers_panel_open ||
-        frame_editor_active || asset_editor_tab_active || shift_block_headers_footers_;
+        asset_editor_tab_active || shift_block_headers_footers_;
     other_settings_.set_enabled(enabled_);
     other_settings_.set_header_suppressed(hide_headers);
     apply_header_suppression();
@@ -3554,16 +3546,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
-    if (frame_editor_active) {
-        if (frame_editor_session_ && consume_if_handled(frame_editor_session_->handle_event(event), pointer_relevant)) {
-            return;
-        }
-        return;
-    }
-
     if (map_mode_ui_) {
         if (DevFooterBar* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !frame_editor_active) {
+            if (footer->visible()) {
                 const bool pointer_in_footer = pointer_relevant && footer->contains(pointer.x, pointer.y);
                 if (consume_if_handled(footer->handle_event(event), pointer_in_footer)) {
                     return;
@@ -3616,12 +3601,6 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (frame_editor_session_ && frame_editor_session_->is_active()) {
-        if (consume_if_handled(frame_editor_session_->handle_event(event), pointer_relevant)) {
-            return;
-        }
-    }
-
     bool block_for_camera = pointer_event_inside_camera;
     if (keyboard_like_event && pointer_over_camera_panel_) {
         block_for_camera = true;
@@ -3637,6 +3616,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
                                       camera_panel_->is_debug_section_expanded() && assets_;
     auto clear_depth_guide_selection = [&]() {
         depth_guide_selection_ = DepthGuideSelection::None;
+        depth_guide_hover_selection_ = DepthGuideSelection::None;
         depth_guide_drag_active_ = false;
         depth_guide_preview_active_ = false;
     };
@@ -3655,6 +3635,12 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
                 settings.dynamic_renderer_depth_efficiency_depth,
                 screen_h_)) {
             hits.push_back({DepthGuideSelection::OrangeEfficiency, *orange_y, 2});
+        }
+        if (const auto green_y = project_depth_guide_screen_y(
+                cam,
+                static_cast<float>(assets_->live_dynamic_fog_near_distance_px()),
+                screen_h_)) {
+            hits.push_back({DepthGuideSelection::GreenNearFog, *green_y, 2});
         }
         if (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::BlueLayer) {
             const double max_cull = std::max(1.0, static_cast<double>(settings.max_cull_depth));
@@ -3677,6 +3663,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
                 best = h;
             }
         }
+        depth_guide_hover_selection_ = best ? best->sel : DepthGuideSelection::None;
 
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT && best) {
             depth_guide_selection_ = best->sel;
@@ -3697,12 +3684,17 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
             } else if (depth_guide_selection_ == DepthGuideSelection::OrangeEfficiency) {
                 preview.dynamic_renderer_depth_efficiency_depth =
                     std::clamp(preview.dynamic_renderer_depth_efficiency_depth + static_cast<float>(dy), 0.0f, preview.max_cull_depth);
+            } else if (depth_guide_selection_ == DepthGuideSelection::GreenNearFog) {
+                const int next_near_fog = std::max(1, assets_->live_dynamic_fog_near_distance_px() + dy);
+                assets_->set_live_dynamic_fog_near_distance_px(next_near_fog);
             } else if (depth_guide_selection_ == DepthGuideSelection::BlueLayer) {
                 preview.layer_depth_interval = std::clamp(preview.layer_depth_interval + static_cast<float>(dy), 1.0f, 100000.0f);
             }
             depth_guide_drag_start_y_ = pointer.y;
             depth_guide_preview_settings_ = preview;
-            cam.set_realism_settings(preview);
+            if (depth_guide_selection_ != DepthGuideSelection::GreenNearFog) {
+                cam.set_realism_settings(preview);
+            }
             if (camera_panel_) {
                 camera_panel_->sync_debug_controls_from_settings(preview);
             }
@@ -3725,14 +3717,17 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && depth_guide_drag_active_) {
             depth_guide_drag_active_ = false;
             if (depth_guide_preview_active_) {
-                cam.set_realism_settings(depth_guide_preview_settings_);
-                if (camera_panel_) {
-                    camera_panel_->sync_debug_controls_from_settings(depth_guide_preview_settings_);
+                if (depth_guide_selection_ != DepthGuideSelection::GreenNearFog) {
+                    cam.set_realism_settings(depth_guide_preview_settings_);
+                    if (camera_panel_) {
+                        camera_panel_->sync_debug_controls_from_settings(depth_guide_preview_settings_);
+                    }
                 }
                 assets_->on_camera_settings_changed();
                 mark_map_dirty();
                 depth_guide_preview_active_ = false;
             }
+            depth_guide_hover_selection_ = DepthGuideSelection::None;
             if (input_) input_->consumeEvent(event);
             return;
         }
@@ -3741,6 +3736,8 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
              (event.button.button == SDL_BUTTON_LEFT && !best))) {
             clear_depth_guide_selection();
         }
+    } else {
+        depth_guide_hover_selection_ = DepthGuideSelection::None;
     }
     if (!pointer_over_room_ui && map_mode_ui_) {
         if (depth_guide_selection_ != DepthGuideSelection::None && pointer_relevant) {
@@ -3756,7 +3753,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (!(frame_editor_session_ && frame_editor_session_->is_active()) && can_route_room_editor) {
+    if (can_route_room_editor) {
         const bool handled = room_editor_ && room_editor_->handle_sdl_event(event);
         if (handled && input_) {
             const bool pointer_inside_room_ui = pointer_relevant && room_editor_ && room_editor_->is_room_ui_blocking_point(pointer.x, pointer.y);
@@ -3774,21 +3771,13 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     if (!enabled_) return;
 
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
 
     const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open ||
-                              frame_editor_active || asset_editor_tab_active;
+                              asset_editor_tab_active;
     other_settings_.set_header_suppressed(hide_headers);
 
     if (!renderer) {
-        return;
-    }
-
-    if (frame_editor_active) {
-        if (frame_editor_session_) {
-            frame_editor_session_->render(renderer);
-        }
         return;
     }
 
@@ -4012,11 +4001,16 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
         if (cam && floor_depth_params && floor_depth_params->enabled) {
             const auto settings = depth_guide_preview_active_ ? depth_guide_preview_settings_ : cam->get_settings();
-            auto draw_guide = [&](float depth, SDL_Color color, const char* label, bool selected) {
+            auto draw_guide = [&](float depth,
+                                  SDL_Color color,
+                                  const char* label,
+                                  DepthGuideSelection selection_kind) {
                 const auto y = project_depth_guide_screen_y(*cam, depth, screen_h_);
                 if (!y.has_value()) return;
                 const int line_y = static_cast<int>(std::lround(*y));
-                const Uint8 alpha = static_cast<Uint8>(selected ? 255 : color.a);
+                const bool active = depth_guide_selection_ == selection_kind;
+                const bool hovered = depth_guide_hover_selection_ == selection_kind;
+                const Uint8 alpha = static_cast<Uint8>(active ? 255 : (hovered ? std::max<Uint8>(color.a, 235) : color.a));
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, alpha);
                 SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
                 DMLabelStyle style = DMStyles::Label();
@@ -4026,14 +4020,21 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             const bool blue_mode = depth_guide_selection_ == DepthGuideSelection::BlueLayer;
             const bool show_red = !blue_mode && (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::RedCull);
             const bool show_orange = !blue_mode && (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::OrangeEfficiency);
+            const bool show_green = !blue_mode && (depth_guide_selection_ == DepthGuideSelection::None || depth_guide_selection_ == DepthGuideSelection::GreenNearFog);
             if (show_red) {
-                draw_guide(settings.max_cull_depth, SDL_Color{255, 48, 48, 220}, "Max Cull Depth", depth_guide_selection_ == DepthGuideSelection::RedCull);
+                draw_guide(settings.max_cull_depth, SDL_Color{255, 48, 48, 220}, "Max Cull Depth", DepthGuideSelection::RedCull);
             }
             if (show_orange) {
                 draw_guide(settings.dynamic_renderer_depth_efficiency_depth,
                            SDL_Color{255, 165, 0, 220},
                            "Dynamic Efficiency Depth",
-                           depth_guide_selection_ == DepthGuideSelection::OrangeEfficiency);
+                           DepthGuideSelection::OrangeEfficiency);
+            }
+            if (show_green && assets_) {
+                draw_guide(static_cast<float>(assets_->live_dynamic_fog_near_distance_px()),
+                           SDL_Color{72, 212, 120, 220},
+                           "Near Fog",
+                           DepthGuideSelection::GreenNearFog);
             }
             if (depth_guide_selection_ == DepthGuideSelection::None || blue_mode) {
                 const double max_cull = std::max(1.0, static_cast<double>(settings.max_cull_depth));
@@ -4044,7 +4045,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                     draw_guide(static_cast<float>(edge),
                                SDL_Color{80, 160, 255, static_cast<Uint8>(blue_mode ? 220 : 120)},
                                "",
-                               false);
+                               DepthGuideSelection::BlueLayer);
                 }
             }
         }
@@ -4056,9 +4057,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     if (renderer && room_editor_) {
         room_editor_->render_overlays(renderer);
 
-        if (frame_editor_session_ && frame_editor_session_->is_active()) {
-            frame_editor_session_->render(renderer);
-        }
     }
     if (renderer && camera_panel_ && camera_panel_->is_visible() && assets_) {
         const WarpedScreenGrid& cam = assets_->getView();
@@ -4095,9 +4093,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         boundary_assets_modal_->render(renderer);
     }
     
-    if (frame_editor_session_ && frame_editor_session_->is_active()) {
-
-    }
     if (renderer && camera_panel_ && camera_panel_->is_visible()) {
         camera_panel_->render(renderer);
     }
@@ -4119,70 +4114,25 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 }
 
 void DevControls::begin_frame_editor_session(Asset* asset,
-                                             std::shared_ptr<animation_editor::AnimationDocument> document,
-                                             std::shared_ptr<animation_editor::PreviewProvider> preview,
+                                             std::shared_ptr<animation_editor::AnimationDocument>,
+                                             std::shared_ptr<animation_editor::PreviewProvider>,
                                              const std::string& animation_id,
-                                             FrameEditorLaunchMode launch_mode,
+                                             FrameEditorLaunchMode,
                                              std::function<void(const std::string&)> on_host_closed) {
-    if (!asset || !assets_ || animation_id.empty()) return;
-    if (!frame_editor_session_) frame_editor_session_ = std::make_unique<FrameEditorSession>();
-    frame_editor_session_->set_snap_resolution(grid_overlay_resolution_r_);
-
-    frame_editor_prev_grid_overlay_ = grid_overlay_enabled_;
-    sync_grid_overlay_enabled(true, true);
-    other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, grid_overlay_enabled_);
-
-    frame_editor_prev_asset_info_open_ = false;
-    frame_editor_asset_for_reopen_ = nullptr;
-    const bool launched_from_animation_editor = static_cast<bool>(on_host_closed);
-    bool asset_info_was_open = false;
-    if (room_editor_) {
-        asset_info_was_open = room_editor_->is_asset_info_editor_open();
-        if (asset_info_was_open) {
-            room_editor_->close_asset_info_editor();
-        }
+    if (!asset || !room_editor_) return;
+    room_editor_->open_movement_editor_for_asset(asset, animation_id);
+    if (on_host_closed) {
+        on_host_closed(animation_id);
     }
-    frame_editor_prev_asset_info_open_ = asset_info_was_open || launched_from_animation_editor;
-    if (frame_editor_prev_asset_info_open_) {
-        frame_editor_asset_for_reopen_ = asset;
-    }
-    frame_editor_session_->begin(assets_,
-                                 asset,
-                                 std::move(document),
-                                 std::move(preview),
-                                 animation_id,
-                                 launch_mode,
-                                 parent_window_,
-                                 std::move(on_host_closed),
-                                 [this]() {
-
-        this->sync_grid_overlay_enabled(this->frame_editor_prev_grid_overlay_, true);
-        other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, this->grid_overlay_enabled_);
-
-        if (this->frame_editor_prev_asset_info_open_ && this->room_editor_ && this->frame_editor_asset_for_reopen_) {
-            this->room_editor_->open_asset_info_editor_for_asset(this->frame_editor_asset_for_reopen_);
-        }
-        this->frame_editor_prev_asset_info_open_ = false;
-        this->frame_editor_asset_for_reopen_ = nullptr;
-        this->apply_header_suppression();
-    },
-    [this]() {
-        this->persist_map_info_to_disk();
-    });
     apply_header_suppression();
 }
 
 void DevControls::end_frame_editor_session() {
-    if (frame_editor_session_) {
-        frame_editor_session_->end();
-    }
-    sync_grid_overlay_enabled(frame_editor_prev_grid_overlay_, true);
-    other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, grid_overlay_enabled_);
     apply_header_suppression();
 }
 
 bool DevControls::is_frame_editor_session_active() const {
-    return frame_editor_session_ && frame_editor_session_->is_active();
+    return false;
 }
 
 bool DevControls::is_runtime_light_editor_active() const {
@@ -4207,10 +4157,7 @@ std::vector<Assets::DevFloorProjectionMarker> DevControls::floor_projection_mark
 }
 
 const Asset* DevControls::frame_editor_target() const {
-    if (!frame_editor_session_ || !frame_editor_session_->is_active()) {
-        return nullptr;
-    }
-    return frame_editor_session_->target_asset();
+    return nullptr;
 }
 
 void DevControls::toggle_asset_library() {
@@ -4257,8 +4204,6 @@ void DevControls::open_animation_editor_for_asset(const std::shared_ptr<AssetInf
 
 void DevControls::close_asset_info_editor() {
     if (room_editor_) room_editor_->close_asset_info_editor();
-
-    end_frame_editor_session();
 }
 
 bool DevControls::consume_escape_for_asset_editor_stack() {
@@ -4266,9 +4211,6 @@ bool DevControls::consume_escape_for_asset_editor_stack() {
         return false;
     }
     const bool consumed = room_editor_->consume_escape_for_asset_editor_stack();
-    if (consumed) {
-        end_frame_editor_session();
-    }
     return consumed;
 }
 
@@ -4721,14 +4663,13 @@ void DevControls::pulse_modal_header() {
 void DevControls::apply_header_suppression() {
     if (map_mode_ui_) {
 
-        const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
         const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
-        const bool modal_hide = is_modal_blocking_panels() || frame_editor_active || asset_editor_tab_active;
+        const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
         const bool header_block = modal_hide || shift_block_headers_footers_;
         map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            const bool footer_enabled = !frame_editor_active && !shift_block_headers_footers_;
+            const bool footer_enabled = !shift_block_headers_footers_;
             footer->set_visible(footer_enabled);
             footer->set_input_enabled(footer_enabled);
         }
@@ -4753,9 +4694,8 @@ void DevControls::mark_layout_dirty() {
 }
 
 void DevControls::update_header_and_footer_bounds() {
-    const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
-    const bool modal_hide = is_modal_blocking_panels() || frame_editor_active || asset_editor_tab_active;
+    const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || shift_block_headers_footers_;

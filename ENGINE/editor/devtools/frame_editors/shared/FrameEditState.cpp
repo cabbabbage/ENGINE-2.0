@@ -19,17 +19,10 @@ std::vector<MovementFrame> parse_frames_from_payload(const std::string& payload_
     return parse_frames_from_payload(payload);
 }
 
-std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& payload) {
-    std::vector<MovementFrame> frames;
-    if (!payload.is_object()) {
-        frames.push_back(MovementFrame{});
-        return frames;
-    }
+namespace {
 
-    const nlohmann::json movement =
-        (payload.contains("movement") && payload["movement"].is_array())
-            ? payload["movement"]
-            : nlohmann::json::array();
+std::vector<MovementFrame> parse_frame_sequence(const nlohmann::json& movement) {
+    std::vector<MovementFrame> frames;
     if (movement.empty()) {
         frames.push_back(MovementFrame{});
         return frames;
@@ -101,17 +94,18 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
     return frames;
 }
 
-nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frames,
-                                         const nlohmann::json& existing_payload) {
-    nlohmann::json payload = existing_payload;
-    if (!payload.is_object()) {
-        payload = nlohmann::json::object();
-    }
+struct MovementTotals {
+    int dx = 0;
+    int dy = 0;
+    double dz = 0.0;
+    double dr = 0.0;
+};
 
+nlohmann::json build_movement_sequence_json(const std::vector<MovementFrame>& frames,
+                                            const nlohmann::json& existing_sequence,
+                                            MovementTotals& totals) {
     const std::size_t frame_count = frames.size();
-    nlohmann::json movement = (payload.contains("movement") && payload["movement"].is_array())
-                                  ? payload["movement"]
-                                  : nlohmann::json::array();
+    nlohmann::json movement = existing_sequence.is_array() ? existing_sequence : nlohmann::json::array();
     if (movement.size() < frame_count) {
         movement.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array({0, 0, 0}));
     } else if (movement.size() > frame_count) {
@@ -164,39 +158,130 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         movement[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(entry);
     }
 
-    int total_dx = 0;
-    int total_dy = 0;
-    double total_dz = 0.0;
-    double total_dr = 0.0;
     for (std::size_t i = 0; i < movement.size(); ++i) {
         const auto& entry = movement[i];
         if (!entry.is_array()) {
             continue;
         }
         if (!entry.empty() && entry[0].is_number_integer()) {
-            total_dx += entry[0].get<int>();
+            totals.dx += entry[0].get<int>();
         } else if (!entry.empty() && entry[0].is_number()) {
-            total_dx += static_cast<int>(std::lround(entry[0].get<double>()));
+            totals.dx += static_cast<int>(std::lround(entry[0].get<double>()));
         }
         if (entry.size() > 1 && entry[1].is_number_integer()) {
-            total_dy += entry[1].get<int>();
+            totals.dy += entry[1].get<int>();
         } else if (entry.size() > 1 && entry[1].is_number()) {
-            total_dy += static_cast<int>(std::lround(entry[1].get<double>()));
+            totals.dy += static_cast<int>(std::lround(entry[1].get<double>()));
         }
         if (entry.size() > 2 && entry[2].is_number()) {
-            total_dz += entry[2].get<double>();
+            totals.dz += entry[2].get<double>();
         }
         if (entry.size() > 3 && entry[3].is_number()) {
-            total_dr += entry[3].get<double>();
+            totals.dr += entry[3].get<double>();
         }
     }
 
     if (movement.empty()) {
         movement.push_back(nlohmann::json::array({0, 0, 0}));
     }
-    payload["movement"] = std::move(movement);
-    payload["movement_total"] =
-        nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
+    return movement;
+}
+
+nlohmann::json totals_json(const MovementTotals& totals) {
+    return nlohmann::json{{"dx", totals.dx}, {"dy", totals.dy}, {"dz", totals.dz}, {"dr", totals.dr}};
+}
+
+}  // namespace
+
+std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& payload) {
+    std::vector<std::vector<MovementFrame>> paths = parse_movement_paths_from_payload(payload);
+    if (paths.empty()) {
+        paths.emplace_back();
+        paths.back().push_back(MovementFrame{});
+    }
+    if (paths.front().empty()) {
+        paths.front().push_back(MovementFrame{});
+    }
+    return paths.front();
+}
+
+std::vector<std::vector<MovementFrame>> parse_movement_paths_from_payload(const nlohmann::json& payload) {
+    std::vector<std::vector<MovementFrame>> paths;
+    if (!payload.is_object()) {
+        paths.push_back(std::vector<MovementFrame>{MovementFrame{}});
+        return paths;
+    }
+
+    if (payload.contains("movement_paths") && payload["movement_paths"].is_array()) {
+        for (const auto& path : payload["movement_paths"]) {
+            if (path.is_array()) {
+                paths.push_back(parse_frame_sequence(path));
+            }
+        }
+    }
+
+    if (paths.empty() && payload.contains("movement") && payload["movement"].is_array()) {
+        paths.push_back(parse_frame_sequence(payload["movement"]));
+    }
+
+    if (paths.empty()) {
+        paths.push_back(std::vector<MovementFrame>{MovementFrame{}});
+    }
+    for (auto& path : paths) {
+        if (path.empty()) {
+            path.push_back(MovementFrame{});
+        }
+    }
+    return paths;
+}
+
+nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frames,
+                                         const nlohmann::json& existing_payload) {
+    return build_payload_from_movement_paths(std::vector<std::vector<MovementFrame>>{frames}, existing_payload);
+}
+
+nlohmann::json build_payload_from_movement_paths(const std::vector<std::vector<MovementFrame>>& paths,
+                                                 const nlohmann::json& existing_payload) {
+    nlohmann::json payload = existing_payload;
+    if (!payload.is_object()) {
+        payload = nlohmann::json::object();
+    }
+
+    std::vector<std::vector<MovementFrame>> safe_paths = paths;
+    if (safe_paths.empty()) {
+        safe_paths.push_back(std::vector<MovementFrame>{MovementFrame{}});
+    }
+
+    const nlohmann::json existing_paths =
+        (payload.contains("movement_paths") && payload["movement_paths"].is_array())
+            ? payload["movement_paths"]
+            : nlohmann::json::array();
+
+    nlohmann::json movement_paths = nlohmann::json::array();
+    nlohmann::json movement_totals = nlohmann::json::array();
+    MovementTotals primary_totals{};
+
+    for (std::size_t path_index = 0; path_index < safe_paths.size(); ++path_index) {
+        if (safe_paths[path_index].empty()) {
+            safe_paths[path_index].push_back(MovementFrame{});
+        }
+        const auto& path_frames = safe_paths[path_index];
+        MovementTotals path_totals{};
+        const nlohmann::json existing_sequence =
+            (path_index < existing_paths.size() && existing_paths[path_index].is_array())
+                ? existing_paths[path_index]
+                : nlohmann::json::array();
+        movement_paths.push_back(build_movement_sequence_json(path_frames, existing_sequence, path_totals));
+        movement_totals.push_back(totals_json(path_totals));
+        if (path_index == 0) {
+            primary_totals = path_totals;
+        }
+    }
+
+    payload["movement_paths"] = std::move(movement_paths);
+    payload["movement_total"] = totals_json(primary_totals);
+    payload["movement_totals"] = std::move(movement_totals);
+    payload.erase("movement");
 
     return payload;
 }

@@ -28,7 +28,10 @@ struct MovementFrame {
 MovementFrame clamp_frame(const MovementFrame& in);
 std::vector<MovementFrame> parse_frames_from_payload(const std::string& payload_json);
 std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& payload);
+std::vector<std::vector<MovementFrame>> parse_movement_paths_from_payload(const nlohmann::json& payload);
 nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frames,
                                          const nlohmann::json& existing_payload);
+nlohmann::json build_payload_from_movement_paths(const std::vector<std::vector<MovementFrame>>& paths,
+                                                 const nlohmann::json& existing_payload);
 
 }  // namespace devmode::frame_editors

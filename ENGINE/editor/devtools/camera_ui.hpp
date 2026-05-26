@@ -68,6 +68,8 @@ private:
     std::unique_ptr<FloatSliderWidget> dynamic_renderer_depth_efficiency_min_density_ratio_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_falloff_slider_;
+    std::unique_ptr<DMSlider> near_fog_distance_slider_;
+    std::unique_ptr<SliderWidget> near_fog_distance_widget_;
     std::unique_ptr<FloatSliderWidget> blur_px_slider_;
     std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
 

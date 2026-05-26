@@ -29,6 +29,7 @@
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
 #include "runtime_world_context.hpp"
+#include "gameplay/spawn/dynamic_spawn_runtime.hpp"
 
 class Asset;
 class OpenGLRuntimeRenderer;
@@ -47,7 +48,6 @@ namespace devmode::core {
 class ManifestStore;
 }
 namespace dynamic_spawn {
-class DynamicSpawnRuntime;
 struct DynamicSpawnDiagnostics;
 }
 
@@ -58,6 +58,8 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
+
+    world::GridBounds screen_world_rect() const;
     enum class DevGridOverlayKind {
         FloorMouseCentered,
         XYPlaneAtAssetDepth,
@@ -223,6 +225,8 @@ public:
     bool live_dynamic_assets_visible() const;
     float boundary_min_visible_screen_ratio() const;
     void set_boundary_min_visible_screen_ratio(float value);
+    int live_dynamic_fog_near_distance_px() const;
+    void set_live_dynamic_fog_near_distance_px(int value, bool persist = true);
     std::pair<int, int> camera_height_bounds_px() const;
     void set_camera_height_bounds_px(int min_value, int max_value);
     void sync_camera_settings_to_map_info_json();
@@ -594,7 +598,7 @@ private:
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
     void rebuild_all_assets_from_grid();
-    void rebuild_active_from_screen_grid();
+    void rebuild_active_from_screen_grid(bool force_same_frame = false);
     world::GridBounds runtime_work_bounds_from_render_bounds(const world::GridBounds& render_bounds);
     world::GridBounds live_dynamic_work_bounds_from_render_bounds(const world::GridBounds& render_bounds) const;
 
@@ -663,7 +667,7 @@ private:
     void rebuild_asset_dimension_cache(float camera_scale);
     bool compute_asset_dimension_cache(const Asset* asset, float camera_scale, AssetDimensionCache& out) const;
     void finalize_max_asset_dimensions(float max_width, float max_height);
-    world::GridBounds screen_world_rect() const;
+
     int audio_effect_max_distance_world() const;
 
     void mark_non_player_update_buffer_dirty() {
@@ -697,4 +701,5 @@ private:
 
     int dynamic_spawn_preload_margin_world_px_ = 192;
     int dynamic_spawn_despawn_margin_world_px_ = 256;
+    int live_dynamic_fog_near_distance_px_ = 64;
 };

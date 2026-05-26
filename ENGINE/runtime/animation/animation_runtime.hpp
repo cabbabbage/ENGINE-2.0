@@ -110,6 +110,7 @@ private:
     struct MovementState {
         std::uint32_t replan_budget_frame_id = 0;
         int replan_attempts_this_frame = 0;
+        std::uint32_t replan_attempt_counter = 0;
     };
 
     struct PlaybackState {
@@ -122,6 +123,7 @@ private:
         std::uint32_t next_attack_cycle_eval_frame = 0;
         std::optional<std::string> committed_attack_target_asset_id = std::nullopt;
         std::string committed_attack_animation_id{};
+        std::size_t committed_attack_path_index = 0;
         int committed_attack_last_dispatched_frame_index = -1;
         std::string committed_attack_last_payload_id{};
         bool attack_recovery_pending = false;

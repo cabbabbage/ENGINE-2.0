@@ -432,12 +432,6 @@ private:
     bool misc_map_color_dirty_ = false;
     std::unique_ptr<DevColorPicker> color_picker_;
 
-    std::unique_ptr<class FrameEditorSession> frame_editor_session_;
-    bool frame_editor_prev_grid_overlay_ = false;
-
-    bool frame_editor_prev_asset_info_open_ = false;
-    Asset* frame_editor_asset_for_reopen_ = nullptr;
-
     bool render_suppression_in_progress_ = false;
     bool shift_block_headers_footers_ = false;
 
@@ -457,8 +451,9 @@ private:
         Uint64 started_ms = 0;
     } import_busy_;
     MultiAssetImportState multi_asset_import_;
-    enum class DepthGuideSelection { None, RedCull, OrangeEfficiency, BlueLayer };
+    enum class DepthGuideSelection { None, RedCull, OrangeEfficiency, GreenNearFog, BlueLayer };
     DepthGuideSelection depth_guide_selection_ = DepthGuideSelection::None;
+    DepthGuideSelection depth_guide_hover_selection_ = DepthGuideSelection::None;
     bool depth_guide_drag_active_ = false;
     int depth_guide_drag_start_y_ = 0;
     WarpedScreenGrid::RealismSettings depth_guide_preview_settings_{};

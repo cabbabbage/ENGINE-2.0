@@ -17,8 +17,6 @@ struct RenderObject {
     SDL_Point center{0, 0};
     bool use_custom_center = false;
     SDL_FlipMode flip = SDL_FLIP_NONE;
-    bool sink_clip_enabled = false;
-    float sink_height_offset_px = 0.0f;
     int texture_w = 0;
     int texture_h = 0;
     bool has_texture_size = false;

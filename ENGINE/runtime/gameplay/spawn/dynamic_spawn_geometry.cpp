@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <limits>
 
 #include "core/AssetsManager.hpp"
@@ -90,6 +91,38 @@ AreaGeometry collect_area_geometry(const Assets& assets) {
         geometry.max_x = geometry.max_z = -1;
     }
     return geometry;
+}
+
+int max_allowed_boundary_z_for_x(const AreaGeometry& geometry, int world_x, int max_spawn_from_room_px) {
+    if (!geometry.valid) {
+        return std::numeric_limits<int>::min();
+    }
+    bool found = false;
+    double max_z = static_cast<double>(std::numeric_limits<int>::min());
+    for (const AreaGeometry::Segment& segment : geometry.segments) {
+        const int min_x = std::min(segment.a.x, segment.b.x);
+        const int max_x = std::max(segment.a.x, segment.b.x);
+        if (world_x < min_x || world_x > max_x) {
+            continue;
+        }
+        if (segment.a.x == segment.b.x) {
+            max_z = std::max(max_z, static_cast<double>(std::max(segment.a.y, segment.b.y)));
+            found = true;
+            continue;
+        }
+        const double t = static_cast<double>(world_x - segment.a.x) / static_cast<double>(segment.b.x - segment.a.x);
+        if (t < 0.0 || t > 1.0) {
+            continue;
+        }
+        const double z = static_cast<double>(segment.a.y) + t * static_cast<double>(segment.b.y - segment.a.y);
+        max_z = std::max(max_z, z);
+        found = true;
+    }
+    if (!found) {
+        return std::numeric_limits<int>::min();
+    }
+    const int boundary = static_cast<int>(std::lround(max_z));
+    return boundary + std::max(0, max_spawn_from_room_px);
 }
 
 } // namespace dynamic_spawn::geometry

@@ -1469,7 +1469,9 @@ std::string MapModeUI::rename_active_room(const std::string& old_name, const std
         nlohmann::json entry = rooms[current_key];
         entry["name"] = desired_name;
 
-        if (candidate == current_key || rooms.contains(candidate)) {
+        candidate = map_layers::make_unique_template_key(map_info, candidate, current_key, current_key);
+
+        if (candidate == current_key) {
             rooms[current_key] = std::move(entry);
             result_key = current_key;
         } else {

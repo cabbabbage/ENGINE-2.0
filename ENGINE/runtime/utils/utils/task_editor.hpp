@@ -79,6 +79,7 @@ private:
     bool pick_files(std::vector<std::filesystem::path>& out_paths);
     bool pick_folder(std::vector<std::filesystem::path>& out_paths);
     bool copy_selected_paths(size_t row_index, const std::vector<std::filesystem::path>& selections);
+    bool should_trigger_add_task(const SDL_Event& event);
 
     static std::vector<std::string> parse_csv_line(const std::string& line);
     static std::string escape_csv_field(const std::string& value);
@@ -114,4 +115,5 @@ private:
     size_t attachment_dialog_row_ = 0;
 
     SDL_Point last_mouse_pos_{0, 0};
+    Uint64 last_add_task_click_timestamp_ = 0;
 };

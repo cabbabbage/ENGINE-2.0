@@ -18,6 +18,7 @@
 #include "animation/animation_tag_utils.hpp"
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
+#include "animation/controllers/shared/custom_controller_update_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
 #include "utils/log.hpp"
@@ -99,7 +100,6 @@ void CustomAssetController::process_pending_attacks(Asset& self) {
         return;
     }
 
-    orphan_eligible_children(self);
     for (const auto& attack : pending_attacks) {
         on_attack(attack);
     }
@@ -108,6 +108,7 @@ void CustomAssetController::process_pending_attacks(Asset& self) {
         pending_attacks,
         attack_processing_config());
     if (summary.died) {
+        orphan_eligible_children(self);
         on_death();
     } else if (summary.took_damage) {
         for (const auto& attack : pending_attacks) {
@@ -406,6 +407,18 @@ void CustomAssetController::on_hit(const animation_update::Attack&) {}
 void CustomAssetController::on_death() {}
 
 void CustomAssetController::on_no_pending_attacks() {}
+
+void CustomAssetController::on_after_attack() {
+    Asset* self = self_ptr();
+    const auto& ctx = game_context();
+    Asset* player = custom_controllers::resolve_valid_player_target(ctx);
+    if (!self || !self->anim_ || !player) {
+        return;
+    }
+    AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
+    combat_overrides.attacking_enabled = false;
+    self->anim_->auto_move(player, 220, false, combat_overrides);
+}
 
 custom_controllers::AttackProcessingConfig CustomAssetController::attack_processing_config() const {
     return {};

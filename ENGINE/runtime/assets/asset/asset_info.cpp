@@ -179,6 +179,13 @@ float sanitize_finite_float(float value, float fallback = 0.0f) {
     return value;
 }
 
+float quantize_depth_offset_world_units(float value) {
+    if (!std::isfinite(value)) {
+        return 0.0f;
+    }
+    return static_cast<float>(std::lround(value));
+}
+
 int sanitize_floor_box_grid_resolution(int resolution) {
     const int clamped = vibble::grid::clamp_resolution(resolution);
     return std::clamp(clamped,
@@ -618,8 +625,26 @@ std::pair<int, int> tilt_range_bounds(const vibble::weighted_range::WeightedIntR
         return {min_value, max_value};
 }
 
-int clamp_y_position_value(int value) {
-    return std::clamp(value, -50, 200);
+int clamp_y_position_percent(int value) {
+    return std::clamp(value, -100, 500);
+}
+
+vibble::weighted_range::WeightedIntRange sanitize_y_position_range_percent(
+    const vibble::weighted_range::WeightedIntRange& range) {
+    vibble::weighted_range::WeightedIntRange sanitized = range;
+    sanitized.center = clamp_y_position_percent(static_cast<int>(std::clamp<std::int64_t>(
+        sanitized.center,
+        static_cast<std::int64_t>(std::numeric_limits<int>::min()),
+        static_cast<std::int64_t>(std::numeric_limits<int>::max()))));
+    sanitized.span = std::max<std::int64_t>(0, sanitized.span);
+    if (sanitized.center - sanitized.span < -100) {
+        sanitized.span = sanitized.center + 100;
+    }
+    if (sanitized.center + sanitized.span > 500) {
+        sanitized.span = std::min<std::int64_t>(sanitized.span, 500 - sanitized.center);
+    }
+    sanitized.span = std::max<std::int64_t>(0, sanitized.span);
+    return sanitized;
 }
 
 std::optional<double> parse_number_like_json(const nlohmann::json& value) {
@@ -1065,7 +1090,9 @@ AssetInfo::OvalAnchorPoint normalize_oval_anchor_point(const nlohmann::json& pay
     }
     if (!legacy_x_depth_model && payload.contains("depth_offset")) {
         if (const auto parsed = parse_number_like_json(payload["depth_offset"])) {
-            point.depth_offset = std::isfinite(*parsed) ? static_cast<float>(*parsed) : 0.0f;
+            point.depth_offset = std::isfinite(*parsed)
+                ? quantize_depth_offset_world_units(static_cast<float>(*parsed))
+                : 0.0f;
         }
     } else {
         point.depth_offset = 0.0f;
@@ -1187,7 +1214,7 @@ nlohmann::json encode_oval_anchor_point(const AssetInfo::OvalAnchorPoint& point)
     encoded["angle_degrees"] = normalize_angle_degrees(point.angle_degrees);
     encoded["texture_x"] = point.texture_x;
     encoded["texture_y"] = point.texture_y;
-    encoded["depth_offset"] = std::isfinite(point.depth_offset) ? point.depth_offset : 0.0f;
+    encoded["depth_offset"] = quantize_depth_offset_world_units(point.depth_offset);
     encoded["rotation_degrees"] = std::isfinite(point.rotation_degrees) ? point.rotation_degrees : 0.0f;
     encoded["hidden"] = point.hidden;
     encoded["resolve_x"] = point.resolve_x;
@@ -1287,7 +1314,7 @@ nlohmann::json encode_anchor_point_json(const DisplacedAssetAnchorPoint& anchor)
     encoded["name"] = anchor.name;
     encoded["texture_x"] = anchor.texture_x;
     encoded["texture_y"] = anchor.texture_y;
-    encoded["depth_offset"] = std::isfinite(anchor.depth_offset) ? anchor.depth_offset : 0.0f;
+    encoded["depth_offset"] = quantize_depth_offset_world_units(anchor.depth_offset);
     encoded["flip_horizontal"] = anchor.flip_horizontal;
     encoded["flip_vertical"] = anchor.flip_vertical;
     encoded["rotation_degrees"] = std::isfinite(anchor.rotation_degrees) ? anchor.rotation_degrees : 0.0f;
@@ -2701,7 +2728,9 @@ void AssetInfo::set_tilt_range_degrees(int min_deg, int max_deg) {
 }
 
 void AssetInfo::set_y_position_range(const vibble::weighted_range::WeightedIntRange& range) {
-        y_position_range = vibble::weighted_range::from_json(vibble::weighted_range::to_json(range), vibble::weighted_range::make_flat(0));
+        y_position_range = sanitize_y_position_range_percent(
+            vibble::weighted_range::from_json(vibble::weighted_range::to_json(range),
+                                              vibble::weighted_range::make_flat(0)));
         info_json_[kYPositionRangeKey] = vibble::weighted_range::to_json(y_position_range);
         info_json_.erase("y_pos_min");
         info_json_.erase("y_pos_max");
@@ -3119,10 +3148,8 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                                                                      "tilt_range_max_deg");
                 }
                 std::tie(tilt_range_min_deg, tilt_range_max_deg) = tilt_range_bounds(tilt_range);
-                y_position_range = read_weighted_range_field(data, kYPositionRangeKey);
-                if (!y_position_range.random && (!data.contains(kYPositionRangeKey) || !data[kYPositionRangeKey].is_object())) {
-                        y_position_range = read_weighted_range_legacy_pair(data, "y_pos_min", "y_pos_max");
-                }
+                y_position_range = sanitize_y_position_range_percent(
+                    read_weighted_range_field(data, kYPositionRangeKey, vibble::weighted_range::make_flat(0)));
         } catch (...) {
 
         }
@@ -4072,10 +4099,12 @@ bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& 
 
 		if (!has_existing) {
 			mark_texture_rebuild_on_close(name, kTextureVariantAll);
+            bump_animation_metadata_revision();
 		} else {
 			const auto variants = classify_texture_rebuild_variants(existing_payload, clean_payload);
 			if (variants != kTextureVariantNone) {
 				mark_texture_rebuild_on_close(name, variants);
+                bump_animation_metadata_revision();
 			}
 		}
 		return true;
@@ -4102,6 +4131,7 @@ bool AssetInfo::remove_animation(const std::string& name) {
 	}
 	if (removed) {
 		mark_bundle_refresh_on_close();
+        bump_animation_metadata_revision();
 	}
 	return removed;
 }
@@ -4128,6 +4158,7 @@ bool AssetInfo::rename_animation(const std::string& old_name, const std::string&
 		}
 		mark_texture_rebuild_on_close(new_name, kTextureVariantAll);
 		mark_bundle_refresh_on_close();
+        bump_animation_metadata_revision();
 		return true;
 	} catch (...) {
 		return false;
@@ -4136,14 +4167,25 @@ bool AssetInfo::rename_animation(const std::string& old_name, const std::string&
 
 void AssetInfo::set_start_animation_name(const std::string& name) {
         try {
+                if (start_animation == name) {
+                    return;
+                }
                 start_animation = name;
                 info_json_["start"] = name;
+                bump_animation_metadata_revision();
         } catch (...) {
 
         }
 }
 
 bool AssetInfo::reload_animations_from_disk() {
+    auto animation_reload_snapshot = [this]() {
+        nlohmann::json snapshot = nlohmann::json::object();
+        snapshot["start"] = start_animation;
+        snapshot["animations"] = anims_json_.is_object() ? anims_json_ : nlohmann::json::object();
+        return snapshot;
+    };
+    const nlohmann::json previous_snapshot = animation_reload_snapshot();
     auto apply_payload = [this](const nlohmann::json& payload) -> bool {
         if (!payload.is_object()) {
             return false;
@@ -4234,7 +4276,14 @@ bool AssetInfo::reload_animations_from_disk() {
     if (!view || !view.data) {
         return false;
     }
-    return apply_payload(*view.data);
+    const bool applied = apply_payload(*view.data);
+    if (applied) {
+        const nlohmann::json updated_snapshot = animation_reload_snapshot();
+        if (updated_snapshot != previous_snapshot) {
+            bump_animation_metadata_revision();
+        }
+    }
+    return applied;
 }
 
 AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed(
@@ -4299,6 +4348,7 @@ AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed
             start_animation = animation_name;
             info_json_["start"] = start_animation;
         }
+        bump_animation_metadata_revision();
 
         result.changed = true;
         result.animation_changed = animation_changed;
@@ -4326,6 +4376,10 @@ AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed
 
 bool AssetInfo::update_animation_properties(const std::string& animation_name, const nlohmann::json& properties) {
     return update_animation_properties_detailed(animation_name, properties).changed;
+}
+
+void AssetInfo::bump_animation_metadata_revision() {
+    ++animation_metadata_revision_;
 }
 
 AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer* renderer,

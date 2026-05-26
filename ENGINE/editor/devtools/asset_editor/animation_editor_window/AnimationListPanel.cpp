@@ -26,8 +26,12 @@
 #include <nlohmann/json.hpp>
 
 namespace {
+#ifndef ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG
+#define ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG 0
+#endif
 
-constexpr int kRowHeight = 72;
+constexpr int kRowHeight = 84;
+constexpr int kStickyHeaderHeight = 56;
 
 constexpr int kIndentPerLevel = 16;
 
@@ -214,6 +218,32 @@ SDL_Color grey_variant_for_level(SDL_Color root, int level) {
     return mix_color(root, greyscale_of(root), t);
 }
 
+animation_editor::AnimationListPanel::ExternalRowsFingerprint fingerprint_for_external_rows(
+    const std::optional<std::vector<animation_editor::AnimationListPanel::ExternalRow>>& rows) {
+    constexpr std::uint64_t kOffset = 1469598103934665603ull;
+    constexpr std::uint64_t kPrime = 1099511628211ull;
+
+    animation_editor::AnimationListPanel::ExternalRowsFingerprint fingerprint{};
+    fingerprint.count = rows ? rows->size() : 0;
+    std::uint64_t hash = kOffset;
+    auto hash_combine = [&](std::uint64_t value) {
+        hash ^= value;
+        hash *= kPrime;
+    };
+
+    if (rows) {
+        for (const auto& row : *rows) {
+            hash_combine(static_cast<std::uint64_t>(std::hash<std::string>{}(row.id)));
+            hash_combine(static_cast<std::uint64_t>(row.level));
+            hash_combine(static_cast<std::uint64_t>(row.selectable ? 1u : 0u));
+            hash_combine(static_cast<std::uint64_t>(row.missing_source ? 1u : 0u));
+        }
+    }
+
+    fingerprint.rolling_hash = hash;
+    return fingerprint;
+}
+
 }
 
 namespace animation_editor {
@@ -224,8 +254,76 @@ AnimationListPanel::AnimationListPanel() {
 
 void AnimationListPanel::set_document(std::shared_ptr<AnimationDocument> document) {
     document_ = std::move(document);
+    external_rows_.reset();
+    last_external_rows_fingerprint_.reset();
     last_document_revision_.reset();
     rebuild_rows();
+}
+
+void AnimationListPanel::set_external_rows(std::optional<std::vector<ExternalRow>> rows) {
+    const ExternalRowsFingerprint next_fingerprint = fingerprint_for_external_rows(rows);
+    const bool fingerprint_unchanged = last_external_rows_fingerprint_.has_value() &&
+                                       *last_external_rows_fingerprint_ == next_fingerprint;
+
+    if (rows.has_value()) {
+        if (!external_rows_.has_value()) {
+            external_rows_.emplace();
+        }
+        auto& stored_rows = *external_rows_;
+        stored_rows.clear();
+        stored_rows.reserve(rows->size());
+        for (auto& row : *rows) {
+            stored_rows.push_back(std::move(row));
+        }
+    } else {
+        external_rows_.reset();
+    }
+    last_external_rows_fingerprint_ = next_fingerprint;
+
+    layout_dirty_ = true;
+    hovered_row_.reset();
+    hovered_delete_row_.reset();
+    last_document_revision_.reset();
+    if (fingerprint_unchanged) {
+        ++row_update_skipped_count_;
+#if ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG
+        SDL_Log("[AnimationListPanel] external row update skipped (count=%zu hash=%llu skipped=%llu applied=%llu)",
+                next_fingerprint.count,
+                static_cast<unsigned long long>(next_fingerprint.rolling_hash),
+                static_cast<unsigned long long>(row_update_skipped_count_),
+                static_cast<unsigned long long>(row_update_applied_count_));
+#endif
+        if (selected_animation_id_) {
+            auto it = std::find_if(display_rows_.begin(), display_rows_.end(), [&](const DisplayRow& row) {
+                return row.id == *selected_animation_id_;
+            });
+            if (it == display_rows_.end()) {
+                selected_animation_id_.reset();
+                if (on_selection_changed_) {
+                    on_selection_changed_(std::nullopt);
+                }
+            }
+        }
+        return;
+    }
+
+    ++row_update_applied_count_;
+#if ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG
+    SDL_Log("[AnimationListPanel] external row update applied (count=%zu hash=%llu skipped=%llu applied=%llu)",
+            next_fingerprint.count,
+            static_cast<unsigned long long>(next_fingerprint.rolling_hash),
+            static_cast<unsigned long long>(row_update_skipped_count_),
+            static_cast<unsigned long long>(row_update_applied_count_));
+#endif
+    rebuild_rows();
+}
+
+void AnimationListPanel::set_show_delete_button(bool show) {
+    if (show_delete_button_ == show) {
+        return;
+    }
+    show_delete_button_ = show;
+    layout_dirty_ = true;
 }
 
 void AnimationListPanel::set_bounds(const SDL_Rect& bounds) {
@@ -248,6 +346,11 @@ void AnimationListPanel::set_selected_animation_id(const std::optional<std::stri
         layout_rows();
     }
     scroll_selection_into_view();
+}
+
+bool AnimationListPanel::is_point_inside(int x, int y) const {
+    SDL_Point p{x, y};
+    return SDL_PointInRect(&p, &bounds_) != 0;
 }
 
 void AnimationListPanel::set_on_selection_changed(
@@ -293,7 +396,52 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
     }
 
     const DMButtonStyle& list_style = DMStyles::ListButton();
-    const int row_padding = DMSpacing::small_gap();
+    const DMButtonStyle& accent_style = DMStyles::AccentButton();
+    const DMButtonStyle& warn_style = DMStyles::WarnButton();
+    const DMButtonStyle& create_style = DMStyles::CreateButton();
+    const int row_padding = DMSpacing::small_gap() + 2;
+
+    SDL_Rect sticky_header{clip.x, clip.y, clip.w, std::min(kStickyHeaderHeight, clip.h)};
+    dm_draw::DrawBeveledRect(renderer,
+                             sticky_header,
+                             DMStyles::CornerRadius(),
+                             1,
+                             DMStyles::PanelHeader(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    dm_draw::DrawRoundedOutline(renderer, sticky_header, DMStyles::CornerRadius(), 1, DMStyles::Border());
+
+    std::string selected_name = selected_animation_id_.value_or("None");
+    std::string asset_name = document_ ? document_->manifest_asset_key_debug() : std::string{};
+    if (asset_name.empty()) {
+        asset_name = "Unknown Asset";
+    }
+    DMLabelStyle header_style = DMStyles::Label();
+    header_style.font_size = std::max(12, header_style.font_size - 2);
+    header_style.color = DMStyles::TextBox().text;
+    DMFontCache::instance().draw_text(renderer, header_style, "Asset: " + asset_name, sticky_header.x + row_padding, sticky_header.y + row_padding);
+    DMFontCache::instance().draw_text(renderer, header_style, "Selected: " + selected_name, sticky_header.x + row_padding, sticky_header.y + row_padding + 22);
+
+    if (display_rows_.empty()) {
+        DMLabelStyle empty_style = DMStyles::Label();
+        empty_style.color = DMStyles::TextBox().label.color;
+        std::string state_icon{DMIcons::Info()};
+        std::string state_text = "No animations yet. Use + to create or import.";
+        if (!document_) {
+            state_icon = std::string{DMIcons::NavDown()};
+            state_text = "Loading animations... wait for asset sync.";
+        }
+        const std::string line = state_icon + " " + state_text;
+        SDL_Point text_size = DMFontCache::instance().measure_text(empty_style, line);
+        DMFontCache::instance().draw_text(renderer,
+                                          empty_style,
+                                          line,
+                                          bounds_.x + (bounds_.w - text_size.x) / 2,
+                                          bounds_.y + std::max(sticky_header.h + DMSpacing::item_gap(), (bounds_.h - text_size.y) / 2));
+    }
 
     for (size_t i = 0; i < display_rows_.size() && i < row_geometry_.size(); ++i) {
         SDL_Rect rect = scroll_controller_.apply(row_geometry_[i].outer);
@@ -304,7 +452,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         const DisplayRow& row = display_rows_[i];
         const float size_factor = size_factor_for_level(row.level);
         const bool selected = selected_animation_id_ && *selected_animation_id_ == row.id;
-        const bool hovered = hovered_row_ && *hovered_row_ == i;
+        const bool hovered = row.selectable && hovered_row_ && *hovered_row_ == i;
 
         SDL_Color base = list_style.bg;
         auto it_root = root_for_id_.find(row.id);
@@ -312,7 +460,16 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
             SDL_Color root_col = color_for_root_key(it_root->second);
             base = grey_variant_for_level(root_col, row.level);
         }
-        SDL_Color fill = hovered ? dm_draw::LightenColor(base, 0.08f) : base;
+        if (!row.selectable) {
+            base = mix_color(base, greyscale_of(base), 0.75f);
+        }
+        SDL_Color fill = hovered ? list_style.hover_bg : base;
+        if (!row.selectable) {
+            fill = DMStyles::ButtonBaseFill();
+        }
+        if (row.missing_source) {
+            fill = warn_style.bg;
+        }
 
         dm_draw::DrawBeveledRect(renderer, rect, DMStyles::CornerRadius(), DMStyles::BevelDepth(), fill, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
 
@@ -320,7 +477,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         int border_thickness = 1;
         if (selected) {
             border_thickness = 2;
-            border_col = DMStyles::AccentButton().bg;
+            border_col = accent_style.border;
         }
         dm_draw::DrawRoundedOutline(renderer, rect, DMStyles::CornerRadius(), border_thickness, border_col);
 
@@ -354,26 +511,52 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
 
         DMLabelStyle label_style = DMStyles::Label();
         label_style.color = list_style.label.color;
-        label_style.font_size = std::max(1, static_cast<int>(std::round(label_style.font_size * size_factor)));
-        DMFontCache::instance().draw_text(renderer, label_style, row.id, content_x, content_y);
-
-        SDL_Rect delete_rect{rect.x + geometry.delete_button_rel.x,
-                             rect.y + geometry.delete_button_rel.y,
-                             geometry.delete_button_rel.w,
-                             geometry.delete_button_rel.h};
-        const DMButtonStyle& delete_style = DMStyles::DeleteButton();
-        SDL_Color delete_bg = delete_style.bg;
-        if (hovered_delete_row_ && *hovered_delete_row_ == i) {
-            delete_bg = delete_style.hover_bg;
+        if (!row.selectable) {
+            label_style.color = DMStyles::TextBox().label.color;
         }
-        dm_draw::DrawBeveledRect(renderer, delete_rect, DMStyles::CornerRadius(), 1, delete_bg, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity() * 0.5f, DMStyles::ShadowIntensity() * 0.5f);
-        dm_draw::DrawRoundedOutline(renderer, delete_rect, DMStyles::CornerRadius(), 1, delete_style.border);
-        DMLabelStyle delete_label_style{delete_style.label.font_path, 12, delete_style.text};
-        std::string delete_text{DMIcons::Close()};
-        SDL_Point delete_size = DMFontCache::instance().measure_text(delete_label_style, delete_text);
-        int delete_text_x = delete_rect.x + (delete_rect.w - delete_size.x) / 2;
-        int delete_text_y = delete_rect.y + (delete_rect.h - delete_size.y) / 2;
-        DMFontCache::instance().draw_text(renderer, delete_label_style, delete_text, delete_text_x, delete_text_y);
+        if (row.missing_source) {
+            label_style.color = warn_style.text;
+        }
+        label_style.font_size = std::max(1, static_cast<int>(std::round(label_style.font_size * size_factor)));
+        const std::string status_icon = row.missing_source ? "!" : (row.selectable ? std::string(DMIcons::NavRight()) : "-");
+        DMFontCache::instance().draw_text(renderer, label_style, status_icon + " " + row.id, content_x, content_y + 4);
+
+        DMLabelStyle chip_style = DMStyles::Label();
+        chip_style.font_size = 12;
+        chip_style.color = DMStyles::TextBox().text;
+        std::vector<std::pair<std::string, SDL_Color>> chips;
+        if (!row.selectable) chips.emplace_back("Inherited", DMStyles::ButtonBaseFill());
+        if (row.missing_source) chips.emplace_back("Missing Source", warn_style.hover_bg);
+        if (start_animation_id_ && *start_animation_id_ == row.id) chips.emplace_back("Start", create_style.bg);
+        int chip_x = content_x;
+        int chip_y = content_y + 28;
+        for (const auto& chip : chips) {
+            SDL_Point chip_sz = DMFontCache::instance().measure_text(chip_style, chip.first);
+            SDL_Rect chip_rect{chip_x, chip_y, chip_sz.x + 12, chip_sz.y + 4};
+            dm_draw::DrawBeveledRect(renderer, chip_rect, DMStyles::CornerRadius(), 1, chip.second, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity() * 0.4f, DMStyles::ShadowIntensity() * 0.4f);
+            DMFontCache::instance().draw_text(renderer, chip_style, chip.first, chip_rect.x + 6, chip_rect.y + 2);
+            chip_x += chip_rect.w + DMSpacing::small_gap();
+        }
+
+        if (show_delete_button_ && row.selectable) {
+            SDL_Rect delete_rect{rect.x + geometry.delete_button_rel.x,
+                                 rect.y + geometry.delete_button_rel.y,
+                                 geometry.delete_button_rel.w,
+                                 geometry.delete_button_rel.h};
+            const DMButtonStyle& delete_style = DMStyles::DeleteButton();
+            SDL_Color delete_bg = delete_style.bg;
+            if (hovered_delete_row_ && *hovered_delete_row_ == i) {
+                delete_bg = delete_style.hover_bg;
+            }
+            dm_draw::DrawBeveledRect(renderer, delete_rect, DMStyles::CornerRadius(), 1, delete_bg, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity() * 0.5f, DMStyles::ShadowIntensity() * 0.5f);
+            dm_draw::DrawRoundedOutline(renderer, delete_rect, DMStyles::CornerRadius(), 1, delete_style.border);
+            DMLabelStyle delete_label_style{delete_style.label.font_path, 12, delete_style.text};
+            std::string delete_text{DMIcons::Close()};
+            SDL_Point delete_size = DMFontCache::instance().measure_text(delete_label_style, delete_text);
+            int delete_text_x = delete_rect.x + (delete_rect.w - delete_size.x) / 2;
+            int delete_text_y = delete_rect.y + (delete_rect.h - delete_size.y) / 2;
+            DMFontCache::instance().draw_text(renderer, delete_label_style, delete_text, delete_text_x, delete_text_y);
+        }
 
     }
 
@@ -412,9 +595,15 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
             hovered_delete_row_.reset();
             return false;
         }
-        hovered_row_ = hit.row_index;
+        hovered_row_.reset();
+        if (hit.row_index && *hit.row_index < display_rows_.size() && display_rows_[*hit.row_index].selectable) {
+            hovered_row_ = hit.row_index;
+        }
         hovered_delete_row_.reset();
-        if (hit.target == HitTarget::Delete && hit.row_index) {
+        if (hit.target == HitTarget::Delete &&
+            hit.row_index &&
+            *hit.row_index < display_rows_.size() &&
+            display_rows_[*hit.row_index].selectable) {
             hovered_delete_row_ = *hit.row_index;
         }
         return hovered_row_.has_value() || hovered_delete_row_.has_value();
@@ -438,9 +627,14 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         const std::string& animation_id = hit.animation_id;
         if (e.button.button == SDL_BUTTON_LEFT) {
             if (hit.target == HitTarget::Delete) {
-                if (on_delete_animation_) {
+                const DisplayRow& row = display_rows_[*hit.row_index];
+                if (row.selectable && on_delete_animation_) {
                     on_delete_animation_(animation_id);
                 }
+                return true;
+            }
+            const DisplayRow& row = display_rows_[*hit.row_index];
+            if (!row.selectable) {
                 return true;
             }
 
@@ -467,6 +661,12 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         if (hit.target == HitTarget::Outside) {
             return false;
         }
+        if (hit.target == HitTarget::Delete &&
+            hit.row_index &&
+            *hit.row_index < display_rows_.size() &&
+            !display_rows_[*hit.row_index].selectable) {
+            return false;
+        }
         return hit.target == HitTarget::Row || hit.target == HitTarget::Delete;
     }
 
@@ -474,6 +674,66 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
 }
 
 void AnimationListPanel::rebuild_rows() {
+    if (external_rows_.has_value()) {
+        std::vector<DisplayRow> flattened;
+        flattened.reserve(external_rows_->size());
+        root_for_id_.clear();
+
+        std::vector<std::string> root_stack;
+        for (const auto& external_row : *external_rows_) {
+            DisplayRow row;
+            row.id = external_row.id;
+            row.level = std::max(0, external_row.level);
+            row.missing_source = external_row.missing_source;
+            row.selectable = external_row.selectable;
+            flattened.push_back(row);
+
+            while (static_cast<int>(root_stack.size()) > row.level) {
+                root_stack.pop_back();
+            }
+            if (row.level == 0 || root_stack.empty()) {
+                root_stack.clear();
+                root_stack.push_back(row.id);
+                root_for_id_[row.id] = row.id;
+            } else {
+                root_for_id_[row.id] = root_stack.front();
+                root_stack.push_back(row.id);
+            }
+        }
+
+        bool changed = flattened.size() != display_rows_.size();
+        if (!changed) {
+            for (size_t i = 0; i < flattened.size(); ++i) {
+                if (flattened[i].id != display_rows_[i].id ||
+                    flattened[i].level != display_rows_[i].level ||
+                    flattened[i].missing_source != display_rows_[i].missing_source ||
+                    flattened[i].selectable != display_rows_[i].selectable) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (changed) {
+            display_rows_ = std::move(flattened);
+            row_geometry_.clear();
+            layout_dirty_ = true;
+            hovered_row_.reset();
+        }
+        if (selected_animation_id_) {
+            auto it = std::find_if(display_rows_.begin(), display_rows_.end(), [&](const DisplayRow& row) {
+                return row.id == *selected_animation_id_;
+            });
+            if (it == display_rows_.end()) {
+                selected_animation_id_.reset();
+                if (on_selection_changed_) {
+                    on_selection_changed_(std::nullopt);
+                }
+            }
+        }
+        return;
+    }
+
     if (!document_) {
         if (!display_rows_.empty()) {
             display_rows_.clear();
@@ -593,6 +853,7 @@ void AnimationListPanel::rebuild_rows() {
         row.id = id;
         row.level = level;
         row.missing_source = (!info.parent.has_value() && info.missing_source);
+        row.selectable = true;
         flattened.push_back(row);
         for (const auto& child : info.children) {
             visit(child, level + 1, root_id);
@@ -647,13 +908,13 @@ void AnimationListPanel::layout_rows() {
     const int padding = DMSpacing::panel_padding();
     const int gap = DMSpacing::small_gap();
     const int base_width = std::max(0, bounds_.w - padding * 2);
-    const int row_padding = DMSpacing::small_gap();
+    const int row_padding = DMSpacing::small_gap() + 2;
 
     row_geometry_.clear();
     row_geometry_.reserve(display_rows_.size());
 
-    int total_height = 0;
-    int cursor_y = bounds_.y + padding;
+    int total_height = kStickyHeaderHeight;
+    int cursor_y = bounds_.y + padding + kStickyHeaderHeight;
 
     for (size_t i = 0; i < display_rows_.size(); ++i) {
         const int level = display_rows_[i].level;
@@ -670,11 +931,15 @@ void AnimationListPanel::layout_rows() {
         const int thumb_size = geometry.content_height;
         geometry.preview_rel = SDL_Rect{geometry.content_offset_x,
                                         std::max(0, (rect.h - thumb_size) / 2), thumb_size, thumb_size};
-        const int delete_button_size = 16;
-        geometry.delete_button_rel = SDL_Rect{rect.w - row_padding - delete_button_size,
-                                              row_padding,
-                                              delete_button_size,
-                                              delete_button_size};
+        if (show_delete_button_) {
+            const int delete_button_size = 16;
+            geometry.delete_button_rel = SDL_Rect{rect.w - row_padding - delete_button_size,
+                                                  row_padding,
+                                                  delete_button_size,
+                                                  delete_button_size};
+        } else {
+            geometry.delete_button_rel = SDL_Rect{0, 0, 0, 0};
+        }
 
         row_geometry_.push_back(geometry);
 
@@ -755,7 +1020,7 @@ AnimationListPanel::HitTestResult AnimationListPanel::hit_test(const SDL_Point& 
                              geometry.delete_button_rel.w,
                              geometry.delete_button_rel.h};
         delete_rect = scroll_controller_.apply(delete_rect);
-        if (SDL_PointInRect(&p, &delete_rect)) {
+        if (show_delete_button_ && display_rows_[i].selectable && SDL_PointInRect(&p, &delete_rect)) {
             result.target = HitTarget::Delete;
         }
         return result;
@@ -794,7 +1059,3 @@ void AnimationListPanel::ensure_layout() const {
     self->layout_rows();
 }
 }
-
-
-
-

@@ -29,6 +29,9 @@ struct TrailGenerationCounters {
     int total_sector_boundary_failures = 0;
     int total_route_budget_failures = 0;
     int total_rooms_considered = 0;
+    int split_attempts = 0;
+    int split_successes = 0;
+    int split_exhausted = 0;
 };
 
 struct TrailConnectionFailure {
@@ -37,10 +40,17 @@ struct TrailConnectionFailure {
     std::string reason;
 };
 
+struct TrailUnresolvedRoom {
+    Room* room = nullptr;
+    std::string phase;
+    std::string reason;
+};
+
 struct TrailGenerationResult {
     std::vector<std::unique_ptr<Room>> trail_rooms;
     std::vector<TrailConnectionFailure> required_failures;
     std::vector<TrailConnectionFailure> optional_skips;
+    std::vector<TrailUnresolvedRoom> unresolved_rooms;
     bool all_required_connected = false;
     TrailGenerationCounters counters;
 };
@@ -84,7 +94,7 @@ private:
     std::mt19937 rng_;
     bool testing_ = false;
     nlohmann::json* trails_data_ = nullptr;
+    nlohmann::json fallback_trails_data_ = nlohmann::json::object();
     std::vector<SDL_Color> trail_colors_;
 };
-
 

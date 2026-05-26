@@ -50,15 +50,15 @@ bool build_xy_sprite_draw_packets(const WarpedScreenGrid& camera,
                                   std::vector<GpuSpriteDrawPacket>& out_xy_sprite_draws,
                                   std::string& out_error,
                                   const std::vector<double>* cached_depth_edges = nullptr);
-bool build_sink_clipped_sprite_packet(const render_projection::ProjectedSpriteFrame& projected,
-                                      float u0,
-                                      float v0,
-                                      float u1,
-                                      float v1,
-                                      float sink_height_offset_px,
-                                      std::uint32_t target_width,
-                                      std::uint32_t target_height,
-                                      GpuSpriteDrawPacket& out_packet);
+bool build_floor_clipped_sprite_packet(const WarpedScreenGrid& camera,
+                                       const render_projection::ProjectedSpriteFrame& projected,
+                                       float u0,
+                                       float v0,
+                                       float u1,
+                                       float v1,
+                                       std::uint32_t target_width,
+                                       std::uint32_t target_height,
+                                       GpuSpriteDrawPacket& out_packet);
 int classify_depth_layer_for_asset(const WarpedScreenGrid& camera,
                                    const Asset& asset,
                                    const std::vector<double>* cached_depth_edges = nullptr);
@@ -136,6 +136,8 @@ private:
                                std::uint32_t target_width,
                                std::uint32_t target_height,
                                std::string& out_error);
+    void ingest_player_damage_pulse(float now_seconds);
+    void prune_expired_damage_pulses(float now_seconds);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
 
@@ -149,7 +151,7 @@ private:
     static void packet_to_vertices(const GpuSpriteDrawPacket& packet,
                                    std::uint32_t target_width,
                                    std::uint32_t target_height,
-                                   std::array<SDL_Vertex, render_sink::kMaxClippedVertices>& out_vertices);
+                                   std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices);
 
     SDL_Renderer* renderer_ = nullptr;
     Assets* assets_ = nullptr;
@@ -184,6 +186,14 @@ private:
     std::vector<int> scratch_batch_indices_{};
     dof_blur_chain::Renderer dof_blur_chain_{};
     double last_dof_path_ms_ = 0.0;
+    struct ActiveDamagePulse {
+        std::uint64_t pulse_id = 0;
+        float pulse_time_seconds = 0.0f;
+        float amplitude = 0.0f;
+        float health_ratio_after = 1.0f;
+    };
+    std::deque<ActiveDamagePulse> active_damage_pulses_{};
+    std::uint64_t last_damage_pulse_id_ = 0;
     struct CreationBudgetConfig {
         std::uint32_t max_creations_per_frame = 3;
         double max_creation_ms_per_frame = 2.5;
@@ -202,3 +212,4 @@ private:
     std::deque<DeferredCreationJob> deferred_creation_queue_{};
     std::uint64_t creation_job_sequence_ = 0;
 };
+

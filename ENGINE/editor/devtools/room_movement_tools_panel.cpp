@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -23,19 +24,28 @@ constexpr int kHeaderHeight = 22;
 constexpr int kHeaderToEnabledGap = 10;
 constexpr int kSectionGap = 14;
 constexpr int kFieldGap = 12;
+constexpr int kButtonGap = 8;
 constexpr int kHintHeight = 44;
 constexpr int kHintLineGap = 20;
+constexpr int kPathListGap = 6;
+constexpr int kQuantizePanelPadding = 10;
+constexpr int kQuantizeHeaderHeight = 18;
 
 }  // namespace
 
 RoomMovementToolsPanel::RoomMovementToolsPanel() {
     enabled_checkbox_ = std::make_unique<DMCheckbox>("Movement Enabled", false);
-    smooth_checkbox_ = std::make_unique<DMCheckbox>("Smooth interpolation", false);
-    curve_checkbox_ = std::make_unique<DMCheckbox>("Curve interpolation", false);
+    smooth_checkbox_ = std::make_unique<DMCheckbox>("Smooth interpolation", true);
+    curve_checkbox_ = std::make_unique<DMCheckbox>("Curve interpolation", true);
     dx_box_ = std::make_unique<DMTextBox>("DX", "0");
     dy_box_ = std::make_unique<DMTextBox>("DY", "0");
     dz_box_ = std::make_unique<DMTextBox>("DZ", "0");
     rot_box_ = std::make_unique<DMTextBox>("Rotation", "0");
+    path_options_ = {"Path 1"};
+    path_buttons_.push_back(std::make_unique<DMButton>("Path 1", &DMStyles::AccentButton(), 220, DMButton::height()));
+    add_path_button_ = std::make_unique<DMButton>("+ New Path", &DMStyles::CreateButton(), 140, DMButton::height());
+    delete_path_button_ = std::make_unique<DMButton>("Delete Path", &DMStyles::DeleteButton(), 140, DMButton::height());
+    quantize_button_ = std::make_unique<DMButton>("Quantize Path", &DMStyles::AccentButton(), 220, DMButton::height());
 }
 
 RoomMovementToolsPanel::~RoomMovementToolsPanel() = default;
@@ -111,17 +121,17 @@ bool RoomMovementToolsPanel::system_enabled() const {
     return enabled_checkbox_ ? enabled_checkbox_->value() : false;
 }
 
-void RoomMovementToolsPanel::set_numeric_values(const NumericValues& values) {
-    if (dx_box_ && !dx_box_->is_editing()) {
+void RoomMovementToolsPanel::set_numeric_values(const NumericValues& values, bool force_update_active_edits) {
+    if (dx_box_ && (force_update_active_edits || !dx_box_->is_editing())) {
         dx_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dx))));
     }
-    if (dy_box_ && !dy_box_->is_editing()) {
+    if (dy_box_ && (force_update_active_edits || !dy_box_->is_editing())) {
         dy_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dy))));
     }
-    if (dz_box_ && !dz_box_->is_editing()) {
+    if (dz_box_ && (force_update_active_edits || !dz_box_->is_editing())) {
         dz_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dz))));
     }
-    if (rot_box_ && !rot_box_->is_editing()) {
+    if (rot_box_ && (force_update_active_edits || !rot_box_->is_editing())) {
         rot_box_->set_value(std::to_string(values.rotation_degrees));
     }
 }
@@ -159,6 +169,41 @@ bool RoomMovementToolsPanel::any_numeric_editing() const {
 void RoomMovementToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCallback callback) {
     on_system_enabled_toggle_ = std::move(callback);
 }
+void RoomMovementToolsPanel::set_path_options(const std::vector<std::string>& options, int selected_index) {
+    const std::vector<std::string> next_options = options.empty() ? std::vector<std::string>{"Path 1"} : options;
+    const int next_selected = std::clamp(selected_index, 0, static_cast<int>(next_options.size()) - 1);
+    const bool options_changed = path_options_ != next_options;
+    path_options_ = next_options;
+    selected_path_index_ = next_selected;
+
+    if (options_changed || path_buttons_.size() != path_options_.size()) {
+        path_buttons_.clear();
+        path_buttons_.reserve(path_options_.size());
+        for (const std::string& label : path_options_) {
+            path_buttons_.push_back(std::make_unique<DMButton>(label,
+                                                               &DMStyles::ListButton(),
+                                                               220,
+                                                               DMButton::height()));
+        }
+        path_scroll_offset_ = 0;
+    } else {
+        for (std::size_t i = 0; i < path_buttons_.size(); ++i) {
+            if (path_buttons_[i]) {
+                path_buttons_[i]->set_text(path_options_[i]);
+            }
+        }
+    }
+    layout_dirty_ = true;
+}
+void RoomMovementToolsPanel::set_on_path_selection_changed(PathSelectionChangedCallback callback) { on_path_selection_changed_ = std::move(callback); }
+void RoomMovementToolsPanel::set_on_add_path(PathActionCallback callback) { on_add_path_ = std::move(callback); }
+void RoomMovementToolsPanel::set_on_delete_path(PathActionCallback callback) { on_delete_path_ = std::move(callback); }
+void RoomMovementToolsPanel::set_quantize_options(const std::vector<QuantizeOption>& options) {
+    quantize_options_ = options;
+    quantize_option_rects_.assign(quantize_options_.size(), SDL_Rect{0, 0, 0, 0});
+    quantize_hover_index_ = -1;
+}
+void RoomMovementToolsPanel::set_on_quantize_path_selected(PathSelectionChangedCallback callback) { on_quantize_path_selected_ = std::move(callback); }
 
 bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
     if (!visible_) {
@@ -168,6 +213,21 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
     update_layout();
 
     bool handled = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event =
+        event.type == SDL_EVENT_MOUSE_MOTION ||
+        event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+        event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+    const bool wheel_event = event.type == SDL_EVENT_MOUSE_WHEEL;
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        pointer = sdl_mouse_util::MotionPoint(event.motion);
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        pointer = sdl_mouse_util::ButtonPoint(event.button);
+    } else if (wheel_event) {
+        sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
+    }
+    const bool pointer_inside_panel = (pointer_event || wheel_event) && point_in_rect(pointer.x, pointer.y, panel_rect_);
+
     if (enabled_checkbox_) {
         const bool before = enabled_checkbox_->value();
         if (enabled_checkbox_->handle_event(event)) {
@@ -202,6 +262,86 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
         if (rot_box_ && rot_box_->handle_event(event)) {
             handled = true;
         }
+        if (event.type == SDL_EVENT_MOUSE_WHEEL && point_in_rect(pointer.x, pointer.y, path_list_rect_)) {
+            const int step = DMButton::height() + kPathListGap;
+            scroll_paths_by(-event.wheel.integer_y * step);
+            handled = true;
+        }
+        layout_path_buttons();
+        for (std::size_t i = 0; i < path_buttons_.size(); ++i) {
+            auto& button = path_buttons_[i];
+            if (!button) continue;
+            const SDL_Rect row_rect = button->rect();
+            const bool row_visible = row_rect.y + row_rect.h >= path_list_rect_.y &&
+                                     row_rect.y <= path_list_rect_.y + path_list_rect_.h;
+            if (!row_visible) {
+                continue;
+            }
+            if (button->handle_event(event)) {
+                handled = true;
+                if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+                    selected_path_index_ = static_cast<int>(i);
+                    for (std::size_t j = 0; j < path_buttons_.size(); ++j) {
+                        if (!path_buttons_[j]) continue;
+                        path_buttons_[j]->set_style(static_cast<int>(j) == selected_path_index_
+                                                        ? &DMStyles::AccentButton()
+                                                        : &DMStyles::ListButton());
+                    }
+                    if (on_path_selection_changed_) on_path_selection_changed_(selected_path_index_);
+                }
+            }
+        }
+        if (add_path_button_ && add_path_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && on_add_path_) on_add_path_();
+        }
+        if (delete_path_button_ && delete_path_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && on_delete_path_) on_delete_path_();
+        }
+        if (quantize_button_ && quantize_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+                quantize_open_ = !quantize_open_;
+            }
+        }
+        if (quantize_open_) {
+            if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+                quantize_open_ = false;
+                quantize_hover_index_ = -1;
+                handled = true;
+            } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+                quantize_hover_index_ = -1;
+                for (std::size_t i = 0; i < quantize_option_rects_.size(); ++i) {
+                    if (quantize_options_[i].selectable && point_in_rect(pointer.x, pointer.y, quantize_option_rects_[i])) {
+                        quantize_hover_index_ = static_cast<int>(i);
+                        break;
+                    }
+                }
+            } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+                bool clicked_row = false;
+                int selectable_index = -1;
+                for (std::size_t i = 0; i < quantize_option_rects_.size(); ++i) {
+                    if (!quantize_options_[i].selectable) continue;
+                    ++selectable_index;
+                    if (point_in_rect(pointer.x, pointer.y, quantize_option_rects_[i])) {
+                        clicked_row = true;
+                        handled = true;
+                        if (on_quantize_path_selected_) {
+                            on_quantize_path_selected_(selectable_index);
+                            quantize_open_ = false;
+                            quantize_hover_index_ = -1;
+                        }
+                        break;
+                    }
+                }
+                if (!clicked_row && !point_in_rect(pointer.x, pointer.y, quantize_panel_rect_) && !point_in_rect(pointer.x, pointer.y, quantize_rect_)) {
+                    quantize_open_ = false;
+                    quantize_hover_index_ = -1;
+                    handled = true;
+                }
+            }
+        }
 
         if (!smooth_enabled()) {
             set_curve_enabled(false);
@@ -212,21 +352,7 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    SDL_Point pointer{0, 0};
-    const bool pointer_event =
-        event.type == SDL_EVENT_MOUSE_MOTION ||
-        event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
-        event.type == SDL_EVENT_MOUSE_BUTTON_UP;
-    const bool wheel_event = event.type == SDL_EVENT_MOUSE_WHEEL;
-    if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        pointer = sdl_mouse_util::MotionPoint(event.motion);
-    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        pointer = sdl_mouse_util::ButtonPoint(event.button);
-    } else if (wheel_event) {
-        sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
-    }
-
-    if ((pointer_event || wheel_event) && point_in_rect(pointer.x, pointer.y, panel_rect_)) {
+    if (pointer_inside_panel) {
         return true;
     }
     return false;
@@ -262,8 +388,8 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
         return;
     }
 
-    DMFontCache::instance().draw_text(renderer, label_style, "Drag selected point on ground", hint_rect_.x, hint_rect_.y);
-    DMFontCache::instance().draw_text(renderer, label_style, "Mouse wheel adjusts height", hint_rect_.x, hint_rect_.y + kHintLineGap);
+    DMFontCache::instance().draw_text(renderer, label_style, "Ground crosshair drag edits X/Z", hint_rect_.x, hint_rect_.y);
+    DMFontCache::instance().draw_text(renderer, label_style, "Elevated handle + wheel edits Y", hint_rect_.x, hint_rect_.y + kHintLineGap);
 
     if (smooth_checkbox_) {
         smooth_checkbox_->render(renderer);
@@ -282,6 +408,58 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
     }
     if (rot_box_) {
         rot_box_->render(renderer);
+    }
+    SDL_Rect previous_clip{};
+    const bool had_clip = SDL_RenderClipEnabled(renderer);
+    if (had_clip) {
+        SDL_GetRenderClipRect(renderer, &previous_clip);
+    }
+    SDL_SetRenderClipRect(renderer, &path_list_rect_);
+    for (const auto& button : path_buttons_) {
+        if (!button) continue;
+        const SDL_Rect row_rect = button->rect();
+        const bool row_visible = row_rect.y + row_rect.h >= path_list_rect_.y &&
+                                 row_rect.y <= path_list_rect_.y + path_list_rect_.h;
+        if (row_visible) {
+            button->render(renderer);
+        }
+    }
+    SDL_SetRenderClipRect(renderer, had_clip ? &previous_clip : nullptr);
+    if (add_path_button_) add_path_button_->render(renderer);
+    if (delete_path_button_) delete_path_button_->render(renderer);
+    if (quantize_button_) quantize_button_->render(renderer);
+    if (quantize_open_) {
+        dm_draw::DrawBeveledRect(renderer,
+                                 quantize_panel_rect_,
+                                 DMStyles::CornerRadius(),
+                                 DMStyles::BevelDepth(),
+                                 DMStyles::PanelBG(),
+                                 DMStyles::HighlightColor(),
+                                 DMStyles::ShadowColor(),
+                                 true,
+                                 DMStyles::HighlightIntensity(),
+                                 DMStyles::ShadowIntensity());
+        dm_draw::DrawRoundedOutline(renderer, quantize_panel_rect_, DMStyles::CornerRadius(), 1, DMStyles::Border());
+        for (std::size_t i = 0; i < quantize_options_.size(); ++i) {
+            const SDL_Rect& row = quantize_option_rects_[i];
+            if (quantize_options_[i].selectable) {
+                if (static_cast<int>(i) == quantize_hover_index_) {
+                    SDL_SetRenderDrawColor(renderer, 95, 105, 130, 120);
+                    const SDL_FRect row_f{static_cast<float>(row.x), static_cast<float>(row.y), static_cast<float>(row.w), static_cast<float>(row.h)};
+                    SDL_RenderFillRect(renderer, &row_f);
+                }
+                const SDL_Color accent = quantize_options_[i].current_animation
+                    ? SDL_Color{219, 126, 247, 255}
+                    : SDL_Color{109, 202, 255, 255};
+                const SDL_FRect swatch{static_cast<float>(row.x + 8),
+                                      static_cast<float>(row.y + (row.h - 10) / 2),
+                                      10.0f,
+                                      10.0f};
+                SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, accent.a);
+                SDL_RenderFillRect(renderer, &swatch);
+            }
+            DMFontCache::instance().draw_text(renderer, label_style, quantize_options_[i].label, row.x + 24, row.y + 4);
+        }
     }
 }
 
@@ -317,6 +495,39 @@ void RoomMovementToolsPanel::update_layout() const {
     enabled_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMCheckbox::height()};
     cursor_y += enabled_rect_.h + kSectionGap;
 
+    const auto textbox_height_for = [content_w](const std::unique_ptr<DMTextBox>& box) {
+        if (!box) {
+            return DMTextBox::height();
+        }
+        return std::max(DMTextBox::height(), box->height_for_width(content_w));
+    };
+
+    const int button_w = (content_w - kButtonGap) / 2;
+    const int action_row_h = DMButton::height();
+    const int controls_height =
+        action_row_h + kFieldGap + action_row_h + kSectionGap +
+        kHintHeight + kSectionGap +
+        DMCheckbox::height() + kFieldGap +
+        DMCheckbox::height() + kSectionGap +
+        textbox_height_for(dx_box_) + kFieldGap +
+        textbox_height_for(dy_box_) + kFieldGap +
+        textbox_height_for(dz_box_) + kFieldGap +
+        textbox_height_for(rot_box_);
+
+    const int panel_bottom = panel_rect_.y + panel_rect_.h - kPanelPadding;
+    const int list_available = std::max(
+        DMButton::height(),
+        panel_bottom - cursor_y - controls_height - kSectionGap);
+    path_select_rect_ = SDL_Rect{content_x, cursor_y, content_w, list_available};
+    path_list_rect_ = path_select_rect_;
+    cursor_y += path_list_rect_.h + kSectionGap;
+
+    path_add_rect_ = SDL_Rect{content_x, cursor_y, std::max(0, button_w), action_row_h};
+    path_delete_rect_ = SDL_Rect{content_x + std::max(0, button_w) + kButtonGap, cursor_y, std::max(0, button_w), action_row_h};
+    cursor_y += action_row_h + kFieldGap;
+    quantize_rect_ = SDL_Rect{content_x, cursor_y, content_w, action_row_h};
+    cursor_y += action_row_h + kSectionGap;
+
     hint_rect_ = SDL_Rect{content_x, cursor_y, content_w, kHintHeight};
     cursor_y += hint_rect_.h + kSectionGap;
 
@@ -325,13 +536,6 @@ void RoomMovementToolsPanel::update_layout() const {
 
     curve_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMCheckbox::height()};
     cursor_y += curve_rect_.h + kSectionGap;
-
-    const auto textbox_height_for = [content_w](const std::unique_ptr<DMTextBox>& box) {
-        if (!box) {
-            return DMTextBox::height();
-        }
-        return std::max(DMTextBox::height(), box->height_for_width(content_w));
-    };
 
     dx_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(dx_box_)};
     cursor_y += dx_rect_.h + kFieldGap;
@@ -370,8 +574,55 @@ void RoomMovementToolsPanel::update_layout() const {
     if (rot_box_) {
         rot_box_->set_rect(rot_rect_);
     }
+    layout_path_buttons();
+    if (add_path_button_) add_path_button_->set_rect(path_add_rect_);
+    if (delete_path_button_) delete_path_button_->set_rect(path_delete_rect_);
+    if (quantize_button_) quantize_button_->set_rect(quantize_rect_);
+    const int quantize_panel_w = std::max(220, quantize_rect_.w);
+    int quantize_panel_x = quantize_rect_.x + quantize_rect_.w + kPathListGap;
+    if (quantize_panel_x + quantize_panel_w > panel_rect_.x + panel_rect_.w) {
+        quantize_panel_x = quantize_rect_.x;
+    }
+    int qy = quantize_rect_.y + quantize_rect_.h + kPathListGap + kQuantizePanelPadding;
+    for (std::size_t i = 0; i < quantize_options_.size(); ++i) {
+        const int row_h = quantize_options_[i].selectable ? DMButton::height() : kQuantizeHeaderHeight;
+        quantize_option_rects_[i] = SDL_Rect{quantize_panel_x + kQuantizePanelPadding, qy, quantize_panel_w - (kQuantizePanelPadding * 2), row_h};
+        qy += row_h + kPathListGap;
+    }
+    quantize_panel_rect_ = SDL_Rect{
+        quantize_panel_x,
+        quantize_rect_.y + quantize_rect_.h + kPathListGap,
+        quantize_panel_w,
+        std::max(0, qy - (quantize_rect_.y + quantize_rect_.h + kPathListGap) + kQuantizePanelPadding - kPathListGap)};
 
     layout_dirty_ = false;
+}
+
+void RoomMovementToolsPanel::layout_path_buttons() const {
+    path_content_height_ = path_buttons_.empty()
+        ? 0
+        : static_cast<int>(path_buttons_.size()) * (DMButton::height() + kPathListGap) - kPathListGap;
+    path_max_scroll_ = std::max(0, path_content_height_ - path_list_rect_.h);
+    path_scroll_offset_ = std::clamp(path_scroll_offset_, 0, path_max_scroll_);
+
+    int path_button_y = path_list_rect_.y - path_scroll_offset_;
+    for (std::size_t i = 0; i < path_buttons_.size(); ++i) {
+        auto& button = path_buttons_[i];
+        if (!button) continue;
+        button->set_rect(SDL_Rect{path_list_rect_.x, path_button_y, path_list_rect_.w, DMButton::height()});
+        button->set_style(static_cast<int>(i) == selected_path_index_ ? &DMStyles::AccentButton() : &DMStyles::ListButton());
+        path_button_y += DMButton::height() + kPathListGap;
+    }
+}
+
+void RoomMovementToolsPanel::scroll_paths_by(int delta) {
+    update_layout();
+    const int next = std::clamp(path_scroll_offset_ + delta, 0, path_max_scroll_);
+    if (next == path_scroll_offset_) {
+        return;
+    }
+    path_scroll_offset_ = next;
+    layout_dirty_ = true;
 }
 
 bool RoomMovementToolsPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {

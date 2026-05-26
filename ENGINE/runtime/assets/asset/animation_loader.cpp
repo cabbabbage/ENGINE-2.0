@@ -1313,7 +1313,7 @@ void AnimationLoader::load(Animation& animation,
         }
 
         std::vector<AnimationFrame> primary_path;
-        if (has_movement_json) {
+        if (!has_movement_paths_json && has_movement_json) {
                 parse_movement_sequence(anim_json["movement"], primary_path);
         }
 

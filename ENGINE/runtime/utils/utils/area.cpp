@@ -145,19 +145,16 @@ void Area::generate_point(SDL_Point center, int map_width, int map_height) {
 }
 
 void Area::generate_circle(SDL_Point center, int horizontal_radius, int vertical_radius, int edge_smoothness, int map_width, int map_height) {
-        int s = std::clamp(edge_smoothness, 0, 100);
-        int count = std::max(12, 6 + s * 2);
-	double max_dev = 0.20 * (100 - s) / 100.0;
-	std::uniform_real_distribution<double> dist(1.0 - max_dev, 1.0 + max_dev);
+        (void)edge_smoothness;
+        constexpr int count = 64;
         const int clamped_horizontal_radius = std::max(1, horizontal_radius);
         const int clamped_vertical_radius = std::max(1, vertical_radius);
 	points.clear();
 	points.reserve(count);
 	for (int i = 0; i < count; ++i) {
 		double theta = 2 * SDL_PI_D * i / count;
-		double rx = clamped_horizontal_radius * dist(rng), ry = clamped_vertical_radius * dist(rng);
-		double x = center.x + rx * std::cos(theta);
-		double y = center.y + ry * std::sin(theta);
+		double x = center.x + static_cast<double>(clamped_horizontal_radius) * std::cos(theta);
+		double y = center.y + static_cast<double>(clamped_vertical_radius) * std::sin(theta);
                 int xi = static_cast<int>(std::round(std::clamp(x, 0.0, static_cast<double>(map_width))));
                 int yi = static_cast<int>(std::round(std::clamp(y, 0.0, static_cast<double>(map_height))));
                 points.emplace_back(SDL_Point{ xi, yi });
@@ -167,10 +164,7 @@ void Area::generate_circle(SDL_Point center, int horizontal_radius, int vertical
 }
 
 void Area::generate_square(SDL_Point center, int w, int h, int edge_smoothness, int map_width, int map_height) {
-        int s = std::clamp(edge_smoothness, 0, 100);
-        double max_dev = 0.25 * (100 - s) / 100.0;
-	std::uniform_real_distribution<double> xoff(-max_dev * w, max_dev * w);
-	std::uniform_real_distribution<double> yoff(-max_dev * h, max_dev * h);
+        (void)edge_smoothness;
 	int half_w = w / 2, half_h = h / 2;
 	points.clear();
 	points.reserve(4);
@@ -179,8 +173,8 @@ void Area::generate_square(SDL_Point center, int w, int h, int edge_smoothness, 
       Point{center.x + half_w, center.y - half_h},
       Point{center.x + half_w, center.y + half_h},
       Point{center.x - half_w, center.y + half_h}}) {
-                int x = static_cast<int>(std::round(x0 + xoff(rng)));
-                int y = static_cast<int>(std::round(y0 + yoff(rng)));
+                int x = x0;
+                int y = y0;
                 points.emplace_back(SDL_Point{ std::clamp(x, 0, map_width), std::clamp(y, 0, map_height) });
         }
         bounds_valid_ = false;

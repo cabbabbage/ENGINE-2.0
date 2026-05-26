@@ -637,9 +637,8 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
         return;
     }
 
-    const auto spawn_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, preload_margin_px()));
-    const auto keep_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, despawn_margin_px()));
-
+    auto spawn_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, preload_margin_px()));
+    auto keep_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, despawn_margin_px()));
     suspend_outside_keep_chunks(keep_chunks);
 
     std::vector<ChunkKey> ordered_spawn_chunks(spawn_chunks.begin(), spawn_chunks.end());
@@ -676,7 +675,6 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
         }
     }
     pending_activation_chunks_.swap(retained_pending);
-
     std::size_t remaining_budget = max_cells_per_sync == 0 ? std::numeric_limits<std::size_t>::max() : max_cells_per_sync;
     std::vector<ChunkKey> next_pending;
     next_pending.reserve(pending_activation_chunks_.size());
@@ -702,7 +700,6 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
             diagnostics_.deferred_cells_remaining += (chunk_it->second.size() - std::min(cursor_it->second, chunk_it->second.size()));
         }
     }
-
     if (freq != 0) {
         const std::uint64_t end = SDL_GetPerformanceCounter();
         diagnostics_.sync_ms = static_cast<double>(end - begin) * 1000.0 / static_cast<double>(freq);
@@ -750,6 +747,7 @@ Asset* DynamicSpawnRuntime::activate_cell(const PlannedCell& cell) {
         asset = std::move(suspended_it->second);
         suspended_.erase(suspended_it);
         reused = true;
+        asset->resample_spawn_y_position();
     } else {
         asset = create_asset_for_cell(cell);
     }
@@ -778,7 +776,7 @@ std::unique_ptr<Asset> DynamicSpawnRuntime::create_asset_for_cell(const PlannedC
     }
     Area spawn_area(cell.owner_name.empty() ? std::string("dynamic_spawn") : cell.owner_name,
                     cell.key.grid_resolution);
-    const std::string stable_spawn_id =
+    std::string stable_spawn_id =
         std::string("live_dynamic:") + cell.selector_spawn_id +
         ":" + std::to_string(cell.key.grid_resolution) +
         ":" + std::to_string(cell.key.grid_x) +
@@ -942,8 +940,10 @@ int DynamicSpawnRuntime::max_spawn_from_room_px() const {
     if (live_it == map.end()) {
         return 128;
     }
-    return read_int_setting(*live_it, "max_spawn_from_room", 128, 0, 2000);
+    return read_int_setting(*live_it, "max_spawn_from_room", 128, 0, 20000);
 }
+
+
 
 int DynamicSpawnRuntime::preload_margin_px() const {
     const nlohmann::json& map = assets_.map_info_json();

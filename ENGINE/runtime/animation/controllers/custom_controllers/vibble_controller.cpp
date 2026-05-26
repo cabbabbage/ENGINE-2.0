@@ -67,6 +67,30 @@ float wrap_degrees_180(float degrees) {
     return wrapped - 180.0f;
 }
 
+std::optional<float> yaw_degrees_from_camera_forward_horizontal(const Asset& player) {
+    const Assets* assets = player.get_assets();
+    if (!assets) {
+        return std::nullopt;
+    }
+
+    const world::CameraProjectionParams params = assets->getView().projection_params();
+    const double forward_x = params.forward_x;
+    const double forward_z = params.forward_z;
+    if (!std::isfinite(forward_x) || !std::isfinite(forward_z)) {
+        return std::nullopt;
+    }
+
+    constexpr double kMinHorizontalLengthSq = 1e-8;
+    const double horizontal_length_sq = forward_x * forward_x + forward_z * forward_z;
+    if (horizontal_length_sq <= kMinHorizontalLengthSq) {
+        return std::nullopt;
+    }
+
+    const double yaw_radians = std::atan2(forward_z, forward_x);
+    const double yaw_degrees = yaw_radians * (180.0 / 3.14159265358979323846);
+    return wrap_degrees_180(static_cast<float>(yaw_degrees));
+}
+
 int consume_axis(float& accumulator) {
     const int whole = static_cast<int>(accumulator);
     if (whole != 0) {
@@ -186,7 +210,11 @@ void vibble_controller::movement(const Input& input) {
     const Assets* owner_assets = player->get_assets();
     const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
     if (!dev_mode && !normal_mode_active_) {
-        yaw_angle_degrees_ = yaw_degrees_for_animation(last_facing_animation_);
+        if (const std::optional<float> camera_yaw = yaw_degrees_from_camera_forward_horizontal(*player)) {
+            yaw_angle_degrees_ = *camera_yaw;
+        } else {
+            yaw_angle_degrees_ = yaw_degrees_for_animation(last_facing_animation_);
+        }
         normal_mode_active_ = true;
     } else if (dev_mode) {
         normal_mode_active_ = false;

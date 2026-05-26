@@ -30,7 +30,8 @@ namespace {
 #define ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG 0
 #endif
 
-constexpr int kRowHeight = 72;
+constexpr int kRowHeight = 84;
+constexpr int kStickyHeaderHeight = 56;
 
 constexpr int kIndentPerLevel = 16;
 
@@ -395,7 +396,52 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
     }
 
     const DMButtonStyle& list_style = DMStyles::ListButton();
-    const int row_padding = DMSpacing::small_gap();
+    const DMButtonStyle& accent_style = DMStyles::AccentButton();
+    const DMButtonStyle& warn_style = DMStyles::WarnButton();
+    const DMButtonStyle& create_style = DMStyles::CreateButton();
+    const int row_padding = DMSpacing::small_gap() + 2;
+
+    SDL_Rect sticky_header{clip.x, clip.y, clip.w, std::min(kStickyHeaderHeight, clip.h)};
+    dm_draw::DrawBeveledRect(renderer,
+                             sticky_header,
+                             DMStyles::CornerRadius(),
+                             1,
+                             DMStyles::PanelHeader(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    dm_draw::DrawRoundedOutline(renderer, sticky_header, DMStyles::CornerRadius(), 1, DMStyles::Border());
+
+    std::string selected_name = selected_animation_id_.value_or("None");
+    std::string asset_name = document_ ? document_->manifest_asset_key_debug() : std::string{};
+    if (asset_name.empty()) {
+        asset_name = "Unknown Asset";
+    }
+    DMLabelStyle header_style = DMStyles::Label();
+    header_style.font_size = std::max(12, header_style.font_size - 2);
+    header_style.color = DMStyles::TextBox().text;
+    DMFontCache::instance().draw_text(renderer, header_style, "Asset: " + asset_name, sticky_header.x + row_padding, sticky_header.y + row_padding);
+    DMFontCache::instance().draw_text(renderer, header_style, "Selected: " + selected_name, sticky_header.x + row_padding, sticky_header.y + row_padding + 22);
+
+    if (display_rows_.empty()) {
+        DMLabelStyle empty_style = DMStyles::Label();
+        empty_style.color = DMStyles::TextBox().label.color;
+        std::string state_icon = DMIcons::Info();
+        std::string state_text = "No animations yet. Use + to create or import.";
+        if (!document_) {
+            state_icon = DMIcons::NavDown();
+            state_text = "Loading animations... wait for asset sync.";
+        }
+        const std::string line = state_icon + " " + state_text;
+        SDL_Point text_size = DMFontCache::instance().measure_text(empty_style, line);
+        DMFontCache::instance().draw_text(renderer,
+                                          empty_style,
+                                          line,
+                                          bounds_.x + (bounds_.w - text_size.x) / 2,
+                                          bounds_.y + std::max(sticky_header.h + DMSpacing::item_gap(), (bounds_.h - text_size.y) / 2));
+    }
 
     for (size_t i = 0; i < display_rows_.size() && i < row_geometry_.size(); ++i) {
         SDL_Rect rect = scroll_controller_.apply(row_geometry_[i].outer);
@@ -417,7 +463,13 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         if (!row.selectable) {
             base = mix_color(base, greyscale_of(base), 0.75f);
         }
-        SDL_Color fill = hovered ? dm_draw::LightenColor(base, 0.08f) : base;
+        SDL_Color fill = hovered ? list_style.hover_bg : base;
+        if (!row.selectable) {
+            fill = DMStyles::ButtonBaseFill();
+        }
+        if (row.missing_source) {
+            fill = warn_style.bg;
+        }
 
         dm_draw::DrawBeveledRect(renderer, rect, DMStyles::CornerRadius(), DMStyles::BevelDepth(), fill, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
 
@@ -425,7 +477,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         int border_thickness = 1;
         if (selected) {
             border_thickness = 2;
-            border_col = DMStyles::AccentButton().bg;
+            border_col = accent_style.border;
         }
         dm_draw::DrawRoundedOutline(renderer, rect, DMStyles::CornerRadius(), border_thickness, border_col);
 
@@ -460,10 +512,31 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         DMLabelStyle label_style = DMStyles::Label();
         label_style.color = list_style.label.color;
         if (!row.selectable) {
-            label_style.color = greyscale_of(label_style.color);
+            label_style.color = DMStyles::TextBox().label.color;
+        }
+        if (row.missing_source) {
+            label_style.color = warn_style.text;
         }
         label_style.font_size = std::max(1, static_cast<int>(std::round(label_style.font_size * size_factor)));
-        DMFontCache::instance().draw_text(renderer, label_style, row.id, content_x, content_y);
+        const std::string status_icon = row.missing_source ? "!" : (row.selectable ? std::string(DMIcons::NavRight()) : "-");
+        DMFontCache::instance().draw_text(renderer, label_style, status_icon + " " + row.id, content_x, content_y + 4);
+
+        DMLabelStyle chip_style = DMStyles::Label();
+        chip_style.font_size = 12;
+        chip_style.color = DMStyles::TextBox().text;
+        std::vector<std::pair<std::string, SDL_Color>> chips;
+        if (!row.selectable) chips.emplace_back("Inherited", DMStyles::ButtonBaseFill());
+        if (row.missing_source) chips.emplace_back("Missing Source", warn_style.hover_bg);
+        if (start_animation_id_ && *start_animation_id_ == row.id) chips.emplace_back("Start", create_style.bg);
+        int chip_x = content_x;
+        int chip_y = content_y + 28;
+        for (const auto& chip : chips) {
+            SDL_Point chip_sz = DMFontCache::instance().measure_text(chip_style, chip.first);
+            SDL_Rect chip_rect{chip_x, chip_y, chip_sz.x + 12, chip_sz.y + 4};
+            dm_draw::DrawBeveledRect(renderer, chip_rect, DMStyles::CornerRadius(), 1, chip.second, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity() * 0.4f, DMStyles::ShadowIntensity() * 0.4f);
+            DMFontCache::instance().draw_text(renderer, chip_style, chip.first, chip_rect.x + 6, chip_rect.y + 2);
+            chip_x += chip_rect.w + DMSpacing::small_gap();
+        }
 
         if (show_delete_button_) {
             SDL_Rect delete_rect{rect.x + geometry.delete_button_rel.x,
@@ -825,13 +898,13 @@ void AnimationListPanel::layout_rows() {
     const int padding = DMSpacing::panel_padding();
     const int gap = DMSpacing::small_gap();
     const int base_width = std::max(0, bounds_.w - padding * 2);
-    const int row_padding = DMSpacing::small_gap();
+    const int row_padding = DMSpacing::small_gap() + 2;
 
     row_geometry_.clear();
     row_geometry_.reserve(display_rows_.size());
 
-    int total_height = 0;
-    int cursor_y = bounds_.y + padding;
+    int total_height = kStickyHeaderHeight;
+    int cursor_y = bounds_.y + padding + kStickyHeaderHeight;
 
     for (size_t i = 0; i < display_rows_.size(); ++i) {
         const int level = display_rows_[i].level;
@@ -976,6 +1049,3 @@ void AnimationListPanel::ensure_layout() const {
     self->layout_rows();
 }
 }
-
-
-

@@ -29,6 +29,8 @@ constexpr double kTwoPi = 6.28318530717958647692;
 constexpr double kStartAngle = -1.5707963267948966;
 constexpr int kSearchPanelHeight = 320;
 constexpr double kArrowKeyDelta = 0.5;
+constexpr double kWidgetScrollDelta = 5.0;
+constexpr double kNodeScrollDelta = 1.0;
 
 double clamp_positive(double value) {
     return value < 0.0 ? 0.0 : value;
@@ -125,6 +127,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             if (collapsed_) {
                 hovered_index_ = -1;
                 active_index_ = -1;
+                widget_selected_ = false;
                 flush_pending_adjustment();
                 wheel_scroll_accumulator_ = 0.0;
                 hide_search();
@@ -162,6 +165,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
 
     if (candidates_.empty()) {
         hovered_index_ = -1;
+        widget_selected_ = false;
         flush_pending_adjustment();
         release_scroll_capture();
         return false;
@@ -218,6 +222,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
                 return true;
             }
 
+            widget_selected_ = false;
             if (active_index_ != target_index) {
                 flush_pending_adjustment();
                 active_index_ = target_index;
@@ -229,21 +234,35 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             } else {
                 flush_pending_adjustment();
                 active_index_ = -1;
+                widget_selected_ = true;
                 wheel_scroll_accumulator_ = 0.0;
                 release_scroll_capture();
             }
             return true;
         }
 
-        if (active_index_ != -1) {
+        if (SDL_PointInRect(&point, &rect_)) {
             flush_pending_adjustment();
             active_index_ = -1;
+            widget_selected_ = true;
+            wheel_scroll_accumulator_ = 0.0;
+            if (!scroll_capture_active_) {
+                DMWidgetsSetSliderScrollCapture(this, true);
+                scroll_capture_active_ = true;
+            }
+            return true;
+        }
+
+        if (active_index_ != -1 || widget_selected_) {
+            flush_pending_adjustment();
+            active_index_ = -1;
+            widget_selected_ = false;
             wheel_scroll_accumulator_ = 0.0;
             release_scroll_capture();
             return true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
-        if (active_index_ >= 0 && on_adjust_) {
+        if ((active_index_ >= 0 || widget_selected_) && on_adjust_) {
             double delta_value = static_cast<double>(e.wheel.integer_y);
             if (std::abs(delta_value) < 1e-6) {
                 delta_value = static_cast<double>(e.wheel.y);
@@ -264,7 +283,8 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             }
 
             if (steps != 0) {
-                submit_adjustment(static_cast<double>(steps));
+                const double per_step_delta = (active_index_ >= 0) ? kNodeScrollDelta : kWidgetScrollDelta;
+                submit_adjustment(static_cast<double>(steps) * per_step_delta);
                 return true;
             }
 
@@ -274,7 +294,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         }
     } else if (e.type == SDL_EVENT_KEY_DOWN) {
         double delta = 0.0;
-        if (active_index_ >= 0 && on_adjust_) {
+        if ((active_index_ >= 0 || widget_selected_) && on_adjust_) {
             if (e.key.key == SDLK_UP) {
                 delta = kArrowKeyDelta;
             } else if (e.key.key == SDLK_DOWN) {
@@ -287,7 +307,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (active_index_ == -1) {
+    if (active_index_ == -1 && !widget_selected_) {
         flush_pending_adjustment();
         release_scroll_capture();
     }
@@ -430,6 +450,7 @@ void CandidateEditorPieGraphWidget::set_weights(std::vector<float> weights) {
     legend_row_rects_.clear();
     legend_row_height_ = 0;
     pending_delta_ = 0.0;
+    widget_selected_ = false;
     if (active_index_ >= static_cast<int>(candidates_.size())) {
         active_index_ = -1;
         release_scroll_capture();
@@ -480,6 +501,7 @@ void CandidateEditorPieGraphWidget::set_candidates_from_json(const nlohmann::jso
     legend_row_rects_.clear();
     legend_row_height_ = 0;
     flush_pending_adjustment();
+    widget_selected_ = false;
     if (active_index_ >= static_cast<int>(candidates_.size())) {
         active_index_ = -1;
         if (scroll_capture_active_) {

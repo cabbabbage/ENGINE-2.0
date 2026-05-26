@@ -90,6 +90,7 @@ private:
     std::vector<CandidateInfo> candidates_{};
     int hovered_index_ = -1;
     int active_index_ = -1;
+    bool widget_selected_ = false;
     std::function<void(int index, double delta)> on_adjust_{};
     std::function<void(int index)> on_delete_{};
     std::function<void()> on_regenerate_{};

@@ -6818,6 +6818,89 @@
       "y_pos_max": 194,
       "y_pos_min": 32
     },
+    "fog_1": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/fog_1",
+      "asset_name": "fog_1",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [
+        "fog"
+      ],
+      "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
+    },
     "fog_2": {
       "anchor_point_child_candidates": [],
       "animations": {
@@ -10032,20 +10115,20 @@
                 "anchor_link": "",
                 "corners": [
                   {
-                    "texture_x": 450,
-                    "texture_y": 368
+                    "texture_x": 0,
+                    "texture_y": 0
                   },
                   {
-                    "texture_x": 1601,
-                    "texture_y": 368
+                    "texture_x": 813,
+                    "texture_y": 0
                   },
                   {
-                    "texture_x": 1601,
-                    "texture_y": 1015
+                    "texture_x": 813,
+                    "texture_y": 308
                   },
                   {
-                    "texture_x": 450,
-                    "texture_y": 1015
+                    "texture_x": 0,
+                    "texture_y": 308
                   }
                 ],
                 "enabled": true,
@@ -10058,13 +10141,13 @@
                 "id": "hit_box_id",
                 "name": "hit_box",
                 "position": {
-                  "x": 450,
-                  "y": 368
+                  "x": 0,
+                  "y": 0
                 },
                 "rotation_degrees": 0.0,
                 "size": {
-                  "h": 647,
-                  "w": 1151
+                  "h": 308,
+                  "w": 813
                 },
                 "type": "hitbox"
               }
@@ -12662,12 +12745,31 @@
               true
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0,
+                0.0,
+                true
+              ]
+            ]
+          ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": -75.0
+            "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -13235,8 +13337,8 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 278.0,
-        "size_variation": 17.0
+        "scale_percentage": 319.0,
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [
@@ -13246,27 +13348,27 @@
       "tillable": false,
       "tilt_range": {
         "center": 0,
-        "falloff": 6,
-        "random": true,
-        "span": 8,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
         "weights": {
-          "center": 0.5107724645296899,
-          "edge": 0.1673673147661587,
-          "falloff": 0.3218602207041514
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
         }
       },
       "tilt_range_max_deg": 8,
       "tilt_range_min_deg": -8,
-      "weight_kg": 584.0,
+      "weight_kg": 0.0,
       "y_position_range": {
-        "center": -15,
-        "falloff": 2,
-        "random": true,
-        "span": 4,
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
         "weights": {
-          "center": 0.43609022556390975,
-          "edge": 0.1917293233082707,
-          "falloff": 0.37218045112781956
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
         }
       }
     },
@@ -13306,6 +13408,7 @@
       "asset_name": "tree_darker",
       "asset_type": "boundary",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
@@ -13314,7 +13417,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 314.0,
+        "scale_percentage": 319.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -13323,7 +13426,29 @@
         "tree"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "tree_eyes_fps_2": {
       "animations": {
@@ -13362,11 +13487,28 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
+            "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -13375,7 +13517,8 @@
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
       "anti_tags": [],
@@ -13383,10 +13526,14 @@
       "asset_name": "tree_fps_2",
       "asset_type": "boundary",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
@@ -13400,7 +13547,31 @@
         "tree"
       ],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "vibble": {
       "anchor_point_child_candidates": [
@@ -18877,25 +19048,25 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 3500,
         "camera_height_min_px": 40,
-        "depth_of_field_enabled": false,
-        "dynamic_renderer_depth_efficiency_depth": 2004.0,
-        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.19999998807907104,
-        "layer_depth_curve": 29.369998931884766,
-        "layer_depth_interval": 10.0,
+        "depth_of_field_enabled": true,
+        "dynamic_renderer_depth_efficiency_depth": 2047.0,
+        "dynamic_renderer_depth_efficiency_min_density_ratio": 0.8399999737739563,
+        "layer_depth_curve": 88.33999633789063,
+        "layer_depth_interval": 21.0,
         "light_max_cull_depth": 38789.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 13342.0,
+        "max_cull_depth": 5158.0,
         "min_visible_screen_ratio": 0.00800000037997961,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 10.329999923706055,
+        "radial_blur_px": 5.569999694824219,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -18921,7 +19092,7 @@
           {
             "candidates": [
               {
-                "chance": 40,
+                "chance": 104,
                 "name": "null"
               },
               {
@@ -18943,7 +19114,7 @@
                 "name": "blue_flower"
               },
               {
-                "chance": 1,
+                "chance": 32.2,
                 "display_name": "#fog",
                 "name": "#fog",
                 "tag": true,
@@ -18966,11 +19137,11 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "fog_near_distance_px": 401,
+        "fog_near_distance_px": 712,
         "fog_render_boundary_spacing": 16,
-        "max_spawn_from_room": 1107,
+        "max_spawn_from_room": 2095,
         "regen_seed": 4,
-        "render_radius": 4229
+        "render_radius": 4625
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -19027,9 +19198,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            41,
-            204,
             31,
+            204,
+            78,
             255
           ],
           "geometry": "Square",
@@ -19164,9 +19335,9 @@
         },
         "NewRoom": {
           "display_color": [
-            36,
-            106,
             242,
+            36,
+            36,
             255
           ],
           "geometry": "Square",
@@ -19210,9 +19381,9 @@
         },
         "NewRoom1": {
           "display_color": [
+            85,
+            174,
             242,
-            36,
-            224,
             255
           ],
           "geometry": "Square",
@@ -19256,9 +19427,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            242,
-            207,
-            36,
+            93,
+            31,
+            204,
             255
           ],
           "geometry": "Square",
@@ -19335,7 +19506,7 @@
           "display_color": [
             85,
             242,
-            115,
+            128,
             255
           ],
           "geometry": "Square",
@@ -19384,9 +19555,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            43,
-            31,
-            204,
+            190,
+            242,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -19466,14 +19637,14 @@
           }
         },
         "baseball": {
-          "camera_center_dx": -2650,
-          "camera_center_dz": -2244,
-          "camera_height_px": 315,
-          "camera_tilt_deg": 19.57892608642578,
-          "camera_zoom_percent": 70,
+          "camera_center_dx": 5551,
+          "camera_center_dz": -3416,
+          "camera_height_px": 288,
+          "camera_tilt_deg": 23.86580467224121,
+          "camera_zoom_percent": 49,
           "display_color": [
-            85,
-            174,
+            228,
+            36,
             242,
             255
           ],
@@ -19796,6 +19967,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-8b6b483e6a8d"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "fog_2"
+                }
+              ],
+              "display_name": "fog_2",
+              "dx": 3492,
+              "dz": -2056,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 17344,
+              "origional_width": 18280,
+              "position": "Exact",
+              "priority": 10,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f94d85ce061c"
             }
           ],
           "trail_connection_sector": {
@@ -19868,9 +20069,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            121,
-            204,
-            31,
+            79,
+            242,
+            36,
             255
           ],
           "geometry": "Square",
@@ -20220,6 +20421,110 @@
               "center": 1.0,
               "edge": 0.0,
               "falloff": 0.0
+            }
+          }
+        },
+        "NewTrail": {
+          "anti_tags": [],
+          "curviness": 0,
+          "curvyness": 0,
+          "display_color": [
+            242,
+            155,
+            85,
+            255
+          ],
+          "geometry": "Square",
+          "name": "NewTrail",
+          "spawn_groups": [],
+          "tags": [],
+          "width": {
+            "center": 750,
+            "falloff": 75,
+            "random": true,
+            "span": 150,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
+        },
+        "NewTrail1": {
+          "anti_tags": [],
+          "curviness": 0,
+          "curvyness": 0,
+          "display_color": [
+            36,
+            88,
+            242,
+            255
+          ],
+          "geometry": "Square",
+          "name": "NewTrail1",
+          "spawn_groups": [],
+          "tags": [],
+          "width": {
+            "center": 750,
+            "falloff": 75,
+            "random": true,
+            "span": 150,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
+        },
+        "NewTrail2": {
+          "anti_tags": [],
+          "curviness": 0,
+          "curvyness": 0,
+          "display_color": [
+            177,
+            242,
+            85,
+            255
+          ],
+          "geometry": "Square",
+          "name": "NewTrail2",
+          "spawn_groups": [],
+          "tags": [],
+          "width": {
+            "center": 750,
+            "falloff": 75,
+            "random": true,
+            "span": 150,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
+        },
+        "NewTrail3": {
+          "anti_tags": [],
+          "curviness": 0,
+          "curvyness": 0,
+          "display_color": [
+            31,
+            204,
+            66,
+            255
+          ],
+          "geometry": "Square",
+          "name": "NewTrail3",
+          "spawn_groups": [],
+          "tags": [],
+          "width": {
+            "center": 750,
+            "falloff": 75,
+            "random": true,
+            "span": 150,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
             }
           }
         }

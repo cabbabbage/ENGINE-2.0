@@ -173,7 +173,11 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up,
     }
 
     for (const auto& event : report.entered_frames) {
-        if (event.cycle_boundary_before_advance && up.maybe_trigger_attack_on_cycle_boundary()) {
+        std::uint64_t boundary_observed = 0;
+        std::uint64_t trigger_committed = 0;
+        if (up.process_cycle_boundary_event(event.cycle_boundary_before_advance,
+                                            boundary_observed,
+                                            trigger_committed)) {
             plan.strides.clear();
             stride_index = 0;
             stride_frame_counter = 0;

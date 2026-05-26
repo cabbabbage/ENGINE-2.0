@@ -163,6 +163,13 @@ private:
     Asset* resolve_asset_by_stable_id(const std::string& stable_id) const;
     bool current_animation_is_attack() const;
     void dispatch_active_attack_payload();
+    bool apply_frame_root_motion_delta(AnimationFrame* frame,
+                                       std::uint64_t& applied_counter,
+                                       std::uint64_t& blocked_counter);
+    bool process_cycle_boundary_event(bool cycle_boundary_before_advance,
+                                      std::uint64_t& boundary_observed_counter,
+                                      std::uint64_t& attack_trigger_committed_counter);
+    Asset* resolve_fallback_attack_target();
     void refresh_runtime_frame_geometry();
     void clear_attack_commitment();
 

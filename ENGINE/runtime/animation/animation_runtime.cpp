@@ -630,7 +630,14 @@ void AnimationRuntime::dispatch_active_attack_payload() {
         return;
     }
     if (!combat_state_.committed_attack_target_asset_id.has_value()) {
-        return;
+        if (Asset* fallback = resolve_fallback_attack_target()) {
+            combat_state_.committed_attack_target_asset_id =
+                animation_update::detail::stable_asset_id(*fallback);
+            runtime_stats::FrameStatsRecorder::instance().set(
+                "combat.attack_payload_fallback_target_committed", true);
+        } else {
+            return;
+        }
     }
     if (path_index_for(self_->current_animation) != combat_state_.committed_attack_path_index) {
         clear_attack_commitment();
@@ -667,6 +674,30 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     if (one_shot_attack) {
         clear_attack_commitment();
     }
+}
+
+Asset* AnimationRuntime::resolve_fallback_attack_target() {
+    const auto candidates = attack_candidate_targets();
+    if (candidates.empty()) {
+        return nullptr;
+    }
+    Asset* player = assets_owner_ ? assets_owner_->game_context().player() : nullptr;
+    if (!player && assets_owner_) {
+        player = assets_owner_->player;
+    }
+    auto valid = [](Asset* a) {
+        return a && a->active && !a->dead && a->isHitboxEnabled();
+    };
+    if (valid(player) &&
+        std::find(candidates.begin(), candidates.end(), player) != candidates.end()) {
+        return player;
+    }
+    for (Asset* candidate : candidates) {
+        if (valid(candidate)) {
+            return candidate;
+        }
+    }
+    return nullptr;
 }
 
 void AnimationRuntime::refresh_runtime_frame_geometry() {
@@ -804,6 +835,9 @@ void AnimationRuntime::update() {
             }
         }
     } decay{ this };
+    std::uint64_t cycle_boundary_observed = 0;
+    std::uint64_t attack_trigger_committed = 0;
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
 
     const bool freeze_for_frame_editor =
         assets_owner_ && assets_owner_->is_frame_editor_target_active(self_);
@@ -868,6 +902,8 @@ void AnimationRuntime::update() {
                 ? executor_.tick_3d(*this, planner_iface_->plan3d_, stride_index_, stride_frame_counter_)
                 : executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_);
             if (consumed) {
+                frame_stats.set("combat.attack_cycle_boundary_observed", cycle_boundary_observed);
+                frame_stats.set("combat.attack_cycle_trigger_committed", attack_trigger_committed);
                 dispatch_active_attack_payload();
                 return;
             }
@@ -877,6 +913,8 @@ void AnimationRuntime::update() {
             const auto& req = planner_iface_->pending_move_;
             if (!should_defer_for_non_locked(req.override_non_locked)) {
                 apply_pending_move();
+                frame_stats.set("combat.attack_cycle_boundary_observed", cycle_boundary_observed);
+                frame_stats.set("combat.attack_cycle_trigger_committed", attack_trigger_committed);
                 dispatch_active_attack_payload();
                 return;
             }
@@ -885,6 +923,8 @@ void AnimationRuntime::update() {
             const auto& req3d = planner_iface_->pending_move_3d_;
             if (!should_defer_for_non_locked(req3d.override_non_locked)) {
                 apply_pending_move_3d();
+                frame_stats.set("combat.attack_cycle_boundary_observed", cycle_boundary_observed);
+                frame_stats.set("combat.attack_cycle_trigger_committed", attack_trigger_committed);
                 dispatch_active_attack_payload();
                 return;
             }
@@ -894,9 +934,11 @@ void AnimationRuntime::update() {
     const bool cycle_boundary_before_advance =
         self_->current_frame && self_->current_frame->next == nullptr;
     (void)advance(self_->current_frame);
-    if (cycle_boundary_before_advance) {
-        (void)maybe_trigger_attack_on_cycle_boundary();
-    }
+    (void)process_cycle_boundary_event(cycle_boundary_before_advance,
+                                       cycle_boundary_observed,
+                                       attack_trigger_committed);
+    frame_stats.set("combat.attack_cycle_boundary_observed", cycle_boundary_observed);
+    frame_stats.set("combat.attack_cycle_trigger_committed", attack_trigger_committed);
     dispatch_active_attack_payload();
 }
 
@@ -1162,6 +1204,8 @@ void AnimationRuntime::apply_pending_move_3d() {
 
 AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(AnimationFrame*& frame, int max_events) {
     FrameAdvanceReport report{};
+    std::uint64_t root_motion_applied = 0;
+    std::uint64_t root_motion_blocked = 0;
     if (!self_ || !self_->info) {
         report.ok = false;
         return report;
@@ -1281,6 +1325,10 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         if (frame->next) {
             frame = frame->next;
             record_entered_frame(false);
+            if (!apply_frame_root_motion_delta(frame, root_motion_applied, root_motion_blocked)) {
+                report.ok = false;
+                return report;
+            }
             continue;
         }
 
@@ -1308,6 +1356,10 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                 anim = &it->second;
                 path_index = path_index_for(self_->current_animation);
                 record_entered_frame(cycle_boundary_before_advance);
+                if (!apply_frame_root_motion_delta(frame, root_motion_applied, root_motion_blocked)) {
+                    report.ok = false;
+                    return report;
+                }
                 break;
             }
             frame = anim->get_first_frame(path_index);
@@ -1316,6 +1368,10 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                 return report;
             }
             record_entered_frame(cycle_boundary_before_advance);
+            if (!apply_frame_root_motion_delta(frame, root_motion_applied, root_motion_blocked)) {
+                report.ok = false;
+                return report;
+            }
             break;
         }
         case Animation::OnEndDirective::Kill:
@@ -1354,6 +1410,10 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
             anim = &it->second;
             path_index = path_index_for(self_->current_animation);
             record_entered_frame(cycle_boundary_before_advance);
+            if (!apply_frame_root_motion_delta(frame, root_motion_applied, root_motion_blocked)) {
+                report.ok = false;
+                return report;
+            }
             break;
         }
         case Animation::OnEndDirective::Default:
@@ -1379,6 +1439,10 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
             anim = &it->second;
             path_index = path_index_for(self_->current_animation);
             record_entered_frame(cycle_boundary_before_advance);
+            if (!apply_frame_root_motion_delta(frame, root_motion_applied, root_motion_blocked)) {
+                report.ok = false;
+                return report;
+            }
             break;
         }
         }
@@ -1388,6 +1452,8 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         self_->mark_anchors_dirty();
         refresh_runtime_frame_geometry();
     }
+    runtime_stats::FrameStatsRecorder::instance().set("movement.attack_root_motion_applied", root_motion_applied);
+    runtime_stats::FrameStatsRecorder::instance().set("movement.attack_root_motion_blocked", root_motion_blocked);
     return report;
 }
 
@@ -1449,6 +1515,11 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
 }
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {
+    // Lock semantics contract:
+    // - Locked animations are protected from movement/pending-request interruption.
+    // - Non-locked animations may defer movement transitions unless the caller explicitly
+    //   opts into override_non_locked (e.g., authored interrupt behavior).
+    // - Default idle may always transition.
     if (override_non_locked || !self_ || !self_->info) {
         return false;
     }
@@ -1464,6 +1535,51 @@ bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) con
 
     const Animation& anim = it->second;
     return !anim.locked;
+}
+
+bool AnimationRuntime::process_cycle_boundary_event(bool cycle_boundary_before_advance,
+                                                    std::uint64_t& boundary_observed_counter,
+                                                    std::uint64_t& attack_trigger_committed_counter) {
+    if (!cycle_boundary_before_advance) {
+        return false;
+    }
+    ++boundary_observed_counter;
+    const bool triggered = maybe_trigger_attack_on_cycle_boundary();
+    if (triggered) {
+        ++attack_trigger_committed_counter;
+    }
+    return triggered;
+}
+
+bool AnimationRuntime::apply_frame_root_motion_delta(AnimationFrame* frame,
+                                                     std::uint64_t& applied_counter,
+                                                     std::uint64_t& blocked_counter) {
+    if (!self_ || !frame) {
+        return true;
+    }
+    if (suppress_root_motion_active()) {
+        return true;
+    }
+    const axis::WorldPos delta = animation_update::detail::frame_world_delta_3d(*frame, *self, grid());
+    if (delta.x == 0 && delta.y == 0 && delta.z == 0) {
+        return true;
+    }
+
+    const axis::WorldPos from{self_->world_x(), self_->world_y(), self_->world_z()};
+    const axis::WorldPos to{from.x + delta.x, from.y + delta.y, from.z + delta.z};
+    const auto block_context = active_path_blocking_context();
+    if ((delta.x != 0 || delta.z != 0) &&
+        path_blocked(world::GridPoint::make_virtual(from.x, from.y, from.z, self_->grid_resolution),
+                     world::GridPoint::make_virtual(to.x, to.y, to.z, self_->grid_resolution),
+                     self_,
+                     nullptr,
+                     block_context)) {
+        ++blocked_counter;
+        return true;
+    }
+    self_->move_to_world_position(to.x, to.y, to.z);
+    ++applied_counter;
+    return true;
 }
 
 std::size_t AnimationRuntime::path_index_for(const std::string& anim_id) const {

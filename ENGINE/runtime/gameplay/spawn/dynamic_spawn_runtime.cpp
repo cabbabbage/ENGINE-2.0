@@ -902,7 +902,7 @@ void DynamicSpawnRuntime::suspend_outside_keep_chunks(const std::unordered_set<C
             to_suspend.push_back({key, asset});
             continue;
         }
-        if (type_is_fog(asset->info)) {
+        if (type_is_fog(asset->info.get())) {
             const double signed_depth =
                 (static_cast<double>(asset->world_z()) - static_cast<double>(projection.anchor_world_z)) * depth_axis_sign;
             if (!std::isfinite(signed_depth) || signed_depth < near_depth) {

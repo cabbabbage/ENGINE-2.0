@@ -588,7 +588,7 @@ struct SpawnGroupConfig::Entry {
             if (!owner_) return;
             const std::string id = spawn_id();
             if (!id.empty() && owner_->callbacks_.on_open_floating) {
-                SDL_Point anchor{header_rect_.x + header_rect_.w / 2, header_rect_.y + header_rect_.h / 2};
+                SDL_Point anchor{header_rect().x + header_rect().w / 2, header_rect().y + header_rect().h / 2};
                 owner_->callbacks_.on_open_floating(id, anchor);
             }
         });

@@ -4029,36 +4029,13 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     }
     if (renderer && boundary_assets_modal_ && boundary_assets_modal_->visible() && assets_) {
         const WarpedScreenGrid& view_cam = assets_->getView();
-        auto [render_min_x, render_min_z, render_max_x, render_max_z] = view_cam.get_current_view().get_bounds();
-        const int render_edge_z = std::max(render_min_z, render_max_z);
-        int render_radius = 1024;
-        const nlohmann::json& map_json = assets_->map_info_json();
-        if (map_json.is_object()) {
-            auto live_it = map_json.find("live_dynamic_spawns");
-            if (live_it != map_json.end() && live_it->is_object()) {
-                auto radius_it = live_it->find("render_radius");
-                if (radius_it != live_it->end() && radius_it->is_number()) {
-                    const int parsed = static_cast<int>(std::lround(radius_it->get<double>()));
-                    render_radius = std::clamp(parsed, 0, 100000);
-                }
-            }
-        }
-        const auto area_geometry = dynamic_spawn::geometry::collect_area_geometry(*assets_);
-        const int spacing = std::max(16, render_radius / 24);
-        const int sample_min_x = std::min(render_min_x, render_max_x);
-        const int sample_max_x = std::max(render_min_x, render_max_x);
-        const int first = vibble::math::floor_div(sample_min_x, spacing) * spacing;
+        const world::GridBounds render_bounds = assets_->screen_world_rect();
+        const auto samples = assets_->sample_live_dynamic_fog_boundary(render_bounds);
         std::vector<SDL_FPoint> points;
-        points.reserve(static_cast<std::size_t>((sample_max_x - sample_min_x) / spacing + 4));
-        for (int x = first; x <= sample_max_x; x += spacing) {
-            const int room_edge_z =
-                dynamic_spawn::geometry::max_allowed_boundary_z_for_x(area_geometry, x, render_radius);
-            if (room_edge_z == std::numeric_limits<int>::min()) {
-                continue;
-            }
-            const int boundary_z = std::min(render_edge_z, room_edge_z);
+        points.reserve(samples.size());
+        for (const auto& sample : samples) {
             SDL_FPoint p{};
-            if (try_floor_warped_screen_position(view_cam, SDL_Point{x, boundary_z}, p)) {
+            if (try_floor_warped_screen_position(view_cam, SDL_Point{sample.world_x, sample.world_z}, p)) {
                 points.push_back(p);
             }
         }

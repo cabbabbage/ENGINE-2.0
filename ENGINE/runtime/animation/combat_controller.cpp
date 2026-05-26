@@ -7,15 +7,57 @@
 #include "animation_runtime.hpp"
 #include "animation_tag_utils.hpp"
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/animation.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "utils/utils/string_utils.hpp"
+
+namespace {
+
+bool frame_has_damage_attack_box(const AnimationFrame& frame) {
+    for (const auto& attack_box : frame.attack_boxes.boxes) {
+        if (!attack_box.enabled) {
+            continue;
+        }
+        const int damage_amount = std::max(attack_box.damage_amount, attack_box.payload.damage_amount);
+        if (damage_amount > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool animation_has_damage_attack_boxes(const Animation& animation) {
+    const std::size_t path_count = animation.movement_path_count();
+    for (std::size_t path_index = 0; path_index < path_count; ++path_index) {
+        const auto& path = animation.movement_path(path_index);
+        for (const auto& frame : path) {
+            if (frame_has_damage_attack_box(frame)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool animation_is_attack_candidate(const Animation& animation) {
+    return animation_update::tag_utils::has_normalized_tag(animation.tags, "attack") ||
+           animation_has_damage_attack_boxes(animation);
+}
+
+} // namespace
 
 AnimationUpdate::AutoMoveCombatOptions AnimationUpdate::resolve_auto_move_combat_options(AutoMoveCombatOverrides overrides) const {
     AutoMoveCombatOptions options;
     if (!self_ || !self_->info) return options;
     bool has_attack_animation = false;
-    for (const auto& [animation_id, animation] : self_->info->animations) { (void)animation_id; if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) { has_attack_animation = true; break; } }
+    for (const auto& [animation_id, animation] : self_->info->animations) {
+        (void)animation_id;
+        if (animation_is_attack_candidate(animation)) {
+            has_attack_animation = true;
+            break;
+        }
+    }
     options.attacking_enabled = (asset_types::canonicalize(self_->info->type) == asset_types::enemy && has_attack_animation);
     if (overrides.force_attacking_enabled.has_value()) {
         options.attacking_enabled = *overrides.force_attacking_enabled && has_attack_animation;

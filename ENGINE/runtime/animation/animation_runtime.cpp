@@ -206,6 +206,37 @@ std::string lower_ascii_copy(const std::string& value) {
     return out;
 }
 
+bool frame_has_damage_attack_box(const AnimationFrame& frame) {
+    for (const auto& attack_box : frame.attack_boxes.boxes) {
+        if (!attack_box.enabled) {
+            continue;
+        }
+        const int damage_amount = std::max(attack_box.damage_amount, attack_box.payload.damage_amount);
+        if (damage_amount > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool animation_has_damage_attack_boxes(const Animation& animation) {
+    const std::size_t path_count = animation.movement_path_count();
+    for (std::size_t path_index = 0; path_index < path_count; ++path_index) {
+        const auto& path = animation.movement_path(path_index);
+        for (const auto& frame : path) {
+            if (frame_has_damage_attack_box(frame)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool animation_is_attack_candidate(const Animation& animation) {
+    return animation_update::tag_utils::has_normalized_tag(animation.tags, "attack") ||
+           animation_has_damage_attack_boxes(animation);
+}
+
 HorizontalFacingIntent attack_facing_intent(const std::vector<std::string>& tags,
                                             const std::string& animation_id) {
     const bool has_left_tag = animation_update::tag_utils::has_normalized_tag(tags, "left");
@@ -320,7 +351,7 @@ bool AnimationRuntime::attacking_enabled_for_self() const {
     }
     for (const auto& [animation_id, animation] : self_->info->animations) {
         (void)animation_id;
-        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+        if (animation_is_attack_candidate(animation)) {
             return true;
         }
     }
@@ -369,7 +400,7 @@ std::vector<std::string> AnimationRuntime::attack_animation_candidates() const {
         if (!animation.has_frames()) {
             continue;
         }
-        if (animation_update::tag_utils::has_normalized_tag(animation.tags, "attack")) {
+        if (animation_is_attack_candidate(animation)) {
             out.push_back(animation_id);
         }
     }
@@ -562,7 +593,7 @@ bool AnimationRuntime::current_animation_is_attack() const {
     if (it == self_->info->animations.end()) {
         return false;
     }
-    return animation_update::tag_utils::has_normalized_tag(it->second.tags, "attack");
+    return animation_is_attack_candidate(it->second);
 }
 
 bool AnimationRuntime::auto_attack_commitment_active() const {
@@ -657,7 +688,7 @@ bool AnimationRuntime::committed_attack_execution_active() const {
         return false;
     }
     const Animation& anim = it->second;
-    return anim.locked && animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+    return anim.locked && animation_is_attack_candidate(anim);
 }
 
 animation_update::detail::PathBlockingContext AnimationRuntime::active_path_blocking_context() const {
@@ -1395,8 +1426,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         combat_state_.attack_recovery_pending = false;
         combat_state_.attack_recovery_animation_id.clear();
     }
-    const bool switched_to_attack =
-        animation_update::tag_utils::has_normalized_tag(anim.tags, "attack");
+    const bool switched_to_attack = animation_is_attack_candidate(anim);
     if (!switched_to_attack) {
         clear_attack_commitment();
     } else if (combat_state_.committed_attack_animation_id != self_->current_animation) {

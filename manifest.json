@@ -20893,8 +20893,8 @@
       "rooms_data": {
         "Bluebloom_Nook": {
           "display_color": [
-            157,
             242,
+            36,
             36,
             255
           ],
@@ -21039,7 +21039,7 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            242,
+            187,
             242,
             85,
             255
@@ -21185,9 +21185,9 @@
         },
         "Frog_Basin": {
           "display_color": [
-            31,
-            101,
             204,
+            51,
+            98,
             255
           ],
           "geometry": "Circle",
@@ -21328,9 +21328,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
-            204,
-            91,
-            31,
+            242,
+            235,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -21476,9 +21476,9 @@
           "camera_tilt_deg": 51.847171783447266,
           "camera_zoom_percent": 100,
           "display_color": [
+            89,
             31,
             204,
-            31,
             255
           ],
           "geometry": "Square",
@@ -21671,9 +21671,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
-            224,
-            203,
-            34,
+            36,
+            242,
+            200,
             255
           ],
           "geometry": "Circle",
@@ -21822,9 +21822,9 @@
           "camera_tilt_deg": 47.55434036254883,
           "camera_zoom_percent": 0,
           "display_color": [
-            204,
-            31,
-            172,
+            242,
+            85,
+            136,
             255
           ],
           "geometry": "Circle",
@@ -22114,9 +22114,9 @@
         },
         "NewRoom": {
           "display_color": [
-            91,
+            122,
             242,
-            36,
+            85,
             255
           ],
           "geometry": "Square",
@@ -22160,9 +22160,9 @@
         },
         "NewRoom1": {
           "display_color": [
+            179,
+            36,
             242,
-            99,
-            85,
             255
           ],
           "geometry": "Square",
@@ -22206,9 +22206,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            128,
-            204,
-            71,
+            242,
+            98,
+            36,
             255
           ],
           "geometry": "Square",
@@ -22283,8 +22283,8 @@
         },
         "NewRoom3": {
           "display_color": [
-            81,
             31,
+            98,
             204,
             255
           ],
@@ -22329,9 +22329,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            189,
-            224,
-            79,
+            31,
+            183,
+            204,
             255
           ],
           "geometry": "Square",
@@ -22376,9 +22376,9 @@
         },
         "Old_Stump_Yard": {
           "display_color": [
-            204,
-            71,
-            133,
+            176,
+            224,
+            34,
             255
           ],
           "geometry": "Square",
@@ -22585,9 +22585,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            242,
-            130,
+            126,
             36,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -22668,8 +22668,8 @@
         },
         "Spider_Hollow": {
           "display_color": [
-            161,
-            85,
+            36,
+            137,
             242,
             255
           ],
@@ -22814,9 +22814,9 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            242,
-            187,
-            85,
+            199,
+            71,
+            204,
             255
           ],
           "geometry": "Square",
@@ -22960,9 +22960,9 @@
         },
         "Whispering_Ring": {
           "display_color": [
-            136,
-            36,
             242,
+            85,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -23111,9 +23111,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            36,
-            153,
             242,
+            224,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -23538,8 +23538,8 @@
           "camera_zoom_percent": 2,
           "display_color": [
             204,
-            31,
-            31,
+            69,
+            51,
             255
           ],
           "geometry": "Square",

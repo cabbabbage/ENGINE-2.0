@@ -590,6 +590,8 @@ Asset::Asset(const Asset& o)
     , anchor_sprite_transform_override_angle_degrees_(o.anchor_sprite_transform_override_angle_degrees_)
     , directional_heading_radians_(o.directional_heading_radians_)
     , directional_heading_valid_(o.directional_heading_valid_)
+    , directional_pitch_radians_(o.directional_pitch_radians_)
+    , directional_pitch_valid_(o.directional_pitch_valid_)
     , directional_target_world_x_(o.directional_target_world_x_)
     , directional_target_world_z_(o.directional_target_world_z_)
     , directional_target_valid_(o.directional_target_valid_)
@@ -686,6 +688,8 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_sprite_transform_override_angle_degrees_ = o.anchor_sprite_transform_override_angle_degrees_;
         directional_heading_radians_ = o.directional_heading_radians_;
         directional_heading_valid_ = o.directional_heading_valid_;
+        directional_pitch_radians_ = o.directional_pitch_radians_;
+        directional_pitch_valid_ = o.directional_pitch_valid_;
         directional_target_world_x_ = o.directional_target_world_x_;
         directional_target_world_z_ = o.directional_target_world_z_;
         directional_target_valid_ = o.directional_target_valid_;
@@ -2345,6 +2349,8 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         sig.world_z_offset = world_z_offset_;
         sig.directional_heading_valid = directional_heading_valid_;
         sig.directional_heading_radians = directional_heading_valid_ ? normalize_radians(directional_heading_radians_) : 0.0f;
+        sig.directional_pitch_valid = directional_pitch_valid_;
+        sig.directional_pitch_radians = directional_pitch_valid_ ? directional_pitch_radians_ : 0.0f;
         sig.directional_target_valid = directional_target_valid_;
         sig.directional_target_world_x = directional_target_valid_ ? directional_target_world_x_ : 0.0f;
         sig.directional_target_world_z = directional_target_valid_ ? directional_target_world_z_ : 0.0f;
@@ -2382,6 +2388,9 @@ bool Asset::update_anchor_basis_if_needed() {
                 signature.directional_heading_valid != last_anchor_basis_signature_.directional_heading_valid ||
                 (signature.directional_heading_valid &&
                  !almost_equal(signature.directional_heading_radians, last_anchor_basis_signature_.directional_heading_radians)) ||
+                signature.directional_pitch_valid != last_anchor_basis_signature_.directional_pitch_valid ||
+                (signature.directional_pitch_valid &&
+                 !almost_equal(signature.directional_pitch_radians, last_anchor_basis_signature_.directional_pitch_radians)) ||
                 signature.directional_target_valid != last_anchor_basis_signature_.directional_target_valid ||
                 (signature.directional_target_valid &&
                  (!almost_equal(signature.directional_target_world_x, last_anchor_basis_signature_.directional_target_world_x) ||
@@ -2884,6 +2893,31 @@ void Asset::clear_directional_heading_radians() {
         }
         directional_heading_radians_ = 0.0f;
         directional_heading_valid_ = false;
+        mark_anchors_dirty();
+}
+
+bool Asset::set_directional_pitch_radians(float radians) {
+        if (!std::isfinite(radians)) {
+                return false;
+        }
+        constexpr float kPitchEpsilon = 1e-5f;
+        const bool changed = !directional_pitch_valid_ ||
+                             std::fabs(directional_pitch_radians_ - radians) > kPitchEpsilon;
+        if (!changed) {
+                return false;
+        }
+        directional_pitch_radians_ = radians;
+        directional_pitch_valid_ = true;
+        mark_anchors_dirty();
+        return true;
+}
+
+void Asset::clear_directional_pitch_radians() {
+        if (!directional_pitch_valid_ && std::fabs(directional_pitch_radians_) < 1e-6f) {
+                return;
+        }
+        directional_pitch_radians_ = 0.0f;
+        directional_pitch_valid_ = false;
         mark_anchors_dirty();
 }
 

@@ -16,6 +16,11 @@ public:
     using SystemEnabledToggleCallback = std::function<void(bool)>;
     using PathSelectionChangedCallback = std::function<void(int)>;
     using PathActionCallback = std::function<void()>;
+    struct QuantizeOption {
+        std::string label;
+        bool current_animation = false;
+        bool selectable = true;
+    };
     struct NumericValues {
         float dx = 0.0f;
         float dy = 0.0f;
@@ -47,7 +52,7 @@ public:
     void set_on_path_selection_changed(PathSelectionChangedCallback callback);
     void set_on_add_path(PathActionCallback callback);
     void set_on_delete_path(PathActionCallback callback);
-    void set_quantize_options(const std::vector<std::string>& options);
+    void set_quantize_options(const std::vector<QuantizeOption>& options);
     void set_on_quantize_path_selected(PathSelectionChangedCallback callback);
 
     bool handle_event(const SDL_Event& event);
@@ -83,6 +88,7 @@ private:
     mutable SDL_Rect path_add_rect_{0, 0, 0, 0};
     mutable SDL_Rect path_delete_rect_{0, 0, 0, 0};
     mutable SDL_Rect quantize_rect_{0, 0, 0, 0};
+    mutable SDL_Rect quantize_panel_rect_{0, 0, 0, 0};
     mutable int path_content_height_ = 0;
     mutable int path_max_scroll_ = 0;
     mutable int path_scroll_offset_ = 0;
@@ -100,8 +106,9 @@ private:
     std::unique_ptr<DMButton> add_path_button_;
     std::unique_ptr<DMButton> delete_path_button_;
     std::unique_ptr<DMButton> quantize_button_;
-    std::vector<std::string> quantize_options_;
-    std::vector<std::unique_ptr<DMButton>> quantize_option_buttons_;
+    std::vector<QuantizeOption> quantize_options_;
+    std::vector<SDL_Rect> quantize_option_rects_;
+    int quantize_hover_index_ = -1;
     bool quantize_open_ = false;
     PathSelectionChangedCallback on_quantize_path_selected_;
     SystemEnabledToggleCallback on_system_enabled_toggle_;

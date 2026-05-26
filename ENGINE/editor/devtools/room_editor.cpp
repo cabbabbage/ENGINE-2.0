@@ -10511,9 +10511,11 @@ void RoomEditor::ensure_movement_editor_widgets() {
             movement_edit_.dirty_since_last_flush = true;
         });
         movement_tools_panel_->set_on_quantize_path_selected([this](int index) {
-            if (index < 0 || index >= static_cast<int>(movement_edit_.quantize_reference_paths.size())) return;
+            if (index < 0 || index >= static_cast<int>(movement_edit_.quantize_option_to_reference_index.size())) return;
+            const int reference_index = movement_edit_.quantize_option_to_reference_index[static_cast<std::size_t>(index)];
+            if (reference_index < 0 || reference_index >= static_cast<int>(movement_edit_.quantize_reference_paths.size())) return;
             quantize_selected_movement_path_to_reference(
-                movement_edit_.quantize_reference_paths[static_cast<std::size_t>(index)]);
+                movement_edit_.quantize_reference_paths[static_cast<std::size_t>(reference_index)]);
         });
     }
     if (movement_tools_panel_) {
@@ -10531,19 +10533,28 @@ void RoomEditor::ensure_movement_editor_widgets() {
         for (std::size_t i = 0; i < movement_edit_.paths.size(); ++i) labels.push_back("Path " + std::to_string(i + 1));
         movement_tools_panel_->set_path_options(labels, movement_edit_.selected_path_index);
         movement_edit_.quantize_reference_paths.clear();
-        std::vector<std::string> quantize_labels;
+        movement_edit_.quantize_option_to_reference_index.clear();
+        std::vector<RoomMovementToolsPanel::QuantizeOption> quantize_labels;
         if (movement_edit_.target_asset && movement_edit_.target_asset->info) {
+            quantize_labels.push_back(RoomMovementToolsPanel::QuantizeOption{"Current animation paths", true, false});
             for (std::size_t i = 0; i < movement_edit_.paths.size(); ++i) {
                 if (static_cast<int>(i) == movement_edit_.selected_path_index) continue;
+                const int ref_idx = static_cast<int>(movement_edit_.quantize_reference_paths.size());
                 movement_edit_.quantize_reference_paths.push_back(movement_edit_.paths[i]);
-                quantize_labels.push_back("Current anim (grey/pink) · Path " + std::to_string(i + 1));
+                movement_edit_.quantize_option_to_reference_index.push_back(ref_idx);
+                quantize_labels.push_back(RoomMovementToolsPanel::QuantizeOption{
+                    "Current · " + movement_edit_.animation_id + " · Path " + std::to_string(i + 1), true, true});
             }
+            quantize_labels.push_back(RoomMovementToolsPanel::QuantizeOption{"Other animation paths", false, false});
             for (const auto& [anim_id, _] : movement_edit_.target_asset->info->animations) {
                 if (anim_id == movement_edit_.animation_id) continue;
                 const auto anim_paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, anim_id);
                 for (std::size_t i = 0; i < anim_paths.size(); ++i) {
+                    const int ref_idx = static_cast<int>(movement_edit_.quantize_reference_paths.size());
                     movement_edit_.quantize_reference_paths.push_back(anim_paths[i]);
-                    quantize_labels.push_back(anim_id + " · Path " + std::to_string(i + 1));
+                    movement_edit_.quantize_option_to_reference_index.push_back(ref_idx);
+                    quantize_labels.push_back(RoomMovementToolsPanel::QuantizeOption{
+                        "Other · " + anim_id + " · Path " + std::to_string(i + 1), false, true});
                 }
             }
         }

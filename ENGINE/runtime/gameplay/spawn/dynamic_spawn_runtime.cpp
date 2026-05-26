@@ -889,16 +889,34 @@ void DynamicSpawnRuntime::suspend_cell(const CellKey& key, Asset* asset) {
 
 void DynamicSpawnRuntime::suspend_outside_keep_chunks(const std::unordered_set<ChunkKey, ChunkKeyHash>& keep_chunks) {
     std::vector<std::pair<CellKey, Asset*>> to_suspend;
+    std::vector<Asset*> to_delete;
     to_suspend.reserve(active_.size());
+    to_delete.reserve(active_.size());
+    const WarpedScreenGrid& cam = assets_.getView();
+    const world::CameraProjectionParams projection = cam.projection_params();
+    const double depth_axis_sign =
+        static_cast<double>(render_depth::normalize_depth_axis_sign(static_cast<float>(projection.forward_z)));
+    const double near_depth = std::max(1.0, static_cast<double>(assets_.live_dynamic_fog_near_distance_px()));
     for (const auto& [key, asset] : active_) {
         if (!asset || asset->dead) {
             to_suspend.push_back({key, asset});
             continue;
         }
+        if (type_is_fog(asset->info)) {
+            const double signed_depth =
+                (static_cast<double>(asset->world_z()) - static_cast<double>(projection.anchor_world_z)) * depth_axis_sign;
+            if (!std::isfinite(signed_depth) || signed_depth < near_depth) {
+                to_delete.push_back(asset);
+                continue;
+            }
+        }
         const ChunkKey chunk = chunk_key_for_world(asset->world_x(), asset->world_z());
         if (keep_chunks.find(chunk) == keep_chunks.end()) {
             to_suspend.push_back({key, asset});
         }
+    }
+    if (!to_delete.empty()) {
+        diagnostics_.deleted += assets_.delete_assets_runtime(to_delete);
     }
     for (const auto& [key, asset] : to_suspend) {
         suspend_cell(key, asset);

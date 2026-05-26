@@ -28,7 +28,7 @@
                 "dynamic": false,
                 "enemy": true,
                 "npc": true,
-                "object": false,
+                "object": true,
                 "player": true,
                 "texture": true
             }

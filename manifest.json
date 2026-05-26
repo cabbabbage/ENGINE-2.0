@@ -246,6 +246,7 @@
       "y_pos_min": -8
     },
     "axe_in_stump": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
@@ -259,14 +260,52 @@
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "resources/assets/axe_in_stump",
       "asset_name": "axe_in_stump",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": false,
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "size_settings": {
+        "scale_percentage": 206.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "barrel": {
       "anchor_point_child_candidates": [
@@ -7473,16 +7512,44 @@
       "floor_boxes_enabled": true,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 104.0
+        "scale_percentage": 134.0,
+        "size_variation": 0.0
       },
       "start": "default",
       "tags": [],
       "tillable": false,
-      "weight_kg": 0.0
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "frog": {
       "anchor_point_child_candidates": [],
@@ -17769,7 +17836,7 @@
         "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 1715.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.8399999737739563,
-        "layer_depth_curve": 88.33999633789062,
+        "layer_depth_curve": 88.33999633789063,
         "layer_depth_interval": 21.0,
         "light_max_cull_depth": 38789.0,
         "light_radius_overlap_culling_enabled": true,
@@ -17868,7 +17935,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 7748.5,
+          "bounding_extent": 3260.0,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -17878,20 +17945,20 @@
             {
               "max_instances": 1,
               "min_instances": 1,
-              "name": "baseball",
+              "name": "Mossy_Circle",
               "required_children": [],
               "source_type": "room_name",
-              "value": "baseball"
+              "value": "Mossy_Circle"
             }
           ]
         },
         {
           "bounding_extent": 10972.86771997184,
           "level": 1,
-          "max_rooms": 6,
-          "min_rooms": 3,
+          "max_rooms": 3,
+          "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 19722.0,
+          "ring_radius": 19233.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -17901,6 +17968,58 @@
               "source_type": "room_name",
               "value": "Loot_Room"
             },
+            {
+              "max_instances": 1,
+              "min_instances": 0,
+              "name": "Mossy_Circle",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "Mossy_Circle"
+            }
+          ]
+        },
+        {
+          "bounding_extent": 3935.686090124567,
+          "level": 2,
+          "max_rooms": 3,
+          "min_rooms": 0,
+          "name": "layer_2",
+          "ring_radius": 39142.0,
+          "rooms": [
+            {
+              "max_instances": 1,
+              "min_instances": 0,
+              "name": "Old_Stump_Yard",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "Old_Stump_Yard"
+            },
+            {
+              "max_instances": 1,
+              "min_instances": 0,
+              "name": "Random_Enemy_Easy",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "Random_Enemy_Easy"
+            },
+            {
+              "max_instances": 1,
+              "min_instances": 0,
+              "name": "Mossy_Circle",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "Mossy_Circle"
+            }
+          ]
+        },
+        {
+          "bounding_extent": 10972.86771997184,
+          "level": 3,
+          "max_rooms": 5,
+          "min_rooms": 0,
+          "name": "layer_3",
+          "ring_radius": 59051.0,
+          "rooms": [
             {
               "max_instances": 1,
               "min_instances": 0,
@@ -17920,54 +18039,6 @@
             {
               "max_instances": 1,
               "min_instances": 0,
-              "name": "Spider_Hollow",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Spider_Hollow"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Frog_Basin",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Frog_Basin"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Bluebloom_Nook",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Bluebloom_Nook"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Whispering_Ring",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Whispering_Ring"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Old_Stump_Yard",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Old_Stump_Yard"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Moonfern_Pocket",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Moonfern_Pocket"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
               "name": "Thornstep_Croft",
               "required_children": [],
               "source_type": "room_name",
@@ -17976,19 +18047,605 @@
             {
               "max_instances": 1,
               "min_instances": 0,
-              "name": "Lantern_Mirelet",
+              "name": "NewRoom2",
               "required_children": [],
               "source_type": "room_name",
-              "value": "Lantern_Mirelet"
+              "value": "NewRoom2"
+            },
+            {
+              "max_instances": 1,
+              "min_instances": 0,
+              "name": "Loot_Room",
+              "required_children": [],
+              "source_type": "room_name",
+              "value": "Loot_Room"
             }
           ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 1000
+        "min_edge_distance": 5000
       },
       "map_name": "forrest",
       "rooms_data": {
+        "Bluebloom_Nook": {
+          "display_color": [
+            36,
+            38,
+            242,
+            255
+          ],
+          "geometry": "Circle",
+          "height": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Bluebloom_Nook",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 30,
+                  "name": "null"
+                },
+                {
+                  "chance": 70,
+                  "name": "blue_flower"
+                }
+              ],
+              "display_name": "bluebloom_nook_1",
+              "dx": -900,
+              "dz": 0,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-05-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 75,
+                  "name": "null"
+                },
+                {
+                  "chance": 25,
+                  "display_name": "#grass",
+                  "name": "#grass",
+                  "tag": true,
+                  "tag_name": "grass"
+                }
+              ],
+              "display_name": "bluebloom_nook_2",
+              "dx": 0,
+              "dz": 280,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-05-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 90,
+                  "name": "null"
+                },
+                {
+                  "chance": 10,
+                  "display_name": "#fog",
+                  "name": "#fog",
+                  "tag": true,
+                  "tag_name": "fog"
+                }
+              ],
+              "display_name": "bluebloom_nook_3",
+              "dx": 900,
+              "dz": 560,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-05-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 144.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
+        "Foggy_Glade": {
+          "display_color": [
+            242,
+            102,
+            85,
+            255
+          ],
+          "geometry": "Circle",
+          "height": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Foggy_Glade",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 20,
+                  "name": "null"
+                },
+                {
+                  "chance": 80,
+                  "display_name": "#fog",
+                  "name": "#fog",
+                  "tag": true,
+                  "tag_name": "fog"
+                }
+              ],
+              "display_name": "foggy_glade_1",
+              "dx": -900,
+              "dz": 0,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-02-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 75,
+                  "name": "null"
+                },
+                {
+                  "chance": 25,
+                  "display_name": "#grass",
+                  "name": "#grass",
+                  "tag": true,
+                  "tag_name": "grass"
+                }
+              ],
+              "display_name": "foggy_glade_2",
+              "dx": 0,
+              "dz": 280,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-02-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 92,
+                  "name": "null"
+                },
+                {
+                  "chance": 8,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "foggy_glade_3",
+              "dx": 900,
+              "dz": 560,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-02-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 36.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
+        "Frog_Basin": {
+          "display_color": [
+            242,
+            241,
+            36,
+            255
+          ],
+          "geometry": "Circle",
+          "height": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Frog_Basin",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 35,
+                  "name": "null"
+                },
+                {
+                  "chance": 65,
+                  "name": "frog"
+                }
+              ],
+              "display_name": "frog_basin_1",
+              "dx": -900,
+              "dz": -700,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-04-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 65,
+                  "name": "null"
+                },
+                {
+                  "chance": 35,
+                  "display_name": "#grass",
+                  "name": "#grass",
+                  "tag": true,
+                  "tag_name": "grass"
+                }
+              ],
+              "display_name": "frog_basin_2",
+              "dx": 0,
+              "dz": -420,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-04-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 85,
+                  "name": "null"
+                },
+                {
+                  "chance": 15,
+                  "name": "blue_flower"
+                }
+              ],
+              "display_name": "frog_basin_3",
+              "dx": 900,
+              "dz": -140,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-04-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 108.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
+        "Lantern_Mirelet": {
+          "display_color": [
+            36,
+            242,
+            79,
+            255
+          ],
+          "geometry": "Circle",
+          "height": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Lantern_Mirelet",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 45,
+                  "name": "null"
+                },
+                {
+                  "chance": 55,
+                  "display_name": "#fog",
+                  "name": "#fog",
+                  "tag": true,
+                  "tag_name": "fog"
+                }
+              ],
+              "display_name": "lantern_mirelet_1",
+              "dx": -900,
+              "dz": -700,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-10-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 75,
+                  "name": "null"
+                },
+                {
+                  "chance": 25,
+                  "name": "frog"
+                }
+              ],
+              "display_name": "lantern_mirelet_2",
+              "dx": 0,
+              "dz": -420,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-10-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 80,
+                  "name": "null"
+                },
+                {
+                  "chance": 20,
+                  "name": "blue_flower"
+                }
+              ],
+              "display_name": "lantern_mirelet_3",
+              "dx": 900,
+              "dz": -140,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-10-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 324.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
         "Loot_Room": {
           "camera_center_dx": 675,
           "camera_center_dz": 5108,
@@ -17996,9 +18653,9 @@
           "camera_tilt_deg": 51.847171783447266,
           "camera_zoom_percent": 100,
           "display_color": [
+            140,
             242,
             36,
-            165,
             255
           ],
           "geometry": "Square",
@@ -18131,11 +18788,365 @@
             }
           }
         },
+        "Moonfern_Pocket": {
+          "display_color": [
+            204,
+            31,
+            92,
+            255
+          ],
+          "geometry": "Circle",
+          "height": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Moonfern_Pocket",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 40,
+                  "name": "null"
+                },
+                {
+                  "chance": 60,
+                  "display_name": "#grass",
+                  "name": "#grass",
+                  "tag": true,
+                  "tag_name": "grass"
+                }
+              ],
+              "display_name": "moonfern_pocket_1",
+              "dx": -900,
+              "dz": 0,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-08-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 70,
+                  "name": "null"
+                },
+                {
+                  "chance": 30,
+                  "name": "blue_flower"
+                }
+              ],
+              "display_name": "moonfern_pocket_2",
+              "dx": 0,
+              "dz": 280,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-08-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 85,
+                  "name": "null"
+                },
+                {
+                  "chance": 15,
+                  "display_name": "#fog",
+                  "name": "#fog",
+                  "tag": true,
+                  "tag_name": "fog"
+                }
+              ],
+              "display_name": "moonfern_pocket_3",
+              "dx": 900,
+              "dz": 560,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-08-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 252.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
+        "Mossy_Circle": {
+          "camera_center_dx": 0,
+          "camera_center_dz": 0,
+          "camera_height_px": 495,
+          "camera_tilt_deg": 56.02865982055664,
+          "camera_zoom_percent": 0,
+          "display_color": [
+            31,
+            204,
+            31,
+            255
+          ],
+          "geometry": "Circle",
+          "height": {
+            "center": 14584,
+            "falloff": 2045,
+            "random": true,
+            "span": 6099,
+            "weights": {
+              "center": 0.4305555555555556,
+              "edge": 0.3416666666666665,
+              "falloff": 0.2277777777777779
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Mossy_Circle",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 60,
+                  "name": "null"
+                },
+                {
+                  "chance": 40,
+                  "display_name": "#grass",
+                  "name": "#grass",
+                  "tag": true,
+                  "tag_name": "grass"
+                }
+              ],
+              "display_name": "mossy_circle_2",
+              "dx": 0,
+              "dz": -420,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-01-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 90,
+                  "name": "null"
+                },
+                {
+                  "chance": 10,
+                  "name": "blue_flower"
+                }
+              ],
+              "display_name": "mossy_circle_3",
+              "dx": 900,
+              "dz": -140,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-01-03"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble"
+                }
+              ],
+              "display_name": "vibble",
+              "dx": -140,
+              "dz": 740,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 6760,
+              "origional_width": 6696,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-c06b4b1bef27"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "fountain"
+                }
+              ],
+              "display_name": "fountain",
+              "dx": -188,
+              "dz": -184,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 5872,
+              "origional_width": 5976,
+              "position": "Exact",
+              "priority": 3,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-42191756ce21"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -380,
+              "dz": 840,
+              "edge_inset_percent": 75,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 30,
+              "min_number": 20,
+              "origional_height": 5872,
+              "origional_width": 5976,
+              "position": "Edge",
+              "priority": 4,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-78f48cb4d181"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 359.0,
+            "width_percent": 100
+          },
+          "width": {
+            "center": 14584,
+            "falloff": 2045,
+            "random": true,
+            "span": 6099,
+            "weights": {
+              "center": 0.4305555555555556,
+              "edge": 0.3416666666666665,
+              "falloff": 0.2277777777777779
+            }
+          }
+        },
         "NewRoom": {
           "display_color": [
-            37,
-            36,
             242,
+            36,
+            204,
             255
           ],
           "geometry": "Square",
@@ -18179,9 +19190,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            85,
             242,
-            242,
+            134,
+            36,
             255
           ],
           "geometry": "Square",
@@ -18225,9 +19236,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            204,
-            118,
-            31,
+            85,
+            242,
+            111,
             255
           ],
           "geometry": "Square",
@@ -18302,9 +19313,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            203,
-            242,
-            36,
+            31,
+            84,
+            204,
             255
           ],
           "geometry": "Square",
@@ -18348,9 +19359,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            31,
-            204,
-            144,
+            85,
+            242,
+            233,
             255
           ],
           "geometry": "Square",
@@ -18374,6 +19385,7 @@
             0,
             0
           ],
+          "room_tags": [],
           "spawn_groups": [],
           "tags": [],
           "trail_connection_sector": {
@@ -18392,6 +19404,210 @@
             }
           }
         },
+        "Old_Stump_Yard": {
+          "display_color": [
+            90,
+            36,
+            242,
+            255
+          ],
+          "geometry": "Square",
+          "height": {
+            "center": 4030,
+            "falloff": 120,
+            "random": true,
+            "span": 380,
+            "weights": {
+              "center": 0.45,
+              "edge": 0.35,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Old_Stump_Yard",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 45,
+                  "name": "null"
+                },
+                {
+                  "chance": 55,
+                  "display_name": "#tree",
+                  "name": "#tree",
+                  "tag": true,
+                  "tag_name": "tree"
+                }
+              ],
+              "display_name": "old_stump_yard_1",
+              "dx": -900,
+              "dz": -700,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-07-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 85,
+                  "name": "null"
+                },
+                {
+                  "chance": 15,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "old_stump_yard_2",
+              "dx": 0,
+              "dz": -420,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-07-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 75,
+                  "name": "null"
+                },
+                {
+                  "chance": 25,
+                  "display_name": "#grass",
+                  "name": "#grass",
+                  "tag": true,
+                  "tag_name": "grass"
+                }
+              ],
+              "display_name": "old_stump_yard_3",
+              "dx": 900,
+              "dz": -140,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-07-03"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "stump"
+                }
+              ],
+              "display_name": "stump",
+              "dx": -556,
+              "dz": 680,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 50,
+              "min_number": 25,
+              "origional_height": 5456,
+              "origional_width": 8504,
+              "position": "Random",
+              "priority": 3,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-5c21a59c3156"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "axe_in_stump"
+                }
+              ],
+              "display_name": "axe_in_stump",
+              "dx": -1260,
+              "dz": 520,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 5456,
+              "origional_width": 8504,
+              "position": "Random",
+              "priority": 4,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-2ce19cd5a3ce"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 216.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
         "Random_Enemy_Easy": {
           "camera_center_dx": 144,
           "camera_center_dz": -103,
@@ -18399,9 +19615,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            115,
-            31,
+            151,
             204,
+            71,
             255
           ],
           "geometry": "Circle",
@@ -18480,6 +19696,444 @@
             }
           }
         },
+        "Spider_Hollow": {
+          "display_color": [
+            204,
+            145,
+            71,
+            255
+          ],
+          "geometry": "Square",
+          "height": {
+            "center": 4030,
+            "falloff": 120,
+            "random": true,
+            "span": 380,
+            "weights": {
+              "center": 0.45,
+              "edge": 0.35,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Spider_Hollow",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 40,
+                  "name": "null"
+                },
+                {
+                  "chance": 60,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider_hollow_1",
+              "dx": -900,
+              "dz": 700,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-03-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 70,
+                  "name": "null"
+                },
+                {
+                  "chance": 30,
+                  "display_name": "#fog",
+                  "name": "#fog",
+                  "tag": true,
+                  "tag_name": "fog"
+                }
+              ],
+              "display_name": "spider_hollow_2",
+              "dx": 0,
+              "dz": 980,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-03-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 80,
+                  "name": "null"
+                },
+                {
+                  "chance": 20,
+                  "display_name": "#tree",
+                  "name": "#tree",
+                  "tag": true,
+                  "tag_name": "tree"
+                }
+              ],
+              "display_name": "spider_hollow_3",
+              "dx": 900,
+              "dz": 1260,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-03-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 72.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
+        "Thornstep_Croft": {
+          "display_color": [
+            36,
+            133,
+            242,
+            255
+          ],
+          "geometry": "Square",
+          "height": {
+            "center": 4030,
+            "falloff": 120,
+            "random": true,
+            "span": 380,
+            "weights": {
+              "center": 0.45,
+              "edge": 0.35,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Thornstep_Croft",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 65,
+                  "name": "null"
+                },
+                {
+                  "chance": 35,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "thornstep_croft_1",
+              "dx": -900,
+              "dz": 700,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-09-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 70,
+                  "name": "null"
+                },
+                {
+                  "chance": 30,
+                  "display_name": "#tree",
+                  "name": "#tree",
+                  "tag": true,
+                  "tag_name": "tree"
+                }
+              ],
+              "display_name": "thornstep_croft_2",
+              "dx": 0,
+              "dz": 980,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-09-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 80,
+                  "name": "null"
+                },
+                {
+                  "chance": 20,
+                  "display_name": "#grass",
+                  "name": "#grass",
+                  "tag": true,
+                  "tag_name": "grass"
+                }
+              ],
+              "display_name": "thornstep_croft_3",
+              "dx": 900,
+              "dz": 1260,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-09-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 288.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
+        "Whispering_Ring": {
+          "display_color": [
+            242,
+            36,
+            56,
+            255
+          ],
+          "geometry": "Circle",
+          "height": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": true,
+          "is_boss": false,
+          "name": "Whispering_Ring",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "room_tags": [
+            "forest_micro",
+            "thematic"
+          ],
+          "spawn_groups": [
+            {
+              "candidates": [
+                {
+                  "chance": 55,
+                  "name": "null"
+                },
+                {
+                  "chance": 45,
+                  "display_name": "#tree",
+                  "name": "#tree",
+                  "tag": true,
+                  "tag_name": "tree"
+                }
+              ],
+              "display_name": "whispering_ring_1",
+              "dx": -900,
+              "dz": 700,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 0,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-06-01"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 65,
+                  "name": "null"
+                },
+                {
+                  "chance": 35,
+                  "display_name": "#fog",
+                  "name": "#fog",
+                  "tag": true,
+                  "tag_name": "fog"
+                }
+              ],
+              "display_name": "whispering_ring_2",
+              "dx": 0,
+              "dz": 980,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 1,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-06-02"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 90,
+                  "name": "null"
+                },
+                {
+                  "chance": 10,
+                  "name": "frog"
+                }
+              ],
+              "display_name": "whispering_ring_3",
+              "dx": 900,
+              "dz": 1260,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 2,
+              "min_number": 1,
+              "origional_height": 12110,
+              "origional_width": 18302,
+              "position": "Exact",
+              "priority": 2,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-forrest-06-03"
+            }
+          ],
+          "trail_connection_sector": {
+            "direction_deg": 180.0,
+            "width_percent": 72
+          },
+          "width": {
+            "center": 6100,
+            "falloff": 140,
+            "random": true,
+            "span": 420,
+            "weights": {
+              "center": 0.5,
+              "edge": 0.3,
+              "falloff": 0.2
+            }
+          }
+        },
         "baseball": {
           "camera_center_dx": 5551,
           "camera_center_dz": -3416,
@@ -18487,9 +20141,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            53,
             242,
-            36,
+            85,
+            133,
             255
           ],
           "geometry": "Circle",
@@ -18913,9 +20567,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            204,
-            71,
-            105,
+            85,
+            96,
+            242,
             255
           ],
           "geometry": "Square",
@@ -19227,1460 +20881,6 @@
               "falloff": 0.0
             }
           }
-        },
-        "Mossy_Circle": {
-          "display_color": [
-            72,
-            140,
-            84,
-            255
-          ],
-          "geometry": "Circle",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Mossy_Circle",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 40,
-                  "name": "null"
-                },
-                {
-                  "chance": 60,
-                  "name": "#tree",
-                  "display_name": "#tree",
-                  "tag": true,
-                  "tag_name": "tree"
-                }
-              ],
-              "display_name": "mossy_circle_1",
-              "dx": -900,
-              "dz": -700,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-01-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 60,
-                  "name": "null"
-                },
-                {
-                  "chance": 40,
-                  "name": "#grass",
-                  "display_name": "#grass",
-                  "tag": true,
-                  "tag_name": "grass"
-                }
-              ],
-              "display_name": "mossy_circle_2",
-              "dx": 0,
-              "dz": -420,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-01-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 90,
-                  "name": "null"
-                },
-                {
-                  "chance": 10,
-                  "name": "blue_flower"
-                }
-              ],
-              "display_name": "mossy_circle_3",
-              "dx": 900,
-              "dz": -140,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-01-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 0.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Foggy_Glade": {
-          "display_color": [
-            90,
-            120,
-            96,
-            255
-          ],
-          "geometry": "Oval",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Foggy_Glade",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 20,
-                  "name": "null"
-                },
-                {
-                  "chance": 80,
-                  "name": "#fog",
-                  "display_name": "#fog",
-                  "tag": true,
-                  "tag_name": "fog"
-                }
-              ],
-              "display_name": "foggy_glade_1",
-              "dx": -900,
-              "dz": 0,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-02-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 75,
-                  "name": "null"
-                },
-                {
-                  "chance": 25,
-                  "name": "#grass",
-                  "display_name": "#grass",
-                  "tag": true,
-                  "tag_name": "grass"
-                }
-              ],
-              "display_name": "foggy_glade_2",
-              "dx": 0,
-              "dz": 280,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-02-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 92,
-                  "name": "null"
-                },
-                {
-                  "chance": 8,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "foggy_glade_3",
-              "dx": 900,
-              "dz": 560,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-02-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 36.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Spider_Hollow": {
-          "display_color": [
-            120,
-            94,
-            66,
-            255
-          ],
-          "geometry": "Square",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Spider_Hollow",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 40,
-                  "name": "null"
-                },
-                {
-                  "chance": 60,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "spider_hollow_1",
-              "dx": -900,
-              "dz": 700,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-03-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 70,
-                  "name": "null"
-                },
-                {
-                  "chance": 30,
-                  "name": "#fog",
-                  "display_name": "#fog",
-                  "tag": true,
-                  "tag_name": "fog"
-                }
-              ],
-              "display_name": "spider_hollow_2",
-              "dx": 0,
-              "dz": 980,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-03-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 80,
-                  "name": "null"
-                },
-                {
-                  "chance": 20,
-                  "name": "#tree",
-                  "display_name": "#tree",
-                  "tag": true,
-                  "tag_name": "tree"
-                }
-              ],
-              "display_name": "spider_hollow_3",
-              "dx": 900,
-              "dz": 1260,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-03-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 72.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Frog_Basin": {
-          "display_color": [
-            88,
-            150,
-            110,
-            255
-          ],
-          "geometry": "Oval",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Frog_Basin",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 35,
-                  "name": "null"
-                },
-                {
-                  "chance": 65,
-                  "name": "frog"
-                }
-              ],
-              "display_name": "frog_basin_1",
-              "dx": -900,
-              "dz": -700,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-04-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 65,
-                  "name": "null"
-                },
-                {
-                  "chance": 35,
-                  "name": "#grass",
-                  "display_name": "#grass",
-                  "tag": true,
-                  "tag_name": "grass"
-                }
-              ],
-              "display_name": "frog_basin_2",
-              "dx": 0,
-              "dz": -420,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-04-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 85,
-                  "name": "null"
-                },
-                {
-                  "chance": 15,
-                  "name": "blue_flower"
-                }
-              ],
-              "display_name": "frog_basin_3",
-              "dx": 900,
-              "dz": -140,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-04-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 108.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Bluebloom_Nook": {
-          "display_color": [
-            95,
-            130,
-            180,
-            255
-          ],
-          "geometry": "Circle",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Bluebloom_Nook",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 30,
-                  "name": "null"
-                },
-                {
-                  "chance": 70,
-                  "name": "blue_flower"
-                }
-              ],
-              "display_name": "bluebloom_nook_1",
-              "dx": -900,
-              "dz": 0,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-05-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 75,
-                  "name": "null"
-                },
-                {
-                  "chance": 25,
-                  "name": "#grass",
-                  "display_name": "#grass",
-                  "tag": true,
-                  "tag_name": "grass"
-                }
-              ],
-              "display_name": "bluebloom_nook_2",
-              "dx": 0,
-              "dz": 280,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-05-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 90,
-                  "name": "null"
-                },
-                {
-                  "chance": 10,
-                  "name": "#fog",
-                  "display_name": "#fog",
-                  "tag": true,
-                  "tag_name": "fog"
-                }
-              ],
-              "display_name": "bluebloom_nook_3",
-              "dx": 900,
-              "dz": 560,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-05-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 144.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Whispering_Ring": {
-          "display_color": [
-            140,
-            110,
-            70,
-            255
-          ],
-          "geometry": "Circle",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Whispering_Ring",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 55,
-                  "name": "null"
-                },
-                {
-                  "chance": 45,
-                  "name": "#tree",
-                  "display_name": "#tree",
-                  "tag": true,
-                  "tag_name": "tree"
-                }
-              ],
-              "display_name": "whispering_ring_1",
-              "dx": -900,
-              "dz": 700,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-06-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 65,
-                  "name": "null"
-                },
-                {
-                  "chance": 35,
-                  "name": "#fog",
-                  "display_name": "#fog",
-                  "tag": true,
-                  "tag_name": "fog"
-                }
-              ],
-              "display_name": "whispering_ring_2",
-              "dx": 0,
-              "dz": 980,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-06-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 90,
-                  "name": "null"
-                },
-                {
-                  "chance": 10,
-                  "name": "frog"
-                }
-              ],
-              "display_name": "whispering_ring_3",
-              "dx": 900,
-              "dz": 1260,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-06-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 180.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Old_Stump_Yard": {
-          "display_color": [
-            126,
-            104,
-            72,
-            255
-          ],
-          "geometry": "Square",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Old_Stump_Yard",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 45,
-                  "name": "null"
-                },
-                {
-                  "chance": 55,
-                  "name": "#tree",
-                  "display_name": "#tree",
-                  "tag": true,
-                  "tag_name": "tree"
-                }
-              ],
-              "display_name": "old_stump_yard_1",
-              "dx": -900,
-              "dz": -700,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-07-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 85,
-                  "name": "null"
-                },
-                {
-                  "chance": 15,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "old_stump_yard_2",
-              "dx": 0,
-              "dz": -420,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-07-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 75,
-                  "name": "null"
-                },
-                {
-                  "chance": 25,
-                  "name": "#grass",
-                  "display_name": "#grass",
-                  "tag": true,
-                  "tag_name": "grass"
-                }
-              ],
-              "display_name": "old_stump_yard_3",
-              "dx": 900,
-              "dz": -140,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-07-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 216.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Moonfern_Pocket": {
-          "display_color": [
-            70,
-            125,
-            100,
-            255
-          ],
-          "geometry": "Oval",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Moonfern_Pocket",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 40,
-                  "name": "null"
-                },
-                {
-                  "chance": 60,
-                  "name": "#grass",
-                  "display_name": "#grass",
-                  "tag": true,
-                  "tag_name": "grass"
-                }
-              ],
-              "display_name": "moonfern_pocket_1",
-              "dx": -900,
-              "dz": 0,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-08-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 70,
-                  "name": "null"
-                },
-                {
-                  "chance": 30,
-                  "name": "blue_flower"
-                }
-              ],
-              "display_name": "moonfern_pocket_2",
-              "dx": 0,
-              "dz": 280,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-08-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 85,
-                  "name": "null"
-                },
-                {
-                  "chance": 15,
-                  "name": "#fog",
-                  "display_name": "#fog",
-                  "tag": true,
-                  "tag_name": "fog"
-                }
-              ],
-              "display_name": "moonfern_pocket_3",
-              "dx": 900,
-              "dz": 560,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-08-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 252.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Thornstep_Croft": {
-          "display_color": [
-            118,
-            96,
-            90,
-            255
-          ],
-          "geometry": "Square",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Thornstep_Croft",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 65,
-                  "name": "null"
-                },
-                {
-                  "chance": 35,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "thornstep_croft_1",
-              "dx": -900,
-              "dz": 700,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-09-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 70,
-                  "name": "null"
-                },
-                {
-                  "chance": 30,
-                  "name": "#tree",
-                  "display_name": "#tree",
-                  "tag": true,
-                  "tag_name": "tree"
-                }
-              ],
-              "display_name": "thornstep_croft_2",
-              "dx": 0,
-              "dz": 980,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-09-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 80,
-                  "name": "null"
-                },
-                {
-                  "chance": 20,
-                  "name": "#grass",
-                  "display_name": "#grass",
-                  "tag": true,
-                  "tag_name": "grass"
-                }
-              ],
-              "display_name": "thornstep_croft_3",
-              "dx": 900,
-              "dz": 1260,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-09-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 288.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
-        },
-        "Lantern_Mirelet": {
-          "display_color": [
-            105,
-            140,
-            88,
-            255
-          ],
-          "geometry": "Oval",
-          "height": {
-            "center": 4030,
-            "falloff": 120,
-            "random": true,
-            "span": 380,
-            "weights": {
-              "center": 0.45,
-              "edge": 0.35,
-              "falloff": 0.2
-            }
-          },
-          "inherit_map_floor_color": true,
-          "inherits_live_dynamic_assets": true,
-          "is_boss": false,
-          "name": "Lantern_Mirelet",
-          "room_floor_color": [
-            0,
-            0,
-            0
-          ],
-          "room_tags": [
-            "forest_micro",
-            "thematic"
-          ],
-          "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 45,
-                  "name": "null"
-                },
-                {
-                  "chance": 55,
-                  "name": "#fog",
-                  "display_name": "#fog",
-                  "tag": true,
-                  "tag_name": "fog"
-                }
-              ],
-              "display_name": "lantern_mirelet_1",
-              "dx": -900,
-              "dz": -700,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 0,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-10-01"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 75,
-                  "name": "null"
-                },
-                {
-                  "chance": 25,
-                  "name": "frog"
-                }
-              ],
-              "display_name": "lantern_mirelet_2",
-              "dx": 0,
-              "dz": -420,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-10-02"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 80,
-                  "name": "null"
-                },
-                {
-                  "chance": 20,
-                  "name": "blue_flower"
-                }
-              ],
-              "display_name": "lantern_mirelet_3",
-              "dx": 900,
-              "dz": -140,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 2,
-              "min_number": 1,
-              "origional_height": 12110,
-              "origional_width": 18302,
-              "position": "Exact",
-              "priority": 2,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-forrest-10-03"
-            }
-          ],
-          "trail_connection_sector": {
-            "direction_deg": 324.0,
-            "width_percent": 72
-          },
-          "width": {
-            "center": 6100,
-            "falloff": 140,
-            "random": true,
-            "span": 420,
-            "weights": {
-              "center": 0.5,
-              "edge": 0.3,
-              "falloff": 0.2
-            }
-          }
         }
       },
       "runtime_game_config": {
@@ -20797,6 +20997,11 @@
           }
         },
         "NewTrail3": {
+          "camera_center_dx": 908,
+          "camera_center_dz": -6472,
+          "camera_height_px": 98,
+          "camera_tilt_deg": 12.258353233337402,
+          "camera_zoom_percent": 0,
           "display_color": [
             31,
             204,

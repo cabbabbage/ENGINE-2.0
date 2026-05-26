@@ -29,6 +29,7 @@
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
 #include "runtime_world_context.hpp"
+#include "gameplay/spawn/dynamic_spawn_runtime.hpp"
 
 class Asset;
 class OpenGLRuntimeRenderer;
@@ -47,7 +48,6 @@ namespace devmode::core {
 class ManifestStore;
 }
 namespace dynamic_spawn {
-class DynamicSpawnRuntime;
 struct DynamicSpawnDiagnostics;
 }
 

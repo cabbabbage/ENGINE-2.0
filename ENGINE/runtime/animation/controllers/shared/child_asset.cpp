@@ -69,7 +69,28 @@ anchor_points::AnchorWorldPoint3 child_anchor_world_displacement(const AnchorPoi
     const std::optional<float> heading_radians =
         oval_anchor_heading::resolve_effective_oval_heading_radians(owner_asset, parent_anchor);
     if (heading_radians.has_value()) {
-        oval_anchor_heading::rotate_xz_about_world_y(*heading_radians, displacement_x, displacement_z);
+        // True 3D orientation composition for oval-linked children:
+        // yaw first around world-up, then pitch around the yaw-rotated local right axis.
+        const float yaw = *heading_radians;
+        oval_anchor_heading::rotate_xz_about_world_y(yaw, displacement_x, displacement_z);
+
+        float pitch = 0.0f;
+        if (owner_asset && owner_asset->has_directional_pitch_radians()) {
+            pitch = owner_asset->directional_pitch_radians();
+        }
+        if (std::isfinite(pitch) && std::fabs(pitch) > 1e-6f) {
+            const float cos_pitch = std::cos(pitch);
+            const float sin_pitch = std::sin(pitch);
+            const float right_x = std::sin(yaw);
+            const float right_z = -std::cos(yaw);
+            const float axis_dot_v = right_x * displacement_x + right_z * displacement_z;
+            const float cross_x = right_z * displacement_y;
+            const float cross_y = -(right_z * displacement_x - right_x * displacement_z);
+            const float cross_z = -right_x * displacement_y;
+            displacement_x = displacement_x * cos_pitch + cross_x * sin_pitch + right_x * axis_dot_v * (1.0f - cos_pitch);
+            displacement_y = displacement_y * cos_pitch + cross_y * sin_pitch;
+            displacement_z = displacement_z * cos_pitch + cross_z * sin_pitch + right_z * axis_dot_v * (1.0f - cos_pitch);
+        }
     }
 
     displacement = anchor_points::AnchorWorldPoint3{

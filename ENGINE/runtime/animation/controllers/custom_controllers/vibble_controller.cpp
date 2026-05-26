@@ -404,6 +404,7 @@ void vibble_controller::on_update(const Input& input) {
         const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
         bool anchor_heading_changed = false;
         if (dev_mode) {
+            player->clear_directional_pitch_radians();
             if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
                 anchor_heading_changed =
                     player->set_directional_target_world_xz(static_cast<float>(mouse_world->x),
@@ -427,6 +428,8 @@ void vibble_controller::on_update(const Input& input) {
             const float horizontal_scale = std::cos(pitch_radians);
             anchor_heading_changed =
                 player->set_directional_heading_radians(heading_radians) || anchor_heading_changed;
+            anchor_heading_changed =
+                player->set_directional_pitch_radians(pitch_radians) || anchor_heading_changed;
             constexpr float kDirectionalTargetDistancePx = 128.0f;
             const float target_x = static_cast<float>(player->world_x()) +
                                    std::cos(heading_radians) * horizontal_scale * kDirectionalTargetDistancePx;

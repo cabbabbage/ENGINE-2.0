@@ -218,12 +218,12 @@ SDL_Color grey_variant_for_level(SDL_Color root, int level) {
     return mix_color(root, greyscale_of(root), t);
 }
 
-AnimationListPanel::ExternalRowsFingerprint fingerprint_for_external_rows(
-    const std::optional<std::vector<AnimationListPanel::ExternalRow>>& rows) {
+animation_editor::AnimationListPanel::ExternalRowsFingerprint fingerprint_for_external_rows(
+    const std::optional<std::vector<animation_editor::AnimationListPanel::ExternalRow>>& rows) {
     constexpr std::uint64_t kOffset = 1469598103934665603ull;
     constexpr std::uint64_t kPrime = 1099511628211ull;
 
-    AnimationListPanel::ExternalRowsFingerprint fingerprint{};
+    animation_editor::AnimationListPanel::ExternalRowsFingerprint fingerprint{};
     fingerprint.count = rows ? rows->size() : 0;
     std::uint64_t hash = kOffset;
     auto hash_combine = [&](std::uint64_t value) {
@@ -428,10 +428,10 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
     if (display_rows_.empty()) {
         DMLabelStyle empty_style = DMStyles::Label();
         empty_style.color = DMStyles::TextBox().label.color;
-        std::string state_icon = DMIcons::Info();
+        std::string state_icon{DMIcons::Info()};
         std::string state_text = "No animations yet. Use + to create or import.";
         if (!document_) {
-            state_icon = DMIcons::NavDown();
+            state_icon = std::string{DMIcons::NavDown()};
             state_text = "Loading animations... wait for asset sync.";
         }
         const std::string line = state_icon + " " + state_text;

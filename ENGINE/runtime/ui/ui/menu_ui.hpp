@@ -51,6 +51,7 @@ class MenuUI : public MainApp {
     void doSettings();
     void doQuit();
     void doToggleDevMode();
+    void update_mouse_capture_state();
 
 	public:
     struct MenuButton {
@@ -104,6 +105,7 @@ class MenuUI : public MainApp {
     void emit_packet_cache_metrics() const;
 
     bool menu_active_ = false;
+    bool mouse_capture_active_ = false;
     MenuAction last_action_ = MenuAction::NONE;
     bool return_to_main_menu_ = false;
     SDL_Texture* background_tex_ = nullptr;

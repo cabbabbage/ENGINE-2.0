@@ -38,6 +38,7 @@
 #include "devtools/DockableCollapsible.hpp"
 #include "devtools/draw_utils.hpp"
 #include "dev_mode_color_utils.hpp"
+#include "dev_mode_utils.hpp"
 #include "spawn_groups/SpawnGroupConfig.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "spawn_groups/widgets/CandidateEditorPieGraphWidget.hpp"

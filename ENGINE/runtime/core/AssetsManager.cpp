@@ -1112,6 +1112,15 @@ const dynamic_spawn::DynamicSpawnDiagnostics& Assets::dynamic_spawn_diagnostics(
     return dynamic_spawn_runtime_ ? dynamic_spawn_runtime_->diagnostics() : kEmpty;
 }
 
+std::vector<dynamic_spawn::DynamicSpawnRuntime::FogBoundarySample>
+Assets::sample_live_dynamic_fog_boundary(const world::GridBounds& render_bounds, int spacing_override_px) const {
+    if (!dynamic_spawn_runtime_) {
+        return {};
+    }
+    const world::GridBounds work_bounds = live_dynamic_work_bounds_from_render_bounds(render_bounds);
+    return dynamic_spawn_runtime_->sample_fog_boundary_lane(work_bounds, spacing_override_px);
+}
+
 bool Assets::dev_grid_overlay_enabled() const {
     return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_grid_overlay_enabled();
 }

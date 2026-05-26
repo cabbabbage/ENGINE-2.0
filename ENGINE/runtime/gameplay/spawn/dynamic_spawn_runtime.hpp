@@ -48,6 +48,10 @@ struct DynamicSpawnDiagnostics {
 
 class DynamicSpawnRuntime {
 public:
+    struct FogBoundarySample {
+        int world_x = 0;
+        int world_z = 0;
+    };
     explicit DynamicSpawnRuntime(Assets& assets);
     ~DynamicSpawnRuntime();
 
@@ -61,6 +65,8 @@ public:
     void forget_asset(Asset* asset);
     std::size_t delete_for_spawn_group(const std::string& spawn_id);
     std::size_t delete_for_spawn_groups(const std::vector<std::string>& spawn_ids);
+    std::vector<FogBoundarySample> sample_fog_boundary_lane(const world::GridBounds& work_bounds,
+                                                            int spacing_override_px = 0) const;
 
     const DynamicSpawnDiagnostics& diagnostics() const { return diagnostics_; }
 

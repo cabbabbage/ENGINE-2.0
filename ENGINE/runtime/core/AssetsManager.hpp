@@ -342,6 +342,8 @@ public:
     void set_output_dimensions(int width, int height);
     std::optional<SDL_Point> opengl_postprocess_target_size() const;
     const dynamic_spawn::DynamicSpawnDiagnostics& dynamic_spawn_diagnostics() const;
+    std::vector<dynamic_spawn::DynamicSpawnRuntime::FogBoundarySample>
+    sample_live_dynamic_fog_boundary(const world::GridBounds& render_bounds, int spacing_override_px = 0) const;
 
 private:
     void save_map_info_json();

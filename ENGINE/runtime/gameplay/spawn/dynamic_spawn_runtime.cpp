@@ -676,9 +676,6 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
         const int spacing = std::max(16, fog_render_boundary_spacing_px());
         const int min_x = std::min(work_bounds.min.world_x(), work_bounds.max.world_x()) - despawn_margin_px();
         const int max_x = std::max(work_bounds.min.world_x(), work_bounds.max.world_x()) + despawn_margin_px();
-        const int render_edge_z = std::max(work_bounds.min.world_z(), work_bounds.max.world_z());
-        const auto area_geometry = dynamic_spawn::geometry::collect_area_geometry(assets_);
-        const int room_limit_px = max_spawn_from_room_px();
         const Selector* fog_selector = nullptr;
         for (const Selector& selector : selectors_) {
             if (selector.mode == Mode::FogBoundaryLane) {
@@ -687,16 +684,11 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
             }
         }
         if (fog_selector) {
-            const int first = vibble::math::floor_div(min_x, spacing) * spacing;
             int lane_min_z = std::numeric_limits<int>::max();
             int lane_max_z = std::numeric_limits<int>::min();
-            for (int x = first; x <= max_x; x += spacing) {
-                const int room_edge_z =
-                    dynamic_spawn::geometry::max_allowed_boundary_z_for_x(area_geometry, x, room_limit_px);
-                if (room_edge_z == std::numeric_limits<int>::min()) {
-                    continue;
-                }
-                const int boundary_z = std::min(render_edge_z, room_edge_z);
+            for (const FogBoundarySample& sample : sample_fog_boundary_lane(work_bounds, spacing)) {
+                const int x = sample.world_x;
+                const int boundary_z = sample.world_z;
                 const int gx = vibble::math::floor_div(x, spacing);
                 const int gz = vibble::math::floor_div(boundary_z, spacing);
                 CellKey key{Mode::FogBoundaryLane, fog_selector->id, spacing, gx, gz};
@@ -1046,6 +1038,33 @@ int DynamicSpawnRuntime::fog_render_boundary_spacing_px() const {
         return 128;
     }
     return read_int_setting(*live_it, "fog_render_boundary_spacing", 128, 16, 2000);
+}
+
+std::vector<DynamicSpawnRuntime::FogBoundarySample>
+DynamicSpawnRuntime::sample_fog_boundary_lane(const world::GridBounds& work_bounds, int spacing_override_px) const {
+    const int spacing = std::max(16, spacing_override_px > 0 ? spacing_override_px : fog_render_boundary_spacing_px());
+    const int min_x = std::min(work_bounds.min.world_x(), work_bounds.max.world_x()) - despawn_margin_px();
+    const int max_x = std::max(work_bounds.min.world_x(), work_bounds.max.world_x()) + despawn_margin_px();
+    const int render_edge_z = std::max(work_bounds.min.world_z(), work_bounds.max.world_z());
+    const int max_visible_z = render_edge_z + despawn_margin_px();
+    const int room_limit_px = max_spawn_from_room_px();
+    const auto area_geometry = dynamic_spawn::geometry::collect_area_geometry(assets_);
+    const int first = vibble::math::floor_div(min_x, spacing) * spacing;
+    std::vector<FogBoundarySample> samples;
+    samples.reserve(static_cast<std::size_t>(std::max(0, (max_x - first) / spacing + 2)));
+    for (int x = first; x <= max_x; x += spacing) {
+        const int room_edge_z =
+            dynamic_spawn::geometry::max_allowed_boundary_z_for_x(area_geometry, x, room_limit_px);
+        if (room_edge_z == std::numeric_limits<int>::min()) {
+            continue;
+        }
+        const int boundary_z = std::min(render_edge_z, room_edge_z);
+        if (boundary_z > max_visible_z) {
+            continue;
+        }
+        samples.push_back(FogBoundarySample{x, boundary_z});
+    }
+    return samples;
 }
 
 int DynamicSpawnRuntime::preload_margin_px() const {

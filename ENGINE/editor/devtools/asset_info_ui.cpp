@@ -1393,6 +1393,22 @@ void AssetInfoUI::layout_widgets(int screen_w, int screen_h) const {
 }
 
 bool AssetInfoUI::handle_event(const SDL_Event& e) {
+    if (DMWeightedRangeWidget::has_active_expanded()) {
+        if (DMWeightedRangeWidget::handle_active_expanded_event(e)) {
+            return true;
+        }
+        switch (e.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_TEXT_INPUT:
+                return true;
+            default:
+                break;
+        }
+    }
 
     if (color_sampling_active_) {
         const bool pointer_event =
@@ -1707,6 +1723,7 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
         asset_selector_->render(r);
 
     DMDropdown::render_active_options(r);
+    DMWeightedRangeWidget::render_active_expanded(r);
 
     if (color_sampling_active_ && r) {
         SDL_Rect sample_rect{ color_sampling_cursor_.x, color_sampling_cursor_.y, 1, 1 };

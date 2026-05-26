@@ -100,7 +100,6 @@ void CustomAssetController::process_pending_attacks(Asset& self) {
         return;
     }
 
-    orphan_eligible_children(self);
     for (const auto& attack : pending_attacks) {
         on_attack(attack);
     }
@@ -109,6 +108,7 @@ void CustomAssetController::process_pending_attacks(Asset& self) {
         pending_attacks,
         attack_processing_config());
     if (summary.died) {
+        orphan_eligible_children(self);
         on_death();
     } else if (summary.took_damage) {
         for (const auto& attack : pending_attacks) {

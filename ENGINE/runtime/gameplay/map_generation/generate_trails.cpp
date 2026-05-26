@@ -28,7 +28,6 @@ constexpr double kLoopConnectionChance = 0.35;
 constexpr double kLoopCapRatio = 0.25;
 constexpr int kTrailPairAttempts = 96;
 constexpr int kSectionPlacementAttempts = 128;
-constexpr double kCurvynessShiftScaleWorldPx = 20.0;
 constexpr double kCenterlineCurvatureScaleWorldPx = 45.0;
 constexpr double kCenterlineControlSpacingWorldPx = 300.0;
 constexpr double kCenterlineValidationSpacingWorldPx = 48.0;
@@ -126,11 +125,6 @@ constexpr double kTrailContactGateStepWorldPx = 24.0;
 constexpr int kTrailRoutePairBudget = 64;
 constexpr double kRoomMarginDistanceWorldPx = 512.0;
 constexpr double kTrailEndpointContainmentSafetyWorldPx = 12.0;
-constexpr double kCurvyRouteAmplitudeScaleWorldPx = 24.0;
-constexpr double kCurvyRouteSampleSpacingBaseWorldPx = 140.0;
-constexpr double kCurvyRouteSampleSpacingMinWorldPx = 56.0;
-constexpr int kCurvyVariantCount = 5;
-
 struct Vec2 {
     double x = 0.0;
     double y = 0.0;
@@ -1846,104 +1840,14 @@ bool polyline_is_valid_for_anchor_exit(const std::vector<SDL_Point>& points,
     return true;
 }
 
-std::uint32_t stable_route_seed(const std::string& a, const std::string& b, int variant_index) {
-    const std::string key = (a < b) ? (a + "|" + b) : (b + "|" + a);
-    std::uint32_t hash = 2166136261u;
-    for (unsigned char ch : key) {
-        hash ^= static_cast<std::uint32_t>(ch);
-        hash *= 16777619u;
-    }
-    hash ^= static_cast<std::uint32_t>(variant_index * 2654435761u);
-    return hash;
-}
-
-std::vector<SDL_Point> build_curvier_polyline(const std::vector<SDL_Point>& base_points,
-                                              int curvyness,
-                                              double amplitude_scale,
-                                              double phase_shift) {
-    std::vector<SDL_Point> polyline = dedupe_consecutive_points(base_points);
-    if (polyline.size() < 2 || curvyness <= 0) {
-        return polyline;
-    }
-
-    const std::vector<double> cumulative = build_polyline_cumulative_lengths(polyline);
-    const double total = polyline_total_length(cumulative);
-    if (total <= 1.0) {
-        return polyline;
-    }
-
-    const double sample_spacing = std::max(
-        kCurvyRouteSampleSpacingMinWorldPx,
-        kCurvyRouteSampleSpacingBaseWorldPx - static_cast<double>(curvyness) * 8.0);
-    const int sample_count = std::max(2, static_cast<int>(std::ceil(total / sample_spacing)));
-    const double amplitude_limit = std::min(
-        total * 0.2,
-        static_cast<double>(curvyness) * kCurvyRouteAmplitudeScaleWorldPx * std::max(0.0, amplitude_scale));
-    if (amplitude_limit <= 0.0) {
-        return polyline;
-    }
-
-    std::vector<SDL_Point> curved;
-    curved.reserve(static_cast<std::size_t>(sample_count) + 1);
-    curved.push_back(polyline.front());
-    for (int i = 1; i < sample_count; ++i) {
-        const double d = total * (static_cast<double>(i) / static_cast<double>(sample_count));
-        Vec2 point{};
-        Vec2 tangent{};
-        if (!sample_polyline_at_distance(polyline, cumulative, d, &point, &tangent)) {
-            continue;
-        }
-        const Vec2 normal{-tangent.y, tangent.x};
-        const double phase = (d / std::max(1.0, total)) * (2.0 * 3.14159265358979323846) + phase_shift;
-        const double envelope = std::sin((d / std::max(1.0, total)) * 3.14159265358979323846);
-        const double lateral = std::sin(phase) * amplitude_limit * envelope;
-        curved.push_back(to_point(add(point, scale(normal, lateral))));
-    }
-    curved.push_back(polyline.back());
-    return dedupe_consecutive_points(curved);
-}
-
 std::vector<std::vector<SDL_Point>> build_centerline_variants(const std::vector<SDL_Point>& base_points,
-                                                              int curvyness,
+                                                              int,
                                                               const std::string& room_a_name,
                                                               const std::string& room_b_name) {
+    (void)room_a_name;
+    (void)room_b_name;
     std::vector<std::vector<SDL_Point>> variants;
-    variants.push_back(dedupe_consecutive_points(base_points));  // Always keep safe fallback first.
-    if (curvyness <= 0) {
-        return variants;
-    }
-
-    for (int i = 0; i < kCurvyVariantCount; ++i) {
-        const std::uint32_t seed = stable_route_seed(room_a_name, room_b_name, i);
-        const double unit = static_cast<double>(seed % 10000u) / 9999.0;
-        const double phase_shift = unit * 2.0 * 3.14159265358979323846;
-        const double amplitude_scale = 0.45 + static_cast<double>(i + 1) / static_cast<double>(kCurvyVariantCount + 1);
-        std::vector<SDL_Point> variant = build_curvier_polyline(base_points, curvyness, amplitude_scale, phase_shift);
-        variant = dedupe_consecutive_points(variant);
-        if (variant.size() < 2) {
-            continue;
-        }
-        bool duplicate = false;
-        for (const auto& existing : variants) {
-            if (existing.size() != variant.size()) {
-                continue;
-            }
-            const bool same_points = std::equal(
-                existing.begin(),
-                existing.end(),
-                variant.begin(),
-                [](const SDL_Point& lhs, const SDL_Point& rhs) {
-                    return lhs.x == rhs.x && lhs.y == rhs.y;
-                });
-            if (same_points) {
-                duplicate = true;
-                break;
-            }
-        }
-        if (!duplicate) {
-            variants.push_back(std::move(variant));
-        }
-    }
+    variants.push_back(dedupe_consecutive_points(base_points));
     return variants;
 }
 
@@ -2052,19 +1956,9 @@ bool centerline_is_valid(Room* room_a,
     return true;
 }
 
-bool shift_is_unique(const std::vector<double>& used_shifts, double value) {
-    for (double existing : used_shifts) {
-        if (std::abs(existing - value) <= 0.01) {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool place_sections(const std::vector<CenterlineSample>& section_samples,
                     int min_width,
                     int max_width,
-                    int curvyness,
                     std::mt19937& rng,
                     TrailAttemptStats* stats,
                     std::vector<TrailSection>* out_sections) {
@@ -2078,28 +1972,12 @@ bool place_sections(const std::vector<CenterlineSample>& section_samples,
     out_sections->reserve(section_samples.size());
 
     std::uniform_int_distribution<int> width_dist(min_width, max_width);
-    std::vector<double> used_shifts;
-    used_shifts.reserve(section_samples.size());
-
     for (const CenterlineSample& sample : section_samples) {
         bool placed = false;
         for (int attempt = 0; attempt < kSectionPlacementAttempts && !placed; ++attempt) {
             const int width = width_dist(rng);
             const double half_width = static_cast<double>(std::max(1, width)) * 0.5;
-            const double curvy_limit = std::max(0.0, static_cast<double>(curvyness) * kCurvynessShiftScaleWorldPx);
-            const double straddle_limit = std::max(0.0, half_width - 1.0);
-            const double local_segment_cap = std::max(0.0, static_cast<double>(kTrailPerpendicularSectionSpacingWorldPx) * 0.25);
-            const double shift_limit = std::min({curvy_limit, straddle_limit, local_segment_cap});
-
             double shift = 0.0;
-            if (shift_limit > 0.0) {
-                std::uniform_real_distribution<double> shift_dist(-shift_limit, shift_limit);
-                shift = shift_dist(rng);
-                if (!shift_is_unique(used_shifts, shift)) {
-                    continue;
-                }
-            }
-
             const Vec2 section_center = add(sample.point, scale(sample.normal, shift));
             const Vec2 left = add(section_center, scale(sample.normal, half_width));
             const Vec2 right = subtract(section_center, scale(sample.normal, half_width));
@@ -2112,7 +1990,6 @@ bool place_sections(const std::vector<CenterlineSample>& section_samples,
             section.left = left;
             section.right = right;
             out_sections->push_back(section);
-            used_shifts.push_back(shift);
             placed = true;
         }
 
@@ -2151,7 +2028,7 @@ bool build_trail_layout(const SDL_Point& start_tip,
                         const SDL_Point& end_tip,
                         int min_width,
                         int max_width,
-                        int curvyness,
+                        int,
                         const std::vector<double>& required_distances,
                         Room* room_a,
                         Room* room_b,
@@ -2177,7 +2054,6 @@ bool build_trail_layout(const SDL_Point& start_tip,
     }
     min_width = std::max(1, min_width);
     max_width = std::max(min_width, max_width);
-    curvyness = std::max(0, curvyness);
 
     const Vec2 start = to_vec2(start_tip);
     const Vec2 end = to_vec2(end_tip);
@@ -2233,7 +2109,7 @@ bool build_trail_layout(const SDL_Point& start_tip,
                                                                                        normal,
                                                                                        section_distances);
         std::vector<TrailSection> sections;
-        if (!place_sections(section_samples, min_width, max_width, curvyness, rng, stats, &sections)) {
+        if (!place_sections(section_samples, min_width, max_width, rng, stats, &sections)) {
             continue;
         }
 
@@ -2298,7 +2174,7 @@ bool sections_respect_connected_room_boundaries(const std::vector<TrailSection>&
 bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_points,
                                       int min_width,
                                       int max_width,
-                                      int curvyness,
+                                      int,
                                       const std::vector<double>& required_distances,
                                       Room* room_a,
                                       Room* room_b,
@@ -2332,7 +2208,6 @@ bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_p
     }
     min_width = std::max(1, min_width);
     max_width = std::max(min_width, max_width);
-    curvyness = std::max(0, curvyness);
 
     const std::vector<double> cumulative = build_polyline_cumulative_lengths(polyline);
     const double trail_length = polyline_total_length(cumulative);
@@ -2399,7 +2274,7 @@ bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_p
     }
 
     std::vector<TrailSection> sections;
-    if (!place_sections(section_samples, min_width, max_width, curvyness, rng, stats, &sections)) {
+    if (!place_sections(section_samples, min_width, max_width, rng, stats, &sections)) {
         return false;
     }
     if (!sections_respect_connected_room_boundaries(sections, room_a, room_b, endpoint_allowance)) {
@@ -2490,7 +2365,6 @@ bool attempt_trail_connection(Room* a,
     const int resolved_width = std::max(1, resolve_weighted_dimension(width_range, rng));
     const int min_width = resolved_width;
     const int max_width = resolved_width;
-    const int curvyness = 0;
     const std::string name = config.value("name", trail_name.empty() ? std::string("trail_segment") : trail_name);
     const int routing_clearance_px = std::max(8, max_width / 2 + 12);
     const int gate_clearance_px = std::max(4, max_width / 3);
@@ -2689,7 +2563,7 @@ bool attempt_trail_connection(Room* a,
         }
 
         const std::vector<std::vector<SDL_Point>> centerline_variants =
-            build_centerline_variants(base_centerline, curvyness, a->room_name, b->room_name);
+            build_centerline_variants(base_centerline, 0, a->room_name, b->room_name);
         bool built_from_variant = false;
         clock::time_point layout_start{};
         clock::time_point layout_end{};
@@ -2731,7 +2605,7 @@ bool attempt_trail_connection(Room* a,
                 if (!build_trail_layout_from_polyline(contained_centerline,
                                                       min_width,
                                                       max_width,
-                                                      curvyness,
+                                                      0,
                                                       required_distances,
                                                       a,
                                                       b,
@@ -2845,7 +2719,7 @@ bool attempt_trail_connection(Room* a,
                     build_centerline_samples_from_polyline(contained_centerline, section_distances);
                 std::vector<TrailSection> forced_sections;
                 if (section_samples.empty() ||
-                    !place_sections(section_samples, min_width, max_width, 0, rng, stats, &forced_sections)) {
+                    !place_sections(section_samples, min_width, max_width, rng, stats, &forced_sections)) {
                     continue;
                 }
                 forced_result.start_tip = contained_centerline.front();

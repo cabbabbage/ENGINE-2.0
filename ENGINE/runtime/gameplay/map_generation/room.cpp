@@ -502,7 +502,6 @@ Room::Room(Point origin,
             room_area->set_type(type.empty() ? "room" : type);
         }
     } else {
-        constexpr int kGeneratedRoomEdgeSmoothness = 0;
         std::string geometry = assets_json.value("geometry", "square");
         if (!geometry.empty()) {
             geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
@@ -537,7 +536,7 @@ Room::Room(Point origin,
             width,
             height,
             geometry,
-            kGeneratedRoomEdgeSmoothness,
+            0,
             map_w,
             map_h,
             3);

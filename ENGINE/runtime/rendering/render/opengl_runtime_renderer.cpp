@@ -1346,6 +1346,47 @@ const std::string& OpenGLRuntimeRenderer::backend_name() const {
     return renderer_name_;
 }
 
+void OpenGLRuntimeRenderer::ingest_player_damage_pulse(float now_seconds) {
+    if (!assets_) {
+        return;
+    }
+
+    const runtime::context::PlayerDamagePulseState& pulse = assets_->game_context().player_damage_pulse();
+    if (pulse.pulse_id == 0 || pulse.pulse_id == last_damage_pulse_id_) {
+        return;
+    }
+    last_damage_pulse_id_ = pulse.pulse_id;
+
+    ActiveDamagePulse active{};
+    active.pulse_id = pulse.pulse_id;
+    active.pulse_time_seconds = pulse.pulse_time_seconds;
+    active.amplitude = std::clamp(
+        static_cast<float>(std::max(0, pulse.damage_amount)) / dof_blur_chain::damage_pulse_tuning::kDamageReference,
+        0.0f,
+        1.0f);
+    active.health_ratio_after = std::clamp(pulse.health_ratio_after, 0.0f, 1.0f);
+    if (active.amplitude <= 0.0f) {
+        return;
+    }
+
+    active_damage_pulses_.push_back(active);
+    while (active_damage_pulses_.size() > dof_blur_chain::damage_pulse_tuning::kMaxConcurrentPulses) {
+        active_damage_pulses_.pop_front();
+    }
+    prune_expired_damage_pulses(now_seconds);
+}
+
+void OpenGLRuntimeRenderer::prune_expired_damage_pulses(float now_seconds) {
+    const float lifetime = dof_blur_chain::damage_pulse_tuning::kPulseLifetimeSeconds;
+    while (!active_damage_pulses_.empty()) {
+        const float age = now_seconds - active_damage_pulses_.front().pulse_time_seconds;
+        if (age <= lifetime) {
+            break;
+        }
+        active_damage_pulses_.pop_front();
+    }
+}
+
 std::vector<world::Chunk*> OpenGLRuntimeRenderer::runtime_floor_chunks() const {
     if (!assets_) {
         return {};
@@ -1938,6 +1979,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
                                 camera_settings.blur_px,
                                 camera_settings.radial_blur_px);
+    const float now_seconds = assets_->game_context().elapsed_seconds();
+    ingest_player_damage_pulse(now_seconds);
+    prune_expired_damage_pulses(now_seconds);
     const bool dof_active = dof_requested_by_settings;
     bool dof_composited = false;
     const bool draw_movement_debug = assets_->is_dev_mode() &&
@@ -2055,6 +2099,71 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
 
         const std::uint64_t dof_begin = SDL_GetPerformanceCounter();
         std::vector<dof_blur_chain::LayerTexture> dof_layers;
+        auto apply_damage_pulse_to_layers = [&]() {
+            constexpr float kTwoPi = 6.28318530717958647692f;
+            for (dof_blur_chain::LayerTexture& layer : dof_layers) {
+                layer.warp_px = 0.0f;
+                layer.tint_strength = 0.0f;
+                layer.phase = 0.0f;
+                if (!layer.texture || active_damage_pulses_.empty()) {
+                    continue;
+                }
+
+                const float layer_distance = static_cast<float>(std::abs(layer.depth_layer - frame_to_render->focus_depth_layer));
+                float accum_warp = 0.0f;
+                float accum_tint = 0.0f;
+                float accum_phase_sin = 0.0f;
+                float accum_phase_cos = 0.0f;
+                float accum_phase_weight = 0.0f;
+
+                for (const ActiveDamagePulse& pulse : active_damage_pulses_) {
+                    const float age = now_seconds - pulse.pulse_time_seconds;
+                    if (age < 0.0f || age > dof_blur_chain::damage_pulse_tuning::kPulseLifetimeSeconds) {
+                        continue;
+                    }
+
+                    float envelope = 1.0f;
+                    if (age < dof_blur_chain::damage_pulse_tuning::kEnvelopeRiseSeconds) {
+                        envelope = age / std::max(1.0e-4f, dof_blur_chain::damage_pulse_tuning::kEnvelopeRiseSeconds);
+                    } else {
+                        envelope = std::exp(-(age - dof_blur_chain::damage_pulse_tuning::kEnvelopeRiseSeconds) /
+                                            std::max(1.0e-4f, dof_blur_chain::damage_pulse_tuning::kEnvelopeDecaySeconds));
+                    }
+
+                    const float health_speed_scale =
+                        dof_blur_chain::damage_pulse_tuning::kLowHealthSpeedScaleMin +
+                        (1.0f - dof_blur_chain::damage_pulse_tuning::kLowHealthSpeedScaleMin) *
+                            std::clamp(pulse.health_ratio_after, 0.0f, 1.0f);
+                    const float propagation_speed =
+                        dof_blur_chain::damage_pulse_tuning::kBasePropagationLayersPerSecond * health_speed_scale;
+                    const float wave_front_distance = age * propagation_speed;
+                    const float wave_delta = std::abs(layer_distance - wave_front_distance);
+                    const float arrival = std::clamp(
+                        1.0f - (wave_delta / std::max(1.0e-4f, dof_blur_chain::damage_pulse_tuning::kWaveFrontSoftnessLayers)),
+                        0.0f,
+                        1.0f);
+                    const float wave_strength = envelope * arrival * pulse.amplitude;
+                    if (wave_strength <= 1.0e-4f) {
+                        continue;
+                    }
+
+                    accum_warp += wave_strength * dof_blur_chain::damage_pulse_tuning::kMaxWarpPx;
+                    accum_tint += wave_strength * dof_blur_chain::damage_pulse_tuning::kMaxTintStrength;
+                    const float phase =
+                        age * dof_blur_chain::damage_pulse_tuning::kPhaseFrequencyHz * kTwoPi +
+                        layer_distance * 0.85f;
+                    accum_phase_sin += std::sin(phase) * wave_strength;
+                    accum_phase_cos += std::cos(phase) * wave_strength;
+                    accum_phase_weight += wave_strength;
+                }
+
+                layer.warp_px = std::clamp(accum_warp, 0.0f, dof_blur_chain::damage_pulse_tuning::kMaxWarpPx);
+                layer.tint_strength = std::clamp(accum_tint, 0.0f, dof_blur_chain::damage_pulse_tuning::kMaxTintStrength);
+                if (accum_phase_weight > 1.0e-4f) {
+                    layer.phase = std::atan2(accum_phase_sin, accum_phase_cos);
+                }
+            }
+        };
         bool used_flattened_xy_dof_layer = false;
         auto rebuild_flattened_xy_dof_layer = [&]() -> bool {
             dof_layers.clear();
@@ -2101,6 +2210,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             render_diagnostics::end_frame();
             return false;
         }
+        apply_damage_pulse_to_layers();
 
         const SDL_Point screen_center = assets_->getView().get_screen_center();
         const SDL_FPoint optical_center{
@@ -2126,6 +2236,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 render_diagnostics::end_frame();
                 return false;
             }
+            apply_damage_pulse_to_layers();
             resolved_dof_result =
                 dof_blur_chain_.compose(dof_layers,
                                         floor_target_,

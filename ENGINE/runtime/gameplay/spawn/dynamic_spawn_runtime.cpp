@@ -98,10 +98,6 @@ bool type_is_boundary(const AssetInfo* info) {
     return info && asset_types::canonicalize(info->type) == asset_types::boundary;
 }
 
-bool type_is_fog(const AssetInfo* info) {
-    return info && info->has_tag("fog");
-}
-
 bool named_area_is_trail(const Room::NamedArea& area) {
     return is_trail_area_label(area.type) ||
            is_trail_area_label(area.kind) ||
@@ -155,7 +151,6 @@ void DynamicSpawnRuntime::compile_from_map() {
     clear_active_instances(true);
     selectors_.clear();
     cells_by_chunk_.clear();
-    deferred_fog_cells_.clear();
     active_chunks_.clear();
     next_selector_id_ = 1;
     diagnostics_ = {};
@@ -172,7 +167,6 @@ void DynamicSpawnRuntime::clear() {
     clear_active_instances(true);
     selectors_.clear();
     cells_by_chunk_.clear();
-    deferred_fog_cells_.clear();
     active_chunks_.clear();
     diagnostics_ = {};
     planned_max_spawn_from_room_px_ = 128;
@@ -188,7 +182,6 @@ void DynamicSpawnRuntime::clear_active_instances(bool delete_assets) {
         }
     }
     active_.clear();
-    deferred_fog_cells_.clear();
     asset_to_key_.clear();
     active_chunks_.clear();
 
@@ -252,12 +245,6 @@ std::size_t DynamicSpawnRuntime::delete_for_spawn_group(const std::string& spawn
     if (removed > 0) {
         for (auto chunk_it = cells_by_chunk_.begin(); chunk_it != cells_by_chunk_.end(); ++chunk_it) {
             auto& cells = chunk_it->second;
-            cells.erase(std::remove_if(cells.begin(), cells.end(), [&](const PlannedCell& cell) {
-                return cell.selector_spawn_id == spawn_id;
-            }), cells.end());
-        }
-        for (auto fog_it = deferred_fog_cells_.begin(); fog_it != deferred_fog_cells_.end(); ++fog_it) {
-            auto& cells = fog_it->second;
             cells.erase(std::remove_if(cells.begin(), cells.end(), [&](const PlannedCell& cell) {
                 return cell.selector_spawn_id == spawn_id;
             }), cells.end());
@@ -688,14 +675,6 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
         }
     }
     pending_activation_chunks_.swap(retained_pending);
-    for (auto it = deferred_fog_cells_.begin(); it != deferred_fog_cells_.end();) {
-        if (keep_chunks.find(it->first) == keep_chunks.end()) {
-            it = deferred_fog_cells_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
     std::size_t remaining_budget = max_cells_per_sync == 0 ? std::numeric_limits<std::size_t>::max() : max_cells_per_sync;
     std::vector<ChunkKey> next_pending;
     next_pending.reserve(pending_activation_chunks_.size());
@@ -713,12 +692,6 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
             next_pending.push_back(chunk);
         }
     }
-    for (const ChunkKey& chunk : ordered_spawn_chunks) {
-        if (remaining_budget == 0) {
-            break;
-        }
-        diagnostics_.cells_processed_this_frame += activate_deferred_fog_cells_budgeted(chunk, remaining_budget);
-    }
     pending_activation_chunks_.swap(next_pending);
     for (const ChunkKey& chunk : pending_activation_chunks_) {
         auto cursor_it = chunk_activation_cursor_.find(chunk);
@@ -727,11 +700,6 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
             diagnostics_.deferred_cells_remaining += (chunk_it->second.size() - std::min(cursor_it->second, chunk_it->second.size()));
         }
     }
-    for (const auto& [chunk, cells] : deferred_fog_cells_) {
-        (void)chunk;
-        diagnostics_.deferred_cells_remaining += cells.size();
-    }
-
     if (freq != 0) {
         const std::uint64_t end = SDL_GetPerformanceCounter();
         diagnostics_.sync_ms = static_cast<double>(end - begin) * 1000.0 / static_cast<double>(freq);
@@ -763,53 +731,10 @@ std::size_t DynamicSpawnRuntime::activate_chunk_budgeted(const ChunkKey& chunk, 
                                                    cell.key.grid_resolution)) {
             continue;
         }
-        if (type_is_fog(cell.info.get()) && !fog_cell_spawn_eligible_now(cell)) {
-            deferred_fog_cells_[chunk].push_back(cell);
-            continue;
-        }
         (void)activate_cell(cell);
     }
     if (cursor >= it->second.size()) {
         chunk_activation_cursor_.erase(chunk);
-    }
-    return processed;
-}
-
-std::size_t DynamicSpawnRuntime::activate_deferred_fog_cells_budgeted(const ChunkKey& chunk,
-                                                                      std::size_t& remaining_budget) {
-    auto it = deferred_fog_cells_.find(chunk);
-    if (it == deferred_fog_cells_.end() || it->second.empty() || remaining_budget == 0) {
-        return 0;
-    }
-    std::vector<PlannedCell> retry_later;
-    retry_later.reserve(it->second.size());
-    std::size_t processed = 0;
-    for (const PlannedCell& cell : it->second) {
-        if (remaining_budget == 0) {
-            retry_later.push_back(cell);
-            continue;
-        }
-        --remaining_budget;
-        ++processed;
-        if (active_.find(cell.key) != active_.end()) {
-            continue;
-        }
-        if (!fog_cell_spawn_eligible_now(cell)) {
-            retry_later.push_back(cell);
-            continue;
-        }
-        if (assets_.world_grid().is_occupied_at_xz(cell.owner_anchor_world_x,
-                                                   cell.owner_anchor_world_z,
-                                                   cell.key.grid_resolution)) {
-            retry_later.push_back(cell);
-            continue;
-        }
-        (void)activate_cell(cell);
-    }
-    if (retry_later.empty()) {
-        deferred_fog_cells_.erase(it);
-    } else {
-        it->second = std::move(retry_later);
     }
     return processed;
 }
@@ -889,34 +814,16 @@ void DynamicSpawnRuntime::suspend_cell(const CellKey& key, Asset* asset) {
 
 void DynamicSpawnRuntime::suspend_outside_keep_chunks(const std::unordered_set<ChunkKey, ChunkKeyHash>& keep_chunks) {
     std::vector<std::pair<CellKey, Asset*>> to_suspend;
-    std::vector<Asset*> to_delete;
     to_suspend.reserve(active_.size());
-    to_delete.reserve(active_.size());
-    const WarpedScreenGrid& cam = assets_.getView();
-    const world::CameraProjectionParams projection = cam.projection_params();
-    const double depth_axis_sign =
-        static_cast<double>(render_depth::normalize_depth_axis_sign(static_cast<float>(projection.forward_z)));
-    const double near_depth = std::max(1.0, static_cast<double>(assets_.live_dynamic_fog_near_distance_px()));
     for (const auto& [key, asset] : active_) {
         if (!asset || asset->dead) {
             to_suspend.push_back({key, asset});
             continue;
         }
-        if (type_is_fog(asset->info.get())) {
-            const double signed_depth =
-                (static_cast<double>(asset->world_z()) - static_cast<double>(projection.anchor_world_z)) * depth_axis_sign;
-            if (!std::isfinite(signed_depth) || signed_depth < near_depth) {
-                to_delete.push_back(asset);
-                continue;
-            }
-        }
         const ChunkKey chunk = chunk_key_for_world(asset->world_x(), asset->world_z());
         if (keep_chunks.find(chunk) == keep_chunks.end()) {
             to_suspend.push_back({key, asset});
         }
-    }
-    if (!to_delete.empty()) {
-        diagnostics_.deleted += assets_.delete_assets_runtime(to_delete);
     }
     for (const auto& [key, asset] : to_suspend) {
         suspend_cell(key, asset);
@@ -1020,30 +927,8 @@ SDL_Point DynamicSpawnRuntime::jittered_world_point(const Selector& selector,
 }
 
 bool DynamicSpawnRuntime::info_allowed(const AssetInfo* info, Mode mode) const {
-    if (type_is_fog(info)) {
-        return true;
-    }
     const bool boundary = type_is_boundary(info);
     return mode == Mode::BoundaryArea ? boundary : !boundary;
-}
-
-bool DynamicSpawnRuntime::fog_cell_spawn_eligible_now(const PlannedCell& cell) const {
-    if (!type_is_fog(cell.info.get())) {
-        return true;
-    }
-    const WarpedScreenGrid& cam = assets_.getView();
-    const auto settings = cam.get_settings();
-    const world::CameraProjectionParams projection = cam.projection_params();
-    const double depth_axis_sign =
-        static_cast<double>(render_depth::normalize_depth_axis_sign(static_cast<float>(projection.forward_z)));
-    const double signed_depth = (static_cast<double>(cell.world_z) - static_cast<double>(projection.anchor_world_z)) *
-        depth_axis_sign;
-    if (!std::isfinite(signed_depth) || signed_depth <= 0.0) {
-        return false;
-    }
-    const double near_depth = std::max(1.0, static_cast<double>(assets_.live_dynamic_fog_near_distance_px()));
-    const double max_cull_depth = std::max(1.0, static_cast<double>(settings.max_cull_depth));
-    return signed_depth >= near_depth && signed_depth <= max_cull_depth;
 }
 
 int DynamicSpawnRuntime::max_spawn_from_room_px() const {

@@ -136,6 +136,8 @@ private:
                                std::uint32_t target_width,
                                std::uint32_t target_height,
                                std::string& out_error);
+    void ingest_player_damage_pulse(float now_seconds);
+    void prune_expired_damage_pulses(float now_seconds);
     std::vector<world::Chunk*> runtime_floor_chunks() const;
     SDL_Color resolve_runtime_floor_clear_color() const;
 
@@ -184,6 +186,14 @@ private:
     std::vector<int> scratch_batch_indices_{};
     dof_blur_chain::Renderer dof_blur_chain_{};
     double last_dof_path_ms_ = 0.0;
+    struct ActiveDamagePulse {
+        std::uint64_t pulse_id = 0;
+        float pulse_time_seconds = 0.0f;
+        float amplitude = 0.0f;
+        float health_ratio_after = 1.0f;
+    };
+    std::deque<ActiveDamagePulse> active_damage_pulses_{};
+    std::uint64_t last_damage_pulse_id_ = 0;
     struct CreationBudgetConfig {
         std::uint32_t max_creations_per_frame = 3;
         double max_creation_ms_per_frame = 2.5;

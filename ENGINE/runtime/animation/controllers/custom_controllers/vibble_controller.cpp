@@ -7,6 +7,7 @@
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "core/game_runtime_context.hpp"
 #include "utils/frame_stats_recorder.hpp"
 #include "utils/input.hpp"
 #include "utils/log.hpp"
@@ -28,6 +29,7 @@ constexpr std::string_view kMeleeAttackAnimation = "attack";
 constexpr std::string_view kMeleeAnchorName = "melee";
 constexpr std::string_view kHandAnchorName = "hand";
 constexpr std::string_view kGunAssetName = "gun";
+constexpr std::string_view kSpiderEggAssetName = "spider_egg";
 constexpr std::string_view kInteractableTag = "interactable";
 constexpr std::string_view kCanCarryTag = "can_carry";
 constexpr int kInteractRadiusPx = 150;
@@ -269,6 +271,7 @@ void vibble_controller::movement(const Input& input) {
 
     const bool has_pixel_motion = (dx_ != 0 || dy_ != 0);
     const bool has_movement_intent = (input_x != 0 || input_y != 0);
+    sprint_intent_active_ = sprint && has_movement_intent;
     frame_stats.set("movement.player_has_intent", has_movement_intent);
     const std::string movement_animation =
         animation_for_direction(input_x, input_y);
@@ -376,6 +379,18 @@ void vibble_controller::on_update(const Input& input) {
         isMeleeing = false;
     }
 
+    const bool sprint_or_dash_active = sprint_intent_active_ || isDashing;
+    constexpr float kEggDisturbanceIntervalSeconds = 0.2f;
+    if (sprint_or_dash_active &&
+        (!was_sprint_or_dash_active_ || now >= nextEggDisturbanceTime_)) {
+        handle_sprint_dash_egg_disturbance(input);
+        nextEggDisturbanceTime_ =
+            now + duration_cast<steady_clock::duration>(duration<float>(kEggDisturbanceIntervalSeconds));
+    }
+    if (!sprint_or_dash_active) {
+        nextEggDisturbanceTime_ = now;
+    }
+    was_sprint_or_dash_active_ = sprint_or_dash_active;
 
 }
 
@@ -521,6 +536,12 @@ void vibble_controller::on_hit(const animation_update::Attack& attack) {
     Asset* player = self_ptr();
     const int health_after = player ? player->runtime_health : 0;
     const int damage = std::max(attack.payload.damage_amount, attack.damage_amount);
+    const int starting_health =
+        (player && player->info) ? std::max(1, player->info->starting_health) : std::max(1, health_after + damage);
+
+    if (runtime::context::GameRuntimeContext* runtime_ctx = mutable_runtime_game_context()) {
+        runtime_ctx->emit_player_damage_pulse(damage, health_after, starting_health);
+    }
 
     auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
     frame_stats.set("combat.vibble_took_damage", true);
@@ -718,6 +739,25 @@ void vibble_controller::drop_carried_asset(const Input& input, int held_frames) 
     ensure_hand_defaults();
 }
 
+void vibble_controller::drop_held_spider_egg_forced(const Input& input) {
+    Asset* player = self_ptr();
+    if (!player || !carried_world_asset_ || carried_world_asset_->dead) {
+        return;
+    }
+    if (!is_spider_egg_asset(carried_world_asset_)) {
+        return;
+    }
+
+    const OrphanImpulse impulse = build_throw_impulse(*player, input, 1);
+    carried_world_asset_->set_anchor_hidden(false);
+    carried_world_asset_->set_hidden(false);
+    carried_world_asset_->active = true;
+    carried_world_asset_->notify_orphaned(player, impulse);
+    carried_world_asset_ = nullptr;
+    carried_asset_name_.clear();
+    ensure_hand_defaults();
+}
+
 void vibble_controller::pickup_asset(Asset& player, Asset& target) {
     if (!target.info) {
         return;
@@ -777,6 +817,24 @@ void vibble_controller::process_interact(const Input& input, int held_frames) {
 
     drop_carried_asset(input, held_frames);
     ensure_hand_defaults();
+}
+
+bool vibble_controller::is_spider_egg_asset(const Asset* asset) const {
+    if (!asset || !asset->info) {
+        return false;
+    }
+    return normalized_tokens_equal(asset->info->name, kSpiderEggAssetName);
+}
+
+void vibble_controller::handle_sprint_dash_egg_disturbance(const Input& input) {
+    runtime::context::GameRuntimeContext* runtime_ctx = mutable_runtime_game_context();
+    if (!runtime_ctx) {
+        return;
+    }
+    const bool sprinting = sprint_intent_active_;
+    const bool dashing = isDashing;
+    runtime_ctx->set_player_motion_disturbance(true, sprinting, dashing);
+    drop_held_spider_egg_forced(input);
 }
 
 custom_controller_api::AttackProcessingConfig vibble_controller::attack_processing_config() const {

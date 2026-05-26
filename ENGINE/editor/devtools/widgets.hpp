@@ -357,6 +357,9 @@ public:
     void clear_selection();
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* r) const;
+    static bool has_active_expanded();
+    static bool handle_active_expanded_event(const SDL_Event& e);
+    static void render_active_expanded(SDL_Renderer* r);
     int preferred_height(int width) const;
     static int height();
 
@@ -380,6 +383,7 @@ private:
     bool apply_drag_delta(SDL_Point point);
     bool apply_drag_delta_in_surface(SDL_Point point, const SDL_Rect& surface);
     bool apply_wheel_delta(int wheel_y);
+    bool apply_node_wheel_delta(int wheel_y, int node_index);
     bool toggle_random();
     bool toggle_popup_editor();
     void ensure_popup_controls();
@@ -430,6 +434,7 @@ private:
     bool popup_toggle_hovered_ = false;
     int hovered_handle_index_ = -1;
     int hovered_popup_handle_index_ = -1;
+    int selected_node_index_ = -1;
     bool dragging_ = false;
     bool drag_started_ = false;
     bool drag_in_popup_ = false;
@@ -460,6 +465,7 @@ private:
     DMWidgetTooltipState* tooltip_state_ = nullptr;
     static constexpr double kMaxRawWeight = 3.0;
     static DMWeightedRangeWidget* active_selected_;
+    static DMWeightedRangeWidget* active_expanded_;
 };
 
 class DMDropdown {

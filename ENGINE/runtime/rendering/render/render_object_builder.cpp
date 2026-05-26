@@ -6,8 +6,6 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation_frame.hpp"
 #include "assets/asset/animation_frame_variant.hpp"
-#include "core/AssetsManager.hpp"
-#include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/render_object.hpp"
 
 namespace render_build {
@@ -51,31 +49,6 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
     mix(static_cast<Uint32>(scale_q));
     mix(static_cast<Uint32>(world_y_q));
     return hash;
-}
-
-float fog_opacity_multiplier(const Asset& asset) {
-    if (!asset.info || !asset.info->has_tag("fog")) {
-        return 1.0f;
-    }
-    if (Assets* assets = asset.get_assets()) {
-        const auto& cam = assets->getView();
-        const auto& settings = cam.get_settings();
-        const double depth = std::fabs(render_depth::depth_from_anchor(
-            cam.current_anchor_world_z(),
-            static_cast<double>(asset.world_z()),
-            asset.render_depth_bias()));
-        const double efficiency_depth = std::max(
-            1.0,
-            static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
-        const double fog_near = std::max(1.0, static_cast<double>(assets->live_dynamic_fog_near_distance_px()));
-        const double start_depth = std::min(fog_near, efficiency_depth);
-        const double end_depth = std::max(fog_near, efficiency_depth);
-        const double range = std::max(1.0, end_depth - start_depth);
-        const double t = std::clamp((depth - start_depth) / range, 0.0, 1.0);
-        return static_cast<float>(t);
-    }
-
-    return 1.0f;
 }
 
 bool query_asset_frame_variant(Asset* asset, const FrameVariant*& out_variant, SDL_Texture*& out_texture) {
@@ -200,9 +173,8 @@ bool build_direct_asset_render_object(Asset* asset,
     const float world_anchor_z_offset = asset->world_z_offset() + asset->render_anchor_offset_z();
     const SDL_FlipMode base_flip = asset->effective_render_flip();
     const double base_angle = asset->effective_render_angle();
-    const float alpha_multiplier = fog_opacity_multiplier(*asset);
     const Uint8 asset_alpha = static_cast<Uint8>(std::lround(
-        std::clamp(asset->smoothed_alpha() * alpha_multiplier, 0.0f, 1.0f) * 255.0f));
+        std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
 
     out_object.texture = cache_record.texture;
     out_object.screen_rect = SDL_Rect{

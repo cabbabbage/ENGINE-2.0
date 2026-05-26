@@ -1,14 +1,35 @@
 #include "small_spider_controller.hpp"
 
+#include "animation/animation_update.hpp"
+#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "assets/asset/Asset.hpp"
-#include "animation/attack.hpp"
 #include "core/AssetsManager.hpp"
-#include "gameplay/map_generation/room.hpp"
-
-#include <vector>
 
 small_spider_controller::small_spider_controller(Asset* self)
-    : custom_controller_api::DefaultCustomController(self) {
+    : custom_controller_api::DefaultCustomController(self),
+      steering_(custom_controller_api::EnemyCombatSteeringConfig{
+          175,
+          84,
+          8,
+          14,
+          260,
+          900
+      }),
+      behavior_(custom_controller_api::EnemyAutoCombatConfig{
+          custom_controller_api::EnemyAutoCombatMode::SkirmisherShortEvade,
+          34,
+          16,
+          140,
+          70,
+          210,
+          true
+      }) {
+    Asset* owner = controller_self();
+    if (owner && owner->anim_) {
+        owner->anim_->set_debug_enabled(false);
+        owner->needs_target = true;
+        owner->set_default_controller_animation_enforced(false);
+    }
 }
 
 void small_spider_controller::on_init() {
@@ -17,18 +38,33 @@ void small_spider_controller::on_init() {
 
 void small_spider_controller::on_update(const Input& in) {
     custom_controller_api::DefaultCustomController::on_update(in);
+    (void)in;
+
     Asset* self = controller_self();
-    if (!self) {
+    const auto& ctx = game_context();
+    if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
 
-    Assets* owner_assets = controller_assets();
-    const Room* current_room = owner_assets ? owner_assets->current_room() : nullptr;
-    const auto trigger_areas = owner_assets
-        ? owner_assets->current_room_trigger_areas()
-        : std::vector<const Room::NamedArea*>{};
-    (void)current_room;
-    (void)trigger_areas;
+    Asset* player = custom_controller_api::resolve_valid_player_target(ctx);
+    if (!player) {
+        return;
+    }
+
+    if (Assets* owner_assets = self->get_assets()) {
+        const world::GridPoint floor_point =
+            owner_assets->resolve_floor_world_point(SDL_Point{self->world_x(), self->world_z()}, self->grid_resolution);
+        constexpr int kAirbornePursuitBufferPx = 1;
+        if (self->world_y() > floor_point.world_y() + kAirbornePursuitBufferPx) {
+            return;
+        }
+    }
+
+    steering_.tick_progress(*self);
+    behavior_.tick(*self, *player, steering_);
+
+    // Continuous contact damage while overlap persists.
+    custom_controller_api::dispatch_contact_attack(ctx);
 }
 
 void small_spider_controller::on_attack(const animation_update::Attack& attack) {

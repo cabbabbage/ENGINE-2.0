@@ -25,6 +25,23 @@ struct RoomFlyAggressionState {
     std::uint32_t last_trigger_frame = 0;
 };
 
+struct PlayerMotionDisturbanceState {
+    bool active = false;
+    bool is_dashing = false;
+    bool is_sprinting = false;
+    std::uint64_t pulse_id = 0;
+    std::uint32_t pulse_frame = 0;
+    float pulse_time_seconds = 0.0f;
+};
+
+struct PlayerDamagePulseState {
+    std::uint64_t pulse_id = 0;
+    float pulse_time_seconds = 0.0f;
+    int damage_amount = 0;
+    int health_after = 0;
+    float health_ratio_after = 1.0f;
+};
+
 class GameRuntimeContext {
 public:
     void begin_frame(Assets* assets,
@@ -57,6 +74,10 @@ public:
     std::vector<Room*> rooms_in_layer(int layer) const;
     bool are_rooms_connected(Room* a, Room* b) const;
     Room* trail_between(Room* a, Room* b) const;
+    void set_player_motion_disturbance(bool active, bool is_sprinting, bool is_dashing);
+    const PlayerMotionDisturbanceState& player_motion_disturbance() const { return player_motion_disturbance_; }
+    void emit_player_damage_pulse(int damage_amount, int health_after, int starting_health);
+    const PlayerDamagePulseState& player_damage_pulse() const { return player_damage_pulse_; }
 
 private:
     void prune_expired_room_fly_aggression();
@@ -71,6 +92,8 @@ private:
     const runtime::config::RuntimeGameConfig* runtime_config_ = nullptr;
     runtime::mapgraph::RuntimeMapGraph map_graph_{};
     std::unordered_map<std::string, RoomFlyAggressionState> room_fly_aggression_;
+    PlayerMotionDisturbanceState player_motion_disturbance_{};
+    PlayerDamagePulseState player_damage_pulse_{};
 };
 
 } // namespace runtime::context

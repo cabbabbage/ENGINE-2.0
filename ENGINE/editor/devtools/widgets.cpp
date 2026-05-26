@@ -2322,6 +2322,8 @@ constexpr int kWeightedRangeMajorTickHeight = 14;
 constexpr int kWeightedRangeImportantTickHeight = 19;
 constexpr int kWeightedRangePopupWidth = 440;
 constexpr int kWeightedRangePopupHeight = 316;
+constexpr int kWeightedRangeModalWidth = 740;
+constexpr int kWeightedRangeModalHeight = 430;
 
 double weighted_range_smoothstep(double t) {
     t = std::clamp(t, 0.0, 1.0);
@@ -2341,6 +2343,7 @@ std::int64_t weighted_range_floor_to_step(std::int64_t value, std::int64_t step)
 }
 
 DMWeightedRangeWidget* DMWeightedRangeWidget::active_selected_ = nullptr;
+DMWeightedRangeWidget* DMWeightedRangeWidget::active_expanded_ = nullptr;
 
 DMWeightedRangeWidget::DMWeightedRangeWidget(const std::string& label,
                                              const vibble::weighted_range::WeightedIntRange& value,
@@ -2409,6 +2412,10 @@ void DMWeightedRangeWidget::clear_selection() {
         set_slider_scroll_capture(this, false);
     }
     wheel_scroll_accumulator_ = 0.0;
+    selected_node_index_ = -1;
+    if (active_expanded_ == this) {
+        active_expanded_ = nullptr;
+    }
 }
 
 int DMWeightedRangeWidget::height() {
@@ -2534,9 +2541,14 @@ void DMWeightedRangeWidget::sync_value_from_popup_controls() {
 }
 
 void DMWeightedRangeWidget::update_popup_geometry() {
-    const int popup_x = std::max(6, rect_.x + rect_.w - kWeightedRangePopupWidth);
-    const int popup_y = rect_.y + rect_.h + 8;
-    popup_rect_ = SDL_Rect{popup_x, popup_y, kWeightedRangePopupWidth, kWeightedRangePopupHeight};
+    const int fallback_w = std::max(rect_.w + 48, kWeightedRangeModalWidth);
+    const int fallback_h = std::max(rect_.h + 48, kWeightedRangeModalHeight);
+    popup_rect_ = SDL_Rect{
+        rect_.x + (rect_.w - fallback_w) / 2,
+        rect_.y + (rect_.h - fallback_h) / 2,
+        fallback_w,
+        fallback_h
+    };
     if (!popup_open_) {
         return;
     }
@@ -2545,7 +2557,7 @@ void DMWeightedRangeWidget::update_popup_geometry() {
     const int col_w = (popup_rect_.w - 30 - column_gap) / 2;
     const int left_x = popup_rect_.x + 10;
     const int right_x = left_x + col_w + column_gap;
-    int row_y = popup_rect_.y + 176;
+    int row_y = popup_rect_.y + 250;
     popup_center_stepper_->set_rect(SDL_Rect{left_x, row_y, col_w, DMNumericStepper::height()});
     popup_span_stepper_->set_rect(SDL_Rect{right_x, row_y, col_w, DMNumericStepper::height()});
     row_y += DMNumericStepper::height() + 6;
@@ -2866,8 +2878,12 @@ bool DMWeightedRangeWidget::toggle_popup_editor() {
     }
     popup_open_ = !popup_open_;
     if (popup_open_) {
+        active_expanded_ = this;
         ensure_popup_controls();
         sync_popup_controls_from_value();
+        set_slider_scroll_capture(this, true);
+    } else if (active_expanded_ == this) {
+        active_expanded_ = nullptr;
     }
     update_popup_geometry();
     return true;
@@ -2966,6 +2982,7 @@ bool DMWeightedRangeWidget::begin_drag(SDL_Point point) {
             return false;
         }
         drag_mode_ = DragMode::NodeHandle;
+        selected_node_index_ = weight_idx;
         drag_handle_index_ = weight_idx;
         drag_start_x_ = point.x;
         drag_start_y_ = point.y;
@@ -2986,6 +3003,42 @@ void DMWeightedRangeWidget::end_drag() {
     drag_in_popup_ = false;
     drag_mode_ = DragMode::None;
     set_slider_scroll_capture(this, active_selected_ == this);
+}
+
+bool DMWeightedRangeWidget::apply_node_wheel_delta(int wheel_y, int node_index) {
+    if (!enabled_ || wheel_y == 0) {
+        return false;
+    }
+    const int steps = std::abs(wheel_y);
+    const int direction = (wheel_y > 0) ? -1 : 1;
+    bool changed = false;
+    if (node_index == 2 || !value_.random) {
+        value_.center += static_cast<std::int64_t>(direction) * static_cast<std::int64_t>(steps);
+        changed = true;
+    } else if (node_index == 0 || node_index == 4) {
+        value_.span = std::max<std::int64_t>(0, value_.span + static_cast<std::int64_t>(direction) * static_cast<std::int64_t>(steps));
+        if (value_.falloff > value_.span) {
+            value_.falloff = value_.span;
+        }
+        changed = true;
+    } else if (node_index == 1 || node_index == 3) {
+        value_.falloff = std::clamp<std::int64_t>(
+            value_.falloff + static_cast<std::int64_t>(direction) * static_cast<std::int64_t>(steps),
+            0,
+            value_.span);
+        changed = true;
+    }
+    if (!changed) {
+        return false;
+    }
+    sanitize_value();
+    sync_visual_range_from_value();
+    if (popup_open_) {
+        sync_popup_controls_from_value();
+    }
+    update_geometry();
+    notify_value_changed();
+    return true;
 }
 
 bool DMWeightedRangeWidget::apply_drag_delta_in_surface(SDL_Point point, const SDL_Rect& surface) {
@@ -3075,6 +3128,7 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         set_slider_scroll_capture(this, true);
         wheel_scroll_accumulator_ = 0.0;
     };
+    const bool modal_active = popup_open_ && (active_expanded_ == this);
     switch (e.type) {
     case SDL_EVENT_MOUSE_MOTION: {
         SDL_Point p{static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
@@ -3092,6 +3146,10 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         update_hover(p);
         const bool inside_widget = SDL_PointInRect(&p, &rect_);
         const bool inside_popup = popup_open_ && SDL_PointInRect(&p, &popup_rect());
+        if (modal_active && !inside_popup && !inside_widget) {
+            used = true;
+            break;
+        }
         if (!inside_widget) {
             if (inside_popup) {
                 used = true;
@@ -3124,7 +3182,10 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
             used = toggle_random() || used;
             break;
         }
-        used = begin_drag(p) || used;
+        if (!begin_drag(p)) {
+            selected_node_index_ = -1;
+        }
+        used = true;
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -3147,8 +3208,9 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
             update_hover(SDL_Point{mx, my});
             SDL_Point wheel_point{mx, my};
             const bool pointer_over_widget = SDL_PointInRect(&wheel_point, &rect_);
+            const bool pointer_over_popup = popup_open_ && SDL_PointInRect(&wheel_point, &popup_rect());
             set_slider_scroll_capture(this, true);
-            if (pointer_over_widget || dragging_) {
+            if (pointer_over_widget || pointer_over_popup || dragging_ || modal_active) {
                 double delta = static_cast<double>(e.wheel.y);
                 if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
                     delta = -delta;
@@ -3166,7 +3228,11 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
                     --steps;
                 }
                 if (steps != 0) {
-                    (void)apply_wheel_delta(steps);
+                    if (selected_node_index_ >= 0) {
+                        (void)apply_node_wheel_delta(steps, selected_node_index_);
+                    } else {
+                        (void)apply_wheel_delta(steps);
+                    }
                 }
             } else {
                 wheel_scroll_accumulator_ = 0.0;
@@ -3187,6 +3253,9 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
     case SDL_EVENT_KEY_DOWN:
         if (is_selected() && e.key.key == SDLK_ESCAPE && popup_open_) {
             popup_open_ = false;
+            if (active_expanded_ == this) {
+                active_expanded_ = nullptr;
+            }
             used = true;
         }
         break;
@@ -3257,7 +3326,7 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
     }
     dm_draw::DrawRoundedSolidRect(r, popup_btn, 4, popup_fill);
     dm_draw::DrawRoundedOutline(r, popup_btn, 4, 1, border);
-    DMFontCache::instance().draw_text(r, label_style, popup_open_ ? "Compact" : "Expand", popup_btn.x + 12, popup_btn.y + 3);
+    DMFontCache::instance().draw_text(r, label_style, popup_open_ ? "Close" : "Expand", popup_btn.x + 18, popup_btn.y + 3);
 
     const SDL_Rect hist = histogram_rect();
     SDL_Color grid{76, 86, 110, 120};
@@ -3384,7 +3453,11 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
         dm_draw::DrawRoundedOutline(r, handle, 5, line_hovered ? 2 : 1, line_hovered ? SDL_Color{255, 235, 194, 255} : border);
     }
 
-    if (popup_open_) {
+    if (popup_open_ && active_expanded_ != this) {
+        // Keep internal state consistent if a different widget took modal ownership.
+        const_cast<DMWeightedRangeWidget*>(this)->popup_open_ = false;
+    }
+    if (false) {
         const SDL_Rect popup = popup_rect();
         dm_draw::DrawBeveledRect(r, popup, DMStyles::CornerRadius(), DMStyles::BevelDepth(),
                                  SDL_Color{23, 28, 38, 245},
@@ -3430,6 +3503,86 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
 
     if (tooltip_state_) {
         DMWidgetTooltipRender(r, rect_, *tooltip_state_);
+    }
+}
+
+bool DMWeightedRangeWidget::has_active_expanded() {
+    return active_expanded_ && active_expanded_->popup_open_;
+}
+
+bool DMWeightedRangeWidget::handle_active_expanded_event(const SDL_Event& e) {
+    if (!has_active_expanded()) {
+        return false;
+    }
+    return active_expanded_->handle_event(e);
+}
+
+void DMWeightedRangeWidget::render_active_expanded(SDL_Renderer* r) {
+    if (!has_active_expanded() || !r) {
+        return;
+    }
+    DMWeightedRangeWidget* w = active_expanded_;
+    int rw = 0;
+    int rh = 0;
+    SDL_GetRenderOutputSize(r, &rw, &rh);
+    if (rw <= 0 || rh <= 0) {
+        return;
+    }
+    w->popup_rect_ = SDL_Rect{
+        std::max(8, (rw - kWeightedRangeModalWidth) / 2),
+        std::max(8, (rh - kWeightedRangeModalHeight) / 2),
+        std::min(kWeightedRangeModalWidth, rw - 16),
+        std::min(kWeightedRangeModalHeight, rh - 16)
+    };
+    w->update_popup_geometry();
+    w->ensure_popup_controls();
+
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, 6, 10, 16, 168);
+    SDL_FRect scrim{0.0f, 0.0f, static_cast<float>(rw), static_cast<float>(rh)};
+    SDL_RenderFillRect(r, &scrim);
+
+    const SDL_Rect popup = w->popup_rect();
+    const DMLabelStyle& label_style = DMStyles::Label();
+    dm_draw::DrawBeveledRect(r, popup, DMStyles::CornerRadius(), DMStyles::BevelDepth(),
+                             SDL_Color{20, 26, 38, 248},
+                             DMStyles::HighlightColor(), DMStyles::ShadowColor(), false,
+                             DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+    dm_draw::DrawRoundedOutline(r, popup, DMStyles::CornerRadius(), 2, SDL_Color{120, 172, 255, 255});
+    DMFontCache::instance().draw_text(r, label_style, "Weighted Random Range Editor", popup.x + 16, popup.y + 12);
+
+    const SDL_Rect pop_hist = w->popup_histogram_rect();
+    SDL_SetRenderDrawColor(r, 82, 94, 122, 170);
+    sdl_render::Rect(r, &pop_hist);
+    const int pop_top = pop_hist.y + kWeightedRangeWeightTopPad;
+    const int pop_baseline = pop_hist.y + pop_hist.h - kWeightedRangeWeightBottomPad;
+    SDL_Rect pop_bar{pop_hist.x + kWeightedRangeColumnPad, pop_baseline, std::max(1, pop_hist.w - (kWeightedRangeColumnPad * 2)), 4};
+    SDL_SetRenderDrawColor(r, 122, 138, 168, 210);
+    sdl_render::FillRect(r, &pop_bar);
+    for (int i = 0; i < 5; ++i) {
+        if (!w->value_.random && i != 2) continue;
+        const int center_x = pop_hist.x + pop_hist.w / 2;
+        const int x = center_x +
+                      ((i == 0) ? -static_cast<int>(std::lround(w->visual_span_px_)) :
+                       (i == 1) ? -static_cast<int>(std::lround(w->visual_falloff_px_)) :
+                       (i == 3) ? static_cast<int>(std::lround(w->visual_falloff_px_)) :
+                       (i == 4) ? static_cast<int>(std::lround(w->visual_span_px_)) : 0);
+        const double normalized = std::clamp(w->value_.random ? w->display_weight_for_index(i) : 1.0, 0.0, 1.0);
+        const int y = pop_baseline - static_cast<int>(std::lround(normalized * static_cast<double>(std::max(1, pop_baseline - pop_top))));
+        SDL_SetRenderDrawColor(r, 255, 207, 136, 220);
+        SDL_RenderLine(r, x, pop_baseline, x, y);
+        SDL_Rect handle{x - (kWeightedRangeHandleSize / 2), y - (kWeightedRangeHandleSize / 2), kWeightedRangeHandleSize, kWeightedRangeHandleSize};
+        dm_draw::DrawRoundedSolidRect(r, handle, 5, SDL_Color{255, 184, 78, 255});
+        dm_draw::DrawRoundedOutline(r, handle, 5, (w->selected_node_index_ == i) ? 2 : 1, SDL_Color{255, 235, 194, 255});
+    }
+    if (w->popup_center_stepper_ && w->popup_span_stepper_ && w->popup_falloff_stepper_ &&
+        w->popup_center_weight_stepper_ && w->popup_falloff_weight_stepper_ && w->popup_edge_weight_stepper_) {
+        w->popup_center_stepper_->render(r);
+        w->popup_span_stepper_->render(r);
+        w->popup_falloff_stepper_->render(r);
+        w->popup_center_weight_stepper_->render(r);
+        w->popup_falloff_weight_stepper_->render(r);
+        w->popup_edge_weight_stepper_->render(r);
     }
 }
 

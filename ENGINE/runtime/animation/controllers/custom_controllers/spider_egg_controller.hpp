@@ -2,6 +2,7 @@
 #define SPIDER_EGG_CONTROLLER_HPP
 
 #include "animation/controllers/shared/custom_controller_api.hpp"
+#include <cstdint>
 #include <optional>
 
 class Asset;
@@ -28,6 +29,14 @@ protected:
     void on_pre_delete_hook(Asset& self) override;
     void on_process_pending_attacks(Asset& self) override;
     void on_interact_hook(Asset& self, Asset* instigator) override;
+
+private:
+    bool is_cracking_ = false;
+    bool spawned_child_ = false;
+    std::uint64_t last_processed_player_disturbance_pulse_ = 0;
+    void process_player_motion_disturbance(Asset& self);
+    bool try_start_cracking(Asset& self);
+    void spawn_small_spider_child(Asset& self);
 };
 
 #endif

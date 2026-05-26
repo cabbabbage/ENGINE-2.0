@@ -145,6 +145,57 @@ bool copy_texture_region(SDL_Renderer* renderer,
     return render_diagnostics::render_texture(renderer, src, src_rect, dst_rect);
 }
 
+bool prepare_damage_pulse_texture(SDL_Renderer* renderer,
+                                  SDL_Texture* src,
+                                  SDL_Texture* dst,
+                                  int draw_w,
+                                  int draw_h,
+                                  float warp_px,
+                                  float tint_strength,
+                                  float phase) {
+    if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
+        return false;
+    }
+
+    const float safe_warp = std::clamp(std::abs(warp_px), 0.0f, dof_blur_chain::damage_pulse_tuning::kMaxWarpPx);
+    const float safe_tint = std::clamp(tint_strength, 0.0f, dof_blur_chain::damage_pulse_tuning::kMaxTintStrength);
+    if (safe_warp <= kBlurEpsilonPx && safe_tint <= kBlurEpsilonPx) {
+        return copy_texture_region(renderer, src, dst, nullptr, nullptr);
+    }
+
+    const TextureStateSnapshot src_state = capture_texture_state(src);
+    clear_texture_target(renderer, dst);
+    render_diagnostics::set_render_target(renderer, dst);
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+
+    const float phase_sign = std::sin(phase) >= 0.0f ? 1.0f : -1.0f;
+    const float side_offset_x = safe_warp * phase_sign;
+    const float side_offset_y = safe_warp * 0.22f * phase_sign;
+    draw_weighted_offset_sample(renderer, src, draw_w, draw_h, side_offset_x, side_offset_y, 0.28f);
+    draw_weighted_offset_sample(renderer, src, draw_w, draw_h, -side_offset_x * 0.66f, -side_offset_y * 0.66f, 0.22f);
+    draw_weighted_offset_sample(renderer, src, draw_w, draw_h, 0.0f, 0.0f, 0.50f);
+
+    if (safe_tint > kBlurEpsilonPx) {
+        const Uint8 tint_alpha = static_cast<Uint8>(std::clamp(
+            static_cast<int>(std::lround(safe_tint * 255.0f)),
+            0,
+            255));
+        const float green_blue_scale = std::clamp(1.0f - safe_tint * 0.78f, 0.0f, 1.0f);
+        const Uint8 green_blue = static_cast<Uint8>(std::clamp(
+            static_cast<int>(std::lround(green_blue_scale * 255.0f)),
+            0,
+            255));
+        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(src, tint_alpha);
+        SDL_SetTextureColorMod(src, 255, green_blue, green_blue);
+        (void)render_diagnostics::render_texture(renderer, src, nullptr, nullptr);
+    }
+
+    restore_texture_state(src, src_state);
+    return true;
+}
+
 bool apply_axis_blur(SDL_Renderer* renderer,
                      SDL_Texture* src,
                      SDL_Texture* dst,
@@ -514,6 +565,27 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
     const float quality_scale = blur_enabled
         ? compute_quality_scale(width_, height_, safe_blur_px, safe_radial_blur_px)
         : 1.0f;
+    auto resolve_layer_source = [&](const LayerTexture& layer, SDL_Texture*& out_texture) -> bool {
+        out_texture = layer.texture;
+        if (!out_texture) {
+            return false;
+        }
+        if (std::abs(layer.warp_px) <= kBlurEpsilonPx && layer.tint_strength <= kBlurEpsilonPx) {
+            return true;
+        }
+        if (!prepare_damage_pulse_texture(renderer_,
+                                          layer.texture,
+                                          chain_temp_,
+                                          width_,
+                                          height_,
+                                          layer.warp_px,
+                                          layer.tint_strength,
+                                          layer.phase)) {
+            return false;
+        }
+        out_texture = chain_temp_;
+        return true;
+    };
 
     scratch_background_layers_.clear();
     scratch_foreground_layers_.clear();
@@ -548,26 +620,41 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
     }
     clear_target(foreground_mid_);
     for (const LayerTexture& layer : scratch_background_layers_) {
+        SDL_Texture* layer_source = nullptr;
+        if (!resolve_layer_source(layer, layer_source)) {
+            return restore_and_return(CompositeResult{});
+        }
         const float layer_blur = safe_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
         const float layer_radial = safe_radial_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
         if (blur_enabled && (layer_blur > kBlurEpsilonPx || layer_radial > kBlurEpsilonPx)) {
-            if (!blur_step(layer.texture, foreground_layer_, blur_work_, layer_blur, optical_center, layer_radial, quality_scale)) return restore_and_return(CompositeResult{});
+            if (!blur_step(layer_source, foreground_layer_, blur_work_, layer_blur, optical_center, layer_radial, quality_scale)) return restore_and_return(CompositeResult{});
             ++result.blur_pass_count;
             if (!composite_texture_over(foreground_layer_, background_mid_)) return restore_and_return(CompositeResult{});
-        } else if (!composite_texture_over(layer.texture, background_mid_)) return restore_and_return(CompositeResult{});
+        } else if (!composite_texture_over(layer_source, background_mid_)) return restore_and_return(CompositeResult{});
         background_has_content = true;
     }
     for (const LayerTexture& layer : layers) {
-        if (layer.depth_layer == focus_depth_layer && layer.texture) { if (!composite_texture_over(layer.texture, background_mid_)) return restore_and_return(CompositeResult{}); background_has_content = true; }
+        if (layer.depth_layer == focus_depth_layer && layer.texture) {
+            SDL_Texture* layer_source = nullptr;
+            if (!resolve_layer_source(layer, layer_source)) {
+                return restore_and_return(CompositeResult{});
+            }
+            if (!composite_texture_over(layer_source, background_mid_)) return restore_and_return(CompositeResult{});
+            background_has_content = true;
+        }
     }
     for (const LayerTexture& layer : scratch_foreground_layers_) {
+        SDL_Texture* layer_source = nullptr;
+        if (!resolve_layer_source(layer, layer_source)) {
+            return restore_and_return(CompositeResult{});
+        }
         const float layer_blur = safe_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
         const float layer_radial = safe_radial_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
         if (blur_enabled && (layer_blur > kBlurEpsilonPx || layer_radial > kBlurEpsilonPx)) {
-            if (!blur_step(layer.texture, foreground_layer_, blur_work_, layer_blur, optical_center, layer_radial, quality_scale)) return restore_and_return(CompositeResult{});
+            if (!blur_step(layer_source, foreground_layer_, blur_work_, layer_blur, optical_center, layer_radial, quality_scale)) return restore_and_return(CompositeResult{});
             ++result.blur_pass_count;
             if (!composite_texture_over(foreground_layer_, foreground_mid_)) return restore_and_return(CompositeResult{});
-        } else if (!composite_texture_over(layer.texture, foreground_mid_)) return restore_and_return(CompositeResult{});
+        } else if (!composite_texture_over(layer_source, foreground_mid_)) return restore_and_return(CompositeResult{});
         foreground_has_content = true;
     }
 

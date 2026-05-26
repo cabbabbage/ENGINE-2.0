@@ -56,6 +56,9 @@ private:
     void pickup_asset(Asset& player, Asset& target);
     OrphanImpulse build_throw_impulse(const Asset& player, const Input& input, int held_frames) const;
     void update_world_carried_asset_pose();
+    void handle_sprint_dash_egg_disturbance(const Input& input);
+    void drop_held_spider_egg_forced(const Input& input);
+    bool is_spider_egg_asset(const Asset* asset) const;
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
@@ -77,9 +80,12 @@ private:
     bool isMeleeing = false;
     float meleeCooldown = 0.5f;
     std::chrono::steady_clock::time_point meleeCooldownEndTime;
+    std::chrono::steady_clock::time_point nextEggDisturbanceTime_{};
 
     float subpixel_x_ = 0.0f;
     float subpixel_y_ = 0.0f;
+    bool sprint_intent_active_ = false;
+    bool was_sprint_or_dash_active_ = false;
     std::string last_facing_animation_ = "default";
     std::optional<ChildAsset> gun_child_;
     std::optional<ChildAsset> carried_child_;

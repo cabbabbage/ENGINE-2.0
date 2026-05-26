@@ -6396,7 +6396,7 @@
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 244.0,
+        "scale_percentage": 100.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -6420,14 +6420,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -43,
-        "falloff": 10,
+        "center": -6,
+        "falloff": 6,
         "random": true,
-        "span": 45,
+        "span": 16,
         "weights": {
-          "center": 0.3095752339812815,
-          "edge": 0.34053275737940963,
-          "falloff": 0.34989200863930886
+          "center": 0.3478260869565218,
+          "edge": 0.3130434782608696,
+          "falloff": 0.3391304347826087
         }
       }
     },
@@ -6465,7 +6465,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 244.0,
+        "scale_percentage": 100.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -6487,14 +6487,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -43,
-        "falloff": 10,
+        "center": -6,
+        "falloff": 6,
         "random": true,
-        "span": 45,
+        "span": 16,
         "weights": {
-          "center": 0.3095752339812815,
-          "edge": 0.34053275737940963,
-          "falloff": 0.34989200863930886
+          "center": 0.3478260869565218,
+          "edge": 0.3130434782608696,
+          "falloff": 0.3391304347826087
         }
       }
     },
@@ -6532,7 +6532,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 244.0,
+        "scale_percentage": 100.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -6554,14 +6554,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -43,
-        "falloff": 10,
+        "center": -6,
+        "falloff": 6,
         "random": true,
-        "span": 45,
+        "span": 16,
         "weights": {
-          "center": 0.3095752339812815,
-          "edge": 0.34053275737940963,
-          "falloff": 0.34989200863930886
+          "center": 0.3478260869565218,
+          "edge": 0.3130434782608696,
+          "falloff": 0.3391304347826087
         }
       }
     },
@@ -6599,7 +6599,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 244.0,
+        "scale_percentage": 100.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -6621,14 +6621,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -43,
-        "falloff": 10,
+        "center": -6,
+        "falloff": 6,
         "random": true,
-        "span": 45,
+        "span": 16,
         "weights": {
-          "center": 0.3095752339812815,
-          "edge": 0.34053275737940963,
-          "falloff": 0.34989200863930886
+          "center": 0.3478260869565218,
+          "edge": 0.3130434782608696,
+          "falloff": 0.3391304347826087
         }
       }
     },
@@ -18682,12 +18682,12 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "fog_far_distance_px": 2451,
-        "fog_near_distance_px": 2016,
+        "fog_far_distance_px": 5929,
+        "fog_near_distance_px": 751,
         "fog_render_boundary_spacing": 16,
         "max_spawn_from_room": 4862,
         "regen_seed": 4,
-        "render_radius": 5020
+        "render_radius": 5099
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -18746,7 +18746,7 @@
           "display_color": [
             36,
             242,
-            242,
+            40,
             255
           ],
           "geometry": "Square",
@@ -18851,9 +18851,9 @@
         },
         "NewRoom": {
           "display_color": [
-            226,
-            85,
+            144,
             242,
+            85,
             255
           ],
           "geometry": "Square",
@@ -18897,9 +18897,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            204,
-            143,
-            31,
+            234,
+            85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -18943,9 +18943,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            31,
-            142,
+            51,
             204,
+            141,
             255
           ],
           "geometry": "Square",
@@ -19020,8 +19020,8 @@
         },
         "NewRoom3": {
           "display_color": [
-            168,
             31,
+            115,
             204,
             255
           ],
@@ -19071,9 +19071,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            160,
-            242,
-            85,
+            178,
+            31,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -19159,9 +19159,9 @@
           "camera_tilt_deg": 30.68971061706543,
           "camera_zoom_percent": 0,
           "display_color": [
-            85,
             242,
-            178,
+            87,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -19583,9 +19583,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            242,
-            97,
-            85,
+            104,
+            204,
+            31,
             255
           ],
           "geometry": "Square",

@@ -179,6 +179,13 @@ float sanitize_finite_float(float value, float fallback = 0.0f) {
     return value;
 }
 
+float quantize_depth_offset_world_units(float value) {
+    if (!std::isfinite(value)) {
+        return 0.0f;
+    }
+    return static_cast<float>(std::lround(value));
+}
+
 int sanitize_floor_box_grid_resolution(int resolution) {
     const int clamped = vibble::grid::clamp_resolution(resolution);
     return std::clamp(clamped,
@@ -1083,7 +1090,9 @@ AssetInfo::OvalAnchorPoint normalize_oval_anchor_point(const nlohmann::json& pay
     }
     if (!legacy_x_depth_model && payload.contains("depth_offset")) {
         if (const auto parsed = parse_number_like_json(payload["depth_offset"])) {
-            point.depth_offset = std::isfinite(*parsed) ? static_cast<float>(*parsed) : 0.0f;
+            point.depth_offset = std::isfinite(*parsed)
+                ? quantize_depth_offset_world_units(static_cast<float>(*parsed))
+                : 0.0f;
         }
     } else {
         point.depth_offset = 0.0f;
@@ -1205,7 +1214,7 @@ nlohmann::json encode_oval_anchor_point(const AssetInfo::OvalAnchorPoint& point)
     encoded["angle_degrees"] = normalize_angle_degrees(point.angle_degrees);
     encoded["texture_x"] = point.texture_x;
     encoded["texture_y"] = point.texture_y;
-    encoded["depth_offset"] = std::isfinite(point.depth_offset) ? point.depth_offset : 0.0f;
+    encoded["depth_offset"] = quantize_depth_offset_world_units(point.depth_offset);
     encoded["rotation_degrees"] = std::isfinite(point.rotation_degrees) ? point.rotation_degrees : 0.0f;
     encoded["hidden"] = point.hidden;
     encoded["resolve_x"] = point.resolve_x;
@@ -1305,7 +1314,7 @@ nlohmann::json encode_anchor_point_json(const DisplacedAssetAnchorPoint& anchor)
     encoded["name"] = anchor.name;
     encoded["texture_x"] = anchor.texture_x;
     encoded["texture_y"] = anchor.texture_y;
-    encoded["depth_offset"] = std::isfinite(anchor.depth_offset) ? anchor.depth_offset : 0.0f;
+    encoded["depth_offset"] = quantize_depth_offset_world_units(anchor.depth_offset);
     encoded["flip_horizontal"] = anchor.flip_horizontal;
     encoded["flip_vertical"] = anchor.flip_vertical;
     encoded["rotation_degrees"] = std::isfinite(anchor.rotation_degrees) ? anchor.rotation_degrees : 0.0f;

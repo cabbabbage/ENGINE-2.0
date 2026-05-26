@@ -144,6 +144,7 @@ public:
     void open_room_config();
     void close_room_config();
     void create_room_from_footer();
+    // Seeds a trail template that uses orthogonal centerline corridor generation.
     void create_trail_from_footer();
     bool is_room_config_open() const;
     bool is_camera_settings_open() const;

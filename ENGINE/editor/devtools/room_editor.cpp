@@ -1670,13 +1670,20 @@ constexpr int kAnchorHandlePickRadiusPx = 12;
 constexpr float kAnchorPointSnapRadiusPx = 18.0f;
 constexpr int kShiftAnchorHoverRadiusPx = 20;
 constexpr int kShiftAnchorSelectRadiusPx = 24;
-constexpr float kAnchorDepthScrollStepWorldPx = 0.1f;
+constexpr float kAnchorDepthScrollStepWorldPx = 1.0f;
 constexpr int kSpawnGroupAnchorXOffsetPx = 16;
 constexpr int kSpawnGroupAnchorYOffsetPx = 8;
 constexpr int kSpawnGroupHeaderSafeZoneMarginPx = 52;
 constexpr int kSpawnGroupFloatingMinHeightPx = 420;
 constexpr int kSpawnGroupFloatingSideMarginPx = 12;
 constexpr int kSpawnGroupFloatingContentWidthPx = 520;
+
+float quantize_anchor_depth_world_units(float value) {
+    if (!std::isfinite(value)) {
+        return 0.0f;
+    }
+    return static_cast<float>(std::lround(value));
+}
 
 bool is_debug_marker_in_bounds(const SDL_FPoint& point, int screen_width, int screen_height) {
     if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
@@ -6768,6 +6775,7 @@ void RoomEditor::create_trail_from_footer() {
     trail_entry["name"] = key;
     trail_entry["geometry"] = "Square";
     trail_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
+    trail_entry["curvyness"] = 0;
     trail_entry["tags"] = nlohmann::json::array();
     trail_entry["anti_tags"] = nlohmann::json::array();
     if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {
@@ -16291,9 +16299,7 @@ bool RoomEditor::apply_anchor_panel_detail_update(const RoomAnchorToolsPanel::De
     const bool requested_orphan_on_end = values.orphan_on_end;
     const bool requested_resolve_x = values.resolve_x;
     const AnchorScalingMethod requested_scaling_method = values.scaling_method;
-    if (!std::isfinite(requested_depth)) {
-        requested_depth = 0.0f;
-    }
+    requested_depth = quantize_anchor_depth_world_units(requested_depth);
     if (!std::isfinite(requested_rotation)) {
         requested_rotation = 0.0f;
     }
@@ -16567,6 +16573,10 @@ bool RoomEditor::update_anchor_depth(const std::string& anchor_name, float delta
     if (anchor_name.empty() || !std::isfinite(delta_world) || std::fabs(delta_world) < 1e-6f) {
         return false;
     }
+    const int depth_steps = static_cast<int>(std::lround(delta_world / kAnchorDepthScrollStepWorldPx));
+    if (depth_steps == 0) {
+        return false;
+    }
     const auto owner = devmode::room_anchor_mode::owner_from_light_mode(light_mode_active());
     const auto is_reserved_anchor_name = [this](const std::string& name) {
         return is_valid_oval_center_anchor_name(name);
@@ -16581,7 +16591,13 @@ bool RoomEditor::update_anchor_depth(const std::string& anchor_name, float delta
             if (!it) {
                 return false;
             }
-            it->depth_offset += delta_world;
+            const float quantized_current = quantize_anchor_depth_world_units(it->depth_offset);
+            const float next_depth =
+                quantized_current + (static_cast<float>(depth_steps) * kAnchorDepthScrollStepWorldPx);
+            if (!std::isfinite(next_depth) || std::fabs(next_depth - it->depth_offset) < 1e-4f) {
+                return false;
+            }
+            it->depth_offset = next_depth;
             return true;
         },
         devmode::core::DevSaveCoordinator::Priority::Debounced);
@@ -18532,8 +18548,9 @@ bool RoomEditor::handle_oval_mode_mouse_input(const Input& input) {
     if (scroll_y != 0 && oval_edit_.center_selected && !pointer_blocked) {
         if (mutate_selected_oval_center_anchor(
                 [scroll_y](DisplacedAssetAnchorPoint& center_anchor) {
+                    const float quantized_current = quantize_anchor_depth_world_units(center_anchor.depth_offset);
                     const float next_depth =
-                        center_anchor.depth_offset + static_cast<float>(scroll_y) * kAnchorDepthScrollStepWorldPx;
+                        quantized_current + static_cast<float>(scroll_y) * kAnchorDepthScrollStepWorldPx;
                     if (!std::isfinite(next_depth) ||
                         std::fabs(next_depth - center_anchor.depth_offset) < 1e-4f) {
                         return false;
@@ -18829,6 +18846,7 @@ bool RoomEditor::handle_anchor_mode_mouse_input(const Input& input) {
                                 static_cast<float>(scroll_y) * kAnchorDepthScrollStepWorldPx) &&
             input_) {
             input_->consumeScroll();
+            sync_anchor_tools_panel();
         }
     }
 
@@ -20222,12 +20240,37 @@ void RoomEditor::redistribute_movement_points_vertical_only_after_adjustment(int
     const float end_z = original_z.back();
 
     if (movement_edit_.curve_enabled) {
-        apply_movement_curved_smoothing(adjusted_index,
-                                        original_xy,
-                                        original_z,
-                                        redistributed_xy,
-                                        redistributed_z,
-                                        last_index);
+        // For wheel-Y edits, shape vertical using a true parabola in frame space:
+        // pass exactly through first, edited, and last points.
+        const float x0 = 0.0f;
+        const float x1 = static_cast<float>(clamped_adjusted);
+        const float x2 = static_cast<float>(last_index);
+        const float y0 = start_z;
+        const float y1 = adjusted_z;
+        const float y2 = end_z;
+        const float d01 = (x0 - x1);
+        const float d02 = (x0 - x2);
+        const float d12 = (x1 - x2);
+        const float denom0 = d01 * d02;
+        const float denom1 = -d01 * d12; // (x1 - x0) * (x1 - x2)
+        const float denom2 = d02 * d12;  // (x2 - x0) * (x2 - x1)
+        const bool valid =
+            std::fabs(denom0) > 1e-6f && std::fabs(denom1) > 1e-6f && std::fabs(denom2) > 1e-6f;
+
+        if (valid) {
+            for (int i = 1; i < last_index; ++i) {
+                if (i == clamped_adjusted) {
+                    continue;
+                }
+                const float x = static_cast<float>(i);
+                const float l0 = ((x - x1) * (x - x2)) / denom0;
+                const float l1 = ((x - x0) * (x - x2)) / denom1;
+                const float l2 = ((x - x0) * (x - x1)) / denom2;
+                redistributed_z[static_cast<std::size_t>(i)] = (y0 * l0) + (y1 * l1) + (y2 * l2);
+            }
+        } else {
+            apply_movement_linear_smoothing(adjusted_index, redistributed_xy, redistributed_z, last_index);
+        }
     } else {
         apply_movement_linear_smoothing(adjusted_index, redistributed_xy, redistributed_z, last_index);
     }

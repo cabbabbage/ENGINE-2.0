@@ -1261,6 +1261,162 @@ std::vector<SDL_Point> to_orthogonal_polyline(const std::vector<SDL_Point>& poin
     return dedupe_path_points(out);
 }
 
+Vec2 axis_direction(const SDL_Point& a, const SDL_Point& b) {
+    const int dx = b.x - a.x;
+    const int dy = b.y - a.y;
+    if (std::abs(dx) >= std::abs(dy)) {
+        return Vec2{dx >= 0 ? 1.0 : -1.0, 0.0};
+    }
+    return Vec2{0.0, dy >= 0 ? 1.0 : -1.0};
+}
+
+std::vector<SDL_Point> sanitize_orthogonal_centerline(const std::vector<SDL_Point>& points) {
+    std::vector<SDL_Point> polyline = dedupe_consecutive_points(to_orthogonal_polyline(points));
+    if (polyline.size() < 3) {
+        return polyline;
+    }
+
+    bool changed = true;
+    while (changed && polyline.size() >= 3) {
+        changed = false;
+        std::vector<SDL_Point> reduced;
+        reduced.reserve(polyline.size());
+        reduced.push_back(polyline.front());
+        for (std::size_t i = 1; i + 1 < polyline.size(); ++i) {
+            const SDL_Point prev = reduced.back();
+            const SDL_Point curr = polyline[i];
+            const SDL_Point next = polyline[i + 1];
+            const Vec2 in_dir = axis_direction(prev, curr);
+            const Vec2 out_dir = axis_direction(curr, next);
+            if (nearly_equal(in_dir.x, out_dir.x) && nearly_equal(in_dir.y, out_dir.y)) {
+                changed = true;
+                continue;
+            }
+            if (nearly_equal(in_dir.x, -out_dir.x) && nearly_equal(in_dir.y, -out_dir.y)) {
+                changed = true;
+                continue;
+            }
+            reduced.push_back(curr);
+        }
+        reduced.push_back(polyline.back());
+        polyline = dedupe_consecutive_points(reduced);
+    }
+    return polyline;
+}
+
+struct OffsetAxisLine {
+    bool horizontal = true;
+    double value = 0.0;
+};
+
+OffsetAxisLine offset_line_for_segment(const SDL_Point& a, const SDL_Point& b, double side_distance) {
+    const Vec2 dir = axis_direction(a, b);
+    const Vec2 normal{-dir.y, dir.x};
+    if (std::abs(dir.x) > 0.5) {
+        return OffsetAxisLine{true, static_cast<double>(a.y) + normal.y * side_distance};
+    }
+    return OffsetAxisLine{false, static_cast<double>(a.x) + normal.x * side_distance};
+}
+
+SDL_Point offset_endpoint_for_segment(const SDL_Point& point,
+                                      const SDL_Point& other,
+                                      double side_distance) {
+    const Vec2 dir = axis_direction(point, other);
+    const Vec2 normal{-dir.y, dir.x};
+    return SDL_Point{
+        static_cast<int>(std::lround(static_cast<double>(point.x) + normal.x * side_distance)),
+        static_cast<int>(std::lround(static_cast<double>(point.y) + normal.y * side_distance)),
+    };
+}
+
+bool build_offset_chain(const std::vector<SDL_Point>& centerline,
+                        double side_distance,
+                        std::vector<SDL_Point>* out_chain) {
+    if (!out_chain || centerline.size() < 2) {
+        return false;
+    }
+    out_chain->clear();
+    out_chain->reserve(centerline.size());
+    out_chain->push_back(offset_endpoint_for_segment(centerline.front(), centerline[1], side_distance));
+    for (std::size_t i = 1; i + 1 < centerline.size(); ++i) {
+        const OffsetAxisLine prev = offset_line_for_segment(centerline[i - 1], centerline[i], side_distance);
+        const OffsetAxisLine next = offset_line_for_segment(centerline[i], centerline[i + 1], side_distance);
+        SDL_Point corner = centerline[i];
+        if (prev.horizontal && !next.horizontal) {
+            corner = SDL_Point{
+                static_cast<int>(std::lround(next.value)),
+                static_cast<int>(std::lround(prev.value)),
+            };
+        } else if (!prev.horizontal && next.horizontal) {
+            corner = SDL_Point{
+                static_cast<int>(std::lround(prev.value)),
+                static_cast<int>(std::lround(next.value)),
+            };
+        } else if (prev.horizontal && next.horizontal) {
+            corner = SDL_Point{centerline[i].x, static_cast<int>(std::lround(prev.value))};
+        } else {
+            corner = SDL_Point{static_cast<int>(std::lround(prev.value)), centerline[i].y};
+        }
+        out_chain->push_back(corner);
+    }
+    out_chain->push_back(offset_endpoint_for_segment(centerline.back(), centerline[centerline.size() - 2], side_distance));
+    *out_chain = dedupe_consecutive_points(*out_chain);
+    return out_chain->size() >= 2;
+}
+
+void normalize_polygon_order(std::vector<SDL_Point>* polygon) {
+    if (!polygon || polygon->size() < 3) {
+        return;
+    }
+    std::vector<SDL_Point>& points = *polygon;
+    if (std::abs(signed_polygon_area(points)) > 1e-6 && signed_polygon_area(points) > 0.0) {
+        std::reverse(points.begin(), points.end());
+    }
+    std::size_t start_index = 0;
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        if (points[i].y < points[start_index].y ||
+            (points[i].y == points[start_index].y && points[i].x < points[start_index].x)) {
+            start_index = i;
+        }
+    }
+    std::rotate(points.begin(), points.begin() + static_cast<std::ptrdiff_t>(start_index), points.end());
+}
+
+bool build_orthogonal_corridor_polygon(const std::vector<SDL_Point>& centerline,
+                                       int width,
+                                       std::vector<SDL_Point>* out_polygon) {
+    if (!out_polygon || centerline.size() < 2) {
+        return false;
+    }
+    const int clamped_width = std::max(1, width);
+    const double left_distance = static_cast<double>(clamped_width) * 0.5;
+    const double right_distance = -left_distance;
+    std::vector<SDL_Point> left_chain;
+    std::vector<SDL_Point> right_chain;
+    if (!build_offset_chain(centerline, left_distance, &left_chain) ||
+        !build_offset_chain(centerline, right_distance, &right_chain)) {
+        return false;
+    }
+    std::vector<SDL_Point> polygon;
+    polygon.reserve(left_chain.size() + right_chain.size());
+    polygon.insert(polygon.end(), left_chain.begin(), left_chain.end());
+    for (std::size_t i = right_chain.size(); i-- > 0;) {
+        polygon.push_back(right_chain[i]);
+    }
+    polygon = dedupe_consecutive_points(polygon);
+    if (polygon.size() >= 2 &&
+        polygon.front().x == polygon.back().x &&
+        polygon.front().y == polygon.back().y) {
+        polygon.pop_back();
+    }
+    normalize_polygon_order(&polygon);
+    if (polygon.size() < 4) {
+        return false;
+    }
+    *out_polygon = std::move(polygon);
+    return true;
+}
+
 RouteSearchResult build_routed_polyline(const SDL_Point& start_gate,
                                         const SDL_Point& end_gate,
                                         Room* room_a,
@@ -2183,7 +2339,7 @@ bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_p
     out_result->polygon.clear();
     out_result->centerline.clear();
 
-    std::vector<SDL_Point> polyline = dedupe_consecutive_points(to_orthogonal_polyline(centerline_points));
+    std::vector<SDL_Point> polyline = sanitize_orthogonal_centerline(centerline_points);
     if (polyline.size() < 2) {
         if (stats) {
             stats->last_failure = TrailFailureReason::DegenerateCenterline;
@@ -2274,7 +2430,14 @@ bool build_trail_layout_from_polyline(const std::vector<SDL_Point>& centerline_p
         return false;
     }
 
-    std::vector<SDL_Point> polygon = build_polygon(to_vec2(polyline.front()), to_vec2(polyline.back()), sections);
+    std::vector<SDL_Point> polygon;
+    if (!build_orthogonal_corridor_polygon(polyline, min_width, &polygon)) {
+        if (stats) {
+            ++stats->polygon_failures;
+            stats->last_failure = TrailFailureReason::PolygonFailed;
+        }
+        return false;
+    }
     if (!trail_polygon_is_clean(polygon, existing_trails)) {
         if (stats) {
             ++stats->polygon_failures;
@@ -2657,7 +2820,7 @@ bool attempt_trail_connection(Room* a,
             for (const std::vector<SDL_Point>& route_points : forced_routes) {
                 std::vector<SDL_Point> contained_centerline =
                     build_centerline_with_endpoint_frames(start_frame, route_points, end_frame);
-                contained_centerline = dedupe_consecutive_points(to_orthogonal_polyline(contained_centerline));
+                contained_centerline = sanitize_orthogonal_centerline(contained_centerline);
                 if (contained_centerline.size() < 2 ||
                     !boundary_zones_respect_room_sectors(contained_centerline, a, b)) {
                     continue;
@@ -2694,9 +2857,9 @@ bool attempt_trail_connection(Room* a,
                 forced_result.start_tip = contained_centerline.front();
                 forced_result.end_tip = contained_centerline.back();
                 forced_result.sections = std::move(forced_sections);
-                forced_result.polygon = build_polygon(to_vec2(forced_result.start_tip),
-                                                      to_vec2(forced_result.end_tip),
-                                                      forced_result.sections);
+                if (!build_orthogonal_corridor_polygon(forced_result.centerline, min_width, &forced_result.polygon)) {
+                    continue;
+                }
                 forced_result.centerline = contained_centerline;
                 const auto layout_end = clock::now();
                 if (forced_result.sections.empty()) {

@@ -342,8 +342,30 @@ bool normalize_room_config_entry(nlohmann::json& entry,
     }
 
     if (entry.erase("edge_smoothness") > 0) changed = true;
-    if (entry.erase("curvyness") > 0) changed = true;
-    if (entry.erase("curviness") > 0) changed = true;
+    if (is_trail_entry) {
+        auto normalize_zero_int = [&](const char* key) {
+            auto it = entry.find(key);
+            if (it == entry.end()) {
+                return;
+            }
+            int value = 0;
+            if (it->is_number_integer()) {
+                value = it->get<int>();
+            } else if (it->is_number_float()) {
+                value = static_cast<int>(std::lround(it->get<double>()));
+            }
+            if (!it->is_number() || value != 0) {
+                entry[key] = 0;
+                changed = true;
+            }
+        };
+        // Keep legacy trail keys stable, but force orthogonal layouts at runtime.
+        normalize_zero_int("curvyness");
+        normalize_zero_int("curviness");
+    } else {
+        if (entry.erase("curvyness") > 0) changed = true;
+        if (entry.erase("curviness") > 0) changed = true;
+    }
 
     if (!entry.contains("spawn_groups") || !entry["spawn_groups"].is_array()) {
         entry["spawn_groups"] = nlohmann::json::array();

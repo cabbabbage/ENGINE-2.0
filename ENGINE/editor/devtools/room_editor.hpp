@@ -984,6 +984,24 @@ private:
     std::shared_ptr<animation_editor::AnimationDocument> stack_animation_preview_document_;
     std::shared_ptr<animation_editor::PreviewProvider> stack_animation_preview_provider_;
     std::string stack_animation_preview_signature_;
+    struct StackAnimationListSyncKey {
+        const Asset* target_asset = nullptr;
+        AssetEditorSubview subview = AssetEditorSubview::AssetInfo;
+        std::string selected_animation_id;
+        std::string animation_revision_signature;
+
+        bool operator==(const StackAnimationListSyncKey& other) const {
+            return target_asset == other.target_asset &&
+                   subview == other.subview &&
+                   selected_animation_id == other.selected_animation_id &&
+                   animation_revision_signature == other.animation_revision_signature;
+        }
+    };
+    std::optional<StackAnimationListSyncKey> stack_animation_list_sync_key_cache_;
+    bool force_stack_animation_sync_ = false;
+    std::uint64_t stack_animation_sync_invocations_ = 0;
+    std::uint64_t stack_animation_sync_skipped_ = 0;
+    std::uint64_t stack_animation_sync_frames_ = 0;
     SDL_Rect stack_animation_list_bounds_{0, 0, 0, 0};
     bool stack_animation_list_visible_ = false;
     std::unordered_set<std::string> stack_animation_list_selectable_ids_;

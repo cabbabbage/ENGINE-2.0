@@ -75,6 +75,14 @@ class AnimationListPanel {
         bool missing_source = false;
         bool selectable = true;
 };
+    struct ExternalRowsFingerprint {
+        std::size_t count = 0;
+        std::uint64_t rolling_hash = 0;
+
+        bool operator==(const ExternalRowsFingerprint& other) const {
+            return count == other.count && rolling_hash == other.rolling_hash;
+        }
+    };
 
     struct RowGeometry {
         SDL_Rect outer{0, 0, 0, 0};
@@ -87,6 +95,9 @@ class AnimationListPanel {
 
     std::shared_ptr<AnimationDocument> document_;
     std::optional<std::vector<ExternalRow>> external_rows_;
+    std::optional<ExternalRowsFingerprint> last_external_rows_fingerprint_;
+    std::uint64_t row_update_applied_count_ = 0;
+    std::uint64_t row_update_skipped_count_ = 0;
     std::vector<RowGeometry> row_geometry_;
     std::vector<DisplayRow> display_rows_;
     std::optional<std::string> start_animation_id_;
@@ -109,4 +120,3 @@ class AnimationListPanel {
 };
 
 }
-

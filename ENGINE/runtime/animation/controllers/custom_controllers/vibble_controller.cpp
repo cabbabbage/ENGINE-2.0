@@ -33,6 +33,10 @@ constexpr std::string_view kSpiderEggAssetName = "spider_egg";
 constexpr std::string_view kInteractableTag = "interactable";
 constexpr std::string_view kCanCarryTag = "can_carry";
 constexpr int kInteractRadiusPx = 150;
+constexpr float kYawSensitivity = 0.20f;
+constexpr float kPitchSensitivity = 0.20f;
+constexpr float kPitchMinDegrees = -45.0f;
+constexpr float kPitchMaxDegrees = 45.0f;
 
 std::string normalize_tag_token(std::string_view value) {
     return vibble::strings::to_lower_copy(vibble::strings::trim_copy(std::string{value}));
@@ -219,9 +223,13 @@ void vibble_controller::movement(const Input& input) {
     } else if (dev_mode) {
         normal_mode_active_ = false;
     }
-    constexpr float kYawSensitivity = 0.20f;
     if (!dev_mode) {
         yaw_angle_degrees_ = wrap_degrees_180(yaw_angle_degrees_ + static_cast<float>(input.getDX()) * kYawSensitivity);
+        // Mouse-up should tilt aim upward, so Y delta decreases pitch angle.
+        pitch_angle_degrees_ = std::clamp(
+            pitch_angle_degrees_ - static_cast<float>(input.getDY()) * kPitchSensitivity,
+            kPitchMinDegrees,
+            kPitchMaxDegrees);
     }
 
     const int input_x =
@@ -414,11 +422,16 @@ void vibble_controller::on_update(const Input& input) {
         } else {
             const float heading_radians =
                 wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
+            const float pitch_radians =
+                pitch_angle_degrees_ * static_cast<float>(3.14159265358979323846 / 180.0);
+            const float horizontal_scale = std::cos(pitch_radians);
             anchor_heading_changed =
                 player->set_directional_heading_radians(heading_radians) || anchor_heading_changed;
             constexpr float kDirectionalTargetDistancePx = 128.0f;
-            const float target_x = static_cast<float>(player->world_x()) + std::cos(heading_radians) * kDirectionalTargetDistancePx;
-            const float target_y = static_cast<float>(player->world_z()) + std::sin(heading_radians) * kDirectionalTargetDistancePx;
+            const float target_x = static_cast<float>(player->world_x()) +
+                                   std::cos(heading_radians) * horizontal_scale * kDirectionalTargetDistancePx;
+            const float target_y = static_cast<float>(player->world_z()) +
+                                   std::sin(heading_radians) * horizontal_scale * kDirectionalTargetDistancePx;
             anchor_heading_changed =
                 player->set_directional_target_world_xz(target_x, target_y) || anchor_heading_changed;
         }

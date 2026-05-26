@@ -93,6 +93,7 @@ private:
     std::string last_facing_animation_ = "default";
     bool normal_mode_active_ = false;
     float yaw_angle_degrees_ = 0.0f;
+    float pitch_angle_degrees_ = 0.0f;
     std::optional<ChildAsset> gun_child_;
     std::optional<ChildAsset> carried_child_;
     Asset* carried_world_asset_ = nullptr;

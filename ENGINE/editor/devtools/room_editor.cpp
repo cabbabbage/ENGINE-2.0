@@ -5424,11 +5424,19 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                                static_cast<int>(std::lround(b.y)));
             }
 
+            std::vector<SDL_FPoint> projected_points(static_cast<std::size_t>(count));
+            std::vector<SDL_FPoint> floor_projected_points(static_cast<std::size_t>(count));
+            std::vector<bool> projected_valid(static_cast<std::size_t>(count), false);
+            std::vector<bool> floor_projected_valid(static_cast<std::size_t>(count), false);
+
             for (int i = 0; i < count; ++i) {
                 SDL_FPoint screen{};
                 if (!project_movement_point(static_cast<std::size_t>(i), screen)) {
                     continue;
                 }
+                projected_points[static_cast<std::size_t>(i)] = screen;
+                projected_valid[static_cast<std::size_t>(i)] = true;
+
                 SDL_FPoint floor_screen = screen;
                 if (movement_edit_.target_asset &&
                     static_cast<std::size_t>(i) < movement_edit_.rel_positions.size() &&
@@ -5442,24 +5450,24 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         movement_edit_.rel_positions[static_cast<std::size_t>(i)].y +
                         static_cast<float>(anchor.y);
                     if (!cam.project_world_point(floor_world_xy, floor_world_z, floor_screen)) {
-                        floor_screen = cam.map_to_screen_f(SDL_FPoint{
-                            floor_world_xy.x,
-                            floor_world_z});
+                        floor_screen = cam.map_to_screen_f(SDL_FPoint{floor_world_xy.x, floor_world_z});
                     }
                 }
+                floor_projected_points[static_cast<std::size_t>(i)] = floor_screen;
+                floor_projected_valid[static_cast<std::size_t>(i)] = true;
+            }
+
+            // Pass A: true 3D movement points (editable/selectable handles).
+            for (int i = 0; i < count; ++i) {
+                if (!projected_valid[static_cast<std::size_t>(i)]) {
+                    continue;
+                }
+                const SDL_FPoint screen = projected_points[static_cast<std::size_t>(i)];
                 const bool selected = movement_edit_.selected_point_active && i == movement_edit_.frame_index;
                 const bool hovered = i == movement_edit_.hovered_point_index;
                 const int cx = static_cast<int>(std::lround(screen.x));
                 const int cy = static_cast<int>(std::lround(screen.y));
                 const int radius = selected ? 7 : 5;
-
-                const int floor_cx = static_cast<int>(std::lround(floor_screen.x));
-                const int floor_cy = static_cast<int>(std::lround(floor_screen.y));
-                if (std::abs(cy - floor_cy) > 1 || std::abs(cx - floor_cx) > 1) {
-                    SDL_SetRenderDrawColor(renderer, 70, 220, 255, 120);
-                    SDL_RenderLine(renderer, floor_cx, floor_cy, cx, cy);
-                }
-
                 SDL_Color color{255, 165, 0, 235};
                 if (selected) {
                     color = SDL_Color{255, 255, 255, 255};
@@ -5474,6 +5482,38 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     SDL_SetRenderDrawColor(renderer, 255, 165, 0, 255);
                     sdl_render::Rect(renderer, &outline);
                 }
+            }
+
+            // Pass B: floor projection helper crosshairs (non-interactive overlays).
+            for (int i = 0; i < count; ++i) {
+                if (!projected_valid[static_cast<std::size_t>(i)] ||
+                    !floor_projected_valid[static_cast<std::size_t>(i)]) {
+                    continue;
+                }
+                const bool selected = movement_edit_.selected_point_active && i == movement_edit_.frame_index;
+                const bool hovered = i == movement_edit_.hovered_point_index;
+                const SDL_FPoint screen = projected_points[static_cast<std::size_t>(i)];
+                const SDL_FPoint floor_screen = floor_projected_points[static_cast<std::size_t>(i)];
+                const int cx = static_cast<int>(std::lround(screen.x));
+                const int cy = static_cast<int>(std::lround(screen.y));
+                const int floor_cx = static_cast<int>(std::lround(floor_screen.x));
+                const int floor_cy = static_cast<int>(std::lround(floor_screen.y));
+
+                if (std::abs(cy - floor_cy) > 1 || std::abs(cx - floor_cx) > 1) {
+                    SDL_SetRenderDrawColor(renderer, 70, 220, 255, 120);
+                    SDL_RenderLine(renderer, floor_cx, floor_cy, cx, cy);
+                }
+
+                SDL_Color floor_color{70, 220, 255, 135};
+                if (selected) {
+                    floor_color = SDL_Color{255, 255, 255, 190};
+                } else if (hovered) {
+                    floor_color = SDL_Color{255, 220, 160, 170};
+                }
+                const int crosshair_radius = selected ? 8 : 6;
+                SDL_SetRenderDrawColor(renderer, floor_color.r, floor_color.g, floor_color.b, floor_color.a);
+                SDL_RenderLine(renderer, floor_cx - crosshair_radius, floor_cy, floor_cx + crosshair_radius, floor_cy);
+                SDL_RenderLine(renderer, floor_cx, floor_cy - crosshair_radius, floor_cx, floor_cy + crosshair_radius);
             }
         }
 

@@ -10805,6 +10805,10 @@ std::string build_stack_animation_preview_signature(const AssetInfo& info) {
     return ss.str();
 }
 
+std::uint64_t build_stack_animation_preview_signature_hash_legacy(const AssetInfo& info) {
+    return static_cast<std::uint64_t>(std::hash<std::string>{}(build_stack_animation_preview_signature(info)));
+}
+
 void RoomEditor::ensure_stack_animation_list_panel() {
     if (stack_animation_list_panel_) {
         return;
@@ -10924,15 +10928,18 @@ void RoomEditor::sync_stack_animation_list_preview_provider(const AssetInfo* inf
     if (!info) {
         stack_animation_preview_document_.reset();
         stack_animation_preview_provider_.reset();
-        stack_animation_preview_signature_.clear();
+        stack_animation_preview_revision_ = 0;
         stack_animation_list_panel_->set_preview_provider({});
         return;
     }
 
-    const std::string signature = build_stack_animation_preview_signature(*info);
+    std::uint64_t metadata_revision = info->animation_metadata_revision();
+    if (metadata_revision == 0) {
+        metadata_revision = build_stack_animation_preview_signature_hash_legacy(*info);
+    }
     const bool needs_reload = !stack_animation_preview_document_ ||
                               !stack_animation_preview_provider_ ||
-                              signature != stack_animation_preview_signature_;
+                              metadata_revision != stack_animation_preview_revision_;
     if (needs_reload) {
         if (!stack_animation_preview_document_) {
             stack_animation_preview_document_ = std::make_shared<animation_editor::AnimationDocument>();
@@ -10949,7 +10956,7 @@ void RoomEditor::sync_stack_animation_list_preview_provider(const AssetInfo* inf
         }
         stack_animation_preview_document_->load_from_manifest(info->manifest_payload(), asset_root, {});
         stack_animation_preview_provider_->set_document(stack_animation_preview_document_);
-        stack_animation_preview_signature_ = signature;
+        stack_animation_preview_revision_ = metadata_revision;
     }
 
     stack_animation_list_panel_->set_preview_provider(stack_animation_preview_provider_);
@@ -13273,8 +13280,11 @@ void RoomEditor::update_asset_editor_layout() {
         next_sync_key.selected_animation_id = *selected;
     }
     if (next_sync_key.target_asset && next_sync_key.target_asset->info) {
-        next_sync_key.animation_revision_signature =
-            build_stack_animation_preview_signature(*next_sync_key.target_asset->info);
+        next_sync_key.animation_revision = next_sync_key.target_asset->info->animation_metadata_revision();
+        if (next_sync_key.animation_revision == 0) {
+            next_sync_key.animation_revision =
+                build_stack_animation_preview_signature_hash_legacy(*next_sync_key.target_asset->info);
+        }
     }
 
     const bool key_unchanged = stack_animation_list_sync_key_cache_.has_value() &&

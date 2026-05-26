@@ -204,6 +204,7 @@ class AssetInfo {
 };
     std::vector<NamedArea> areas;
     std::map<std::string, Animation> animations;
+    std::uint64_t animation_metadata_revision() const { return animation_metadata_revision_; }
     std::map<std::string, Mapping> mappings;
 
 	public:
@@ -377,9 +378,11 @@ class AssetInfo {
     static std::uint8_t sanitize_texture_variant_mask(std::uint8_t variants);
     static std::uint8_t classify_texture_rebuild_variants(const nlohmann::json& before_payload,
                                                           const nlohmann::json& after_payload);
+    void bump_animation_metadata_revision();
     std::unordered_set<std::string> tag_lookup_;
     std::unordered_set<std::string> anti_tag_lookup_;
     RuntimeTextureRebuildState runtime_texture_rebuild_state_;
+    std::uint64_t animation_metadata_revision_ = 1;
     bool dirty_ = false;
     friend class AnimationLoader;
     friend class PrimaryAssetCache;

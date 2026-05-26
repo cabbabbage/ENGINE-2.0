@@ -461,7 +461,7 @@ void CustomAssetController::on_orphaned_hook(Asset& self,
             orphan_fall_state_.velocity_x = (raw_x / length) * impulse_force;
             orphan_fall_state_.velocity_z = (raw_z / length) * impulse_force;
         }
-        orphan_fall_state_.velocity_y = std::max(0.0, static_cast<double>(impulse->upward_force));
+        orphan_fall_state_.velocity_y = static_cast<double>(impulse->upward_force);
     }
 
     const int bounce_amount = self.info ? std::clamp(self.info->bounce_amount, 0, 100) : 0;

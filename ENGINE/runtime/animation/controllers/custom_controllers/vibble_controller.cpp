@@ -792,14 +792,27 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
                                                      int held_frames) const {
     float dir_x = 0.0f;
     float dir_z = 0.0f;
-    if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
-        dir_x = static_cast<float>(mouse_world->x - player.world_x());
-        dir_z = static_cast<float>(mouse_world->y - player.world_z());
-    }
-    if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
-        const CardinalVector facing = cardinal_vector_for_animation(last_facing_animation_);
-        dir_x = static_cast<float>(facing.x);
-        dir_z = static_cast<float>(facing.y);
+    float vertical_scale = 1.0f;
+    const Assets* owner_assets = player.get_assets();
+    const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
+    if (dev_mode) {
+        if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
+            dir_x = static_cast<float>(mouse_world->x - player.world_x());
+            dir_z = static_cast<float>(mouse_world->y - player.world_z());
+        }
+        if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
+            const CardinalVector facing = cardinal_vector_for_animation(last_facing_animation_);
+            dir_x = static_cast<float>(facing.x);
+            dir_z = static_cast<float>(facing.y);
+        }
+    } else {
+        const float heading_radians =
+            wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
+        const float pitch_radians = pitch_angle_degrees_ * static_cast<float>(3.14159265358979323846 / 180.0);
+        const float horizontal_scale = std::cos(pitch_radians);
+        dir_x = std::cos(heading_radians) * horizontal_scale;
+        dir_z = std::sin(heading_radians) * horizontal_scale;
+        vertical_scale = std::sin(pitch_radians);
     }
     if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
         dir_x = 1.0f;
@@ -814,7 +827,7 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
     const int clamped_hold = std::clamp(held_frames, 1, 120);
     const float force = 350.0f + static_cast<float>(clamped_hold) * 14.0f;
     const float upward_force = 220.0f + static_cast<float>(clamped_hold) * 10.0f;
-    return OrphanImpulse{dir_x, dir_z, force, upward_force};
+    return OrphanImpulse{dir_x, dir_z, force, upward_force * vertical_scale};
 }
 
 void vibble_controller::drop_carried_asset(const Input& input, int held_frames) {

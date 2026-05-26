@@ -513,6 +513,7 @@ private:
     bool is_point_inside_stack_animation_list(int x, int y) const;
     void sync_stack_animation_list_preview_provider(const AssetInfo* info);
     bool apply_stack_animation_selection(const std::string& animation_id);
+    bool delete_stack_animation_from_list(const std::string& animation_id);
     std::string asset_editor_subview_label(AssetEditorSubview subview) const;
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;

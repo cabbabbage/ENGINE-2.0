@@ -3472,7 +3472,7 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         const bool clear_movement_xy_preview =
             !scroll_preview_xy_overlay_active_for_movement_ ||
             !(movement_mode_active() && movement_edit_.vertical_wheel_edit.active) ||
-            event.button.button == SDL_BUTTON_LEFT;
+            (event.button.button == SDL_BUTTON_LEFT || event.button.button == SDL_BUTTON_RIGHT);
         if (scroll_preview_floor_overlay_active_) {
             scroll_preview_floor_overlay_active_ = false;
         }
@@ -10819,7 +10819,7 @@ void RoomEditor::ensure_stack_animation_list_panel() {
         return;
     }
     stack_animation_list_panel_ = std::make_unique<animation_editor::AnimationListPanel>();
-    stack_animation_list_panel_->set_show_delete_button(false);
+    stack_animation_list_panel_->set_show_delete_button(true);
     stack_animation_list_panel_->set_on_selection_changed([this](const std::optional<std::string>& animation_id) {
         if (!animation_id.has_value() || animation_id->empty()) {
             return;
@@ -10829,6 +10829,9 @@ void RoomEditor::ensure_stack_animation_list_panel() {
             this->sync_stack_animation_list_panel();
             this->update_asset_editor_layout();
         }
+    });
+    stack_animation_list_panel_->set_on_delete_animation([this](const std::string& animation_id) {
+        (void)this->delete_stack_animation_from_list(animation_id);
     });
 }
 
@@ -19473,6 +19476,57 @@ std::vector<std::string> RoomEditor::system_editable_animation_names(const Asset
     return resolve_file_sourced_animation_selection_for_target(target, animation_id).navigable_animation_ids;
 }
 
+bool RoomEditor::delete_stack_animation_from_list(const std::string& animation_id) {
+    if (animation_id.empty() || !is_stack_animation_editable_id(animation_id)) {
+        return false;
+    }
+
+    Asset* target = stack_animation_list_target_asset();
+    if (!target || !target->info) {
+        return false;
+    }
+    const std::shared_ptr<AssetInfo> target_info = target->info;
+    if (!target_info) {
+        return false;
+    }
+
+    const std::string message = "Delete animation '" + animation_id + "'? This cannot be undone.";
+    const bool confirmed = devmode::dialogs::confirm(
+        parent_window_,
+        "Delete Animation",
+        message,
+        "Delete",
+        "Cancel",
+        true);
+    if (!confirmed) {
+        return false;
+    }
+
+    if (!target_info->remove_animation(animation_id)) {
+        show_notice("Failed to delete animation '" + animation_id + "'.");
+        return false;
+    }
+
+    if (!persist_asset_manifest_from_info(target_info,
+                                          devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                          "Stack animation delete",
+                                          "stack-animation-delete",
+                                          true)) {
+        show_notice("Deleted animation '" + animation_id + "' but failed to save.");
+        return false;
+    }
+
+    if (assets_) {
+        assets_->mark_active_assets_dirty();
+    }
+
+    force_stack_animation_sync_ = true;
+    sync_stack_animation_list_panel();
+    update_asset_editor_layout();
+    show_notice("Deleted animation '" + animation_id + "'.");
+    return true;
+}
+
 void RoomEditor::clamp_selected_movement_path_index() {
     if (movement_edit_.paths.empty()) {
         movement_edit_.selected_path_index = 0;
@@ -20162,6 +20216,11 @@ void RoomEditor::redistribute_movement_points_vertical_only_after_adjustment(int
     const std::vector<float> original_z = movement_edit_.rel_positions_z;
     const int last_index = count - 1;
 
+    const int clamped_adjusted = std::clamp(adjusted_index, 1, last_index - 1);
+    const float adjusted_z = original_z[static_cast<std::size_t>(clamped_adjusted)];
+    const float start_z = original_z.front();
+    const float end_z = original_z.back();
+
     if (movement_edit_.curve_enabled) {
         apply_movement_curved_smoothing(adjusted_index,
                                         original_xy,
@@ -20172,6 +20231,11 @@ void RoomEditor::redistribute_movement_points_vertical_only_after_adjustment(int
     } else {
         apply_movement_linear_smoothing(adjusted_index, redistributed_xy, redistributed_z, last_index);
     }
+
+    // Vertical wheel edit is authoritative for the selected point and endpoints.
+    redistributed_z.front() = start_z;
+    redistributed_z.back() = end_z;
+    redistributed_z[static_cast<std::size_t>(clamped_adjusted)] = adjusted_z;
 
     movement_edit_.rel_positions = original_xy;
     movement_edit_.rel_positions_z = std::move(redistributed_z);
@@ -23924,9 +23988,8 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
 
     if (left_pressed && !is_movement_ui_blocking_point(screen_pt.x, screen_pt.y)) {
         if (movement_edit_.vertical_wheel_edit.active) {
-            end_movement_vertical_wheel_edit(true);
+            end_movement_vertical_wheel_edit(false);
             movement_edit_.dragging_point = false;
-            return true;
         }
 
         const int elevated_hit = find_movement_point_at_screen_point(screen_pt, kMovementPointPickRadiusPx);

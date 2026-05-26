@@ -545,7 +545,6 @@ private:
     friend class Move;
     friend class AssetInfoUI;
     friend class RenderAsset;
-    friend class FrameEditorSession;
     friend class Assets;
     friend class CompositeAssetRenderer;
     friend class world::WorldGrid;

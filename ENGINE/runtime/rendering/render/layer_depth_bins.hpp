@@ -21,7 +21,7 @@ inline float dof_blur_strength_for_layer_distance(int layer,
         static_cast<float>(std::abs(layer - focus_layer)) / static_cast<float>(bucket_radius),
         0.0f,
         1.0f);
-    return normalized_distance * normalized_distance * (3.0f - 2.0f * normalized_distance);
+    return normalized_distance * normalized_distance * normalized_distance;
 }
 
 std::vector<double> build_linear_depth_edges(double max_depth, double base_layer_interval);

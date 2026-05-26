@@ -525,10 +525,27 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
     std::sort(scratch_background_layers_.begin(), scratch_background_layers_.end(), [](const LayerTexture& a, const LayerTexture& b){ return a.depth_layer > b.depth_layer; });
     std::sort(scratch_foreground_layers_.begin(), scratch_foreground_layers_.end(), [](const LayerTexture& a, const LayerTexture& b){ return a.depth_layer < b.depth_layer; });
 
+    clear_target(background_mid_);
     bool background_has_content = false;
     bool foreground_has_content = false;
-    clear_target(background_mid_);
-    if (background_seed) { if (!copy_texture(background_seed, background_mid_)) return restore_and_return(CompositeResult{}); background_has_content = true; }
+    if (background_seed) {
+        // Treat the far background seed as the deepest layer so sky and mountains pick up the full blur.
+        if (blur_enabled && (safe_blur_px > kBlurEpsilonPx || safe_radial_blur_px > kBlurEpsilonPx)) {
+            if (!blur_step(background_seed,
+                           background_mid_,
+                           blur_work_,
+                           safe_blur_px,
+                           optical_center,
+                           safe_radial_blur_px,
+                           quality_scale)) {
+                return restore_and_return(CompositeResult{});
+            }
+            ++result.blur_pass_count;
+        } else if (!copy_texture(background_seed, background_mid_)) {
+            return restore_and_return(CompositeResult{});
+        }
+        background_has_content = true;
+    }
     clear_target(foreground_mid_);
     for (const LayerTexture& layer : scratch_background_layers_) {
         const float layer_blur = safe_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);

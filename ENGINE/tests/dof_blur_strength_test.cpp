@@ -28,6 +28,7 @@ int main() {
     assert(nearly_equal(beyond_background, beyond_foreground));
     assert(at_focus < near_background);
     assert(near_background < far_background);
+    assert(near_background < 0.5f);
     assert(nearly_equal(far_background, 1.0f));
     assert(nearly_equal(beyond_background, 1.0f));
 

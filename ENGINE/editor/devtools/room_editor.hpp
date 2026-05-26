@@ -131,6 +131,7 @@ public:
     void open_asset_info_editor(const std::shared_ptr<AssetInfo>& info);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void open_asset_info_editor_for_asset(Asset* asset, bool focus_camera = true);
+    void open_movement_editor_for_asset(Asset* asset, const std::string& animation_id);
     void close_asset_info_editor();
     bool consume_escape_for_asset_editor_stack();
     bool is_asset_info_editor_open() const;

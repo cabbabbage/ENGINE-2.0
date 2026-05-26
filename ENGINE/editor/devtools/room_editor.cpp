@@ -6186,6 +6186,17 @@ void RoomEditor::open_asset_info_editor_for_asset(Asset* asset, bool focus_camer
     set_focus_asset(asset, true);
 }
 
+void RoomEditor::open_movement_editor_for_asset(Asset* asset, const std::string& animation_id) {
+    if (!asset || !asset->info) {
+        return;
+    }
+    open_asset_info_editor_for_asset(asset, false);
+    if (!animation_id.empty()) {
+        (void)apply_asset_preview_animation_and_frame(asset, animation_id, 0);
+    }
+    set_asset_editor_subview(AssetEditorSubview::Movement, false);
+}
+
 void RoomEditor::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
     if (info_ui_) {
@@ -10310,13 +10321,29 @@ void RoomEditor::ensure_movement_editor_widgets() {
             if (movement_edit_.paths.empty()) return;
             movement_edit_.selected_path_index = std::clamp(index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
             movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
+            normalize_movement_frames_to_current_animation();
             rebuild_movement_rel_positions();
             refresh_movement_runtime_animation();
+            refresh_movement_editor_selection(true);
         });
         movement_tools_panel_->set_on_add_path([this]() {
             if (!movement_mode_active()) return;
-            movement_edit_.paths.push_back(movement_edit_.frames);
+            if (!movement_edit_.paths.empty() &&
+                movement_edit_.selected_path_index >= 0 &&
+                movement_edit_.selected_path_index < static_cast<int>(movement_edit_.paths.size())) {
+                movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)] = movement_edit_.frames;
+            }
+            std::vector<devmode::room_movement_payload::MovementFrame> new_path(movement_edit_.frames.size());
+            if (new_path.empty()) {
+                new_path.push_back(devmode::room_movement_payload::MovementFrame{});
+            }
+            movement_edit_.paths.push_back(std::move(new_path));
             movement_edit_.selected_path_index = static_cast<int>(movement_edit_.paths.size()) - 1;
+            movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
+            normalize_movement_frames_to_current_animation();
+            rebuild_movement_rel_positions();
+            refresh_movement_runtime_animation();
+            refresh_movement_editor_selection(true);
             movement_edit_.dirty_since_last_flush = true;
         });
         movement_tools_panel_->set_on_delete_path([this]() {
@@ -10324,8 +10351,10 @@ void RoomEditor::ensure_movement_editor_widgets() {
             movement_edit_.paths.erase(movement_edit_.paths.begin() + movement_edit_.selected_path_index);
             movement_edit_.selected_path_index = std::clamp(movement_edit_.selected_path_index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
             movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
+            normalize_movement_frames_to_current_animation();
             rebuild_movement_rel_positions();
             refresh_movement_runtime_animation();
+            refresh_movement_editor_selection(true);
             movement_edit_.dirty_since_last_flush = true;
         });
     }
@@ -10846,12 +10875,13 @@ bool RoomEditor::apply_stack_animation_selection(const std::string& animation_id
                 next_frame_index = 0;
             }
             movement_edit_.paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, animation_id);
-            movement_edit_.selected_path_index = std::clamp(movement_edit_.selected_path_index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
-            movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
+            movement_edit_.selected_path_index = 0;
+            movement_edit_.frames = movement_edit_.paths.empty() ? std::vector<devmode::room_movement_payload::MovementFrame>{devmode::room_movement_payload::MovementFrame{}} : movement_edit_.paths[0];
             if (!movement_edit_.has_frames()) {
                 movement_edit_.frames.push_back(devmode::room_movement_payload::MovementFrame{});
             }
             normalize_movement_frames_to_current_animation();
+            rebuild_movement_rel_positions();
             if (apply_movement_animation_and_frame(animation_id, next_frame_index)) {
                 refresh_movement_editor_selection(false);
                 sync_movement_panel_frame_values();
@@ -19019,11 +19049,26 @@ void RoomEditor::normalize_movement_frames_to_current_animation() {
     }
 
     const std::size_t desired_count = std::max<std::size_t>(1, anim_it->second.frame_count());
-    if (movement_edit_.frame_count() < desired_count) {
-        movement_edit_.frames.resize(desired_count);
-    } else if (movement_edit_.frame_count() > desired_count) {
-        movement_edit_.frames.resize(desired_count);
+    if (movement_edit_.paths.empty()) {
+        movement_edit_.paths.push_back(movement_edit_.frames.empty()
+            ? std::vector<devmode::room_movement_payload::MovementFrame>(desired_count)
+            : movement_edit_.frames);
     }
+
+    movement_edit_.selected_path_index =
+        std::clamp(movement_edit_.selected_path_index, 0, static_cast<int>(movement_edit_.paths.size()) - 1);
+    if (!movement_edit_.frames.empty()) {
+        movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)] = movement_edit_.frames;
+    }
+
+    for (auto& path : movement_edit_.paths) {
+        if (path.empty()) {
+            path.push_back(devmode::room_movement_payload::MovementFrame{});
+        }
+        path.resize(desired_count);
+    }
+
+    movement_edit_.frames = movement_edit_.paths[static_cast<std::size_t>(movement_edit_.selected_path_index)];
 }
 
 void RoomEditor::refresh_movement_runtime_animation() {

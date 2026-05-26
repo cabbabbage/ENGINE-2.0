@@ -167,16 +167,28 @@ void RoomMovementToolsPanel::set_on_system_enabled_toggle(SystemEnabledToggleCal
     on_system_enabled_toggle_ = std::move(callback);
 }
 void RoomMovementToolsPanel::set_path_options(const std::vector<std::string>& options, int selected_index) {
-    path_options_ = options.empty() ? std::vector<std::string>{"Path 1"} : options;
-    selected_path_index_ = std::clamp(selected_index, 0, static_cast<int>(path_options_.size()) - 1);
-    path_buttons_.clear();
-    path_buttons_.reserve(path_options_.size());
-    for (std::size_t i = 0; i < path_options_.size(); ++i) {
-        const bool selected = static_cast<int>(i) == selected_path_index_;
-        path_buttons_.push_back(std::make_unique<DMButton>(path_options_[i],
-                                                           selected ? &DMStyles::AccentButton() : &DMStyles::ListButton(),
-                                                           220,
-                                                           DMButton::height()));
+    const std::vector<std::string> next_options = options.empty() ? std::vector<std::string>{"Path 1"} : options;
+    const int next_selected = std::clamp(selected_index, 0, static_cast<int>(next_options.size()) - 1);
+    const bool options_changed = path_options_ != next_options;
+    path_options_ = next_options;
+    selected_path_index_ = next_selected;
+
+    if (options_changed || path_buttons_.size() != path_options_.size()) {
+        path_buttons_.clear();
+        path_buttons_.reserve(path_options_.size());
+        for (const std::string& label : path_options_) {
+            path_buttons_.push_back(std::make_unique<DMButton>(label,
+                                                               &DMStyles::ListButton(),
+                                                               220,
+                                                               DMButton::height()));
+        }
+        path_scroll_offset_ = 0;
+    } else {
+        for (std::size_t i = 0; i < path_buttons_.size(); ++i) {
+            if (path_buttons_[i]) {
+                path_buttons_[i]->set_text(path_options_[i]);
+            }
+        }
     }
     layout_dirty_ = true;
 }
@@ -192,6 +204,21 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
     update_layout();
 
     bool handled = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event =
+        event.type == SDL_EVENT_MOUSE_MOTION ||
+        event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+        event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+    const bool wheel_event = event.type == SDL_EVENT_MOUSE_WHEEL;
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        pointer = sdl_mouse_util::MotionPoint(event.motion);
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        pointer = sdl_mouse_util::ButtonPoint(event.button);
+    } else if (wheel_event) {
+        sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
+    }
+    const bool pointer_inside_panel = (pointer_event || wheel_event) && point_in_rect(pointer.x, pointer.y, panel_rect_);
+
     if (enabled_checkbox_) {
         const bool before = enabled_checkbox_->value();
         if (enabled_checkbox_->handle_event(event)) {
@@ -226,9 +253,21 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
         if (rot_box_ && rot_box_->handle_event(event)) {
             handled = true;
         }
+        if (event.type == SDL_EVENT_MOUSE_WHEEL && point_in_rect(pointer.x, pointer.y, path_list_rect_)) {
+            const int step = DMButton::height() + kPathListGap;
+            scroll_paths_by(-event.wheel.integer_y * step);
+            handled = true;
+        }
+        layout_path_buttons();
         for (std::size_t i = 0; i < path_buttons_.size(); ++i) {
             auto& button = path_buttons_[i];
             if (!button) continue;
+            const SDL_Rect row_rect = button->rect();
+            const bool row_visible = row_rect.y + row_rect.h >= path_list_rect_.y &&
+                                     row_rect.y <= path_list_rect_.y + path_list_rect_.h;
+            if (!row_visible) {
+                continue;
+            }
             if (button->handle_event(event)) {
                 handled = true;
                 if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
@@ -261,21 +300,7 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
         }
     }
 
-    SDL_Point pointer{0, 0};
-    const bool pointer_event =
-        event.type == SDL_EVENT_MOUSE_MOTION ||
-        event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
-        event.type == SDL_EVENT_MOUSE_BUTTON_UP;
-    const bool wheel_event = event.type == SDL_EVENT_MOUSE_WHEEL;
-    if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        pointer = sdl_mouse_util::MotionPoint(event.motion);
-    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        pointer = sdl_mouse_util::ButtonPoint(event.button);
-    } else if (wheel_event) {
-        sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
-    }
-
-    if ((pointer_event || wheel_event) && point_in_rect(pointer.x, pointer.y, panel_rect_)) {
+    if (pointer_inside_panel) {
         return true;
     }
     return false;
@@ -332,9 +357,22 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
     if (rot_box_) {
         rot_box_->render(renderer);
     }
-    for (const auto& button : path_buttons_) {
-        if (button) button->render(renderer);
+    SDL_Rect previous_clip{};
+    const bool had_clip = SDL_RenderClipEnabled(renderer);
+    if (had_clip) {
+        SDL_GetRenderClipRect(renderer, &previous_clip);
     }
+    SDL_SetRenderClipRect(renderer, &path_list_rect_);
+    for (const auto& button : path_buttons_) {
+        if (!button) continue;
+        const SDL_Rect row_rect = button->rect();
+        const bool row_visible = row_rect.y + row_rect.h >= path_list_rect_.y &&
+                                 row_rect.y <= path_list_rect_.y + path_list_rect_.h;
+        if (row_visible) {
+            button->render(renderer);
+        }
+    }
+    SDL_SetRenderClipRect(renderer, had_clip ? &previous_clip : nullptr);
     if (add_path_button_) add_path_button_->render(renderer);
     if (delete_path_button_) delete_path_button_->render(renderer);
 }
@@ -371,6 +409,37 @@ void RoomMovementToolsPanel::update_layout() const {
     enabled_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMCheckbox::height()};
     cursor_y += enabled_rect_.h + kSectionGap;
 
+    const auto textbox_height_for = [content_w](const std::unique_ptr<DMTextBox>& box) {
+        if (!box) {
+            return DMTextBox::height();
+        }
+        return std::max(DMTextBox::height(), box->height_for_width(content_w));
+    };
+
+    const int button_w = (content_w - kButtonGap) / 2;
+    const int action_row_h = DMButton::height();
+    const int controls_height =
+        action_row_h + kSectionGap +
+        kHintHeight + kSectionGap +
+        DMCheckbox::height() + kFieldGap +
+        DMCheckbox::height() + kSectionGap +
+        textbox_height_for(dx_box_) + kFieldGap +
+        textbox_height_for(dy_box_) + kFieldGap +
+        textbox_height_for(dz_box_) + kFieldGap +
+        textbox_height_for(rot_box_);
+
+    const int panel_bottom = panel_rect_.y + panel_rect_.h - kPanelPadding;
+    const int list_available = std::max(
+        DMButton::height(),
+        panel_bottom - cursor_y - controls_height - kSectionGap);
+    path_select_rect_ = SDL_Rect{content_x, cursor_y, content_w, list_available};
+    path_list_rect_ = path_select_rect_;
+    cursor_y += path_list_rect_.h + kSectionGap;
+
+    path_add_rect_ = SDL_Rect{content_x, cursor_y, std::max(0, button_w), action_row_h};
+    path_delete_rect_ = SDL_Rect{content_x + std::max(0, button_w) + kButtonGap, cursor_y, std::max(0, button_w), action_row_h};
+    cursor_y += action_row_h + kSectionGap;
+
     hint_rect_ = SDL_Rect{content_x, cursor_y, content_w, kHintHeight};
     cursor_y += hint_rect_.h + kSectionGap;
 
@@ -379,13 +448,6 @@ void RoomMovementToolsPanel::update_layout() const {
 
     curve_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMCheckbox::height()};
     cursor_y += curve_rect_.h + kSectionGap;
-
-    const auto textbox_height_for = [content_w](const std::unique_ptr<DMTextBox>& box) {
-        if (!box) {
-            return DMTextBox::height();
-        }
-        return std::max(DMTextBox::height(), box->height_for_width(content_w));
-    };
 
     dx_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(dx_box_)};
     cursor_y += dx_rect_.h + kFieldGap;
@@ -397,15 +459,7 @@ void RoomMovementToolsPanel::update_layout() const {
     cursor_y += dz_rect_.h + kFieldGap;
 
     rot_rect_ = SDL_Rect{content_x, cursor_y, content_w, textbox_height_for(rot_box_)};
-    cursor_y += rot_rect_.h + kSectionGap;
-    path_select_rect_ = SDL_Rect{content_x, cursor_y, content_w, DMButton::height()};
-    const int path_list_h = static_cast<int>(path_buttons_.size()) * (DMButton::height() + kPathListGap) - (path_buttons_.empty() ? 0 : kPathListGap);
-    path_list_rect_ = SDL_Rect{content_x, cursor_y, content_w, std::max(path_select_rect_.h, path_list_h)};
-    cursor_y += path_list_rect_.h + kFieldGap;
-    const int button_w = (content_w - kButtonGap) / 2;
-    path_add_rect_ = SDL_Rect{content_x, cursor_y, std::max(0, button_w), DMButton::height()};
-    path_delete_rect_ = SDL_Rect{content_x + std::max(0, button_w) + kButtonGap, cursor_y, std::max(0, button_w), DMButton::height()};
-    cursor_y += std::max(path_add_rect_.h, path_delete_rect_.h) + kPanelPadding;
+    cursor_y += rot_rect_.h + kPanelPadding;
 
     if (!panel_bounds_override_active_) {
         panel_rect_.h = std::max(panel_rect_.h, cursor_y - panel_rect_.y);
@@ -432,7 +486,21 @@ void RoomMovementToolsPanel::update_layout() const {
     if (rot_box_) {
         rot_box_->set_rect(rot_rect_);
     }
-    int path_button_y = path_list_rect_.y;
+    layout_path_buttons();
+    if (add_path_button_) add_path_button_->set_rect(path_add_rect_);
+    if (delete_path_button_) delete_path_button_->set_rect(path_delete_rect_);
+
+    layout_dirty_ = false;
+}
+
+void RoomMovementToolsPanel::layout_path_buttons() const {
+    path_content_height_ = path_buttons_.empty()
+        ? 0
+        : static_cast<int>(path_buttons_.size()) * (DMButton::height() + kPathListGap) - kPathListGap;
+    path_max_scroll_ = std::max(0, path_content_height_ - path_list_rect_.h);
+    path_scroll_offset_ = std::clamp(path_scroll_offset_, 0, path_max_scroll_);
+
+    int path_button_y = path_list_rect_.y - path_scroll_offset_;
     for (std::size_t i = 0; i < path_buttons_.size(); ++i) {
         auto& button = path_buttons_[i];
         if (!button) continue;
@@ -440,10 +508,16 @@ void RoomMovementToolsPanel::update_layout() const {
         button->set_style(static_cast<int>(i) == selected_path_index_ ? &DMStyles::AccentButton() : &DMStyles::ListButton());
         path_button_y += DMButton::height() + kPathListGap;
     }
-    if (add_path_button_) add_path_button_->set_rect(path_add_rect_);
-    if (delete_path_button_) delete_path_button_->set_rect(path_delete_rect_);
+}
 
-    layout_dirty_ = false;
+void RoomMovementToolsPanel::scroll_paths_by(int delta) {
+    update_layout();
+    const int next = std::clamp(path_scroll_offset_ + delta, 0, path_max_scroll_);
+    if (next == path_scroll_offset_) {
+        return;
+    }
+    path_scroll_offset_ = next;
+    layout_dirty_ = true;
 }
 
 bool RoomMovementToolsPanel::point_in_rect(int x, int y, const SDL_Rect& rect) {

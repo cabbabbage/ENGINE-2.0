@@ -54,6 +54,8 @@ public:
 
 private:
     void update_layout() const;
+    void layout_path_buttons() const;
+    void scroll_paths_by(int delta);
     static bool point_in_rect(int x, int y, const SDL_Rect& rect);
 
 private:
@@ -78,6 +80,9 @@ private:
     mutable SDL_Rect path_list_rect_{0, 0, 0, 0};
     mutable SDL_Rect path_add_rect_{0, 0, 0, 0};
     mutable SDL_Rect path_delete_rect_{0, 0, 0, 0};
+    mutable int path_content_height_ = 0;
+    mutable int path_max_scroll_ = 0;
+    mutable int path_scroll_offset_ = 0;
 
     std::unique_ptr<DMCheckbox> enabled_checkbox_;
     std::unique_ptr<DMCheckbox> smooth_checkbox_;

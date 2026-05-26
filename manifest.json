@@ -18388,7 +18388,7 @@
         "dynamic_renderer_depth_efficiency_depth": 2004.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.19999998807907104,
         "layer_depth_curve": 29.369998931884766,
-        "layer_depth_interval": 50.0,
+        "layer_depth_interval": 13.0,
         "light_max_cull_depth": 38789.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
@@ -18535,8 +18535,8 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
+            37,
             36,
-            169,
             242,
             255
           ],
@@ -18642,9 +18642,9 @@
         },
         "NewRoom": {
           "display_color": [
-            217,
+            142,
             242,
-            36,
+            85,
             255
           ],
           "geometry": "Square",
@@ -18688,9 +18688,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            147,
-            31,
-            204,
+            36,
+            226,
+            242,
             255
           ],
           "geometry": "Square",
@@ -18734,9 +18734,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            85,
-            242,
-            221,
+            31,
+            204,
+            111,
             255
           ],
           "geometry": "Square",
@@ -18811,9 +18811,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            85,
-            93,
-            242,
+            204,
+            31,
+            114,
             255
           ],
           "geometry": "Square",
@@ -18862,9 +18862,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            154,
-            204,
-            71,
+            228,
+            36,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -18951,8 +18951,8 @@
           "camera_zoom_percent": 0,
           "display_color": [
             242,
-            36,
-            46,
+            242,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -19374,9 +19374,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            31,
-            204,
-            172,
+            101,
+            85,
+            242,
             255
           ],
           "geometry": "Square",

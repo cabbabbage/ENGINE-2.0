@@ -946,76 +946,14 @@ std::vector<double> build_section_distances(double trail_length, const std::vect
                            required_distances);
 }
 
-std::vector<double> build_control_distances(double trail_length) {
-    return build_distances(trail_length, kCenterlineControlSpacingWorldPx, {});
-}
-
 std::vector<double> build_validation_distances(double trail_length, const std::vector<double>& required_distances) {
     return build_distances(trail_length, kCenterlineValidationSpacingWorldPx, required_distances);
-}
-
-std::vector<double> build_control_offsets(const std::vector<double>& control_distances,
-                                          double trail_length,
-                                          int curvyness,
-                                          bool straight_only,
-                                          std::mt19937& rng) {
-    std::vector<double> offsets(control_distances.size(), 0.0);
-    if (straight_only || curvyness <= 0 || control_distances.size() <= 2 || trail_length <= 0.0) {
-        return offsets;
-    }
-
-    const double raw_limit = static_cast<double>(curvyness) * kCenterlineCurvatureScaleWorldPx;
-    const double local_segment_cap = std::min(kCenterlineControlSpacingWorldPx * 0.35, trail_length * 0.18);
-    const double max_offset = std::min({raw_limit, trail_length * 0.3, local_segment_cap});
-    if (max_offset <= 0.0) {
-        return offsets;
-    }
-
-    std::uniform_real_distribution<double> dist(-max_offset, max_offset);
-    for (std::size_t i = 1; i + 1 < control_distances.size(); ++i) {
-        const double t = std::clamp(control_distances[i] / trail_length, 0.0, 1.0);
-        const double envelope = std::sin(t * 3.14159265358979323846);
-        offsets[i] = dist(rng) * envelope;
-    }
-    return offsets;
-}
-
-double sample_offset_at_distance(const std::vector<double>& control_distances,
-                                 const std::vector<double>& control_offsets,
-                                 double distance) {
-    if (control_distances.empty() || control_offsets.empty()) {
-        return 0.0;
-    }
-    if (control_distances.size() == 1 || control_offsets.size() == 1) {
-        return control_offsets.front();
-    }
-    if (distance <= control_distances.front()) {
-        return control_offsets.front();
-    }
-    if (distance >= control_distances.back()) {
-        return control_offsets.back();
-    }
-
-    auto upper = std::lower_bound(control_distances.begin(), control_distances.end(), distance);
-    std::size_t hi = static_cast<std::size_t>(std::distance(control_distances.begin(), upper));
-    if (hi == 0) {
-        return control_offsets.front();
-    }
-    const std::size_t lo = hi - 1;
-    const double d0 = control_distances[lo];
-    const double d1 = control_distances[hi];
-    const double span = std::max(kPointEpsilon, d1 - d0);
-    const double t = std::clamp((distance - d0) / span, 0.0, 1.0);
-    const double smooth_t = t * t * (3.0 - 2.0 * t);
-    return control_offsets[lo] + (control_offsets[hi] - control_offsets[lo]) * smooth_t;
 }
 
 std::vector<CenterlineSample> build_centerline_samples(const Vec2& start,
                                                        const Vec2& dir,
                                                        const Vec2& base_normal,
-                                                       const std::vector<double>& sample_distances,
-                                                       const std::vector<double>& control_distances,
-                                                       const std::vector<double>& control_offsets) {
+                                                       const std::vector<double>& sample_distances) {
     std::vector<CenterlineSample> samples;
     if (sample_distances.empty()) {
         return samples;
@@ -1023,8 +961,7 @@ std::vector<CenterlineSample> build_centerline_samples(const Vec2& start,
 
     samples.reserve(sample_distances.size());
     for (double distance : sample_distances) {
-        const double offset = sample_offset_at_distance(control_distances, control_offsets, distance);
-        const Vec2 point = add(add(start, scale(dir, distance)), scale(base_normal, offset));
+        const Vec2 point = add(start, scale(dir, distance));
         CenterlineSample sample;
         sample.distance = distance;
         sample.point = point;
@@ -2263,7 +2200,6 @@ bool build_trail_layout(const SDL_Point& start_tip,
         return false;
     }
 
-    const std::vector<double> control_distances = build_control_distances(trail_length);
     const std::vector<double> validation_distances = build_validation_distances(trail_length, required_distances);
     if (validation_distances.empty()) {
         if (stats) {
@@ -2283,17 +2219,10 @@ bool build_trail_layout(const SDL_Point& start_tip,
             }
         }
 
-        const std::vector<double> control_offsets = build_control_offsets(control_distances,
-                                                                          trail_length,
-                                                                          curvyness,
-                                                                          straight_only,
-                                                                          rng);
         const std::vector<CenterlineSample> validation_samples = build_centerline_samples(start,
                                                                                           dir,
                                                                                           normal,
-                                                                                          validation_distances,
-                                                                                          control_distances,
-                                                                                          control_offsets);
+                                                                                          validation_distances);
         if (!centerline_is_valid(
                 room_a, room_b, validation_samples, room_obstacles, existing_trails, stats, allow_connected_room_interior)) {
             continue;
@@ -2302,9 +2231,7 @@ bool build_trail_layout(const SDL_Point& start_tip,
         const std::vector<CenterlineSample> section_samples = build_centerline_samples(start,
                                                                                        dir,
                                                                                        normal,
-                                                                                       section_distances,
-                                                                                       control_distances,
-                                                                                       control_offsets);
+                                                                                       section_distances);
         std::vector<TrailSection> sections;
         if (!place_sections(section_samples, min_width, max_width, curvyness, rng, stats, &sections)) {
             continue;

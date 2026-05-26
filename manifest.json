@@ -11620,40 +11620,40 @@
               0,
               0,
               0.0,
-              false
+              true
             ],
             [
-              -13,
+              -26,
               0,
-              -13,
+              0,
               0.0,
               false
             ],
             [
-              -13,
+              -26,
               0,
-              -13,
+              0,
               0.0,
               false
             ],
             [
-              -13,
+              -26,
               0,
-              -13,
+              0,
               0.0,
               false
             ],
             [
-              -13,
+              -26,
               0,
-              -13,
+              0,
               0.0,
               false
             ],
             [
-              -13,
+              -26,
               0,
-              -13,
+              0,
               0.0,
               false
             ]
@@ -11668,39 +11668,34 @@
                 true
               ],
               [
-                -13,
+                -26,
                 0,
                 0,
-                0.0,
-                true
+                0.0
               ],
               [
-                -13,
+                -26,
                 0,
                 0,
-                0.0,
-                true
+                0.0
               ],
               [
-                -13,
+                -26,
                 0,
                 0,
-                0.0,
-                true
+                0.0
               ],
               [
-                -13,
+                -26,
                 0,
                 0,
-                0.0,
-                true
+                0.0
               ],
               [
-                -13,
+                -26,
                 0,
                 0,
-                0.0,
-                true
+                0.0
               ]
             ],
             [
@@ -11712,39 +11707,34 @@
                 true
               ],
               [
-                -13,
                 0,
-                13,
-                0.0,
-                true
+                0,
+                0,
+                0.0
               ],
               [
-                -13,
                 0,
-                13,
-                0.0,
-                true
+                0,
+                0,
+                0.0
               ],
               [
-                -13,
                 0,
-                13,
-                0.0,
-                true
+                0,
+                0,
+                0.0
               ],
               [
-                -13,
                 0,
-                13,
-                0.0,
-                true
+                0,
+                0,
+                0.0
               ],
               [
-                -13,
                 0,
-                13,
-                0.0,
-                true
+                0,
+                0,
+                0.0
               ]
             ],
             [
@@ -11755,42 +11745,42 @@
                 0.0
               ],
               [
-                -13,
                 0,
-                -13,
+                0,
+                0,
                 0.0
               ],
               [
-                -13,
                 0,
-                -13,
+                0,
+                0,
                 0.0
               ],
               [
-                -13,
                 0,
-                -13,
+                0,
+                0,
                 0.0
               ],
               [
-                -13,
                 0,
-                -13,
+                0,
+                0,
                 0.0
               ],
               [
-                -13,
                 0,
-                -13,
+                0,
+                0,
                 0.0
               ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -65,
+            "dx": -130,
             "dy": 0,
-            "dz": -65.0
+            "dz": 0.0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -18697,7 +18687,7 @@
         "fog_render_boundary_spacing": 16,
         "max_spawn_from_room": 4862,
         "regen_seed": 4,
-        "render_radius": 3202
+        "render_radius": 5020
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -18754,9 +18744,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            31,
-            204,
-            31,
+            36,
+            242,
+            242,
             255
           ],
           "geometry": "Square",
@@ -18861,9 +18851,9 @@
         },
         "NewRoom": {
           "display_color": [
-            36,
+            226,
+            85,
             242,
-            141,
             255
           ],
           "geometry": "Square",
@@ -18907,9 +18897,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            242,
-            85,
-            242,
+            204,
+            143,
+            31,
             255
           ],
           "geometry": "Square",
@@ -18953,9 +18943,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            242,
-            94,
-            85,
+            31,
+            142,
+            204,
             255
           ],
           "geometry": "Square",
@@ -19030,9 +19020,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            85,
-            109,
-            242,
+            168,
+            31,
+            204,
             255
           ],
           "geometry": "Square",
@@ -19081,9 +19071,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            85,
+            160,
             242,
-            210,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -19169,9 +19159,9 @@
           "camera_tilt_deg": 30.68971061706543,
           "camera_zoom_percent": 0,
           "display_color": [
-            111,
-            204,
-            31,
+            85,
+            242,
+            178,
             255
           ],
           "geometry": "Circle",
@@ -19388,16 +19378,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -2996,
-              "dz": -2244,
+              "dx": -2840,
+              "dz": -2092,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 15656,
-              "origional_width": 16584,
+              "origional_height": 16744,
+              "origional_width": 15456,
               "position": "Exact",
               "priority": 6,
               "quantity": 1,
@@ -19593,9 +19583,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            161,
-            85,
             242,
+            97,
+            85,
             255
           ],
           "geometry": "Square",

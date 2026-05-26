@@ -10470,6 +10470,11 @@ void RoomEditor::ensure_movement_editor_widgets() {
             refresh_movement_editor_selection(true);
             movement_edit_.dirty_since_last_flush = true;
         });
+        movement_tools_panel_->set_on_quantize_path_selected([this](int index) {
+            if (index < 0 || index >= static_cast<int>(movement_edit_.quantize_reference_paths.size())) return;
+            quantize_selected_movement_path_to_reference(
+                movement_edit_.quantize_reference_paths[static_cast<std::size_t>(index)]);
+        });
     }
     if (movement_tools_panel_) {
         movement_tools_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -10485,6 +10490,24 @@ void RoomEditor::ensure_movement_editor_widgets() {
         labels.reserve(movement_edit_.paths.size());
         for (std::size_t i = 0; i < movement_edit_.paths.size(); ++i) labels.push_back("Path " + std::to_string(i + 1));
         movement_tools_panel_->set_path_options(labels, movement_edit_.selected_path_index);
+        movement_edit_.quantize_reference_paths.clear();
+        std::vector<std::string> quantize_labels;
+        if (movement_edit_.target_asset && movement_edit_.target_asset->info) {
+            for (std::size_t i = 0; i < movement_edit_.paths.size(); ++i) {
+                if (static_cast<int>(i) == movement_edit_.selected_path_index) continue;
+                movement_edit_.quantize_reference_paths.push_back(movement_edit_.paths[i]);
+                quantize_labels.push_back("Current anim (grey/pink) · Path " + std::to_string(i + 1));
+            }
+            for (const auto& [anim_id, _] : movement_edit_.target_asset->info->animations) {
+                if (anim_id == movement_edit_.animation_id) continue;
+                const auto anim_paths = resolve_room_movement_paths_for_animation(movement_edit_.target_asset, anim_id);
+                for (std::size_t i = 0; i < anim_paths.size(); ++i) {
+                    movement_edit_.quantize_reference_paths.push_back(anim_paths[i]);
+                    quantize_labels.push_back(anim_id + " · Path " + std::to_string(i + 1));
+                }
+            }
+        }
+        movement_tools_panel_->set_quantize_options(quantize_labels);
     }
 }
 
@@ -19817,35 +19840,22 @@ void RoomEditor::apply_movement_curved_smoothing(int adjusted_index,
         }
     };
 
-    auto place_half = [&](int first_idx, int second_idx) {
-        const int segment_count = second_idx - first_idx;
-        if (segment_count <= 1) {
-            return;
-        }
-        SDL_FPoint p0 = redistributed_xy[first_idx];
-        SDL_FPoint p2 = redistributed_xy[second_idx];
-        const int control_index = std::clamp(first_idx + segment_count / 2, first_idx + 1, second_idx - 1);
-        SDL_FPoint control = original_xy[control_index];
-        // Strengthen curve shape so adjusted-point edits produce a visible arc.
-        const SDL_FPoint midpoint{(p0.x + p2.x) * 0.5f, (p0.y + p2.y) * 0.5f};
-        control.x = midpoint.x + (control.x - midpoint.x) * 1.35f;
-        control.y = midpoint.y + (control.y - midpoint.y) * 1.35f;
-        clamp_control(p0, p2, control);
-
-        const float z0 = redistributed_z[first_idx];
-        const float z1 = original_z[control_index];
-        const float z2 = redistributed_z[second_idx];
-        for (int i = first_idx + 1; i < second_idx; ++i) {
-            const float progression = static_cast<float>(i - first_idx) / static_cast<float>(segment_count);
-            const float t = remap_to_quadratic_arclength_t(p0, control, p2, progression);
-            redistributed_xy[i] = sample_quadratic_point(p0, control, p2, t);
-            redistributed_z[i] = ((1.0f - t) * (1.0f - t) * z0) + (2.0f * (1.0f - t) * t * z1) + (t * t * z2);
-        }
-    };
-
-    place_half(0, std::min(adjusted_index, last_index));
-    if (adjusted_index < last_index) {
-        place_half(adjusted_index, last_index);
+    const SDL_FPoint p0 = redistributed_xy.front();
+    const SDL_FPoint p2 = redistributed_xy.back();
+    SDL_FPoint control = original_xy[std::clamp(adjusted_index, 1, last_index - 1)];
+    const SDL_FPoint midpoint{(p0.x + p2.x) * 0.5f, (p0.y + p2.y) * 0.5f};
+    control.x = midpoint.x + (control.x - midpoint.x) * 1.1f;
+    control.y = midpoint.y + (control.y - midpoint.y) * 1.1f;
+    clamp_control(p0, p2, control);
+    const float z0 = redistributed_z.front();
+    const float z1 = original_z[std::clamp(adjusted_index, 1, last_index - 1)];
+    const float z2 = redistributed_z.back();
+    for (int i = 1; i < last_index; ++i) {
+        const float progression = static_cast<float>(i) / static_cast<float>(last_index);
+        const float t = remap_to_quadratic_arclength_t(p0, control, p2, progression);
+        redistributed_xy[static_cast<std::size_t>(i)] = sample_quadratic_point(p0, control, p2, t);
+        redistributed_z[static_cast<std::size_t>(i)] =
+            ((1.0f - t) * (1.0f - t) * z0) + (2.0f * (1.0f - t) * t * z1) + (t * t * z2);
     }
 }
 
@@ -19877,6 +19887,29 @@ void RoomEditor::redistribute_movement_points_after_adjustment(int adjusted_inde
 
     movement_edit_.rel_positions = std::move(redistributed_xy);
     movement_edit_.rel_positions_z = std::move(redistributed_z);
+    rebuild_movement_frames_from_positions();
+    refresh_movement_runtime_animation();
+    movement_edit_.dirty_since_last_flush = true;
+}
+
+void RoomEditor::quantize_selected_movement_path_to_reference(const std::vector<devmode::room_movement_payload::MovementFrame>& reference_frames) {
+    if (!movement_mode_active() || movement_edit_.frames.size() < 2 || reference_frames.size() < 2) return;
+    if (movement_edit_.rel_positions.size() != movement_edit_.frames.size() ||
+        movement_edit_.rel_positions_z.size() != movement_edit_.frames.size()) return;
+    const MovementRelativePath reference = build_movement_relative_path(reference_frames);
+    if (reference.xy.size() < 2 || reference.z.size() < 2) return;
+    const SDL_FPoint current_total = movement_edit_.rel_positions.back();
+    const SDL_FPoint reference_total = reference.xy.back();
+    const float current_z = movement_edit_.rel_positions_z.back();
+    const float reference_z = reference.z.back();
+    const float sx = std::abs(current_total.x) > 0.0001f ? (reference_total.x / current_total.x) : 1.0f;
+    const float sy = std::abs(current_total.y) > 0.0001f ? (reference_total.y / current_total.y) : 1.0f;
+    const float sz = std::abs(current_z) > 0.0001f ? (reference_z / current_z) : 1.0f;
+    for (std::size_t i = 1; i < movement_edit_.rel_positions.size(); ++i) {
+        movement_edit_.rel_positions[i].x *= sx;
+        movement_edit_.rel_positions[i].y *= sy;
+        movement_edit_.rel_positions_z[i] *= sz;
+    }
     rebuild_movement_frames_from_positions();
     refresh_movement_runtime_animation();
     movement_edit_.dirty_since_last_flush = true;
@@ -21320,8 +21353,7 @@ std::vector<Assets::DevFloorProjectionMarker> RoomEditor::floor_projection_marke
             add_marker(floor_world_xz,
                        color,
                        selected || hovered,
-                       (selected || hovered) ? Assets::DevFloorProjectionMarker::Shape::Crosshair
-                                             : Assets::DevFloorProjectionMarker::Shape::Dot);
+                       Assets::DevFloorProjectionMarker::Shape::Crosshair);
         }
     }
 

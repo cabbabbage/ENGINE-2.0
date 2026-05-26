@@ -721,6 +721,7 @@ private:
                                          std::vector<SDL_FPoint>& redistributed_xy,
                                          std::vector<float>& redistributed_z,
                                          int last_index) const;
+    void quantize_selected_movement_path_to_reference(const std::vector<devmode::room_movement_payload::MovementFrame>& reference_frames);
     void redistribute_movement_points_after_adjustment(int adjusted_index);
     SDL_Point movement_asset_anchor_world() const;
     float movement_base_world_z() const;
@@ -1118,6 +1119,7 @@ private:
         int selected_path_index = 0;
         std::vector<SDL_FPoint> rel_positions;
         std::vector<float> rel_positions_z;
+        std::vector<std::vector<devmode::room_movement_payload::MovementFrame>> quantize_reference_paths;
 
         bool has_frames() const { return !frames.empty(); }
         std::size_t frame_count() const { return frames.size(); }
@@ -1430,4 +1432,3 @@ private:
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };
-

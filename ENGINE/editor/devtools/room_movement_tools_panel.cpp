@@ -43,6 +43,7 @@ RoomMovementToolsPanel::RoomMovementToolsPanel() {
     path_buttons_.push_back(std::make_unique<DMButton>("Path 1", &DMStyles::AccentButton(), 220, DMButton::height()));
     add_path_button_ = std::make_unique<DMButton>("+ New Path", &DMStyles::CreateButton(), 140, DMButton::height());
     delete_path_button_ = std::make_unique<DMButton>("Delete Path", &DMStyles::DeleteButton(), 140, DMButton::height());
+    quantize_button_ = std::make_unique<DMButton>("Quantize Path", &DMStyles::AccentButton(), 220, DMButton::height());
 }
 
 RoomMovementToolsPanel::~RoomMovementToolsPanel() = default;
@@ -195,6 +196,15 @@ void RoomMovementToolsPanel::set_path_options(const std::vector<std::string>& op
 void RoomMovementToolsPanel::set_on_path_selection_changed(PathSelectionChangedCallback callback) { on_path_selection_changed_ = std::move(callback); }
 void RoomMovementToolsPanel::set_on_add_path(PathActionCallback callback) { on_add_path_ = std::move(callback); }
 void RoomMovementToolsPanel::set_on_delete_path(PathActionCallback callback) { on_delete_path_ = std::move(callback); }
+void RoomMovementToolsPanel::set_quantize_options(const std::vector<std::string>& options) {
+    quantize_options_ = options;
+    quantize_option_buttons_.clear();
+    quantize_option_buttons_.reserve(quantize_options_.size());
+    for (const std::string& label : quantize_options_) {
+        quantize_option_buttons_.push_back(std::make_unique<DMButton>(label, &DMStyles::ListButton(), 220, DMButton::height()));
+    }
+}
+void RoomMovementToolsPanel::set_on_quantize_path_selected(PathSelectionChangedCallback callback) { on_quantize_path_selected_ = std::move(callback); }
 
 bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
     if (!visible_) {
@@ -290,6 +300,25 @@ bool RoomMovementToolsPanel::handle_event(const SDL_Event& event) {
             handled = true;
             if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && on_delete_path_) on_delete_path_();
         }
+        if (quantize_button_ && quantize_button_->handle_event(event)) {
+            handled = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+                quantize_open_ = !quantize_open_;
+            }
+        }
+        if (quantize_open_) {
+            for (std::size_t i = 0; i < quantize_option_buttons_.size(); ++i) {
+                auto& b = quantize_option_buttons_[i];
+                if (!b) continue;
+                if (b->handle_event(event)) {
+                    handled = true;
+                    if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT && on_quantize_path_selected_) {
+                        on_quantize_path_selected_(static_cast<int>(i));
+                        quantize_open_ = false;
+                    }
+                }
+            }
+        }
 
         if (!smooth_enabled()) {
             set_curve_enabled(false);
@@ -375,6 +404,12 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
     SDL_SetRenderClipRect(renderer, had_clip ? &previous_clip : nullptr);
     if (add_path_button_) add_path_button_->render(renderer);
     if (delete_path_button_) delete_path_button_->render(renderer);
+    if (quantize_button_) quantize_button_->render(renderer);
+    if (quantize_open_) {
+        for (const auto& b : quantize_option_buttons_) {
+            if (b) b->render(renderer);
+        }
+    }
 }
 
 bool RoomMovementToolsPanel::is_point_inside(int x, int y) const {
@@ -419,7 +454,7 @@ void RoomMovementToolsPanel::update_layout() const {
     const int button_w = (content_w - kButtonGap) / 2;
     const int action_row_h = DMButton::height();
     const int controls_height =
-        action_row_h + kSectionGap +
+        action_row_h + kFieldGap + action_row_h + kSectionGap +
         kHintHeight + kSectionGap +
         DMCheckbox::height() + kFieldGap +
         DMCheckbox::height() + kSectionGap +
@@ -438,6 +473,8 @@ void RoomMovementToolsPanel::update_layout() const {
 
     path_add_rect_ = SDL_Rect{content_x, cursor_y, std::max(0, button_w), action_row_h};
     path_delete_rect_ = SDL_Rect{content_x + std::max(0, button_w) + kButtonGap, cursor_y, std::max(0, button_w), action_row_h};
+    cursor_y += action_row_h + kFieldGap;
+    quantize_rect_ = SDL_Rect{content_x, cursor_y, content_w, action_row_h};
     cursor_y += action_row_h + kSectionGap;
 
     hint_rect_ = SDL_Rect{content_x, cursor_y, content_w, kHintHeight};
@@ -489,6 +526,14 @@ void RoomMovementToolsPanel::update_layout() const {
     layout_path_buttons();
     if (add_path_button_) add_path_button_->set_rect(path_add_rect_);
     if (delete_path_button_) delete_path_button_->set_rect(path_delete_rect_);
+    if (quantize_button_) quantize_button_->set_rect(quantize_rect_);
+    int qy = quantize_rect_.y + quantize_rect_.h + kPathListGap;
+    for (auto& b : quantize_option_buttons_) {
+        if (!b) continue;
+        b->set_rect(SDL_Rect{quantize_rect_.x, qy, quantize_rect_.w, DMButton::height()});
+        b->set_style(&DMStyles::ListButton());
+        qy += DMButton::height() + kPathListGap;
+    }
 
     layout_dirty_ = false;
 }

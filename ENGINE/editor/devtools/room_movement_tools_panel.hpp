@@ -107,7 +107,7 @@ private:
     std::unique_ptr<DMButton> delete_path_button_;
     std::unique_ptr<DMButton> quantize_button_;
     std::vector<QuantizeOption> quantize_options_;
-    std::vector<SDL_Rect> quantize_option_rects_;
+    mutable std::vector<SDL_Rect> quantize_option_rects_;
     int quantize_hover_index_ = -1;
     bool quantize_open_ = false;
     PathSelectionChangedCallback on_quantize_path_selected_;

@@ -876,7 +876,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"render_radius", 128},
         {"max_spawn_from_room", 128},
         {"fog_near_distance_px", 64},
-        {"fog_far_distance_px", 256},
         {"boundary_area_selectors",
          nlohmann::json::array({make_batch_spawn_group(map_name, "map_boundary", "batch_map_boundary")})}
     });

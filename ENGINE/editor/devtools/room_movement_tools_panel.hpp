@@ -44,7 +44,7 @@ public:
     bool curve_enabled() const;
     void set_system_enabled(bool enabled);
     bool system_enabled() const;
-    void set_numeric_values(const NumericValues& values);
+    void set_numeric_values(const NumericValues& values, bool force_update_active_edits = false);
     NumericValues numeric_values() const;
     bool any_numeric_editing() const;
     void set_on_system_enabled_toggle(SystemEnabledToggleCallback callback);

@@ -19786,8 +19786,7 @@ bool RoomEditor::apply_movement_panel_numeric_edits() {
     frame.dz = values.dz;
     frame.rotation_degrees = values.rotation_degrees;
     rebuild_movement_rel_positions();
-    refresh_movement_runtime_animation();
-    movement_edit_.dirty_since_last_flush = true;
+    redistribute_movement_points_after_adjustment(idx);
     return true;
 }
 
@@ -23797,6 +23796,19 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
         movement_edit_.rel_positions_z[static_cast<std::size_t>(index)] = next_z;
         redistribute_movement_points_after_adjustment(index);
         sync_movement_panel_frame_values();
+        apply_movement_preview_pose_to_target();
+        if (movement_tools_panel_) {
+            RoomMovementToolsPanel::NumericValues values{};
+            const auto& frame = movement_edit_.frames[static_cast<std::size_t>(index)];
+            values.dx = frame.dx;
+            values.dy = frame.dy;
+            values.dz = frame.dz;
+            values.rotation_degrees = frame.rotation_degrees;
+            movement_tools_panel_->set_numeric_values(values, true);
+        }
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
         if (input_) {
             input_->consumeScroll();
         }

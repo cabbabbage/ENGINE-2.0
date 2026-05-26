@@ -121,17 +121,17 @@ bool RoomMovementToolsPanel::system_enabled() const {
     return enabled_checkbox_ ? enabled_checkbox_->value() : false;
 }
 
-void RoomMovementToolsPanel::set_numeric_values(const NumericValues& values) {
-    if (dx_box_ && !dx_box_->is_editing()) {
+void RoomMovementToolsPanel::set_numeric_values(const NumericValues& values, bool force_update_active_edits) {
+    if (dx_box_ && (force_update_active_edits || !dx_box_->is_editing())) {
         dx_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dx))));
     }
-    if (dy_box_ && !dy_box_->is_editing()) {
+    if (dy_box_ && (force_update_active_edits || !dy_box_->is_editing())) {
         dy_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dy))));
     }
-    if (dz_box_ && !dz_box_->is_editing()) {
+    if (dz_box_ && (force_update_active_edits || !dz_box_->is_editing())) {
         dz_box_->set_value(std::to_string(static_cast<int>(std::lround(values.dz))));
     }
-    if (rot_box_ && !rot_box_->is_editing()) {
+    if (rot_box_ && (force_update_active_edits || !rot_box_->is_editing())) {
         rot_box_->set_value(std::to_string(values.rotation_degrees));
     }
 }

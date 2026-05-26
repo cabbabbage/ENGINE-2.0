@@ -8,17 +8,17 @@
 namespace dof_blur_chain {
 
 namespace damage_pulse_tuning {
-inline constexpr float kDamageReference = 40.0f;
-inline constexpr float kMaxTintStrength = 0.38f;
-inline constexpr float kMaxWarpPx = 5.25f;
-inline constexpr float kBasePropagationLayersPerSecond = 22.0f;
-inline constexpr float kLowHealthSpeedScaleMin = 0.74f;
-inline constexpr float kWaveFrontSoftnessLayers = 0.55f;
-inline constexpr float kEnvelopeRiseSeconds = 0.035f;
-inline constexpr float kEnvelopeDecaySeconds = 0.22f;
-inline constexpr float kPulseLifetimeSeconds = 0.42f;
+inline constexpr float kDamageReference = 30.0f;
+inline constexpr float kMaxTintStrength = 0.56f;
+inline constexpr float kMaxWarpPx = 8.5f;
+inline constexpr float kBasePropagationLayersPerSecond = 8.0f;
+inline constexpr float kLowHealthSpeedScaleMin = 0.62f;
+inline constexpr float kWaveFrontSoftnessLayers = 1.15f;
+inline constexpr float kEnvelopeRiseSeconds = 0.055f;
+inline constexpr float kEnvelopeDecaySeconds = 0.48f;
+inline constexpr float kPulseLifetimeSeconds = 0.90f;
 inline constexpr std::uint32_t kMaxConcurrentPulses = 5;
-inline constexpr float kPhaseFrequencyHz = 14.0f;
+inline constexpr float kPhaseFrequencyHz = 8.5f;
 } // namespace damage_pulse_tuning
 
 struct LayerTexture {

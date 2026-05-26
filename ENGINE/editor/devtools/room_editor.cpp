@@ -19714,7 +19714,7 @@ void RoomEditor::render_stack_animation_delete_modal(SDL_Renderer* renderer) con
     const int text_height = std::max(0, text_rect_bottom - (box.y + text_margin));
     SDL_Rect text_rect{box.x + text_margin, box.y + text_margin, std::max(0, box.w - 2 * text_margin), text_height};
 
-    TTF_Font* font = devmode::utils::load_font(18);
+    TTF_Font* font = ::devmode::utils::load_font(18);
     if (font && text_rect.w > 0 && text_rect.h > 0) {
         SDL_Surface* surf = ttf_util::RenderTextBlendedWrapped(font, message.c_str(), DMStyles::Label().color, text_rect.w);
         if (surf) {
@@ -19741,9 +19741,9 @@ void RoomEditor::render_stack_animation_delete_modal(SDL_Renderer* renderer) con
         dm_draw::DrawBeveledRect(renderer, rect, corner_radius, bevel_depth, bg, highlight, shadow, false,
                                  DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
         dm_draw::DrawRoundedOutline(renderer, rect, corner_radius, 1, style.border);
-        TTF_Font* btn_font = devmode::utils::load_font(style.label.font_size > 0 ? style.label.font_size : 16);
+        TTF_Font* btn_font = ::devmode::utils::load_font(style.label.font_size > 0 ? style.label.font_size : 16);
         if (!btn_font) {
-            btn_font = devmode::utils::load_font(16);
+            btn_font = ::devmode::utils::load_font(16);
         }
         if (!btn_font) {
             return;

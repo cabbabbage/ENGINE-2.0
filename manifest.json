@@ -450,12 +450,29 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -566,7 +583,7 @@
       "oval_anchor_mappings": [],
       "size_settings": {
         "scale_percentage": 63.0,
-        "size_variation": 2.0
+        "size_variation": 4.0
       },
       "start": "default",
       "starting_health": 2000,
@@ -574,17 +591,17 @@
       "tillable": false,
       "tilt_range": {
         "center": 0,
-        "falloff": 3,
+        "falloff": 2,
         "random": true,
-        "span": 8,
+        "span": 6,
         "weights": {
           "center": 0.4906197462692994,
           "edge": 0.2183058230274431,
           "falloff": 0.29107443070325745
         }
       },
-      "tilt_range_max_deg": 8,
-      "tilt_range_min_deg": -8,
+      "tilt_range_max_deg": 6,
+      "tilt_range_min_deg": -6,
       "weight_kg": 953.0,
       "y_position_range": {
         "center": -1,
@@ -18535,8 +18552,8 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            242,
-            85,
+            36,
+            120,
             242,
             255
           ],
@@ -18688,9 +18705,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            242,
-            36,
-            36,
+            52,
+            31,
+            204,
             255
           ],
           "geometry": "Square",
@@ -18736,7 +18753,7 @@
           "display_color": [
             31,
             204,
-            109,
+            105,
             255
           ],
           "geometry": "Square",
@@ -18812,7 +18829,7 @@
         "NewRoom3": {
           "display_color": [
             36,
-            218,
+            212,
             242,
             255
           ],
@@ -18862,9 +18879,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            93,
-            85,
-            242,
+            204,
+            188,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -18950,9 +18967,9 @@
           "camera_tilt_deg": 31.15995216369629,
           "camera_zoom_percent": 0,
           "display_color": [
-            135,
             242,
-            85,
+            36,
+            56,
             255
           ],
           "geometry": "Circle",
@@ -19374,9 +19391,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            171,
-            204,
-            31,
+            106,
+            85,
+            242,
             255
           ],
           "geometry": "Square",

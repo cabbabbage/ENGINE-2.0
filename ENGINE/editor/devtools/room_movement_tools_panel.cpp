@@ -33,8 +33,8 @@ constexpr int kPathListGap = 6;
 
 RoomMovementToolsPanel::RoomMovementToolsPanel() {
     enabled_checkbox_ = std::make_unique<DMCheckbox>("Movement Enabled", false);
-    smooth_checkbox_ = std::make_unique<DMCheckbox>("Smooth interpolation", false);
-    curve_checkbox_ = std::make_unique<DMCheckbox>("Curve interpolation", false);
+    smooth_checkbox_ = std::make_unique<DMCheckbox>("Smooth interpolation", true);
+    curve_checkbox_ = std::make_unique<DMCheckbox>("Curve interpolation", true);
     dx_box_ = std::make_unique<DMTextBox>("DX", "0");
     dy_box_ = std::make_unique<DMTextBox>("DY", "0");
     dz_box_ = std::make_unique<DMTextBox>("DZ", "0");

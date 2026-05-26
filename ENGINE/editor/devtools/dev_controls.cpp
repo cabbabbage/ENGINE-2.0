@@ -1422,6 +1422,15 @@ void DevControls::rebuild_settings_schema() {
 }
 
 void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
+    if (grid_overlay_enabled_ == enabled) {
+        if (update_footer && map_mode_ui_) {
+            if (auto* footer = map_mode_ui_->get_footer_bar()) {
+                footer->set_grid_overlay_enabled(enabled, false);
+            }
+        }
+        other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, enabled);
+        return;
+    }
     grid_overlay_enabled_ = enabled;
     persist_dev_bool(kGridOverlayEnabledKey, enabled);
     if (update_footer && map_mode_ui_) {
@@ -1429,6 +1438,7 @@ void DevControls::sync_grid_overlay_enabled(bool enabled, bool update_footer) {
             footer->set_grid_overlay_enabled(enabled, false);
         }
     }
+    other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, enabled);
 }
 
 void DevControls::sync_debug_flags_from_assets() {

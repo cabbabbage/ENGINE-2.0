@@ -1103,8 +1103,8 @@ private:
         bool had_static_frame_before = false;
         bool static_frame_before = false;
         bool dirty_since_last_flush = false;
-        bool smooth_enabled = false;
-        bool curve_enabled = false;
+        bool smooth_enabled = true;
+        bool curve_enabled = true;
         bool anchor_snap_active = false;
         int original_world_x = 0;
         int original_world_y = 0;

@@ -22936,6 +22936,10 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
     const bool left_down = input_->isDown(Input::LEFT);
     const bool left_pressed = input_->wasPressed(Input::LEFT);
     const bool left_released = input_->wasReleased(Input::LEFT);
+    const SDL_MouseButtonFlags raw_mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
+    const bool physical_left_down = (raw_mouse_buttons & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) != 0;
+    const bool drag_button_down = left_down || physical_left_down;
+    const bool drag_button_released = left_released || !drag_button_down;
     const bool pointer_blocked = is_hitbox_ui_blocking_point(screen_pt.x, screen_pt.y);
     const int locked_box_index = hitbox_edit_.selected_box_index;
     const bool lock_to_selected_box = locked_box_index >= 0;
@@ -23059,16 +23063,16 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
         sync_hitbox_tools_panel();
     }
 
-    if (hitbox_edit_.dragging_corner && left_down) {
+    if (hitbox_edit_.dragging_corner && drag_button_down) {
         drag_hitbox_corner_to_screen(hitbox_edit_.selected_box_index, hitbox_edit_.selected_point_index, screen_pt);
     }
-    if (hitbox_edit_.dragging_box && left_down) {
+    if (hitbox_edit_.dragging_box && drag_button_down) {
         drag_hitbox_box_to_screen(hitbox_edit_.selected_box_index, screen_pt);
     }
-    if (hitbox_edit_.dragging_rotation && left_down) {
+    if (hitbox_edit_.dragging_rotation && drag_button_down) {
         drag_hitbox_rotation_to_screen(hitbox_edit_.selected_box_index, screen_pt);
     }
-    if (hitbox_edit_.dragging_extrusion_handle && left_down) {
+    if (hitbox_edit_.dragging_extrusion_handle && drag_button_down) {
         const int clamped_selected = hitbox_edit_.selected_box_index;
         (void)mutate_hitbox_current_frame(
             [this, screen_pt, clamped_selected](std::vector<animation_update::FrameHitBox>& boxes) {
@@ -23094,7 +23098,7 @@ bool RoomEditor::handle_hitbox_mode_mouse_input(const Input& input) {
             devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
 
-    if (left_released) {
+    if (drag_button_released) {
         hitbox_edit_.dragging_corner = false;
         hitbox_edit_.dragging_box = false;
         hitbox_edit_.dragging_rotation = false;
@@ -23206,6 +23210,10 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
     const bool left_down = input_->isDown(Input::LEFT);
     const bool left_pressed = input_->wasPressed(Input::LEFT);
     const bool left_released = input_->wasReleased(Input::LEFT);
+    const SDL_MouseButtonFlags raw_mouse_buttons = SDL_GetMouseState(nullptr, nullptr);
+    const bool physical_left_down = (raw_mouse_buttons & SDL_BUTTON_MASK(SDL_BUTTON_LEFT)) != 0;
+    const bool drag_button_down = left_down || physical_left_down;
+    const bool drag_button_released = left_released || !drag_button_down;
     const bool pointer_blocked = is_attack_box_ui_blocking_point(screen_pt.x, screen_pt.y);
     const int locked_box_index = attack_box_edit_.selected_box_index;
     const bool lock_to_selected_box = locked_box_index >= 0;
@@ -23327,16 +23335,16 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
         sync_attack_box_tools_panel();
     }
 
-    if (attack_box_edit_.dragging_corner && left_down) {
+    if (attack_box_edit_.dragging_corner && drag_button_down) {
         drag_attack_box_corner_to_screen(attack_box_edit_.selected_box_index, attack_box_edit_.selected_point_index, screen_pt);
     }
-    if (attack_box_edit_.dragging_box && left_down) {
+    if (attack_box_edit_.dragging_box && drag_button_down) {
         drag_attack_box_to_screen(attack_box_edit_.selected_box_index, screen_pt);
     }
-    if (attack_box_edit_.dragging_rotation && left_down) {
+    if (attack_box_edit_.dragging_rotation && drag_button_down) {
         drag_attack_box_rotation_to_screen(attack_box_edit_.selected_box_index, screen_pt);
     }
-    if (attack_box_edit_.dragging_extrusion_handle && left_down) {
+    if (attack_box_edit_.dragging_extrusion_handle && drag_button_down) {
         const int clamped_selected = attack_box_edit_.selected_box_index;
         (void)mutate_attack_box_current_frame(
             [this, screen_pt, clamped_selected](std::vector<animation_update::FrameAttackBox>& boxes) {
@@ -23362,7 +23370,7 @@ bool RoomEditor::handle_attack_box_mode_mouse_input(const Input& input) {
             devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
 
-    if (left_released) {
+    if (drag_button_released) {
         attack_box_edit_.dragging_corner = false;
         attack_box_edit_.dragging_box = false;
         attack_box_edit_.dragging_rotation = false;
@@ -23527,8 +23535,7 @@ bool RoomEditor::handle_movement_mode_mouse_input(const Input& input) {
         SDL_Point anchor = movement_asset_anchor_world();
         SDL_Point world_px{static_cast<int>(std::lround(world.x)), static_cast<int>(std::lround(world.y))};
         if (snap_to_grid_enabled_) {
-            const int resolution = current_grid_resolution();
-            world_px = vibble::grid::snap_world_to_vertex(world_px, resolution);
+            world_px = snap_world_point_to_overlay_grid(world_px, current_grid_resolution());
         }
         const int index = std::clamp(movement_edit_.frame_index, 0, static_cast<int>(movement_edit_.rel_positions.size()) - 1);
         if (index <= 0) {

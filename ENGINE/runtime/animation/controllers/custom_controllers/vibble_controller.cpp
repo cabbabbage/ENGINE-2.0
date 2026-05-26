@@ -213,14 +213,23 @@ void vibble_controller::movement(const Input& input) {
     const float dt = player->frame_delta_seconds_clamped();
     const Assets* owner_assets = player->get_assets();
     const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
+    // Aim system split by mode:
+    // - Dev mode: cursor-projected world target (mouse raycast path) drives facing.
+    // - Normal mode: FPS-like yaw/pitch accumulators drive facing/aim.
+    //
+    // When transitioning into normal mode, re-seed yaw from camera-facing (or last facing)
+    // and reset pitch so we do not reuse stale pre-dev pitch state.
     if (!dev_mode && !normal_mode_active_) {
         if (const std::optional<float> camera_yaw = yaw_degrees_from_camera_forward_horizontal(*player)) {
             yaw_angle_degrees_ = *camera_yaw;
         } else {
             yaw_angle_degrees_ = yaw_degrees_for_animation(last_facing_animation_);
         }
+        pitch_angle_degrees_ = 0.0f;
         normal_mode_active_ = true;
     } else if (dev_mode) {
+        // Leaving normal-mode aim loop; while in dev mode we must not update yaw/pitch
+        // from mouse deltas because dev mode is cursor-world-target driven.
         normal_mode_active_ = false;
     }
     if (!dev_mode) {
@@ -404,6 +413,8 @@ void vibble_controller::on_update(const Input& input) {
         const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
         bool anchor_heading_changed = false;
         if (dev_mode) {
+            // Dev mode uses cursor -> world projection as the sole aim source.
+            // Keep this path isolated from normal-mode yaw/pitch aiming.
             player->clear_directional_pitch_radians();
             if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
                 anchor_heading_changed =
@@ -421,6 +432,7 @@ void vibble_controller::on_update(const Input& input) {
                 }
             }
         } else {
+            // Normal mode uses yaw/pitch accumulators only (no cursor raycast/aim path).
             const float heading_radians =
                 wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
             const float pitch_radians =

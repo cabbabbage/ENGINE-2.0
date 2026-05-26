@@ -19059,7 +19059,7 @@ SDL_Point RoomEditor::movement_asset_anchor_world() const {
     if (movement_mode_active()) {
         return animation_update::detail::bottom_middle_for(
             *movement_edit_.target_asset,
-            SDL_Point{movement_edit_.original_world_x, movement_edit_.original_world_y});
+            SDL_Point{movement_edit_.original_world_x, movement_edit_.original_world_z});
     }
     return animation_update::detail::bottom_middle_for(*movement_edit_.target_asset,
                                                        movement_edit_.target_asset->world_xz_point());
@@ -19070,7 +19070,7 @@ float RoomEditor::movement_base_world_z() const {
         return 0.0f;
     }
     if (movement_mode_active()) {
-        return static_cast<float>(movement_edit_.original_world_z) + movement_edit_.target_asset->world_z_offset();
+        return static_cast<float>(movement_edit_.original_world_y) + movement_edit_.target_asset->world_z_offset();
     }
     return movement_edit_.target_asset->world_z_offset();
 }

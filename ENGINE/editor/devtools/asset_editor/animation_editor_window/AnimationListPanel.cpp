@@ -26,6 +26,9 @@
 #include <nlohmann/json.hpp>
 
 namespace {
+#ifndef ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG
+#define ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG 0
+#endif
 
 constexpr int kRowHeight = 72;
 
@@ -214,6 +217,32 @@ SDL_Color grey_variant_for_level(SDL_Color root, int level) {
     return mix_color(root, greyscale_of(root), t);
 }
 
+AnimationListPanel::ExternalRowsFingerprint fingerprint_for_external_rows(
+    const std::optional<std::vector<AnimationListPanel::ExternalRow>>& rows) {
+    constexpr std::uint64_t kOffset = 1469598103934665603ull;
+    constexpr std::uint64_t kPrime = 1099511628211ull;
+
+    AnimationListPanel::ExternalRowsFingerprint fingerprint{};
+    fingerprint.count = rows ? rows->size() : 0;
+    std::uint64_t hash = kOffset;
+    auto hash_combine = [&](std::uint64_t value) {
+        hash ^= value;
+        hash *= kPrime;
+    };
+
+    if (rows) {
+        for (const auto& row : *rows) {
+            hash_combine(static_cast<std::uint64_t>(std::hash<std::string>{}(row.id)));
+            hash_combine(static_cast<std::uint64_t>(row.level));
+            hash_combine(static_cast<std::uint64_t>(row.selectable ? 1u : 0u));
+            hash_combine(static_cast<std::uint64_t>(row.missing_source ? 1u : 0u));
+        }
+    }
+
+    fingerprint.rolling_hash = hash;
+    return fingerprint;
+}
+
 }
 
 namespace animation_editor {
@@ -225,16 +254,66 @@ AnimationListPanel::AnimationListPanel() {
 void AnimationListPanel::set_document(std::shared_ptr<AnimationDocument> document) {
     document_ = std::move(document);
     external_rows_.reset();
+    last_external_rows_fingerprint_.reset();
     last_document_revision_.reset();
     rebuild_rows();
 }
 
 void AnimationListPanel::set_external_rows(std::optional<std::vector<ExternalRow>> rows) {
-    external_rows_ = std::move(rows);
+    const ExternalRowsFingerprint next_fingerprint = fingerprint_for_external_rows(rows);
+    const bool fingerprint_unchanged = last_external_rows_fingerprint_.has_value() &&
+                                       *last_external_rows_fingerprint_ == next_fingerprint;
+
+    if (rows.has_value()) {
+        if (!external_rows_.has_value()) {
+            external_rows_.emplace();
+        }
+        auto& stored_rows = *external_rows_;
+        stored_rows.clear();
+        stored_rows.reserve(rows->size());
+        for (auto& row : *rows) {
+            stored_rows.push_back(std::move(row));
+        }
+    } else {
+        external_rows_.reset();
+    }
+    last_external_rows_fingerprint_ = next_fingerprint;
+
     layout_dirty_ = true;
     hovered_row_.reset();
     hovered_delete_row_.reset();
     last_document_revision_.reset();
+    if (fingerprint_unchanged) {
+        ++row_update_skipped_count_;
+#if ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG
+        SDL_Log("[AnimationListPanel] external row update skipped (count=%zu hash=%llu skipped=%llu applied=%llu)",
+                next_fingerprint.count,
+                static_cast<unsigned long long>(next_fingerprint.rolling_hash),
+                static_cast<unsigned long long>(row_update_skipped_count_),
+                static_cast<unsigned long long>(row_update_applied_count_));
+#endif
+        if (selected_animation_id_) {
+            auto it = std::find_if(display_rows_.begin(), display_rows_.end(), [&](const DisplayRow& row) {
+                return row.id == *selected_animation_id_;
+            });
+            if (it == display_rows_.end()) {
+                selected_animation_id_.reset();
+                if (on_selection_changed_) {
+                    on_selection_changed_(std::nullopt);
+                }
+            }
+        }
+        return;
+    }
+
+    ++row_update_applied_count_;
+#if ANIMATION_LIST_PANEL_ROW_UPDATE_DEBUG
+    SDL_Log("[AnimationListPanel] external row update applied (count=%zu hash=%llu skipped=%llu applied=%llu)",
+            next_fingerprint.count,
+            static_cast<unsigned long long>(next_fingerprint.rolling_hash),
+            static_cast<unsigned long long>(row_update_skipped_count_),
+            static_cast<unsigned long long>(row_update_applied_count_));
+#endif
     rebuild_rows();
 }
 
@@ -897,7 +976,6 @@ void AnimationListPanel::ensure_layout() const {
     self->layout_rows();
 }
 }
-
 
 
 

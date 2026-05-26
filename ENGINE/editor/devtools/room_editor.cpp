@@ -10963,6 +10963,7 @@ void RoomEditor::sync_stack_animation_list_preview_provider(const AssetInfo* inf
 }
 
 void RoomEditor::sync_stack_animation_list_panel() {
+    static const std::vector<animation_editor::AnimationListPanel::ExternalRow> kEmptyExternalRows;
     ensure_stack_animation_list_panel();
     if (!stack_animation_list_panel_) {
         return;
@@ -10973,7 +10974,7 @@ void RoomEditor::sync_stack_animation_list_panel() {
     stack_animation_list_visible_ = list_visible;
     if (!list_visible) {
         sync_stack_animation_list_preview_provider(nullptr);
-        stack_animation_list_panel_->set_external_rows(std::vector<animation_editor::AnimationListPanel::ExternalRow>{});
+        stack_animation_list_panel_->set_external_rows(kEmptyExternalRows);
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
         return;
     }
@@ -10981,7 +10982,7 @@ void RoomEditor::sync_stack_animation_list_panel() {
     Asset* target = stack_animation_list_target_asset();
     if (!target || !target->info) {
         sync_stack_animation_list_preview_provider(nullptr);
-        stack_animation_list_panel_->set_external_rows(std::vector<animation_editor::AnimationListPanel::ExternalRow>{});
+        stack_animation_list_panel_->set_external_rows(kEmptyExternalRows);
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
         return;
     }

@@ -154,6 +154,9 @@ bool EnemyCombatSteering::approach(Asset& self,
             static_cast<int>(std::lround((to_target_x / dist) * static_cast<double>(step_px) * detour_side_))
         };
         delta = tangent;
+        const int radial_bias = std::max(1, step_px / 3);
+        delta.x += static_cast<int>(std::lround((to_target_x / dist) * static_cast<double>(radial_bias)));
+        delta.y += static_cast<int>(std::lround((to_target_z / dist) * static_cast<double>(radial_bias)));
         if (delta.x == 0 && delta.y == 0) {
             delta = SDL_Point{detour_side_ * step_px, 0};
         }

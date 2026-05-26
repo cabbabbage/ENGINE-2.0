@@ -57,5 +57,12 @@ int main() {
     require(static_cast<int>(round_tripped[1][0].dx) == -5, "round-trip second path dx mismatch");
     require(static_cast<int>(round_tripped[1][1].dy) == 7, "round-trip second path dy mismatch");
 
+    // Multiple movement paths must preserve independent path payloads rather than
+    // collapsing into one shared primary track.
+    require(stored["movement_paths"][0].is_array(), "first movement path should be serialized");
+    require(stored["movement_paths"][1].is_array(), "second movement path should be serialized");
+    require(stored["movement_paths"][0].size() == 2, "first movement path frame count mismatch");
+    require(stored["movement_paths"][1].size() == 2, "second movement path frame count mismatch");
+
     return 0;
 }

@@ -43,8 +43,12 @@ private:
     FacingSelection facing_from_mouse(const Asset& player,
                                       const Input& input,
                                       const std::string& fallback_animation) const;
+    FacingSelection facing_from_yaw(float yaw_angle_degrees,
+                                    const std::string& fallback_animation) const;
     CardinalVector movement_cardinal_vector(int world_x, int world_y) const;
     static CardinalVector cardinal_vector_for_animation(const std::string& animation_id);
+    static float yaw_degrees_for_animation(const std::string& animation_id);
+    static std::string animation_for_yaw_degrees(float yaw_angle_degrees);
     void apply_idle_facing(const std::string& animation_id);
     void start_dash();
     void process_interact(const Input& input, int held_frames);
@@ -87,6 +91,8 @@ private:
     bool sprint_intent_active_ = false;
     bool was_sprint_or_dash_active_ = false;
     std::string last_facing_animation_ = "default";
+    bool normal_mode_active_ = false;
+    float yaw_angle_degrees_ = 0.0f;
     std::optional<ChildAsset> gun_child_;
     std::optional<ChildAsset> carried_child_;
     Asset* carried_world_asset_ = nullptr;

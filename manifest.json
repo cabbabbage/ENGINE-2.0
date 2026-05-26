@@ -18640,8 +18640,8 @@
           "camera_zoom_percent": 3,
           "display_color": [
             242,
-            36,
             242,
+            85,
             255
           ],
           "geometry": "Square",
@@ -18746,8 +18746,8 @@
         },
         "NewRoom": {
           "display_color": [
-            125,
             31,
+            32,
             204,
             255
           ],
@@ -18792,9 +18792,9 @@
         },
         "NewRoom1": {
           "display_color": [
+            138,
             242,
-            85,
-            140,
+            36,
             255
           ],
           "geometry": "Square",
@@ -18838,9 +18838,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            137,
-            204,
             71,
+            136,
+            204,
             255
           ],
           "geometry": "Square",
@@ -18915,9 +18915,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            36,
-            54,
-            242,
+            204,
+            31,
+            189,
             255
           ],
           "geometry": "Square",
@@ -18967,7 +18967,7 @@
           "camera_zoom_percent": 40,
           "display_color": [
             242,
-            152,
+            159,
             85,
             255
           ],
@@ -19054,9 +19054,9 @@
           "camera_tilt_deg": 30.68971061706543,
           "camera_zoom_percent": 0,
           "display_color": [
-            174,
-            85,
-            242,
+            115,
+            31,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -19478,9 +19478,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            204,
-            31,
-            177,
+            242,
+            85,
+            145,
             255
           ],
           "geometry": "Square",

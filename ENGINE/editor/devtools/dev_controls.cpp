@@ -4027,38 +4027,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         room_editor_->render_overlays(renderer);
 
     }
-    if (renderer && boundary_assets_modal_ && boundary_assets_modal_->visible() && assets_) {
-        const WarpedScreenGrid& view_cam = assets_->getView();
-        const world::GridBounds render_bounds = assets_->screen_world_rect();
-        const auto samples = assets_->sample_live_dynamic_fog_boundary(render_bounds);
-        std::vector<SDL_FPoint> points;
-        points.reserve(samples.size());
-        for (const auto& sample : samples) {
-            SDL_FPoint p{};
-            if (try_floor_warped_screen_position(view_cam, SDL_Point{sample.world_x, sample.world_z}, p)) {
-                points.push_back(p);
-            }
-        }
-        if (points.size() >= 2) {
-            SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
-            SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
-            Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
-            SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 255, 32, 32, 235);
-            for (int t = -1; t <= 1; ++t) {
-                for (std::size_t i = 1; i < points.size(); ++i) {
-                    SDL_RenderLine(renderer,
-                                   static_cast<int>(std::lround(points[i - 1].x)),
-                                   static_cast<int>(std::lround(points[i - 1].y)) + t,
-                                   static_cast<int>(std::lround(points[i].x)),
-                                   static_cast<int>(std::lround(points[i].y)) + t);
-                }
-            }
-            SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
-            SDL_SetRenderDrawBlendMode(renderer, prev_mode);
-        }
-    }
     if (renderer && camera_panel_ && camera_panel_->is_visible() && assets_) {
         const WarpedScreenGrid& cam = assets_->getView();
         SDL_FPoint center_world_f = cam.get_view_center_f();

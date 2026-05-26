@@ -75,9 +75,6 @@ float fog_opacity_multiplier(const Asset& asset) {
     if (!asset.info || !asset.info->has_tag("fog")) {
         return 1.0f;
     }
-    if (asset.spawn_id.rfind("live_dynamic:fog_boundary:", 0) == 0) {
-        return 1.0f;
-    }
 
     constexpr int kFogDistanceMin = 0;
     constexpr int kFogDistanceMax = 20000;

@@ -925,7 +925,6 @@ private:
     static constexpr int kRenderRadiusDefault = 128;
     static constexpr int kMaxSpawnFromRoomDefault = 128;
     static constexpr int kFogNearDistanceDefault = 64;
-    static constexpr int kFogFarDistanceDefault = 256;
 
     struct GroupWidgets {
         std::string spawn_id{};
@@ -1045,26 +1044,6 @@ private:
         return std::clamp(value, kRadiusMin, kFogDistanceMax);
     }
 
-    int current_fog_far_distance() const {
-        if (!section_ || !section_->is_object()) {
-            return kFogFarDistanceDefault;
-        }
-        auto it = section_->find("fog_far_distance_px");
-        if (it == section_->end() || !it->is_number()) {
-            return kFogFarDistanceDefault;
-        }
-        int value = kFogFarDistanceDefault;
-        try {
-            if (it->is_number_integer()) {
-                value = it->get<int>();
-            } else {
-                value = static_cast<int>(std::lround(it->get<double>()));
-            }
-        } catch (...) {
-            value = kFogFarDistanceDefault;
-        }
-        return std::clamp(value, current_fog_near_distance(), kFogDistanceMax);
-    }
 
     void set_render_radius(int value) {
         if (!section_) return;
@@ -1098,21 +1077,7 @@ private:
             *section_ = json::object();
         }
         const int clamped = std::clamp(value, kRadiusMin, kFogDistanceMax);
-        const int far = std::max(clamped, current_fog_far_distance());
         (*section_)["fog_near_distance_px"] = clamped;
-        (*section_)["fog_far_distance_px"] = far;
-        notify_save(false);
-    }
-
-    void set_fog_far_distance(int value) {
-        if (!section_) return;
-        if (!section_->is_object()) {
-            *section_ = json::object();
-        }
-        const int near = current_fog_near_distance();
-        const int clamped = std::clamp(value, near, kFogDistanceMax);
-        (*section_)["fog_near_distance_px"] = near;
-        (*section_)["fog_far_distance_px"] = clamped;
         notify_save(false);
     }
 
@@ -1162,7 +1127,6 @@ private:
         const int render_radius = current_render_radius();
         const int max_spawn_from_room = current_max_spawn_from_room();
         const int fog_near_distance = current_fog_near_distance();
-        const int fog_far_distance = current_fog_far_distance();
         if (!section_->contains("render_radius") ||
             !(*section_)["render_radius"].is_number_integer() ||
             (*section_)["render_radius"].get<int>() != render_radius) {
@@ -1181,12 +1145,7 @@ private:
             (*section_)["fog_near_distance_px"] = fog_near_distance;
             changed = true;
         }
-        if (!section_->contains("fog_far_distance_px") ||
-            !(*section_)["fog_far_distance_px"].is_number_integer() ||
-            (*section_)["fog_far_distance_px"].get<int>() != fog_far_distance) {
-            (*section_)["fog_far_distance_px"] = fog_far_distance;
-            changed = true;
-        }
+        section_->erase("fog_far_distance_px");
         auto& selectors = ensure_candidate_selectors();
         if (!selectors.is_array()) {
             selectors = json::array();
@@ -1277,7 +1236,6 @@ private:
         const int render_radius = current_render_radius();
         const int max_spawn_from_room = current_max_spawn_from_room();
         const int fog_near_distance = current_fog_near_distance();
-        const int fog_far_distance = current_fog_far_distance();
         if (!render_radius_slider_) {
             render_radius_slider_ = std::make_unique<DMSlider>(
                 "Render Radius (px)",
@@ -1314,18 +1272,6 @@ private:
             fog_near_distance_widget_ =
                 std::make_unique<SliderWidget>(fog_near_distance_slider_.get());
         }
-        if (!fog_far_distance_slider_) {
-            fog_far_distance_slider_ = std::make_unique<DMSlider>(
-                "Fog Far (px)",
-                kRadiusMin,
-                kFogDistanceMax,
-                fog_far_distance);
-            fog_far_distance_slider_->set_on_value_changed([this](int value) {
-                this->set_fog_far_distance(value);
-            });
-            fog_far_distance_widget_ =
-                std::make_unique<SliderWidget>(fog_far_distance_slider_.get());
-        }
         if (render_radius_slider_) {
             render_radius_slider_->set_value(render_radius);
         }
@@ -1335,9 +1281,6 @@ private:
         if (fog_near_distance_slider_) {
             fog_near_distance_slider_->set_value(fog_near_distance);
         }
-        if (fog_far_distance_slider_) {
-            fog_far_distance_slider_->set_value(fog_far_distance);
-        }
         if (render_radius_widget_) {
             rows.push_back({render_radius_widget_.get()});
         }
@@ -1346,9 +1289,6 @@ private:
         }
         if (fog_near_distance_widget_) {
             rows.push_back({fog_near_distance_widget_.get()});
-        }
-        if (fog_far_distance_widget_) {
-            rows.push_back({fog_far_distance_widget_.get()});
         }
 
         auto search_extras = std::make_shared<std::vector<SearchAssets::Result>>(build_candidate_search_extra_results());
@@ -1695,8 +1635,6 @@ private:
     std::unique_ptr<SliderWidget> max_spawn_from_room_widget_{};
     std::unique_ptr<DMSlider> fog_near_distance_slider_{};
     std::unique_ptr<SliderWidget> fog_near_distance_widget_{};
-    std::unique_ptr<DMSlider> fog_far_distance_slider_{};
-    std::unique_ptr<SliderWidget> fog_far_distance_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
     int pie_callback_depth_ = 0;
     bool pending_rebuild_ = false;

@@ -52,61 +52,22 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
     return hash;
 }
 
-int read_int_setting(const nlohmann::json& object, const char* key, int fallback, int min_value, int max_value) {
-    if (!object.is_object()) {
-        return std::clamp(fallback, min_value, max_value);
-    }
-    auto it = object.find(key);
-    if (it == object.end() || !it->is_number()) {
-        return std::clamp(fallback, min_value, max_value);
-    }
-    try {
-        const double raw = it->get<double>();
-        if (!std::isfinite(raw)) {
-            return std::clamp(fallback, min_value, max_value);
-        }
-        return std::clamp(static_cast<int>(std::llround(raw)), min_value, max_value);
-    } catch (...) {
-        return std::clamp(fallback, min_value, max_value);
-    }
-}
-
 float fog_opacity_multiplier(const Asset& asset) {
     if (!asset.info || !asset.info->has_tag("fog")) {
         return 1.0f;
     }
 
-    constexpr int kFogDistanceMin = 0;
-    constexpr int kFogDistanceMax = 20000;
-    constexpr int kDefaultFogNearDistance = 64;
-    constexpr int kDefaultFogFarDistance = 256;
+    constexpr double kMinEfficiencyDepth = 1.0;
 
-    int near_distance = kDefaultFogNearDistance;
-    int far_distance = kDefaultFogFarDistance;
     if (Assets* assets = asset.get_assets()) {
-        const nlohmann::json& map = assets->map_info_json();
-        if (map.is_object()) {
-            auto live_it = map.find("live_dynamic_spawns");
-            if (live_it != map.end() && live_it->is_object()) {
-                near_distance = read_int_setting(*live_it,
-                                                 "fog_near_distance_px",
-                                                 kDefaultFogNearDistance,
-                                                 kFogDistanceMin,
-                                                 kFogDistanceMax);
-                far_distance = read_int_setting(*live_it,
-                                                "fog_far_distance_px",
-                                                kDefaultFogFarDistance,
-                                                near_distance,
-                                                kFogDistanceMax);
-            }
-        }
-
         const SDL_Point camera_center = assets->getView().get_screen_center();
+        const auto& settings = assets->getView().get_settings();
+        const double full_opacity_depth =
+            std::max(kMinEfficiencyDepth, static_cast<double>(settings.dynamic_renderer_depth_efficiency_depth));
         const double dx = static_cast<double>(asset.world_x()) - static_cast<double>(camera_center.x);
         const double dz = static_cast<double>(asset.world_z()) - static_cast<double>(camera_center.y);
         const double distance = std::hypot(dx, dz);
-        const double span = std::max(1.0, static_cast<double>(far_distance - near_distance));
-        const double t = std::clamp((distance - static_cast<double>(near_distance)) / span, 0.0, 1.0);
+        const double t = std::clamp(distance / full_opacity_depth, 0.0, 1.0);
         return static_cast<float>(t);
     }
 

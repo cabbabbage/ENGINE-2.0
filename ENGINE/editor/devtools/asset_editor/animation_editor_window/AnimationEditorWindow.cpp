@@ -1263,9 +1263,8 @@ void AnimationEditorWindow::configure_list_panel() {
     list_panel_->set_on_context_menu([this](const std::optional<std::string>& animation_id, const SDL_Point& location) {
         this->handle_list_context_menu(animation_id, location);
     });
-    list_panel_->set_on_delete_animation([this](const std::string& animation_id) {
-        this->delete_animation_with_confirmation(animation_id);
-    });
+    list_panel_->set_show_delete_button(false);
+    list_panel_->set_on_delete_animation({});
     list_panel_->set_selected_animation_id(selected_animation_id_);
 }
 
@@ -1315,6 +1314,9 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_audio_importer(audio_importer_);
     inspector_panel_->set_audio_file_picker([this]() { return this->pick_audio_file(); });
     inspector_panel_->set_manifest_store(manifest_store_);
+    inspector_panel_->set_delete_animation_callback([this](const std::string& animation_id) {
+        this->delete_animation_immediate(animation_id);
+    });
     refresh_inspector_animation_callback();
     if (selected_animation_id_) {
         inspector_panel_->set_animation_id(*selected_animation_id_);
@@ -1412,10 +1414,6 @@ void AnimationEditorWindow::handle_list_context_menu(const std::optional<std::st
         options.push_back(AnimationListContextMenu::Option{
             "Duplicate",
             [this, row_id]() { this->duplicate_animation(row_id); },
-        });
-        options.push_back(AnimationListContextMenu::Option{
-            "Delete",
-            [this, row_id]() { this->delete_animation_with_confirmation(row_id); },
         });
     }
 
@@ -1811,46 +1809,48 @@ void AnimationEditorWindow::duplicate_animation(const std::string& animation_id)
     }
 }
 
-void AnimationEditorWindow::delete_animation_with_confirmation(const std::string& animation_id) {
+void AnimationEditorWindow::delete_animation_immediate(const std::string& animation_id) {
     if (!document_) return;
-
-    std::string message = "Delete animation '" + animation_id + "'? This cannot be undone.";
-    bool confirmed = false;
-    if (choice_prompt_override_) {
-        auto result = choice_prompt_override_("Delete Animation", message, {0, 1});
-        confirmed = result && *result == 1;
-    } else {
-        confirmed = devmode::dialogs::confirm(parent_window_, "Delete Animation", message, "Delete", "Cancel", true);
-    }
-    if (!confirmed) {
-        set_status_message("Deletion cancelled.", 120);
-        if (list_context_menu_) {
-            list_context_menu_->close();
+    std::unordered_set<std::string> pending{animation_id};
+    std::vector<std::string> deletion_order;
+    while (!pending.empty()) {
+        const std::string current = *pending.begin();
+        pending.erase(pending.begin());
+        deletion_order.push_back(current);
+        for (const auto& id : document_->animation_ids()) {
+            if (std::find(deletion_order.begin(), deletion_order.end(), id) != deletion_order.end()) continue;
+            auto payload_dump = document_->animation_payload(id);
+            if (!payload_dump) continue;
+            nlohmann::json payload = nlohmann::json::parse(*payload_dump, nullptr, false);
+            if (!payload.is_object()) continue;
+            const auto source_it = payload.find("source");
+            if (source_it == payload.end() || !source_it->is_object()) continue;
+            if (source_it->value("kind", std::string{}) != "animation") continue;
+            const std::string source_name = source_it->value("name", std::string{});
+            if (source_name == current) pending.insert(id);
         }
-        return;
     }
-
-    std::string source_delete_error;
-    const bool removed_source_folder = remove_animation_source_folder(animation_id, source_delete_error);
-
-    if (!removed_source_folder && !source_delete_error.empty()) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AnimationEditor] %s",
-                    source_delete_error.c_str());
+    bool removed_all_sources = true;
+    for (const auto& id : deletion_order) {
+        std::string source_delete_error;
+        const bool removed_source_folder = remove_animation_source_folder(id, source_delete_error);
+        removed_all_sources = removed_all_sources && removed_source_folder;
+        if (!removed_source_folder && !source_delete_error.empty()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AnimationEditor] %s", source_delete_error.c_str());
+        }
+        document_->delete_animation(id);
+        preview_provider_->invalidate(id);
     }
-
-    document_->delete_animation(animation_id);
     const bool saved_delete = document_->save_to_file_checked(true);
-    preview_provider_->invalidate(animation_id);
     if (auto info_ptr = info_.lock()) {
         devmode::refresh_loaded_animation_instances(assets_, info_ptr);
     }
     if (!saved_delete) {
-        set_status_message("Deleted animation '" + animation_id + "' but save failed.", 300);
-    } else if (!removed_source_folder) {
-        set_status_message("Deleted animation '" + animation_id + "' (some files could not be removed).", 300);
+        set_status_message("Deleted animation(s) from '" + animation_id + "' but save failed.", 300);
+    } else if (!removed_all_sources) {
+        set_status_message("Deleted animation(s) from '" + animation_id + "' (some files could not be removed).", 300);
     } else {
-        set_status_message("Deleted animation '" + animation_id + "'.", 240);
+        set_status_message("Deleted animation(s) from '" + animation_id + "'.", 240);
     }
     if (list_context_menu_) {
         list_context_menu_->close();

@@ -168,7 +168,7 @@ class AnimationEditorWindow {
     void prompt_rename_animation(const std::string& animation_id);
     void set_animation_as_start(const std::string& animation_id);
     void duplicate_animation(const std::string& animation_id);
-    void delete_animation_with_confirmation(const std::string& animation_id);
+    void delete_animation_immediate(const std::string& animation_id);
     void render_background(SDL_Renderer* renderer) const;
     void render_status(SDL_Renderer* renderer) const;
     void render_debug_overlay(SDL_Renderer* renderer) const;

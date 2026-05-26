@@ -36,11 +36,11 @@
         "grid": {
             "cell_size_px": 32.0,
             "overlay": {
-                "enabled": true,
+                "enabled": false,
                 "r": 5.0
             },
             "snap": {
-                "enabled": true
+                "enabled": false
             }
         },
         "impass_floor": {

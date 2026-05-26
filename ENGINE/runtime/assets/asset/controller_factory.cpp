@@ -23,6 +23,8 @@
 
 #include "animation/controllers/custom_controllers/fly_controller.hpp"
 #include "animation/controllers/custom_controllers/chest_opening_controller.hpp"
+#include "animation/controllers/custom_controllers/spider_egg_controller.hpp"
+#include "animation/controllers/custom_controllers/small_spider_controller.hpp"
 // <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>
 
 namespace {
@@ -79,6 +81,12 @@ const std::unordered_map<std::string, ControllerFactoryFn>& controller_registry(
                 {"vibble_controller", [](Asset* asset) { return std::make_unique<vibble_controller>(asset); }},
                 // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
                 // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
+        { "small_spider_controller", [](Asset* asset) {
+                return std::make_unique<small_spider_controller>(asset);
+        } },
+        { "spider_egg_controller", [](Asset* asset) {
+                return std::make_unique<spider_egg_controller>(asset);
+        } },
         { "fly_controller", [](Asset* asset) {
                 return std::make_unique<fly_controller>(asset);
         } },

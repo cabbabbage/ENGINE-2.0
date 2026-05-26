@@ -9558,6 +9558,1117 @@
       "movement_enabled": false,
       "start": "default"
     },
+    "small_spider": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "attack_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 20,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 20,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 5.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0,
+              0.0
+            ]
+          ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        },
+        "left": {
+          "attack_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement": [
+            [
+              0,
+              0,
+              0,
+              0.0
+            ],
+            [
+              -6,
+              0,
+              6,
+              0.0
+            ],
+            [
+              -6,
+              0,
+              6,
+              0.0
+            ],
+            [
+              -6,
+              0,
+              6,
+              0.0
+            ],
+            [
+              -6,
+              0,
+              6,
+              0.0
+            ],
+            [
+              -6,
+              0,
+              6,
+              0.0
+            ]
+          ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                0,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                -6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                -6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                -6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                -6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                -6,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -6,
+                0,
+                6,
+                0.0
+              ]
+            ]
+          ],
+          "movement_total": {
+            "dr": 0.0,
+            "dx": -30,
+            "dy": 0,
+            "dz": 30.0
+          },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "left"
+          },
+          "tags": []
+        },
+        "right": {
+          "attack_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 865,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 803
+                  },
+                  {
+                    "texture_x": 1073,
+                    "texture_y": 998
+                  },
+                  {
+                    "texture_x": 865,
+                    "texture_y": 998
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 1,
+                "extrusion_forward": 1,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 0.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 865,
+                  "y": 803
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 195,
+                  "w": 208
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
+          "derived_modifiers": {
+            "reverse": false
+          },
+          "inherit_data": true,
+          "invert_frames_horizontal": true,
+          "invert_frames_vertical": false,
+          "invert_x": true,
+          "invert_y": false,
+          "invert_z": false,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/small_spider",
+      "asset_name": "small_spider",
+      "asset_type": "Object",
+      "attack_box_enabled": true,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": true,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 22.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
+    },
     "spider": {
       "anchor_point_child_candidates": [],
       "animations": {
@@ -10237,33 +11348,11 @@
                 0,
                 0.0,
                 true
-              ],
+              ]
+            ],
+            [
               [
-                -26,
                 0,
-                0,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -26,
                 0,
                 0,
                 0.0
@@ -10274,83 +11363,15 @@
                 0,
                 0,
                 0,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                13,
-                0.0
-              ]
-            ],
-            [
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -26,
-                0,
-                -13,
                 0.0
               ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -130,
+            "dx": 0,
             "dy": 0,
-            "dz": -65.0
+            "dz": 0
           },
           "movement_totals": [
             {
@@ -10373,7 +11394,7 @@
             }
           ],
           "number_of_frames": 1,
-          "on_end": "default",
+          "on_end": "reverse",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -11135,36 +12156,6 @@
                 0,
                 0.0,
                 true
-              ],
-              [
-                -13,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                0,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                0,
-                0.0
               ]
             ],
             [
@@ -11174,36 +12165,6 @@
                 0,
                 0.0,
                 true
-              ],
-              [
-                -13,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                -13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                -13,
-                0.0
               ]
             ],
             [
@@ -11212,47 +12173,37 @@
                 0,
                 0,
                 0.0
-              ],
-              [
-                -13,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                13,
-                0.0
-              ],
-              [
-                -13,
-                0,
-                13,
-                0.0
               ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -65,
+            "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
-          "on_end": "default",
+          "on_end": "loop",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -11590,6 +12541,740 @@
           "center": 0.36,
           "edge": 0.28,
           "falloff": 0.36
+        }
+      }
+    },
+    "spider_egg": {
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "spider_child",
+          "candidates": {
+            "candidates": []
+          },
+          "orphan_on_end": true
+        }
+      ],
+      "animations": {
+        "crack": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ],
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ]
+          ],
+          "attack_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 784,
+                    "texture_y": 609
+                  },
+                  {
+                    "texture_x": 878,
+                    "texture_y": 609
+                  },
+                  {
+                    "texture_x": 878,
+                    "texture_y": 657
+                  },
+                  {
+                    "texture_x": 784,
+                    "texture_y": 657
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 5,
+                "extrusion_forward": 15,
+                "frame_range": {
+                  "end": 6,
+                  "start": 6
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 10.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 784,
+                  "y": 609
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 48,
+                  "w": 94
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 617,
+                    "texture_y": 784
+                  },
+                  {
+                    "texture_x": 701,
+                    "texture_y": 741
+                  },
+                  {
+                    "texture_x": 723,
+                    "texture_y": 784
+                  },
+                  {
+                    "texture_x": 639,
+                    "texture_y": 827
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 5,
+                "extrusion_forward": 15,
+                "frame_range": {
+                  "end": 6,
+                  "start": 6
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 10.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 623,
+                  "y": 760
+                },
+                "rotation_degrees": -27.54395294189453,
+                "size": {
+                  "h": 48,
+                  "w": 94
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 538,
+                    "texture_y": 725
+                  },
+                  {
+                    "texture_x": 622,
+                    "texture_y": 725
+                  },
+                  {
+                    "texture_x": 622,
+                    "texture_y": 777
+                  },
+                  {
+                    "texture_x": 538,
+                    "texture_y": 777
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 16,
+                "extrusion_forward": 8,
+                "frame_range": {
+                  "end": 6,
+                  "start": 6
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 10.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 538,
+                  "y": 725
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 52,
+                  "w": 84
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 257,
+                    "texture_y": 655
+                  },
+                  {
+                    "texture_x": 315,
+                    "texture_y": 655
+                  },
+                  {
+                    "texture_x": 315,
+                    "texture_y": 709
+                  },
+                  {
+                    "texture_x": 257,
+                    "texture_y": 709
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 16,
+                "extrusion_forward": 8,
+                "frame_range": {
+                  "end": 6,
+                  "start": 6
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 10.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 257,
+                  "y": 655
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 54,
+                  "w": 58
+                },
+                "type": "attack_box"
+              }
+            ],
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 134,
+                    "texture_y": 857
+                  },
+                  {
+                    "texture_x": 217,
+                    "texture_y": 857
+                  },
+                  {
+                    "texture_x": 217,
+                    "texture_y": 912
+                  },
+                  {
+                    "texture_x": 134,
+                    "texture_y": 912
+                  }
+                ],
+                "damage_amount": 0,
+                "enabled": true,
+                "extrusion_backward": 19,
+                "extrusion_forward": 11,
+                "frame_range": {
+                  "end": 6,
+                  "start": 6
+                },
+                "id": "attack_box_id",
+                "meta": {
+                  "attack_payload": {
+                    "animation_trigger": "",
+                    "critical_hit_chance": 0.0,
+                    "damage_amount": 0,
+                    "damage_type": "physical",
+                    "element_type": "none",
+                    "hitback_distance": 10.0,
+                    "hitback_enabled": true,
+                    "payload_id": "attack_box_id",
+                    "recharge_random_weight": 1.0,
+                    "recharge_seconds": 0.0,
+                    "sound_effect": "",
+                    "status_effects": [],
+                    "stun_frames": 0
+                  }
+                },
+                "name": "attack_box",
+                "payload_id": "attack_box_id",
+                "position": {
+                  "x": 134,
+                  "y": 857
+                },
+                "rotation_degrees": 0.0,
+                "size": {
+                  "h": 55,
+                  "w": 83
+                },
+                "type": "attack_box"
+              }
+            ]
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 11,
+          "on_end": "end",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "crack"
+          },
+          "tags": [
+            "break"
+          ]
+        },
+        "default": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": 0.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 384,
+                "texture_y": 431
+              }
+            ]
+          ],
+          "attack_boxes": [
+            []
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            []
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        },
+        "end": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": 30.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "spider_child",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 915,
+                "texture_y": 905
+              }
+            ]
+          ],
+          "attack_boxes": [
+            []
+          ],
+          "box_schema_version": 1,
+          "hit_boxes": [
+            [
+              {
+                "anchor_link": "",
+                "corners": [
+                  {
+                    "texture_x": 812,
+                    "texture_y": 708
+                  },
+                  {
+                    "texture_x": 1046,
+                    "texture_y": 706
+                  },
+                  {
+                    "texture_x": 1048,
+                    "texture_y": 984
+                  },
+                  {
+                    "texture_x": 814,
+                    "texture_y": 986
+                  }
+                ],
+                "enabled": true,
+                "extrusion_backward": 30,
+                "extrusion_forward": 47,
+                "frame_range": {
+                  "end": 0,
+                  "start": 0
+                },
+                "id": "hit_box_id",
+                "name": "hit_box",
+                "position": {
+                  "x": 813,
+                  "y": 707
+                },
+                "rotation_degrees": -0.35654449462890625,
+                "size": {
+                  "h": 278,
+                  "w": 234
+                },
+                "type": "hitbox"
+              }
+            ]
+          ],
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "end"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/spider_egg",
+      "asset_name": "spider_egg",
+      "asset_type": "object",
+      "attack_box_enabled": true,
+      "bounce_amount": 0,
+      "can_invert": true,
+      "floor_boxes": [
+        {
+          "candidate": {
+            "candidates": [
+              {
+                "chance": 2,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "spider_egg"
+              }
+            ],
+            "grid_resolution": 6
+          },
+          "depth": 143.0,
+          "enabled": true,
+          "id": "floor_box",
+          "name": "Floor Box",
+          "position_x": -2.5,
+          "position_z": -6.5,
+          "tags": [],
+          "width": 183.0
+        }
+      ],
+      "floor_boxes_enabled": true,
+      "hitbox_enabled": true,
+      "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "neighbor_search_distance": 500,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 28.0,
+        "size_variation": 8.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": true,
+        "span": 11,
+        "weights": {
+          "center": 0.3333333333333333,
+          "edge": 0.3333333333333333,
+          "falloff": 0.3333333333333333
+        }
+      },
+      "tilt_range_max_deg": 11,
+      "tilt_range_min_deg": -11,
+      "update_radius": 0,
+      "weight_kg": 39.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
         }
       }
     },
@@ -17935,7 +19620,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 3260.0,
+          "bounding_extent": 10341.5,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -17953,12 +19638,12 @@
           ]
         },
         {
-          "bounding_extent": 10972.86771997184,
+          "bounding_extent": 10341.5,
           "level": 1,
           "max_rooms": 3,
           "min_rooms": 1,
           "name": "layer_1",
-          "ring_radius": 19233.0,
+          "ring_radius": 21483.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -17977,102 +19662,18 @@
               "value": "Mossy_Circle"
             }
           ]
-        },
-        {
-          "bounding_extent": 3935.686090124567,
-          "level": 2,
-          "max_rooms": 3,
-          "min_rooms": 0,
-          "name": "layer_2",
-          "ring_radius": 39142.0,
-          "rooms": [
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Old_Stump_Yard",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Old_Stump_Yard"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Random_Enemy_Easy",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Random_Enemy_Easy"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Mossy_Circle",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Mossy_Circle"
-            }
-          ]
-        },
-        {
-          "bounding_extent": 10972.86771997184,
-          "level": 3,
-          "max_rooms": 5,
-          "min_rooms": 0,
-          "name": "layer_3",
-          "ring_radius": 59051.0,
-          "rooms": [
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Mossy_Circle",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Mossy_Circle"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Foggy_Glade",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Foggy_Glade"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Thornstep_Croft",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Thornstep_Croft"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "NewRoom2",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "NewRoom2"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "Loot_Room",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Loot_Room"
-            }
-          ]
         }
       ],
       "map_layers_settings": {
-        "min_edge_distance": 5000
+        "min_edge_distance": 800
       },
       "map_name": "forrest",
       "rooms_data": {
         "Bluebloom_Nook": {
           "display_color": [
-            36,
-            38,
+            85,
             242,
+            241,
             255
           ],
           "geometry": "Circle",
@@ -18216,9 +19817,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            242,
-            102,
-            85,
+            123,
+            31,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -18362,8 +19963,8 @@
         },
         "Frog_Basin": {
           "display_color": [
+            235,
             242,
-            241,
             36,
             255
           ],
@@ -18505,9 +20106,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
+            242,
             36,
             242,
-            79,
             255
           ],
           "geometry": "Circle",
@@ -18653,14 +20254,14 @@
           "camera_tilt_deg": 51.847171783447266,
           "camera_zoom_percent": 100,
           "display_color": [
-            140,
+            85,
             242,
-            36,
+            148,
             255
           ],
           "geometry": "Square",
           "height": {
-            "center": 12110,
+            "center": 7620,
             "falloff": 0,
             "random": false,
             "span": 0,
@@ -18693,53 +20294,23 @@
                 }
               ],
               "display_name": "chest_opening",
-              "dx": 0,
-              "dz": 4,
+              "dx": 100,
+              "dz": 732,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": true,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3000,
-              "origional_width": 3000,
+              "origional_height": 6568,
+              "origional_width": 6296,
               "position": "Exact",
               "priority": 0,
               "quantity": 1,
-              "resolution": 1,
+              "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-14355a24bb8c"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "frog"
-                }
-              ],
-              "display_name": "frog",
-              "dx": -2152,
-              "dz": 3524,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 15616,
-              "origional_width": 17640,
-              "position": "Exact",
-              "priority": 1,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-e88349fed95a"
             },
             {
               "candidates": [
@@ -18764,12 +20335,100 @@
               "origional_height": 13504,
               "origional_width": 23464,
               "position": "Exact",
-              "priority": 2,
+              "priority": 1,
               "quantity": 1,
               "resolution": 8,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-34b42c8175f4"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider_egg"
+                }
+              ],
+              "display_name": "spider_egg",
+              "dx": -1267,
+              "dz": 1047,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 30,
+              "min_number": 20,
+              "origional_height": 9656,
+              "origional_width": 9216,
+              "position": "Random",
+              "priority": 2,
+              "resolution": 5,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f5d48972d374"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "small_spider"
+                }
+              ],
+              "display_name": "small_spider",
+              "dx": -2232,
+              "dz": -32,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 8928,
+              "origional_width": 9440,
+              "position": "Exact",
+              "priority": 3,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-130086303671"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider_egg"
+                }
+              ],
+              "display_name": "spider_egg (Copy)",
+              "dx": -1267,
+              "dz": 1047,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 30,
+              "min_number": 20,
+              "origional_height": 9656,
+              "origional_width": 9216,
+              "position": "Random",
+              "priority": 4,
+              "resolution": 5,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-458717dabe1f"
             }
           ],
           "trail_connection_sector": {
@@ -18777,7 +20436,7 @@
             "width_percent": 79
           },
           "width": {
-            "center": 18302,
+            "center": 7559,
             "falloff": 0,
             "random": false,
             "span": 0,
@@ -18792,7 +20451,7 @@
           "display_color": [
             204,
             31,
-            92,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -18941,9 +20600,9 @@
           "camera_tilt_deg": 56.02865982055664,
           "camera_zoom_percent": 0,
           "display_color": [
-            31,
+            84,
             204,
-            31,
+            71,
             255
           ],
           "geometry": "Circle",
@@ -19124,6 +20783,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-78f48cb4d181"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -996,
+              "dz": 864,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12688,
+              "origional_width": 19768,
+              "position": "Exact",
+              "priority": 5,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-fe5aa68f26e4"
             }
           ],
           "trail_connection_sector": {
@@ -19145,8 +20834,8 @@
         "NewRoom": {
           "display_color": [
             242,
-            36,
-            204,
+            124,
+            85,
             255
           ],
           "geometry": "Square",
@@ -19190,9 +20879,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            242,
-            134,
-            36,
+            71,
+            136,
+            204,
             255
           ],
           "geometry": "Square",
@@ -19236,9 +20925,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            85,
+            207,
             242,
-            111,
+            85,
             255
           ],
           "geometry": "Square",
@@ -19313,9 +21002,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            31,
-            84,
-            204,
+            36,
+            242,
+            76,
             255
           ],
           "geometry": "Square",
@@ -19359,9 +21048,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            85,
-            242,
-            233,
+            181,
+            34,
+            224,
             255
           ],
           "geometry": "Square",
@@ -19406,9 +21095,9 @@
         },
         "Old_Stump_Yard": {
           "display_color": [
-            90,
             36,
             242,
+            216,
             255
           ],
           "geometry": "Square",
@@ -19615,9 +21304,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            151,
-            204,
-            71,
+            242,
+            36,
+            174,
             255
           ],
           "geometry": "Circle",
@@ -19698,9 +21387,9 @@
         },
         "Spider_Hollow": {
           "display_color": [
-            204,
-            145,
-            71,
+            79,
+            191,
+            224,
             255
           ],
           "geometry": "Square",
@@ -19844,9 +21533,9 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            36,
-            133,
+            71,
             242,
+            36,
             255
           ],
           "geometry": "Square",
@@ -19990,9 +21679,9 @@
         },
         "Whispering_Ring": {
           "display_color": [
+            219,
+            85,
             242,
-            36,
-            56,
             255
           ],
           "geometry": "Circle",
@@ -20142,8 +21831,8 @@
           "camera_zoom_percent": 49,
           "display_color": [
             242,
-            85,
-            133,
+            71,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -20567,9 +22256,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            85,
-            96,
-            242,
+            204,
+            31,
+            87,
             255
           ],
           "geometry": "Square",

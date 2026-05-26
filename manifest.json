@@ -18507,7 +18507,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 2.809999942779541,
+        "radial_blur_px": 10.329999923706055,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -18580,6 +18580,7 @@
         ],
         "fog_far_distance_px": 2451,
         "fog_near_distance_px": 2016,
+        "fog_render_boundary_spacing": 16,
         "max_spawn_from_room": 4862,
         "regen_seed": 4,
         "render_radius": 3202
@@ -18639,9 +18640,9 @@
           "camera_tilt_deg": 31.507720947265625,
           "camera_zoom_percent": 3,
           "display_color": [
-            242,
-            139,
-            85,
+            32,
+            31,
+            204,
             255
           ],
           "geometry": "Square",
@@ -18746,9 +18747,9 @@
         },
         "NewRoom": {
           "display_color": [
-            31,
-            32,
-            204,
+            169,
+            61,
+            242,
             255
           ],
           "geometry": "Square",
@@ -18792,9 +18793,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            147,
-            204,
             31,
+            204,
+            127,
             255
           ],
           "geometry": "Square",
@@ -18838,9 +18839,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            204,
-            31,
-            175,
+            85,
+            93,
+            242,
             255
           ],
           "geometry": "Square",
@@ -18915,9 +18916,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            31,
-            204,
-            31,
+            242,
+            85,
+            196,
             255
           ],
           "geometry": "Square",
@@ -18966,9 +18967,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            36,
-            114,
+            85,
             242,
+            176,
             255
           ],
           "geometry": "Circle",
@@ -19054,9 +19055,9 @@
           "camera_tilt_deg": 30.68971061706543,
           "camera_zoom_percent": 0,
           "display_color": [
-            204,
-            96,
-            31,
+            155,
+            242,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -19478,9 +19479,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
+            36,
             242,
-            85,
-            137,
+            56,
             255
           ],
           "geometry": "Square",

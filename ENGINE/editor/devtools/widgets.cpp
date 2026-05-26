@@ -2320,6 +2320,8 @@ constexpr int kWeightedRangeMinorTickHeight = 5;
 constexpr int kWeightedRangeMidTickHeight = 9;
 constexpr int kWeightedRangeMajorTickHeight = 14;
 constexpr int kWeightedRangeImportantTickHeight = 19;
+constexpr int kWeightedRangePopupWidth = 440;
+constexpr int kWeightedRangePopupHeight = 316;
 
 double weighted_range_smoothstep(double t) {
     t = std::clamp(t, 0.0, 1.0);
@@ -2382,6 +2384,12 @@ void DMWeightedRangeWidget::set_on_value_changed(ValueChangedCallback callback) 
 
 void DMWeightedRangeWidget::set_tooltip_state(DMWidgetTooltipState* state) {
     tooltip_state_ = state;
+    if (popup_center_stepper_) popup_center_stepper_->set_tooltip_state(state);
+    if (popup_span_stepper_) popup_span_stepper_->set_tooltip_state(state);
+    if (popup_falloff_stepper_) popup_falloff_stepper_->set_tooltip_state(state);
+    if (popup_center_weight_stepper_) popup_center_weight_stepper_->set_tooltip_state(state);
+    if (popup_falloff_weight_stepper_) popup_falloff_weight_stepper_->set_tooltip_state(state);
+    if (popup_edge_weight_stepper_) popup_edge_weight_stepper_->set_tooltip_state(state);
 }
 
 void DMWeightedRangeWidget::set_enabled(bool enabled) {
@@ -2481,13 +2489,105 @@ void DMWeightedRangeWidget::update_geometry() {
                                               kWeightedRangeHandleHitSize };
         columns_[i].value_hitbox = SDL_Rect{ x - 18, hist.y, 36, hist.h };
     }
+    update_popup_geometry();
+}
+
+void DMWeightedRangeWidget::ensure_popup_controls() {
+    if (popup_center_stepper_) {
+        return;
+    }
+    popup_center_stepper_ = std::make_unique<DMNumericStepper>("Center", static_cast<int>(min_allowed_), static_cast<int>(max_allowed_), static_cast<int>(value_.center));
+    popup_span_stepper_ = std::make_unique<DMNumericStepper>("Span", 0, static_cast<int>(std::max<std::int64_t>(0, max_allowed_ - min_allowed_)), static_cast<int>(value_.span));
+    popup_falloff_stepper_ = std::make_unique<DMNumericStepper>("Falloff", 0, static_cast<int>(std::max<std::int64_t>(0, max_allowed_ - min_allowed_)), static_cast<int>(value_.falloff));
+    popup_center_weight_stepper_ = std::make_unique<DMNumericStepper>("Center Weight", 0, 100, static_cast<int>(std::lround(value_.weights.center * 100.0)));
+    popup_falloff_weight_stepper_ = std::make_unique<DMNumericStepper>("Falloff Weight", 0, 100, static_cast<int>(std::lround(value_.weights.falloff * 100.0)));
+    popup_edge_weight_stepper_ = std::make_unique<DMNumericStepper>("Edge Weight", 0, 100, static_cast<int>(std::lround(value_.weights.edge * 100.0)));
+    set_tooltip_state(tooltip_state_);
+    sync_popup_controls_from_value();
+}
+
+void DMWeightedRangeWidget::sync_popup_controls_from_value() {
+    ensure_popup_controls();
+    popup_center_stepper_->set_range(static_cast<int>(min_allowed_), static_cast<int>(max_allowed_));
+    popup_center_stepper_->set_value(static_cast<int>(value_.center));
+    popup_span_stepper_->set_value(static_cast<int>(value_.span));
+    popup_falloff_stepper_->set_value(static_cast<int>(value_.falloff));
+    popup_center_weight_stepper_->set_value(static_cast<int>(std::lround(value_.weights.center * 100.0)));
+    popup_falloff_weight_stepper_->set_value(static_cast<int>(std::lround(value_.weights.falloff * 100.0)));
+    popup_edge_weight_stepper_->set_value(static_cast<int>(std::lround(value_.weights.edge * 100.0)));
+}
+
+void DMWeightedRangeWidget::sync_value_from_popup_controls() {
+    if (!popup_center_stepper_) {
+        return;
+    }
+    value_.center = popup_center_stepper_->value();
+    value_.span = popup_span_stepper_->value();
+    value_.falloff = popup_falloff_stepper_->value();
+    value_.weights.center = static_cast<double>(popup_center_weight_stepper_->value()) / 100.0;
+    value_.weights.falloff = static_cast<double>(popup_falloff_weight_stepper_->value()) / 100.0;
+    value_.weights.edge = static_cast<double>(popup_edge_weight_stepper_->value()) / 100.0;
+    sanitize_value();
+    sync_popup_controls_from_value();
+    sync_visual_range_from_value();
+    update_geometry();
+}
+
+void DMWeightedRangeWidget::update_popup_geometry() {
+    const int popup_x = std::max(6, rect_.x + rect_.w - kWeightedRangePopupWidth);
+    const int popup_y = rect_.y + rect_.h + 8;
+    popup_rect_ = SDL_Rect{popup_x, popup_y, kWeightedRangePopupWidth, kWeightedRangePopupHeight};
+    if (!popup_open_) {
+        return;
+    }
+    ensure_popup_controls();
+    const int column_gap = 8;
+    const int col_w = (popup_rect_.w - 30 - column_gap) / 2;
+    const int left_x = popup_rect_.x + 10;
+    const int right_x = left_x + col_w + column_gap;
+    int row_y = popup_rect_.y + 176;
+    popup_center_stepper_->set_rect(SDL_Rect{left_x, row_y, col_w, DMNumericStepper::height()});
+    popup_span_stepper_->set_rect(SDL_Rect{right_x, row_y, col_w, DMNumericStepper::height()});
+    row_y += DMNumericStepper::height() + 6;
+    popup_falloff_stepper_->set_rect(SDL_Rect{left_x, row_y, col_w, DMNumericStepper::height()});
+    popup_center_weight_stepper_->set_rect(SDL_Rect{right_x, row_y, col_w, DMNumericStepper::height()});
+    row_y += DMNumericStepper::height() + 6;
+    popup_falloff_weight_stepper_->set_rect(SDL_Rect{left_x, row_y, col_w, DMNumericStepper::height()});
+    popup_edge_weight_stepper_->set_rect(SDL_Rect{right_x, row_y, col_w, DMNumericStepper::height()});
 }
 
 void DMWeightedRangeWidget::update_hover(SDL_Point point) {
     hovered_ = SDL_PointInRect(&point, &rect_);
     checkbox_hovered_ = SDL_PointInRect(&point, &checkbox_rect());
     random_hovered_ = checkbox_hovered_;
+    popup_toggle_hovered_ = SDL_PointInRect(&point, &popup_toggle_rect());
     hovered_handle_index_ = hovered_ ? weight_index_for_point(point) : -1;
+    hovered_popup_handle_index_ = (popup_open_ && SDL_PointInRect(&point, &popup_rect())) ? weight_index_for_point(point) : -1;
+}
+
+SDL_Rect DMWeightedRangeWidget::popup_toggle_rect() const {
+    return SDL_Rect{
+        rect_.x + rect_.w - 96,
+        rect_.y + 5,
+        88,
+        20
+    };
+}
+
+SDL_Rect DMWeightedRangeWidget::popup_rect() const {
+    return popup_rect_;
+}
+
+SDL_Rect DMWeightedRangeWidget::popup_histogram_rect() const {
+    if (!popup_open_) {
+        return histogram_rect();
+    }
+    return SDL_Rect{
+        popup_rect_.x + 14,
+        popup_rect_.y + 36,
+        std::max(0, popup_rect_.w - 28),
+        130
+    };
 }
 
 void DMWeightedRangeWidget::sync_visual_range_from_value() {
@@ -2752,9 +2852,39 @@ bool DMWeightedRangeWidget::toggle_random() {
     }
     sanitize_value();
     sync_visual_range_from_value();
+    if (popup_open_) {
+        sync_popup_controls_from_value();
+    }
     update_geometry();
     notify_value_changed();
     return true;
+}
+
+bool DMWeightedRangeWidget::toggle_popup_editor() {
+    if (!enabled_) {
+        return false;
+    }
+    popup_open_ = !popup_open_;
+    if (popup_open_) {
+        ensure_popup_controls();
+        sync_popup_controls_from_value();
+    }
+    update_popup_geometry();
+    return true;
+}
+
+double DMWeightedRangeWidget::velocity_scaled_pixels(int delta_pixels) const {
+    const double sign = (delta_pixels < 0) ? -1.0 : 1.0;
+    const double distance = std::abs(static_cast<double>(delta_pixels));
+    if (distance <= 0.0) {
+        return 0.0;
+    }
+    const double fine_zone = std::min(36.0, std::max(18.0, static_cast<double>(rect_.w) * 0.08));
+    if (distance <= fine_zone) {
+        return sign * (distance * 0.34);
+    }
+    const double accelerated = (fine_zone * 0.34) + std::pow(distance - fine_zone, 1.12);
+    return sign * accelerated;
 }
 
 bool DMWeightedRangeWidget::apply_wheel_delta(int wheel_y) {
@@ -2788,6 +2918,9 @@ bool DMWeightedRangeWidget::apply_wheel_delta(int wheel_y) {
     value_.span = span;
     sanitize_value();
     sync_falloff_value_from_visual();
+    if (popup_open_) {
+        sync_popup_controls_from_value();
+    }
     update_geometry();
     notify_value_changed();
     return true;
@@ -2797,7 +2930,37 @@ bool DMWeightedRangeWidget::begin_drag(SDL_Point point) {
     if (!enabled_) {
         return false;
     }
-    const int weight_idx = weight_index_for_point(point);
+    const auto index_for_surface = [this, &point](const SDL_Rect& surface) -> int {
+        const int center_x = surface.x + surface.w / 2;
+        const int top = surface.y + kWeightedRangeWeightTopPad;
+        const int bottom = surface.y + surface.h - kWeightedRangeWeightBottomPad;
+        int nearest_index = -1;
+        int nearest_distance = std::numeric_limits<int>::max();
+        for (int i = 0; i < 5; ++i) {
+            if (!value_.random && i != 2) {
+                continue;
+            }
+            const int x = center_x +
+                          ((i == 0) ? -static_cast<int>(std::lround(visual_span_px_)) :
+                           (i == 1) ? -static_cast<int>(std::lround(visual_falloff_px_)) :
+                           (i == 3) ? static_cast<int>(std::lround(visual_falloff_px_)) :
+                           (i == 4) ? static_cast<int>(std::lround(visual_span_px_)) : 0);
+            const int y = std::clamp(weight_y_for_value(display_weight_for_index(i)), top, bottom);
+            SDL_Rect handle{x - (kWeightedRangeHandleHitSize / 2), y - (kWeightedRangeHandleHitSize / 2), kWeightedRangeHandleHitSize, kWeightedRangeHandleHitSize};
+            if (SDL_PointInRect(&point, &handle)) {
+                return i;
+            }
+            const int dx = std::abs(point.x - x);
+            const bool y_match = point.y >= (top - 6) && point.y <= (bottom + 6);
+            if (y_match && dx <= 14 && dx < nearest_distance) {
+                nearest_distance = dx;
+                nearest_index = i;
+            }
+        }
+        return nearest_index;
+    };
+    drag_in_popup_ = popup_open_ && SDL_PointInRect(&point, &popup_histogram_rect());
+    const int weight_idx = index_for_surface(drag_in_popup_ ? popup_histogram_rect() : histogram_rect());
     if (weight_idx >= 0) {
         if (!value_.random && weight_idx != 2) {
             return false;
@@ -2820,11 +2983,12 @@ bool DMWeightedRangeWidget::begin_drag(SDL_Point point) {
 void DMWeightedRangeWidget::end_drag() {
     dragging_ = false;
     drag_started_ = false;
+    drag_in_popup_ = false;
     drag_mode_ = DragMode::None;
     set_slider_scroll_capture(this, active_selected_ == this);
 }
 
-bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
+bool DMWeightedRangeWidget::apply_drag_delta_in_surface(SDL_Point point, const SDL_Rect& surface) {
     if (!dragging_ || !enabled_) {
         return false;
     }
@@ -2835,32 +2999,41 @@ bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
         static_cast<double>(std::max<std::int64_t>(1, drag_start_value_.span)) / std::max(1.0, drag_start_visual_span_px_);
     switch (drag_mode_) {
     case DragMode::NodeHandle: {
+        const double scaled_dx = velocity_scaled_pixels(dx);
         if (drag_handle_index_ == 2) {
             const double center_units_per_pixel = std::max(1.0, start_units_per_pixel);
             value_.center = drag_start_value_.center +
-                            static_cast<std::int64_t>(std::llround(static_cast<double>(dx) * center_units_per_pixel));
+                            static_cast<std::int64_t>(std::llround(scaled_dx * center_units_per_pixel));
         } else if (drag_handle_index_ == 0 || drag_handle_index_ == 4) {
             if (drag_handle_index_ == 0) {
-                visual_span_px_ = drag_start_visual_span_px_ - static_cast<double>(dx);
+                visual_span_px_ = drag_start_visual_span_px_ - scaled_dx;
             } else {
-                visual_span_px_ = drag_start_visual_span_px_ + static_cast<double>(dx);
+                visual_span_px_ = drag_start_visual_span_px_ + scaled_dx;
             }
             clamp_visual_range();
             value_.span = std::max<std::int64_t>(0, static_cast<std::int64_t>(std::llround(visual_span_px_ * start_units_per_pixel)));
         } else {
             if (drag_handle_index_ == 1) {
-                visual_falloff_px_ = drag_start_visual_falloff_px_ - static_cast<double>(dx);
+                visual_falloff_px_ = drag_start_visual_falloff_px_ - scaled_dx;
             } else {
-                visual_falloff_px_ = drag_start_visual_falloff_px_ + static_cast<double>(dx);
+                visual_falloff_px_ = drag_start_visual_falloff_px_ + scaled_dx;
             }
             clamp_visual_range();
         }
         if (value_.random) {
-            const SDL_Rect line = histogram_line_rect(drag_handle_index_);
-            const int top = line.y;
-            const int bottom = line.y + line.h;
-            const int adjusted_y = std::clamp(drag_start_y_ + dy, top, bottom);
-            set_weight_for_index(drag_handle_index_, weight_for_y(adjusted_y));
+            const int center_x = surface.x + surface.w / 2;
+            const int x = center_x +
+                          ((drag_handle_index_ == 0) ? -static_cast<int>(std::lround(visual_span_px_)) :
+                           (drag_handle_index_ == 1) ? -static_cast<int>(std::lround(visual_falloff_px_)) :
+                           (drag_handle_index_ == 3) ? static_cast<int>(std::lround(visual_falloff_px_)) :
+                           (drag_handle_index_ == 4) ? static_cast<int>(std::lround(visual_span_px_)) : 0);
+            const int line_top = surface.y + kWeightedRangeWeightTopPad;
+            const int line_bottom = surface.y + surface.h - kWeightedRangeWeightBottomPad;
+            const SDL_Rect line{x - (kWeightedRangeLineThickness / 2), line_top, kWeightedRangeLineThickness, std::max(0, line_bottom - line_top)};
+            const int adjusted_y = std::clamp(drag_start_y_ + dy, line.y, line.y + line.h);
+            const int span = std::max(1, (line.y + line.h) - line.y);
+            const double normalized = static_cast<double>((line.y + line.h) - adjusted_y) / static_cast<double>(span);
+            set_weight_for_index(drag_handle_index_, std::clamp(normalized, 0.0, 1.0));
         }
         changed = true;
         break;
@@ -2872,10 +3045,17 @@ bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
     if (changed) {
         sanitize_value();
         sync_falloff_value_from_visual();
+        if (popup_open_) {
+            sync_popup_controls_from_value();
+        }
         update_geometry();
         notify_value_changed();
     }
     return changed;
+}
+
+bool DMWeightedRangeWidget::apply_drag_delta(SDL_Point point) {
+    return apply_drag_delta_in_surface(point, drag_in_popup_ ? popup_histogram_rect() : histogram_rect());
 }
 
 bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
@@ -2911,7 +3091,12 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         SDL_Point p{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
         update_hover(p);
         const bool inside_widget = SDL_PointInRect(&p, &rect_);
+        const bool inside_popup = popup_open_ && SDL_PointInRect(&p, &popup_rect());
         if (!inside_widget) {
+            if (inside_popup) {
+                used = true;
+                break;
+            }
             if (e.button.button == SDL_BUTTON_LEFT && is_selected()) {
                 deselect();
             }
@@ -2924,12 +3109,15 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         if (e.button.button == SDL_BUTTON_LEFT && !is_selected()) {
             select_widget();
             used = true;
-            break;
         }
         if (is_selected()) {
             used = true;
         }
         if (e.button.button != SDL_BUTTON_LEFT) {
+            break;
+        }
+        if (SDL_PointInRect(&p, &popup_toggle_rect())) {
+            used = toggle_popup_editor() || used;
             break;
         }
         if (SDL_PointInRect(&p, &checkbox_rect())) {
@@ -2996,8 +3184,28 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
             end_drag();
         }
         break;
+    case SDL_EVENT_KEY_DOWN:
+        if (is_selected() && e.key.key == SDLK_ESCAPE && popup_open_) {
+            popup_open_ = false;
+            used = true;
+        }
+        break;
     default:
         break;
+    }
+    if (popup_open_) {
+        ensure_popup_controls();
+        const auto before_json = vibble::weighted_range::to_json(value_);
+        used = popup_center_stepper_->handle_event(e) || used;
+        used = popup_span_stepper_->handle_event(e) || used;
+        used = popup_falloff_stepper_->handle_event(e) || used;
+        used = popup_center_weight_stepper_->handle_event(e) || used;
+        used = popup_falloff_weight_stepper_->handle_event(e) || used;
+        used = popup_edge_weight_stepper_->handle_event(e) || used;
+        sync_value_from_popup_controls();
+        if (vibble::weighted_range::to_json(value_) != before_json) {
+            notify_value_changed();
+        }
     }
     return used;
 }
@@ -3042,6 +3250,14 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
         const int title_x = std::max(box.x + 8, box.x + box.w - label_size.x - 8);
         DMFontCache::instance().draw_text(r, label_style, label_, title_x, label_y);
     }
+    const SDL_Rect popup_btn = popup_toggle_rect();
+    SDL_Color popup_fill = popup_open_ ? SDL_Color{80, 124, 190, 235} : DMStyles::ButtonBaseFill();
+    if (popup_toggle_hovered_) {
+        popup_fill = DMStyles::ButtonHoverFill();
+    }
+    dm_draw::DrawRoundedSolidRect(r, popup_btn, 4, popup_fill);
+    dm_draw::DrawRoundedOutline(r, popup_btn, 4, 1, border);
+    DMFontCache::instance().draw_text(r, label_style, popup_open_ ? "Compact" : "Expand", popup_btn.x + 12, popup_btn.y + 3);
 
     const SDL_Rect hist = histogram_rect();
     SDL_Color grid{76, 86, 110, 120};
@@ -3166,6 +3382,50 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
         }
         dm_draw::DrawRoundedSolidRect(r, handle, 5, handle_fill);
         dm_draw::DrawRoundedOutline(r, handle, 5, line_hovered ? 2 : 1, line_hovered ? SDL_Color{255, 235, 194, 255} : border);
+    }
+
+    if (popup_open_) {
+        const SDL_Rect popup = popup_rect();
+        dm_draw::DrawBeveledRect(r, popup, DMStyles::CornerRadius(), DMStyles::BevelDepth(),
+                                 SDL_Color{23, 28, 38, 245},
+                                 DMStyles::HighlightColor(), DMStyles::ShadowColor(), false,
+                                 DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+        dm_draw::DrawRoundedOutline(r, popup, DMStyles::CornerRadius(), 2, SDL_Color{114, 158, 236, 255});
+        DMFontCache::instance().draw_text(r, label_style, "Expanded Weighted Range Editor", popup.x + 12, popup.y + 10);
+
+        const SDL_Rect pop_hist = popup_histogram_rect();
+        SDL_SetRenderDrawColor(r, grid.r, grid.g, grid.b, grid.a);
+        sdl_render::Rect(r, &pop_hist);
+        const int pop_top = pop_hist.y + kWeightedRangeWeightTopPad;
+        const int pop_baseline = pop_hist.y + pop_hist.h - kWeightedRangeWeightBottomPad;
+        SDL_SetRenderDrawColor(r, bar_col.r, bar_col.g, bar_col.b, bar_col.a);
+        SDL_Rect pop_bar{pop_hist.x + kWeightedRangeColumnPad, pop_baseline, std::max(1, pop_hist.w - (kWeightedRangeColumnPad * 2)), 4};
+        sdl_render::FillRect(r, &pop_bar);
+        for (int i = 0; i < 5; ++i) {
+            if (!value_.random && i != 2) continue;
+            const int center_x = pop_hist.x + pop_hist.w / 2;
+            const int x = center_x +
+                          ((i == 0) ? -static_cast<int>(std::lround(visual_span_px_)) :
+                           (i == 1) ? -static_cast<int>(std::lround(visual_falloff_px_)) :
+                           (i == 3) ? static_cast<int>(std::lround(visual_falloff_px_)) :
+                           (i == 4) ? static_cast<int>(std::lround(visual_span_px_)) : 0);
+            const double normalized = std::clamp(value_.random ? display_weight_for_index(i) : 1.0, 0.0, 1.0);
+            const int y = pop_baseline - static_cast<int>(std::lround(normalized * static_cast<double>(std::max(1, pop_baseline - pop_top))));
+            SDL_SetRenderDrawColor(r, 255, 207, 136, 220);
+            SDL_RenderLine(r, x, pop_baseline, x, y);
+            SDL_Rect handle{x - (kWeightedRangeHandleSize / 2), y - (kWeightedRangeHandleSize / 2), kWeightedRangeHandleSize, kWeightedRangeHandleSize};
+            dm_draw::DrawRoundedSolidRect(r, handle, 5, SDL_Color{255, 184, 78, 255});
+            dm_draw::DrawRoundedOutline(r, handle, 5, 1, SDL_Color{255, 235, 194, 255});
+        }
+        if (popup_center_stepper_ && popup_span_stepper_ && popup_falloff_stepper_ &&
+            popup_center_weight_stepper_ && popup_falloff_weight_stepper_ && popup_edge_weight_stepper_) {
+            popup_center_stepper_->render(r);
+            popup_span_stepper_->render(r);
+            popup_falloff_stepper_->render(r);
+            popup_center_weight_stepper_->render(r);
+            popup_falloff_weight_stepper_->render(r);
+            popup_edge_weight_stepper_->render(r);
+        }
     }
 
     if (tooltip_state_) {

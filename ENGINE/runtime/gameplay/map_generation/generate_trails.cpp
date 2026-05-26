@@ -116,14 +116,14 @@ int resolve_weighted_dimension(const vibble::weighted_range::WeightedIntRange& r
     }
     return static_cast<int>(resolved);
 }
-constexpr int kTrailRouteSearchMaxExpansions = 500000;
-constexpr int kTrailRouteSearchMaxCellSpan = 512;
+constexpr int kTrailRouteSearchMaxExpansions = 120000;
+constexpr int kTrailRouteSearchMaxCellSpan = 320;
 constexpr int kTrailRouteInitialCellSizeWorldPx = 96;
 constexpr int kTrailRouteSampleSpacingWorldPx = 32;
 constexpr int kTrailBoundaryZoneDistanceWorldPx = 240;
 constexpr int kTrailContactGateIterations = 24;
 constexpr double kTrailContactGateStepWorldPx = 24.0;
-constexpr int kTrailRoutePairBudget = 256;
+constexpr int kTrailRoutePairBudget = 64;
 constexpr double kRoomMarginDistanceWorldPx = 512.0;
 constexpr double kTrailEndpointContainmentSafetyWorldPx = 12.0;
 constexpr double kCurvyRouteAmplitudeScaleWorldPx = 24.0;
@@ -1116,6 +1116,59 @@ struct RouteSearchResult {
     bool budget_exhausted = false;
     std::vector<SDL_Point> points;
 };
+
+std::vector<SDL_Point> sanitize_orthogonal_centerline(const std::vector<SDL_Point>& points);
+std::vector<SDL_Point> simplify_route_points(const std::vector<SDL_Point>& points,
+                                             Room* room_a,
+                                             Room* room_b,
+                                             const std::vector<RoomObstacle>& room_obstacles,
+                                             const std::vector<TrailObstacle>& existing_trails,
+                                             int clearance_px);
+bool polyline_is_valid_for_route(const std::vector<SDL_Point>& points,
+                                 Room* room_a,
+                                 Room* room_b,
+                                 const std::vector<RoomObstacle>& room_obstacles,
+                                 const std::vector<TrailObstacle>& existing_trails,
+                                 int clearance_px);
+
+bool build_fast_orthogonal_route(const SDL_Point& start_gate,
+                                 const SDL_Point& end_gate,
+                                 Room* room_a,
+                                 Room* room_b,
+                                 const std::vector<RoomObstacle>& room_obstacles,
+                                 const std::vector<TrailObstacle>& existing_trails,
+                                 int clearance_px,
+                                 std::vector<SDL_Point>* out_points) {
+    if (!out_points) {
+        return false;
+    }
+    out_points->clear();
+    std::vector<std::vector<SDL_Point>> candidates;
+    candidates.reserve(10);
+    candidates.push_back({start_gate, SDL_Point{end_gate.x, start_gate.y}, end_gate});
+    candidates.push_back({start_gate, SDL_Point{start_gate.x, end_gate.y}, end_gate});
+
+    const int detour = std::max(96, clearance_px * 4);
+    candidates.push_back({start_gate, SDL_Point{start_gate.x, start_gate.y + detour}, SDL_Point{end_gate.x, start_gate.y + detour}, end_gate});
+    candidates.push_back({start_gate, SDL_Point{start_gate.x, start_gate.y - detour}, SDL_Point{end_gate.x, start_gate.y - detour}, end_gate});
+    candidates.push_back({start_gate, SDL_Point{start_gate.x + detour, start_gate.y}, SDL_Point{start_gate.x + detour, end_gate.y}, end_gate});
+    candidates.push_back({start_gate, SDL_Point{start_gate.x - detour, start_gate.y}, SDL_Point{start_gate.x - detour, end_gate.y}, end_gate});
+
+    for (std::vector<SDL_Point>& candidate : candidates) {
+        candidate = sanitize_orthogonal_centerline(candidate);
+        candidate = simplify_route_points(candidate, room_a, room_b, room_obstacles, existing_trails, clearance_px);
+        candidate = sanitize_orthogonal_centerline(candidate);
+        if (candidate.size() < 2) {
+            continue;
+        }
+        if (!polyline_is_valid_for_route(candidate, room_a, room_b, room_obstacles, existing_trails, clearance_px)) {
+            continue;
+        }
+        *out_points = std::move(candidate);
+        return true;
+    }
+    return false;
+}
 
 bool point_blocked_for_route(const SDL_Point& point,
                              Room* room_a,
@@ -2670,23 +2723,37 @@ bool attempt_trail_connection(Room* a,
         }
         saw_route_candidate = true;
 
-        RouteSearchResult route = build_routed_polyline(
-            start_frame.margin, end_frame.margin, a, b, room_obstacles, *routing_trails, routing_clearance_px);
-        if (route.budget_exhausted) {
-            route_budget_exhausted = true;
-            continue;
-        }
-        if (!route.success || route.points.size() < 2) {
-            if (stats) {
-                stats->last_failure = TrailFailureReason::RouteFailed;
+        RouteSearchResult route;
+        std::vector<SDL_Point> fast_route_points;
+        if (build_fast_orthogonal_route(start_frame.margin,
+                                        end_frame.margin,
+                                        a,
+                                        b,
+                                        room_obstacles,
+                                        *routing_trails,
+                                        routing_clearance_px,
+                                        &fast_route_points)) {
+            route.success = true;
+            route.points = std::move(fast_route_points);
+        } else {
+            route = build_routed_polyline(
+                start_frame.margin, end_frame.margin, a, b, room_obstacles, *routing_trails, routing_clearance_px);
+            if (route.budget_exhausted) {
+                route_budget_exhausted = true;
+                continue;
             }
-            continue;
-        }
-        if (!polyline_is_valid_for_route(route.points, a, b, room_obstacles, *routing_trails, routing_clearance_px)) {
-            if (stats) {
-                stats->last_failure = TrailFailureReason::RouteFailed;
+            if (!route.success || route.points.size() < 2) {
+                if (stats) {
+                    stats->last_failure = TrailFailureReason::RouteFailed;
+                }
+                continue;
             }
-            continue;
+            if (!polyline_is_valid_for_route(route.points, a, b, room_obstacles, *routing_trails, routing_clearance_px)) {
+                if (stats) {
+                    stats->last_failure = TrailFailureReason::RouteFailed;
+                }
+                continue;
+            }
         }
 
         std::vector<SDL_Point> base_centerline = build_centerline_with_endpoint_frames(start_frame, route.points, end_frame);
@@ -2790,8 +2857,8 @@ bool attempt_trail_connection(Room* a,
     // Last-resort seed/fallback: build a deterministic Manhattan corridor between legal sector contacts.
     // This bypasses existing trail obstacles so the first trail can always seed the graph.
     const std::vector<TrailObstacle> no_trail_obstacles;
-    const int forced_pair_limit = std::min<int>(static_cast<int>(pair_candidates.size()), 96);
-    const std::array<double, 9> forced_offsets{0.0, 1024.0, -1024.0, 2048.0, -2048.0, 4096.0, -4096.0, 8192.0, -8192.0};
+    const int forced_pair_limit = std::min<int>(static_cast<int>(pair_candidates.size()), 24);
+    const std::array<double, 5> forced_offsets{0.0, 1024.0, -1024.0, 2048.0, -2048.0};
     for (int pair_index = 0; pair_index < forced_pair_limit; ++pair_index) {
         const ContactPairCandidate& pair = pair_candidates[static_cast<std::size_t>(pair_index)];
         ++route_pair_attempts;

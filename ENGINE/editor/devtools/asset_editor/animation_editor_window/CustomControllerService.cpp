@@ -264,10 +264,11 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
 
         hpp << "#ifndef " << guard << "\n";
         hpp << "#define " << guard << "\n\n";
-        hpp << "#include \"animation/controllers/shared/custom_controller_api.hpp\"\n\n";
+        hpp << "#include \"animation/controllers/shared/custom_controller_api.hpp\"\n";
+        hpp << "#include <optional>\n\n";
         hpp << "class Asset;\n";
         hpp << "class Input;\n\n";
-        hpp << "class " << class_name << " : public CustomAssetController {\n\n";
+        hpp << "class " << class_name << " : public custom_controller_api::DefaultCustomController {\n\n";
         hpp << "public:\n";
         hpp << "    explicit " << class_name << "(Asset* self);\n";
         hpp << "    ~" << class_name << "() override = default;\n";
@@ -279,9 +280,14 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         hpp << "    void on_hit(const animation_update::Attack& attack) override;\n";
         hpp << "    void on_death() override;\n";
         hpp << "    void on_no_pending_attacks() override;\n";
-        hpp << "    void on_orphaned_hook(Asset& self, Asset* former_parent) override;\n";
+        hpp << "    void on_after_attack() override;\n";
+        hpp << "    custom_controller_api::AttackProcessingConfig attack_processing_config() const override;\n";
+        hpp << "    void on_orphaned_hook(Asset& self,\n";
+        hpp << "                          Asset* former_parent,\n";
+        hpp << "                          std::optional<OrphanImpulse> impulse = std::nullopt) override;\n";
         hpp << "    void on_pre_delete_hook(Asset& self) override;\n";
         hpp << "    void on_process_pending_attacks(Asset& self) override;\n";
+        hpp << "    void on_interact_hook(Asset& self, Asset* instigator) override;\n";
         hpp << "};\n\n";
         hpp << "#endif\n";
     }
@@ -296,22 +302,22 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         cpp << "#include \"assets/asset/Asset.hpp\"\n";
         cpp << "#include \"animation/attack.hpp\"\n";
         cpp << "#include \"core/AssetsManager.hpp\"\n";
-        cpp << "#include \"map_generation/room.hpp\"\n\n";
+        cpp << "#include \"gameplay/map_generation/room.hpp\"\n\n";
         cpp << "#include <vector>\n\n";
         cpp << class_name << "::" << class_name << "(Asset* self)\n";
-        cpp << "    : CustomAssetController(self) {\n";
+        cpp << "    : custom_controller_api::DefaultCustomController(self) {\n";
         cpp << "}\n\n";
         cpp << "void " << class_name << "::on_init() {\n";
-        cpp << "    CustomAssetController::on_init();\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_init();\n";
         cpp << "}\n\n";
         cpp << "void " << class_name << "::on_update(const Input& in) {\n";
-        cpp << "    CustomAssetController::on_update(in);\n";
-        cpp << "    Asset* self = self_ptr();\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_update(in);\n";
+        cpp << "    Asset* self = controller_self();\n";
         cpp << "    if (!self) {\n";
         cpp << "        return;\n";
         cpp << "    }\n";
         cpp << "\n";
-        cpp << "    Assets* owner_assets = assets();\n";
+        cpp << "    Assets* owner_assets = controller_assets();\n";
         cpp << "    const Room* current_room = owner_assets ? owner_assets->current_room() : nullptr;\n";
         cpp << "    const auto trigger_areas = owner_assets\n";
         cpp << "        ? owner_assets->current_room_trigger_areas()\n";
@@ -321,25 +327,36 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         cpp << "}\n";
         cpp << "\n";
         cpp << "void " << class_name << "::on_attack(const animation_update::Attack& attack) {\n";
-        cpp << "    CustomAssetController::on_attack(attack);\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_attack(attack);\n";
         cpp << "}\n\n";
         cpp << "void " << class_name << "::on_hit(const animation_update::Attack& attack) {\n";
-        cpp << "    CustomAssetController::on_hit(attack);\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_hit(attack);\n";
         cpp << "}\n\n";
         cpp << "void " << class_name << "::on_death() {\n";
-        cpp << "    CustomAssetController::on_death();\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_death();\n";
         cpp << "}\n\n";
         cpp << "void " << class_name << "::on_no_pending_attacks() {\n";
-        cpp << "    CustomAssetController::on_no_pending_attacks();\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_no_pending_attacks();\n";
         cpp << "}\n\n";
-        cpp << "void " << class_name << "::on_orphaned_hook(Asset& self, Asset* former_parent) {\n";
-        cpp << "    CustomAssetController::on_orphaned_hook(self, former_parent);\n";
+        cpp << "void " << class_name << "::on_after_attack() {\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_after_attack();\n";
+        cpp << "}\n\n";
+        cpp << "custom_controller_api::AttackProcessingConfig " << class_name << "::attack_processing_config() const {\n";
+        cpp << "    return custom_controller_api::DefaultCustomController::attack_processing_config();\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_orphaned_hook(Asset& self,\n";
+        cpp << "                                               Asset* former_parent,\n";
+        cpp << "                                               std::optional<OrphanImpulse> impulse) {\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_orphaned_hook(self, former_parent, impulse);\n";
         cpp << "}\n\n";
         cpp << "void " << class_name << "::on_pre_delete_hook(Asset& self) {\n";
-        cpp << "    CustomAssetController::on_pre_delete_hook(self);\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_pre_delete_hook(self);\n";
         cpp << "}\n\n";
         cpp << "void " << class_name << "::on_process_pending_attacks(Asset& self_ref) {\n";
-        cpp << "    CustomAssetController::on_process_pending_attacks(self_ref);\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_process_pending_attacks(self_ref);\n";
+        cpp << "}\n\n";
+        cpp << "void " << class_name << "::on_interact_hook(Asset& self, Asset* instigator) {\n";
+        cpp << "    custom_controller_api::DefaultCustomController::on_interact_hook(self, instigator);\n";
         cpp << "}\n";
     }
 }
@@ -375,45 +392,45 @@ void CustomControllerService::ensure_controller_factory_registration(const std::
     const std::string include_line = "#include \"animation/controllers/custom_controllers/" + base_name + ".hpp\"";
     if (content.find(include_line) == std::string::npos) {
         int insert_index = -1;
-        int last_include_index = -1;
         for (std::size_t i = 0; i < lines.size(); ++i) {
-            std::string trimmed = trim_left_copy(lines[i]);
-            if (trimmed.rfind("#include", 0) == 0) {
-                last_include_index = static_cast<int>(i);
-                if (lines[i].find("animation/controllers/custom_controllers/") != std::string::npos) {
-                    insert_index = static_cast<int>(i) + 1;
-                }
+            if (lines[i].find("<<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>") != std::string::npos) {
+                insert_index = static_cast<int>(i);
+                break;
             }
         }
         if (insert_index < 0) {
+            int last_include_index = -1;
+            for (std::size_t i = 0; i < lines.size(); ++i) {
+                const std::string trimmed = trim_left_copy(lines[i]);
+                if (trimmed.rfind("#include", 0) == 0) {
+                    last_include_index = static_cast<int>(i);
+                }
+            }
             insert_index = last_include_index >= 0 ? last_include_index + 1 : 0;
         }
         lines.insert(lines.begin() + insert_index, include_line);
         modified = true;
     }
 
-    const std::string branch_prefix = "                if (key == \"" + base_name + "\")";
-    bool branch_exists = std::any_of(lines.begin(), lines.end(), [&](const std::string& existing) {
-        return existing.find(branch_prefix) != std::string::npos;
+    const std::string entry_prefix = "        { \"" + base_name + "\"";
+    const bool entry_exists = std::any_of(lines.begin(), lines.end(), [&](const std::string& existing) {
+        return existing.find(entry_prefix) != std::string::npos;
     });
 
-    if (!branch_exists) {
-        std::vector<std::string> branch_lines = {
-            "                if (key == \"" + base_name + "\")",
-            "                        return std::make_unique<" + class_name + ">(self);"
-};
+    if (!entry_exists) {
+        const std::vector<std::string> entry_lines = {
+            "        { \"" + base_name + "\", [](Asset* asset) {",
+            "                return std::make_unique<" + class_name + ">(asset);",
+            "        } },"
+        };
 
-        auto catch_it = std::find_if(lines.begin(), lines.end(), [](const std::string& value) {
-            return value.find("} catch") != std::string::npos;
+        auto marker_it = std::find_if(lines.begin(), lines.end(), [](const std::string& value) {
+            return value.find("<<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>") != std::string::npos;
         });
 
-        if (catch_it != lines.end()) {
-            std::size_t insert_pos = static_cast<std::size_t>(std::distance(lines.begin(), catch_it));
-            if (insert_pos > 0 && !lines[insert_pos - 1].empty()) {
-                lines.insert(lines.begin() + insert_pos, std::string());
-                ++insert_pos;
-            }
-            lines.insert(lines.begin() + insert_pos, branch_lines.begin(), branch_lines.end());
+        if (marker_it != lines.end()) {
+            const std::size_t insert_pos = static_cast<std::size_t>(std::distance(lines.begin(), marker_it)) + 1;
+            lines.insert(lines.begin() + insert_pos, entry_lines.begin(), entry_lines.end());
             modified = true;
         }
     }

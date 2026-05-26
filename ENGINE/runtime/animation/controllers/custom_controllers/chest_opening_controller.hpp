@@ -7,7 +7,7 @@
 class Asset;
 class Input;
 
-class chest_opening_controller : public CustomAssetController {
+class chest_opening_controller : public custom_controller_api::DefaultCustomController {
 
 public:
     explicit chest_opening_controller(Asset* self);

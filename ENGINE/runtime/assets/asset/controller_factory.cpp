@@ -17,7 +17,7 @@
 #include "animation/controllers/custom_controllers/gary_controller.hpp"
 #include "animation/controllers/custom_controllers/spider_controller.hpp"
 
-#include "animation/controllers/shared/custom_asset_controller.hpp"
+#include "animation/controllers/shared/default_custom_controller.hpp"
 #include "utils/utils/log.hpp"
 #include "utils/utils/string_utils.hpp"
 
@@ -120,27 +120,24 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
         const std::string effective_key = explicit_key.empty() ? asset_key : explicit_key;
 
         if (effective_key.empty()) {
-                return std::make_unique<CustomAssetController>(self, true);
+                return std::make_unique<animation_update::custom_controllers::DefaultCustomController>(self, true);
         }
 
         const auto& registry = controller_registry();
         const auto it = registry.find(effective_key);
         if (it == registry.end()) {
-                return std::make_unique<CustomAssetController>(self, true);
+                return std::make_unique<animation_update::custom_controllers::DefaultCustomController>(self, true);
         }
 
         try {
                 return it->second(self);
-
-                if (key == "chest_opening_controller")
-                        return std::make_unique<chest_opening_controller>(self);
         } catch (const std::exception& ex) {
                 const std::string asset_name = (self->info && !self->info->name.empty()) ? self->info->name
                                                                                           : "<unknown asset>";
                 vibble::log::error("Failed to construct controller '" + effective_key + "' for asset '" +
                                    asset_name + "': " + ex.what());
         }
-        return std::make_unique<CustomAssetController>(self, true);
+        return std::make_unique<animation_update::custom_controllers::DefaultCustomController>(self, true);
 }
 
 std::unique_ptr<AssetController>

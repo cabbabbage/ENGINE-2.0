@@ -362,6 +362,13 @@ bool normalize_room_config_entry(nlohmann::json& entry,
         // Keep legacy trail keys stable, but force orthogonal layouts at runtime.
         normalize_zero_int("curvyness");
         normalize_zero_int("curviness");
+        if (entry.contains("curvyness") && !entry.contains("curviness")) {
+            entry["curviness"] = 0;
+            changed = true;
+        } else if (entry.contains("curviness") && !entry.contains("curvyness")) {
+            entry["curvyness"] = 0;
+            changed = true;
+        }
     } else {
         if (entry.erase("curvyness") > 0) changed = true;
         if (entry.erase("curviness") > 0) changed = true;

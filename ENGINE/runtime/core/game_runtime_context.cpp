@@ -86,6 +86,7 @@ const RoomFlyAggressionState* GameRuntimeContext::room_fly_aggression_state(
 }
 
 void GameRuntimeContext::rebuild_runtime_map_graph(const std::vector<Room*>& rooms) {
+    // Skip null pointers so runtime connectivity stays deterministic across editor/runtime rebuild passes.
     std::vector<Room*> filtered;
     filtered.reserve(rooms.size());
     for (Room* room : rooms) {

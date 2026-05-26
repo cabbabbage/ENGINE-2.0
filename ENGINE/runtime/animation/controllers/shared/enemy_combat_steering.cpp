@@ -173,7 +173,7 @@ bool EnemyCombatSteering::approach(Asset& self,
     }
 
     const SDL_Point world_target = bounded_target_from_delta(self, delta);
-    self.anim_->auto_move(world_target, effective_visit_threshold_px, std::nullopt, true, combat_overrides);
+    self.anim_->auto_move(world_target, effective_visit_threshold_px, std::nullopt, false, combat_overrides);
     mark_planned(self, target);
     return true;
 }
@@ -204,7 +204,7 @@ bool EnemyCombatSteering::evade(Asset& self,
     detour_side_ = -detour_side_;
 
     const SDL_Point world_target = bounded_target_from_delta(self, delta);
-    self.anim_->auto_move(world_target, effective_visit_threshold_px, std::nullopt, true, combat_overrides);
+    self.anim_->auto_move(world_target, effective_visit_threshold_px, std::nullopt, false, combat_overrides);
     mark_planned(self, target);
     return true;
 }

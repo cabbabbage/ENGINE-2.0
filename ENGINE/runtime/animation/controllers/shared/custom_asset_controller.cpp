@@ -417,7 +417,7 @@ void CustomAssetController::on_after_attack() {
     }
     AnimationUpdate::AutoMoveCombatOverrides combat_overrides;
     combat_overrides.attacking_enabled = false;
-    self->anim_->auto_move(player, 220, true, combat_overrides);
+    self->anim_->auto_move(player, 220, false, combat_overrides);
 }
 
 custom_controllers::AttackProcessingConfig CustomAssetController::attack_processing_config() const {

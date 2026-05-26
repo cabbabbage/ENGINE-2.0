@@ -22,7 +22,7 @@ using json = nlohmann::json;
 
 namespace {
 constexpr double kTau = 6.28318530717958647692;
-constexpr int kLayoutAttemptLimit = 12;
+constexpr int kLayoutAttemptLimit = 8;
 
 template <typename ClockDuration>
 double duration_ms(ClockDuration value) {

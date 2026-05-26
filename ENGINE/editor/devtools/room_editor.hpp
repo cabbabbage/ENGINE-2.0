@@ -144,7 +144,7 @@ public:
     void open_room_config();
     void close_room_config();
     void create_room_from_footer();
-    // Seeds a trail template that uses orthogonal centerline corridor generation.
+    // Seeds a trail template for orthogonal centerline corridor generation (90° turns only).
     void create_trail_from_footer();
     bool is_room_config_open() const;
     bool is_camera_settings_open() const;
@@ -515,6 +515,13 @@ private:
     void sync_stack_animation_list_preview_provider(const AssetInfo* info);
     bool apply_stack_animation_selection(const std::string& animation_id);
     bool delete_stack_animation_from_list(const std::string& animation_id);
+    void request_stack_animation_delete(const std::string& animation_id);
+    void cancel_stack_animation_delete_request();
+    bool confirm_stack_animation_delete_request();
+    void clear_stack_animation_delete_state();
+    void update_stack_animation_delete_modal_geometry();
+    bool handle_stack_animation_delete_modal_event(const SDL_Event& event);
+    void render_stack_animation_delete_modal(SDL_Renderer* renderer) const;
     std::string asset_editor_subview_label(AssetEditorSubview subview) const;
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
@@ -1018,6 +1025,15 @@ private:
     SDL_Rect stack_animation_list_bounds_{0, 0, 0, 0};
     bool stack_animation_list_visible_ = false;
     std::unordered_set<std::string> stack_animation_list_selectable_ids_;
+    bool showing_stack_animation_delete_popup_ = false;
+    std::optional<std::string> pending_stack_animation_delete_id_{};
+    SDL_Rect stack_animation_delete_modal_rect_{0, 0, 0, 0};
+    SDL_Rect stack_animation_delete_yes_rect_{0, 0, 0, 0};
+    SDL_Rect stack_animation_delete_no_rect_{0, 0, 0, 0};
+    bool stack_animation_delete_yes_hovered_ = false;
+    bool stack_animation_delete_no_hovered_ = false;
+    bool stack_animation_delete_yes_pressed_ = false;
+    bool stack_animation_delete_no_pressed_ = false;
 
     struct AnchorHandleSample {
         std::string name;

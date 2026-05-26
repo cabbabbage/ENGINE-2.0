@@ -3594,6 +3594,26 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         if (!enabled_) {
             return result;
         }
+        if (showing_stack_animation_delete_popup_) {
+            if (handle_stack_animation_delete_modal_event(event)) {
+                result.handled = true;
+                result.pointer_blocked = true;
+                return result;
+            }
+            switch (event.type) {
+                case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                case SDL_EVENT_MOUSE_BUTTON_UP:
+                case SDL_EVENT_MOUSE_MOTION:
+                case SDL_EVENT_MOUSE_WHEEL:
+                case SDL_EVENT_KEY_DOWN:
+                case SDL_EVENT_TEXT_INPUT:
+                    result.handled = true;
+                    result.pointer_blocked = true;
+                    return result;
+                default:
+                    break;
+            }
+        }
         ensure_stack_animation_list_panel();
         sync_stack_animation_list_panel();
         if (!stack_animation_list_panel_ || !stack_animation_list_visible_) {
@@ -6126,6 +6146,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (stack_animation_list_panel_ && stack_animation_list_visible_) {
             stack_animation_list_panel_->render(renderer);
         }
+        if (showing_stack_animation_delete_popup_) {
+            render_stack_animation_delete_modal(renderer);
+        }
         if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible()) {
             anchor_navigation_panel_->render(renderer);
         }
@@ -6776,6 +6799,7 @@ void RoomEditor::create_trail_from_footer() {
     trail_entry["geometry"] = "Square";
     trail_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
     trail_entry["curvyness"] = 0;
+    trail_entry["curviness"] = 0;
     trail_entry["tags"] = nlohmann::json::array();
     trail_entry["anti_tags"] = nlohmann::json::array();
     if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {
@@ -10839,7 +10863,7 @@ void RoomEditor::ensure_stack_animation_list_panel() {
         }
     });
     stack_animation_list_panel_->set_on_delete_animation([this](const std::string& animation_id) {
-        (void)this->delete_stack_animation_from_list(animation_id);
+        this->request_stack_animation_delete(animation_id);
     });
 }
 
@@ -10989,6 +11013,7 @@ void RoomEditor::sync_stack_animation_list_panel() {
     const bool list_visible = is_stack_animation_list_subview_active();
     stack_animation_list_visible_ = list_visible;
     if (!list_visible) {
+        clear_stack_animation_delete_state();
         sync_stack_animation_list_preview_provider(nullptr);
         stack_animation_list_panel_->set_external_rows(kEmptyExternalRows);
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
@@ -10997,6 +11022,7 @@ void RoomEditor::sync_stack_animation_list_panel() {
 
     Asset* target = stack_animation_list_target_asset();
     if (!target || !target->info) {
+        clear_stack_animation_delete_state();
         sync_stack_animation_list_preview_provider(nullptr);
         stack_animation_list_panel_->set_external_rows(kEmptyExternalRows);
         stack_animation_list_panel_->set_selected_animation_id(std::nullopt);
@@ -13194,6 +13220,9 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
             stack_animation_list_bounds_ = list_panel_rect;
             stack_animation_list_panel_->set_bounds(list_panel_rect);
         }
+    }
+    if (showing_stack_animation_delete_popup_) {
+        update_stack_animation_delete_modal_geometry();
     }
     if (anchor_tools_panel_) {
         if (anchor_mode_active() || light_mode_active() || asset_editor_transition_.active) {
@@ -19508,18 +19537,6 @@ bool RoomEditor::delete_stack_animation_from_list(const std::string& animation_i
         return false;
     }
 
-    const std::string message = "Delete animation '" + animation_id + "'? This cannot be undone.";
-    const bool confirmed = devmode::dialogs::confirm(
-        parent_window_,
-        "Delete Animation",
-        message,
-        "Delete",
-        "Cancel",
-        true);
-    if (!confirmed) {
-        return false;
-    }
-
     if (!target_info->remove_animation(animation_id)) {
         show_notice("Failed to delete animation '" + animation_id + "'.");
         return false;
@@ -19543,6 +19560,225 @@ bool RoomEditor::delete_stack_animation_from_list(const std::string& animation_i
     update_asset_editor_layout();
     show_notice("Deleted animation '" + animation_id + "'.");
     return true;
+}
+
+void RoomEditor::request_stack_animation_delete(const std::string& animation_id) {
+    if (animation_id.empty() || !is_stack_animation_editable_id(animation_id) || !stack_animation_list_visible_) {
+        return;
+    }
+    pending_stack_animation_delete_id_ = animation_id;
+    showing_stack_animation_delete_popup_ = true;
+    stack_animation_delete_yes_hovered_ = false;
+    stack_animation_delete_no_hovered_ = false;
+    stack_animation_delete_yes_pressed_ = false;
+    stack_animation_delete_no_pressed_ = false;
+    update_stack_animation_delete_modal_geometry();
+}
+
+void RoomEditor::cancel_stack_animation_delete_request() {
+    clear_stack_animation_delete_state();
+}
+
+bool RoomEditor::confirm_stack_animation_delete_request() {
+    if (!pending_stack_animation_delete_id_.has_value() || pending_stack_animation_delete_id_->empty()) {
+        clear_stack_animation_delete_state();
+        return false;
+    }
+    const std::string animation_id = *pending_stack_animation_delete_id_;
+    clear_stack_animation_delete_state();
+    return delete_stack_animation_from_list(animation_id);
+}
+
+void RoomEditor::clear_stack_animation_delete_state() {
+    showing_stack_animation_delete_popup_ = false;
+    pending_stack_animation_delete_id_.reset();
+    stack_animation_delete_modal_rect_ = SDL_Rect{0, 0, 0, 0};
+    stack_animation_delete_yes_rect_ = SDL_Rect{0, 0, 0, 0};
+    stack_animation_delete_no_rect_ = SDL_Rect{0, 0, 0, 0};
+    stack_animation_delete_yes_hovered_ = false;
+    stack_animation_delete_no_hovered_ = false;
+    stack_animation_delete_yes_pressed_ = false;
+    stack_animation_delete_no_pressed_ = false;
+}
+
+void RoomEditor::update_stack_animation_delete_modal_geometry() {
+    if (!showing_stack_animation_delete_popup_) {
+        return;
+    }
+    const int modal_w = 420;
+    const int modal_h = 190;
+    stack_animation_delete_modal_rect_ = SDL_Rect{
+        std::max(0, screen_w_ / 2 - modal_w / 2),
+        std::max(0, screen_h_ / 2 - modal_h / 2),
+        modal_w,
+        modal_h
+    };
+    const int button_w = 140;
+    const int button_h = 40;
+    const int button_gap = 20;
+    const int total_w = button_w * 2 + button_gap;
+    const int buttons_x = stack_animation_delete_modal_rect_.x + (stack_animation_delete_modal_rect_.w - total_w) / 2;
+    const int buttons_y = stack_animation_delete_modal_rect_.y + stack_animation_delete_modal_rect_.h - button_h - 20;
+    stack_animation_delete_yes_rect_ = SDL_Rect{buttons_x, buttons_y, button_w, button_h};
+    stack_animation_delete_no_rect_ = SDL_Rect{buttons_x + button_w + button_gap, buttons_y, button_w, button_h};
+}
+
+bool RoomEditor::handle_stack_animation_delete_modal_event(const SDL_Event& event) {
+    if (!showing_stack_animation_delete_popup_) {
+        return false;
+    }
+
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        SDL_Point p = sdl_mouse_util::MotionPoint(event.motion);
+        stack_animation_delete_yes_hovered_ = SDL_PointInRect(&p, &stack_animation_delete_yes_rect_);
+        stack_animation_delete_no_hovered_ = SDL_PointInRect(&p, &stack_animation_delete_no_rect_);
+        return SDL_PointInRect(&p, &stack_animation_delete_modal_rect_);
+    }
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point p = sdl_mouse_util::ButtonPoint(event.button);
+        if (SDL_PointInRect(&p, &stack_animation_delete_yes_rect_)) {
+            stack_animation_delete_yes_pressed_ = true;
+            return true;
+        }
+        if (SDL_PointInRect(&p, &stack_animation_delete_no_rect_)) {
+            stack_animation_delete_no_pressed_ = true;
+            return true;
+        }
+        return SDL_PointInRect(&p, &stack_animation_delete_modal_rect_);
+    }
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point p = sdl_mouse_util::ButtonPoint(event.button);
+        const bool inside_yes = SDL_PointInRect(&p, &stack_animation_delete_yes_rect_);
+        const bool inside_no = SDL_PointInRect(&p, &stack_animation_delete_no_rect_);
+        const bool consumed = SDL_PointInRect(&p, &stack_animation_delete_modal_rect_);
+        if (inside_yes && stack_animation_delete_yes_pressed_) {
+            stack_animation_delete_yes_pressed_ = false;
+            stack_animation_delete_no_pressed_ = false;
+            (void)confirm_stack_animation_delete_request();
+            return true;
+        }
+        if (inside_no && stack_animation_delete_no_pressed_) {
+            stack_animation_delete_yes_pressed_ = false;
+            stack_animation_delete_no_pressed_ = false;
+            cancel_stack_animation_delete_request();
+            return true;
+        }
+        stack_animation_delete_yes_pressed_ = false;
+        stack_animation_delete_no_pressed_ = false;
+        return consumed;
+    }
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        if (event.key.key == SDLK_RETURN || event.key.key == SDLK_Y || event.key.key == SDLK_SPACE) {
+            (void)confirm_stack_animation_delete_request();
+            return true;
+        }
+        if (event.key.key == SDLK_ESCAPE || event.key.key == SDLK_N) {
+            cancel_stack_animation_delete_request();
+            return true;
+        }
+        return true;
+    }
+    if (event.type == SDL_EVENT_TEXT_INPUT) {
+        return true;
+    }
+    return false;
+}
+
+void RoomEditor::render_stack_animation_delete_modal(SDL_Renderer* renderer) const {
+    if (!renderer || !showing_stack_animation_delete_popup_) {
+        return;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 160);
+    SDL_Rect overlay{0, 0, screen_w_, screen_h_};
+    sdl_render::FillRect(renderer, &overlay);
+
+    SDL_Rect box = stack_animation_delete_modal_rect_;
+    if (box.w <= 0 || box.h <= 0) {
+        return;
+    }
+    const SDL_Color panel_bg = DMStyles::PanelBG();
+    const SDL_Color& highlight = DMStyles::HighlightColor();
+    const SDL_Color& shadow = DMStyles::ShadowColor();
+    const int corner_radius = DMStyles::CornerRadius();
+    const int bevel_depth = DMStyles::BevelDepth();
+    dm_draw::DrawBeveledRect(renderer, box, corner_radius, bevel_depth, panel_bg, highlight, shadow, false,
+                             DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+    dm_draw::DrawRoundedOutline(renderer, box, corner_radius, 1, DMStyles::Border());
+
+    const std::string animation_id = pending_stack_animation_delete_id_.value_or(std::string{});
+    const std::string message = "Are you sure you want to delete animation \"" + animation_id + "\"?";
+    const int text_margin = 16 + bevel_depth;
+    const int text_rect_bottom = stack_animation_delete_yes_rect_.y - 14;
+    const int text_height = std::max(0, text_rect_bottom - (box.y + text_margin));
+    SDL_Rect text_rect{box.x + text_margin, box.y + text_margin, std::max(0, box.w - 2 * text_margin), text_height};
+
+    TTF_Font* font = devmode::utils::load_font(18);
+    if (font && text_rect.w > 0 && text_rect.h > 0) {
+        SDL_Surface* surf = ttf_util::RenderTextBlendedWrapped(font, message.c_str(), DMStyles::Label().color, text_rect.w);
+        if (surf) {
+            SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+            SDL_DestroySurface(surf);
+            if (tex) {
+                int tw = 0;
+                int th = 0;
+                texture_size(tex, tw, th);
+                SDL_Rect dst{text_rect.x, text_rect.y, std::min(tw, text_rect.w), std::min(th, text_rect.h)};
+                sdl_render::Texture(renderer, tex, nullptr, &dst);
+                SDL_DestroyTexture(tex);
+            }
+        }
+    }
+
+    auto render_button = [&](const SDL_Rect& rect, bool hovered, bool pressed, const char* caption, const DMButtonStyle& style) {
+        SDL_Color bg = style.bg;
+        if (pressed) {
+            bg = style.press_bg;
+        } else if (hovered) {
+            bg = style.hover_bg;
+        }
+        dm_draw::DrawBeveledRect(renderer, rect, corner_radius, bevel_depth, bg, highlight, shadow, false,
+                                 DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+        dm_draw::DrawRoundedOutline(renderer, rect, corner_radius, 1, style.border);
+        TTF_Font* btn_font = devmode::utils::load_font(style.label.font_size > 0 ? style.label.font_size : 16);
+        if (!btn_font) {
+            btn_font = devmode::utils::load_font(16);
+        }
+        if (!btn_font) {
+            return;
+        }
+        SDL_Surface* text = ttf_util::RenderTextBlended(btn_font, caption, style.text);
+        if (!text) {
+            return;
+        }
+        SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, text);
+        SDL_DestroySurface(text);
+        if (!tex) {
+            return;
+        }
+        int tw = 0;
+        int th = 0;
+        texture_size(tex, tw, th);
+        const int interior_h = std::max(0, rect.h - 2 * bevel_depth);
+        int text_y = rect.y + bevel_depth + std::max(0, interior_h - th) / 2;
+        text_y = std::max(text_y, rect.y + bevel_depth);
+        text_y = std::min(text_y, rect.y + rect.h - bevel_depth - th);
+        SDL_Rect dst{rect.x + (rect.w - tw) / 2, text_y, tw, th};
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
+        SDL_DestroyTexture(tex);
+    };
+
+    render_button(stack_animation_delete_yes_rect_,
+                  stack_animation_delete_yes_hovered_,
+                  stack_animation_delete_yes_pressed_,
+                  "Delete",
+                  DMStyles::DeleteButton());
+    render_button(stack_animation_delete_no_rect_,
+                  stack_animation_delete_no_hovered_,
+                  stack_animation_delete_no_pressed_,
+                  "Cancel",
+                  DMStyles::HeaderButton());
 }
 
 void RoomEditor::clamp_selected_movement_path_index() {

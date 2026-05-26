@@ -19714,16 +19714,21 @@ void RoomEditor::render_stack_animation_delete_modal(SDL_Renderer* renderer) con
     const int text_height = std::max(0, text_rect_bottom - (box.y + text_margin));
     SDL_Rect text_rect{box.x + text_margin, box.y + text_margin, std::max(0, box.w - 2 * text_margin), text_height};
 
-    TTF_Font* font = ::devmode::utils::load_font(18);
+    TTF_Font* font = devmode::utils::load_font(18);
     if (font && text_rect.w > 0 && text_rect.h > 0) {
         SDL_Surface* surf = ttf_util::RenderTextBlendedWrapped(font, message.c_str(), DMStyles::Label().color, text_rect.w);
         if (surf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_DestroySurface(surf);
             if (tex) {
-                int tw = 0;
-                int th = 0;
-                texture_size(tex, tw, th);
+                float twf = 0.0f;
+                float thf = 0.0f;
+                if (!SDL_GetTextureSize(tex, &twf, &thf)) {
+                    SDL_DestroyTexture(tex);
+                    return;
+                }
+                const int tw = static_cast<int>(std::lround(twf));
+                const int th = static_cast<int>(std::lround(thf));
                 SDL_Rect dst{text_rect.x, text_rect.y, std::min(tw, text_rect.w), std::min(th, text_rect.h)};
                 sdl_render::Texture(renderer, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
@@ -19741,9 +19746,9 @@ void RoomEditor::render_stack_animation_delete_modal(SDL_Renderer* renderer) con
         dm_draw::DrawBeveledRect(renderer, rect, corner_radius, bevel_depth, bg, highlight, shadow, false,
                                  DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
         dm_draw::DrawRoundedOutline(renderer, rect, corner_radius, 1, style.border);
-        TTF_Font* btn_font = ::devmode::utils::load_font(style.label.font_size > 0 ? style.label.font_size : 16);
+        TTF_Font* btn_font = devmode::utils::load_font(style.label.font_size > 0 ? style.label.font_size : 16);
         if (!btn_font) {
-            btn_font = ::devmode::utils::load_font(16);
+            btn_font = devmode::utils::load_font(16);
         }
         if (!btn_font) {
             return;
@@ -19757,9 +19762,14 @@ void RoomEditor::render_stack_animation_delete_modal(SDL_Renderer* renderer) con
         if (!tex) {
             return;
         }
-        int tw = 0;
-        int th = 0;
-        texture_size(tex, tw, th);
+        float twf = 0.0f;
+        float thf = 0.0f;
+        if (!SDL_GetTextureSize(tex, &twf, &thf)) {
+            SDL_DestroyTexture(tex);
+            return;
+        }
+        const int tw = static_cast<int>(std::lround(twf));
+        const int th = static_cast<int>(std::lround(thf));
         const int interior_h = std::max(0, rect.h - 2 * bevel_depth);
         int text_y = rect.y + bevel_depth + std::max(0, interior_h - th) / 2;
         text_y = std::max(text_y, rect.y + bevel_depth);

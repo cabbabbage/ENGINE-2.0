@@ -57,6 +57,7 @@
 #include "rendering/render/layer_depth_bins.hpp"
 #include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
+#include "gameplay/spawn/dynamic_spawn_geometry.hpp"
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_types.hpp"
@@ -4024,6 +4025,43 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     if (renderer && room_editor_) {
         room_editor_->render_overlays(renderer);
 
+    }
+    if (renderer && boundary_assets_modal_ && boundary_assets_modal_->visible() && assets_) {
+        const WarpedScreenGrid& view_cam = assets_->getView();
+        const auto render_bounds = view_cam.get_current_view();
+        const int render_edge_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
+        int render_radius = 1024;
+        const nlohmann::json& map_json = assets_->map_info_json();
+        if (map_json.is_object()) {
+            auto live_it = map_json.find("live_dynamic_spawns");
+            if (live_it != map_json.end() && live_it->is_object()) {
+                auto radius_it = live_it->find("render_radius");
+                if (radius_it != live_it->end() && radius_it->is_number()) {
+                    const int parsed = static_cast<int>(std::lround(radius_it->get<double>()));
+                    render_radius = std::clamp(parsed, 0, 100000);
+                }
+            }
+        }
+        const int room_edge_z = dynamic_spawn::geometry::collect_area_geometry(*assets_).max_z + render_radius;
+        const int boundary_z = std::max(render_edge_z, room_edge_z);
+        SDL_FPoint left{};
+        SDL_FPoint right{};
+        if (try_floor_warped_screen_position(view_cam, SDL_Point{render_bounds.min.world_x(), boundary_z}, left) &&
+            try_floor_warped_screen_position(view_cam, SDL_Point{render_bounds.max.world_x(), boundary_z}, right)) {
+            SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
+            SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
+            Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
+            SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 255, 32, 32, 235);
+            SDL_RenderLine(renderer,
+                           static_cast<int>(std::lround(left.x)),
+                           static_cast<int>(std::lround(left.y)),
+                           static_cast<int>(std::lround(right.x)),
+                           static_cast<int>(std::lround(right.y)));
+            SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
+            SDL_SetRenderDrawBlendMode(renderer, prev_mode);
+        }
     }
     if (renderer && camera_panel_ && camera_panel_->is_visible() && assets_) {
         const WarpedScreenGrid& cam = assets_->getView();

@@ -664,8 +664,8 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
         return;
     }
 
-    const auto spawn_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, preload_margin_px()));
-    const auto keep_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, despawn_margin_px()));
+    auto spawn_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, preload_margin_px()));
+    auto keep_chunks = chunk_keys_for_bounds(expanded_bounds(work_bounds, despawn_margin_px()));
     {
         for (auto it = cells_by_chunk_.begin(); it != cells_by_chunk_.end(); ++it) {
             auto& cells = it->second;
@@ -694,6 +694,18 @@ void DynamicSpawnRuntime::sync(const world::GridBounds& work_bounds, std::size_t
                 CellKey key{Mode::FogBoundaryLane, fog_selector->id, spacing, gx, gz};
                 add_planned_cell(*fog_selector, key, x, boundary_z, assets_.map_id(), cells_by_chunk_);
             }
+            const auto fog_spawn_chunks =
+                chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
+                                                        world::GridPoint{min_x, boundary_z},
+                                                        world::GridPoint{max_x, boundary_z}},
+                                                    preload_margin_px()));
+            spawn_chunks.insert(fog_spawn_chunks.begin(), fog_spawn_chunks.end());
+            const auto fog_keep_chunks =
+                chunk_keys_for_bounds(expanded_bounds(world::GridBounds{
+                                                        world::GridPoint{min_x, boundary_z},
+                                                        world::GridPoint{max_x, boundary_z}},
+                                                    despawn_margin_px()));
+            keep_chunks.insert(fog_keep_chunks.begin(), fog_keep_chunks.end());
         }
     }
 

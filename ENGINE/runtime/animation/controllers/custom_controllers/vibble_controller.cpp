@@ -33,8 +33,8 @@ constexpr std::string_view kSpiderEggAssetName = "spider_egg";
 constexpr std::string_view kInteractableTag = "interactable";
 constexpr std::string_view kCanCarryTag = "can_carry";
 constexpr int kInteractRadiusPx = 150;
-constexpr float kYawSensitivity = 0.20f;
-constexpr float kPitchSensitivity = 0.20f;
+constexpr float kYawSensitivity = 0.60f;
+constexpr float kPitchSensitivity = 0.80f;
 constexpr float kPitchMinDegrees = -45.0f;
 constexpr float kPitchMaxDegrees = 45.0f;
 

@@ -14437,7 +14437,7 @@
           "candidate": {
             "candidates": [
               {
-                "chance": 2,
+                "chance": 8,
                 "name": "null"
               },
               {
@@ -16656,8 +16656,8 @@
                 "resolve_x": true,
                 "rotation_degrees": 0.0,
                 "scaling_method": "parent",
-                "texture_x": 152,
-                "texture_y": 335
+                "texture_x": 205,
+                "texture_y": 302
               },
               {
                 "depth_offset": 0.0,
@@ -19623,26 +19623,10 @@
               "rotation_degrees": 0.0,
               "scaling_method": "parent",
               "tags": [
-                "right"
+                "left"
               ],
               "texture_x": 35,
               "texture_y": 14
-            },
-            {
-              "angle_degrees": 45.0,
-              "anti_tags": [
-                "attack"
-              ],
-              "depth_offset": 0.0,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "tags": [
-                "right"
-              ],
-              "texture_x": 0,
-              "texture_y": 20
             },
             {
               "angle_degrees": 90.0,
@@ -19661,7 +19645,7 @@
               "texture_y": 14
             },
             {
-              "angle_degrees": 135.0,
+              "angle_degrees": 180.0,
               "anti_tags": [
                 "attack"
               ],
@@ -19672,42 +19656,9 @@
               "scaling_method": "parent",
               "tags": [
                 "right"
-              ],
-              "texture_x": -50,
-              "texture_y": 0
-            },
-            {
-              "angle_degrees": 180.0,
-              "anti_tags": [
-                "attack",
-                "right"
-              ],
-              "depth_offset": 0.0,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "tags": [
-                "left"
               ],
               "texture_x": -35,
               "texture_y": -14
-            },
-            {
-              "angle_degrees": 225.0,
-              "anti_tags": [
-                "attack"
-              ],
-              "depth_offset": 0.0,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "tags": [
-                "left"
-              ],
-              "texture_x": 0,
-              "texture_y": -20
             },
             {
               "angle_degrees": 270.0,
@@ -19724,22 +19675,6 @@
               ],
               "texture_x": 35,
               "texture_y": -14
-            },
-            {
-              "angle_degrees": 315.0,
-              "anti_tags": [
-                "attack"
-              ],
-              "depth_offset": 0.0,
-              "hidden": false,
-              "resolve_x": true,
-              "rotation_degrees": 0.0,
-              "scaling_method": "parent",
-              "tags": [
-                "left"
-              ],
-              "texture_x": 50,
-              "texture_y": 0
             }
           ],
           "radius_offset_degrees": 235.0,
@@ -20219,38 +20154,85 @@
             [
               0,
               0,
-              0
+              0,
+              0.0
             ],
             [
-              -16,
+              2,
               0,
-              39
+              7,
+              120.0
             ],
             [
-              -17,
+              -11,
               0,
-              21
+              5,
+              0.0
             ],
             [
-              -19,
               0,
-              -12
+              0,
+              -15,
+              -120.0
             ],
             [
-              -23,
+              -18,
               0,
-              -42
+              -33,
+              0.0
             ],
             [
-              -9,
+              9,
               0,
-              -66
+              -28,
+              0.0
+            ]
+          ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                2,
+                0,
+                7,
+                120.0
+              ],
+              [
+                -11,
+                0,
+                5,
+                0.0
+              ],
+              [
+                0,
+                0,
+                -15,
+                -120.0
+              ],
+              [
+                -18,
+                0,
+                -33,
+                0.0
+              ],
+              [
+                9,
+                0,
+                -28,
+                0.0
+              ]
             ]
           ],
           "movement_total": {
-            "dx": -84,
+            "dr": 0.0,
+            "dx": -18,
             "dy": 0,
-            "dz": -60.0
+            "dz": -64.0
           },
           "number_of_frames": 1,
           "on_end": "reverse",
@@ -20275,7 +20257,7 @@
           "invert_frames_vertical": false,
           "invert_x": true,
           "invert_y": false,
-          "invert_z": true,
+          "invert_z": false,
           "number_of_frames": 1,
           "on_end": "reverse",
           "reverse_source": false,
@@ -20309,12 +20291,29 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -20358,17 +20357,43 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
+      "size_settings": {
+        "size_variation": 0.0
+      },
       "start": "default",
       "tags": [],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
       "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "vibble_eyes": {
       "anchor_point_child_candidates": [],
@@ -20893,9 +20918,9 @@
       "rooms_data": {
         "Bluebloom_Nook": {
           "display_color": [
+            85,
             242,
-            36,
-            36,
+            228,
             255
           ],
           "geometry": "Circle",
@@ -21039,9 +21064,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            187,
-            242,
-            85,
+            31,
+            204,
+            177,
             255
           ],
           "geometry": "Circle",
@@ -21185,9 +21210,9 @@
         },
         "Frog_Basin": {
           "display_color": [
-            204,
-            51,
-            98,
+            189,
+            36,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -21328,9 +21353,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
+            85,
+            174,
             242,
-            235,
-            36,
             255
           ],
           "geometry": "Circle",
@@ -21470,15 +21495,15 @@
           }
         },
         "Loot_Room": {
-          "camera_center_dx": 675,
-          "camera_center_dz": 5108,
-          "camera_height_px": 2429,
-          "camera_tilt_deg": 51.847171783447266,
+          "camera_center_dx": -3468,
+          "camera_center_dz": 130,
+          "camera_height_px": 326,
+          "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
           "display_color": [
-            89,
-            31,
-            204,
+            85,
+            242,
+            160,
             255
           ],
           "geometry": "Square",
@@ -21671,9 +21696,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
-            36,
-            242,
-            200,
+            204,
+            77,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -21822,9 +21847,9 @@
           "camera_tilt_deg": 47.55434036254883,
           "camera_zoom_percent": 0,
           "display_color": [
+            204,
             242,
             85,
-            136,
             255
           ],
           "geometry": "Circle",
@@ -22094,6 +22119,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-42742b181289"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble_attack_1"
+                }
+              ],
+              "display_name": "vibble_attack_1",
+              "dx": 684,
+              "dz": 2736,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 18128,
+              "origional_width": 19784,
+              "position": "Exact",
+              "priority": 8,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-9e44bfa73dfe"
             }
           ],
           "trail_connection_sector": {
@@ -22114,9 +22169,9 @@
         },
         "NewRoom": {
           "display_color": [
-            122,
-            242,
-            85,
+            204,
+            71,
+            169,
             255
           ],
           "geometry": "Square",
@@ -22160,8 +22215,8 @@
         },
         "NewRoom1": {
           "display_color": [
-            179,
-            36,
+            154,
+            85,
             242,
             255
           ],
@@ -22206,9 +22261,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            242,
-            98,
             36,
+            212,
+            242,
             255
           ],
           "geometry": "Square",
@@ -22283,9 +22338,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            31,
-            98,
-            204,
+            36,
+            242,
+            129,
             255
           ],
           "geometry": "Square",
@@ -22329,9 +22384,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            31,
-            183,
-            204,
+            84,
+            36,
+            242,
             255
           ],
           "geometry": "Square",
@@ -22376,9 +22431,9 @@
         },
         "Old_Stump_Yard": {
           "display_color": [
-            176,
-            224,
-            34,
+            242,
+            36,
+            36,
             255
           ],
           "geometry": "Square",
@@ -22585,9 +22640,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            126,
-            36,
             242,
+            121,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -22668,9 +22723,9 @@
         },
         "Spider_Hollow": {
           "display_color": [
-            36,
-            137,
             242,
+            36,
+            192,
             255
           ],
           "geometry": "Square",
@@ -22814,8 +22869,8 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            199,
             71,
+            136,
             204,
             255
           ],
@@ -22960,9 +23015,9 @@
         },
         "Whispering_Ring": {
           "display_color": [
-            242,
-            85,
-            85,
+            204,
+            71,
+            116,
             255
           ],
           "geometry": "Circle",
@@ -23112,8 +23167,8 @@
           "camera_zoom_percent": 49,
           "display_color": [
             242,
-            224,
-            85,
+            36,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -23537,9 +23592,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            204,
-            69,
-            51,
+            224,
+            169,
+            34,
             255
           ],
           "geometry": "Square",

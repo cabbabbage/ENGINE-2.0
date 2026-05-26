@@ -445,12 +445,16 @@ void RoomMovementToolsPanel::render(SDL_Renderer* renderer) const {
             if (quantize_options_[i].selectable) {
                 if (static_cast<int>(i) == quantize_hover_index_) {
                     SDL_SetRenderDrawColor(renderer, 95, 105, 130, 120);
-                    SDL_RenderFillRect(renderer, &row);
+                    const SDL_FRect row_f{static_cast<float>(row.x), static_cast<float>(row.y), static_cast<float>(row.w), static_cast<float>(row.h)};
+                    SDL_RenderFillRect(renderer, &row_f);
                 }
                 const SDL_Color accent = quantize_options_[i].current_animation
                     ? SDL_Color{219, 126, 247, 255}
                     : SDL_Color{109, 202, 255, 255};
-                SDL_Rect swatch{row.x + 8, row.y + (row.h - 10) / 2, 10, 10};
+                const SDL_FRect swatch{static_cast<float>(row.x + 8),
+                                      static_cast<float>(row.y + (row.h - 10) / 2),
+                                      10.0f,
+                                      10.0f};
                 SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, accent.a);
                 SDL_RenderFillRect(renderer, &swatch);
             }

@@ -86,7 +86,14 @@ const RoomFlyAggressionState* GameRuntimeContext::room_fly_aggression_state(
 }
 
 void GameRuntimeContext::rebuild_runtime_map_graph(const std::vector<Room*>& rooms) {
-    map_graph_.build_from_rooms(rooms);
+    std::vector<Room*> filtered;
+    filtered.reserve(rooms.size());
+    for (Room* room : rooms) {
+        if (room) {
+            filtered.push_back(room);
+        }
+    }
+    map_graph_.build_from_rooms(filtered);
     map_graph_.set_current_room(current_room_);
 }
 

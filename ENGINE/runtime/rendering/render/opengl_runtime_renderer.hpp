@@ -73,6 +73,11 @@ const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
 
 class OpenGLRuntimeRenderer {
 public:
+    bool ensure_atmospheric_dust_textures();
+    void destroy_atmospheric_dust_textures();
+
+    std::vector<SDL_Texture*> atmospheric_dust_textures_{};
+    bool atmospheric_dust_textures_loaded_ = false;
     static std::unique_ptr<OpenGLRuntimeRenderer> Create(SDL_Renderer* renderer,
                                                          Assets* assets,
                                                          int screen_width,

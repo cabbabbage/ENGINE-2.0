@@ -17332,9 +17332,126 @@
       "y_pos_min": 0
     },
     "tree_dark": {
-      "anchor_point_child_candidates": [],
+      "anchor_point_child_candidates": [
+        {
+          "anchor_point_name": "norm_anhor_point_1",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "fog_2"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_1_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "fog_2"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_1_copy_2",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "fog_2"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        },
+        {
+          "anchor_point_name": "norm_anhor_point_1_copy_2_copy",
+          "candidates": {
+            "candidates": [
+              {
+                "chance": 5,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "fog_2"
+              }
+            ]
+          },
+          "orphan_on_end": true
+        }
+      ],
       "animations": {
         "default": {
+          "anchor_points": [
+            [
+              {
+                "depth_offset": 10.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 224,
+                "texture_y": 976
+              },
+              {
+                "depth_offset": 24.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1_copy_2",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 242,
+                "texture_y": 784
+              },
+              {
+                "depth_offset": -16.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1_copy_2_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 251,
+                "texture_y": 668
+              },
+              {
+                "depth_offset": -21.0,
+                "flip_horizontal": true,
+                "flip_vertical": true,
+                "hidden": false,
+                "name": "norm_anhor_point_1_copy",
+                "resolve_x": true,
+                "rotation_degrees": 0.0,
+                "scaling_method": "parent",
+                "texture_x": 241,
+                "texture_y": 858
+              }
+            ]
+          ],
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -23561,7 +23678,7 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "blur_px": 3.0399999618530273,
+        "blur_px": 8.319999694824219,
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 2019,
         "camera_height_min_px": 200,
@@ -23583,7 +23700,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 20.03999900817871,
+        "radial_blur_px": 29.26999855041504,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -23712,7 +23829,7 @@
           "display_color": [
             31,
             204,
-            31,
+            78,
             255
           ],
           "geometry": "Circle",
@@ -23856,9 +23973,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            242,
-            36,
-            178,
+            32,
+            31,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -24002,9 +24119,9 @@
         },
         "Frog_Basin": {
           "display_color": [
-            95,
             242,
             36,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -24145,9 +24262,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
-            142,
-            242,
             85,
+            242,
+            128,
             255
           ],
           "geometry": "Circle",
@@ -24293,9 +24410,9 @@
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
           "display_color": [
+            75,
             242,
             36,
-            242,
             255
           ],
           "geometry": "Square",
@@ -24488,9 +24605,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
-            100,
-            36,
-            242,
+            204,
+            151,
+            71,
             255
           ],
           "geometry": "Circle",
@@ -24639,9 +24756,9 @@
           "camera_tilt_deg": 26.236095428466797,
           "camera_zoom_percent": 0,
           "display_color": [
-            36,
-            242,
-            83,
+            31,
+            110,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -24941,6 +25058,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-9e44bfa73dfe"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_dark"
+                }
+              ],
+              "display_name": "tree_dark",
+              "dx": -880,
+              "dz": -1552,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 12896,
+              "origional_width": 14032,
+              "position": "Exact",
+              "priority": 9,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-71e96812f420"
             }
           ],
           "trail_connection_sector": {
@@ -24963,7 +25110,7 @@
           "display_color": [
             31,
             204,
-            160,
+            141,
             255
           ],
           "geometry": "Square",
@@ -25007,9 +25154,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            183,
-            31,
-            204,
+            224,
+            34,
+            186,
             255
           ],
           "geometry": "Square",
@@ -25053,9 +25200,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            204,
-            85,
-            31,
+            74,
+            36,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25130,9 +25277,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            242,
-            85,
-            148,
+            99,
+            204,
+            71,
             255
           ],
           "geometry": "Square",
@@ -25176,9 +25323,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            34,
-            185,
-            224,
+            214,
+            85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25223,9 +25370,9 @@
         },
         "NewRoom5": {
           "display_color": [
-            242,
-            85,
-            205,
+            191,
+            224,
+            34,
             255
           ],
           "geometry": "Square",
@@ -25270,9 +25417,9 @@
         },
         "Old_Stump_Yard": {
           "display_color": [
-            219,
-            242,
-            36,
+            71,
+            149,
+            204,
             255
           ],
           "geometry": "Square",
@@ -25479,9 +25626,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            76,
-            204,
             71,
+            204,
+            177,
             255
           ],
           "geometry": "Circle",
@@ -25563,8 +25710,8 @@
         "Spider_Hollow": {
           "display_color": [
             242,
+            138,
             36,
-            123,
             255
           ],
           "geometry": "Square",
@@ -25708,8 +25855,8 @@
         },
         "Thornstep_Croft": {
           "display_color": [
+            189,
             36,
-            117,
             242,
             255
           ],
@@ -25854,8 +26001,8 @@
         },
         "Whispering_Ring": {
           "display_color": [
-            85,
-            96,
+            36,
+            74,
             242,
             255
           ],
@@ -26005,9 +26152,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            67,
-            31,
-            204,
+            242,
+            36,
+            135,
             255
           ],
           "geometry": "Circle",
@@ -26431,9 +26578,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            204,
-            71,
-            177,
+            242,
+            184,
+            85,
             255
           ],
           "geometry": "Square",
@@ -26815,9 +26962,9 @@
           "curviness": 0,
           "curvyness": 0,
           "display_color": [
-            36,
-            88,
+            150,
             242,
+            85,
             255
           ],
           "geometry": "Square",

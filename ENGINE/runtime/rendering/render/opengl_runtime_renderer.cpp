@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
@@ -329,6 +330,19 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     constexpr std::uintptr_t kSpritePacketSortOffset =
         std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
+}
+
+
+bool is_supported_dust_image(const std::filesystem::path& path) {
+    std::string ext = path.extension().u8string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    return ext == ".png" ||
+           ext == ".webp" ||
+           ext == ".jpg" ||
+           ext == ".jpeg";
 }
 
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
@@ -998,10 +1012,12 @@ std::unique_ptr<OpenGLRuntimeRenderer> OpenGLRuntimeRenderer::Create(SDL_Rendere
 
 bool OpenGLRuntimeRenderer::initialize(std::string& out_error) {
     out_error.clear();
+
     if (!renderer_) {
         out_error = "Renderer is null.";
         return false;
     }
+
     renderer_name_ = renderer_name_.empty() ? std::string("unknown") : renderer_name_;
     if (const char* name = SDL_GetRendererName(renderer_)) {
         renderer_name_ = name;
@@ -1027,10 +1043,13 @@ bool OpenGLRuntimeRenderer::initialize(std::string& out_error) {
     if (const std::optional<SDL_Point> target = render_target_manager_.current_size(); target.has_value()) {
         prewarm.target_width = static_cast<std::uint32_t>(target->x);
         prewarm.target_height = static_cast<std::uint32_t>(target->y);
+
         std::string prewarm_error;
-        ensure_render_targets(prewarm, prewarm_error);
-        ensure_far_background_textures();
+        (void)ensure_render_targets(prewarm, prewarm_error);
+        (void)ensure_far_background_textures();
+        (void)ensure_atmospheric_dust_textures();
     }
+
     return true;
 }
 
@@ -1039,9 +1058,13 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(xy_sprite_target_);
     render_diagnostics::destroy_texture(composite_target_);
     render_diagnostics::destroy_texture(finale_effects_target_);
+
     destroy_depth_layer_targets();
     dof_blur_chain_.destroy_targets();
+
     destroy_far_background_textures();
+    destroy_atmospheric_dust_textures();
+
     output_target_width_ = 1;
     output_target_height_ = 1;
     clear_creation_queue();
@@ -1157,6 +1180,108 @@ void OpenGLRuntimeRenderer::configure_render_target(SDL_Texture* texture) {
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
 }
+
+
+bool OpenGLRuntimeRenderer::ensure_atmospheric_dust_textures() {
+    if (!renderer_) {
+        return false;
+    }
+
+    if (atmospheric_dust_textures_loaded_) {
+        dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+        return true;
+    }
+
+    atmospheric_dust_textures_loaded_ = true;
+    atmospheric_dust_textures_.clear();
+
+    const std::filesystem::path dust_root = project_root_path() / "resources" / "dust";
+    if (!std::filesystem::exists(dust_root)) {
+        vibble::log::warn("[OpenGLRuntimeRenderer] Atmospheric dust folder does not exist: " +
+                          dust_root.u8string());
+        dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+        return true;
+    }
+
+    std::vector<std::filesystem::path> image_paths;
+    std::error_code ec;
+    std::filesystem::recursive_directory_iterator it(
+        dust_root,
+        std::filesystem::directory_options::skip_permission_denied,
+        ec);
+    const std::filesystem::recursive_directory_iterator end{};
+
+    for (; it != end && !ec; it.increment(ec)) {
+        const std::filesystem::directory_entry& entry = *it;
+
+        std::error_code entry_ec;
+        if (!entry.is_regular_file(entry_ec) || entry_ec) {
+            continue;
+        }
+
+        const std::filesystem::path path = entry.path();
+        if (!is_supported_dust_image(path)) {
+            continue;
+        }
+
+        image_paths.push_back(path);
+    }
+
+    if (ec) {
+        vibble::log::warn("[OpenGLRuntimeRenderer] Stopped scanning atmospheric dust folder early: " +
+                          dust_root.u8string() + " error=" + ec.message());
+    }
+
+    std::sort(image_paths.begin(), image_paths.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.u8string() < rhs.u8string();
+    });
+
+    atmospheric_dust_textures_.reserve(image_paths.size());
+
+    for (const std::filesystem::path& path : image_paths) {
+        SDL_Surface* surface = IMG_Load(path.u8string().c_str());
+        if (!surface) {
+            vibble::log::warn("[OpenGLRuntimeRenderer] Failed to load atmospheric dust frame '" +
+                              path.u8string() + "': " + safe_string(SDL_GetError()));
+            continue;
+        }
+
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+        SDL_DestroySurface(surface);
+
+        if (!texture) {
+            vibble::log::warn("[OpenGLRuntimeRenderer] Failed to upload atmospheric dust frame '" +
+                              path.u8string() + "': " + safe_string(SDL_GetError()));
+            continue;
+        }
+
+        render_diagnostics::note_texture_created(texture);
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
+
+        atmospheric_dust_textures_.push_back(texture);
+    }
+
+    vibble::log::info("[OpenGLRuntimeRenderer] Loaded " +
+                      std::to_string(atmospheric_dust_textures_.size()) +
+                      " atmospheric dust frame texture(s) from " +
+                      dust_root.u8string());
+
+    dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+    return true;
+}
+
+
+void OpenGLRuntimeRenderer::destroy_atmospheric_dust_textures() {
+    for (SDL_Texture*& texture : atmospheric_dust_textures_) {
+        render_diagnostics::destroy_texture(texture);
+    }
+
+    atmospheric_dust_textures_.clear();
+    atmospheric_dust_textures_loaded_ = false;
+    dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+}
+
 
 bool OpenGLRuntimeRenderer::ensure_far_background_textures() {
     if (!renderer_) {
@@ -2235,6 +2360,10 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(frame_to_render->target_height))};
         dof_blur_chain_.set_output_dimensions(static_cast<int>(frame_to_render->target_width),
                                               static_cast<int>(frame_to_render->target_height));
+
+        (void)ensure_atmospheric_dust_textures();
+        dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+
         const dof_blur_chain::CompositeResult dof_result =
             dof_blur_chain_.compose(dof_layers,
                                     floor_target_,
@@ -2243,7 +2372,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                     camera_settings.radial_blur_px,
                                     optical_center,
                                     frame_to_render->focus_depth_layer,
-                                    camera_zoom_percent);
+                                    camera_zoom_percent,
+                                    now_seconds);
 
         const bool frame_contains_focus_depth_layer = std::any_of(
             frame_to_render->depth_layers.begin(),
@@ -2262,14 +2392,20 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 return false;
             }
             apply_damage_pulse_to_layers();
-            resolved_dof_result =
-                dof_blur_chain_.compose(dof_layers,
-                                        floor_target_,
-                                        camera_settings.depth_of_field_enabled,
-                                        camera_settings.blur_px,
-                                        camera_settings.radial_blur_px,
-                                        optical_center,
-                                        frame_to_render->focus_depth_layer);
+            (void)ensure_atmospheric_dust_textures();
+            dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+
+    resolved_dof_result =
+        dof_blur_chain_.compose(dof_layers,
+                                floor_target_,
+                                camera_settings.depth_of_field_enabled,
+                                camera_settings.blur_px,
+                                camera_settings.radial_blur_px,
+                                optical_center,
+                                frame_to_render->focus_depth_layer,
+                                camera_zoom_percent,
+                                now_seconds,
+                                dust_anchor);
         }
 
         if (resolved_dof_result.valid) {

@@ -21,44 +21,65 @@ inline constexpr std::uint32_t kMaxConcurrentPulses = 5;
 inline constexpr float kPhaseFrequencyHz = 8.5f;
 } // namespace damage_pulse_tuning
 
-namespace layer_effect_tuning {
-// This is intentionally radial-only. Normal Gaussian blur was removed for speed.
-inline constexpr float kMinProcessQualityScale = 0.18f;
+namespace radial_blur_tuning {
+inline constexpr float kMinProcessQualityScale = 0.20f;
+inline constexpr float kFarLayerQualityMultiplier = 0.48f;
+inline constexpr float kBackgroundSeedQualityMultiplier = 0.42f;
 
-// Foreground layers are never downscaled. Background layers can be downscaled as they get farther.
-inline constexpr float kBackgroundFarQualityMultiplier = 0.38f;
-inline constexpr float kBackgroundSeedQualityMultiplier = 0.34f;
+inline constexpr int kMinSamples = 4;
+inline constexpr int kMaxSamples = 18;
+inline constexpr float kSamplesPerSqrtRadius = 1.75f;
 
-// Radial blur sampling.
-inline constexpr int kMinRadialSamples = 3;
-inline constexpr int kMaxRadialSamples = 14;
-inline constexpr float kSamplesPerSqrtRadius = 1.25f;
-inline constexpr float kMaxRadialScaleDelta = 0.88f;
-inline constexpr float kRadialScaleMultiplier = 3.05f;
+inline constexpr float kMaxScaleDelta = 0.95f;
+inline constexpr float kScaleDeltaMultiplier = 3.35f;
+} // namespace radial_blur_tuning
 
-// Very soft ramp near focus. This fixes the aggressive jump from focus to adjacent layers.
-inline constexpr float kDepthRampPower = 2.45f;
-inline constexpr float kDepthRampSoftFloor = 0.015f;
+namespace atmospheric_dust_tuning {
+inline constexpr bool kEnabled = true;
+inline constexpr float kAnimationFps = 18.0f;
 
-// Lens warp. This is a fast GPU scaling approximation, not a mesh warp.
-inline constexpr bool kLensWarpEnabled = true;
-inline constexpr float kLensWarpMaxScaleDelta = 0.155f;
-inline constexpr float kLensWarpForegroundMultiplier = 1.25f;
-inline constexpr float kLensWarpBackgroundMultiplier = 0.95f;
-inline constexpr float kLensWarpBackgroundSeedMultiplier = 0.55f;
-inline constexpr float kLensWarpWideZoomPower = 1.15f;
-inline constexpr float kLensWarpMaxSafeScale = 1.22f;
+// The dust PNG owns opacity. SDL draws it at full alpha mod.
+// Do not fade by layer.
+inline constexpr float kDrawAlpha = 1.0f;
 
-// Chromatic aberration. This is deliberately visible/aggressive to start.
-inline constexpr bool kChromaticAberrationEnabled = true;
-inline constexpr float kChromaticBasePx = 1.35f;
-inline constexpr float kChromaticMaxPx = 8.5f;
-inline constexpr float kChromaticForegroundMultiplier = 1.28f;
-inline constexpr float kChromaticBackgroundMultiplier = 1.05f;
-inline constexpr float kChromaticBackgroundSeedMultiplier = 0.80f;
-inline constexpr float kChromaticFringeOpacity = 0.52f;
-inline constexpr float kChromaticCenterOpacity = 0.92f;
-} // namespace layer_effect_tuning
+// Size changes by depth only.
+// Far background gets smaller/tighter tiles.
+// Foreground gets larger/sparser tiles.
+inline constexpr float kFocusTileScale = 0.50f;
+inline constexpr float kBackgroundNearTileScale = 0.46f;
+inline constexpr float kBackgroundFarTileScale = 0.12f;
+inline constexpr float kForegroundNearTileScale = 0.72f;
+inline constexpr float kForegroundFarTileScale = 1.15f;
+
+// Extra coverage passes. These are still full texture opacity.
+// They exist only to make coverage feel denser and less repetitive.
+inline constexpr float kSecondaryPassScale = 0.57f;
+inline constexpr float kTertiaryPassScale = 0.31f;
+
+inline constexpr float kMinTilePx = 18.0f;
+inline constexpr float kMaxTilePx = 420.0f;
+
+// Layer-space guard. The renderer should already avoid submitting layers past
+// max cull / efficiency depth, but this prevents runaway dust on extreme stacks.
+inline constexpr int kMaxDustLayerDistance = 64;
+
+// Converts camera/player world movement into dust texture movement.
+inline constexpr float kWorldAnchorPixelScale = 1.0f;
+
+// Different parallax makes dust feel like it lives at depth.
+// Background moves less, foreground moves more.
+inline constexpr float kBackgroundParallaxNear = 0.68f;
+inline constexpr float kBackgroundParallaxFar = 0.18f;
+inline constexpr float kForegroundParallaxNear = 0.88f;
+inline constexpr float kForegroundParallaxFar = 1.45f;
+inline constexpr float kFocusParallax = 0.72f;
+} // namespace atmospheric_dust_tuning
+
+struct DustAnchor {
+    float world_x = 0.0f;
+    float world_z = 0.0f;
+    float pixels_per_world_unit = 1.0f;
+};
 
 struct LayerTexture {
     int depth_layer = 0;
@@ -90,6 +111,9 @@ public:
     void set_output_dimensions(int width, int height);
     void destroy_targets();
 
+    // Borrowed textures. The OpenGL runtime renderer owns and destroys these.
+    void set_dust_frames(const std::vector<SDL_Texture*>& dust_frames);
+
     CompositeResult compose(const std::vector<LayerTexture>& layers,
                             SDL_Texture* background_seed,
                             bool depth_of_field_enabled,
@@ -97,7 +121,9 @@ public:
                             float radial_blur_px,
                             SDL_FPoint optical_center,
                             int focus_depth_layer = 0,
-                            float camera_zoom_percent = 0.0f);
+                            float camera_zoom_percent = 0.0f,
+                            float time_seconds = 0.0f,
+                            DustAnchor dust_anchor = {});
 
 private:
     bool ensure_targets();
@@ -107,15 +133,13 @@ private:
     bool copy_texture(SDL_Texture* src, SDL_Texture* dst) const;
     bool composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const;
 
-    bool process_layer_effects(SDL_Texture* src,
-                               SDL_Texture* dst,
-                               SDL_Texture* work,
-                               SDL_Texture* chromatic_work,
-                               float radial_blur_px,
-                               float quality_scale,
-                               float lens_scale_delta,
-                               float chromatic_px,
-                               bool foreground_layer) const;
+    bool blur_step(SDL_Texture* src,
+                   SDL_Texture* dst,
+                   SDL_Texture* blur_work,
+                   float blur_px,
+                   SDL_FPoint optical_center,
+                   float radial_blur_px,
+                   float quality_scale) const;
 
     SDL_Renderer* renderer_ = nullptr;
     int width_ = 1;
@@ -123,11 +147,12 @@ private:
 
     SDL_Texture* background_mid_ = nullptr;
     SDL_Texture* foreground_mid_ = nullptr;
-    SDL_Texture* layer_effect_target_ = nullptr;
+    SDL_Texture* foreground_layer_ = nullptr;
     SDL_Texture* chain_temp_ = nullptr;
     SDL_Texture* blur_work_ = nullptr;
-    SDL_Texture* chromatic_work_ = nullptr;
+    SDL_Texture* dust_work_ = nullptr;
 
+    std::vector<SDL_Texture*> dust_frames_{};
     std::vector<LayerTexture> scratch_background_layers_{};
     std::vector<LayerTexture> scratch_foreground_layers_{};
 };

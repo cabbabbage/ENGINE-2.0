@@ -1,8 +1,7 @@
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
-#include "animation/controllers/shared/child_asset.hpp"
+#include "animation/controllers/custom_controller.hpp"
 #include <SDL3/SDL.h>
 #include <chrono>
 #include <optional>
@@ -13,7 +12,7 @@
 class Asset;
 class Input;
 
-class vibble_controller : public CustomAssetController {
+class vibble_controller : public custom_controller_api::CustomControllerBase {
 
 public:
     vibble_controller(Asset* player);
@@ -94,8 +93,6 @@ private:
     bool normal_mode_active_ = false;
     float yaw_angle_degrees_ = 0.0f;
     float pitch_angle_degrees_ = 0.0f;
-    std::optional<ChildAsset> gun_child_;
-    std::optional<ChildAsset> carried_child_;
     Asset* carried_world_asset_ = nullptr;
     std::string carried_asset_name_;
 };

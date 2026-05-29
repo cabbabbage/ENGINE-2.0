@@ -72,7 +72,7 @@ inline constexpr float kDepthRampPower = 1.35f;
 
 struct DustAnchor {
     // Used only for computing distance/visibility behavior.
-    // The dust tile field itself is anchored to the bottom-center of the layer content.
+    // The dust tile field itself is projected as world-depth planes.
     float world_x = 0.0f;
     float world_z = 0.0f;
 

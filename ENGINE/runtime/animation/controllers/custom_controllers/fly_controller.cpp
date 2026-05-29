@@ -1,6 +1,5 @@
 #include "fly_controller.hpp"
-#include "animation/controllers/shared/custom_controller_api.hpp"
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+
 #include "animation/animation_update.hpp"
 #include "animation/attack.hpp"
 #include "assets/asset/Asset.hpp"
@@ -8,58 +7,79 @@
 #include "gameplay/map_generation/room.hpp"
 #include "utils/input.hpp"
 
+#include <cmath>
+
 namespace {
 
-custom_controller_api::RandomOrbit3DControllerBehaviorConfig
-resolve_fly_orbit_behavior_config(Asset* self) {
-    if (!self) {
-        return runtime::config::make_default_fly_orbit_behavior_config();
-    }
-    Assets* owner_assets = self->get_assets();
-    if (!owner_assets) {
-        return runtime::config::make_default_fly_orbit_behavior_config();
-    }
-    return owner_assets->runtime_game_config().fly_orbit_behavior;
+axis::WorldPos orbit_target_for_angle(const axis::WorldPos& center,
+                                      float angle,
+                                      int radius,
+                                      int vertical_amp) {
+    const float cos_a = std::cos(angle);
+    const float sin_a = std::sin(angle);
+    return axis::WorldPos{
+        center.x + static_cast<int>(std::lround(cos_a * static_cast<float>(radius))),
+        center.y + static_cast<int>(std::lround(std::sin(angle * 0.5f) * static_cast<float>(vertical_amp))),
+        center.z + static_cast<int>(std::lround(sin_a * static_cast<float>(radius)))};
 }
 
 } // namespace
 
 fly_controller::fly_controller(Asset* self)
-    : CustomAssetController(self),
-      orbit_behavior_(this, resolve_fly_orbit_behavior_config(self)) {
-    Asset* owner = self_ptr();
+    : custom_controller_api::CustomControllerBase(self) {
+    Asset* owner = controller_self();
     if (owner) {
-        // Ensure the orbit behavior can issue its first movement plan immediately.
         owner->needs_target = true;
     }
 }
 
 void fly_controller::on_update(const Input& in) {
-    Asset* self = self_ptr();
+    (void)in;
+    Asset* self = controller_self();
     if (!self) {
         return;
     }
 
-    orbit_behavior_.set_config(game_context().fly_orbit_behavior_config());
-    if(orbiting) {
-        orbit_behavior_.tick(in);
-        if (game_context().room_flies_aggressive()) {
-            animation_update::custom_controllers::AttackDetectionHelper::send_attacks_to_active_targets(self, assets());
+    const auto& ctx = controller_game_context();
+    if (orbiting && ctx.fly_orbit_point.valid) {
+        const axis::WorldPos center{
+            ctx.fly_orbit_point.world_xz.x,
+            ctx.fly_orbit_point.world_y,
+            ctx.fly_orbit_point.world_xz.y};
+
+        const int radius = ctx.room_flies_aggressive() ? 30 : 80;
+        const int vertical_amp = ctx.room_flies_aggressive() ? 20 : 10;
+        orbit_angle_radians_ += ctx.room_flies_aggressive() ? 0.22f : 0.08f;
+
+        custom_controller_api::MovementConfig move_cfg{};
+        move_cfg.visit_threshold_px = ctx.fly_orbit_behavior_config().visit_threshold_px;
+        move_cfg.override_non_locked = ctx.fly_orbit_behavior_config().override_non_locked;
+        move_cfg.resolution_layer = ctx.fly_orbit_point.grid_resolution;
+
+        (void)move_toward(orbit_target_for_angle(center,
+                                                 orbit_angle_radians_,
+                                                 radius,
+                                                 vertical_amp),
+                          ctx.room_flies_aggressive() ? 24 : 10,
+                          move_cfg);
+
+        if (ctx.room_flies_aggressive()) {
+            apply_attack_hits_to_active_targets();
         }
+        return;
     }
-    else{
-        if (self->anim_) {
-            self->anim_->set_animation(animation_update::detail::kDefaultAnimation);
-        }
+
+    if (self->anim_) {
+        self->anim_->set_animation(animation_update::detail::kDefaultAnimation);
     }
 }
 
 void fly_controller::on_process_pending_attacks(Asset& self_ref) {
-    CustomAssetController::on_process_pending_attacks(self_ref);
+    custom_controller_api::CustomControllerBase::on_process_pending_attacks(self_ref);
 }
 
 void fly_controller::on_attack(const animation_update::Attack& attack) {
-    Asset* self = self_ptr();
+    Asset* self = controller_self();
     if (!self) {
         return;
     }

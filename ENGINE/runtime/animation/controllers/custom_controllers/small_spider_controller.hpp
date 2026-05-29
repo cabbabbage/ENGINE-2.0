@@ -1,15 +1,13 @@
 #ifndef SMALL_SPIDER_CONTROLLER_HPP
 #define SMALL_SPIDER_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
-#include "animation/controllers/shared/enemy_auto_combat_behavior.hpp"
-#include "animation/controllers/shared/enemy_combat_steering.hpp"
+#include "animation/controllers/custom_controller.hpp"
 #include <optional>
 
 class Asset;
 class Input;
 
-class small_spider_controller : public custom_controller_api::DefaultCustomController {
+class small_spider_controller : public custom_controller_api::CustomControllerBase {
 
 public:
     explicit small_spider_controller(Asset* self);
@@ -32,8 +30,9 @@ protected:
     void on_interact_hook(Asset& self, Asset* instigator) override;
 
 private:
-    custom_controller_api::EnemyCombatSteering steering_;
-    custom_controller_api::EnemyAutoCombatBehavior behavior_;
+    custom_controller_api::EnemyBehaviorConfig behavior_config_{};
+    custom_controller_api::MovementConfig chase_move_{};
+    custom_controller_api::MovementConfig retreat_move_{};
 };
 
 #endif

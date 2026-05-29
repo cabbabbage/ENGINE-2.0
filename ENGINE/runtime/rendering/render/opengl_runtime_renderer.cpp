@@ -345,47 +345,36 @@ bool is_supported_dust_image(const std::filesystem::path& path) {
            ext == ".jpeg";
 }
 
-SDL_FPoint resolve_packets_bottom_center(const std::vector<GpuSpriteDrawPacket>& packets,
-                                         std::uint32_t target_width,
-                                         std::uint32_t target_height,
-                                         bool& out_valid) {
-    out_valid = false;
-
-    const float width = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
-    const float height = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
-    float min_x = width;
-    float max_x = 0.0f;
-    float max_y = 0.0f;
-
-    for (const GpuSpriteDrawPacket& packet : packets) {
-        const int vertex_count = std::clamp(packet.vertex_count, 0, static_cast<int>(packet.vertices.size()));
-        if (vertex_count <= 0) {
-            continue;
-        }
-
-        for (int i = 0; i < vertex_count; ++i) {
-            const GpuSpriteVertex& vertex = packet.vertices[static_cast<std::size_t>(i)];
-            if (!std::isfinite(vertex.clip_x) || !std::isfinite(vertex.clip_y)) {
-                continue;
-            }
-
-            const float x = (vertex.clip_x + 1.0f) * 0.5f * width;
-            const float y = (1.0f - vertex.clip_y) * 0.5f * height;
-            min_x = std::min(min_x, x);
-            max_x = std::max(max_x, x);
-            max_y = std::max(max_y, y);
-            out_valid = true;
-        }
+double signed_depth_midpoint_for_layer(int layer_id, const std::vector<double>& depth_edges) {
+    const int abs_layer = std::abs(layer_id);
+    if (abs_layer <= 0 || depth_edges.size() < 2) {
+        return 0.0;
     }
 
-    if (!out_valid) {
-        return SDL_FPoint{width * 0.5f, height};
-    }
+    const std::size_t start_index = std::min<std::size_t>(
+        static_cast<std::size_t>(abs_layer - 1),
+        depth_edges.size() - 2u);
+    const std::size_t end_index = std::min<std::size_t>(start_index + 1u, depth_edges.size() - 1u);
+    const double midpoint = (depth_edges[start_index] + depth_edges[end_index]) * 0.5;
+    return layer_id >= 0 ? midpoint : -midpoint;
+}
 
-    return SDL_FPoint{
-        std::clamp((min_x + max_x) * 0.5f, 0.0f, width),
-        std::clamp(max_y, 0.0f, height)
-    };
+void assign_dust_depth_for_layer(GpuDepthLayerDrawPackets& layer,
+                                 int focus_depth_layer,
+                                 double focus_world_z,
+                                 float depth_axis_sign,
+                                 const std::vector<double>& depth_edges) {
+    const double layer_signed_depth = signed_depth_midpoint_for_layer(layer.depth_layer, depth_edges);
+    const double focus_signed_depth = signed_depth_midpoint_for_layer(focus_depth_layer, depth_edges);
+    const double signed_distance_from_focus = layer_signed_depth - focus_signed_depth;
+    const double world_distance = std::abs(signed_distance_from_focus);
+
+    layer.world_distance_from_focus = static_cast<float>(std::max(0.0, world_distance));
+    layer.dust_world_z = render_depth::world_z_from_depth_offset(
+        static_cast<float>(signed_distance_from_focus),
+        static_cast<float>(focus_world_z),
+        depth_axis_sign);
+    layer.has_dust_world_z = std::isfinite(layer.dust_world_z);
 }
 
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
@@ -1617,6 +1606,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             used_active_fallback);
     const WarpedScreenGrid& camera = assets_->getView();
     const auto& camera_settings = camera.get_settings();
+    const world::CameraProjectionParams projection = camera.projection_params();
+    const float depth_axis_sign = render_depth::normalize_depth_axis_sign(
+        static_cast<float>(projection.forward_z));
     const double depth_interval = std::max(1.0, static_cast<double>(camera_settings.layer_depth_interval));
     const double depth_curve = std::max(0.0, static_cast<double>(camera_settings.layer_depth_curve));
     const double effective_max_depth = std::max(depth_interval, static_cast<double>(camera_settings.max_cull_depth));
@@ -1670,6 +1662,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     const Assets::DevGridOverlayContext dev_grid_overlay_context = assets_->dev_grid_overlay_context();
     if (assets_->dev_grid_overlay_enabled() &&
+        dev_grid_overlay_context.kind != Assets::DevGridOverlayKind::XYPlaneAtAssetDepth &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.x) &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.y)) {
         scratch_floor_grid_overlay_draws_.clear();
@@ -1779,10 +1772,11 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                 layer.depth_layer,
                 out_data.focus_depth_layer,
                 max_distance_from_focus);
-            layer.dust_bottom_center = resolve_packets_bottom_center(layer.packets,
-                                                                     out_data.target_width,
-                                                                     out_data.target_height,
-                                                                     layer.has_dust_bottom_center);
+            assign_dust_depth_for_layer(layer,
+                                        out_data.focus_depth_layer,
+                                        camera.current_focus_plane_world_z(),
+                                        depth_axis_sign,
+                                        frame_depth_edges);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }
@@ -2381,17 +2375,20 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                      out_error)) {
                 return false;
             }
-            bool dust_anchor_valid = false;
-            const SDL_FPoint dust_anchor = resolve_packets_bottom_center(frame_to_render->xy_sprite_draws,
-                                                                         frame_to_render->target_width,
-                                                                         frame_to_render->target_height,
-                                                                         dust_anchor_valid);
+            const auto projection = camera.projection_params();
+            const float depth_axis_sign = render_depth::normalize_depth_axis_sign(
+                static_cast<float>(projection.forward_z));
+            const float fallback_distance = std::max(1.0f, camera_settings.layer_depth_interval);
             dof_blur_chain::LayerTexture flattened_layer{};
             flattened_layer.depth_layer = frame_to_render->focus_depth_layer + 1;
             flattened_layer.blur_strength = 1.0f;
             flattened_layer.texture = xy_sprite_target_;
-            flattened_layer.dust_bottom_center = dust_anchor;
-            flattened_layer.has_dust_bottom_center = dust_anchor_valid;
+            flattened_layer.world_distance_from_focus = fallback_distance;
+            flattened_layer.dust_world_z = render_depth::world_z_from_depth_offset(
+                fallback_distance,
+                static_cast<float>(camera.current_focus_plane_world_z()),
+                depth_axis_sign);
+            flattened_layer.has_dust_world_z = true;
             dof_layers.push_back(flattened_layer);
             used_flattened_xy_dof_layer = true;
             return true;
@@ -2420,8 +2417,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 dof_layer.depth_layer = layer.depth_layer;
                 dof_layer.blur_strength = layer.blur_strength_px;
                 dof_layer.texture = layer_target;
-                dof_layer.dust_bottom_center = layer.dust_bottom_center;
-                dof_layer.has_dust_bottom_center = layer.has_dust_bottom_center;
+                dof_layer.world_distance_from_focus = layer.world_distance_from_focus;
+                dof_layer.dust_world_z = layer.dust_world_z;
+                dof_layer.has_dust_world_z = layer.has_dust_world_z;
                 dof_layers.push_back(dof_layer);
             }
         } else if (!rebuild_flattened_xy_dof_layer()) {
@@ -2445,6 +2443,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         dust_anchor.world_z = static_cast<float>(camera.current_anchor_world_z());
         dust_anchor.world_units_per_depth_layer = std::max(1.0f, camera_settings.layer_depth_interval);
         dust_anchor.max_dust_world_distance = std::max(1.0f, camera_settings.dynamic_renderer_depth_efficiency_depth);
+        dust_anchor.focus_world_z = static_cast<float>(camera.current_focus_plane_world_z());
+        dust_anchor.depth_axis_sign = render_depth::normalize_depth_axis_sign(
+            static_cast<float>(camera.projection_params().forward_z));
+        dust_anchor.projection = camera.projection_params();
+        dust_anchor.has_projection = true;
 
         const dof_blur_chain::CompositeResult dof_result =
             dof_blur_chain_.compose(dof_layers,

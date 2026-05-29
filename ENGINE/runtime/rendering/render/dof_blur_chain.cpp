@@ -102,15 +102,6 @@ float depth_curve(int layer_distance, float normalized_distance) {
     return std::clamp(absolute_curve * 0.78f + normalized_curve * 0.22f, 0.0f, 1.0f);
 }
 
-float dust_depth_curve(float world_distance, float max_world_distance) {
-    if (max_world_distance <= 0.0f) {
-        return 0.0f;
-    }
-
-    const float t = std::clamp(world_distance / max_world_distance, 0.0f, 1.0f);
-    return std::pow(smoothstep01(t), dof_blur_chain::atmospheric_dust_tuning::kDepthRampPower);
-}
-
 TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
     TextureStateSnapshot state{};
 
@@ -380,87 +371,261 @@ float layer_world_distance(const dof_blur_chain::LayerTexture& layer,
     return static_cast<float>(layer_distance) * std::max(0.001f, dust_anchor.world_units_per_depth_layer);
 }
 
-float resolve_dust_tile_scale(const dof_blur_chain::LayerTexture& layer,
-                              int focus_depth_layer,
-                              float depth_t,
-                              bool foreground_layer,
-                              bool background_seed) {
-    if (background_seed) {
-        return dof_blur_chain::atmospheric_dust_tuning::kBackgroundFarTileScale;
+bool build_camera_ray_from_screen(const world::CameraProjectionParams& params,
+                                  SDL_FPoint screen_point,
+                                  CameraRay& out_ray) {
+    out_ray = CameraRay{};
+    const double safe_scale = std::max(1.0e-6, params.meters_scale);
+    if (!std::isfinite(safe_scale)) {
+        return false;
     }
 
-    const int layer_distance = std::abs(layer.depth_layer - focus_depth_layer);
-    if (layer_distance <= 0) {
-        return dof_blur_chain::atmospheric_dust_tuning::kFocusTileScale;
+    const auto [ndc_x, ndc_y] = render::screen_space::screen_to_ndc(
+        static_cast<double>(screen_point.x),
+        static_cast<double>(screen_point.y),
+        params.screen_width,
+        params.screen_height,
+        params.screen_zoom,
+        params.screen_pan_y_px);
+    if (!std::isfinite(ndc_x) || !std::isfinite(ndc_y)) {
+        return false;
     }
 
-    if (foreground_layer) {
-        return lerp_float(dof_blur_chain::atmospheric_dust_tuning::kForegroundNearTileScale,
-                          dof_blur_chain::atmospheric_dust_tuning::kForegroundFarTileScale,
-                          depth_t);
+    const double dir_x = params.forward_x + params.right_x * (ndc_x * params.tan_half_fov_x) +
+                         params.up_x * (ndc_y * params.tan_half_fov_y);
+    const double dir_y = params.forward_y + params.right_y * (ndc_x * params.tan_half_fov_x) +
+                         params.up_y * (ndc_y * params.tan_half_fov_y);
+    const double dir_z = params.forward_z + params.right_z * (ndc_x * params.tan_half_fov_x) +
+                         params.up_z * (ndc_y * params.tan_half_fov_y);
+    const double len = std::sqrt(dir_x * dir_x + dir_y * dir_y + dir_z * dir_z);
+    if (!std::isfinite(len) || len <= 1.0e-8) {
+        return false;
     }
 
-    return lerp_float(dof_blur_chain::atmospheric_dust_tuning::kBackgroundNearTileScale,
-                      dof_blur_chain::atmospheric_dust_tuning::kBackgroundFarTileScale,
-                      depth_t);
+    const double inv_len = 1.0 / len;
+    out_ray.origin = WorldPoint3{
+        static_cast<float>(params.position_x / safe_scale + params.anchor_world_x),
+        static_cast<float>(params.position_y / safe_scale + params.anchor_world_y),
+        static_cast<float>(params.position_z / safe_scale + params.anchor_world_z),
+        true};
+    out_ray.direction = WorldPoint3{
+        static_cast<float>(dir_x * inv_len),
+        static_cast<float>(dir_y * inv_len),
+        static_cast<float>(dir_z * inv_len),
+        true};
+    out_ray.valid =
+        std::isfinite(out_ray.origin.x) &&
+        std::isfinite(out_ray.origin.y) &&
+        std::isfinite(out_ray.origin.z) &&
+        std::isfinite(out_ray.direction.x) &&
+        std::isfinite(out_ray.direction.y) &&
+        std::isfinite(out_ray.direction.z);
+    return out_ray.valid;
 }
 
-float camera_zoom_to_screen_scale(float camera_zoom_percent) {
-    if (!std::isfinite(camera_zoom_percent)) {
+bool intersect_camera_ray_on_world_z(const world::CameraProjectionParams& params,
+                                     const CameraRay& ray,
+                                     float target_world_z,
+                                     WorldPoint3& out_world) {
+    out_world = WorldPoint3{};
+    if (!ray.valid) {
+        return false;
+    }
+
+    const double safe_scale = std::max(1.0e-6, params.meters_scale);
+    if (!std::isfinite(safe_scale) || std::fabs(static_cast<double>(ray.direction.z)) <= 1.0e-8) {
+        return false;
+    }
+
+    const double target_z_m = (static_cast<double>(target_world_z) - params.anchor_world_z) * safe_scale;
+    const double t = (target_z_m - params.position_z) / static_cast<double>(ray.direction.z);
+    if (!std::isfinite(t) || t <= 0.0) {
+        return false;
+    }
+
+    out_world = WorldPoint3{
+        static_cast<float>((params.position_x + static_cast<double>(ray.direction.x) * t) / safe_scale +
+                           params.anchor_world_x),
+        static_cast<float>((params.position_y + static_cast<double>(ray.direction.y) * t) / safe_scale +
+                           params.anchor_world_y),
+        target_world_z,
+        true};
+    out_world.valid =
+        std::isfinite(out_world.x) &&
+        std::isfinite(out_world.y) &&
+        std::isfinite(out_world.z);
+    return out_world.valid;
+}
+
+bool project_world_to_screen(const world::CameraProjectionParams& params,
+                             const WorldPoint3& world,
+                             SDL_FPoint& out_screen) {
+    if (!world.valid) {
+        return false;
+    }
+
+    const double safe_scale = std::max(1.0e-6, params.meters_scale);
+    if (!std::isfinite(safe_scale)) {
+        return false;
+    }
+
+    const double wx = (static_cast<double>(world.x) - params.anchor_world_x) * safe_scale;
+    const double wy = (static_cast<double>(world.y) - params.anchor_world_y) * safe_scale;
+    const double wz = (static_cast<double>(world.z) - params.anchor_world_z) * safe_scale;
+    const double to_x = wx - params.position_x;
+    const double to_y = wy - params.position_y;
+    const double to_z = wz - params.position_z;
+    const double depth = to_x * params.forward_x + to_y * params.forward_y + to_z * params.forward_z;
+    if (!std::isfinite(depth) || depth <= params.near_plane || depth > params.far_plane) {
+        return false;
+    }
+
+    const double cam_x = to_x * params.right_x + to_y * params.right_y + to_z * params.right_z;
+    const double cam_y = to_x * params.up_x + to_y * params.up_y + to_z * params.up_z;
+    const double ndc_x = cam_x / (depth * std::max(1.0e-6, params.tan_half_fov_x));
+    const double ndc_y = cam_y / (depth * std::max(1.0e-6, params.tan_half_fov_y));
+    if (!std::isfinite(ndc_x) || !std::isfinite(ndc_y)) {
+        return false;
+    }
+
+    out_screen = render::screen_space::ndc_to_screen(ndc_x,
+                                                     ndc_y,
+                                                     params.screen_width,
+                                                     params.screen_height,
+                                                     params.screen_zoom,
+                                                     params.screen_pan_y_px);
+    return std::isfinite(out_screen.x) && std::isfinite(out_screen.y);
+}
+
+bool expand_bounds_from_screen_sample(const world::CameraProjectionParams& params,
+                                      SDL_FPoint screen,
+                                      float world_z,
+                                      WorldBounds& bounds) {
+    CameraRay ray{};
+    WorldPoint3 world{};
+    if (!build_camera_ray_from_screen(params, screen, ray) ||
+        !intersect_camera_ray_on_world_z(params, ray, world_z, world)) {
+        return false;
+    }
+
+    if (!bounds.valid) {
+        bounds.min_x = bounds.max_x = world.x;
+        bounds.min_y = bounds.max_y = world.y;
+        bounds.valid = true;
+    } else {
+        bounds.min_x = std::min(bounds.min_x, world.x);
+        bounds.max_x = std::max(bounds.max_x, world.x);
+        bounds.min_y = std::min(bounds.min_y, world.y);
+        bounds.max_y = std::max(bounds.max_y, world.y);
+    }
+    return true;
+}
+
+WorldBounds visible_world_bounds_for_plane(const world::CameraProjectionParams& params,
+                                           int width,
+                                           int height,
+                                           float world_z,
+                                           float pad_x,
+                                           float pad_y) {
+    WorldBounds bounds{};
+    const float w = static_cast<float>(std::max(1, width));
+    const float h = static_cast<float>(std::max(1, height));
+    const std::array<SDL_FPoint, 9> samples{
+        SDL_FPoint{0.0f, 0.0f},
+        SDL_FPoint{w * 0.5f, 0.0f},
+        SDL_FPoint{w, 0.0f},
+        SDL_FPoint{0.0f, h * 0.5f},
+        SDL_FPoint{w * 0.5f, h * 0.5f},
+        SDL_FPoint{w, h * 0.5f},
+        SDL_FPoint{0.0f, h},
+        SDL_FPoint{w * 0.5f, h},
+        SDL_FPoint{w, h}
+    };
+
+    for (const SDL_FPoint& sample : samples) {
+        (void)expand_bounds_from_screen_sample(params, sample, world_z, bounds);
+    }
+
+    if (bounds.valid) {
+        bounds.min_x -= pad_x;
+        bounds.max_x += pad_x;
+        bounds.min_y -= pad_y;
+        bounds.max_y += pad_y;
+    }
+    return bounds;
+}
+
+float dust_alpha_for_world_distance(float world_distance, float max_world_distance) {
+    if (max_world_distance <= 0.0f) {
+        return 1.0f;
+    }
+    if (world_distance >= max_world_distance) {
+        return 0.0f;
+    }
+
+    const float fade_start = max_world_distance * 0.80f;
+    if (world_distance <= fade_start) {
         return 1.0f;
     }
 
-    return 1.0f + std::clamp(camera_zoom_percent, 0.0f, 100.0f) * 0.01f;
+    const float fade_width = std::max(1.0e-4f, max_world_distance - fade_start);
+    return smoothstep01((max_world_distance - world_distance) / fade_width);
 }
 
-float layer_parallax_factor(int depth_layer, int focus_depth_layer) {
-    const int distance = std::abs(depth_layer - focus_depth_layer);
-    const float distance_t = std::clamp(static_cast<float>(distance) / 8.0f, 0.0f, 1.0f);
-    if (depth_layer > focus_depth_layer) {
-        // Background layers move less relative to camera pan.
-        return lerp_float(0.85f, 0.35f, distance_t);
+bool resolve_reference_tile_world_size(const dof_blur_chain::DustAnchor& dust_anchor,
+                                       float source_w,
+                                       float source_h,
+                                       float& out_world_w,
+                                       float& out_world_h) {
+    out_world_w = 0.0f;
+    out_world_h = 0.0f;
+    if (!dust_anchor.has_projection || source_w <= 0.0f || source_h <= 0.0f) {
+        return false;
     }
-    if (depth_layer < focus_depth_layer) {
-        // Foreground layers move more relative to camera pan.
-        return lerp_float(1.10f, 1.75f, distance_t);
+
+    const world::CameraProjectionParams& projection = dust_anchor.projection;
+    const SDL_FPoint center{
+        static_cast<float>(std::max(1, projection.screen_width)) * 0.5f,
+        static_cast<float>(std::max(1, projection.screen_height)) * 0.5f
+    };
+    const float ref_screen_w = source_w * dof_blur_chain::atmospheric_dust_tuning::kFocusTileScale;
+    const float ref_screen_h = source_h * dof_blur_chain::atmospheric_dust_tuning::kFocusTileScale;
+
+    CameraRay center_ray{};
+    CameraRay right_ray{};
+    CameraRay up_ray{};
+    WorldPoint3 center_world{};
+    WorldPoint3 right_world{};
+    WorldPoint3 up_world{};
+    if (!build_camera_ray_from_screen(projection, center, center_ray) ||
+        !build_camera_ray_from_screen(projection, SDL_FPoint{center.x + ref_screen_w, center.y}, right_ray) ||
+        !build_camera_ray_from_screen(projection, SDL_FPoint{center.x, center.y - ref_screen_h}, up_ray) ||
+        !intersect_camera_ray_on_world_z(projection, center_ray, dust_anchor.focus_world_z, center_world) ||
+        !intersect_camera_ray_on_world_z(projection, right_ray, dust_anchor.focus_world_z, right_world) ||
+        !intersect_camera_ray_on_world_z(projection, up_ray, dust_anchor.focus_world_z, up_world)) {
+        return false;
     }
-    return 1.0f;
+
+    out_world_w = std::abs(right_world.x - center_world.x);
+    out_world_h = std::abs(up_world.y - center_world.y);
+    return std::isfinite(out_world_w) && std::isfinite(out_world_h) &&
+           out_world_w > 0.0f && out_world_h > 0.0f;
 }
 
-SDL_FPoint layer_world_scroll_px(const dof_blur_chain::DustAnchor& dust_anchor,
+bool draw_world_depth_dust_tiles(SDL_Renderer* renderer,
+                                 const std::vector<SDL_Texture*>& dust_frames,
+                                 const dof_blur_chain::DustAnchor& dust_anchor,
+                                 int width,
+                                 int height,
                                  int depth_layer,
-                                 int focus_depth_layer,
-                                 float tile_w,
-                                 float tile_h) {
-    if (tile_w <= 0.0f || tile_h <= 0.0f) {
-        return SDL_FPoint{0.0f, 0.0f};
-    }
-
-    const float parallax = layer_parallax_factor(depth_layer, focus_depth_layer);
-    const float units_per_layer = std::max(0.001f, dust_anchor.world_units_per_depth_layer);
-
-    // Convert world motion to tile-space phase so the dust field stays attached to layer motion.
-    const float world_to_tile_x = 1.0f / units_per_layer;
-    const float world_to_tile_y = 0.6f / units_per_layer;
-    const float tile_phase_x = dust_anchor.world_x * world_to_tile_x * parallax;
-    const float tile_phase_y = dust_anchor.world_z * world_to_tile_y * parallax;
-
-    const float scroll_x = std::fmod(tile_phase_x * tile_w, tile_w);
-    const float scroll_y = std::fmod(tile_phase_y * tile_h, tile_h);
-    return SDL_FPoint{scroll_x, scroll_y};
-}
-
-bool draw_bottom_center_anchored_dust_tiles(SDL_Renderer* renderer,
-                                            const std::vector<SDL_Texture*>& dust_frames,
-                                            int width,
-                                            int height,
-                                            int depth_layer,
-                                            float tile_w,
-                                            float tile_h,
-                                            SDL_FPoint anchor,
-                                            SDL_FPoint world_scroll_px,
-                                            float time_seconds) {
-    if (!renderer || dust_frames.empty() || width <= 0 || height <= 0 || tile_w <= 0.0f || tile_h <= 0.0f) {
+                                 float world_z,
+                                 float tile_world_w,
+                                 float tile_world_h,
+                                 float alpha,
+                                 float time_seconds) {
+    if (!renderer || dust_frames.empty() || !dust_anchor.has_projection ||
+        width <= 0 || height <= 0 || tile_world_w <= 0.0f || tile_world_h <= 0.0f ||
+        alpha <= 0.0f) {
         return true;
     }
 
@@ -469,64 +634,105 @@ bool draw_bottom_center_anchored_dust_tiles(SDL_Renderer* renderer,
         return true;
     }
 
-    // The dust field is locked to the bottom-center of the layer content.
-    // Tile (0, 0) has its bottom edge on this anchor. When depth changes the tile size,
-    // the field expands/contracts from the layer floor edge instead of swimming around screen center.
-    const float anchor_x = std::clamp(anchor.x + world_scroll_px.x, 0.0f, static_cast<float>(width));
-    const float anchor_y = std::clamp(anchor.y + world_scroll_px.y, 0.0f, static_cast<float>(height));
+    WorldBounds bounds = visible_world_bounds_for_plane(dust_anchor.projection,
+                                                       width,
+                                                       height,
+                                                       world_z,
+                                                       tile_world_w * 2.0f,
+                                                       tile_world_h * 2.0f);
+    if (!bounds.valid) {
+        return true;
+    }
 
-    const int tiles_left = static_cast<int>(std::ceil(anchor_x / tile_w)) + 2;
-    const int tiles_right = static_cast<int>(std::ceil((static_cast<float>(width) - anchor_x) / tile_w)) + 2;
-    const int tiles_up = static_cast<int>(std::ceil(anchor_y / tile_h)) + 2;
-    const int tiles_down = static_cast<int>(std::ceil((static_cast<float>(height) - anchor_y) / tile_h)) + 2;
+    int tile_x0 = static_cast<int>(std::floor(bounds.min_x / tile_world_w));
+    int tile_x1 = static_cast<int>(std::ceil(bounds.max_x / tile_world_w));
+    int tile_y0 = static_cast<int>(std::floor(bounds.min_y / tile_world_h));
+    int tile_y1 = static_cast<int>(std::ceil(bounds.max_y / tile_world_h));
+
+    constexpr int kMaxTilesPerAxis = 160;
+    if (tile_x1 - tile_x0 > kMaxTilesPerAxis) {
+        const int center = (tile_x0 + tile_x1) / 2;
+        tile_x0 = center - kMaxTilesPerAxis / 2;
+        tile_x1 = tile_x0 + kMaxTilesPerAxis;
+    }
+    if (tile_y1 - tile_y0 > kMaxTilesPerAxis) {
+        const int center = (tile_y0 + tile_y1) / 2;
+        tile_y0 = center - kMaxTilesPerAxis / 2;
+        tile_y1 = tile_y0 + kMaxTilesPerAxis;
+    }
 
     const int base_frame =
         static_cast<int>(std::floor(std::max(0.0f, time_seconds) *
                                     dof_blur_chain::atmospheric_dust_tuning::kAnimationFps));
+    const Uint8 alpha_mod = static_cast<Uint8>(std::clamp(
+        static_cast<int>(std::lround(alpha *
+                                     dof_blur_chain::atmospheric_dust_tuning::kDrawAlpha *
+                                     255.0f)),
+        0,
+        255));
+    if (alpha_mod == 0) {
+        return true;
+    }
 
     bool ok = true;
+    const int indices[6]{0, 1, 2, 0, 2, 3};
 
-    for (int gy = -tiles_up; gy <= tiles_down; ++gy) {
-        for (int gx = -tiles_left; gx <= tiles_right; ++gx) {
-            const std::uint32_t h = hash_tile(depth_layer, gx, gy, 211);
+    for (int ty = tile_y0; ty <= tile_y1 && ok; ++ty) {
+        for (int tx = tile_x0; tx <= tile_x1 && ok; ++tx) {
+            const std::uint32_t h = hash_tile(depth_layer, tx, ty, 211);
             const int frame_offset = static_cast<int>(h % static_cast<std::uint32_t>(frame_count));
-            const int frame_index = ping_pong_frame_index(base_frame + frame_offset, frame_count);
-
-            SDL_Texture* dust = dust_frames[static_cast<std::size_t>(frame_index)];
+            SDL_Texture* dust = dust_frames[static_cast<std::size_t>(
+                ping_pong_frame_index(base_frame + frame_offset, frame_count))];
             if (!dust) {
                 continue;
             }
 
+            const float x0 = static_cast<float>(tx) * tile_world_w;
+            const float x1 = static_cast<float>(tx + 1) * tile_world_w;
+            const float y0 = static_cast<float>(ty) * tile_world_h;
+            const float y1 = static_cast<float>(ty + 1) * tile_world_h;
+
+            SDL_FPoint tl{}, tr{}, br{}, bl{};
+            if (!project_world_to_screen(dust_anchor.projection, WorldPoint3{x0, y1, world_z, true}, tl) ||
+                !project_world_to_screen(dust_anchor.projection, WorldPoint3{x1, y1, world_z, true}, tr) ||
+                !project_world_to_screen(dust_anchor.projection, WorldPoint3{x1, y0, world_z, true}, br) ||
+                !project_world_to_screen(dust_anchor.projection, WorldPoint3{x0, y0, world_z, true}, bl)) {
+                continue;
+            }
+
+            const SDL_FlipMode flip = tile_flip_mode(depth_layer, tx, ty);
+            const int flip_flags = static_cast<int>(flip);
+            float u0 = 0.0f;
+            float u1 = 1.0f;
+            float v0 = 0.0f;
+            float v1 = 1.0f;
+            if ((flip_flags & static_cast<int>(SDL_FLIP_HORIZONTAL)) != 0) {
+                std::swap(u0, u1);
+            }
+            if ((flip_flags & static_cast<int>(SDL_FLIP_VERTICAL)) != 0) {
+                std::swap(v0, v1);
+            }
+
+            SDL_Vertex vertices[4]{};
+            vertices[0].position = tl;
+            vertices[0].tex_coord = SDL_FPoint{u0, v0};
+            vertices[0].color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+            vertices[1].position = tr;
+            vertices[1].tex_coord = SDL_FPoint{u1, v0};
+            vertices[1].color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+            vertices[2].position = br;
+            vertices[2].tex_coord = SDL_FPoint{u1, v1};
+            vertices[2].color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+            vertices[3].position = bl;
+            vertices[3].tex_coord = SDL_FPoint{u0, v1};
+            vertices[3].color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+
             const TextureStateSnapshot state = capture_texture_state(dust);
-
             SDL_SetTextureBlendMode(dust, SDL_BLENDMODE_BLEND);
-            SDL_SetTextureAlphaMod(dust, static_cast<Uint8>(
-                std::clamp(static_cast<int>(std::lround(dof_blur_chain::atmospheric_dust_tuning::kDrawAlpha * 255.0f)),
-                           0,
-                           255)));
+            SDL_SetTextureAlphaMod(dust, alpha_mod);
             SDL_SetTextureColorMod(dust, 255, 255, 255);
-
-            const SDL_FRect dst{
-                anchor_x - tile_w * 0.5f + static_cast<float>(gx) * tile_w,
-                anchor_y - tile_h + static_cast<float>(gy) * tile_h,
-                tile_w,
-                tile_h
-            };
-
-            const SDL_FlipMode flip = tile_flip_mode(depth_layer, gx, gy);
-            if (!SDL_RenderTextureRotated(renderer, dust, nullptr, &dst, 0.0, nullptr, flip)) {
-                ok = false;
-            }
-
+            ok = render_diagnostics::render_geometry(renderer, dust, vertices, 4, indices, 6);
             restore_texture_state(dust, state);
-
-            if (!ok) {
-                break;
-            }
-        }
-
-        if (!ok) {
-            break;
         }
     }
 
@@ -543,10 +749,11 @@ bool add_layer_atmospheric_dust(SDL_Renderer* renderer,
                                 int focus_depth_layer,
                                 float max_layer_world_distance,
                                 float time_seconds,
-                                float camera_zoom_percent,
-                                bool foreground_layer,
                                 bool background_seed,
                                 dof_blur_chain::DustAnchor dust_anchor) {
+    (void)max_layer_world_distance;
+    (void)background_seed;
+
     if (!renderer || !src || !dst || width <= 0 || height <= 0 || src == dst) {
         return false;
     }
@@ -555,7 +762,9 @@ bool add_layer_atmospheric_dust(SDL_Renderer* renderer,
         return false;
     }
 
-    if (!dof_blur_chain::atmospheric_dust_tuning::kEnabled || dust_frames.empty()) {
+    if (!dof_blur_chain::atmospheric_dust_tuning::kEnabled ||
+        dust_frames.empty() ||
+        !dust_anchor.has_projection) {
         return true;
     }
 
@@ -570,53 +779,47 @@ bool add_layer_atmospheric_dust(SDL_Renderer* renderer,
         return true;
     }
 
-    const float world_distance = background_seed
-        ? std::max(0.0f, max_layer_world_distance)
-        : layer_world_distance(layer, focus_depth_layer, dust_anchor);
+    const float world_distance = layer_world_distance(layer, focus_depth_layer, dust_anchor);
 
-    const float cutoff_distance = dust_anchor.max_dust_world_distance > 0.0f
-        ? dust_anchor.max_dust_world_distance
-        : 0.0f;
-
-    if (!background_seed && cutoff_distance > 0.0f && world_distance > cutoff_distance) {
+    const float alpha = dust_alpha_for_world_distance(world_distance, dust_anchor.max_dust_world_distance);
+    if (alpha <= 0.0f) {
         return true;
     }
 
-    const float effective_max_distance = cutoff_distance > 0.0f
-        ? cutoff_distance
-        : std::max(1.0f, max_layer_world_distance);
+    float tile_world_w = 0.0f;
+    float tile_world_h = 0.0f;
+    if (!resolve_reference_tile_world_size(dust_anchor, source_w, source_h, tile_world_w, tile_world_h)) {
+        const float fallback = std::max(1.0f, dust_anchor.world_units_per_depth_layer);
+        tile_world_w = std::max(1.0f,
+                                source_w *
+                                    dof_blur_chain::atmospheric_dust_tuning::kFocusTileScale *
+                                    fallback / 128.0f);
+        tile_world_h = std::max(1.0f,
+                                source_h *
+                                    dof_blur_chain::atmospheric_dust_tuning::kFocusTileScale *
+                                    fallback / 128.0f);
+    }
 
-    const float depth_t = dust_depth_curve(world_distance, effective_max_distance);
-    const float tile_scale = resolve_dust_tile_scale(layer,
-                                                     focus_depth_layer,
-                                                     depth_t,
-                                                     foreground_layer,
-                                                     background_seed) *
-                             camera_zoom_to_screen_scale(camera_zoom_percent);
-
-    const float tile_w = std::max(1.0f, source_w * std::max(0.001f, tile_scale));
-    const float tile_h = std::max(1.0f, source_h * std::max(0.001f, tile_scale));
+    const float world_z = layer.has_dust_world_z
+        ? layer.dust_world_z
+        : render_depth::world_z_from_depth_offset(world_distance,
+                                                  dust_anchor.focus_world_z,
+                                                  dust_anchor.depth_axis_sign);
 
     SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
     render_diagnostics::set_render_target(renderer, dst);
 
-    const bool ok = draw_bottom_center_anchored_dust_tiles(renderer,
-                                                    dust_frames,
-                                                    width,
-                                                    height,
-                                                    layer.depth_layer,
-                                                    tile_w,
-                                                    tile_h,
-                                                    background_seed
-                                                        ? SDL_FPoint{static_cast<float>(width) * 0.5f,
-                                                                     static_cast<float>(height)}
-                                                        : resolve_layer_dust_anchor(layer, width, height),
-                                                    layer_world_scroll_px(dust_anchor,
-                                                                          layer.depth_layer,
-                                                                          focus_depth_layer,
-                                                                          tile_w,
-                                                                          tile_h),
-                                                    time_seconds);
+    const bool ok = draw_world_depth_dust_tiles(renderer,
+                                                dust_frames,
+                                                dust_anchor,
+                                                width,
+                                                height,
+                                                layer.depth_layer,
+                                                world_z,
+                                                tile_world_w,
+                                                tile_world_h,
+                                                alpha,
+                                                time_seconds);
 
     render_diagnostics::set_render_target(renderer, previous_target);
     return ok;
@@ -1199,6 +1402,8 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                   float camera_zoom_percent,
                                   float time_seconds,
                                   DustAnchor dust_anchor) {
+    (void)camera_zoom_percent;
+
     CompositeResult result{};
 
     if (!renderer_ || layers.empty()) {
@@ -1301,7 +1506,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
     auto add_dust_to_layer = [&](SDL_Texture* source,
                                  SDL_Texture*& out_source,
                                  const LayerTexture& layer,
-                                 bool foreground_layer,
+                                 bool /*foreground_layer*/,
                                  bool background_seed) -> bool {
         if (!atmospheric_dust_tuning::kEnabled || dust_frames_.empty()) {
             out_source = source;
@@ -1318,8 +1523,6 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                         focus_depth_layer,
                                         std::max(1.0f, max_layer_world_distance),
                                         time_seconds,
-                                        camera_zoom_percent,
-                                        foreground_layer,
                                         background_seed,
                                         dust_anchor)) {
             return false;
@@ -1338,6 +1541,14 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         seed_layer.world_distance_from_focus = std::max(
             max_layer_world_distance,
             static_cast<float>(seed_distance) * std::max(0.001f, dust_anchor.world_units_per_depth_layer));
+        if (dust_anchor.max_dust_world_distance > 0.0f) {
+            seed_layer.world_distance_from_focus =
+                std::min(seed_layer.world_distance_from_focus, dust_anchor.max_dust_world_distance * 0.95f);
+        }
+        seed_layer.dust_world_z = render_depth::world_z_from_depth_offset(seed_layer.world_distance_from_focus,
+                                                                          dust_anchor.focus_world_z,
+                                                                          dust_anchor.depth_axis_sign);
+        seed_layer.has_dust_world_z = true;
 
         SDL_Texture* seed_source = nullptr;
 

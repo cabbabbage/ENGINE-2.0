@@ -1,12 +1,12 @@
 #ifndef DAVEY_CONTROLLER_HPP
 #define DAVEY_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
+#include "animation/controllers/custom_controller.hpp"
 
 class Asset;
 class Input;
 
-class davey_controller : public CustomAssetController {
+class davey_controller : public custom_controller_api::CustomControllerBase {
 
 public:
     explicit davey_controller(Asset* self);

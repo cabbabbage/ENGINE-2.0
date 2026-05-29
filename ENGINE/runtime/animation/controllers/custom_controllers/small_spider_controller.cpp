@@ -1,29 +1,24 @@
 #include "small_spider_controller.hpp"
 
 #include "animation/animation_update.hpp"
-#include "animation/controllers/shared/custom_controller_api.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
 small_spider_controller::small_spider_controller(Asset* self)
-    : custom_controller_api::DefaultCustomController(self),
-      steering_(custom_controller_api::EnemyCombatSteeringConfig{
-          175,
-          84,
-          8,
-          14,
-          260,
-          900
-      }),
-      behavior_(custom_controller_api::EnemyAutoCombatConfig{
-          custom_controller_api::EnemyAutoCombatMode::SkirmisherShortEvade,
-          34,
-          16,
-          140,
-          70,
-          210,
-          true
-      }) {
+    : custom_controller_api::CustomControllerBase(self) {
+    behavior_config_.kamikaze = false;
+    behavior_config_.chase_range_px = 34;
+    behavior_config_.attack_range_px = 16;
+    behavior_config_.retreat_distance_px = 140;
+    behavior_config_.recover_ms = 210;
+    behavior_config_.return_home_threshold_px = 70;
+    behavior_config_.force_attacking_enabled = true;
+
+    chase_move_.visit_threshold_px = 10;
+    chase_move_.override_non_locked = false;
+    retreat_move_.visit_threshold_px = 10;
+    retreat_move_.override_non_locked = false;
+
     Asset* owner = controller_self();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
@@ -33,20 +28,19 @@ small_spider_controller::small_spider_controller(Asset* self)
 }
 
 void small_spider_controller::on_init() {
-    custom_controller_api::DefaultCustomController::on_init();
+    custom_controller_api::CustomControllerBase::on_init();
 }
 
 void small_spider_controller::on_update(const Input& in) {
-    custom_controller_api::DefaultCustomController::on_update(in);
-    (void)in;
+    custom_controller_api::CustomControllerBase::on_update(in);
 
     Asset* self = controller_self();
-    const auto& ctx = game_context();
+    const auto& ctx = controller_game_context();
     if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
 
-    Asset* player = custom_controller_api::resolve_valid_player_target(ctx);
+    Asset* player = resolve_target_player();
     if (!player) {
         return;
     }
@@ -60,51 +54,48 @@ void small_spider_controller::on_update(const Input& in) {
         }
     }
 
-    steering_.tick_progress(*self);
-    behavior_.tick(*self, *player, steering_);
-
-    // Continuous contact damage while overlap persists.
-    custom_controller_api::dispatch_contact_attack(ctx);
+    run_enemy_behavior(player, behavior_config_, chase_move_, retreat_move_);
+    apply_attack_hit(*player);
 }
 
 void small_spider_controller::on_attack(const animation_update::Attack& attack) {
-    custom_controller_api::DefaultCustomController::on_attack(attack);
+    custom_controller_api::CustomControllerBase::on_attack(attack);
 }
 
 void small_spider_controller::on_hit(const animation_update::Attack& attack) {
-    custom_controller_api::DefaultCustomController::on_hit(attack);
+    custom_controller_api::CustomControllerBase::on_hit(attack);
 }
 
 void small_spider_controller::on_death() {
-    custom_controller_api::DefaultCustomController::on_death();
+    custom_controller_api::CustomControllerBase::on_death();
 }
 
 void small_spider_controller::on_no_pending_attacks() {
-    custom_controller_api::DefaultCustomController::on_no_pending_attacks();
+    custom_controller_api::CustomControllerBase::on_no_pending_attacks();
 }
 
 void small_spider_controller::on_after_attack() {
-    custom_controller_api::DefaultCustomController::on_after_attack();
+    custom_controller_api::CustomControllerBase::on_after_attack();
 }
 
 custom_controller_api::AttackProcessingConfig small_spider_controller::attack_processing_config() const {
-    return custom_controller_api::DefaultCustomController::attack_processing_config();
+    return custom_controller_api::CustomControllerBase::attack_processing_config();
 }
 
 void small_spider_controller::on_orphaned_hook(Asset& self,
                                                Asset* former_parent,
                                                std::optional<OrphanImpulse> impulse) {
-    custom_controller_api::DefaultCustomController::on_orphaned_hook(self, former_parent, impulse);
+    custom_controller_api::CustomControllerBase::on_orphaned_hook(self, former_parent, impulse);
 }
 
 void small_spider_controller::on_pre_delete_hook(Asset& self) {
-    custom_controller_api::DefaultCustomController::on_pre_delete_hook(self);
+    custom_controller_api::CustomControllerBase::on_pre_delete_hook(self);
 }
 
 void small_spider_controller::on_process_pending_attacks(Asset& self_ref) {
-    custom_controller_api::DefaultCustomController::on_process_pending_attacks(self_ref);
+    custom_controller_api::CustomControllerBase::on_process_pending_attacks(self_ref);
 }
 
 void small_spider_controller::on_interact_hook(Asset& self, Asset* instigator) {
-    custom_controller_api::DefaultCustomController::on_interact_hook(self, instigator);
+    custom_controller_api::CustomControllerBase::on_interact_hook(self, instigator);
 }

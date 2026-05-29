@@ -4753,27 +4753,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         if (assets_ && assets_->dev_grid_overlay_enabled()) {
             const Assets::DevGridOverlayContext overlay_ctx = dev_grid_overlay_context();
             if (overlay_ctx.kind == Assets::DevGridOverlayKind::XYPlaneAtAssetDepth) {
-                const int cell = std::max(1, vibble::grid::delta(current_grid_resolution()));
                 const float target_world_z = overlay_ctx.target_world_z;
-
-                auto mode_target_asset = [&]() -> Asset* {
-                    if (anchor_mode_active() || light_mode_active()) return anchor_edit_.target_asset;
-                    if (oval_mode_active()) return oval_edit_.target_asset;
-                    if (movement_mode_active()) return movement_edit_.target_asset;
-                    if (hitbox_mode_active()) return hitbox_edit_.target_asset;
-                    if (attack_box_mode_active()) return attack_box_edit_.target_asset;
-                    if (impassable_box_mode_active()) return impassable_box_edit_.target_asset;
-                    return nullptr;
-                };
-
-                Asset* overlay_target = mode_target_asset();
-                if (!overlay_target) {
-                    // No active editable target for XY overlay.
-                } else {
-                    const SDL_Point frame_dims = resolve_anchor_editor_frame_dimensions(overlay_target, nullptr);
-                    const int frame_w = std::max(1, frame_dims.x);
-                    const int frame_h = std::max(1, frame_dims.y);
-                    int sample_step_px = std::max(1, cell);
+                if (std::isfinite(overlay_ctx.exact_floor_xz.x) && std::isfinite(overlay_ctx.exact_floor_xz.y)) {
+                    const int resolution = current_grid_resolution();
+                    const int cell = std::max(1, vibble::grid::delta(resolution));
+                    vibble::grid::Grid& grid_service = vibble::grid::global_grid();
                     constexpr int kMaxSamplesPerPass = 32000;
 
                     constexpr int kGridPointSizePx = 2;
@@ -4785,84 +4769,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     Uint8 prev_r = 0, prev_g = 0, prev_b = 0, prev_a = 0;
                     SDL_GetRenderDrawBlendMode(renderer, &prev_blend);
                     SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-                    DisplacedAssetAnchorPoint sample_anchor{};
-                    sample_anchor.name = "__xy_overlay_grid_point";
-                    sample_anchor.depth_offset =
-                        std::isfinite(target_world_z)
-                            ? (target_world_z - static_cast<float>(overlay_target->world_z()))
-                            : 0.0f;
-                    sample_anchor.resolve_x = true;
-
-                    auto sample_screen_for_texture = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
-                        sample_anchor.texture_x = texture_x;
-                        sample_anchor.texture_y = texture_y;
-                        const auto resolved_sample = anchor_points::resolve_frame_anchor_sample(
-                            *overlay_target,
-                            sample_anchor,
-                            anchor_points::GridMaterialization::None);
-                        if (resolved_sample.resolved.missing) {
-                            return false;
-                        }
-                        if (resolved_sample.has_final_screen_px &&
-                            std::isfinite(resolved_sample.final_screen_px.x) &&
-                            std::isfinite(resolved_sample.final_screen_px.y)) {
-                            out_screen = resolved_sample.final_screen_px;
-                        } else {
-                            out_screen = resolved_sample.screen_px;
-                        }
-                        return std::isfinite(out_screen.x) && std::isfinite(out_screen.y);
-                    };
-
-                    const SDL_Point pointer_screen = input_
-                        ? SDL_Point{input_->getX(), input_->getY()}
-                        : (has_last_pointer_screen_
-                            ? last_pointer_screen_
-                            : SDL_Point{screen_w_ / 2, screen_h_ / 2});
-                    const SDL_FPoint desired_screen{
-                        static_cast<float>(pointer_screen.x),
-                        static_cast<float>(pointer_screen.y)
-                    };
-
-                    const bool same_target =
-                        xy_overlay_cursor_state_.valid &&
-                        xy_overlay_cursor_state_.target_asset == overlay_target &&
-                        std::fabs(xy_overlay_cursor_state_.target_world_z - target_world_z) < 1e-3f;
-                    int seed_x = same_target
-                        ? xy_overlay_cursor_state_.tex_x
-                        : frame_w / 2;
-                    int seed_y = same_target
-                        ? xy_overlay_cursor_state_.tex_y
-                        : frame_h / 2;
-                    int solved_x = seed_x;
-                    int solved_y = seed_y;
-                    const bool solved = solve_texture_point_for_screen_target(
-                            seed_x,
-                            seed_y,
-                            desired_screen,
-                            sample_screen_for_texture,
-                            frame_w - 1,
-                            frame_h - 1,
-                            solved_x,
-                            solved_y);
-                    if (solved) {
-                        xy_overlay_cursor_state_.target_asset = overlay_target;
-                        xy_overlay_cursor_state_.target_world_z = target_world_z;
-                        xy_overlay_cursor_state_.tex_x = solved_x;
-                        xy_overlay_cursor_state_.tex_y = solved_y;
-                        xy_overlay_cursor_state_.valid = true;
-                    } else {
-                        solved_x = frame_w / 2;
-                        solved_y = frame_h / 2;
-                        xy_overlay_cursor_state_.valid = false;
-                        xy_overlay_cursor_state_.target_asset = nullptr;
-                    }
-
-                    auto snap_tex = [sample_step_px](int value) -> int {
-                        return (value / sample_step_px) * sample_step_px;
-                    };
-                    const int center_tex_x = snap_tex(solved_x);
-                    const int center_tex_y = snap_tex(solved_y);
                     int radius_cells = std::clamp(
                         std::max(screen_w_, screen_h_) / std::max(4, cell),
                         24,
@@ -4874,20 +4782,27 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     const float radius_cells_f = static_cast<float>(std::max(1, radius_cells));
                     const float radius_cells_sq = radius_cells_f * radius_cells_f;
 
-                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                    const SDL_Point center_index =
+                        grid_service.world_to_index(overlay_ctx.snapped_floor_xz, resolution);
                     for (int gy = -radius_cells; gy <= radius_cells; ++gy) {
                         for (int gx = -radius_cells; gx <= radius_cells; ++gx) {
-                            const float dist_cells_sq =
-                                static_cast<float>(gx * gx + gy * gy);
+                            const float dist_cells_sq = static_cast<float>(gx * gx + gy * gy);
                             if (dist_cells_sq > radius_cells_sq) {
                                 continue;
                             }
-                            const int tex_x = center_tex_x + gx * sample_step_px;
-                            const int tex_y = center_tex_y + gy * sample_step_px;
+
+                            const SDL_Point world_pt =
+                                grid_service.index_to_world(center_index.x + gx, center_index.y + gy, resolution);
                             SDL_FPoint screen_point{};
-                            if (!sample_screen_for_texture(tex_x, tex_y, screen_point)) {
+                            if (!assets_->getView().project_world_point(
+                                    SDL_FPoint{static_cast<float>(world_pt.x), target_world_z},
+                                    static_cast<float>(world_pt.y),
+                                    screen_point) ||
+                                !std::isfinite(screen_point.x) ||
+                                !std::isfinite(screen_point.y)) {
                                 continue;
                             }
+
                             const float edge_t =
                                 std::clamp(std::sqrt(std::max(0.0f, dist_cells_sq) / radius_cells_sq), 0.0f, 1.0f);
                             const Uint8 alpha = static_cast<Uint8>(std::lround((1.0f - edge_t) * 180.0f));

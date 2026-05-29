@@ -1,5 +1,5 @@
 #include "rendering/render/opengl_runtime_renderer.hpp"
-
+#include "rendering/render/finale_effects.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -1038,6 +1038,10 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(floor_target_);
     render_diagnostics::destroy_texture(xy_sprite_target_);
     render_diagnostics::destroy_texture(composite_target_);
+    render_diagnostics::destroy_texture(finale_effects_target_);
+
+    finale_effects::FinalEffects::destroy_cached_textures();
+
     destroy_depth_layer_targets();
     dof_blur_chain_.destroy_targets();
     destroy_far_background_textures();
@@ -2366,15 +2370,77 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     }
 
     const std::uint64_t backbuffer_begin = SDL_GetPerformanceCounter();
+
+    SDL_Texture* final_scene_texture = composite_target_;
+
+    // Apply final full-screen effects after everything is composited, including UI/debug overlays,
+    // but before copying to the real window backbuffer.
+    if (final_scene_texture) {
+        if (!finale_effects_target_) {
+            finale_effects_target_ = create_render_target(
+                renderer_,
+                static_cast<int>(frame_to_render->target_width),
+                static_cast<int>(frame_to_render->target_height),
+                "finale_effects",
+                out_error);
+
+            if (!finale_effects_target_) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+        }
+
+        float finale_w = 0.0f;
+        float finale_h = 0.0f;
+        const bool finale_size_ok =
+            SDL_GetTextureSize(finale_effects_target_, &finale_w, &finale_h) &&
+            static_cast<int>(std::lround(finale_w)) == static_cast<int>(frame_to_render->target_width) &&
+            static_cast<int>(std::lround(finale_h)) == static_cast<int>(frame_to_render->target_height);
+
+        if (!finale_size_ok) {
+            render_diagnostics::destroy_texture(finale_effects_target_);
+            finale_effects_target_ = create_render_target(
+                renderer_,
+                static_cast<int>(frame_to_render->target_width),
+                static_cast<int>(frame_to_render->target_height),
+                "finale_effects",
+                out_error);
+
+            if (!finale_effects_target_) {
+                render_diagnostics::end_frame();
+                return false;
+            }
+        }
+
+        // Fast path: GPU texture in, GPU texture out.
+        // Your helper should render composite_target_ into finale_effects_target_.
+        SDL_Texture* effected_texture = helperpereffects(
+            renderer_,
+            final_scene_texture,
+            finale_effects_target_,
+            static_cast<int>(frame_to_render->target_width),
+            static_cast<int>(frame_to_render->target_height),
+            out_error);
+
+        if (!effected_texture) {
+            render_diagnostics::end_frame();
+            return false;
+        }
+
+        final_scene_texture = effected_texture;
+    }
+
     if (!bind_target_no_clear(nullptr)) {
         render_diagnostics::end_frame();
         return false;
     }
-    if (!render_diagnostics::render_texture(renderer_, composite_target_, nullptr, &full_rect)) {
-        out_error = "Failed to present composite target: " + safe_string(SDL_GetError());
+
+    if (!render_diagnostics::render_texture(renderer_, final_scene_texture, nullptr, &full_rect)) {
+        out_error = "Failed to present final scene texture: " + safe_string(SDL_GetError());
         render_diagnostics::end_frame();
         return false;
     }
+
     backbuffer_ms = elapsed_ms(backbuffer_begin, SDL_GetPerformanceCounter());
 
     const double submit_ms = elapsed_ms(frame_submit_begin, SDL_GetPerformanceCounter());

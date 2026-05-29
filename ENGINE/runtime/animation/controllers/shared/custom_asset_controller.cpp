@@ -189,11 +189,7 @@ void CustomAssetController::initialize_anchor_candidate_children() {
             anchor_candidate_hash(anchor_name),
             catalog,
             vibble::spawn::ZeroWeightPolicy::NoSelection);
-        if (!resolved || resolved->is_null || resolved->resolved_asset_name.empty()) {
-            vibble::log::warn(std::string("[CustomAssetController] Unable to resolve explicit anchor candidates for anchor '") +
-                              anchor_name + "' on asset '" + self_->info->name + "'");
-            continue;
-        }
+
 
         AnchorCandidateAttachment attachment{};
         attachment.anchor_name = anchor_name;

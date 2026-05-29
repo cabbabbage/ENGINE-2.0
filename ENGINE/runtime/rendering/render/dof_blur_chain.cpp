@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 #include "rendering/render/render_diagnostics.hpp"
 
@@ -20,6 +21,13 @@ struct TextureStateSnapshot {
 
 float sanitized_non_negative(float value) {
     return (std::isfinite(value) && value > 0.0f) ? value : 0.0f;
+}
+
+SDL_FPoint screen_center_for_target(int width, int height) {
+    return SDL_FPoint{
+        static_cast<float>(std::max(1, width)) * 0.5f,
+        static_cast<float>(std::max(1, height)) * 0.5f
+    };
 }
 
 TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
@@ -51,22 +59,30 @@ SDL_BlendMode make_sum_blend_mode() {
                                       SDL_BLENDOPERATION_ADD);
 }
 
-void build_gaussian_weights(std::vector<float>& weights, int kernel_radius, float sigma) {
-    weights.assign(static_cast<std::size_t>(kernel_radius + 1), 0.0f);
-
-    float sum = 0.0f;
-    for (int i = 0; i <= kernel_radius; ++i) {
-        const float x = static_cast<float>(i);
-        const float w = std::exp(-(x * x) / (2.0f * sigma * sigma));
-        weights[static_cast<std::size_t>(i)] = w;
-        sum += (i == 0) ? w : (2.0f * w);
+void clear_texture_target(SDL_Renderer* renderer, SDL_Texture* target) {
+    if (!renderer || !target) {
+        return;
     }
+    render_diagnostics::set_render_target(renderer, target);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+}
 
-    if (sum > 1.0e-6f) {
-        for (float& w : weights) {
-            w /= sum;
-        }
+bool copy_texture_region(SDL_Renderer* renderer,
+                         SDL_Texture* src,
+                         SDL_Texture* dst,
+                         const SDL_FRect* src_rect,
+                         const SDL_FRect* dst_rect) {
+    if (!renderer || !src || !dst) {
+        return false;
     }
+    clear_texture_target(renderer, dst);
+    render_diagnostics::set_render_target(renderer, dst);
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+    return render_diagnostics::render_texture(renderer, src, src_rect, dst_rect);
 }
 
 void draw_weighted_offset_sample(SDL_Renderer* renderer,
@@ -117,32 +133,6 @@ void draw_weighted_scaled_sample(SDL_Renderer* renderer,
         scaled_w,
         scaled_h};
     render_diagnostics::render_texture(renderer, texture, &src_rect, &dst_rect);
-}
-
-void clear_texture_target(SDL_Renderer* renderer, SDL_Texture* target) {
-    if (!renderer || !target) {
-        return;
-    }
-    render_diagnostics::set_render_target(renderer, target);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-}
-
-bool copy_texture_region(SDL_Renderer* renderer,
-                         SDL_Texture* src,
-                         SDL_Texture* dst,
-                         const SDL_FRect* src_rect,
-                         const SDL_FRect* dst_rect) {
-    if (!renderer || !src || !dst) {
-        return false;
-    }
-    clear_texture_target(renderer, dst);
-    render_diagnostics::set_render_target(renderer, dst);
-    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureAlphaMod(src, 255);
-    SDL_SetTextureColorMod(src, 255, 255, 255);
-    return render_diagnostics::render_texture(renderer, src, src_rect, dst_rect);
 }
 
 bool prepare_damage_pulse_texture(SDL_Renderer* renderer,
@@ -196,53 +186,25 @@ bool prepare_damage_pulse_texture(SDL_Renderer* renderer,
     return true;
 }
 
-bool apply_axis_blur(SDL_Renderer* renderer,
-                     SDL_Texture* src,
-                     SDL_Texture* dst,
-                     int draw_w,
-                     int draw_h,
-                     float radius_px,
-                     float dir_x,
-                     float dir_y,
-                     SDL_BlendMode sum_blend) {
-    if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
-        return false;
+int radial_sample_count(float process_radial_radius_px) {
+    const float safe_radius = sanitized_non_negative(process_radial_radius_px);
+    if (safe_radius <= kBlurEpsilonPx) {
+        return 0;
     }
-
-    if (radius_px <= kBlurEpsilonPx) {
-        return copy_texture_region(renderer, src, dst, nullptr, nullptr);
-    }
-
-    clear_texture_target(renderer, dst);
-    render_diagnostics::set_render_target(renderer, dst);
-
-    const int kernel_radius = std::clamp(static_cast<int>(std::ceil(radius_px)), 1, 24);
-    const float sigma = std::max(kBlurEpsilonPx, radius_px * 0.58f);
-    std::vector<float> weights;
-    build_gaussian_weights(weights, kernel_radius, sigma);
-
-    SDL_SetTextureBlendMode(src, sum_blend);
-    SDL_SetTextureColorMod(src, 255, 255, 255);
-    for (int i = -kernel_radius; i <= kernel_radius; ++i) {
-        draw_weighted_offset_sample(renderer,
-                                    src,
-                                    draw_w,
-                                    draw_h,
-                                    static_cast<float>(i) * dir_x,
-                                    static_cast<float>(i) * dir_y,
-                                    weights[static_cast<std::size_t>(std::abs(i))]);
-    }
-    return true;
+    return std::clamp(
+        dof_blur_chain::radial_blur_tuning::kMinSamples +
+            static_cast<int>(std::ceil(std::sqrt(safe_radius) * dof_blur_chain::radial_blur_tuning::kSamplesPerSqrtRadius)),
+        dof_blur_chain::radial_blur_tuning::kMinSamples,
+        dof_blur_chain::radial_blur_tuning::kMaxSamples);
 }
 
-bool apply_radial_zoom_blur(SDL_Renderer* renderer,
-                            SDL_Texture* src,
-                            SDL_Texture* dst,
-                            int draw_w,
-                            int draw_h,
-                            float radial_radius_px,
-                            const SDL_FPoint& optical_center,
-                            SDL_BlendMode sum_blend) {
+bool apply_fast_radial_zoom_blur(SDL_Renderer* renderer,
+                                 SDL_Texture* src,
+                                 SDL_Texture* dst,
+                                 int draw_w,
+                                 int draw_h,
+                                 float radial_radius_px,
+                                 SDL_BlendMode sum_blend) {
     if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
         return false;
     }
@@ -256,44 +218,70 @@ bool apply_radial_zoom_blur(SDL_Renderer* renderer,
     SDL_SetTextureBlendMode(src, sum_blend);
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
+    const SDL_FPoint center = screen_center_for_target(draw_w, draw_h);
     const float max_dim = static_cast<float>(std::max(draw_w, draw_h));
     const float normalized_radius = std::clamp(radial_radius_px / std::max(1.0f, max_dim), 0.0f, 1.0f);
-    const int sample_count = std::clamp(static_cast<int>(std::ceil(radial_radius_px * 2.0f)), 2, 64);
-    const float max_scale_delta = std::min(0.65f, normalized_radius * 3.0f);
+    const int sample_count = radial_sample_count(radial_radius_px);
+    const float max_scale_delta = std::min(dof_blur_chain::radial_blur_tuning::kMaxScaleDelta,
+                                           normalized_radius * dof_blur_chain::radial_blur_tuning::kScaleDeltaMultiplier);
 
     float total_raw_weight = 1.0f;
-    std::vector<float> side_weights(static_cast<std::size_t>(sample_count), 0.0f);
+    std::vector<float> weights(static_cast<std::size_t>(sample_count), 0.0f);
     for (int i = 0; i < sample_count; ++i) {
         const float t = static_cast<float>(i + 1) / static_cast<float>(sample_count);
-        const float w = 1.0f - t;
-        side_weights[static_cast<std::size_t>(i)] = w;
-        total_raw_weight += 2.0f * w;
+        const float w = (1.0f - t) * (1.0f - t);
+        weights[static_cast<std::size_t>(i)] = w;
+        total_raw_weight += w;
     }
     if (total_raw_weight <= 1.0e-6f) {
         return false;
     }
 
-    draw_weighted_scaled_sample(renderer, src, draw_w, draw_h, optical_center, 1.0f, 1.0f / total_raw_weight);
+    // Base full-coverage sample prevents corner/edge holes. All other samples zoom outward only.
+    draw_weighted_scaled_sample(renderer, src, draw_w, draw_h, center, 1.0f, 1.0f / total_raw_weight);
     for (int i = 0; i < sample_count; ++i) {
         const float t = static_cast<float>(i + 1) / static_cast<float>(sample_count);
         const float scale_delta = max_scale_delta * t;
-        const float weight = side_weights[static_cast<std::size_t>(i)] / total_raw_weight;
-        draw_weighted_scaled_sample(renderer, src, draw_w, draw_h, optical_center, std::max(0.05f, 1.0f - scale_delta), weight);
-        draw_weighted_scaled_sample(renderer, src, draw_w, draw_h, optical_center, 1.0f + scale_delta, weight);
+        const float weight = weights[static_cast<std::size_t>(i)] / total_raw_weight;
+        draw_weighted_scaled_sample(renderer, src, draw_w, draw_h, center, 1.0f + scale_delta, weight);
     }
     return true;
 }
 
-bool apply_lens_blur(SDL_Renderer* renderer,
-                     SDL_Texture* src,
-                     SDL_Texture* dst,
-                     SDL_Texture* scratch,
-                     int target_w,
-                     int target_h,
-                     float radius_px,
-                     const SDL_FPoint& optical_center,
-                     float radial_radius_px,
-                     float quality_scale) {
+float compute_radial_quality_scale(int width, int height, float radial_blur_px, float normalized_layer_distance) {
+    const float safe_radius = sanitized_non_negative(radial_blur_px);
+    const int min_dim = std::max(1, std::min(width, height));
+    if (safe_radius <= 2.0f || min_dim <= 360) {
+        return 1.0f;
+    }
+
+    float quality = 1.0f;
+    if (safe_radius <= 5.0f) {
+        quality = 0.82f;
+    } else if (safe_radius <= 10.0f) {
+        quality = 0.66f;
+    } else if (safe_radius <= 18.0f) {
+        quality = 0.50f;
+    } else if (safe_radius <= 32.0f) {
+        quality = 0.36f;
+    } else {
+        quality = dof_blur_chain::radial_blur_tuning::kMinProcessQualityScale;
+    }
+
+    const float distance_t = std::clamp(normalized_layer_distance, 0.0f, 1.0f);
+    const float distance_multiplier = 1.0f - distance_t * (1.0f - dof_blur_chain::radial_blur_tuning::kFarLayerQualityMultiplier);
+    quality *= distance_multiplier;
+    return std::clamp(quality, dof_blur_chain::radial_blur_tuning::kMinProcessQualityScale, 1.0f);
+}
+
+bool apply_radial_only_lens_blur(SDL_Renderer* renderer,
+                                 SDL_Texture* src,
+                                 SDL_Texture* dst,
+                                 SDL_Texture* scratch,
+                                 int target_w,
+                                 int target_h,
+                                 float radial_radius_px,
+                                 float quality_scale) {
     if (!renderer || !src || !dst || !scratch || target_w <= 0 || target_h <= 0 || scratch == src || scratch == dst) {
         return false;
     }
@@ -313,13 +301,20 @@ bool apply_lens_blur(SDL_Renderer* renderer,
         return copied;
     }
 
-    const float clamped_quality = std::clamp(quality_scale, 0.35f, 1.0f);
+    const float clamped_quality = std::clamp(quality_scale, dof_blur_chain::radial_blur_tuning::kMinProcessQualityScale, 1.0f);
     const int process_w = std::clamp(static_cast<int>(std::lround(static_cast<float>(target_w) * clamped_quality)), 1, target_w);
     const int process_h = std::clamp(static_cast<int>(std::lround(static_cast<float>(target_h) * clamped_quality)), 1, target_h);
     const bool reduced_resolution = (process_w != target_w) || (process_h != target_h);
-    const float process_blur_radius = std::max(0.0f, radius_px) * clamped_quality;
     const float process_radial_radius = std::max(0.0f, radial_radius_px) * clamped_quality;
-    const SDL_FPoint scaled_optical_center{optical_center.x * clamped_quality, optical_center.y * clamped_quality};
+
+    if (process_radial_radius <= kBlurEpsilonPx) {
+        const bool copied = copy_texture_region(renderer, src, dst, nullptr, nullptr);
+        restore_texture_state(src, src_state);
+        restore_texture_state(scratch, scratch_state);
+        restore_texture_state(dst, dst_state);
+        render_diagnostics::set_render_target(renderer, previous_target);
+        return copied;
+    }
 
     SDL_Texture* current = src;
     if (reduced_resolution) {
@@ -334,56 +329,21 @@ bool apply_lens_blur(SDL_Renderer* renderer,
         current = scratch;
     }
 
-    auto pick_other_temp = [&](SDL_Texture* texture) {
-        return (texture == scratch) ? dst : scratch;
-    };
-
-    if (process_blur_radius > kBlurEpsilonPx) {
-        SDL_Texture* next = pick_other_temp(current);
-        if (!apply_axis_blur(renderer, current, next, process_w, process_h, process_blur_radius, 1.0f, 0.0f, sum_blend)) {
-            restore_texture_state(src, src_state);
-            restore_texture_state(scratch, scratch_state);
-            restore_texture_state(dst, dst_state);
-            render_diagnostics::set_render_target(renderer, previous_target);
-            return false;
-        }
-        current = next;
-
-        next = pick_other_temp(current);
-        if (!apply_axis_blur(renderer, current, next, process_w, process_h, process_blur_radius, 0.0f, 1.0f, sum_blend)) {
-            restore_texture_state(src, src_state);
-            restore_texture_state(scratch, scratch_state);
-            restore_texture_state(dst, dst_state);
-            render_diagnostics::set_render_target(renderer, previous_target);
-            return false;
-        }
-        current = next;
-    }
-
-    if (process_radial_radius > kBlurEpsilonPx) {
-        SDL_Texture* next = pick_other_temp(current);
-        if (!apply_radial_zoom_blur(renderer, current, next, process_w, process_h, process_radial_radius, scaled_optical_center, sum_blend)) {
-            restore_texture_state(src, src_state);
-            restore_texture_state(scratch, scratch_state);
-            restore_texture_state(dst, dst_state);
-            render_diagnostics::set_render_target(renderer, previous_target);
-            return false;
-        }
-        current = next;
+    if (!apply_fast_radial_zoom_blur(renderer, current, dst, process_w, process_h, process_radial_radius, sum_blend)) {
+        restore_texture_state(src, src_state);
+        restore_texture_state(scratch, scratch_state);
+        restore_texture_state(dst, dst_state);
+        render_diagnostics::set_render_target(renderer, previous_target);
+        return false;
     }
 
     bool copied_to_dst = true;
     if (reduced_resolution) {
         const SDL_FRect lowres_rect{0.0f, 0.0f, static_cast<float>(process_w), static_cast<float>(process_h)};
-        if (current == dst) {
-            copied_to_dst = copy_texture_region(renderer, dst, scratch, &lowres_rect, &lowres_rect);
-            current = scratch;
-        }
+        copied_to_dst = copy_texture_region(renderer, dst, scratch, &lowres_rect, &lowres_rect);
         if (copied_to_dst) {
-            copied_to_dst = copy_texture_region(renderer, current, dst, &lowres_rect, nullptr);
+            copied_to_dst = copy_texture_region(renderer, scratch, dst, &lowres_rect, nullptr);
         }
-    } else if (current != dst) {
-        copied_to_dst = copy_texture_region(renderer, current, dst, nullptr, nullptr);
     }
 
     restore_texture_state(src, src_state);
@@ -393,35 +353,12 @@ bool apply_lens_blur(SDL_Renderer* renderer,
     return copied_to_dst;
 }
 
-float compute_quality_scale(int width, int height, float blur_px, float radial_blur_px) {
-    const float max_radius = std::max(sanitized_non_negative(blur_px), sanitized_non_negative(radial_blur_px));
-    const int min_dim = std::max(1, std::min(width, height));
-    if (max_radius <= 2.0f || min_dim <= 540) {
-        return 1.0f;
-    }
-    if (max_radius <= 6.0f) {
-        return 0.9f;
-    }
-    if (max_radius <= 12.0f) {
-        return 0.8f;
-    }
-    if (max_radius <= 24.0f) {
-        return 0.65f;
-    }
-    if (min_dim <= 720) {
-        return 0.6f;
-    }
-    return 0.5f;
-}
-
 } // namespace
 
 namespace dof_blur_chain {
 
-bool enabled(bool depth_of_field_enabled, float blur_px, float radial_blur_px) {
-    return depth_of_field_enabled &&
-           (sanitized_non_negative(blur_px) > kBlurEpsilonPx ||
-            sanitized_non_negative(radial_blur_px) > kBlurEpsilonPx);
+bool enabled(bool depth_of_field_enabled, float /*blur_px*/, float radial_blur_px) {
+    return depth_of_field_enabled && sanitized_non_negative(radial_blur_px) > kBlurEpsilonPx;
 }
 
 Renderer::Renderer(SDL_Renderer* renderer)
@@ -514,37 +451,35 @@ bool Renderer::composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const 
 bool Renderer::blur_step(SDL_Texture* src,
                          SDL_Texture* dst,
                          SDL_Texture* blur_work,
-                         float blur_px,
-                         SDL_FPoint optical_center,
+                         float /*blur_px*/,
+                         SDL_FPoint /*optical_center*/,
                          float radial_blur_px,
                          float quality_scale) const {
     if (!src || !dst || !blur_work) {
         return false;
     }
-    const float safe_blur_px = sanitized_non_negative(blur_px);
     const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
-    if (!enabled(true, safe_blur_px, safe_radial_blur_px)) {
+    if (safe_radial_blur_px <= kBlurEpsilonPx) {
         return copy_texture(src, dst);
     }
-    return apply_lens_blur(renderer_,
-                           src,
-                           dst,
-                           blur_work,
-                           width_,
-                           height_,
-                           safe_blur_px,
-                           optical_center,
-                           safe_radial_blur_px,
-                           quality_scale);
+    return apply_radial_only_lens_blur(renderer_,
+                                       src,
+                                       dst,
+                                       blur_work,
+                                       width_,
+                                       height_,
+                                       safe_radial_blur_px,
+                                       quality_scale);
 }
 
 CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                   SDL_Texture* background_seed,
                                   bool depth_of_field_enabled,
-                                  float blur_px,
+                                  float /*blur_px*/,
                                   float radial_blur_px,
                                   SDL_FPoint optical_center,
                                   int focus_depth_layer) {
+    (void)optical_center;
     CompositeResult result{};
     if (!renderer_ || layers.empty()) {
         return result;
@@ -559,12 +494,9 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         return out;
     };
 
-    const float safe_blur_px = sanitized_non_negative(blur_px);
     const float safe_radial_blur_px = sanitized_non_negative(radial_blur_px);
-    const bool blur_enabled = enabled(depth_of_field_enabled, safe_blur_px, safe_radial_blur_px);
-    const float quality_scale = blur_enabled
-        ? compute_quality_scale(width_, height_, safe_blur_px, safe_radial_blur_px)
-        : 1.0f;
+    const bool blur_enabled = enabled(depth_of_field_enabled, 0.0f, safe_radial_blur_px);
+
     auto resolve_layer_source = [&](const LayerTexture& layer, SDL_Texture*& out_texture) -> bool {
         out_texture = layer.texture;
         if (!out_texture) {
@@ -590,26 +522,50 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
     scratch_background_layers_.clear();
     scratch_foreground_layers_.clear();
     for (const LayerTexture& layer : layers) {
-        if (!layer.texture) continue;
-        if (layer.depth_layer > focus_depth_layer) scratch_background_layers_.push_back(layer);
-        else if (layer.depth_layer < focus_depth_layer) scratch_foreground_layers_.push_back(layer);
+        if (!layer.texture) {
+            continue;
+        }
+        if (layer.depth_layer > focus_depth_layer) {
+            scratch_background_layers_.push_back(layer);
+        } else if (layer.depth_layer < focus_depth_layer) {
+            scratch_foreground_layers_.push_back(layer);
+        }
     }
-    std::sort(scratch_background_layers_.begin(), scratch_background_layers_.end(), [](const LayerTexture& a, const LayerTexture& b){ return a.depth_layer > b.depth_layer; });
-    std::sort(scratch_foreground_layers_.begin(), scratch_foreground_layers_.end(), [](const LayerTexture& a, const LayerTexture& b){ return a.depth_layer < b.depth_layer; });
+
+    std::sort(scratch_background_layers_.begin(), scratch_background_layers_.end(), [](const LayerTexture& a, const LayerTexture& b) {
+        return a.depth_layer > b.depth_layer;
+    });
+    std::sort(scratch_foreground_layers_.begin(), scratch_foreground_layers_.end(), [](const LayerTexture& a, const LayerTexture& b) {
+        return a.depth_layer < b.depth_layer;
+    });
+
+    int max_layer_distance = 0;
+    for (const LayerTexture& layer : layers) {
+        if (layer.texture) {
+            max_layer_distance = std::max(max_layer_distance, std::abs(layer.depth_layer - focus_depth_layer));
+        }
+    }
+    const float inv_max_layer_distance = max_layer_distance > 0 ? 1.0f / static_cast<float>(max_layer_distance) : 0.0f;
 
     clear_target(background_mid_);
+    clear_target(foreground_mid_);
+
     bool background_has_content = false;
     bool foreground_has_content = false;
+
     if (background_seed) {
-        // Treat the far background seed as the deepest layer so sky and mountains pick up the full blur.
-        if (blur_enabled && (safe_blur_px > kBlurEpsilonPx || safe_radial_blur_px > kBlurEpsilonPx)) {
+        if (blur_enabled && safe_radial_blur_px > kBlurEpsilonPx) {
+            const float background_quality = std::clamp(
+                compute_radial_quality_scale(width_, height_, safe_radial_blur_px, 1.0f) * radial_blur_tuning::kBackgroundSeedQualityMultiplier,
+                radial_blur_tuning::kMinProcessQualityScale,
+                1.0f);
             if (!blur_step(background_seed,
                            background_mid_,
                            blur_work_,
-                           safe_blur_px,
-                           optical_center,
+                           0.0f,
+                           screen_center_for_target(width_, height_),
                            safe_radial_blur_px,
-                           quality_scale)) {
+                           background_quality)) {
                 return restore_and_return(CompositeResult{});
             }
             ++result.blur_pass_count;
@@ -618,43 +574,81 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         }
         background_has_content = true;
     }
-    clear_target(foreground_mid_);
+
     for (const LayerTexture& layer : scratch_background_layers_) {
         SDL_Texture* layer_source = nullptr;
         if (!resolve_layer_source(layer, layer_source)) {
             return restore_and_return(CompositeResult{});
         }
-        const float layer_blur = safe_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
-        const float layer_radial = safe_radial_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
-        if (blur_enabled && (layer_blur > kBlurEpsilonPx || layer_radial > kBlurEpsilonPx)) {
-            if (!blur_step(layer_source, foreground_layer_, blur_work_, layer_blur, optical_center, layer_radial, quality_scale)) return restore_and_return(CompositeResult{});
+
+        const float layer_strength = std::clamp(layer.blur_strength, 0.0f, 1.0f);
+        const float layer_radial = safe_radial_blur_px * layer_strength;
+        const float layer_distance_t = std::clamp(static_cast<float>(std::abs(layer.depth_layer - focus_depth_layer)) * inv_max_layer_distance, 0.0f, 1.0f);
+        SDL_Texture* layer_output = layer_source;
+
+        if (blur_enabled && layer_radial > kBlurEpsilonPx) {
+            const float layer_quality = compute_radial_quality_scale(width_, height_, layer_radial, layer_distance_t);
+            if (!blur_step(layer_source,
+                           foreground_layer_,
+                           blur_work_,
+                           0.0f,
+                           screen_center_for_target(width_, height_),
+                           layer_radial,
+                           layer_quality)) {
+                return restore_and_return(CompositeResult{});
+            }
             ++result.blur_pass_count;
-            if (!composite_texture_over(foreground_layer_, background_mid_)) return restore_and_return(CompositeResult{});
-        } else if (!composite_texture_over(layer_source, background_mid_)) return restore_and_return(CompositeResult{});
+            layer_output = foreground_layer_;
+        }
+
+        if (!composite_texture_over(layer_output, background_mid_)) {
+            return restore_and_return(CompositeResult{});
+        }
         background_has_content = true;
     }
+
     for (const LayerTexture& layer : layers) {
         if (layer.depth_layer == focus_depth_layer && layer.texture) {
             SDL_Texture* layer_source = nullptr;
             if (!resolve_layer_source(layer, layer_source)) {
                 return restore_and_return(CompositeResult{});
             }
-            if (!composite_texture_over(layer_source, background_mid_)) return restore_and_return(CompositeResult{});
+            if (!composite_texture_over(layer_source, background_mid_)) {
+                return restore_and_return(CompositeResult{});
+            }
             background_has_content = true;
         }
     }
+
     for (const LayerTexture& layer : scratch_foreground_layers_) {
         SDL_Texture* layer_source = nullptr;
         if (!resolve_layer_source(layer, layer_source)) {
             return restore_and_return(CompositeResult{});
         }
-        const float layer_blur = safe_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
-        const float layer_radial = safe_radial_blur_px * std::clamp(layer.blur_strength, 0.0f, 1.0f);
-        if (blur_enabled && (layer_blur > kBlurEpsilonPx || layer_radial > kBlurEpsilonPx)) {
-            if (!blur_step(layer_source, foreground_layer_, blur_work_, layer_blur, optical_center, layer_radial, quality_scale)) return restore_and_return(CompositeResult{});
+
+        const float layer_strength = std::clamp(layer.blur_strength, 0.0f, 1.0f);
+        const float layer_radial = safe_radial_blur_px * layer_strength;
+        const float layer_distance_t = std::clamp(static_cast<float>(std::abs(layer.depth_layer - focus_depth_layer)) * inv_max_layer_distance, 0.0f, 1.0f);
+        SDL_Texture* layer_output = layer_source;
+
+        if (blur_enabled && layer_radial > kBlurEpsilonPx) {
+            const float layer_quality = compute_radial_quality_scale(width_, height_, layer_radial, layer_distance_t);
+            if (!blur_step(layer_source,
+                           foreground_layer_,
+                           blur_work_,
+                           0.0f,
+                           screen_center_for_target(width_, height_),
+                           layer_radial,
+                           layer_quality)) {
+                return restore_and_return(CompositeResult{});
+            }
             ++result.blur_pass_count;
-            if (!composite_texture_over(foreground_layer_, foreground_mid_)) return restore_and_return(CompositeResult{});
-        } else if (!composite_texture_over(layer_source, foreground_mid_)) return restore_and_return(CompositeResult{});
+            layer_output = foreground_layer_;
+        }
+
+        if (!composite_texture_over(layer_output, foreground_mid_)) {
+            return restore_and_return(CompositeResult{});
+        }
         foreground_has_content = true;
     }
 

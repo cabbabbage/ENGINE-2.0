@@ -21,6 +21,18 @@ inline constexpr std::uint32_t kMaxConcurrentPulses = 5;
 inline constexpr float kPhaseFrequencyHz = 8.5f;
 } // namespace damage_pulse_tuning
 
+namespace radial_blur_tuning {
+// Normal blur is intentionally removed. Only radial zoom blur is used.
+inline constexpr float kMinProcessQualityScale = 0.20f;
+inline constexpr float kFarLayerQualityMultiplier = 0.48f;
+inline constexpr float kBackgroundSeedQualityMultiplier = 0.42f;
+inline constexpr int kMinSamples = 4;
+inline constexpr int kMaxSamples = 18;
+inline constexpr float kSamplesPerSqrtRadius = 1.75f;
+inline constexpr float kMaxScaleDelta = 0.95f;
+inline constexpr float kScaleDeltaMultiplier = 3.35f;
+} // namespace radial_blur_tuning
+
 struct LayerTexture {
     int depth_layer = 0;
     float blur_strength = 0.0f;
@@ -38,6 +50,7 @@ struct CompositeResult {
 };
 
 bool enabled(bool depth_of_field_enabled, float blur_px, float radial_blur_px);
+
 class Renderer {
 public:
     explicit Renderer(SDL_Renderer* renderer = nullptr);
@@ -71,6 +84,7 @@ private:
                    SDL_FPoint optical_center,
                    float radial_blur_px,
                    float quality_scale) const;
+
     SDL_Renderer* renderer_ = nullptr;
     int width_ = 1;
     int height_ = 1;

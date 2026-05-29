@@ -1562,17 +1562,11 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
     const bool dof_requested = allow_dof_depth_layers &&
         dof_requested_by_settings;
     if (dof_requested) {
-        const auto bucket_depth_layer =
-            [focus = out_data.focus_depth_layer](int layer) {
-            constexpr int bucket_radius = render_depth::kDofFocusBucketRadius;
-            const int delta = std::clamp(layer - focus, -bucket_radius, bucket_radius);
-            return focus + delta;
-        };
         scratch_depth_xy_sprite_packets_.clear();
         scratch_depth_xy_sprite_packets_.rehash(std::max<std::size_t>(
             scratch_depth_xy_sprite_packets_.bucket_count(), out_data.xy_sprite_draws.size()));
         for (const GpuSpriteDrawPacket& packet : out_data.xy_sprite_draws) {
-            scratch_depth_xy_sprite_packets_[bucket_depth_layer(packet.depth_layer)].push_back(packet);
+            scratch_depth_xy_sprite_packets_[packet.depth_layer].push_back(packet);
         }
 
         scratch_depth_layer_ids_.clear();
@@ -1585,6 +1579,12 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             return lhs > rhs;
         });
 
+        int max_distance_from_focus = 0;
+        for (int layer_id : scratch_depth_layer_ids_) {
+            max_distance_from_focus = std::max(max_distance_from_focus,
+                                               std::abs(layer_id - out_data.focus_depth_layer));
+        }
+
         out_data.depth_layers.reserve(scratch_depth_layer_ids_.size());
         for (int layer_id : scratch_depth_layer_ids_) {
             GpuDepthLayerDrawPackets layer{};
@@ -1595,7 +1595,8 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             }
             layer.blur_strength_px = render_depth::dof_blur_strength_for_layer_distance(
                 layer.depth_layer,
-                out_data.focus_depth_layer);
+                out_data.focus_depth_layer,
+                max_distance_from_focus);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }
@@ -2227,10 +2228,17 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                     optical_center,
                                     frame_to_render->focus_depth_layer);
 
+        const bool frame_contains_focus_depth_layer = std::any_of(
+            frame_to_render->depth_layers.begin(),
+            frame_to_render->depth_layers.end(),
+            [focus_depth_layer = frame_to_render->focus_depth_layer](const GpuDepthLayerDrawPackets& layer) {
+                return layer.depth_layer == focus_depth_layer;
+            });
         dof_blur_chain::CompositeResult resolved_dof_result = dof_result;
         if (resolved_dof_result.valid &&
             resolved_dof_result.blur_pass_count == 0 &&
             !used_flattened_xy_dof_layer &&
+            !frame_contains_focus_depth_layer &&
             !frame_to_render->xy_sprite_draws.empty()) {
             if (!rebuild_flattened_xy_dof_layer()) {
                 render_diagnostics::end_frame();

@@ -1068,7 +1068,6 @@ void Assets::apply_camera_runtime_settings() {
     WarpedScreenGrid::RealismSettings settings = camera_.realism_settings();
     settings.boundary_min_visible_screen_ratio = boundary_min_visible_screen_ratio_;
     camera_.set_realism_settings(settings);
-    render_pipeline::ScalingLogic::SetQualityCap(1.0f);
     finalize_max_asset_dimensions(max_asset_width_world_, max_asset_height_world_);
 }
 

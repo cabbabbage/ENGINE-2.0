@@ -133,7 +133,6 @@ class Asset {
         }
         return cached_w;
     }
-    float runtime_scale_remainder() const;
     float runtime_resolved_scale() const;
     float runtime_width_px() const;
     float runtime_height_px() const;
@@ -305,7 +304,6 @@ class Asset {
 
     void update_scale_values(bool force = false);
     bool can_skip_static_runtime_update();
-    SDL_Texture* get_current_variant_texture() const;
     void set_current_animation(const std::string& name);
     // Queue an attack event for deferred controller handling.
     void send_attack(const animation_update::Attack& attack);
@@ -557,20 +555,10 @@ private:
     double base_spawn_tilt_degrees_ = 0.0;
     void ensure_animation_runtime(bool force_recreate);
 
-    void clear_downscale_cache();
-    void invalidate_downscale_cache();
     void refresh_cached_dimensions();
     void recompute_local_bounds_square();
 
-    std::uint64_t downscale_cache_ready_revision_ = 0;
-
     SDL_Rect     composite_bounds_local_{0, 0, 0, 0};
-
-    SDL_Texture* last_scaled_texture_      = nullptr;
-    SDL_Texture* last_scaled_source_       = nullptr;
-    int          last_scaled_w_            = 0;
-    int          last_scaled_h_            = 0;
-    float        last_scaled_camera_scale_ = -1.0f;
 
 
     void clear_render_caches();

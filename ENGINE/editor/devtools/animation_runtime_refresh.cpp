@@ -21,7 +21,7 @@ bool has_valid_frame_binding(Asset* asset) {
     if (!asset || !asset->current_frame) {
         return false;
     }
-    return asset->get_current_variant_texture() != nullptr;
+    return asset->get_current_frame() != nullptr;
 }
 
 void log_refresh_event(std::uint64_t transaction_id,

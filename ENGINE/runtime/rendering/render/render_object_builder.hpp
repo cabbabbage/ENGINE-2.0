@@ -20,7 +20,6 @@ struct DirectAssetRenderCacheRecord {
     SDL_FPoint projection_anchor_uv{0.5f, 1.0f};
     SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
     int frame_identity = -1;
-    int variant_identity = -1;
     SDL_Texture* texture_identity = nullptr;
     Uint32 reprojection_identity = 0;
 };

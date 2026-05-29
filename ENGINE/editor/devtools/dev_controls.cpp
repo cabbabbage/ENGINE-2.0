@@ -1201,12 +1201,12 @@ bool DevControls::run_exit_save_sequence(const std::string& reason) {
                 imgcache::GeneratorOptions::AnimationRebuildRequest request;
                 request.asset_name = asset_name;
                 request.animation_name = animation_name;
-                request.all_frames_variant_mask =
-                    static_cast<std::uint8_t>(animation_request.all_frames_variants &
-                                              imgcache::kTextureVariantMaskAll);
-                for (const auto& [frame_index, frame_mask] : animation_request.frame_variants) {
-                    request.frame_variant_masks[frame_index] =
-                        static_cast<std::uint8_t>(frame_mask & imgcache::kTextureVariantMaskAll);
+                request.all_frames_layer_mask =
+                    static_cast<std::uint8_t>(animation_request.all_frames_layers &
+                                              imgcache::kTextureLayerMaskAll);
+                for (const auto& [frame_index, frame_mask] : animation_request.frame_layers) {
+                    request.frame_layer_masks[frame_index] =
+                        static_cast<std::uint8_t>(frame_mask & imgcache::kTextureLayerMaskAll);
                 }
                 generator_options.explicit_rebuild_requests.push_back(std::move(request));
             }

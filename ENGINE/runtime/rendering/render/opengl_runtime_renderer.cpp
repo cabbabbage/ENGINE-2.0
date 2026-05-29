@@ -873,7 +873,7 @@ bool opengl_runtime_renderer_detail::build_xy_sprite_draw_packets(
             packet.source_animation_name = asset->current_animation;
             packet.source_texture_id = "sdl_texture_ptr=" + std::to_string(reinterpret_cast<std::uintptr_t>(object.texture));
             packet.source_frame_index = asset->current_frame ? asset->current_frame->frame_index : -1;
-            packet.source_variant_index = asset->current_variant_index;
+            packet.source_variant_index = -1;
         }
         packet.modulate = SDL_FColor{
             static_cast<float>(object.color_mod.r) / 255.0f,

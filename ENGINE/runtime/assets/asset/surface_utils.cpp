@@ -47,11 +47,11 @@ std::uint64_t hash_surface_pixels(SDL_Surface* surface, std::uint64_t seed) {
     return seed;
 }
 
-std::uint64_t compute_surface_signature(const std::vector<std::vector<SDL_Surface*>>& variants) {
+std::uint64_t compute_surface_signature(const std::vector<std::vector<SDL_Surface*>>& surface_stacks) {
     std::uint64_t signature = kSignatureOffset;
-    for (std::size_t variant_idx = 0; variant_idx < variants.size(); ++variant_idx) {
-        signature = mix_signature(signature, static_cast<std::uint64_t>(variant_idx));
-        const auto& stack = variants[variant_idx];
+    for (std::size_t stack_idx = 0; stack_idx < surface_stacks.size(); ++stack_idx) {
+        signature = mix_signature(signature, static_cast<std::uint64_t>(stack_idx));
+        const auto& stack = surface_stacks[stack_idx];
         signature = mix_signature(signature, static_cast<std::uint64_t>(stack.size()));
         for (std::size_t frame_idx = 0; frame_idx < stack.size(); ++frame_idx) {
             signature = mix_signature(signature, static_cast<std::uint64_t>(frame_idx));

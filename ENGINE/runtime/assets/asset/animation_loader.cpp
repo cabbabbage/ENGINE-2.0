@@ -180,50 +180,6 @@ float invert_horizontal_rotation(float rotation_degrees) {
         return -rotation_degrees;
 }
 
-std::vector<float> discover_cached_scale_steps(const fs::path& cache_folder) {
-        std::vector<float> steps;
-        std::error_code ec;
-        if (!fs::exists(cache_folder, ec) || !fs::is_directory(cache_folder, ec)) {
-                return steps;
-        }
-
-        for (const auto& entry : fs::directory_iterator(cache_folder, ec)) {
-                if (ec) break;
-                if (!entry.is_directory()) continue;
-                const std::string name = entry.path().filename().string();
-                const std::string prefix = "scale_";
-                if (name.rfind(prefix, 0) != 0 || name.size() <= prefix.size()) {
-                        continue;
-                }
-                try {
-                        const int pct = std::stoi(name.substr(prefix.size()));
-                        if (pct <= 0) continue;
-                        float step = static_cast<float>(pct) * 0.01f;
-                        if (!std::isfinite(step) || step <= 0.0f || step >= 0.999f) {
-                                continue;
-                        }
-                        steps.push_back(std::clamp(step, 0.01f, 0.99f));
-                } catch (...) {
-                        continue;
-                }
-        }
-
-        if (steps.empty()) {
-                return steps;
-        }
-
-        std::sort(steps.begin(), steps.end(), std::greater<float>());
-        steps.erase(std::unique(steps.begin(), steps.end(), [](float a, float b) {
-                return std::fabs(a - b) < 1e-4f;
-        }), steps.end());
-
-        if (steps.size() > render_pipeline::ScalingLogic::kMaxVariantCount) {
-                steps.resize(render_pipeline::ScalingLogic::kMaxVariantCount);
-        }
-
-        return steps;
-}
-
 int count_png_files(const std::string& folder) {
         int count = 0;
         const fs::path folder_path(folder);
@@ -926,39 +882,6 @@ bool path_exists_safely(const fs::path& path) {
         return fs::exists(path, ec);
 }
 
-std::string format_steps(const std::vector<float>& steps) {
-        std::ostringstream oss;
-        oss << '[';
-        for (std::size_t i = 0; i < steps.size(); ++i) {
-                if (i != 0) {
-                        oss << ", ";
-                }
-                oss << std::fixed << std::setprecision(2) << steps[i];
-        }
-        oss << ']';
-        return oss.str();
-}
-
-struct VariantLayerPaths {
-        std::string scale_folder;
-        std::string normal_folder;
-        std::string foreground_folder;
-        std::string background_folder;
-};
-
-VariantLayerPaths build_variant_layer_paths(const std::string& cache_folder,
-                                            const std::vector<float>& steps,
-                                            std::size_t index) {
-        VariantLayerPaths paths;
-        paths.scale_folder     = render_pipeline::ScalingLogic::VariantFolder(cache_folder, steps, index);
-        const fs::path scale_root(paths.scale_folder);
-        paths.normal_folder     = (scale_root / "normal").string();
-        paths.foreground_folder = (scale_root / "foreground").string();
-        paths.background_folder = (scale_root / "background").string();
-
-        return paths;
-}
-
 inline double sanitize_scale_factor(float value) {
         if (!std::isfinite(value) || value < 0.0f) {
                 return 1.0;
@@ -1463,9 +1386,9 @@ void AnimationLoader::load(Animation& animation,
         }
         bind_frame_data(animation, anchor_frames, hit_box_frames, attack_box_frames);
                 if (trigger == "default") {
-                        if (const AnimationFrame* first = animation.primary_frame_at(0); first && first->variant.base_texture) {
-                                base_sprite = first->variant.base_texture;
-                                info.preview_texture = first->variant.base_texture;
+                        if (const AnimationFrame* first = animation.primary_frame_at(0); first && first->texture_binding.base_texture) {
+                                base_sprite = first->texture_binding.base_texture;
+                                info.preview_texture = first->texture_binding.base_texture;
                         }
                 }
 

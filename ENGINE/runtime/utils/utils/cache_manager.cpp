@@ -57,6 +57,19 @@ bool is_mipmap_beneficial(const SDL_Surface* surface, const CacheManager::Textur
     return surface->w >= 128 && surface->h >= 128;
 }
 
+Uint32 mip_level_count(int width, int height, bool enable) {
+    if (!enable || width <= 0 || height <= 0) {
+        return 1;
+    }
+    Uint32 levels = 1;
+    int dimension = std::max(width, height);
+    while (dimension > 1) {
+        dimension /= 2;
+        ++levels;
+    }
+    return levels;
+}
+
 void log_texture_policy_once(SDL_GPUDevice* gpu_device,
                              const CacheManager::TextureUploadOptions& options) {
     static bool logged_color = false;
@@ -554,7 +567,7 @@ SDL_GPUTexture* upload_prepared_texture_to_gpu(SDL_GPUDevice* gpu_device,
     create_info.width = static_cast<Uint32>(normalized.width);
     create_info.height = static_cast<Uint32>(normalized.height);
     create_info.layer_count_or_depth = 1;
-    create_info.num_levels = 1;
+    create_info.num_levels = mip_level_count(normalized.width, normalized.height, normalized.options.enable_mipmaps);
     create_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
     create_info.props = 0;
 
@@ -564,7 +577,7 @@ SDL_GPUTexture* upload_prepared_texture_to_gpu(SDL_GPUDevice* gpu_device,
         return nullptr;
     }
 
-    if (!upload_prepared_pixels_to_gpu_texture(gpu_device, gpu_texture, normalized, false)) {
+    if (!upload_prepared_pixels_to_gpu_texture(gpu_device, gpu_texture, normalized, create_info.num_levels > 1)) {
         out_error = "SDL_UploadToGPUTexture failed for prepared texture: " + std::string(SDL_GetError());
         SDL_ReleaseGPUTexture(gpu_device, gpu_texture);
         return nullptr;
@@ -643,7 +656,8 @@ bool load_bundle(const std::string& bundle_path, BundleData& out_data) {
         return false;
     }
     if (header.magic != kBundleMagic || header.version != kBundleVersion) {
-        std::cerr << "[CacheManager] Bundle magic/version mismatch for " << bundle_path << "\n";
+        vibble::log::info("[CacheManager] Bundle schema mismatch for " + bundle_path +
+                          "; rejecting stale multi-variant bundle for rebuild.");
         return false;
     }
 

@@ -1,7 +1,7 @@
 // asset_tool_cli.cpp
 //
 // CLI wrapper for ImageCacheGenerator.
-// Generates cache structure: cache/<asset>/animations/<anim>/scale_<pct>/normal/<idx>.png
+// Generates cache structure: cache/<asset>/animations/<anim>/<idx>.png
 
 #include "image_cache_generator.hpp"
 
@@ -35,7 +35,7 @@ void print_usage(const char* prog_name) {
     std::cout << "OPTIONS:\n";
     std::cout << "  --manifest <path>       Path to manifest.json (default: auto-discover)\n";
     std::cout << "  --cache-root <path>     Override cache directory (default: <repo>/cache)\n";
-    std::cout << "  --force-rebuild         Force rebuild all frames/variants in selected scope\n";
+    std::cout << "  --force-rebuild         Force rebuild all frames in selected scope\n";
     std::cout << "  --missing-only          Rebuild only missing output files in selected scope\n";
     std::cout << "  --dry-run               Plan without executing (show what would be done)\n";
     std::cout << "  --asset <name>          Only process specified asset\n";

@@ -648,20 +648,26 @@ void ImageCacheGenerator::DeleteOldMultiVariantCache(const fs::path& cache_root,
     }
 
     bool found_old = false;
-    for (const auto& entry : fs::directory_iterator(asset_cache_dir, ec)) {
-        if (ec) break;
-        if (!entry.is_directory(ec) || ec) continue;
-        const std::string dirname = entry.path().filename().string();
-        // Look for scale_* directories (old multi-variant layout)
-        if (dirname.rfind("scale_", 0) == 0) {
-            if (!found_old) {
-                log.info("[ImageCacheGenerator] Detected old multi-variant cache in " + asset_cache_dir.string() +
-                         "; deleting stale scale_* directories before rebuild.");
-                found_old = true;
-            }
-            std::error_code rm_ec;
-            fs::remove_all(entry.path(), rm_ec);
+    std::vector<fs::path> stale_scale_dirs;
+    for (fs::recursive_directory_iterator it(asset_cache_dir, ec), end; it != end && !ec; it.increment(ec)) {
+        if (!it->is_directory(ec) || ec) {
+            continue;
         }
+        const std::string dirname = it->path().filename().string();
+        if (dirname.rfind("scale_", 0) != 0) {
+            continue;
+        }
+        if (!found_old) {
+            log.info("[ImageCacheGenerator] Detected old multi-variant cache in " + asset_cache_dir.string() +
+                     "; deleting stale scale_* directories before rebuild.");
+            found_old = true;
+        }
+        stale_scale_dirs.push_back(it->path());
+        it.disable_recursion_pending();
+    }
+    for (const auto& stale_dir : stale_scale_dirs) {
+        std::error_code rm_ec;
+        fs::remove_all(stale_dir, rm_ec);
     }
 }
 

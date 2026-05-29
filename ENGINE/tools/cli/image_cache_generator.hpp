@@ -32,13 +32,9 @@ namespace fs = std::filesystem;
 // -----------------------------
 // Core enums and simple structs
 // -----------------------------
-enum class Variant : std::uint8_t {
-    Normal = 0
-};
-
-inline constexpr std::uint8_t kTextureVariantMaskNone = 0u;
-inline constexpr std::uint8_t kTextureVariantMaskNormal = 1u << 0;
-inline constexpr std::uint8_t kTextureVariantMaskAll = kTextureVariantMaskNormal;
+inline constexpr std::uint8_t kTextureLayerMaskNone = 0u;
+inline constexpr std::uint8_t kTextureLayerMaskBase = 1u << 0;
+inline constexpr std::uint8_t kTextureLayerMaskAll = kTextureLayerMaskBase;
 
 struct ImageRGBA {
     int w = 0;
@@ -116,8 +112,8 @@ struct GeneratorOptions {
     struct AnimationRebuildRequest {
         std::string asset_name;
         std::string animation_name;
-        std::uint8_t all_frames_variant_mask = kTextureVariantMaskNone;
-        std::unordered_map<int, std::uint8_t> frame_variant_masks;
+        std::uint8_t all_frames_layer_mask = kTextureLayerMaskNone;
+        std::unordered_map<int, std::uint8_t> frame_layer_masks;
     };
     std::vector<AnimationRebuildRequest> explicit_rebuild_requests;
 
@@ -205,14 +201,14 @@ struct CacheManifestCropCanvas {
 };
 
 struct CacheManifest {
-    int schema_version = 2;  // bumped from 1: removed variant_profiles, camera_inputs, camera_derived
+    int schema_version = 2;  // bumped from 1: removed legacy_variant_profiles, camera_inputs, camera_derived
     std::string generator_version;
     std::string asset_name;
     std::string digest;
     float authored_scale_percentage = 100.0f;
     CacheManifestCropCanvas crop_canvas;
     std::vector<CacheManifestAnimation> animations;
-    // variant_profiles, camera_inputs, camera_derived removed
+    // legacy_variant_profiles, camera_inputs, camera_derived removed
 };
 
 // -----------------------------

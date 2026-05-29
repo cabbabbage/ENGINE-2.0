@@ -56,7 +56,7 @@ namespace CacheManager {
     };
 
     struct BundleData {
-        std::uint32_t version = 3;  // bumped from 2: removed BundleFrameVariant, single layer per frame
+        std::uint32_t version = 3;  // bumped from 2: removed BundleFrameTextureBinding, single layer per frame
         nlohmann::json metadata_snapshot;
         std::vector<BundleAnimation> animations;
     };

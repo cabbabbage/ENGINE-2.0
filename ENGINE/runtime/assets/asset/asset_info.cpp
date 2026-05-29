@@ -1278,12 +1278,12 @@ SDL_Point resolve_anchor_frame_dimensions(const AssetInfo& info, const Animation
     int frame_w = 0;
     int frame_h = 0;
 
-    if (frame && !frame->variants.empty()) {
-        const FrameVariant& variant = frame->variants.front();
-        if (variant.source_rect.w > 0 && variant.source_rect.h > 0) {
-            frame_w = variant.source_rect.w;
-            frame_h = variant.source_rect.h;
-        } else if (SDL_Texture* texture = variant.get_base_texture()) {
+    if (frame) {
+        const FrameTextureBinding& binding = frame->texture_binding;
+        if (binding.source_rect.w > 0 && binding.source_rect.h > 0) {
+            frame_w = binding.source_rect.w;
+            frame_h = binding.source_rect.h;
+        } else if (SDL_Texture* texture = binding.get_base_texture()) {
             float tex_w = 0.0f;
             float tex_h = 0.0f;
             if (SDL_GetTextureSize(texture, &tex_w, &tex_h)) {
@@ -2194,58 +2194,58 @@ bool AssetInfo::has_tag(const std::string &tag) const {
 }
 
 bool AssetInfo::AnimationTextureRebuildRequest::empty() const {
-    return all_frames_variants == kTextureVariantNone && frame_variants.empty();
+    return all_frames_layers == kTextureLayerNone && frame_layers.empty();
 }
 
 void AssetInfo::AnimationTextureRebuildRequest::clear() {
-    all_frames_variants = kTextureVariantNone;
-    frame_variants.clear();
+    all_frames_layers = kTextureLayerNone;
+    frame_layers.clear();
 }
 
-void AssetInfo::AnimationTextureRebuildRequest::mark_animation(std::uint8_t variants) {
-    variants = AssetInfo::sanitize_texture_variant_mask(variants);
-    if (variants == kTextureVariantNone) {
+void AssetInfo::AnimationTextureRebuildRequest::mark_animation(std::uint8_t layers) {
+    layers = AssetInfo::sanitize_texture_layer_mask(layers);
+    if (layers == kTextureLayerNone) {
         return;
     }
-    all_frames_variants = static_cast<std::uint8_t>(all_frames_variants | variants);
-    if (all_frames_variants == kTextureVariantAll) {
-        frame_variants.clear();
+    all_frames_layers = static_cast<std::uint8_t>(all_frames_layers | layers);
+    if (all_frames_layers == kTextureLayerAll) {
+        frame_layers.clear();
         return;
     }
 
-    for (auto it = frame_variants.begin(); it != frame_variants.end();) {
-        it->second = AssetInfo::sanitize_texture_variant_mask(
-            static_cast<std::uint8_t>(it->second & static_cast<std::uint8_t>(~all_frames_variants)));
-        if (it->second == kTextureVariantNone) {
-            it = frame_variants.erase(it);
+    for (auto it = frame_layers.begin(); it != frame_layers.end();) {
+        it->second = AssetInfo::sanitize_texture_layer_mask(
+            static_cast<std::uint8_t>(it->second & static_cast<std::uint8_t>(~all_frames_layers)));
+        if (it->second == kTextureLayerNone) {
+            it = frame_layers.erase(it);
         } else {
             ++it;
         }
     }
 }
 
-void AssetInfo::AnimationTextureRebuildRequest::mark_frame(int frame_index, std::uint8_t variants) {
+void AssetInfo::AnimationTextureRebuildRequest::mark_frame(int frame_index, std::uint8_t layers) {
     if (frame_index < 0) {
         return;
     }
-    variants = AssetInfo::sanitize_texture_variant_mask(variants);
-    if (variants == kTextureVariantNone) {
+    layers = AssetInfo::sanitize_texture_layer_mask(layers);
+    if (layers == kTextureLayerNone) {
         return;
     }
-    variants = static_cast<std::uint8_t>(variants & static_cast<std::uint8_t>(~all_frames_variants));
-    if (variants == kTextureVariantNone) {
+    layers = static_cast<std::uint8_t>(layers & static_cast<std::uint8_t>(~all_frames_layers));
+    if (layers == kTextureLayerNone) {
         return;
     }
-    auto& frame_mask = frame_variants[frame_index];
-    frame_mask = AssetInfo::sanitize_texture_variant_mask(static_cast<std::uint8_t>(frame_mask | variants));
-    if (frame_mask == kTextureVariantNone) {
-        frame_variants.erase(frame_index);
+    auto& frame_mask = frame_layers[frame_index];
+    frame_mask = AssetInfo::sanitize_texture_layer_mask(static_cast<std::uint8_t>(frame_mask | layers));
+    if (frame_mask == kTextureLayerNone) {
+        frame_layers.erase(frame_index);
     }
 }
 
 void AssetInfo::AnimationTextureRebuildRequest::merge(const AnimationTextureRebuildRequest& other) {
-    mark_animation(other.all_frames_variants);
-    for (const auto& entry : other.frame_variants) {
+    mark_animation(other.all_frames_layers);
+    for (const auto& entry : other.frame_layers) {
         mark_frame(entry.first, entry.second);
     }
 }
@@ -2271,27 +2271,27 @@ void AssetInfo::TextureRebuildBucket::mark_bundle_refresh() {
     bundle_refresh_required = true;
 }
 
-void AssetInfo::TextureRebuildBucket::mark_animation(const std::string& animation_name, std::uint8_t variants) {
+void AssetInfo::TextureRebuildBucket::mark_animation(const std::string& animation_name, std::uint8_t layers) {
     if (animation_name.empty()) {
         return;
     }
-    variants = AssetInfo::sanitize_texture_variant_mask(variants);
-    if (variants == kTextureVariantNone) {
+    layers = AssetInfo::sanitize_texture_layer_mask(layers);
+    if (layers == kTextureLayerNone) {
         return;
     }
-    animations[animation_name].mark_animation(variants);
+    animations[animation_name].mark_animation(layers);
     bundle_refresh_required = true;
 }
 
-void AssetInfo::TextureRebuildBucket::mark_frame(const std::string& animation_name, int frame_index, std::uint8_t variants) {
+void AssetInfo::TextureRebuildBucket::mark_frame(const std::string& animation_name, int frame_index, std::uint8_t layers) {
     if (animation_name.empty() || frame_index < 0) {
         return;
     }
-    variants = AssetInfo::sanitize_texture_variant_mask(variants);
-    if (variants == kTextureVariantNone) {
+    layers = AssetInfo::sanitize_texture_layer_mask(layers);
+    if (layers == kTextureLayerNone) {
         return;
     }
-    animations[animation_name].mark_frame(frame_index, variants);
+    animations[animation_name].mark_frame(frame_index, layers);
     bundle_refresh_required = true;
 }
 
@@ -2313,11 +2313,11 @@ void AssetInfo::RuntimeTextureRebuildState::clear() {
     pending_on_close.clear();
 }
 
-std::uint8_t AssetInfo::sanitize_texture_variant_mask(std::uint8_t variants) {
-    return static_cast<std::uint8_t>(variants & kTextureVariantAll);
+std::uint8_t AssetInfo::sanitize_texture_layer_mask(std::uint8_t layers) {
+    return static_cast<std::uint8_t>(layers & kTextureLayerAll);
 }
 
-std::uint8_t AssetInfo::classify_texture_rebuild_variants(const nlohmann::json& before_payload,
+std::uint8_t AssetInfo::classify_texture_rebuild_layers(const nlohmann::json& before_payload,
                                                           const nlohmann::json& after_payload) {
     const std::string before_kind = source_value_string(before_payload, "kind");
     const std::string before_path = source_value_string(before_payload, "path");
@@ -2329,7 +2329,7 @@ std::uint8_t AssetInfo::classify_texture_rebuild_variants(const nlohmann::json& 
     const bool source_changed =
         before_kind != after_kind || before_path != after_path || before_name != after_name;
     if (source_changed) {
-        return kTextureVariantAll;
+        return kTextureLayerAll;
     }
 
     auto read_frame_count = [](const nlohmann::json& payload) -> int {
@@ -2358,29 +2358,29 @@ std::uint8_t AssetInfo::classify_texture_rebuild_variants(const nlohmann::json& 
     const bool has_source_hint =
         !before_kind.empty() || !after_kind.empty() || !before_path.empty() || !after_path.empty();
     if (has_source_hint && before_frames != after_frames) {
-        return kTextureVariantAll;
+        return kTextureLayerAll;
     }
 
-    return kTextureVariantNone;
+    return kTextureLayerNone;
 }
 
 void AssetInfo::clear_runtime_texture_rebuild_state() {
     runtime_texture_rebuild_state_.clear();
 }
 
-void AssetInfo::mark_texture_rebuild_on_close(const std::string& animation_name, std::uint8_t variants) {
-    runtime_texture_rebuild_state_.pending_on_close.mark_animation(animation_name, variants);
+void AssetInfo::mark_texture_rebuild_on_close(const std::string& animation_name, std::uint8_t layers) {
+    runtime_texture_rebuild_state_.pending_on_close.mark_animation(animation_name, layers);
 }
 
 void AssetInfo::mark_texture_frame_rebuild_on_close(const std::string& animation_name,
                                                     int frame_index,
-                                                    std::uint8_t variants) {
-    runtime_texture_rebuild_state_.pending_on_close.mark_frame(animation_name, frame_index, variants);
+                                                    std::uint8_t layers) {
+    runtime_texture_rebuild_state_.pending_on_close.mark_frame(animation_name, frame_index, layers);
 }
 
-void AssetInfo::mark_all_animation_textures_on_close(std::uint8_t variants) {
-    variants = sanitize_texture_variant_mask(variants);
-    if (variants == kTextureVariantNone) {
+void AssetInfo::mark_all_animation_textures_on_close(std::uint8_t layers) {
+    layers = sanitize_texture_layer_mask(layers);
+    if (layers == kTextureLayerNone) {
         return;
     }
 
@@ -2390,7 +2390,7 @@ void AssetInfo::mark_all_animation_textures_on_close(std::uint8_t variants) {
             if (!it.value().is_object() || it.key().empty()) {
                 continue;
             }
-            runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), variants);
+            runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), layers);
             marked_any = true;
         }
     }
@@ -2402,7 +2402,7 @@ void AssetInfo::mark_all_animation_textures_on_close(std::uint8_t variants) {
                     if (!it.value().is_object() || it.key().empty()) {
                         continue;
                     }
-                    runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), variants);
+                    runtime_texture_rebuild_state_.pending_on_close.mark_animation(it.key(), layers);
                     marked_any = true;
                 }
             }
@@ -2418,14 +2418,14 @@ void AssetInfo::mark_bundle_refresh_on_close() {
     runtime_texture_rebuild_state_.pending_on_close.mark_bundle_refresh();
 }
 
-void AssetInfo::mark_texture_rebuild_on_load(const std::string& animation_name, std::uint8_t variants) {
-    runtime_texture_rebuild_state_.pending_on_load.mark_animation(animation_name, variants);
+void AssetInfo::mark_texture_rebuild_on_load(const std::string& animation_name, std::uint8_t layers) {
+    runtime_texture_rebuild_state_.pending_on_load.mark_animation(animation_name, layers);
 }
 
 void AssetInfo::mark_texture_frame_rebuild_on_load(const std::string& animation_name,
                                                    int frame_index,
-                                                   std::uint8_t variants) {
-    runtime_texture_rebuild_state_.pending_on_load.mark_frame(animation_name, frame_index, variants);
+                                                   std::uint8_t layers) {
+    runtime_texture_rebuild_state_.pending_on_load.mark_frame(animation_name, frame_index, layers);
 }
 
 AssetInfo::TextureRebuildBucket AssetInfo::consume_pending_texture_rebuild_on_close() {
@@ -2477,7 +2477,7 @@ void AssetInfo::classify_animation_snapshot_rebuilds(const nlohmann::json& befor
                               (*after_anims)[animation_name].is_object();
 
         if (!in_before && in_after) {
-            mark_texture_rebuild_on_close(animation_name, kTextureVariantAll);
+            mark_texture_rebuild_on_close(animation_name, kTextureLayerAll);
             continue;
         }
         if (in_before && !in_after) {
@@ -2488,10 +2488,10 @@ void AssetInfo::classify_animation_snapshot_rebuilds(const nlohmann::json& befor
             continue;
         }
 
-        const auto variants = classify_texture_rebuild_variants((*before_anims)[animation_name],
+        const auto layers = classify_texture_rebuild_layers((*before_anims)[animation_name],
                                                                 (*after_anims)[animation_name]);
-        if (variants != kTextureVariantNone) {
-            mark_texture_rebuild_on_close(animation_name, variants);
+        if (layers != kTextureLayerNone) {
+            mark_texture_rebuild_on_close(animation_name, layers);
         }
     }
 }
@@ -4098,12 +4098,12 @@ bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& 
 		anims_json_[name] = clean_payload;
 
 		if (!has_existing) {
-			mark_texture_rebuild_on_close(name, kTextureVariantAll);
+			mark_texture_rebuild_on_close(name, kTextureLayerAll);
             bump_animation_metadata_revision();
 		} else {
-			const auto variants = classify_texture_rebuild_variants(existing_payload, clean_payload);
-			if (variants != kTextureVariantNone) {
-				mark_texture_rebuild_on_close(name, variants);
+			const auto layers = classify_texture_rebuild_layers(existing_payload, clean_payload);
+			if (layers != kTextureLayerNone) {
+				mark_texture_rebuild_on_close(name, layers);
                 bump_animation_metadata_revision();
 			}
 		}
@@ -4156,7 +4156,7 @@ bool AssetInfo::rename_animation(const std::string& old_name, const std::string&
 			start_animation = new_name;
 		 info_json_["start"] = start_animation;
 		}
-		mark_texture_rebuild_on_close(new_name, kTextureVariantAll);
+		mark_texture_rebuild_on_close(new_name, kTextureLayerAll);
 		mark_bundle_refresh_on_close();
         bump_animation_metadata_revision();
 		return true;
@@ -4356,17 +4356,17 @@ AssetInfo::AnimationUpdateResult AssetInfo::update_animation_properties_detailed
 
         if (animation_changed) {
             if (!has_existing_animation) {
-                result.variant_mask = kTextureVariantAll;
+                result.texture_binding_mask = kTextureLayerAll;
             } else {
-                const auto variants = classify_texture_rebuild_variants(existing_animation, updated_animation);
-                result.variant_mask = variants;
+                const auto layers = classify_texture_rebuild_layers(existing_animation, updated_animation);
+                result.texture_binding_mask = layers;
             }
-            if (result.variant_mask != kTextureVariantNone) {
-                mark_texture_rebuild_on_close(animation_name, result.variant_mask);
+            if (result.texture_binding_mask != kTextureLayerNone) {
+                mark_texture_rebuild_on_close(animation_name, result.texture_binding_mask);
             }
         }
 
-        result.structural = result.variant_mask != kTextureVariantNone;
+        result.structural = result.texture_binding_mask != kTextureLayerNone;
         return result;
     } catch (const std::exception& e) {
         std::cerr << "[AssetInfo] Failed to update animation properties for '" << animation_name << "': " << e.what() << std::endl;
@@ -4471,10 +4471,8 @@ AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer* r
             return false;
         }
         for (const auto& frame : prebuilt.frames) {
-            for (SDL_Texture* texture : frame.textures) {
-                if (texture) {
-                    return true;
-                }
+            if (frame.texture) {
+                return true;
             }
         }
         return false;
@@ -4541,10 +4539,8 @@ AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer* r
                     continue;
                 }
                 for (const auto& frame : bundle_animation.frames) {
-                    for (const auto& variant : frame.variants) {
-                        if (!variant.use_atlas && is_transparent_placeholder_layer(variant.base)) {
-                            return true;
-                        }
+                    if (is_transparent_placeholder_layer(frame.base_layer)) {
+                        return true;
                     }
                 }
             }
@@ -4679,10 +4675,8 @@ AssetInfo::AnimationLoadResult AssetInfo::loadAnimationsDetailed(SDL_Renderer* r
             return false;
         }
         for (const auto& frame : anim.cached_frames()) {
-            for (SDL_Texture* texture : frame.textures) {
-                if (texture) {
-                    return true;
-                }
+            if (frame.texture) {
+                return true;
             }
         }
         return false;

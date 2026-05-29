@@ -19,7 +19,7 @@ std::uint64_t mix_signature(std::uint64_t seed, std::uint64_t value);
 
 std::uint64_t hash_surface_pixels(SDL_Surface* surface, std::uint64_t seed);
 
-std::uint64_t compute_surface_signature(const std::vector<std::vector<SDL_Surface*>>& variants);
+std::uint64_t compute_surface_signature(const std::vector<std::vector<SDL_Surface*>>& surface_stacks);
 
 }
 }

@@ -15,6 +15,7 @@
 #include <iostream>
 #include <SDL3/SDL_log.h>
 #include <stdexcept>
+#include <iomanip>
 #include <sstream>
 #include <vector>
 #include <unordered_set>
@@ -52,6 +53,10 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "search_assets.hpp"
 #include "draw_utils.hpp"
+#include "font_cache.hpp"
+#include "rendering/render/render_object.hpp"
+#include "rendering/render/render_object_builder.hpp"
+#include "rendering/render/render_object_projection.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
 #include "devtools/config/room_config/tag_editor_widget.hpp"
 #include "devtools/manifest_asset_utils.hpp"
@@ -911,6 +916,13 @@ AssetInfoUI::AssetInfoUI() {
             delete_btn_widget_->set_rect(SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, DMButton::height()});
             y += DMButton::height() + ctx.gap;
         }
+        const int stats_h = live_stats_height();
+        if (stats_h > 0) {
+            live_stats_rect_ = SDL_Rect{ctx.content_x, y - ctx.scroll_value, ctx.content_width, stats_h};
+            y += stats_h + ctx.gap;
+        } else {
+            live_stats_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
         return y;
     });
 
@@ -924,6 +936,7 @@ AssetInfoUI::AssetInfoUI() {
         if (controller_action_btn_) controller_action_btn_->render(renderer);
         if (duplicate_btn_) duplicate_btn_->render(renderer);
         if (delete_btn_) delete_btn_->render(renderer);
+        render_live_stats(renderer);
     });
 
     container_.set_on_close([this]() { this->close(); });
@@ -1013,6 +1026,123 @@ AssetInfoUI::AssetInfoUI() {
         if (delete_btn_widget_ && delete_btn_widget_->handle_event(e)) return true;
         return false;
     });
+}
+
+
+int AssetInfoUI::live_stats_height() const {
+    if (!visible_ || !info_) {
+        return 0;
+    }
+    const int padding = std::max(4, DMSpacing::item_gap());
+    const int line_h = std::max(12, DMStyles::Label().font_size + 3);
+    return padding * 2 + line_h * 5;
+}
+
+std::array<std::string, 5> AssetInfoUI::build_live_stats_lines() const {
+    std::array<std::string, 5> lines{
+        "World position: n/a",
+        "Screen position: n/a",
+        "Screen size: n/a",
+        "Size variant index: n/a",
+        "Variant size: n/a"
+    };
+
+    if (!visible_ || !info_ || !target_asset_) {
+        return lines;
+    }
+
+    Asset* asset = target_asset_;
+    std::ostringstream world;
+    world << "World position: X " << asset->world_x()
+          << "  Y " << asset->world_y()
+          << "  Z " << asset->world_z();
+    lines[0] = world.str();
+
+    if (assets_) {
+        const WarpedScreenGrid& camera = assets_->getView();
+        SDL_FPoint screen{};
+        if (camera.project_world_point(
+                SDL_FPoint{static_cast<float>(asset->world_x()), static_cast<float>(asset->world_y())},
+                static_cast<float>(asset->world_z()),
+                screen) && std::isfinite(screen.x) && std::isfinite(screen.y)) {
+            std::ostringstream ss;
+            ss << std::fixed << std::setprecision(1)
+               << "Screen position: X " << screen.x << "  Y " << screen.y;
+            lines[1] = ss.str();
+        }
+
+        RenderObject object{};
+        render_projection::ProjectedSpriteFrame projected{};
+        if (render_build::build_direct_asset_render_object(asset, object) && object.texture) {
+            const Asset::PerspectiveSample perspective = asset->runtime_perspective_sample();
+            const float world_z = static_cast<float>(asset->world_z()) + object.world_z_offset;
+            if (render_projection::build_render_object_projected_frame(
+                    camera,
+                    object,
+                    perspective.scale,
+                    world_z,
+                    projected) && projected.valid) {
+                const float min_x = std::min({projected.screen_tl.x, projected.screen_tr.x, projected.screen_br.x, projected.screen_bl.x});
+                const float max_x = std::max({projected.screen_tl.x, projected.screen_tr.x, projected.screen_br.x, projected.screen_bl.x});
+                const float min_y = std::min({projected.screen_tl.y, projected.screen_tr.y, projected.screen_br.y, projected.screen_bl.y});
+                const float max_y = std::max({projected.screen_tl.y, projected.screen_tr.y, projected.screen_br.y, projected.screen_bl.y});
+                const float screen_w = std::max(0.0f, max_x - min_x);
+                const float screen_h = std::max(0.0f, max_y - min_y);
+                std::ostringstream size;
+                size << std::fixed << std::setprecision(1)
+                     << "Screen size: L " << screen_h << " px  W " << screen_w << " px";
+                lines[2] = size.str();
+            }
+        }
+    }
+
+    std::ostringstream variant;
+    variant << "Size variant index: " << asset->current_variant_index;
+    lines[3] = variant.str();
+
+    std::ostringstream variant_size;
+    variant_size << "Variant size: L " << asset->height() << " px  W " << asset->width() << " px";
+    lines[4] = variant_size.str();
+
+    return lines;
+}
+
+void AssetInfoUI::render_live_stats(SDL_Renderer* renderer) const {
+    if (!renderer || live_stats_rect_.w <= 0 || live_stats_rect_.h <= 0 || !visible_ || !info_) {
+        return;
+    }
+
+    SDL_Rect box = live_stats_rect_;
+    const int radius = std::min(DMStyles::CornerRadius(), std::max(0, std::min(box.w, box.h) / 2));
+    const int bevel = std::min(DMStyles::BevelDepth(), std::max(0, std::min(box.w, box.h) / 2));
+    SDL_Color fill = DMStyles::PanelBG();
+    fill.a = 210;
+    dm_draw::DrawBeveledRect(renderer,
+                             box,
+                             radius,
+                             bevel,
+                             fill,
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             true,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+
+    DMLabelStyle style = DMStyles::Label();
+    style.font_size = std::max(9, style.font_size - 1);
+    SDL_Color text = style.color;
+    text.a = 220;
+    style.color = text;
+
+    const auto lines = build_live_stats_lines();
+    const int padding = std::max(4, DMSpacing::item_gap());
+    const int line_h = std::max(12, style.font_size + 3);
+    int y = box.y + padding;
+    const int x = box.x + padding;
+    for (const std::string& line : lines) {
+        DMFontCache::instance().draw_text(renderer, style, line, x, y);
+        y += line_h;
+    }
 }
 
 AssetInfoUI::~AssetInfoUI() {

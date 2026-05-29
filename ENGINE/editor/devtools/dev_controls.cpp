@@ -2594,12 +2594,22 @@ void DevControls::layout_drop_modal() {
     const int button_gap = 12;
     const int button_w = 140;
     const int button_h = DMButton::height();
-    const int buttons_total_w = button_w * 2 + button_gap;
+    const std::string current_name = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
+    const bool show_replace = drop_asset_name_exists(current_name);
+    const int button_count = show_replace ? 3 : 2;
+    const int buttons_total_w = button_w * button_count + button_gap * (button_count - 1);
     const int buttons_x = x + (modal_w - buttons_total_w) / 2;
     const int buttons_y = y + modal_h - button_h - padding;
     drop_modal_.create_rect = SDL_Rect{buttons_x, buttons_y, button_w, button_h};
-    drop_modal_.cancel_rect = SDL_Rect{buttons_x + button_w + button_gap, buttons_y, button_w, button_h};
+    if (show_replace) {
+        drop_modal_.replace_rect = SDL_Rect{buttons_x + button_w + button_gap, buttons_y, button_w, button_h};
+        drop_modal_.cancel_rect = SDL_Rect{buttons_x + (button_w + button_gap) * 2, buttons_y, button_w, button_h};
+    } else {
+        drop_modal_.replace_rect = SDL_Rect{0, 0, 0, 0};
+        drop_modal_.cancel_rect = SDL_Rect{buttons_x + button_w + button_gap, buttons_y, button_w, button_h};
+    }
     if (drop_modal_.create_button) drop_modal_.create_button->set_rect(drop_modal_.create_rect);
+    if (drop_modal_.replace_button) drop_modal_.replace_button->set_rect(drop_modal_.replace_rect);
     if (drop_modal_.cancel_button) drop_modal_.cancel_button->set_rect(drop_modal_.cancel_rect);
 }
 
@@ -2680,7 +2690,7 @@ void DevControls::open_drop_conflict_modal(const std::string& asset_name) {
     drop_conflict_modal_.asset_name = asset_name;
     drop_conflict_modal_.skip_button = std::make_unique<DMButton>("Skip", &DMStyles::HeaderButton(), 150, DMButton::height());
     drop_conflict_modal_.rename_button = std::make_unique<DMButton>("Rename", &DMStyles::CreateButton(), 150, DMButton::height());
-    drop_conflict_modal_.replace_button = std::make_unique<DMButton>("Replace", &DMStyles::CreateButton(), 150, DMButton::height());
+    drop_conflict_modal_.replace_button = std::make_unique<DMButton>("Replace", &DMStyles::DeleteButton(), 150, DMButton::height());
     layout_drop_conflict_modal();
 }
 
@@ -2704,6 +2714,7 @@ void DevControls::open_drop_modal(const DropImportRequest& request) {
     const std::string suggested = suggest_name_from_drop(validation);
     drop_modal_.name_box = std::make_unique<DMTextBox>("Animation / Asset Name", suggested);
     drop_modal_.create_button = std::make_unique<DMButton>("Create", &DMStyles::CreateButton(), 140, DMButton::height());
+    drop_modal_.replace_button = std::make_unique<DMButton>("Replace", &DMStyles::DeleteButton(), 140, DMButton::height());
     drop_modal_.cancel_button = std::make_unique<DMButton>("Cancel", &DMStyles::HeaderButton(), 140, DMButton::height());
     layout_drop_modal();
 }
@@ -2934,6 +2945,23 @@ bool DevControls::handle_drop_modal_event(const SDL_Event& event) {
         if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
             const std::string desired = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
             if (finalize_drop_creation(desired)) {
+                reset_drop_modal();
+                if (multi_asset_import_.active) {
+                    multi_asset_import_.waiting_for_rename = false;
+                    ++multi_asset_import_.index;
+                    process_next_multi_asset_item();
+                }
+            }
+        }
+    }
+
+    const std::string current_name = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
+    if (drop_asset_name_exists(current_name) &&
+        drop_modal_.replace_button &&
+        drop_modal_.replace_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            if (finalize_drop_replacement(current_name)) {
                 reset_drop_modal();
                 if (multi_asset_import_.active) {
                     multi_asset_import_.waiting_for_rename = false;
@@ -3187,7 +3215,10 @@ void DevControls::render_drop_modal(SDL_Renderer* renderer) {
     DrawLabelText(renderer, "Create animation from dropped files", title_x, title_y, DMStyles::Label());
 
     if (drop_modal_.name_box) drop_modal_.name_box->render(renderer);
+    const std::string current_name = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
+    const bool show_replace = drop_asset_name_exists(current_name);
     if (drop_modal_.create_button) drop_modal_.create_button->render(renderer);
+    if (show_replace && drop_modal_.replace_button) drop_modal_.replace_button->render(renderer);
     if (drop_modal_.cancel_button) drop_modal_.cancel_button->render(renderer);
 
     if (!drop_modal_.error.empty()) {
@@ -3395,18 +3426,6 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         error_out = "Please enter a name (letters, numbers, underscore).";
         return false;
     }
-    const bool already_exists = manifest_store_.resolve_asset_name(sanitized).has_value() ||
-                                (assets_ && assets_->library().get(sanitized));
-    if (already_exists) {
-        if (!replace_existing) {
-            error_out = "An asset with that name already exists.";
-            return false;
-        }
-        if (!replace_existing_drop_asset(sanitized, error_out)) {
-            return false;
-        }
-    }
-
     std::vector<std::filesystem::path> validate_targets;
     if (request.kind == DropContentKind::PngFolder && !request.folder.empty()) {
         validate_targets.push_back(request.folder);
@@ -3416,6 +3435,16 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     DropValidationResult validation = validate_drop_items(validate_targets);
     if (!validation.valid) {
         error_out = validation.reason.empty() ? "Dropped content is invalid." : validation.reason;
+        return false;
+    }
+
+    const bool already_exists = manifest_store_.resolve_asset_name(sanitized).has_value() ||
+                                (assets_ && assets_->library().get(sanitized));
+    if (already_exists && !replace_existing) {
+        error_out = "An asset with that name already exists.";
+        return false;
+    }
+    if (replace_existing && !replace_existing_drop_asset(sanitized, error_out)) {
         return false;
     }
 
@@ -3455,9 +3484,27 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
     return true;
 }
 
+bool DevControls::drop_asset_name_exists(const std::string& asset_name) const {
+    const std::string sanitized = sanitize_asset_name_local(devmode::utils::trim_whitespace_copy(asset_name));
+    if (sanitized.empty()) {
+        return false;
+    }
+    return manifest_store_.resolve_asset_name(sanitized).has_value() ||
+           (assets_ && assets_->library().get(sanitized));
+}
+
 bool DevControls::finalize_drop_creation(const std::string& desired_name) {
     std::string error;
     if (!create_drop_asset(desired_name, drop_modal_.request.files, drop_modal_.request, true, false, error)) {
+        drop_modal_.error = error;
+        return false;
+    }
+    return true;
+}
+
+bool DevControls::finalize_drop_replacement(const std::string& desired_name) {
+    std::string error;
+    if (!create_drop_asset(desired_name, drop_modal_.request.files, drop_modal_.request, true, true, error)) {
         drop_modal_.error = error;
         return false;
     }

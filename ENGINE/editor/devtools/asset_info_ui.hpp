@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <cstdint>
+#include <array>
 #include <vector>
 #include <filesystem>
 
@@ -136,6 +137,9 @@ class AssetInfoUI {
     void collapse_all_except(DockableCollapsible* keep);
     bool run_animation_editor_action(PendingAnimationEditorAction action);
     void request_animation_editor_action(PendingAnimationEditorAction action);
+    int live_stats_height() const;
+    std::array<std::string, 5> build_live_stats_lines() const;
+    void render_live_stats(SDL_Renderer* renderer) const;
 
   private:
     bool visible_ = false;
@@ -175,6 +179,7 @@ class AssetInfoUI {
     std::unique_ptr<class ButtonWidget> duplicate_btn_widget_;
     std::unique_ptr<class DMButton> delete_btn_;
     std::unique_ptr<class ButtonWidget> delete_btn_widget_;
+    mutable SDL_Rect live_stats_rect_{0, 0, 0, 0};
     PendingAnimationEditorActionRequest pending_animation_editor_action_{};
     std::uint64_t animation_editor_action_revision_ = 0;
     std::uint64_t ui_frame_counter_ = 0;

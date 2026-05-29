@@ -32,7 +32,9 @@ constexpr Uint64 kFooterSlideDurationMs = 88;
 constexpr Uint64 kFooterZoneDebounceMs = 36;
 constexpr float kFooterShowZoneRatio = 0.90f;
 constexpr float kFooterUnlockZoneRatio = 0.80f;
-constexpr SDL_Color kEditorFrameSelectedColor{255, 140, 0, 236};
+constexpr SDL_Color kEditorFrameCurrentColor{255, 140, 0, 236};
+constexpr SDL_Color kEditorFrameSelectedColor{76, 154, 255, 210};
+constexpr SDL_Color kEditorFrameSelectedBorderColor{120, 190, 255, 255};
 
 const DMButtonStyle* default_group_style(FooterButtonGroup group) {
     switch (group) {
@@ -278,11 +280,22 @@ void DevFooterBar::set_editor_tabs(std::vector<EditorTab> tabs) {
 }
 
 void DevFooterBar::set_editor_frame_navigation(EditorFrameNavigation navigation) {
+    const EditorFrameNavigation previous_navigation = editor_frame_navigation_;
+    const std::vector<int> previous_selected_frames = editor_selected_frame_indices_;
+    const bool same_selection_scope = previous_navigation.visible == navigation.visible &&
+        ((!previous_navigation.selection_scope_id.empty() || !navigation.selection_scope_id.empty())
+             ? previous_navigation.selection_scope_id == navigation.selection_scope_id
+             : previous_navigation.animation_label == navigation.animation_label);
+
     editor_frame_navigation_ = std::move(navigation);
     editor_frame_navigation_.frame_count = std::max(0, editor_frame_navigation_.frame_count);
     if (editor_frame_navigation_.frame_count <= 0) {
         editor_frame_navigation_.selected_frame = 0;
         editor_frame_navigation_.visible = false;
+    } else if (same_selection_scope) {
+        editor_frame_navigation_.selected_frame = std::clamp(previous_navigation.selected_frame,
+                                                             0,
+                                                             editor_frame_navigation_.frame_count - 1);
     } else {
         editor_frame_navigation_.selected_frame = std::clamp(editor_frame_navigation_.selected_frame,
                                                              0,
@@ -308,14 +321,17 @@ void DevFooterBar::set_editor_frame_navigation(EditorFrameNavigation navigation)
     editor_hovered_frame_index_ = -1;
     editor_pressed_frame_index_ = -1;
     editor_selected_frame_indices_.clear();
-    for (int frame_index : editor_frame_navigation_.selected_frames) {
+    const std::vector<int>& requested_selection = same_selection_scope
+        ? previous_selected_frames
+        : editor_frame_navigation_.selected_frames;
+    for (int frame_index : requested_selection) {
         if (frame_index >= 0 && frame_index < editor_frame_navigation_.frame_count &&
             std::find(editor_selected_frame_indices_.begin(), editor_selected_frame_indices_.end(), frame_index) ==
                 editor_selected_frame_indices_.end()) {
             editor_selected_frame_indices_.push_back(frame_index);
         }
     }
-    if (editor_selected_frame_indices_.empty() && editor_frame_navigation_.frame_count > 0) {
+    if (editor_selected_frame_indices_.empty() && editor_frame_navigation_.frame_count > 0 && !same_selection_scope) {
         editor_selected_frame_indices_.push_back(editor_frame_navigation_.selected_frame);
     }
     editor_frame_navigation_.selected_frames = editor_selected_frame_indices_;
@@ -324,6 +340,18 @@ void DevFooterBar::set_editor_frame_navigation(EditorFrameNavigation navigation)
         false);
     ensure_editor_frame_visible(editor_frame_navigation_.selected_frame);
     layout_content();
+}
+
+void DevFooterBar::set_editor_selected_frames(std::vector<int> frame_indices) {
+    editor_selected_frame_indices_.clear();
+    for (int frame_index : frame_indices) {
+        if (frame_index >= 0 && frame_index < editor_frame_navigation_.frame_count &&
+            std::find(editor_selected_frame_indices_.begin(), editor_selected_frame_indices_.end(), frame_index) ==
+                editor_selected_frame_indices_.end()) {
+            editor_selected_frame_indices_.push_back(frame_index);
+        }
+    }
+    editor_frame_navigation_.selected_frames = editor_selected_frame_indices_;
 }
 
 void DevFooterBar::clear_editor_navigation() {
@@ -1201,24 +1229,24 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
         const int released_index = editor_frame_index_at_point(pointer);
         const bool ctrl_down = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
         if (released_index >= 0) {
-            editor_frame_navigation_.selected_frame = released_index;
             ensure_editor_frame_visible(released_index);
-            if (editor_frame_editor_focused_) {
-                if (ctrl_down) {
-                    auto selected_it = std::find(
-                        editor_selected_frame_indices_.begin(),
-                        editor_selected_frame_indices_.end(),
-                        released_index);
-                    if (selected_it == editor_selected_frame_indices_.end()) {
-                        editor_selected_frame_indices_.push_back(released_index);
-                    } else if (editor_selected_frame_indices_.size() > 1) {
-                        editor_selected_frame_indices_.erase(selected_it);
-                    }
+            if (ctrl_down) {
+                auto selected_it = std::find(
+                    editor_selected_frame_indices_.begin(),
+                    editor_selected_frame_indices_.end(),
+                    released_index);
+                if (selected_it == editor_selected_frame_indices_.end()) {
+                    editor_selected_frame_indices_.push_back(released_index);
                 } else {
-                    editor_selected_frame_indices_.assign(1, released_index);
+                    editor_selected_frame_indices_.erase(selected_it);
                 }
                 editor_frame_navigation_.selected_frames = editor_selected_frame_indices_;
-                if (editor_drag_start_frame_index_ >= 0 &&
+            } else {
+                editor_frame_navigation_.selected_frame = released_index;
+                editor_selected_frame_indices_.assign(1, released_index);
+                editor_frame_navigation_.selected_frames = editor_selected_frame_indices_;
+                if (editor_frame_editor_focused_ &&
+                    editor_drag_start_frame_index_ >= 0 &&
                     editor_drag_drop_insertion_index_ >= 0 &&
                     editor_drag_drop_insertion_index_ != editor_drag_start_frame_index_ &&
                     editor_drag_drop_insertion_index_ != editor_drag_start_frame_index_ + 1 &&
@@ -1226,13 +1254,9 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
                     editor_frame_navigation_.on_reorder_frame(
                         editor_drag_start_frame_index_,
                         editor_drag_drop_insertion_index_);
-                } else if (editor_frame_navigation_.on_frame_click) {
-                    editor_frame_navigation_.on_frame_click(released_index, ctrl_down);
                 } else if (editor_frame_navigation_.on_select_frame) {
                     editor_frame_navigation_.on_select_frame(released_index);
                 }
-            } else if (editor_frame_navigation_.on_select_frame) {
-                editor_frame_navigation_.on_select_frame(released_index);
             }
             used = true;
         }
@@ -1307,7 +1331,7 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
             focus_rect.y -= 3;
             focus_rect.w += 6;
             focus_rect.h += 6;
-            dm_draw::DrawRoundedOutline(renderer, focus_rect, 10, 2, kEditorFrameSelectedColor);
+            dm_draw::DrawRoundedOutline(renderer, focus_rect, 10, 2, kEditorFrameCurrentColor);
         }
     }
 
@@ -1331,14 +1355,29 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
             continue;
         }
 
-        const bool selected = i == editor_frame_navigation_.selected_frame ||
-            std::find(editor_selected_frame_indices_.begin(), editor_selected_frame_indices_.end(), i) !=
-                editor_selected_frame_indices_.end();
+        const bool current = i == editor_frame_navigation_.selected_frame;
+        const bool selected = std::find(editor_selected_frame_indices_.begin(), editor_selected_frame_indices_.end(), i) !=
+            editor_selected_frame_indices_.end();
         const bool hovered = i == editor_hovered_frame_index_;
-        SDL_Color chip_bg = selected ? kEditorFrameSelectedColor : dm_draw::DarkenColor(DMStyles::PanelHeader(), 0.04f);
+        SDL_Color chip_bg = dm_draw::DarkenColor(DMStyles::PanelHeader(), 0.04f);
+        if (selected) {
+            chip_bg = kEditorFrameSelectedColor;
+        }
+        if (current) {
+            chip_bg = kEditorFrameCurrentColor;
+        }
         dm_draw::DrawRoundedSolidRect(renderer, chip, 7, chip_bg);
-        const SDL_Color border = hovered ? DMStyles::HighlightColor() : DMStyles::Border();
-        dm_draw::DrawRoundedOutline(renderer, chip, 7, 1, border);
+        SDL_Color border = DMStyles::Border();
+        if (selected) {
+            border = kEditorFrameSelectedBorderColor;
+        }
+        if (current) {
+            border = DMStyles::AccentButton().border;
+        }
+        dm_draw::DrawRoundedOutline(renderer, chip, 7, current ? 2 : 1, border);
+        if (hovered) {
+            dm_draw::DrawRoundedOutline(renderer, chip, 7, 2, DMStyles::HighlightColor());
+        }
 
         const int preview_pad = 3;
         SDL_Rect preview_rect{
@@ -1381,7 +1420,7 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
         dm_draw::DrawRoundedSolidRect(renderer, label_bg, 5, label_bg_color);
         DMLabelStyle frame_style = DMStyles::Label();
         frame_style.font_size = 11;
-        frame_style.color = selected ? SDL_Color{255, 255, 255, 255} : DMStyles::Label().color;
+        frame_style.color = (selected || current) ? SDL_Color{255, 255, 255, 255} : DMStyles::Label().color;
         const std::string label = std::to_string(i + 1);
         const SDL_Point size = DMFontCache::instance().measure_text(frame_style, label);
         const int text_x = label_bg.x + std::max(0, (label_bg.w - size.x) / 2);
@@ -1398,10 +1437,10 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
         if (insertion_x >= editor_frame_strip_rect_.x &&
             insertion_x <= editor_frame_strip_rect_.x + editor_frame_strip_rect_.w) {
             SDL_SetRenderDrawColor(renderer,
-                                   kEditorFrameSelectedColor.r,
-                                   kEditorFrameSelectedColor.g,
-                                   kEditorFrameSelectedColor.b,
-                                   kEditorFrameSelectedColor.a);
+                                   kEditorFrameCurrentColor.r,
+                                   kEditorFrameCurrentColor.g,
+                                   kEditorFrameCurrentColor.b,
+                                   kEditorFrameCurrentColor.a);
             SDL_RenderLine(renderer,
                            insertion_x,
                            editor_frame_strip_rect_.y + 4,

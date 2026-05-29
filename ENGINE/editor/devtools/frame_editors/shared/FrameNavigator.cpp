@@ -26,6 +26,8 @@ const int kApplyButtonGap = DMSpacing::item_gap();
 constexpr int kBottomButtonHeight = 40;
 constexpr int kSaveExitButtonWidth = 150;
 const int kNavigatorGap = DMSpacing::small_gap();
+constexpr SDL_Color kThumbSelectedColor{76, 154, 255, 210};
+constexpr SDL_Color kThumbSelectedBorderColor{120, 190, 255, 255};
 
 SDL_FRect ToFRect(const SDL_Rect& rect) {
     return SDL_FRect{
@@ -60,6 +62,7 @@ FrameNavigator::~FrameNavigator() = default;
 void FrameNavigator::set_frame_count(int count) {
     frame_count_ = std::max(0, count);
     validate_frame_index();
+    prune_selected_frames();
     update_button_states();
     clamp_scroll();
     ensure_frame_visible(current_frame_);
@@ -75,6 +78,16 @@ void FrameNavigator::set_current_frame(int frame) {
     if (current_frame_ != old_frame) {
         update_button_states();
         notify_frame_changed();
+    }
+}
+
+void FrameNavigator::set_selected_frames(std::vector<int> frame_indices) {
+    selected_frames_.clear();
+    for (int frame_index : frame_indices) {
+        if (frame_index >= 0 && frame_index < frame_count_ &&
+            std::find(selected_frames_.begin(), selected_frames_.end(), frame_index) == selected_frames_.end()) {
+            selected_frames_.push_back(frame_index);
+        }
     }
 }
 
@@ -236,13 +249,27 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        // Frame stepping is intentionally restricted to the explicit prev/next
-        // navigator arrow buttons to avoid accidental frame advances while
-        // editing with mouse-driven tools in dev mode.
-        pressed_thumb_index_ = -1;
+        pressed_thumb_index_ = frame_index_at_point(p);
         update_hover(p);
+        consumed = consumed || pressed_thumb_index_ >= 0;
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        const int released_index = frame_index_at_point(p);
+        if (released_index >= 0 && released_index == pressed_thumb_index_) {
+            const bool ctrl_down = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+            if (ctrl_down) {
+                auto selected_it = std::find(selected_frames_.begin(), selected_frames_.end(), released_index);
+                if (selected_it == selected_frames_.end()) {
+                    selected_frames_.push_back(released_index);
+                } else {
+                    selected_frames_.erase(selected_it);
+                }
+            } else {
+                selected_frames_.assign(1, released_index);
+                request_frame_change(released_index);
+            }
+            consumed = true;
+        }
         pressed_thumb_index_ = -1;
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
@@ -387,7 +414,14 @@ void FrameNavigator::render_thumbnails(SDL_Renderer* renderer) {
             continue;
         }
 
-        SDL_Color base = DMStyles::PanelHeader();
+        const bool active = (i == current_frame_);
+        const bool selected = std::find(selected_frames_.begin(), selected_frames_.end(), i) != selected_frames_.end();
+        SDL_Color base = selected ? kThumbSelectedColor : DMStyles::PanelHeader();
+        if (active) {
+            SDL_Color glow = DMStyles::AccentButton().bg;
+            glow.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(glow.a * 0.45f), 0, 255));
+            base = glow;
+        }
         dm_draw::DrawRoundedSolidRect(renderer, thumb, kThumbCorner, base);
 
         SDL_Texture* tex = nullptr;
@@ -413,15 +447,14 @@ void FrameNavigator::render_thumbnails(SDL_Renderer* renderer) {
             }
         }
 
-        const bool active = (i == current_frame_);
-        if (active) {
-            SDL_Color glow = DMStyles::AccentButton().bg;
-            glow.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(glow.a * 0.45f), 0, 255));
-            dm_draw::DrawRoundedSolidRect(renderer, thumb, kThumbCorner, glow);
+        SDL_Color border = DMStyles::Border();
+        if (selected) {
+            border = kThumbSelectedBorderColor;
         }
-
-        SDL_Color border = active ? DMStyles::AccentButton().border : DMStyles::Border();
-        dm_draw::DrawRoundedOutline(renderer, thumb, kThumbCorner, 2, border);
+        if (active) {
+            border = DMStyles::AccentButton().border;
+        }
+        dm_draw::DrawRoundedOutline(renderer, thumb, kThumbCorner, active ? 2 : 1, border);
 
         if (hovered_index_ == i) {
             SDL_Color hover = DMStyles::HighlightColor();
@@ -439,8 +472,9 @@ void FrameNavigator::render_thumbnails(SDL_Renderer* renderer) {
 }
 
 void FrameNavigator::render_badge(SDL_Renderer* renderer, const SDL_Rect& thumb_rect, int index, bool active) const {
-    const SDL_Color badge_bg = active ? DMStyles::AccentButton().bg : DMStyles::PanelHeader();
-    const SDL_Color badge_border = active ? DMStyles::AccentButton().border : DMStyles::Border();
+    const bool selected = std::find(selected_frames_.begin(), selected_frames_.end(), index) != selected_frames_.end();
+    const SDL_Color badge_bg = active ? DMStyles::AccentButton().bg : (selected ? kThumbSelectedColor : DMStyles::PanelHeader());
+    const SDL_Color badge_border = active ? DMStyles::AccentButton().border : (selected ? kThumbSelectedBorderColor : DMStyles::Border());
     SDL_Rect badge{
         thumb_rect.x + kBadgePadding,
         thumb_rect.y + thumb_rect.h - kBadgeHeight - kBadgePadding,
@@ -453,7 +487,7 @@ void FrameNavigator::render_badge(SDL_Renderer* renderer, const SDL_Rect& thumb_
     SDL_SetRenderDrawColor(renderer, badge_border.r, badge_border.g, badge_border.b, badge_border.a);
     SDL_RenderRect(renderer, &badge_f);
 
-    const SDL_Color text_color = active ? DMStyles::AccentButton().text : DMStyles::Label().color;
+    const SDL_Color text_color = (active || selected) ? SDL_Color{255, 255, 255, 255} : DMStyles::Label().color;
     DMLabelStyle label_style{DMStyles::Label().font_path, 12, text_color};
     const std::string label = std::to_string(index);
     SDL_Point text_size = DMFontCache::instance().measure_text(label_style, label);
@@ -526,6 +560,17 @@ void FrameNavigator::validate_frame_index() {
     }
 
     current_frame_ = std::clamp(current_frame_, 0, frame_count_ - 1);
+}
+
+void FrameNavigator::prune_selected_frames() {
+    std::vector<int> pruned;
+    for (int frame_index : selected_frames_) {
+        if (frame_index >= 0 && frame_index < frame_count_ &&
+            std::find(pruned.begin(), pruned.end(), frame_index) == pruned.end()) {
+            pruned.push_back(frame_index);
+        }
+    }
+    selected_frames_ = std::move(pruned);
 }
 
 void FrameNavigator::notify_frame_changed() {

@@ -264,6 +264,7 @@ void DevFooterBar::set_editor_navigation_enabled(bool enabled) {
         editor_hovered_frame_index_ = -1;
         editor_pressed_frame_index_ = -1;
         editor_frame_scroll_offset_ = 0.0f;
+        set_editor_frame_editor_focused(false, true);
     }
     layout_content();
 }
@@ -306,6 +307,21 @@ void DevFooterBar::set_editor_frame_navigation(EditorFrameNavigation navigation)
 
     editor_hovered_frame_index_ = -1;
     editor_pressed_frame_index_ = -1;
+    editor_selected_frame_indices_.clear();
+    for (int frame_index : editor_frame_navigation_.selected_frames) {
+        if (frame_index >= 0 && frame_index < editor_frame_navigation_.frame_count &&
+            std::find(editor_selected_frame_indices_.begin(), editor_selected_frame_indices_.end(), frame_index) ==
+                editor_selected_frame_indices_.end()) {
+            editor_selected_frame_indices_.push_back(frame_index);
+        }
+    }
+    if (editor_selected_frame_indices_.empty() && editor_frame_navigation_.frame_count > 0) {
+        editor_selected_frame_indices_.push_back(editor_frame_navigation_.selected_frame);
+    }
+    editor_frame_navigation_.selected_frames = editor_selected_frame_indices_;
+    set_editor_frame_editor_focused(
+        editor_frame_navigation_.frame_editor_enabled && editor_frame_navigation_.focused,
+        false);
     ensure_editor_frame_visible(editor_frame_navigation_.selected_frame);
     layout_content();
 }
@@ -318,6 +334,15 @@ void DevFooterBar::clear_editor_navigation() {
     editor_frame_scroll_offset_ = 0.0f;
     editor_hovered_frame_index_ = -1;
     editor_pressed_frame_index_ = -1;
+    set_editor_frame_editor_focused(false, true);
+    editor_selected_frame_indices_.clear();
+    editor_drag_start_frame_index_ = -1;
+    editor_drag_current_frame_index_ = -1;
+    editor_drag_drop_insertion_index_ = -1;
+    editor_insertion_point_hovered_ = false;
+    editor_insertion_point_index_ = -1;
+    editor_context_menu_requested_ = false;
+    editor_context_menu_frame_index_ = -1;
     layout_content();
 }
 
@@ -551,6 +576,42 @@ bool DevFooterBar::contains(int x, int y) const {
         return false;
     }
     return editor_navigation_contains_point(p);
+}
+
+bool DevFooterBar::editor_frame_focus_bounds_contains_point(const SDL_Point& point) const {
+    if (SDL_PointInRect(&point, &editor_frame_strip_rect_)) {
+        return true;
+    }
+    auto point_in_button = [&point](const std::unique_ptr<DMButton>& button) {
+        if (!button) {
+            return false;
+        }
+        const SDL_Rect rect = button->rect();
+        return SDL_PointInRect(&point, &rect);
+    };
+    return point_in_button(editor_prev_frame_button_) || point_in_button(editor_next_frame_button_);
+}
+
+void DevFooterBar::set_editor_frame_editor_focused(bool focused, bool notify_callback) {
+    focused = focused && editor_frame_navigation_.visible && editor_frame_navigation_.frame_editor_enabled;
+    if (editor_frame_editor_focused_ == focused) {
+        editor_frame_navigation_.focused = focused;
+        return;
+    }
+    editor_frame_editor_focused_ = focused;
+    editor_frame_navigation_.focused = focused;
+    if (!focused) {
+        editor_drag_start_frame_index_ = -1;
+        editor_drag_current_frame_index_ = -1;
+        editor_drag_drop_insertion_index_ = -1;
+        editor_insertion_point_hovered_ = false;
+        editor_insertion_point_index_ = -1;
+        editor_context_menu_requested_ = false;
+        editor_context_menu_frame_index_ = -1;
+    }
+    if (notify_callback && editor_frame_navigation_.on_focus_changed) {
+        editor_frame_navigation_.on_focus_changed(focused);
+    }
 }
 
 void DevFooterBar::layout() {
@@ -959,6 +1020,79 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
         return button->handle_event(e);
     };
 
+    auto point_in_button = [](const SDL_Point& pt, const std::unique_ptr<DMButton>& button) {
+        if (!button) {
+            return false;
+        }
+        const SDL_Rect rect = button->rect();
+        return SDL_PointInRect(&pt, &rect);
+    };
+
+    SDL_Point pointer{0, 0};
+    const bool pointer_event =
+        e.type == SDL_EVENT_MOUSE_MOTION ||
+        e.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+        e.type == SDL_EVENT_MOUSE_BUTTON_UP;
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        pointer = SDL_Point{
+            static_cast<int>(std::lround(e.motion.x)),
+            static_cast<int>(std::lround(e.motion.y))
+        };
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        pointer = SDL_Point{
+            static_cast<int>(std::lround(e.button.x)),
+            static_cast<int>(std::lround(e.button.y))
+        };
+    }
+
+    if (editor_frame_editor_focused_ && e.type == SDL_EVENT_KEY_UP) {
+        return true;
+    }
+
+    if (editor_frame_editor_focused_ && e.type == SDL_EVENT_KEY_DOWN) {
+        const bool ctrl_down = (e.key.mod & SDL_KMOD_CTRL) != 0;
+        const int primary_frame = editor_selected_frame_indices_.empty()
+            ? editor_frame_navigation_.selected_frame
+            : editor_selected_frame_indices_.front();
+
+        if (e.key.key == SDLK_ESCAPE) {
+            set_editor_frame_editor_focused(false, true);
+            return true;
+        }
+        if ((e.key.key == SDLK_DELETE || e.key.key == SDLK_BACKSPACE) && editor_frame_navigation_.on_delete_frames) {
+            editor_frame_navigation_.on_delete_frames();
+            return true;
+        }
+        if (ctrl_down && e.key.key == SDLK_D && editor_frame_navigation_.on_duplicate_frames) {
+            editor_frame_navigation_.on_duplicate_frames();
+            return true;
+        }
+        if (e.key.key == SDLK_INSERT && editor_frame_navigation_.on_insert_frame) {
+            const int insertion_index = editor_insertion_point_index_ >= 0
+                ? editor_insertion_point_index_
+                : std::clamp(primary_frame + 1, 0, editor_frame_navigation_.frame_count);
+            editor_frame_navigation_.on_insert_frame(insertion_index);
+            return true;
+        }
+        if (e.key.key == SDLK_R && editor_frame_navigation_.on_replace_frame) {
+            editor_frame_navigation_.on_replace_frame(primary_frame);
+            return true;
+        }
+        if (e.key.key == SDLK_I && editor_frame_navigation_.on_interpolation_popup) {
+            editor_frame_navigation_.on_interpolation_popup(primary_frame);
+            return true;
+        }
+
+        return true;
+    }
+
+    if (editor_frame_editor_focused_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        if (!editor_frame_focus_bounds_contains_point(pointer)) {
+            set_editor_frame_editor_focused(false, true);
+            return true;
+        }
+    }
+
     for (auto& tab : editor_tabs_) {
         if (!tab.widget) {
             continue;
@@ -977,28 +1111,12 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
     used = trigger_button(editor_prev_frame_button_.get()) || used;
     used = trigger_button(editor_next_frame_button_.get()) || used;
 
-    auto point_in_button = [](const SDL_Point& pt, const std::unique_ptr<DMButton>& button) {
-        if (!button) {
-            return false;
-        }
-        const SDL_Rect rect = button->rect();
-        return SDL_PointInRect(&pt, &rect);
-    };
-
-    SDL_Point pointer{0, 0};
-    if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        pointer = SDL_Point{
-            static_cast<int>(std::lround(e.motion.x)),
-            static_cast<int>(std::lround(e.motion.y))
-        };
-    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        pointer = SDL_Point{
-            static_cast<int>(std::lround(e.button.x)),
-            static_cast<int>(std::lround(e.button.y))
-        };
-    }
-
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (editor_frame_navigation_.frame_editor_enabled && e.button.clicks >= 2 &&
+            editor_frame_focus_bounds_contains_point(pointer)) {
+            set_editor_frame_editor_focused(true, true);
+            used = true;
+        }
         if (point_in_button(pointer, editor_prev_frame_button_) ||
             point_in_button(pointer, editor_next_frame_button_)) {
             used = true;
@@ -1035,29 +1153,93 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
     }
 
     if (!editor_frame_navigation_.visible || editor_frame_navigation_.frame_count <= 0) {
-        return used;
+        return used || (editor_frame_editor_focused_ && (pointer_event || e.type == SDL_EVENT_MOUSE_WHEEL));
     }
 
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
         editor_hovered_frame_index_ = editor_frame_index_at_point(pointer);
-        used = used || editor_hovered_frame_index_ >= 0;
+        if (editor_frame_editor_focused_) {
+            editor_drag_current_frame_index_ = editor_hovered_frame_index_;
+            if (SDL_PointInRect(&pointer, &editor_frame_strip_rect_)) {
+                const float stride = static_cast<float>(kEditorFrameChipWidth + kEditorFrameChipGap);
+                const float relative_x = static_cast<float>(pointer.x - editor_frame_strip_rect_.x) + editor_frame_scroll_offset_;
+                editor_drag_drop_insertion_index_ = std::clamp(
+                    static_cast<int>(std::lround(relative_x / stride)),
+                    0,
+                    editor_frame_navigation_.frame_count);
+                editor_insertion_point_hovered_ = true;
+                editor_insertion_point_index_ = editor_drag_drop_insertion_index_;
+            } else {
+                editor_insertion_point_hovered_ = false;
+                editor_insertion_point_index_ = -1;
+            }
+        }
+        used = used || editor_hovered_frame_index_ >= 0 || editor_frame_editor_focused_;
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         editor_pressed_frame_index_ = editor_frame_index_at_point(pointer);
         editor_hovered_frame_index_ = editor_pressed_frame_index_;
+        if (editor_frame_editor_focused_) {
+            editor_drag_start_frame_index_ = editor_pressed_frame_index_;
+            editor_drag_current_frame_index_ = editor_pressed_frame_index_;
+            editor_drag_drop_insertion_index_ = editor_pressed_frame_index_;
+        }
         if (editor_pressed_frame_index_ >= 0) {
+            used = true;
+        }
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT) {
+        const int context_index = editor_frame_index_at_point(pointer);
+        if (editor_frame_editor_focused_ && context_index >= 0) {
+            editor_context_menu_requested_ = true;
+            editor_context_menu_point_ = pointer;
+            editor_context_menu_frame_index_ = context_index;
+            if (editor_frame_navigation_.on_interpolation_popup) {
+                editor_frame_navigation_.on_interpolation_popup(context_index);
+            }
             used = true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         const int released_index = editor_frame_index_at_point(pointer);
+        const bool ctrl_down = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
         if (released_index >= 0) {
             editor_frame_navigation_.selected_frame = released_index;
             ensure_editor_frame_visible(released_index);
-            if (editor_frame_navigation_.on_select_frame) {
+            if (editor_frame_editor_focused_) {
+                if (ctrl_down) {
+                    auto selected_it = std::find(
+                        editor_selected_frame_indices_.begin(),
+                        editor_selected_frame_indices_.end(),
+                        released_index);
+                    if (selected_it == editor_selected_frame_indices_.end()) {
+                        editor_selected_frame_indices_.push_back(released_index);
+                    } else if (editor_selected_frame_indices_.size() > 1) {
+                        editor_selected_frame_indices_.erase(selected_it);
+                    }
+                } else {
+                    editor_selected_frame_indices_.assign(1, released_index);
+                }
+                editor_frame_navigation_.selected_frames = editor_selected_frame_indices_;
+                if (editor_drag_start_frame_index_ >= 0 &&
+                    editor_drag_drop_insertion_index_ >= 0 &&
+                    editor_drag_drop_insertion_index_ != editor_drag_start_frame_index_ &&
+                    editor_drag_drop_insertion_index_ != editor_drag_start_frame_index_ + 1 &&
+                    editor_frame_navigation_.on_reorder_frame) {
+                    editor_frame_navigation_.on_reorder_frame(
+                        editor_drag_start_frame_index_,
+                        editor_drag_drop_insertion_index_);
+                } else if (editor_frame_navigation_.on_frame_click) {
+                    editor_frame_navigation_.on_frame_click(released_index, ctrl_down);
+                } else if (editor_frame_navigation_.on_select_frame) {
+                    editor_frame_navigation_.on_select_frame(released_index);
+                }
+            } else if (editor_frame_navigation_.on_select_frame) {
                 editor_frame_navigation_.on_select_frame(released_index);
             }
             used = true;
         }
         editor_pressed_frame_index_ = -1;
+        editor_drag_start_frame_index_ = -1;
+        editor_drag_current_frame_index_ = -1;
+        editor_drag_drop_insertion_index_ = -1;
         editor_hovered_frame_index_ = released_index;
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
@@ -1076,7 +1258,7 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
         }
     }
 
-    return used;
+    return used || (editor_frame_editor_focused_ && (pointer_event || e.type == SDL_EVENT_MOUSE_WHEEL));
 }
 
 void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
@@ -1098,6 +1280,37 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
     if (editor_prev_frame_button_) editor_prev_frame_button_->render(renderer);
     if (editor_next_frame_button_) editor_next_frame_button_->render(renderer);
 
+    if (editor_frame_editor_focused_) {
+        SDL_Rect focus_rect = editor_frame_strip_rect_;
+        auto include_button = [&focus_rect](const std::unique_ptr<DMButton>& button) {
+            if (!button) {
+                return;
+            }
+            const SDL_Rect rect = button->rect();
+            if (rect.w <= 0 || rect.h <= 0) {
+                return;
+            }
+            if (focus_rect.w <= 0 || focus_rect.h <= 0) {
+                focus_rect = rect;
+                return;
+            }
+            const int left = std::min(focus_rect.x, rect.x);
+            const int top = std::min(focus_rect.y, rect.y);
+            const int right = std::max(focus_rect.x + focus_rect.w, rect.x + rect.w);
+            const int bottom = std::max(focus_rect.y + focus_rect.h, rect.y + rect.h);
+            focus_rect = SDL_Rect{left, top, right - left, bottom - top};
+        };
+        include_button(editor_prev_frame_button_);
+        include_button(editor_next_frame_button_);
+        if (focus_rect.w > 0 && focus_rect.h > 0) {
+            focus_rect.x -= 3;
+            focus_rect.y -= 3;
+            focus_rect.w += 6;
+            focus_rect.h += 6;
+            dm_draw::DrawRoundedOutline(renderer, focus_rect, 10, 2, kEditorFrameSelectedColor);
+        }
+    }
+
     if (editor_frame_strip_rect_.w <= 0 || editor_frame_strip_rect_.h <= 0 || editor_frame_navigation_.frame_count <= 0) {
         return;
     }
@@ -1118,7 +1331,9 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
             continue;
         }
 
-        const bool selected = i == editor_frame_navigation_.selected_frame;
+        const bool selected = i == editor_frame_navigation_.selected_frame ||
+            std::find(editor_selected_frame_indices_.begin(), editor_selected_frame_indices_.end(), i) !=
+                editor_selected_frame_indices_.end();
         const bool hovered = i == editor_hovered_frame_index_;
         SDL_Color chip_bg = selected ? kEditorFrameSelectedColor : dm_draw::DarkenColor(DMStyles::PanelHeader(), 0.04f);
         dm_draw::DrawRoundedSolidRect(renderer, chip, 7, chip_bg);
@@ -1172,6 +1387,27 @@ void DevFooterBar::render_editor_navigation(SDL_Renderer* renderer) const {
         const int text_x = label_bg.x + std::max(0, (label_bg.w - size.x) / 2);
         const int text_y = label_bg.y + std::max(0, (label_bg.h - size.y) / 2);
         DMFontCache::instance().draw_text(renderer, frame_style, label, text_x, text_y);
+    }
+
+    if (editor_frame_editor_focused_ && editor_insertion_point_hovered_ && editor_insertion_point_index_ >= 0) {
+        const float stride = static_cast<float>(kEditorFrameChipWidth + kEditorFrameChipGap);
+        const int insertion_x = static_cast<int>(std::lround(
+            static_cast<float>(editor_frame_strip_rect_.x) +
+            static_cast<float>(editor_insertion_point_index_) * stride -
+            editor_frame_scroll_offset_));
+        if (insertion_x >= editor_frame_strip_rect_.x &&
+            insertion_x <= editor_frame_strip_rect_.x + editor_frame_strip_rect_.w) {
+            SDL_SetRenderDrawColor(renderer,
+                                   kEditorFrameSelectedColor.r,
+                                   kEditorFrameSelectedColor.g,
+                                   kEditorFrameSelectedColor.b,
+                                   kEditorFrameSelectedColor.a);
+            SDL_RenderLine(renderer,
+                           insertion_x,
+                           editor_frame_strip_rect_.y + 4,
+                           insertion_x,
+                           editor_frame_strip_rect_.y + editor_frame_strip_rect_.h - 5);
+        }
     }
 
     if (clipping_enabled) {

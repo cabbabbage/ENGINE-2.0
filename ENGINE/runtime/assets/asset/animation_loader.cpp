@@ -409,12 +409,8 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
                 int frame_h = 0;
                 if (frame_index < frame_cache.size()) {
                         const auto& cache = frame_cache[frame_index];
-                        if (!cache.widths.empty()) frame_w = cache.widths.front();
-                        if (!cache.heights.empty()) frame_h = cache.heights.front();
-                        if (!cache.source_rects.empty() && !cache.uses_atlas.empty() && cache.uses_atlas.front()) {
-                                frame_w = cache.source_rects.front().w;
-                                frame_h = cache.source_rects.front().h;
-                        }
+                        frame_w = cache.width;
+                        frame_h = cache.height;
                 }
                 for (auto& anchor : frame) {
                         if (invert_x) {
@@ -760,12 +756,8 @@ void apply_box_transforms(std::vector<std::vector<TBox>>& boxes,
                 int frame_h = 0;
                 if (frame_index < frame_cache.size()) {
                         const auto& cache = frame_cache[frame_index];
-                        if (!cache.widths.empty()) frame_w = cache.widths.front();
-                        if (!cache.heights.empty()) frame_h = cache.heights.front();
-                        if (!cache.source_rects.empty() && !cache.uses_atlas.empty() && cache.uses_atlas.front()) {
-                                frame_w = cache.source_rects.front().w;
-                                frame_h = cache.source_rects.front().h;
-                        }
+                        frame_w = cache.width;
+                        frame_h = cache.height;
                 }
                 for (auto& box : boxes[frame_index]) {
                         animation_update::FrameBoxRect flipped = box.rect;
@@ -1036,21 +1028,6 @@ void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
 void apply_scale_mode(SDL_Texture*, const AssetInfo&) {}
 #endif
 
-void enforce_canonical_variant_layout(std::vector<float>& steps,
-                                      std::vector<Animation::FrameCache>* frame_cache = nullptr) {
-        render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
-        const std::size_t canonical_variant_count = steps.size();
-        if (!frame_cache) {
-                return;
-        }
-        for (auto& cache : *frame_cache) {
-                cache.textures.resize(canonical_variant_count, nullptr);
-                cache.widths.resize(canonical_variant_count, 0);
-                cache.heights.resize(canonical_variant_count, 0);
-                cache.source_rects.resize(canonical_variant_count, SDL_Rect{0, 0, 0, 0});
-                cache.uses_atlas.resize(canonical_variant_count, false);
-            }
-}
 
 }
 
@@ -1083,9 +1060,7 @@ void AnimationLoader::load(Animation& animation,
         const double safe_scale = sanitize_scale_factor(scale_factor);
         const Animation* source_animation_ptr = nullptr;
         animation.clear_texture_cache();
-        animation.variant_steps_.clear();
         animation.tags.clear();
-        enforce_canonical_variant_layout(animation.variant_steps_);
         (void)root_cache;
 
         if (anim_json.contains("source")) {
@@ -1350,9 +1325,7 @@ void AnimationLoader::load(Animation& animation,
                 }
         } else if (animation.source.kind == "folder") {
                 if (prebuilt_frames && !prebuilt_frames->frames.empty()) {
-                        animation.variant_steps_ = prebuilt_frames->variant_steps;
                         animation.frame_cache_ = std::move(prebuilt_frames->frames);
-                        enforce_canonical_variant_layout(animation.variant_steps_, &animation.frame_cache_);
                         original_canvas_width = prebuilt_frames->canvas_width;
                         original_canvas_height = prebuilt_frames->canvas_height;
                         scaled_sprite_w = prebuilt_frames->canvas_width;
@@ -1367,7 +1340,6 @@ void AnimationLoader::load(Animation& animation,
                 }
         }
 
-        enforce_canonical_variant_layout(animation.variant_steps_, &animation.frame_cache_);
 
         if (animation.frame_cache_.empty() &&
             animation.source.kind == "animation" &&
@@ -1490,27 +1462,27 @@ void AnimationLoader::load(Animation& animation,
                                      animation.invert_y);
         }
         bind_frame_data(animation, anchor_frames, hit_box_frames, attack_box_frames);
-        if (trigger == "default") {
-                if (const AnimationFrame* first = animation.primary_frame_at(0); first && !first->variants.empty()) {
-                        base_sprite = first->variants[0].base_texture;
-                        info.preview_texture = first->variants[0].base_texture;
+                if (trigger == "default") {
+                        if (const AnimationFrame* first = animation.primary_frame_at(0); first && first->variant.base_texture) {
+                                base_sprite = first->variant.base_texture;
+                                info.preview_texture = first->variant.base_texture;
+                        }
                 }
-        }
 
         int frame_width  = 0;
         int frame_height = 0;
         if (!animation.frame_cache_.empty()) {
-		frame_width  = animation.frame_cache_[0].widths[0];
-		frame_height = animation.frame_cache_[0].heights[0];
-		if ((frame_width <= 0 || frame_height <= 0) && animation.frame_cache_[0].textures[0]) {
-				float fw = 0.0f;
-				float fh = 0.0f;
-				if (SDL_GetTextureSize(animation.frame_cache_[0].textures[0], &fw, &fh)) {
-					frame_width = static_cast<int>(std::lround(fw));
-					frame_height = static_cast<int>(std::lround(fh));
-				}
-		}
-}
+            frame_width  = animation.frame_cache_[0].width;
+            frame_height = animation.frame_cache_[0].height;
+            if ((frame_width <= 0 || frame_height <= 0) && animation.frame_cache_[0].texture) {
+                    float fw = 0.0f;
+                    float fh = 0.0f;
+                    if (SDL_GetTextureSize(animation.frame_cache_[0].texture, &fw, &fh)) {
+                            frame_width = static_cast<int>(std::lround(fw));
+                            frame_height = static_cast<int>(std::lround(fh));
+                    }
+            }
+        }
 
         const auto load_end        = std::chrono::steady_clock::now();
         const double elapsed_secs  = std::chrono::duration<double>(load_end - load_start).count();

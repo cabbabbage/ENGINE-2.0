@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <optional>
 #include <cmath>
 #include <cctype>
@@ -35,6 +36,78 @@
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"
 using json = nlohmann::json;
+
+namespace {
+
+bool asset_info_has_default_frames(const std::shared_ptr<AssetInfo>& info) {
+        if (!info) {
+                return false;
+        }
+
+        auto it = info->animations.find("default");
+        return it != info->animations.end() && it->second.has_frames();
+}
+
+std::unordered_set<std::string> collect_runtime_asset_names_from_rooms(const std::vector<Room*>& rooms) {
+        std::unordered_set<std::string> names;
+
+        for (const Room* room : rooms) {
+                if (!room) {
+                        continue;
+                }
+
+                for (const auto& asset_up : room->assets) {
+                        const Asset* asset = asset_up.get();
+                        if (!asset || !asset->info || asset->info->name.empty()) {
+                                continue;
+                        }
+
+                        names.insert(asset->info->name);
+                }
+        }
+
+        return names;
+}
+
+bool ensure_default_animation_frames_loaded_for_asset(SDL_Renderer* renderer,
+                                                     AssetLibrary* asset_library,
+                                                     const std::shared_ptr<AssetInfo>& info) {
+        if (!info) {
+                return false;
+        }
+
+        if (asset_info_has_default_frames(info)) {
+                return true;
+        }
+
+        if (!renderer) {
+                vibble::log::warn("[AssetLoader] Cannot lazy-load animations for '" + info->name +
+                                  "': renderer is null.");
+                return false;
+        }
+
+        try {
+                if (asset_library && !info->name.empty()) {
+                        std::unordered_set<std::string> one_asset;
+                        one_asset.insert(info->name);
+                        asset_library->loadAnimationsFor(renderer, one_asset);
+                } else {
+                        info->loadAnimations(renderer, false, true);
+                }
+        } catch (const std::exception& ex) {
+                vibble::log::error("[AssetLoader] Lazy animation load failed for '" + info->name +
+                                   "': " + ex.what());
+                return false;
+        } catch (...) {
+                vibble::log::error("[AssetLoader] Lazy animation load failed for '" + info->name +
+                                   "': unknown exception");
+                return false;
+        }
+
+        return asset_info_has_default_frames(info);
+}
+
+} // namespace
 
 AssetLoader::~AssetLoader() = default;
 
@@ -109,32 +182,36 @@ manifest_store_(manifest_store)
         const auto rooms_end = std::chrono::steady_clock::now();
         vibble::log::info(std::string("[AssetLoader] Rooms created: ") + std::to_string(getRooms().size()) + " in " + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(rooms_end - rooms_begin).count()) + "ms");
         loading_status::notify("Loading assets");
-    {
-        const auto preload_begin = std::chrono::steady_clock::now();
+        {
+                const auto preload_begin = std::chrono::steady_clock::now();
 
-        if (asset_library_ && renderer_) {
-                const std::size_t known_assets = asset_library_->all().size();
-                if (known_assets > 0) {
-                        vibble::log::info(std::string("[AssetLoader] Preloading animations for all known assets (") +
-                                         std::to_string(known_assets) + ")...");
-                        asset_library_->ensureAllAnimationsLoaded(renderer_);
+                if (asset_library_ && renderer_) {
+                        const std::unordered_set<std::string> map_asset_names =
+                            collect_runtime_asset_names_from_rooms(getRooms());
 
-                        const auto preload_end = std::chrono::steady_clock::now();
-                        const double preload_ms = std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - preload_begin).count();
-                        vibble::log::info(std::string("[AssetLoader] Animation preload pass completed for ") +
-                                          std::to_string(known_assets) + " assets in " +
-                                          std::to_string(preload_ms) + "ms");
+                        if (!map_asset_names.empty()) {
+                                vibble::log::info(std::string("[AssetLoader] Loading runtime animations for map-used assets (") +
+                                                  std::to_string(map_asset_names.size()) + ")...");
+                                asset_library_->loadAnimationsFor(renderer_, map_asset_names);
+
+                                const auto preload_end = std::chrono::steady_clock::now();
+                                const double preload_ms =
+                                    std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - preload_begin).count();
+
+                                vibble::log::info(std::string("[AssetLoader] Map-scoped runtime animation load completed for ") +
+                                                  std::to_string(map_asset_names.size()) + " asset type(s) in " +
+                                                  std::to_string(preload_ms) + "ms");
+                        } else {
+                                vibble::log::info("[AssetLoader] No map-spawned asset names found for runtime animation load.");
+                        }
+                } else if (!renderer_) {
+                        vibble::log::warn("[AssetLoader] Renderer unavailable; skipping map-scoped runtime animation load.");
                 } else {
-                        vibble::log::info("[AssetLoader] No assets available in the library for animation preload.");
+                        vibble::log::warn("[AssetLoader] Asset library unavailable; skipping map-scoped runtime animation load.");
                 }
-        } else if (!renderer_) {
-                vibble::log::warn("[AssetLoader] Renderer unavailable; skipping animation preload.");
-        } else {
-                vibble::log::warn("[AssetLoader] Asset library unavailable; skipping animation preload.");
         }
-    }
 
-    loading_status::notify("Loading assets");
+        loading_status::notify("Loading assets");
         vibble::log::info("[AssetLoader] Finalizing assets across rooms...");
         try {
                 finalizeAssets();
@@ -256,6 +333,8 @@ void AssetLoader::finalizeAssets() {
         std::size_t finalized_assets   = 0;
         std::size_t skipped_assets     = 0;
         std::size_t skipped_missing_default_count = 0;
+        std::size_t lazy_loaded_asset_count = 0;
+
         std::vector<std::string> skipped_missing_default_names;
         skipped_missing_default_names.reserve(16);
 
@@ -266,29 +345,37 @@ void AssetLoader::finalizeAssets() {
                 }
 
                 const std::size_t room_total = room->assets.size();
-                std::size_t       room_finalized = 0;
-                std::size_t       room_skipped   = 0;
+                std::size_t room_finalized = 0;
+                std::size_t room_skipped = 0;
 
                 for (auto& asset_up : room->assets) {
                         ++total_assets;
-                        Asset* a = asset_up.get();
-                        if (!a || !a->info) {
+
+                        Asset* asset = asset_up.get();
+                        if (!asset || !asset->info) {
                                 ++skipped_assets;
                                 ++room_skipped;
                                 continue;
                         }
 
-                        const std::string name = a->info->name;
+                        const std::string name = asset->info->name;
 
-                        // Guard against assets whose default animation has no frames (e.g., missing art on disk).
-                        // These can cause downstream crashes when animation runtimes are built.
-                        auto default_anim = a->info->animations.find("default");
-                        if (default_anim == a->info->animations.end() || !default_anim->second.has_frames()) {
-                                vibble::log::error(std::string("[AssetLoader] finalizeAssets: asset '") + name + "' is missing default animation frames; skipping.");
+                        const bool had_default_frames = asset_info_has_default_frames(asset->info);
+                        if (!had_default_frames &&
+                            ensure_default_animation_frames_loaded_for_asset(renderer_, asset_library_, asset->info)) {
+                                ++lazy_loaded_asset_count;
+                        }
+
+                        if (!asset_info_has_default_frames(asset->info)) {
+                                vibble::log::error(std::string("[AssetLoader] finalizeAssets: asset '") +
+                                                   name +
+                                                   "' is missing default animation frames after map-scoped lazy load; skipping.");
+
                                 ++skipped_missing_default_count;
                                 if (skipped_missing_default_names.size() < 16) {
                                         skipped_missing_default_names.push_back(name);
                                 }
+
                                 asset_up.reset();
                                 ++skipped_assets;
                                 ++room_skipped;
@@ -296,17 +383,25 @@ void AssetLoader::finalizeAssets() {
                         }
 
                         try {
-                                asset_up->finalize_setup();
+                                asset->finalize_setup();
                                 ++finalized_assets;
                                 ++room_finalized;
                         } catch (const std::exception& ex) {
-                                vibble::log::error(std::string("[AssetLoader] finalizeAssets: exception during finalize_setup for '") + name + "': " + ex.what() + ". Skipping asset.");
+                                vibble::log::error(std::string("[AssetLoader] finalizeAssets: exception during finalize_setup for '") +
+                                                   name +
+                                                   "': " +
+                                                   ex.what() +
+                                                   ". Skipping asset.");
+
                                 asset_up.reset();
                                 ++skipped_assets;
                                 ++room_skipped;
                                 continue;
                         } catch (...) {
-                                vibble::log::error(std::string("[AssetLoader] finalizeAssets: unknown exception during finalize_setup for '") + name + "'. Skipping asset.");
+                                vibble::log::error(std::string("[AssetLoader] finalizeAssets: unknown exception during finalize_setup for '") +
+                                                   name +
+                                                   "'. Skipping asset.");
+
                                 asset_up.reset();
                                 ++skipped_assets;
                                 ++room_skipped;
@@ -315,33 +410,52 @@ void AssetLoader::finalizeAssets() {
                 }
 
                 if (room_total > 0) {
-                        std::string msg = std::string("[AssetLoader] finalizeAssets: room=") + std::to_string(room_index) + " finalized " + std::to_string(room_finalized) + "/" + std::to_string(room_total);
+                        std::string msg =
+                            std::string("[AssetLoader] finalizeAssets: room=") +
+                            std::to_string(room_index) +
+                            " finalized " +
+                            std::to_string(room_finalized) +
+                            "/" +
+                            std::to_string(room_total);
+
                         if (room_skipped > 0) {
                                 msg += std::string(" (skipped ") + std::to_string(room_skipped) + ")";
                         }
+
                         vibble::log::debug(msg);
                 }
 
                 ++room_index;
         }
 
-        {
-        std::string msg = std::string("[AssetLoader] finalizeAssets complete: ") + std::to_string(finalized_assets) + "/" + std::to_string(total_assets) + " assets ready";
+        std::string msg =
+            std::string("[AssetLoader] finalizeAssets complete: ") +
+            std::to_string(finalized_assets) +
+            "/" +
+            std::to_string(total_assets) +
+            " assets ready";
+
         if (skipped_assets > 0) {
                 msg += std::string(" (") + std::to_string(skipped_assets) + " skipped)";
         }
+
+        msg += std::string(", lazy_loaded_asset_types=") + std::to_string(lazy_loaded_asset_count);
         vibble::log::info(msg);
-        vibble::log::warn(std::string("[AssetLoader] finalizeAssets missing-default skip count: ") +
-                          std::to_string(skipped_missing_default_count));
+
+        if (skipped_missing_default_count > 0) {
+                vibble::log::warn(std::string("[AssetLoader] finalizeAssets missing-default skip count after lazy load: ") +
+                                  std::to_string(skipped_missing_default_count));
+        }
+
         if (!skipped_missing_default_names.empty()) {
                 std::string sampled = skipped_missing_default_names.front();
                 for (std::size_t i = 1; i < skipped_missing_default_names.size(); ++i) {
                         sampled += ", " + skipped_missing_default_names[i];
                 }
-                vibble::log::error(std::string("[AssetLoader] finalizeAssets high-severity: missing default frames after full preload. Sample assets: ") +
+
+                vibble::log::error(std::string("[AssetLoader] finalizeAssets high-severity: missing default frames after map-scoped lazy load. Sample assets: ") +
                                    sampled);
         }
-}
 }
 
 std::vector<std::unique_ptr<Asset>> AssetLoader::extract_all_assets() {

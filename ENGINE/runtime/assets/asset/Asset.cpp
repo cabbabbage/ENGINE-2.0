@@ -3,7 +3,6 @@
 #include "animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/scaling_logic.hpp"
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_payload.hpp"
@@ -971,14 +970,18 @@ void Asset::resample_spawn_y_position() {
                 set_provisional_grid_point(world_x(), resolved_world_y, world_z(), grid_resolution);
         }
 }
+
 void Asset::update_scale_values(bool force) {
     const std::uint32_t frame_id = assets_ ? assets_->frame_id() : 0;
-    const std::uint64_t camera_state_version = assets_ ? assets_->getView().camera_state_version() : 0;
+    const std::uint64_t camera_state_version =
+        assets_ ? assets_->getView().camera_state_version() : 0;
+
     if (!force &&
         last_scale_update_frame_id_ == frame_id &&
         last_scale_update_camera_state_version_ == camera_state_version) {
         return;
     }
+
     last_scale_update_frame_id_ = frame_id;
     last_scale_update_camera_state_version_ = camera_state_version;
 
@@ -993,16 +996,19 @@ void Asset::update_scale_values(bool force) {
     } else if (window) {
         camera_scale = static_cast<float>(std::max(0.0001, window->get_scale()));
     }
-    float quality_cap = render_pipeline::ScalingLogic::QualityCap();
-    if (!std::isfinite(quality_cap) || quality_cap <= 0.0f) {
-        quality_cap = 1.0f;
+
+    float resolved_scale = base_scale * perspective_scale;
+    if (!std::isfinite(resolved_scale) || resolved_scale <= 0.0f) {
+        resolved_scale = 1.0f;
     }
 
-    const float prospective_scale = base_scale * perspective_scale;
     constexpr float kScaleEpsilon = 1e-4f;
-    const float scale_delta = prospective_scale - current_scale;
-    const bool trace_scale = should_trace_asset_scale(*this) &&
-                             should_emit_scale_trace_for_frame(*this, frame_id);
+    const float scale_delta = resolved_scale - current_scale;
+
+    const bool trace_scale =
+        should_trace_asset_scale(*this) &&
+        should_emit_scale_trace_for_frame(*this, frame_id);
+
     if (trace_scale) {
         auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
         frame_stats.set("scale_trace.asset_name", info ? info->name : std::string{"<unknown>"});
@@ -1010,78 +1016,35 @@ void Asset::update_scale_values(bool force) {
         frame_stats.set("scale_trace.asset_source", perspective_source);
         frame_stats.set("scale_trace.asset_perspective", static_cast<double>(perspective_scale));
         frame_stats.set("scale_trace.asset_base", static_cast<double>(base_scale));
-        frame_stats.set("scale_trace.asset_scale", static_cast<double>(prospective_scale));
+        frame_stats.set("scale_trace.asset_scale", static_cast<double>(resolved_scale));
         frame_stats.set("scale_trace.asset_delta", static_cast<double>(scale_delta));
     }
 
-    if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&
+    if (std::fabs(resolved_scale - current_scale) < kScaleEpsilon &&
         std::fabs(base_scale - last_scale_base_input_) < kScaleEpsilon &&
         std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon &&
-        std::fabs(camera_scale - last_scale_camera_input_) < kScaleEpsilon &&
-        std::fabs(quality_cap - last_scale_quality_cap_input_) < kScaleEpsilon) {
+        std::fabs(camera_scale - last_scale_camera_input_) < kScaleEpsilon) {
         return;
     }
 
-    current_scale = prospective_scale;
+    current_scale = resolved_scale;
     last_scale_base_input_ = base_scale;
     last_scale_perspective_input_ = perspective_scale;
     last_scale_camera_input_ = camera_scale;
-    last_scale_quality_cap_input_ = quality_cap;
+    last_scale_quality_cap_input_ = 1.0f;
 
-    // Select variants against the actual render scale so we prefer downscaling
-    // a larger source texture, and only upscale when no larger variant exists.
-    float desired_variant_scale = current_scale;
-    if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
-        desired_variant_scale = 1.0f;
-    }
-
-    auto scale_profile = render_pipeline::ScalingLogic::ProfileForAsset(info ? info->name : std::string{});
-    std::vector<float> steps = scale_profile.steps;
-    render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
-    float profile_max_scale = scale_profile.max_scale;
-    if (!std::isfinite(profile_max_scale) || profile_max_scale <= 0.0f) {
-        profile_max_scale = 1.0f;
-    }
-    float desired_texture_scale = desired_variant_scale / profile_max_scale;
-    if (!std::isfinite(desired_texture_scale) || desired_texture_scale <= 0.0f) {
-        desired_texture_scale = desired_variant_scale;
-    }
-
-    render_pipeline::ScalingLogic::HysteresisState hysteresis_state{};
-    hysteresis_state.last_index = scale_variant_state_.last_variant_index;
-    hysteresis_state.min_scale = scale_variant_state_.hysteresis_min;
-    hysteresis_state.max_scale = scale_variant_state_.hysteresis_max;
-
-    const int previous_variant_index = current_variant_index;
-    auto selection = render_pipeline::ScalingLogic::Choose(
-        desired_texture_scale,
-        steps,
-        hysteresis_state,
-        desired_texture_scale,
-        render_pipeline::ScalingLogic::HysteresisOptions{});
-
-    current_nearest_variant_scale = profile_max_scale * selection.stored_scale;
-    current_variant_index = selection.index;
-    if (current_variant_index != previous_variant_index) {
-        refresh_cached_dimensions();
-    }
-
-    scale_variant_state_.last_variant_index = selection.index;
-    scale_variant_state_.hysteresis_min = selection.hysteresis_min;
-    scale_variant_state_.hysteresis_max = selection.hysteresis_max;
-
-    if (current_nearest_variant_scale > 0.0f) {
-        current_remaining_scale_adjustment = current_scale / current_nearest_variant_scale;
-    } else {
-        current_remaining_scale_adjustment = 1.0f;
-    }
+    // ScalingLogic is gone. Runtime uses the base frame texture only.
+    // The renderer applies the full scale at draw time.
+    current_variant_index = 0;
+    current_nearest_variant_scale = 1.0f;
+    current_remaining_scale_adjustment = current_scale;
 
     last_scale_usage_.requested_scale = current_scale;
-    last_scale_usage_.texture_scale = current_nearest_variant_scale;
-    last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
-    last_scale_usage_.variant_index = current_variant_index;
+    last_scale_usage_.texture_scale = 1.0f;
+    last_scale_usage_.remainder_scale = current_scale;
+    last_scale_usage_.variant_index = 0;
 
-    // Variant/remainder changes alter package dimensions and source texture selection.
+    refresh_cached_dimensions();
     mark_composite_dirty();
     mark_anchors_dirty();
     mark_mesh_dirty();

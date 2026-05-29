@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "77b1caca9c786cd2",
+          "height": 155,
+          "order": 0,
+          "width": 191
+        }
+      ]
+    }
+  ],
+  "asset_name": "bone",
+  "authored_scale_percentage": 25.0,
+  "crop_canvas": {
+    "shared_height": 155,
+    "shared_width": 191
+  },
+  "digest": "538b23237367dcc5",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "5f3f719a7e36c641",
+          "height": 1080,
+          "order": 0,
+          "width": 1920
+        }
+      ]
+    }
+  ],
+  "asset_name": "tree_darker",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 1062,
+    "shared_width": 443
+  },
+  "digest": "7a438877f9653a24",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

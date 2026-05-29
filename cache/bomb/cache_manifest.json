@@ -1,0 +1,191 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "441ada0df02bc4cc",
+          "height": 455,
+          "order": 0,
+          "width": 466
+        },
+        {
+          "filename": "1.png",
+          "hash": "5e3d9f0e6bc31530",
+          "height": 455,
+          "order": 1,
+          "width": 466
+        },
+        {
+          "filename": "2.png",
+          "hash": "f1e79a57c5842a8b",
+          "height": 455,
+          "order": 2,
+          "width": 466
+        },
+        {
+          "filename": "3.png",
+          "hash": "2a14abe842e3de21",
+          "height": 455,
+          "order": 3,
+          "width": 466
+        },
+        {
+          "filename": "4.png",
+          "hash": "90b8d47d7abe09f3",
+          "height": 455,
+          "order": 4,
+          "width": 466
+        },
+        {
+          "filename": "5.png",
+          "hash": "93b3fc8085eb45d3",
+          "height": 455,
+          "order": 5,
+          "width": 466
+        },
+        {
+          "filename": "6.png",
+          "hash": "69b2cc2d0fd4e999",
+          "height": 455,
+          "order": 6,
+          "width": 466
+        },
+        {
+          "filename": "7.png",
+          "hash": "0a136c4061e08271",
+          "height": 455,
+          "order": 7,
+          "width": 466
+        },
+        {
+          "filename": "8.png",
+          "hash": "69b2cc2d0fd4e999",
+          "height": 455,
+          "order": 8,
+          "width": 466
+        },
+        {
+          "filename": "9.png",
+          "hash": "93b3fc8085eb45d3",
+          "height": 455,
+          "order": 9,
+          "width": 466
+        },
+        {
+          "filename": "10.png",
+          "hash": "90b8d47d7abe09f3",
+          "height": 455,
+          "order": 10,
+          "width": 466
+        },
+        {
+          "filename": "11.png",
+          "hash": "2a14abe842e3de21",
+          "height": 455,
+          "order": 11,
+          "width": 466
+        },
+        {
+          "filename": "12.png",
+          "hash": "f1e79a57c5842a8b",
+          "height": 455,
+          "order": 12,
+          "width": 466
+        },
+        {
+          "filename": "13.png",
+          "hash": "5e3d9f0e6bc31530",
+          "height": 455,
+          "order": 13,
+          "width": 466
+        },
+        {
+          "filename": "14.png",
+          "hash": "441ada0df02bc4cc",
+          "height": 455,
+          "order": 14,
+          "width": 466
+        },
+        {
+          "filename": "15.png",
+          "hash": "961f746979d040f2",
+          "height": 455,
+          "order": 15,
+          "width": 466
+        }
+      ]
+    },
+    {
+      "name": "die",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "ad4a23846b0ebedd",
+          "height": 455,
+          "order": 0,
+          "width": 466
+        },
+        {
+          "filename": "1.png",
+          "hash": "f11660660a37a04e",
+          "height": 455,
+          "order": 1,
+          "width": 466
+        },
+        {
+          "filename": "2.png",
+          "hash": "ff1b4e0006bff75d",
+          "height": 455,
+          "order": 2,
+          "width": 466
+        },
+        {
+          "filename": "3.png",
+          "hash": "f43c7e45ef34c0f3",
+          "height": 455,
+          "order": 3,
+          "width": 466
+        },
+        {
+          "filename": "4.png",
+          "hash": "4b0145660b278625",
+          "height": 455,
+          "order": 4,
+          "width": 466
+        },
+        {
+          "filename": "5.png",
+          "hash": "51fe862834b94da9",
+          "height": 455,
+          "order": 5,
+          "width": 466
+        },
+        {
+          "filename": "6.png",
+          "hash": "cf0a09bcf9db6bdc",
+          "height": 455,
+          "order": 6,
+          "width": 466
+        },
+        {
+          "filename": "7.png",
+          "hash": "4f72bca434a32cf7",
+          "height": 455,
+          "order": 7,
+          "width": 466
+        }
+      ]
+    }
+  ],
+  "asset_name": "bomb",
+  "authored_scale_percentage": 22.0,
+  "crop_canvas": {
+    "shared_height": 455,
+    "shared_width": 466
+  },
+  "digest": "e9cc85fa9f8610b3",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

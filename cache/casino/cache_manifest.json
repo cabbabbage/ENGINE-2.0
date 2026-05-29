@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "a5ba41e1e84b326c",
+          "height": 751,
+          "order": 0,
+          "width": 958
+        }
+      ]
+    }
+  ],
+  "asset_name": "casino",
+  "authored_scale_percentage": 138.0,
+  "crop_canvas": {
+    "shared_height": 751,
+    "shared_width": 958
+  },
+  "digest": "2f0c23c1b631e41b",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

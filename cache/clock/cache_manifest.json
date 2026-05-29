@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "d484f9b64580fe62",
+          "height": 771,
+          "order": 0,
+          "width": 754
+        }
+      ]
+    }
+  ],
+  "asset_name": "clock",
+  "authored_scale_percentage": 35.0,
+  "crop_canvas": {
+    "shared_height": 771,
+    "shared_width": 754
+  },
+  "digest": "4006384832706084",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

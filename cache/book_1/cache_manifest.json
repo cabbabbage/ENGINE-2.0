@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "e77585bc01a37b72",
+          "height": 169,
+          "order": 0,
+          "width": 340
+        }
+      ]
+    }
+  ],
+  "asset_name": "book_1",
+  "authored_scale_percentage": 12.0,
+  "crop_canvas": {
+    "shared_height": 169,
+    "shared_width": 340
+  },
+  "digest": "09e1c27593f80eee",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

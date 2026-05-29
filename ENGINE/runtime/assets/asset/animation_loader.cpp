@@ -5,7 +5,7 @@
 #include "asset_info.hpp"
 #include "asset_types.hpp"
 #include "animation/controllers/shared/attack_payload.hpp"
-#include "rendering/render/scaling_logic.hpp"
+
 #include "json_coercion.hpp"
 #include "surface_utils.hpp"
 #include "utils/cache_manager.hpp"

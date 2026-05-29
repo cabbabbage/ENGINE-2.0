@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "b166523636f1847f",
+          "height": 161,
+          "order": 0,
+          "width": 164
+        }
+      ]
+    }
+  ],
+  "asset_name": "skull",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 161,
+    "shared_width": 164
+  },
+  "digest": "56f11f5cf7b5ccff",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

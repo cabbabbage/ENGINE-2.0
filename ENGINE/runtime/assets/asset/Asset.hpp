@@ -24,7 +24,6 @@
 
 #include "asset_controller.hpp"
 #include "animation/attack.hpp"
-#include "rendering/render/scaling_logic.hpp"
 
 class WarpedScreenGrid;
 class Assets;

@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "3666e0e1c37de6a5",
+          "height": 16,
+          "order": 0,
+          "width": 16
+        }
+      ]
+    }
+  ],
+  "asset_name": "vibble_mouth",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 16,
+    "shared_width": 16
+  },
+  "digest": "30d37051365dfc76",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

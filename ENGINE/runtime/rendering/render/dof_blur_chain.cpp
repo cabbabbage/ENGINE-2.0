@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -11,8 +12,18 @@
 namespace {
 
 constexpr float kEffectEpsilon = 1.0e-4f;
-constexpr int kLensGridCols = 14;
-constexpr int kLensGridRows = 10;
+
+// Fog is intentionally tiny. 0.05f = 5% alpha, not 50%.
+constexpr bool kLayerFogEnabled = true;
+constexpr float kLayerFogMaxOpacity = 0.050f;
+constexpr float kLayerFogFocusOpacity = 0.006f;
+constexpr float kLayerFogMinDepthOpacity = 0.010f;
+constexpr float kLayerFogTopAboveHorizonRatio = 0.035f;
+constexpr float kLayerFogHorizonRatio = 0.385f;
+constexpr float kLayerFogBottomRatio = 0.965f;
+constexpr float kLayerFogBackgroundBaseRatio = 0.790f;
+constexpr float kLayerFogGrey = 0.66f;
+constexpr int kLayerFogColumns = 12;
 
 struct TextureStateSnapshot {
     SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
@@ -33,6 +44,10 @@ float safe_unit(float value) {
     return std::clamp(value, 0.0f, 1.0f);
 }
 
+float lerp_float(float a, float b, float t) {
+    return a + (b - a) * safe_unit(t);
+}
+
 float smoothstep01(float value) {
     const float t = safe_unit(value);
     return t * t * (3.0f - 2.0f * t);
@@ -43,6 +58,7 @@ float absolute_depth_effect_t(int layer_distance) {
         return 0.0f;
     }
 
+    // Adjacent layers should barely change. Deeper layers ramp smoothly.
     const float t = std::clamp((static_cast<float>(layer_distance) - 0.35f) / 4.75f, 0.0f, 1.0f);
     const float s = smoothstep01(t);
     return std::pow(s, 2.10f);
@@ -62,7 +78,19 @@ float lens_realism_depth_t(int layer_distance, float normalized_distance) {
 float dof_realism_depth_t(int layer_distance, float normalized_distance) {
     const float a = absolute_depth_effect_t(layer_distance);
     const float n = normalized_depth_effect_t(normalized_distance);
+
+    // Softer than the old curve so layer-to-layer movement feels smooth.
     return std::clamp(a * 0.86f + n * 0.14f, 0.0f, 1.0f);
+}
+
+float fog_depth_t(int layer_distance, float normalized_distance) {
+    if (layer_distance <= 0) {
+        return 0.0f;
+    }
+
+    const float a = absolute_depth_effect_t(layer_distance);
+    const float n = normalized_depth_effect_t(normalized_distance);
+    return std::clamp(a * 0.72f + n * 0.28f, 0.0f, 1.0f);
 }
 
 SDL_FPoint render_target_center(int width, int height) {
@@ -217,6 +245,226 @@ void draw_weighted_scaled_sample(SDL_Renderer* renderer,
     draw_scaled_sample(renderer, texture, draw_w, draw_h, center, scale, static_cast<Uint8>(alpha));
 }
 
+std::uint32_t hash_layer_column(int layer_id, int column, int salt) {
+    std::uint32_t h = 2166136261u;
+    auto mix = [&h](std::uint32_t v) {
+        h ^= v;
+        h *= 16777619u;
+    };
+    mix(static_cast<std::uint32_t>(layer_id * 73856093));
+    mix(static_cast<std::uint32_t>(column * 19349663));
+    mix(static_cast<std::uint32_t>(salt * 83492791));
+    h ^= h >> 13;
+    h *= 1274126177u;
+    h ^= h >> 16;
+    return h;
+}
+
+float jitter_unit(int layer_id, int column, int salt) {
+    const std::uint32_t h = hash_layer_column(layer_id, column, salt);
+    const float unit = static_cast<float>(h & 0xFFFFu) / 65535.0f;
+    return unit * 2.0f - 1.0f;
+}
+
+void emit_fog_quad(std::vector<SDL_Vertex>& vertices,
+                   std::vector<int>& indices,
+                   float x0,
+                   float x1,
+                   float y0,
+                   float y1,
+                   float alpha0,
+                   float alpha1) {
+    if (x1 <= x0 || y1 <= y0 || alpha0 <= 0.0f && alpha1 <= 0.0f) {
+        return;
+    }
+
+    const int base = static_cast<int>(vertices.size());
+
+    const SDL_FColor top_color{
+        kLayerFogGrey,
+        kLayerFogGrey,
+        kLayerFogGrey,
+        std::clamp(alpha0, 0.0f, 1.0f)
+    };
+
+    const SDL_FColor bottom_color{
+        kLayerFogGrey,
+        kLayerFogGrey,
+        kLayerFogGrey,
+        std::clamp(alpha1, 0.0f, 1.0f)
+    };
+
+    SDL_Vertex tl{};
+    tl.position = SDL_FPoint{x0, y0};
+    tl.color = top_color;
+
+    SDL_Vertex tr{};
+    tr.position = SDL_FPoint{x1, y0};
+    tr.color = top_color;
+
+    SDL_Vertex br{};
+    br.position = SDL_FPoint{x1, y1};
+    br.color = bottom_color;
+
+    SDL_Vertex bl{};
+    bl.position = SDL_FPoint{x0, y1};
+    bl.color = bottom_color;
+
+    vertices.push_back(tl);
+    vertices.push_back(tr);
+    vertices.push_back(br);
+    vertices.push_back(bl);
+
+    indices.push_back(base + 0);
+    indices.push_back(base + 1);
+    indices.push_back(base + 2);
+    indices.push_back(base + 0);
+    indices.push_back(base + 2);
+    indices.push_back(base + 3);
+}
+
+bool add_layer_depth_fog(SDL_Renderer* renderer,
+                         SDL_Texture* src,
+                         SDL_Texture* dst,
+                         int width,
+                         int height,
+                         int depth_layer,
+                         int focus_depth_layer,
+                         int max_layer_distance) {
+    if (!renderer || !src || !dst || width <= 0 || height <= 0 || src == dst) {
+        return false;
+    }
+
+    if (!copy_texture_region(renderer, src, dst, nullptr, nullptr)) {
+        return false;
+    }
+
+    if (!kLayerFogEnabled) {
+        return true;
+    }
+
+    const int layer_distance = std::abs(depth_layer - focus_depth_layer);
+    const bool foreground_layer = depth_layer < focus_depth_layer;
+    const bool background_layer = depth_layer > focus_depth_layer;
+    const float inv_max_distance =
+        max_layer_distance > 0 ? 1.0f / static_cast<float>(max_layer_distance) : 0.0f;
+    const float normalized_distance =
+        std::clamp(static_cast<float>(layer_distance) * inv_max_distance, 0.0f, 1.0f);
+
+    const float depth_t = fog_depth_t(layer_distance, normalized_distance);
+
+    float peak_alpha = kLayerFogFocusOpacity;
+    if (layer_distance > 0) {
+        peak_alpha = kLayerFogMinDepthOpacity +
+            (kLayerFogMaxOpacity - kLayerFogMinDepthOpacity) * depth_t;
+    }
+    peak_alpha = std::clamp(peak_alpha, 0.0f, kLayerFogMaxOpacity);
+
+    if (peak_alpha <= 1.0f / 255.0f) {
+        return true;
+    }
+
+    const float h = static_cast<float>(height);
+    const float w = static_cast<float>(width);
+
+    const float horizon_y = h * kLayerFogHorizonRatio;
+    const float top_y_base = std::max(0.0f, horizon_y - h * kLayerFogTopAboveHorizonRatio);
+
+    float depth_line_y = h * 0.64f;
+    float bottom_y_base = h * kLayerFogBottomRatio;
+
+    if (background_layer) {
+        // Farther background layers sit closer to the horizon.
+        depth_line_y = lerp_float(h * 0.61f, horizon_y + h * 0.055f, depth_t);
+        bottom_y_base = lerp_float(h * kLayerFogBackgroundBaseRatio, h * 0.60f, depth_t);
+    } else if (foreground_layer) {
+        // Near foreground fog reaches lower on screen.
+        depth_line_y = lerp_float(h * 0.66f, h * 0.84f, depth_t);
+        bottom_y_base = h * kLayerFogBottomRatio;
+    } else {
+        // Focus layer gets only a very faint lens haze around its depth band.
+        depth_line_y = h * 0.64f;
+        bottom_y_base = h * 0.83f;
+    }
+
+    depth_line_y = std::clamp(depth_line_y, top_y_base + 2.0f, h - 2.0f);
+    bottom_y_base = std::clamp(bottom_y_base, depth_line_y + 2.0f, h + 64.0f);
+
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
+    vertices.reserve(static_cast<std::size_t>(kLayerFogColumns * 8));
+    indices.reserve(static_cast<std::size_t>(kLayerFogColumns * 12));
+
+    const float column_w = w / static_cast<float>(kLayerFogColumns);
+    const float edge_jitter_px = std::clamp(h * 0.010f, 2.0f, 14.0f);
+    const float depth_jitter_px = std::clamp(h * 0.0075f, 1.5f, 9.0f);
+
+    for (int column = 0; column < kLayerFogColumns; ++column) {
+        const float x0 = static_cast<float>(column) * column_w - 1.0f;
+        const float x1 = (column == kLayerFogColumns - 1)
+            ? w + 1.0f
+            : static_cast<float>(column + 1) * column_w + 1.0f;
+
+        const float top_y =
+            std::clamp(top_y_base + jitter_unit(depth_layer, column, 1) * edge_jitter_px,
+                       0.0f,
+                       depth_line_y - 2.0f);
+
+        const float local_depth_y =
+            std::clamp(depth_line_y + jitter_unit(depth_layer, column, 2) * depth_jitter_px,
+                       top_y + 2.0f,
+                       bottom_y_base - 2.0f);
+
+        const float bottom_y =
+            std::clamp(bottom_y_base + jitter_unit(depth_layer, column, 3) * edge_jitter_px,
+                       local_depth_y + 2.0f,
+                       h + 72.0f);
+
+        const float column_alpha_scale =
+            std::clamp(0.86f + jitter_unit(depth_layer, column, 4) * 0.14f, 0.72f, 1.0f);
+
+        const float local_peak_alpha = peak_alpha * column_alpha_scale;
+
+        // Fade upward from the depth line toward just above the horizon.
+        emit_fog_quad(vertices,
+                      indices,
+                      x0,
+                      x1,
+                      top_y,
+                      local_depth_y,
+                      0.0f,
+                      local_peak_alpha);
+
+        // Fade downward from the depth line toward the layer base.
+        emit_fog_quad(vertices,
+                      indices,
+                      x0,
+                      x1,
+                      local_depth_y,
+                      bottom_y,
+                      local_peak_alpha,
+                      local_peak_alpha * 0.10f);
+    }
+
+    if (vertices.empty() || indices.empty()) {
+        return true;
+    }
+
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    render_diagnostics::set_render_target(renderer, dst);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    const bool ok = SDL_RenderGeometry(renderer,
+                                       nullptr,
+                                       vertices.data(),
+                                       static_cast<int>(vertices.size()),
+                                       indices.data(),
+                                       static_cast<int>(indices.size()));
+
+    render_diagnostics::set_render_target(renderer, previous_target);
+    return ok;
+}
+
 bool prepare_damage_pulse_texture(SDL_Renderer* renderer,
                                   SDL_Texture* src,
                                   SDL_Texture* dst,
@@ -323,53 +571,6 @@ float compute_background_quality_scale(int width,
     return std::clamp(quality, dof_blur_chain::layer_effect_tuning::kMinProcessQualityScale, 1.0f);
 }
 
-float camera_zoom_percent_from_input(float camera_zoom_percent) {
-    if (!std::isfinite(camera_zoom_percent)) {
-        return 0.0f;
-    }
-
-    if (camera_zoom_percent > 1.01f) {
-        return std::clamp(camera_zoom_percent, 0.0f, 100.0f);
-    }
-
-    return std::clamp(camera_zoom_percent * 100.0f, 0.0f, 100.0f);
-}
-
-float compute_lens_barrel_strength(float camera_zoom_percent,
-                                   int layer_distance,
-                                   float normalized_distance,
-                                   bool foreground_layer,
-                                   bool background_seed) {
-    if (!dof_blur_chain::layer_effect_tuning::kLensWarpEnabled) {
-        return 0.0f;
-    }
-
-    const float zoom_percent = camera_zoom_percent_from_input(camera_zoom_percent);
-    const float zoom01 = safe_unit(zoom_percent / 100.0f);
-    const float wide_lens_amount =
-        std::pow(1.0f - zoom01, dof_blur_chain::layer_effect_tuning::kLensWarpWideZoomPower);
-
-    const float depth_amount = lens_realism_depth_t(layer_distance, normalized_distance);
-
-    float multiplier = foreground_layer
-        ? dof_blur_chain::layer_effect_tuning::kLensWarpForegroundMultiplier
-        : dof_blur_chain::layer_effect_tuning::kLensWarpBackgroundMultiplier;
-
-    if (background_seed) {
-        multiplier *= dof_blur_chain::layer_effect_tuning::kLensWarpBackgroundSeedMultiplier;
-    }
-
-    const float strength =
-        dof_blur_chain::layer_effect_tuning::kLensWarpMaxScaleDelta *
-        1.45f *
-        wide_lens_amount *
-        depth_amount *
-        multiplier;
-
-    const float max_strength = std::max(0.0f, dof_blur_chain::layer_effect_tuning::kLensWarpMaxSafeScale - 1.0f);
-    return std::clamp(strength, 0.0f, max_strength);
-}
-
 float compute_chromatic_px(int layer_distance,
                            float normalized_distance,
                            bool foreground_layer,
@@ -388,113 +589,13 @@ float compute_chromatic_px(int layer_distance,
         multiplier *= dof_blur_chain::layer_effect_tuning::kChromaticBackgroundSeedMultiplier;
     }
 
+    // Kept restrained so it does not wash the whole image purple.
     const float px =
         (0.25f + dof_blur_chain::layer_effect_tuning::kChromaticBasePx * 0.42f +
          dof_blur_chain::layer_effect_tuning::kChromaticMaxPx * 0.44f * depth_amount) *
         multiplier;
 
     return std::clamp(px, 0.0f, 5.25f);
-}
-
-bool apply_barrel_lens_warp(SDL_Renderer* renderer,
-                            SDL_Texture* src,
-                            SDL_Texture* dst,
-                            int draw_w,
-                            int draw_h,
-                            int source_texture_w,
-                            int source_texture_h,
-                            float barrel_strength) {
-    if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
-        return false;
-    }
-
-    if (barrel_strength <= kEffectEpsilon) {
-        const SDL_FRect src_rect{0.0f, 0.0f, static_cast<float>(draw_w), static_cast<float>(draw_h)};
-        return copy_texture_region(renderer, src, dst, &src_rect, nullptr);
-    }
-
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
-    const TextureStateSnapshot src_state = capture_texture_state(src);
-
-    clear_texture_target(renderer, dst);
-    render_diagnostics::set_render_target(renderer, dst);
-
-    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureAlphaMod(src, 255);
-    SDL_SetTextureColorMod(src, 255, 255, 255);
-
-    constexpr int vertex_count = (kLensGridCols + 1) * (kLensGridRows + 1);
-    constexpr int index_count = kLensGridCols * kLensGridRows * 6;
-
-    std::array<SDL_Vertex, vertex_count> vertices{};
-    std::array<int, index_count> indices{};
-
-    const float w = static_cast<float>(draw_w);
-    const float h = static_cast<float>(draw_h);
-    const float cx = w * 0.5f;
-    const float cy = h * 0.5f;
-    const float inv_rx = 1.0f / std::max(1.0f, cx);
-    const float inv_ry = 1.0f / std::max(1.0f, cy);
-
-    const float uv_max_x = static_cast<float>(draw_w) / static_cast<float>(std::max(1, source_texture_w));
-    const float uv_max_y = static_cast<float>(draw_h) / static_cast<float>(std::max(1, source_texture_h));
-
-    int vertex_cursor = 0;
-    for (int y = 0; y <= kLensGridRows; ++y) {
-        const float v = static_cast<float>(y) / static_cast<float>(kLensGridRows);
-        const float py = v * h;
-        const float ny = (py - cy) * inv_ry;
-
-        for (int x = 0; x <= kLensGridCols; ++x) {
-            const float u = static_cast<float>(x) / static_cast<float>(kLensGridCols);
-            const float px = u * w;
-            const float nx = (px - cx) * inv_rx;
-
-            const float r2 = std::clamp(nx * nx + ny * ny, 0.0f, 2.0f);
-            const float r4 = r2 * r2;
-            const float scale = 1.0f + barrel_strength * (0.78f * r2 + 0.22f * r4);
-
-            SDL_Vertex vertex{};
-            vertex.position.x = cx + (px - cx) * scale;
-            vertex.position.y = cy + (py - cy) * scale;
-            vertex.tex_coord.x = u * uv_max_x;
-            vertex.tex_coord.y = v * uv_max_y;
-            vertex.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
-
-            vertices[static_cast<std::size_t>(vertex_cursor++)] = vertex;
-        }
-    }
-
-    int index_cursor = 0;
-    for (int y = 0; y < kLensGridRows; ++y) {
-        for (int x = 0; x < kLensGridCols; ++x) {
-            const int row0 = y * (kLensGridCols + 1);
-            const int row1 = (y + 1) * (kLensGridCols + 1);
-            const int a = row0 + x;
-            const int b = row0 + x + 1;
-            const int c = row1 + x + 1;
-            const int d = row1 + x;
-
-            indices[static_cast<std::size_t>(index_cursor++)] = a;
-            indices[static_cast<std::size_t>(index_cursor++)] = b;
-            indices[static_cast<std::size_t>(index_cursor++)] = c;
-            indices[static_cast<std::size_t>(index_cursor++)] = a;
-            indices[static_cast<std::size_t>(index_cursor++)] = c;
-            indices[static_cast<std::size_t>(index_cursor++)] = d;
-        }
-    }
-
-    const bool ok = render_diagnostics::render_geometry(
-        renderer,
-        src,
-        vertices.data(),
-        static_cast<int>(vertices.size()),
-        indices.data(),
-        static_cast<int>(indices.size()));
-
-    restore_texture_state(src, src_state);
-    render_diagnostics::set_render_target(renderer, previous_target);
-    return ok;
 }
 
 bool apply_radial_zoom_blur(SDL_Renderer* renderer,
@@ -547,6 +648,7 @@ bool apply_radial_zoom_blur(SDL_Renderer* renderer,
         return false;
     }
 
+    // Full coverage base sample. Only outward samples, so no black corner creep.
     draw_weighted_scaled_sample(renderer,
                                 src,
                                 draw_w,
@@ -607,6 +709,7 @@ bool apply_chromatic_aberration(SDL_Renderer* renderer,
 
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
 
+    // Real image first. Aberration is only a fringe, never the main color.
     SDL_SetTextureColorMod(src, 255, 255, 255);
     draw_scaled_sample(renderer, src, width, height, center, 1.0f, 255);
 
@@ -630,7 +733,6 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
                              int height,
                              float radial_blur_px,
                              float quality_scale,
-                             float lens_barrel_strength,
                              float chromatic_px) {
     if (!renderer || !src || !dst || !work || !chromatic_work || width <= 0 || height <= 0) {
         return false;
@@ -654,8 +756,6 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
     const float process_chromatic = sanitized_non_negative(chromatic_px) * safe_quality;
 
     SDL_Texture* current = src;
-    int current_backing_w = width;
-    int current_backing_h = height;
 
     if (reduced_resolution) {
         const SDL_FRect low_rect{
@@ -670,27 +770,6 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
         }
 
         current = work;
-        current_backing_w = width;
-        current_backing_h = height;
-    }
-
-    if (lens_barrel_strength > kEffectEpsilon) {
-        SDL_Texture* lens_dst = reduced_resolution ? chromatic_work : work;
-
-        if (!apply_barrel_lens_warp(renderer,
-                                    current,
-                                    lens_dst,
-                                    process_w,
-                                    process_h,
-                                    current_backing_w,
-                                    current_backing_h,
-                                    lens_barrel_strength)) {
-            return false;
-        }
-
-        current = lens_dst;
-        current_backing_w = width;
-        current_backing_h = height;
     }
 
     if (process_radial > kEffectEpsilon) {
@@ -707,8 +786,6 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
         }
 
         current = radial_dst;
-        current_backing_w = width;
-        current_backing_h = height;
     }
 
     if (process_chromatic > kEffectEpsilon) {
@@ -724,8 +801,6 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
         }
 
         current = chroma_dst;
-        current_backing_w = width;
-        current_backing_h = height;
     }
 
     if (reduced_resolution) {
@@ -750,14 +825,9 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
 
 namespace dof_blur_chain {
 
-bool enabled(bool depth_of_field_enabled, float /*blur_px*/, float radial_blur_px) {
-    if (!depth_of_field_enabled) {
-        return false;
-    }
-
-    return sanitized_non_negative(radial_blur_px) > kEffectEpsilon ||
-           layer_effect_tuning::kLensWarpEnabled ||
-           layer_effect_tuning::kChromaticAberrationEnabled;
+bool enabled(bool depth_of_field_enabled, float /*blur_px*/, float /*radial_blur_px*/) {
+    // If depth-of-field mode is active, this compositor now also owns layer fog.
+    return depth_of_field_enabled;
 }
 
 Renderer::Renderer(SDL_Renderer* renderer)
@@ -879,7 +949,7 @@ bool Renderer::process_layer_effects(SDL_Texture* src,
                                      SDL_Texture* chromatic_work,
                                      float radial_blur_px,
                                      float quality_scale,
-                                     float lens_scale_delta,
+                                     float /*lens_scale_delta*/,
                                      float chromatic_px,
                                      bool /*foreground_layer*/) const {
     if (!src || !dst || !work || !chromatic_work) {
@@ -887,7 +957,6 @@ bool Renderer::process_layer_effects(SDL_Texture* src,
     }
 
     if (radial_blur_px <= kEffectEpsilon &&
-        lens_scale_delta <= kEffectEpsilon &&
         chromatic_px <= kEffectEpsilon) {
         return copy_texture(src, dst);
     }
@@ -901,7 +970,6 @@ bool Renderer::process_layer_effects(SDL_Texture* src,
                                    height_,
                                    radial_blur_px,
                                    quality_scale,
-                                   lens_scale_delta,
                                    chromatic_px);
 }
 
@@ -914,6 +982,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                   int focus_depth_layer,
                                   float camera_zoom_percent) {
     (void)optical_center;
+    (void)camera_zoom_percent;
 
     CompositeResult result{};
 
@@ -938,7 +1007,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
     };
 
     const float base_radial_px = sanitized_non_negative(radial_blur_px);
-    const bool dof_active = enabled(depth_of_field_enabled, 0.0f, base_radial_px);
+    const bool dof_active = depth_of_field_enabled;
 
     scratch_background_layers_.clear();
     scratch_foreground_layers_.clear();
@@ -1021,6 +1090,18 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
             const float normalized_distance =
                 std::clamp(static_cast<float>(layer_distance) * inv_max_distance, 0.0f, 1.0f);
 
+            SDL_Texture* fogged_source = chromatic_work_;
+            if (!add_layer_depth_fog(renderer_,
+                                     source,
+                                     fogged_source,
+                                     width_,
+                                     height_,
+                                     layer.depth_layer,
+                                     focus_depth_layer,
+                                     max_layer_distance)) {
+                return false;
+            }
+
             const float dof_depth_t = dof_realism_depth_t(layer_distance, normalized_distance);
             const float lens_depth_t = lens_realism_depth_t(layer_distance, normalized_distance);
 
@@ -1031,13 +1112,6 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                           dof_depth_t
                     : 0.0f;
 
-            const float lens_barrel =
-                compute_lens_barrel_strength(camera_zoom_percent,
-                                             layer_distance,
-                                             normalized_distance,
-                                             foreground_layer,
-                                             false);
-
             const float chromatic_px =
                 compute_chromatic_px(layer_distance,
                                      normalized_distance,
@@ -1046,10 +1120,9 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
 
             const bool needs_effect =
                 radial_px > kEffectEpsilon ||
-                lens_barrel > kEffectEpsilon ||
                 chromatic_px > kEffectEpsilon;
 
-            SDL_Texture* output = source;
+            SDL_Texture* output = fogged_source;
 
             if (needs_effect) {
                 const float quality =
@@ -1060,13 +1133,13 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                                            std::max(radial_px, base_radial_px * 0.20f),
                                                            lens_depth_t);
 
-                if (!process_layer_effects(source,
+                if (!process_layer_effects(fogged_source,
                                            layer_effect_target_,
                                            blur_work_,
-                                           chromatic_work_,
+                                           chain_temp_,
                                            radial_px,
                                            quality,
-                                           lens_barrel,
+                                           0.0f,
                                            chromatic_px,
                                            foreground_layer)) {
                     return false;
@@ -1086,11 +1159,20 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         const int seed_distance = std::max(4, max_layer_distance);
         const float seed_norm = 1.0f;
 
+        SDL_Texture* seed_with_fog = chromatic_work_;
+        if (!add_layer_depth_fog(renderer_,
+                                 background_seed,
+                                 seed_with_fog,
+                                 width_,
+                                 height_,
+                                 focus_depth_layer + seed_distance,
+                                 focus_depth_layer,
+                                 seed_distance)) {
+            return fail();
+        }
+
         const float seed_radial =
             dof_active ? base_radial_px * 0.70f * dof_realism_depth_t(seed_distance, seed_norm) : 0.0f;
-
-        const float seed_lens =
-            compute_lens_barrel_strength(camera_zoom_percent, seed_distance, seed_norm, false, true);
 
         const float seed_chromatic =
             compute_chromatic_px(seed_distance, seed_norm, false, true);
@@ -1101,14 +1183,14 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
             layer_effect_tuning::kMinProcessQualityScale,
             1.0f);
 
-        if (seed_radial > kEffectEpsilon || seed_lens > kEffectEpsilon || seed_chromatic > kEffectEpsilon) {
-            if (!process_layer_effects(background_seed,
+        if (seed_radial > kEffectEpsilon || seed_chromatic > kEffectEpsilon) {
+            if (!process_layer_effects(seed_with_fog,
                                        background_mid_,
                                        blur_work_,
-                                       chromatic_work_,
+                                       chain_temp_,
                                        seed_radial,
                                        seed_quality,
-                                       seed_lens,
+                                       0.0f,
                                        seed_chromatic,
                                        false)) {
                 return fail();
@@ -1117,7 +1199,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
             if (seed_radial > kEffectEpsilon) {
                 ++result.blur_pass_count;
             }
-        } else if (!copy_texture(background_seed, background_mid_)) {
+        } else if (!copy_texture(seed_with_fog, background_mid_)) {
             return fail();
         }
 
@@ -1143,8 +1225,19 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
             return fail();
         }
 
+        SDL_Texture* fogged_source = chromatic_work_;
+        if (!add_layer_depth_fog(renderer_,
+                                 source,
+                                 fogged_source,
+                                 width_,
+                                 height_,
+                                 layer.depth_layer,
+                                 focus_depth_layer,
+                                 max_layer_distance)) {
+            return fail();
+        }
+
         constexpr float kFocusLayerRadialMultiplier = 0.025f;
-        constexpr float kFocusLayerLensMultiplier = 0.035f;
         constexpr float kFocusLayerChromaticMultiplier = 0.020f;
 
         const float focus_radial_px =
@@ -1157,14 +1250,6 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         const int focus_fake_distance = 1;
         const float focus_fake_normalized_distance = 0.08f;
 
-        const float focus_lens_barrel =
-            compute_lens_barrel_strength(camera_zoom_percent,
-                                         focus_fake_distance,
-                                         focus_fake_normalized_distance,
-                                         false,
-                                         false) *
-            kFocusLayerLensMultiplier;
-
         const float focus_chromatic_px =
             compute_chromatic_px(focus_fake_distance,
                                  focus_fake_normalized_distance,
@@ -1172,18 +1257,17 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                  false) *
             kFocusLayerChromaticMultiplier;
 
-        SDL_Texture* output = source;
+        SDL_Texture* output = fogged_source;
 
         if (focus_radial_px > kEffectEpsilon ||
-            focus_lens_barrel > kEffectEpsilon ||
             focus_chromatic_px > kEffectEpsilon) {
-            if (!process_layer_effects(source,
+            if (!process_layer_effects(fogged_source,
                                        layer_effect_target_,
                                        blur_work_,
-                                       chromatic_work_,
+                                       chain_temp_,
                                        focus_radial_px,
                                        1.0f,
-                                       focus_lens_barrel,
+                                       0.0f,
                                        focus_chromatic_px,
                                        false)) {
                 return fail();

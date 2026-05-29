@@ -3,7 +3,7 @@
 #include "asset_info.hpp"
 #include "asset_types.hpp"
 #include "surface_utils.hpp"
-#include "rendering/render/scaling_logic.hpp"
+
 #include "utils/cache_manager.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"

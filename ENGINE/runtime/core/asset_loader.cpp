@@ -49,63 +49,15 @@ bool asset_info_has_default_frames(const std::shared_ptr<AssetInfo>& info) {
         return it != info->animations.end() && it->second.has_frames();
 }
 
-std::unordered_set<std::string> collect_runtime_asset_names_from_rooms(const std::vector<Room*>& rooms,
-                                                                       const AssetLibrary* asset_library) {
+std::unordered_set<std::string> collect_all_known_asset_names(const AssetLibrary* asset_library) {
         std::unordered_set<std::string> names;
-        std::vector<std::string> pending;
-
-        auto add_name = [&](const std::string& name) {
-                if (name.empty()) {
-                        return;
-                }
-                if (names.insert(name).second) {
-                        pending.push_back(name);
-                }
-        };
-
-        for (const Room* room : rooms) {
-                if (!room) {
-                        continue;
-                }
-
-                for (const auto& asset_up : room->assets) {
-                        const Asset* asset = asset_up.get();
-                        if (!asset || !asset->info || asset->info->name.empty()) {
-                                continue;
-                        }
-
-                        add_name(asset->info->name);
-                }
-        }
-
         if (!asset_library) {
                 return names;
         }
 
-        const vibble::spawn::RuntimeCandidates::AssetCatalogView catalog{
-            &asset_library->all(),
-            false
-        };
-
-        for (std::size_t index = 0; index < pending.size(); ++index) {
-                const std::string asset_name = pending[index];
-                const std::shared_ptr<AssetInfo> info = asset_library->get(asset_name);
-                if (!info) {
-                        continue;
-                }
-
-                for (const auto& child_candidate : info->anchor_point_child_candidates) {
-                        const auto candidates_it = child_candidate.candidates.find("candidates");
-                        if (candidates_it == child_candidate.candidates.end() || !candidates_it->is_array()) {
-                                continue;
-                        }
-                        const auto runtime_candidates =
-                            vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
-                        std::unordered_set<std::string> child_names;
-                        runtime_candidates.append_positive_asset_names(child_names, catalog);
-                        for (const std::string& child_name : child_names) {
-                                add_name(child_name);
-                        }
+        for (const auto& [name, info] : asset_library->all()) {
+                if (!name.empty() && info) {
+                        names.insert(name);
                 }
         }
 
@@ -135,7 +87,7 @@ bool ensure_default_animation_frames_loaded_for_asset(SDL_Renderer* renderer,
                         one_asset.insert(info->name);
                         asset_library->loadAnimationsFor(renderer, one_asset);
                 } else {
-                        info->loadAnimations(renderer, false, true);
+                        info->loadAnimations(renderer, true, true);
                 }
         } catch (const std::exception& ex) {
                 vibble::log::error("[AssetLoader] Lazy animation load failed for '" + info->name +
@@ -229,28 +181,28 @@ manifest_store_(manifest_store)
                 const auto preload_begin = std::chrono::steady_clock::now();
 
                 if (asset_library_ && renderer_) {
-                        const std::unordered_set<std::string> map_asset_names =
-                            collect_runtime_asset_names_from_rooms(getRooms(), asset_library_);
+                        const std::unordered_set<std::string> all_asset_names =
+                            collect_all_known_asset_names(asset_library_);
 
-                        if (!map_asset_names.empty()) {
-                                vibble::log::info(std::string("[AssetLoader] Loading runtime animations for map-used assets (") +
-                                                  std::to_string(map_asset_names.size()) + ")...");
-                                asset_library_->loadAnimationsFor(renderer_, map_asset_names);
+                        if (!all_asset_names.empty()) {
+                                vibble::log::info(std::string("[AssetLoader] Loading runtime animations for all known assets (") +
+                                                  std::to_string(all_asset_names.size()) + ")...");
+                                asset_library_->loadAnimationsFor(renderer_, all_asset_names);
 
                                 const auto preload_end = std::chrono::steady_clock::now();
                                 const double preload_ms =
                                     std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - preload_begin).count();
 
-                                vibble::log::info(std::string("[AssetLoader] Map-scoped runtime animation load completed for ") +
-                                                  std::to_string(map_asset_names.size()) + " asset type(s) in " +
+                                vibble::log::info(std::string("[AssetLoader] Runtime animation load completed for all known asset type(s): requested=") +
+                                                  std::to_string(all_asset_names.size()) + " in " +
                                                   std::to_string(preload_ms) + "ms");
                         } else {
-                                vibble::log::info("[AssetLoader] No map-spawned asset names found for runtime animation load.");
+                                vibble::log::warn("[AssetLoader] Asset library has no known assets to preload.");
                         }
                 } else if (!renderer_) {
-                        vibble::log::warn("[AssetLoader] Renderer unavailable; skipping map-scoped runtime animation load.");
+                        vibble::log::warn("[AssetLoader] Renderer unavailable; skipping full runtime animation load.");
                 } else {
-                        vibble::log::warn("[AssetLoader] Asset library unavailable; skipping map-scoped runtime animation load.");
+                        vibble::log::warn("[AssetLoader] Asset library unavailable; skipping full runtime animation load.");
                 }
         }
 

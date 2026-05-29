@@ -1,0 +1,102 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 0,
+          "width": 215
+        },
+        {
+          "filename": "1.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 1,
+          "width": 215
+        },
+        {
+          "filename": "2.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 2,
+          "width": 215
+        },
+        {
+          "filename": "3.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 3,
+          "width": 215
+        },
+        {
+          "filename": "4.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 4,
+          "width": 215
+        },
+        {
+          "filename": "5.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 5,
+          "width": 215
+        },
+        {
+          "filename": "6.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 6,
+          "width": 215
+        },
+        {
+          "filename": "7.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 7,
+          "width": 215
+        },
+        {
+          "filename": "8.png",
+          "hash": "6d30a9cb18fb87d6",
+          "height": 198,
+          "order": 8,
+          "width": 215
+        },
+        {
+          "filename": "9.png",
+          "hash": "192412713b85bb91",
+          "height": 198,
+          "order": 9,
+          "width": 215
+        },
+        {
+          "filename": "10.png",
+          "hash": "469230b7186f51b3",
+          "height": 198,
+          "order": 10,
+          "width": 215
+        },
+        {
+          "filename": "11.png",
+          "hash": "192412713b85bb91",
+          "height": 198,
+          "order": 11,
+          "width": 215
+        }
+      ]
+    }
+  ],
+  "asset_name": "bush_1_fps_2",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 198,
+    "shared_width": 215
+  },
+  "digest": "36551ebb93bfa681",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

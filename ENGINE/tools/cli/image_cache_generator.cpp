@@ -1,11 +1,14 @@
 #include "image_cache_generator.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <chrono>
 #include <fstream>
+#include <ios>
 #include <iomanip>
 #include <limits>
 #include <optional>
@@ -49,10 +52,6 @@ struct SharedCropSize {
     }
 };
 
-std::vector<float> canonical_scale_steps() {
-    return {1.0f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f, 0.4f, 0.3f, 0.2f, 0.1f};
-}
-
 bool is_png_file(const fs::path& path) {
     std::string ext = path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
@@ -61,17 +60,104 @@ bool is_png_file(const fs::path& path) {
     return ext == ".png";
 }
 
-int scale_percent(float step) {
-    return std::max(1, static_cast<int>(std::lround(static_cast<double>(step) * 100.0)));
-}
-
 int scale_dimension(int value, float step) {
     return std::max(1, static_cast<int>(std::lround(static_cast<double>(value) * static_cast<double>(step))));
 }
 
-bool has_normal_variant_mask(std::uint8_t mask) {
-    return (mask & kTextureVariantMaskNormal) != 0;
+constexpr int kCacheManifestSchemaVersion = 1;
+constexpr const char* kCacheManifestGeneratorVersion = "image_cache_generator.v2";
+constexpr const char* kCacheManifestFileName = "cache_manifest.json";
+constexpr std::uint64_t kFnvOffset = 14695981039346656037ull;
+constexpr std::uint64_t kFnvPrime = 1099511628211ull;
+
+void fnv1a_append(std::uint64_t& hash, const void* data, std::size_t size) {
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (std::size_t idx = 0; idx < size; ++idx) {
+        hash ^= static_cast<std::uint64_t>(bytes[idx]);
+        hash *= kFnvPrime;
+    }
 }
+
+std::string hex_u64(std::uint64_t value) {
+    std::ostringstream out;
+    out << std::hex << std::setfill('0') << std::setw(16) << value;
+    return out.str();
+}
+
+std::optional<std::string> HashFileFnv1a(const fs::path& path, std::string& err) {
+    err.clear();
+    std::ifstream in(path, std::ios::binary);
+    if (!in.is_open()) {
+        err = "failed to open source frame for hashing: " + path.string();
+        return std::nullopt;
+    }
+
+    std::uint64_t hash = kFnvOffset;
+    std::array<char, 64 * 1024> buffer{};
+    while (in.good()) {
+        in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        const std::streamsize got = in.gcount();
+        if (got > 0) {
+            fnv1a_append(hash, buffer.data(), static_cast<std::size_t>(got));
+        }
+    }
+    if (!in.eof()) {
+        err = "failed while reading source frame for hashing: " + path.string();
+        return std::nullopt;
+    }
+    return hex_u64(hash);
+}
+
+nlohmann::json SourceFrameToJson(const CacheManifestSourceFrame& frame) {
+    return nlohmann::json{{"filename", frame.filename},
+                          {"order", frame.order},
+                          {"hash", frame.hash},
+                          {"width", frame.width},
+                          {"height", frame.height}};
+}
+
+nlohmann::json AnimationToJson(const CacheManifestAnimation& animation) {
+    nlohmann::json frames = nlohmann::json::array();
+    for (const auto& frame : animation.source_frames) {
+        frames.push_back(SourceFrameToJson(frame));
+    }
+    return nlohmann::json{{"name", animation.name}, {"source_frames", frames}};
+}
+
+nlohmann::json VariantProfileToJson(const CacheManifestVariantProfile& profile) {
+    return nlohmann::json{{"variant", profile.variant},
+                          {"scale_percent", profile.scale_percent},
+                          {"step", profile.step},
+                          {"width", profile.width},
+                          {"height", profile.height}};
+}
+
+std::optional<CacheManifestSourceFrame> BuildSourceFrameManifest(const fs::path& frame_path,
+                                                                 int order,
+                                                                 std::string& err) {
+    err.clear();
+    auto hash = HashFileFnv1a(frame_path, err);
+    if (!hash.has_value()) {
+        return std::nullopt;
+    }
+
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    if (stbi_info(frame_path.string().c_str(), &width, &height, &channels) == 0 || width <= 0 || height <= 0) {
+        err = "failed reading source frame dimensions: " + frame_path.string();
+        return std::nullopt;
+    }
+
+    CacheManifestSourceFrame frame;
+    frame.filename = frame_path.filename().string();
+    frame.order = order;
+    frame.hash = hash.value();
+    frame.width = width;
+    frame.height = height;
+    return frame;
+}
+
 
 std::vector<fs::path> EnumerateSourceFramesForAnalysis(const fs::path& anim_src_dir) {
     std::vector<fs::path> frames;
@@ -417,11 +503,11 @@ SmartVariantPlan BuildSmartVariantPlan(const nlohmann::json& asset_obj,
     plan.max_camera_scale = std::max(0.01f, camera.base_height_px / static_cast<float>(std::max(1, camera.min_height_px)));
     plan.min_camera_scale = std::max(0.01f, camera.base_height_px / static_cast<float>(std::max(1, camera.max_height_px)));
 
-    const float scale100_factor = std::max(0.01f, plan.authored_scale * plan.max_camera_scale);
+    const float scale100_factor = std::max(0.01f, plan.max_camera_scale);
     plan.scale100_w = scale_dimension(shared_crop.width, scale100_factor);
     plan.scale100_h = scale_dimension(shared_crop.height, scale100_factor);
 
-    const float horizon_factor = std::max(0.01f, plan.authored_scale * plan.min_camera_scale);
+    const float horizon_factor = std::max(0.01f, plan.min_camera_scale);
     const int horizon_w = scale_dimension(shared_crop.width, horizon_factor);
     const int horizon_h = scale_dimension(shared_crop.height, horizon_factor);
     const float min_visible_px = std::max(1.0f,
@@ -479,37 +565,83 @@ void LogSmartVariantPlan(ILogger& log,
     }
 }
 
-bool AssetHasScalingProfile(const nlohmann::json& asset_obj) {
-    auto it = asset_obj.find("scaling_profile");
-    return it != asset_obj.end() && it->is_object();
-}
+std::optional<CacheManifest> BuildCurrentCacheManifest(const std::string& asset_name,
+                                                       const std::vector<std::pair<std::string, fs::path>>& animations,
+                                                       const SmartVariantPlan& plan,
+                                                       const CameraCacheSettings& camera,
+                                                       const SharedCropSize& shared_crop,
+                                                       std::string& err) {
+    err.clear();
+    CacheManifest manifest;
+    manifest.schema_version = kCacheManifestSchemaVersion;
+    manifest.generator_version = kCacheManifestGeneratorVersion;
+    manifest.asset_name = asset_name;
+    manifest.authored_scale_percentage = plan.authored_scale * 100.0f;
+    manifest.camera_inputs.min_height_px = camera.min_height_px;
+    manifest.camera_inputs.max_height_px = camera.max_height_px;
+    manifest.camera_inputs.base_height_px = camera.base_height_px;
+    manifest.camera_inputs.min_visible_screen_ratio = camera.min_visible_screen_ratio;
+    manifest.camera_inputs.boundary_min_visible_screen_ratio = camera.boundary_min_visible_screen_ratio;
+    manifest.camera_derived.max_camera_scale = plan.max_camera_scale;
+    manifest.camera_derived.min_camera_scale = plan.min_camera_scale;
+    manifest.camera_derived.scale100_width = plan.scale100_w;
+    manifest.camera_derived.scale100_height = plan.scale100_h;
+    manifest.camera_derived.min_width = plan.min_w;
+    manifest.camera_derived.min_height = plan.min_h;
+    manifest.crop_canvas.shared_width = shared_crop.width;
+    manifest.crop_canvas.shared_height = shared_crop.height;
 
-bool AssetCacheMissingAnySmartVariant(const fs::path& cache_root,
-                                      const std::string& asset_name,
-                                      const std::vector<std::pair<std::string, fs::path>>& animations,
-                                      const SmartVariantPlan& plan) {
-    std::error_code ec;
-    if (!fs::exists(cache_root / asset_name, ec) || ec) {
-        return true;
+    for (std::size_t idx = 0; idx < plan.percents.size(); ++idx) {
+        CacheManifestVariantProfile profile;
+        profile.variant = CachePaths::kNormalDirName;
+        profile.scale_percent = plan.percents[idx];
+        profile.step = plan.steps[idx];
+        profile.width = scale_dimension(plan.scale100_w, plan.steps[idx]);
+        profile.height = scale_dimension(plan.scale100_h, plan.steps[idx]);
+        manifest.variant_profiles.push_back(profile);
     }
+
     for (const auto& animation_entry : animations) {
+        CacheManifestAnimation animation;
+        animation.name = animation_entry.first;
         const auto frames = ImageCacheGenerator::EnumerateSourceFrames(animation_entry.second);
         for (std::size_t frame_index = 0; frame_index < frames.size(); ++frame_index) {
-            for (int pct : plan.percents) {
-                const fs::path out_path = CachePaths::frame_png_path(cache_root,
-                                                                     asset_name,
-                                                                     animation_entry.first,
-                                                                     pct,
-                                                                     Variant::Normal,
-                                                                     static_cast<int>(frame_index));
-                if (!fs::exists(out_path, ec) || ec) {
-                    return true;
+            auto frame = BuildSourceFrameManifest(frames[frame_index], static_cast<int>(frame_index), err);
+            if (!frame.has_value()) {
+                return std::nullopt;
+            }
+            animation.source_frames.push_back(frame.value());
+        }
+        manifest.animations.push_back(animation);
+    }
+
+    manifest.digest = ImageCacheGenerator::GenerateManifestDigest(manifest);
+    return manifest;
+}
+
+std::vector<fs::path> MissingExpectedOutputs(const fs::path& cache_root,
+                                             const CacheManifest& manifest) {
+    std::vector<fs::path> missing;
+    std::error_code ec;
+    for (const auto& animation : manifest.animations) {
+        for (const auto& frame : animation.source_frames) {
+            for (const auto& profile : manifest.variant_profiles) {
+                const fs::path output = CachePaths::frame_png_path(cache_root,
+                                                                   manifest.asset_name,
+                                                                   animation.name,
+                                                                   profile.scale_percent,
+                                                                   Variant::Normal,
+                                                                   frame.order);
+                if (!fs::exists(output, ec) || ec) {
+                    missing.push_back(output);
+                    ec.clear();
                 }
             }
         }
     }
-    return false;
+    return missing;
 }
+
 
 fs::path BuildTempCacheRoot(const fs::path& cache_root, const std::string& asset_name) {
     const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -549,6 +681,178 @@ bool ReplaceAssetCacheAtomically(const fs::path& cache_root,
 }
 
 } // namespace
+
+
+fs::path ImageCacheGenerator::CacheManifestPath(const fs::path& cache_root, const std::string& asset_name) {
+    return cache_root / asset_name / kCacheManifestFileName;
+}
+
+nlohmann::json ImageCacheGenerator::CacheManifestToJson(const CacheManifest& manifest, bool include_digest) {
+    nlohmann::json variants = nlohmann::json::array();
+    for (const auto& profile : manifest.variant_profiles) {
+        variants.push_back(VariantProfileToJson(profile));
+    }
+
+    nlohmann::json animations = nlohmann::json::array();
+    for (const auto& animation : manifest.animations) {
+        animations.push_back(AnimationToJson(animation));
+    }
+
+    nlohmann::json json{{"schema_version", manifest.schema_version},
+                        {"generator_version", manifest.generator_version},
+                        {"asset_name", manifest.asset_name},
+                        {"authored_scale_percentage", manifest.authored_scale_percentage},
+                        {"camera_inputs", nlohmann::json{{"min_height_px", manifest.camera_inputs.min_height_px},
+                                                          {"max_height_px", manifest.camera_inputs.max_height_px},
+                                                          {"base_height_px", manifest.camera_inputs.base_height_px},
+                                                          {"min_visible_screen_ratio", manifest.camera_inputs.min_visible_screen_ratio},
+                                                          {"boundary_min_visible_screen_ratio", manifest.camera_inputs.boundary_min_visible_screen_ratio}}},
+                        {"camera_derived", nlohmann::json{{"max_camera_scale", manifest.camera_derived.max_camera_scale},
+                                                           {"min_camera_scale", manifest.camera_derived.min_camera_scale},
+                                                           {"scale100_width", manifest.camera_derived.scale100_width},
+                                                           {"scale100_height", manifest.camera_derived.scale100_height},
+                                                           {"min_width", manifest.camera_derived.min_width},
+                                                           {"min_height", manifest.camera_derived.min_height}}},
+                        {"crop_canvas", nlohmann::json{{"shared_width", manifest.crop_canvas.shared_width},
+                                                        {"shared_height", manifest.crop_canvas.shared_height}}},
+                        {"variant_profiles", variants},
+                        {"animations", animations}};
+    if (include_digest) {
+        json["digest"] = manifest.digest;
+    }
+    return json;
+}
+
+std::optional<CacheManifest> ImageCacheGenerator::CacheManifestFromJson(const nlohmann::json& json, std::string& err) {
+    err.clear();
+    try {
+        if (!json.is_object()) {
+            err = "cache manifest root is not an object";
+            return std::nullopt;
+        }
+        CacheManifest manifest;
+        manifest.schema_version = json.value("schema_version", 0);
+        manifest.generator_version = json.value("generator_version", std::string{});
+        manifest.asset_name = json.value("asset_name", std::string{});
+        manifest.digest = json.value("digest", std::string{});
+        manifest.authored_scale_percentage = json.value("authored_scale_percentage", 100.0f);
+
+        const auto& camera_inputs = json.at("camera_inputs");
+        manifest.camera_inputs.min_height_px = camera_inputs.value("min_height_px", 0);
+        manifest.camera_inputs.max_height_px = camera_inputs.value("max_height_px", 0);
+        manifest.camera_inputs.base_height_px = camera_inputs.value("base_height_px", 0.0f);
+        manifest.camera_inputs.min_visible_screen_ratio = camera_inputs.value("min_visible_screen_ratio", 0.0f);
+        manifest.camera_inputs.boundary_min_visible_screen_ratio = camera_inputs.value("boundary_min_visible_screen_ratio", 0.0f);
+
+        const auto& camera_derived = json.at("camera_derived");
+        manifest.camera_derived.max_camera_scale = camera_derived.value("max_camera_scale", 1.0f);
+        manifest.camera_derived.min_camera_scale = camera_derived.value("min_camera_scale", 1.0f);
+        manifest.camera_derived.scale100_width = camera_derived.value("scale100_width", 1);
+        manifest.camera_derived.scale100_height = camera_derived.value("scale100_height", 1);
+        manifest.camera_derived.min_width = camera_derived.value("min_width", 1);
+        manifest.camera_derived.min_height = camera_derived.value("min_height", 1);
+
+        const auto& crop_canvas = json.at("crop_canvas");
+        manifest.crop_canvas.shared_width = crop_canvas.value("shared_width", 0);
+        manifest.crop_canvas.shared_height = crop_canvas.value("shared_height", 0);
+
+        for (const auto& profile_json : json.at("variant_profiles")) {
+            CacheManifestVariantProfile profile;
+            profile.variant = profile_json.value("variant", std::string{});
+            profile.scale_percent = profile_json.value("scale_percent", 100);
+            profile.step = profile_json.value("step", 1.0f);
+            profile.width = profile_json.value("width", 1);
+            profile.height = profile_json.value("height", 1);
+            manifest.variant_profiles.push_back(profile);
+        }
+
+        for (const auto& animation_json : json.at("animations")) {
+            CacheManifestAnimation animation;
+            animation.name = animation_json.value("name", std::string{});
+            for (const auto& frame_json : animation_json.at("source_frames")) {
+                CacheManifestSourceFrame frame;
+                frame.filename = frame_json.value("filename", std::string{});
+                frame.order = frame_json.value("order", 0);
+                frame.hash = frame_json.value("hash", std::string{});
+                frame.width = frame_json.value("width", 0);
+                frame.height = frame_json.value("height", 0);
+                animation.source_frames.push_back(frame);
+            }
+            manifest.animations.push_back(animation);
+        }
+        return manifest;
+    } catch (const std::exception& e) {
+        err = std::string("failed parsing cache manifest: ") + e.what();
+        return std::nullopt;
+    }
+}
+
+std::string ImageCacheGenerator::GenerateManifestDigest(const CacheManifest& manifest) {
+    const std::string canonical = CacheManifestToJson(manifest, false).dump();
+    std::uint64_t hash = kFnvOffset;
+    fnv1a_append(hash, canonical.data(), canonical.size());
+    return hex_u64(hash);
+}
+
+bool ImageCacheGenerator::ReadCacheManifest(const fs::path& path, CacheManifest& manifest, std::string& err) {
+    err.clear();
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        err = "cache manifest does not exist: " + path.string();
+        return false;
+    }
+    nlohmann::json json;
+    try {
+        in >> json;
+    } catch (const std::exception& e) {
+        err = std::string("failed reading cache manifest: ") + e.what();
+        return false;
+    }
+    auto parsed = CacheManifestFromJson(json, err);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    manifest = parsed.value();
+    return true;
+}
+
+bool ImageCacheGenerator::WriteCacheManifest(const fs::path& path, const CacheManifest& manifest, std::string& err) {
+    err.clear();
+    std::error_code ec;
+    fs::create_directories(path.parent_path(), ec);
+    if (ec) {
+        err = "failed creating cache manifest directory: " + path.parent_path().string();
+        return false;
+    }
+    std::ofstream out(path, std::ios::trunc);
+    if (!out.is_open()) {
+        err = "failed opening cache manifest for writing: " + path.string();
+        return false;
+    }
+    out << CacheManifestToJson(manifest, true).dump(2) << '\n';
+    if (!out.good()) {
+        err = "failed writing cache manifest: " + path.string();
+        return false;
+    }
+    return true;
+}
+
+bool ImageCacheGenerator::CacheManifestsExactlyMatch(const CacheManifest& existing,
+                                                     const CacheManifest& current,
+                                                     std::string& reason) {
+    reason.clear();
+    if (existing.digest != current.digest) {
+        reason = "cache manifest digest differs";
+    } else if (CacheManifestToJson(existing, true) != CacheManifestToJson(current, true)) {
+        reason = "cache manifest JSON differs despite matching digest";
+    }
+    return reason.empty();
+}
+
+std::vector<fs::path> ImageCacheGenerator::MissingExpectedOutputPaths(const fs::path& cache_root,
+                                                                      const CacheManifest& manifest) {
+    return MissingExpectedOutputs(cache_root, manifest);
+}
 
 GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     GenResult result{};
@@ -634,12 +938,50 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         }
 
         const SmartVariantPlan plan = BuildSmartVariantPlan(asset_obj, camera_settings, *shared_crop_size);
-        const bool should_generate = opt.force_rebuild ||
-                                     !AssetHasScalingProfile(asset_obj) ||
-                                     ReadAuthoredScale(asset_obj) != 1.0f ||
-                                     AssetCacheMissingAnySmartVariant(cache_root, asset_name, animations, plan);
-        if (!should_generate) {
+
+        std::string manifest_err;
+        std::optional<CacheManifest> current_manifest_opt = BuildCurrentCacheManifest(asset_name,
+                                                                                      animations,
+                                                                                      plan,
+                                                                                      camera_settings,
+                                                                                      *shared_crop_size,
+                                                                                      manifest_err);
+        if (!current_manifest_opt.has_value()) {
+            result.error = manifest_err;
+            return result;
+        }
+        const CacheManifest current_cache_manifest = current_manifest_opt.value();
+
+        std::vector<std::string> stale_reasons;
+        if (opt.force_rebuild) {
+            stale_reasons.emplace_back("force rebuild requested");
+        }
+
+        CacheManifest existing_cache_manifest;
+        const fs::path cache_manifest_path = CacheManifestPath(cache_root, asset_name);
+        std::string existing_manifest_err;
+        if (!ReadCacheManifest(cache_manifest_path, existing_cache_manifest, existing_manifest_err)) {
+            stale_reasons.push_back(existing_manifest_err);
+        } else {
+            std::string compare_reason;
+            if (!CacheManifestsExactlyMatch(existing_cache_manifest, current_cache_manifest, compare_reason)) {
+                stale_reasons.push_back(compare_reason);
+            }
+        }
+
+        const std::vector<fs::path> missing_outputs = MissingExpectedOutputPaths(cache_root, current_cache_manifest);
+        if (!missing_outputs.empty()) {
+            stale_reasons.push_back(std::to_string(missing_outputs.size()) + " expected cache output(s) missing; first missing: " +
+                                    missing_outputs.front().string());
+        }
+
+        if (stale_reasons.empty()) {
             continue;
+        }
+
+        log.info("[ImageCacheGenerator] Rebuilding asset '" + asset_name + "': " + stale_reasons.front());
+        for (std::size_t reason_index = 1; reason_index < stale_reasons.size(); ++reason_index) {
+            log.info("[ImageCacheGenerator] Additional stale reason for '" + asset_name + "': " + stale_reasons[reason_index]);
         }
 
         LogSmartVariantPlan(log, asset_name, first_source.value(), plan, camera_settings);
@@ -702,7 +1044,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                         continue;
                     }
 
-                    const float resize_factor = std::max(0.01f, plan.authored_scale * plan.max_camera_scale * step);
+                    const float resize_factor = std::max(0.01f, plan.max_camera_scale * step);
                     const int dst_w = scale_dimension(src.w, resize_factor);
                     const int dst_h = scale_dimension(src.h, resize_factor);
                     std::optional<ImageRGBA> scaled = ResizeRGBA(src, dst_w, dst_h, load_err);
@@ -771,6 +1113,17 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         }
 
         if (touched_asset && !opt.dry_run) {
+            std::string cache_manifest_write_err;
+            if (!WriteCacheManifest(CacheManifestPath(write_cache_root, asset_name),
+                                    current_cache_manifest,
+                                    cache_manifest_write_err)) {
+                ++result.stats.tasks_failed;
+                result.error = cache_manifest_write_err;
+                std::error_code ignored;
+                fs::remove_all(write_cache_root, ignored);
+                return result;
+            }
+
             std::string replace_err;
             if (!ReplaceAssetCacheAtomically(cache_root, write_cache_root, asset_name, replace_err)) {
                 ++result.stats.tasks_failed;
@@ -780,20 +1133,13 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 return result;
             }
 
-            if (!asset_obj.contains("size_settings") || !asset_obj["size_settings"].is_object()) {
-                asset_obj["size_settings"] = nlohmann::json::object();
-            }
-            asset_obj["size_settings"]["scale_percentage"] = 100.0;
-
             nlohmann::json percentages = nlohmann::json::array();
             nlohmann::json steps = nlohmann::json::array();
             for (std::size_t idx = 0; idx < plan.percents.size(); ++idx) {
                 percentages.push_back(plan.percents[idx]);
                 steps.push_back(plan.steps[idx]);
             }
-            const std::uint64_t revision = static_cast<std::uint64_t>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()).count());
+            const std::uint64_t revision = std::strtoull(current_cache_manifest.digest.c_str(), nullptr, 16);
             asset_obj["scaling_profile"] = nlohmann::json{
                 {"revision", revision},
                 {"percentages", percentages},

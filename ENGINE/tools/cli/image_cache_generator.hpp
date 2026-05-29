@@ -226,6 +226,66 @@ struct GenResult {
     std::vector<fs::path> written_files;
 };
 
+
+// -----------------------------
+// Cache manifest model
+// -----------------------------
+struct CacheManifestSourceFrame {
+    std::string filename;
+    int order = 0;
+    std::string hash;
+    int width = 0;
+    int height = 0;
+};
+
+struct CacheManifestAnimation {
+    std::string name;
+    std::vector<CacheManifestSourceFrame> source_frames;
+};
+
+struct CacheManifestCameraInputs {
+    int min_height_px = 0;
+    int max_height_px = 0;
+    float base_height_px = 0.0f;
+    float min_visible_screen_ratio = 0.0f;
+    float boundary_min_visible_screen_ratio = 0.0f;
+};
+
+struct CacheManifestCameraDerived {
+    float max_camera_scale = 1.0f;
+    float min_camera_scale = 1.0f;
+    int scale100_width = 1;
+    int scale100_height = 1;
+    int min_width = 1;
+    int min_height = 1;
+};
+
+struct CacheManifestCropCanvas {
+    int shared_width = 0;
+    int shared_height = 0;
+};
+
+struct CacheManifestVariantProfile {
+    std::string variant;
+    int scale_percent = 100;
+    float step = 1.0f;
+    int width = 1;
+    int height = 1;
+};
+
+struct CacheManifest {
+    int schema_version = 1;
+    std::string generator_version;
+    std::string asset_name;
+    std::string digest;
+    float authored_scale_percentage = 100.0f;
+    CacheManifestCameraInputs camera_inputs;
+    CacheManifestCameraDerived camera_derived;
+    CacheManifestCropCanvas crop_canvas;
+    std::vector<CacheManifestVariantProfile> variant_profiles;
+    std::vector<CacheManifestAnimation> animations;
+};
+
 // -----------------------------
 // Main generator class
 // -----------------------------
@@ -235,7 +295,7 @@ public:
     // Runtime behavior:
     // - explicit_rebuild_requests: rebuild only requested animations/frames/variants
     // - missing_only: rebuild only missing output files in selected scope
-    // - no queue persistence and no metadata-hash stale checks
+    // - cache_manifest.json stale checks validate source/frame metadata, camera/crop inputs, and outputs
     static GenResult Run(const GeneratorOptions& opt, ILogger& log);
 
     // -------------------------
@@ -271,6 +331,18 @@ public:
                                         const std::string& anim_name,
                                         int scale_pct,
                                         int out_index);
+
+    static fs::path CacheManifestPath(const fs::path& cache_root, const std::string& asset_name);
+    static nlohmann::json CacheManifestToJson(const CacheManifest& manifest, bool include_digest = true);
+    static std::optional<CacheManifest> CacheManifestFromJson(const nlohmann::json& json, std::string& err);
+    static std::string GenerateManifestDigest(const CacheManifest& manifest);
+    static bool ReadCacheManifest(const fs::path& path, CacheManifest& manifest, std::string& err);
+    static bool WriteCacheManifest(const fs::path& path, const CacheManifest& manifest, std::string& err);
+    static bool CacheManifestsExactlyMatch(const CacheManifest& existing,
+                                           const CacheManifest& current,
+                                           std::string& reason);
+    static std::vector<fs::path> MissingExpectedOutputPaths(const fs::path& cache_root,
+                                                            const CacheManifest& manifest);
 
     // -------------------------
     // Image IO and transforms (implemented in .cpp)

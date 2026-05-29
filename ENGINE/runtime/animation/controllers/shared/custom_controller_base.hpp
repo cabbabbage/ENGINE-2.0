@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
 #include "animation/controllers/shared/controller_game_context.hpp"

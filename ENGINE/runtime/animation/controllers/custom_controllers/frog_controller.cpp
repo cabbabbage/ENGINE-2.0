@@ -39,7 +39,10 @@ void frog_controller::on_update(const Input&) {
         return;
     }
 
-    const int dist_sq = static_cast<int>(custom_controller_api::internal::ControllerMovementSystem::distance_sq_3d(*self, *player));
+    const long long dx = static_cast<long long>(player->world_x()) - static_cast<long long>(self->world_x());
+    const long long dy = static_cast<long long>(player->world_y()) - static_cast<long long>(self->world_y());
+    const long long dz = static_cast<long long>(player->world_z()) - static_cast<long long>(self->world_z());
+    const long long dist_sq = (dx * dx) + (dy * dy) + (dz * dz);
     const int threat_sq = kThreatRangePx * kThreatRangePx;
     const int safe_sq = kSafeDistancePx * kSafeDistancePx;
 
@@ -47,13 +50,13 @@ void frog_controller::on_update(const Input&) {
     flee_cfg.visit_threshold_px = 10;
     flee_cfg.override_non_locked = false;
 
-    if (dist_sq <= threat_sq) {
+    if (dist_sq <= static_cast<long long>(threat_sq)) {
         hop_away_from(*player);
         apply_attack_hit(*player);
         return;
     }
 
-    if (dist_sq < safe_sq && flee_until_safe_) {
+    if (dist_sq < static_cast<long long>(safe_sq) && flee_until_safe_) {
         hop_away_from(*player);
         apply_attack_hit(*player);
         return;

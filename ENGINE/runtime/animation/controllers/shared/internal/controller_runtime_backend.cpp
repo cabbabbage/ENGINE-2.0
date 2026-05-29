@@ -9,6 +9,8 @@
 #include <string>
 #include <unordered_set>
 
+#include <nlohmann/json.hpp>
+
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "core/AssetsManager.hpp"

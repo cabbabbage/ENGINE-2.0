@@ -156,14 +156,16 @@ ManifestStore::ManifestStore(const std::filesystem::path& manifest_path,
     }
 }
 
-std::optional<std::string> ManifestStore::resolve_asset_name(const std::string& name) {
-    ensure_loaded();
+std::optional<std::string> ManifestStore::resolve_asset_name(const std::string& name) const {
+    auto* self = const_cast<ManifestStore*>(this);
+    self->ensure_loaded();
 
-    if (!manifest_cache_.contains("assets") || !manifest_cache_["assets"].is_object()) {
+    const auto assets_it = self->manifest_cache_.find("assets");
+    if (assets_it == self->manifest_cache_.end() || !assets_it->is_object()) {
         return std::nullopt;
     }
 
-    nlohmann::json& assets = manifest_cache_["assets"];
+    const nlohmann::json& assets = *assets_it;
     auto direct = assets.find(name);
     if (direct != assets.end()) {
         return name;

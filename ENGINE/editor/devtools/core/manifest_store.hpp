@@ -133,7 +133,7 @@ public:
                   std::function<void()> flush = {},
                   int indent = 2);
 
-    std::optional<std::string> resolve_asset_name(const std::string& name);
+    std::optional<std::string> resolve_asset_name(const std::string& name) const;
     AssetView get_asset(const std::string& name);
 
     AssetEditSession begin_asset_edit(const std::string& name, bool create_if_missing = false);

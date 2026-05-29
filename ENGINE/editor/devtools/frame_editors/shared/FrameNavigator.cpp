@@ -95,6 +95,10 @@ void FrameNavigator::set_on_frame_changed(std::function<void(int)> callback) {
     on_frame_changed_ = std::move(callback);
 }
 
+void FrameNavigator::set_on_focus_requested(std::function<void()> callback) {
+    on_focus_requested_ = std::move(callback);
+}
+
 void FrameNavigator::set_on_before_change(std::function<bool(int, int)> callback) {
     on_before_change_ = std::move(callback);
 }
@@ -218,29 +222,43 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
 
     bool consumed = false;
 
+    const bool left_button_up = (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT);
+
     if (btn_prev_ && btn_prev_->handle_event(e)) {
-        request_frame_change(current_frame_ - 1);
+        if (left_button_up) {
+            (void)request_frame_change(current_frame_ - 1);
+        }
         consumed = true;
     }
 
     if (btn_next_ && btn_next_->handle_event(e)) {
-        request_frame_change(current_frame_ + 1);
+        if (left_button_up) {
+            (void)request_frame_change(current_frame_ + 1);
+        }
         consumed = true;
     }
     if (btn_apply_next_ && btn_apply_next_->handle_event(e)) {
-        handle_apply_next();
+        if (left_button_up) {
+            handle_apply_next();
+        }
         consumed = true;
     }
     if (btn_apply_animation_ && btn_apply_animation_->handle_event(e)) {
-        handle_apply_animation();
+        if (left_button_up) {
+            handle_apply_animation();
+        }
         consumed = true;
     }
     if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
-        handle_apply_all();
+        if (left_button_up) {
+            handle_apply_all();
+        }
         consumed = true;
     }
     if (btn_save_exit_ && btn_save_exit_->handle_event(e)) {
-        handle_save_and_exit();
+        if (left_button_up) {
+            handle_save_and_exit();
+        }
         consumed = true;
     }
 
@@ -249,9 +267,13 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        if (e.button.clicks >= 2 && SDL_PointInRect(&p, &strip_rect_)) {
+            request_focus();
+            consumed = true;
+        }
         pressed_thumb_index_ = frame_index_at_point(p);
         update_hover(p);
-        consumed = consumed || pressed_thumb_index_ >= 0;
+        consumed = consumed || SDL_PointInRect(&p, &strip_rect_);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         const int released_index = frame_index_at_point(p);
@@ -265,8 +287,9 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
                     selected_frames_.erase(selected_it);
                 }
             } else {
-                selected_frames_.assign(1, released_index);
-                request_frame_change(released_index);
+                if (released_index == current_frame_ || request_frame_change(released_index)) {
+                    select_single_frame(released_index);
+                }
             }
             consumed = true;
         }
@@ -307,20 +330,36 @@ void FrameNavigator::render(SDL_Renderer* renderer) {
     if (btn_save_exit_) btn_save_exit_->render(renderer);
 }
 
-void FrameNavigator::request_frame_change(int frame) {
+bool FrameNavigator::request_frame_change(int frame) {
     if (!enabled_ || frame_count_ <= 0) {
-        return;
+        return false;
     }
     int clamped = std::clamp(frame, 0, frame_count_ - 1);
     if (clamped == current_frame_) {
-        return;
+        return false;
     }
     if (on_before_change_) {
         if (!on_before_change_(current_frame_, clamped)) {
-            return;
+            return false;
         }
     }
+    select_single_frame(clamped);
     set_current_frame(clamped);
+    return true;
+}
+
+void FrameNavigator::select_single_frame(int frame) {
+    if (frame < 0 || frame >= frame_count_) {
+        selected_frames_.clear();
+        return;
+    }
+    selected_frames_.assign(1, frame);
+}
+
+void FrameNavigator::request_focus() {
+    if (on_focus_requested_) {
+        on_focus_requested_();
+    }
 }
 
 void FrameNavigator::ensure_frame_visible(int frame) {

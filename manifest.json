@@ -143,7 +143,7 @@
       "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "size_settings": {
-        "scale_percentage": 43.0,
+        "scale_percentage": 100.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -20768,29 +20768,29 @@
       },
       "camera_settings": {
         "base_height_px": 720.0,
-        "blur_px": 0.0,
+        "blur_px": 0.4399999976158142,
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
-        "camera_height_max_px": 3500,
-        "camera_height_min_px": 40,
-        "depth_of_field_enabled": true,
-        "dynamic_renderer_depth_efficiency_depth": 2579.0,
+        "camera_height_max_px": 5000,
+        "camera_height_min_px": 200,
+        "depth_of_field_enabled": false,
+        "dynamic_renderer_depth_efficiency_depth": 2467.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.05999999865889549,
-        "layer_depth_curve": 54.47999954223633,
-        "layer_depth_interval": 10.0,
+        "layer_depth_curve": 83.86000061035156,
+        "layer_depth_interval": 21.0,
         "light_max_cull_depth": 38789.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 3364.0,
+        "max_cull_depth": 2804.0,
         "min_visible_screen_ratio": 0.00800000037997961,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 5.569999694824219,
+        "radial_blur_px": 24.10999870300293,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -20858,7 +20858,7 @@
         "fog_render_boundary_spacing": 16,
         "max_spawn_from_room": 3202,
         "regen_seed": 4,
-        "render_radius": 7233
+        "render_radius": 11225
       },
       "map_grid_settings": {
         "grid_resolution": 8,
@@ -20918,9 +20918,9 @@
       "rooms_data": {
         "Bluebloom_Nook": {
           "display_color": [
-            147,
-            31,
-            204,
+            116,
+            85,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -21064,9 +21064,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            36,
-            215,
             242,
+            241,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -21210,9 +21210,9 @@
         },
         "Frog_Basin": {
           "display_color": [
+            202,
+            85,
             242,
-            36,
-            178,
             255
           ],
           "geometry": "Circle",
@@ -21353,9 +21353,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
-            204,
-            58,
+            93,
             31,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -21501,9 +21501,9 @@
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
           "display_color": [
-            71,
-            166,
-            204,
+            85,
+            242,
+            100,
             255
           ],
           "geometry": "Square",
@@ -21696,9 +21696,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
+            31,
+            187,
             204,
-            71,
-            135,
             255
           ],
           "geometry": "Circle",
@@ -21847,8 +21847,8 @@
           "camera_tilt_deg": 47.55434036254883,
           "camera_zoom_percent": 0,
           "display_color": [
-            151,
             85,
+            171,
             242,
             255
           ],
@@ -22169,9 +22169,9 @@
         },
         "NewRoom": {
           "display_color": [
-            81,
-            31,
-            204,
+            242,
+            207,
+            85,
             255
           ],
           "geometry": "Square",
@@ -22215,9 +22215,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            31,
-            204,
-            172,
+            242,
+            122,
+            85,
             255
           ],
           "geometry": "Square",
@@ -22261,9 +22261,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            85,
+            36,
             242,
-            225,
+            178,
             255
           ],
           "geometry": "Square",
@@ -22338,9 +22338,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            242,
-            164,
-            36,
+            204,
+            31,
+            147,
             255
           ],
           "geometry": "Square",
@@ -22384,9 +22384,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            242,
-            223,
-            36,
+            77,
+            204,
+            51,
             255
           ],
           "geometry": "Square",
@@ -22431,9 +22431,9 @@
         },
         "NewRoom5": {
           "display_color": [
-            111,
+            133,
             204,
-            31,
+            71,
             255
           ],
           "geometry": "Square",
@@ -22457,6 +22457,7 @@
             0,
             0
           ],
+          "room_tags": [],
           "spawn_groups": [],
           "tags": [],
           "trail_connection_sector": {
@@ -22478,8 +22479,8 @@
         "Old_Stump_Yard": {
           "display_color": [
             242,
+            183,
             36,
-            234,
             255
           ],
           "geometry": "Square",
@@ -22686,9 +22687,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            185,
             36,
             242,
+            121,
             255
           ],
           "geometry": "Circle",
@@ -22769,9 +22770,9 @@
         },
         "Spider_Hollow": {
           "display_color": [
-            204,
-            71,
-            192,
+            222,
+            36,
+            242,
             255
           ],
           "geometry": "Square",
@@ -22915,9 +22916,9 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            36,
-            242,
-            135,
+            71,
+            126,
+            204,
             255
           ],
           "geometry": "Square",
@@ -23061,7 +23062,7 @@
         },
         "Whispering_Ring": {
           "display_color": [
-            41,
+            133,
             36,
             242,
             255
@@ -23212,9 +23213,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            115,
-            71,
             204,
+            31,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -23638,9 +23639,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            224,
-            105,
-            34,
+            85,
+            242,
+            190,
             255
           ],
           "geometry": "Square",
@@ -23973,9 +23974,9 @@
           "camera_tilt_deg": 31.657548904418945,
           "camera_zoom_percent": 0,
           "display_color": [
-            71,
-            154,
-            204,
+            85,
+            202,
+            242,
             255
           ],
           "geometry": "Square",
@@ -24017,6 +24018,7 @@
         },
         "NewTrail1": {
           "anti_tags": [],
+          "camera_height_px": 1000,
           "curviness": 0,
           "curvyness": 0,
           "display_color": [
@@ -24070,7 +24072,7 @@
         "NewTrail3": {
           "camera_center_dx": 908,
           "camera_center_dz": -6472,
-          "camera_height_px": 98,
+          "camera_height_px": 200,
           "camera_tilt_deg": 12.258353233337402,
           "camera_zoom_percent": 0,
           "display_color": [

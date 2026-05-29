@@ -131,6 +131,7 @@ class Section_BasicInfo : public DockableCollapsible {
     std::unique_ptr<DMWeightedRangeWidget> wr_y_pos_range_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
+    std::unique_ptr<DMCheckbox>  c_crop_on_load_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
     std::unique_ptr<DMButton>    apply_btn_;
     std::vector<std::unique_ptr<Widget>> widgets_;
@@ -204,6 +205,7 @@ inline void Section_BasicInfo::build() {
         c_flipable_.reset();
     }
     c_tillable_ = std::make_unique<DMCheckbox>("Tileable (grid tiles)", info_->tillable);
+    c_crop_on_load_ = std::make_unique<DMCheckbox>("Crop on Load", info_->crop_on_load);
 
     auto w_type = std::make_unique<DropdownWidget>(dd_type_.get());
     rows.push_back({ w_type.get() });
@@ -256,6 +258,10 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_tillable.get() });
     widgets_.push_back(std::move(w_tillable));
 
+    auto w_crop_on_load = std::make_unique<CheckboxWidget>(c_crop_on_load_.get());
+    rows.push_back({ w_crop_on_load.get() });
+    widgets_.push_back(std::move(w_crop_on_load));   
+
     if (!apply_btn_) {
         apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
     }
@@ -281,6 +287,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
+        if (c_crop_on_load_ && c_crop_on_load_->handle_event(e)) used = true;
     }
     if (!used) {
         used = DockableCollapsible::handle_event(e);
@@ -344,6 +351,11 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         changed = true;
         tile_changed = true;
         rebuild_needed = true;
+    }
+    if (c_crop_on_load_ && info_->crop_on_load != c_crop_on_load_->value()) {
+        info_->set_crop_on_load(c_crop_on_load_->value());
+        changed = true;
+        render_settings_changed = true;
     }
 
     if (changed) {

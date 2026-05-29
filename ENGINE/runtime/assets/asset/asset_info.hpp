@@ -101,6 +101,7 @@ class AssetInfo {
     int original_canvas_height = 0;
     bool flipable;
     bool tillable = false;
+    bool crop_on_load = true;
     std::string lighting_normal_map;
     float lighting_roughness = 1.0f;
     float lighting_height_bias = 0.0f;
@@ -253,6 +254,7 @@ class AssetInfo {
     void set_min_distance_all(int d);
     void set_neighbor_search_radius(int radius);
     void set_flipable(bool v);
+    void set_crop_on_load(bool v);
     void set_starting_health(int health);
     void set_scale_factor(float factor);
     void set_scale_percentage(float percent);

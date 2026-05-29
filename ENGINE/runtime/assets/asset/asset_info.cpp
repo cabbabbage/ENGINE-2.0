@@ -2830,9 +2830,14 @@ void AssetInfo::set_passable(bool v) {
 
 void AssetInfo::set_tillable(bool v) {
         tillable = v;
-
         info_json_["tillable"] = v;
-        info_json_["tileable"] = v;
+
+}
+
+
+void AssetInfo::set_crop_on_load(bool v) {
+        crop_on_load = v;
+        info_json_["crop_on_load"] = v;
 }
 
 Area* AssetInfo::find_area(const std::string& name) {

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <utility>
 
 #include "assets/asset/Asset.hpp"
@@ -12624,6 +12625,13 @@ void RoomEditor::sync_shared_footer_navigation() {
         };
     };
 
+    auto frame_selection_scope_for = [](Asset* target, const std::string& animation_id) -> std::string {
+        if (!target) {
+            return {};
+        }
+        return std::to_string(reinterpret_cast<std::uintptr_t>(target)) + ":" + animation_id;
+    };
+
     DevFooterBar::EditorFrameNavigation frame_nav{};
     if ((anchor_mode_active() || light_mode_active()) &&
         is_asset_pointer_live(anchor_edit_.target_asset) &&
@@ -12632,6 +12640,7 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.visible = true;
         frame_nav.animation_label = anchor_edit_.animation_id.empty() ? "No Animation" : anchor_edit_.animation_id;
         frame_nav.frame_count = frame_count_for(anchor_edit_.target_asset, anchor_edit_.animation_id);
+        frame_nav.selection_scope_id = frame_selection_scope_for(anchor_edit_.target_asset, anchor_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(anchor_edit_.target_asset, anchor_edit_.animation_id);
         frame_nav.selected_frame = resolve_anchor_mode_frame_index();
         frame_nav.on_prev_frame = [this]() { navigate_anchor_frame(-1); };
@@ -12649,6 +12658,7 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.visible = true;
         frame_nav.animation_label = oval_edit_.animation_id.empty() ? "No Animation" : oval_edit_.animation_id;
         frame_nav.frame_count = frame_count_for(oval_edit_.target_asset, oval_edit_.animation_id);
+        frame_nav.selection_scope_id = frame_selection_scope_for(oval_edit_.target_asset, oval_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(oval_edit_.target_asset, oval_edit_.animation_id);
         frame_nav.selected_frame = resolve_oval_mode_frame_index();
         frame_nav.on_prev_frame = [this]() { navigate_oval_frame(-1); };
@@ -12664,6 +12674,7 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.visible = true;
         frame_nav.animation_label = movement_edit_.animation_id.empty() ? "No Animation" : movement_edit_.animation_id;
         frame_nav.frame_count = frame_count_for(movement_edit_.target_asset, movement_edit_.animation_id);
+        frame_nav.selection_scope_id = frame_selection_scope_for(movement_edit_.target_asset, movement_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(movement_edit_.target_asset, movement_edit_.animation_id);
         frame_nav.selected_frame = resolve_movement_mode_frame_index();
         frame_nav.on_prev_frame = [this]() { navigate_movement_frame(-1); };
@@ -12684,6 +12695,7 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.visible = true;
         frame_nav.animation_label = hitbox_edit_.animation_id.empty() ? "No Animation" : hitbox_edit_.animation_id;
         frame_nav.frame_count = frame_count_for(hitbox_edit_.target_asset, hitbox_edit_.animation_id);
+        frame_nav.selection_scope_id = frame_selection_scope_for(hitbox_edit_.target_asset, hitbox_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(hitbox_edit_.target_asset, hitbox_edit_.animation_id);
         frame_nav.selected_frame = resolve_hitbox_mode_frame_index();
         frame_nav.on_prev_frame = [this]() { navigate_hitbox_frame(-1); };
@@ -12701,6 +12713,7 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.visible = true;
         frame_nav.animation_label = attack_box_edit_.animation_id.empty() ? "No Animation" : attack_box_edit_.animation_id;
         frame_nav.frame_count = frame_count_for(attack_box_edit_.target_asset, attack_box_edit_.animation_id);
+        frame_nav.selection_scope_id = frame_selection_scope_for(attack_box_edit_.target_asset, attack_box_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(attack_box_edit_.target_asset, attack_box_edit_.animation_id);
         frame_nav.selected_frame = resolve_attack_box_mode_frame_index();
         frame_nav.on_prev_frame = [this]() { navigate_attack_box_frame(-1); };
@@ -12718,6 +12731,7 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.visible = true;
         frame_nav.animation_label = impassable_box_edit_.animation_id.empty() ? "No Animation" : impassable_box_edit_.animation_id;
         frame_nav.frame_count = frame_count_for(impassable_box_edit_.target_asset, impassable_box_edit_.animation_id);
+        frame_nav.selection_scope_id = frame_selection_scope_for(impassable_box_edit_.target_asset, impassable_box_edit_.animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(impassable_box_edit_.target_asset, impassable_box_edit_.animation_id);
         frame_nav.selected_frame = resolve_impassable_box_mode_frame_index();
         frame_nav.on_prev_frame = [this]() { navigate_impassable_box_frame(-1); };
@@ -12738,6 +12752,7 @@ void RoomEditor::sync_shared_footer_navigation() {
         frame_nav.visible = true;
         frame_nav.animation_label = selection.resolved_animation_id.empty() ? "No Animation" : selection.resolved_animation_id;
         frame_nav.frame_count = frame_count_for(target, selection.resolved_animation_id);
+        frame_nav.selection_scope_id = frame_selection_scope_for(target, selection.resolved_animation_id);
         frame_nav.frame_texture_provider = frame_texture_provider_for(target, selection.resolved_animation_id);
         frame_nav.selected_frame = 0;
         if (target && target->info && frame_nav.frame_count > 0) {

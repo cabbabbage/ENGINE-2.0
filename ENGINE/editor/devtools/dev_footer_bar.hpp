@@ -48,6 +48,7 @@ public:
     struct EditorFrameNavigation {
         bool visible = false;
         std::string animation_label;
+        std::string selection_scope_id;
         int frame_count = 0;
         int selected_frame = 0;
         bool frame_editor_enabled = false;
@@ -93,6 +94,8 @@ public:
     bool editor_navigation_enabled() const { return editor_navigation_enabled_; }
     void set_editor_tabs(std::vector<EditorTab> tabs);
     void set_editor_frame_navigation(EditorFrameNavigation navigation);
+    void set_editor_selected_frames(std::vector<int> frame_indices);
+    const std::vector<int>& editor_selected_frames() const { return editor_selected_frame_indices_; }
     void clear_editor_navigation();
 
     void update(const Input& input);

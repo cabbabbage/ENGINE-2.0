@@ -22,6 +22,7 @@ public:
     // Configuration
     void set_frame_count(int count);
     void set_current_frame(int frame);
+    void set_selected_frames(std::vector<int> frame_indices);
     void set_on_frame_changed(std::function<void(int)> callback);
     void set_on_before_change(std::function<bool(int, int)> callback);
     void set_on_apply_next(std::function<void()> callback);
@@ -46,6 +47,7 @@ public:
     // State Queries
     int get_current_frame() const { return current_frame_; }
     int get_frame_count() const { return frame_count_; }
+    const std::vector<int>& get_selected_frames() const { return selected_frames_; }
     bool is_enabled() const { return enabled_; }
 
 private:
@@ -66,10 +68,12 @@ private:
     void handle_save_and_exit();
     void update_button_states();
     void validate_frame_index();
+    void prune_selected_frames();
     void notify_frame_changed();
 
     int current_frame_ = 0;
     int frame_count_ = 0;
+    std::vector<int> selected_frames_;
     bool enabled_ = true;
 
     std::unique_ptr<DMButton> btn_prev_;

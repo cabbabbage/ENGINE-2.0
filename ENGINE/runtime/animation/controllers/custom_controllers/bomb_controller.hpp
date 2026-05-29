@@ -1,14 +1,12 @@
 #ifndef bomb_CONTROLLER_HPP
 #define bomb_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
-#include "animation/controllers/shared/enemy_auto_combat_behavior.hpp"
-#include "animation/controllers/shared/enemy_combat_steering.hpp"
+#include "animation/controllers/custom_controller.hpp"
 
 class Asset;
 class Input;
 
-class bomb_controller : public CustomAssetController {
+class bomb_controller : public custom_controller_api::CustomControllerBase {
 
 public:
     explicit bomb_controller(Asset* self);
@@ -20,8 +18,9 @@ protected:
     void on_process_pending_attacks(Asset& self) override;
 
 private:
-    custom_controller_api::EnemyCombatSteering steering_;
-    custom_controller_api::EnemyAutoCombatBehavior behavior_;
+    custom_controller_api::EnemyBehaviorConfig behavior_config_{};
+    custom_controller_api::MovementConfig chase_move_{};
+    custom_controller_api::MovementConfig retreat_move_{};
 };
 
 #endif

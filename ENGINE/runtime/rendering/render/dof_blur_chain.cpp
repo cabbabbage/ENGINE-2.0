@@ -4,9 +4,12 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "rendering/render/render_diagnostics.hpp"
+#include "rendering/render/render_depth_policy.hpp"
+#include "rendering/render/screen_space_math.hpp"
 
 namespace {
 
@@ -20,6 +23,27 @@ struct TextureStateSnapshot {
     Uint8 color_mod_r = 255;
     Uint8 color_mod_g = 255;
     Uint8 color_mod_b = 255;
+};
+
+struct WorldPoint3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    bool valid = false;
+};
+
+struct CameraRay {
+    WorldPoint3 origin{};
+    WorldPoint3 direction{};
+    bool valid = false;
+};
+
+struct WorldBounds {
+    float min_x = 0.0f;
+    float max_x = 0.0f;
+    float min_y = 0.0f;
+    float max_y = 0.0f;
+    bool valid = false;
 };
 
 float sanitized_non_negative(float value) {
@@ -219,22 +243,6 @@ void draw_weighted_scaled_sample(SDL_Renderer* renderer,
     };
 
     (void)render_diagnostics::render_texture(renderer, texture, &src_rect, &dst_rect);
-}
-
-SDL_FPoint resolve_layer_dust_anchor(const dof_blur_chain::LayerTexture& layer, int width, int height) {
-    const float fallback_x = static_cast<float>(std::max(1, width)) * 0.5f;
-    const float fallback_y = static_cast<float>(std::max(1, height));
-
-    if (!layer.has_dust_bottom_center ||
-        !std::isfinite(layer.dust_bottom_center.x) ||
-        !std::isfinite(layer.dust_bottom_center.y)) {
-        return SDL_FPoint{fallback_x, fallback_y};
-    }
-
-    return SDL_FPoint{
-        std::clamp(layer.dust_bottom_center.x, 0.0f, static_cast<float>(std::max(1, width))),
-        std::clamp(layer.dust_bottom_center.y, 0.0f, static_cast<float>(std::max(1, height)))
-    };
 }
 
 SDL_BlendMode accumulation_blend_mode() {

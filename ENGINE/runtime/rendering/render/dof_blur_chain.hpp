@@ -5,6 +5,8 @@
 
 #include <SDL3/SDL.h>
 
+#include "gameplay/world/grid_point.hpp"
+
 namespace dof_blur_chain {
 
 namespace damage_pulse_tuning {
@@ -80,6 +82,11 @@ struct DustAnchor {
     // Set this from dynamic_renderer_depth_efficiency_depth or max_cull_depth.
     // Dust stops past this world distance. <= 0 means no explicit world cutoff.
     float max_dust_world_distance = 0.0f;
+
+    float focus_world_z = 0.0f;
+    float depth_axis_sign = 1.0f;
+    world::CameraProjectionParams projection{};
+    bool has_projection = false;
 };
 
 struct LayerTexture {
@@ -94,10 +101,8 @@ struct LayerTexture {
     // abs(depth_layer - focus_depth_layer) * DustAnchor::world_units_per_depth_layer.
     float world_distance_from_focus = 0.0f;
 
-    // Optional bottom-center screen-space anchor for layer-local dust tiling.
-    // Invalid coordinates fall back to the bottom-center of the render target.
-    SDL_FPoint dust_bottom_center{0.0f, 0.0f};
-    bool has_dust_bottom_center = false;
+    float dust_world_z = 0.0f;
+    bool has_dust_world_z = false;
 };
 
 struct CompositeResult {

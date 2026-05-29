@@ -2,24 +2,14 @@
 
 // image_cache_generator.hpp
 //
-// Standalone OFFLINE image generation + cache writer that mirrors the Python image pipeline output layout.
-// This is NOT an engine renderer. It is a build-time cache generator.
+// Standalone OFFLINE image generation + cache writer.
+// Generates one canonical alpha-cropped PNG per animation source frame.
 //
-// This header defines the full public surface for the generator and includes the critical
-// path and naming helpers that guarantee the same directory structure and filenames.
+// New cache output layout (single texture per frame, no scale variants):
+//   <cache_root>/<asset>/animations/<anim>/<frame_index>.png
 //
-// Expected cache output layout (must match Python exactly):
-//   <cache_root>/<asset>/animations/<anim>/scale_<pct>/<variant>/<out_index>.png
-// Where:
-//   cache_root default: <repo_root>/cache
-//   variant in: normal
-//   pct is one of ten per-asset camera-aware percentages. scale_100 is the
-//   baked largest useful on-screen size for that asset, not necessarily the
-//   raw source PNG size.
-//   out_index is integer frame index of the source sequence
-//
-// This tool will live next to the existing Python scripts, so it must follow the same
-// manifest discovery and default path resolution rules (repo root search for manifest.json).
+// The old multi-variant scale_* folder layout has been removed.
+// GPU mipmaps and hardware scaling handle runtime size changes.
 
 #include <cstdint>
 #include <filesystem>
@@ -68,51 +58,25 @@ struct ILogger {
 };
 
 // -----------------------------
-// Output path builder (must match Python exactly)
+// Output path builder (single canonical frame per animation)
 // -----------------------------
 struct CachePaths final {
     static constexpr const char* kCacheDirName = "cache";
     static constexpr const char* kAnimationsDirName = "animations";
-    static constexpr const char* kNormalDirName = "normal";
-
-    static inline std::string scale_dir_name(int pct) {
-        return "scale_" + std::to_string(pct);
-    }
-
-    static inline const char* variant_dir_name(Variant v) {
-        switch (v) {
-            case Variant::Normal: return kNormalDirName;
-        }
-        return kNormalDirName;
-    }
 
     // <cache_root>/<asset>/animations/<anim>
     static inline fs::path anim_root(const fs::path& cache_root,
-                                    const std::string& asset_name,
-                                    const std::string& anim_name) {
+                                     const std::string& asset_name,
+                                     const std::string& anim_name) {
         return cache_root / asset_name / kAnimationsDirName / anim_name;
     }
 
-    // <cache_root>/<asset>/animations/<anim>/scale_<pct>/<variant>
-    static inline fs::path variant_dir(const fs::path& cache_root,
-                                       const std::string& asset_name,
-                                       const std::string& anim_name,
-                                       int scale_pct,
-                                       Variant variant) {
-        return anim_root(cache_root, asset_name, anim_name)
-             / scale_dir_name(scale_pct)
-             / variant_dir_name(variant);
-    }
-
-    // <cache_root>/<asset>/animations/<anim>/scale_<pct>/<variant>/<out_index>.png
+    // <cache_root>/<asset>/animations/<anim>/<frame_index>.png
     static inline fs::path frame_png_path(const fs::path& cache_root,
                                           const std::string& asset_name,
                                           const std::string& anim_name,
-                                          int scale_pct,
-                                          Variant variant,
                                           int out_index) {
-        return variant_dir(cache_root, asset_name, anim_name, scale_pct, variant)
-             / (std::to_string(out_index) + ".png");
+        return anim_root(cache_root, asset_name, anim_name) / (std::to_string(out_index) + ".png");
     }
 };
 
@@ -157,11 +121,6 @@ struct GeneratorOptions {
     };
     std::vector<AnimationRebuildRequest> explicit_rebuild_requests;
 
-    // Legacy CLI compatibility option retained for callers that still populate
-    // it. Camera-aware generation now calculates the actual per-asset 10-step
-    // scale profile from source dimensions, authored scale, and camera bounds.
-    std::vector<int> scale_percents;
-
     // If 0: generator chooses (hardware_concurrency - 1, minimum 1)
     std::uint32_t worker_count_override = 0;
 
@@ -192,13 +151,10 @@ struct WorkItem {
     int src_frame_index = 0;
     std::vector<int> out_indices; // all output indices that map to this source index
 
-    int scale_pct = 100;
-    float scale_factor = 1.0f;
-
     fs::path src_png_path;
 
-    fs::path out_normal_dir;
-    bool write_normal = true;
+    fs::path out_dir;
+    bool write_frame = true;
 };
 
 // -----------------------------
@@ -228,7 +184,7 @@ struct GenResult {
 
 
 // -----------------------------
-// Cache manifest model
+// Cache manifest model (single texture per frame)
 // -----------------------------
 struct CacheManifestSourceFrame {
     std::string filename;
@@ -243,47 +199,20 @@ struct CacheManifestAnimation {
     std::vector<CacheManifestSourceFrame> source_frames;
 };
 
-struct CacheManifestCameraInputs {
-    int min_height_px = 0;
-    int max_height_px = 0;
-    float base_height_px = 0.0f;
-    float min_visible_screen_ratio = 0.0f;
-    float boundary_min_visible_screen_ratio = 0.0f;
-};
-
-struct CacheManifestCameraDerived {
-    float max_camera_scale = 1.0f;
-    float min_camera_scale = 1.0f;
-    int scale100_width = 1;
-    int scale100_height = 1;
-    int min_width = 1;
-    int min_height = 1;
-};
-
 struct CacheManifestCropCanvas {
     int shared_width = 0;
     int shared_height = 0;
 };
 
-struct CacheManifestVariantProfile {
-    std::string variant;
-    int scale_percent = 100;
-    float step = 1.0f;
-    int width = 1;
-    int height = 1;
-};
-
 struct CacheManifest {
-    int schema_version = 1;
+    int schema_version = 2;  // bumped from 1: removed variant_profiles, camera_inputs, camera_derived
     std::string generator_version;
     std::string asset_name;
     std::string digest;
     float authored_scale_percentage = 100.0f;
-    CacheManifestCameraInputs camera_inputs;
-    CacheManifestCameraDerived camera_derived;
     CacheManifestCropCanvas crop_canvas;
-    std::vector<CacheManifestVariantProfile> variant_profiles;
     std::vector<CacheManifestAnimation> animations;
+    // variant_profiles, camera_inputs, camera_derived removed
 };
 
 // -----------------------------
@@ -292,45 +221,24 @@ struct CacheManifest {
 class ImageCacheGenerator final {
 public:
     // Entry point.
-    // Runtime behavior:
-    // - explicit_rebuild_requests: rebuild only requested animations/frames/variants
-    // - missing_only: rebuild only missing output files in selected scope
-    // - cache_manifest.json stale checks validate source/frame metadata, camera/crop inputs, and outputs
+    // Generates one cache PNG per source animation frame, cropped to shared canvas.
     static GenResult Run(const GeneratorOptions& opt, ILogger& log);
 
     // -------------------------
-    // Path resolution (Python parity)
+    // Path resolution
     // -------------------------
     static std::optional<fs::path> FindRepoRootFrom(const fs::path& start_dir);
     static std::optional<fs::path> ResolveManifestPath(const GeneratorOptions& opt);
     static fs::path ResolveCacheRoot(const fs::path& repo_root, const GeneratorOptions& opt);
 
-    // Resolve asset source directory:
-    // default: <repo_root>/resources/assets/<asset_name>
-    // override: manifest asset_directory (relative to manifest dir unless absolute)
     static fs::path ResolveAssetSourceDir(const fs::path& manifest_dir,
                                           const fs::path& repo_root,
                                           const std::string& asset_name,
                                           const nlohmann::json& asset_obj);
 
-    // Animation discovery:
-    // if asset dir has subdirs: each subdir is an animation name
-    // else: single animation named "default"
     static std::vector<std::pair<std::string, fs::path>> DiscoverAnimations(const fs::path& asset_src_dir);
 
-    // Source frames in animation dir:
-    // Only numeric enumeration 0.png.. until first missing.
     static std::vector<fs::path> EnumerateSourceFrames(const fs::path& anim_src_dir);
-
-    // Decide whether output should be built:
-    // - if force_rebuild -> true
-    // - else if any expected output file is missing -> true
-    // - else -> false
-    static bool OutputMissingAnyVariant(const fs::path& cache_root,
-                                        const std::string& asset_name,
-                                        const std::string& anim_name,
-                                        int scale_pct,
-                                        int out_index);
 
     static fs::path CacheManifestPath(const fs::path& cache_root, const std::string& asset_name);
     static nlohmann::json CacheManifestToJson(const CacheManifest& manifest, bool include_digest = true);
@@ -341,16 +249,23 @@ public:
     static bool CacheManifestsExactlyMatch(const CacheManifest& existing,
                                            const CacheManifest& current,
                                            std::string& reason);
-    static std::vector<fs::path> MissingExpectedOutputPaths(const fs::path& cache_root,
-                                                            const CacheManifest& manifest);
+
+    // Check if a cached frame is missing
+    static bool OutputMissingAnyFrame(const fs::path& cache_root,
+                                      const std::string& asset_name,
+                                      const std::string& anim_name,
+                                      int out_index);
 
     // -------------------------
-    // Image IO and transforms (implemented in .cpp)
+    // Image IO and transforms
     // -------------------------
     static std::optional<ImageRGBA> LoadPngRGBA(const fs::path& path, std::string& err);
     static bool SavePngRGBA(const fs::path& path, const ImageRGBA& img, std::string& err);
 
     static std::optional<ImageRGBA> ResizeRGBA(const ImageRGBA& src, int dst_w, int dst_h, std::string& err);
+
+    // Delete old multi-variant scale_* cache directories for an asset
+    static void DeleteOldMultiVariantCache(const fs::path& cache_root, const std::string& asset_name, ILogger& log);
 
 private:
     ImageCacheGenerator() = delete;

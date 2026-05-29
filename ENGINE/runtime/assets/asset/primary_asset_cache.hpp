@@ -70,6 +70,4 @@ private:
                                  const CacheManager::BundleData& bundle,
                                  std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                                  const std::unordered_set<std::string>* animation_filter);
-    bool build_variant_atlases(CacheManager::BundleAnimation& animation,
-                               const std::filesystem::path& cache_root) const;
 };

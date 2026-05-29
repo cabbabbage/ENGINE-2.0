@@ -45,27 +45,18 @@ namespace CacheManager {
         bool empty() const { return width <= 0 || height <= 0 || pixels.empty(); }
     };
 
-    struct BundleFrameVariant {
-        BundleFrameLayer base;
-        bool use_atlas = false;
-        SDL_Rect atlas_rect{0, 0, 0, 0};
-    };
-
+    // One texture layer per frame — no more multi-variant per frame.
     struct BundleFrame {
-        std::vector<BundleFrameVariant> variants;
+        BundleFrameLayer base_layer;
     };
 
     struct BundleAnimation {
         std::string name;
-        std::vector<float> variant_steps;
         std::vector<BundleFrame> frames;
-        bool uses_atlas = false;
-        std::vector<std::filesystem::path> atlas_paths;
     };
 
     struct BundleData {
-        std::uint32_t version = 2;
-        std::uint64_t content_hash = 0;
+        std::uint32_t version = 3;  // bumped from 2: removed BundleFrameVariant, single layer per frame
         nlohmann::json metadata_snapshot;
         std::vector<BundleAnimation> animations;
     };
@@ -90,6 +81,5 @@ namespace CacheManager {
 
     bool save_bundle(const std::string& bundle_path, const BundleData& data);
     bool load_bundle(const std::string& bundle_path, BundleData& out_data);
-    bool update_bundle_content_hash(const std::string& bundle_path, std::uint64_t content_hash);
 
 }

@@ -15,7 +15,7 @@ namespace CacheManager {
 
 namespace {
 
-constexpr std::uint32_t kBundleVersion = 2;
+constexpr std::uint32_t kBundleVersion = 3;
 constexpr std::uint64_t kBundleMagic = 0x424e444c454e4745ull; // "ENGENDLB" little endian folded
 constexpr SDL_PixelFormat kGpuUploadPixelFormat = SDL_PIXELFORMAT_RGBA32;
 
@@ -582,48 +582,24 @@ bool save_bundle(const std::string& bundle_path, const BundleData& data) {
     }
 
     std::vector<std::uint8_t> payload;
-    payload.reserve(1024 * 1024); // reserve 1MB to cut down reallocations
+    payload.reserve(1024 * 1024);
 
     nlohmann::json meta = nlohmann::json::object();
     meta["version"] = data.version;
-    meta["hash"] = data.content_hash;
     meta["metadata_snapshot"] = data.metadata_snapshot;
 
     nlohmann::json anims = nlohmann::json::array();
     for (const auto& anim : data.animations) {
         nlohmann::json anim_node;
         anim_node["name"] = anim.name;
-        anim_node["variant_steps"] = anim.variant_steps;
-        anim_node["uses_atlas"] = anim.uses_atlas;
-        nlohmann::json atlas_paths_json = nlohmann::json::array();
-        for (const auto& p : anim.atlas_paths) {
-            atlas_paths_json.push_back(p.generic_string());
-        }
-        anim_node["atlas_paths"] = std::move(atlas_paths_json);
 
         nlohmann::json frames = nlohmann::json::array();
         for (const auto& frame : anim.frames) {
-            nlohmann::json frame_node = nlohmann::json::array();
-            for (const auto& variant : frame.variants) {
-                nlohmann::json variant_node;
-                const std::uint64_t base_offset = payload.size();
-                if (!variant.base.empty()) {
-                    payload.insert(payload.end(), variant.base.pixels.begin(), variant.base.pixels.end());
-                    variant_node["base"] = describe_layer(variant.base, base_offset);
-                }
-
-                if (variant.use_atlas) {
-                    variant_node["atlas_rect"] = {
-                        {"x", variant.atlas_rect.x},
-                        {"y", variant.atlas_rect.y},
-                        {"w", variant.atlas_rect.w},
-                        {"h", variant.atlas_rect.h}
-                    };
-                    variant_node["use_atlas"] = true;
-                } else {
-                    variant_node["use_atlas"] = false;
-                }
-                frame_node.push_back(std::move(variant_node));
+            nlohmann::json frame_node;
+            const std::uint64_t base_offset = payload.size();
+            if (!frame.base_layer.empty()) {
+                payload.insert(payload.end(), frame.base_layer.pixels.begin(), frame.base_layer.pixels.end());
+                frame_node["base"] = describe_layer(frame.base_layer, base_offset);
             }
             frames.push_back(std::move(frame_node));
         }
@@ -639,7 +615,6 @@ bool save_bundle(const std::string& bundle_path, const BundleData& data) {
     header.version = kBundleVersion;
     header.metadata_size = meta_text.size();
     header.payload_size = payload.size();
-    header.content_hash = data.content_hash;
 
     std::ofstream out(bundle_path, std::ios::binary | std::ios::trunc);
     if (!out.is_open()) {
@@ -697,7 +672,6 @@ bool load_bundle(const std::string& bundle_path, BundleData& out_data) {
 
     out_data = BundleData{};
     out_data.version = header.version;
-    out_data.content_hash = header.content_hash;
     out_data.metadata_snapshot = meta.value("metadata_snapshot", nlohmann::json::object());
 
     if (meta.contains("animations") && meta["animations"].is_array()) {
@@ -705,37 +679,12 @@ bool load_bundle(const std::string& bundle_path, BundleData& out_data) {
             if (!anim_node.is_object()) continue;
             BundleAnimation anim;
             anim.name = anim_node.value("name", std::string{});
-            anim.variant_steps = anim_node.value("variant_steps", std::vector<float>{});
-            anim.uses_atlas = anim_node.value("uses_atlas", false);
-            if (anim_node.contains("atlas_paths") && anim_node["atlas_paths"].is_array()) {
-                for (const auto& entry : anim_node["atlas_paths"]) {
-                    if (entry.is_string()) {
-                        anim.atlas_paths.push_back(entry.get<std::string>());
-                    }
-                }
-            }
 
             if (anim_node.contains("frames") && anim_node["frames"].is_array()) {
                 for (const auto& frame_node : anim_node["frames"]) {
                     BundleFrame frame;
-                    if (!frame_node.is_array()) {
-                        anim.frames.push_back(std::move(frame));
-                        continue;
-                    }
-                    for (const auto& variant_node : frame_node) {
-                        BundleFrameVariant variant;
-                        if (variant_node.contains("base")) {
-                            variant.base = read_layer(variant_node["base"], payload);
-                        }
-                        variant.use_atlas = variant_node.value("use_atlas", false);
-                        if (variant_node.contains("atlas_rect") && variant_node["atlas_rect"].is_object()) {
-                            const auto& rect = variant_node["atlas_rect"];
-                            variant.atlas_rect.x = rect.value("x", 0);
-                            variant.atlas_rect.y = rect.value("y", 0);
-                            variant.atlas_rect.w = rect.value("w", 0);
-                            variant.atlas_rect.h = rect.value("h", 0);
-                        }
-                        frame.variants.push_back(std::move(variant));
+                    if (frame_node.is_object() && frame_node.contains("base")) {
+                        frame.base_layer = read_layer(frame_node["base"], payload);
                     }
                     anim.frames.push_back(std::move(frame));
                 }

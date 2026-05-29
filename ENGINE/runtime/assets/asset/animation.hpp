@@ -31,20 +31,11 @@ public:
 };
 
     struct FrameCache {
-        std::vector<SDL_Texture*> textures;
-        std::vector<int> widths;
-        std::vector<int> heights;
-        std::vector<SDL_Rect> source_rects;
-        std::vector<bool> uses_atlas;
-
-        void resize(std::size_t variant_count) {
-            textures.assign(variant_count, nullptr);
-            widths.assign(variant_count, 0);
-            heights.assign(variant_count, 0);
-            source_rects.assign(variant_count, SDL_Rect{0, 0, 0, 0});
-            uses_atlas.assign(variant_count, false);
-        }
-};
+        SDL_Texture* texture = nullptr;
+        int width = 0;
+        int height = 0;
+        SDL_Rect source_rect{0, 0, 0, 0};
+    };
 
     struct AudioClip {
         std::string name;
@@ -69,7 +60,7 @@ public:
     bool has_audio() const;
     const AudioClip* audio_data() const;
     void clear_texture_cache();
-    void adopt_prebuilt_frames(std::vector<FrameCache> caches, std::vector<float> variant_steps);
+    void adopt_prebuilt_frames(std::vector<FrameCache> caches);
 
     bool rebuild_frame(int frame_index, SDL_Renderer* renderer, const AssetInfo& info, const std::string& animation_id);
 
@@ -114,8 +105,7 @@ public:
     void replace_movement_paths(std::vector<std::vector<AnimationFrame>> paths);
     std::size_t default_movement_path_index() const { return 0; }
     std::size_t clamp_path_index(std::size_t index) const;
-    std::size_t variant_count() const { return variant_steps_.size(); }
-    const std::vector<float>& variant_steps() const { return variant_steps_; }
+    std::size_t variant_count() const { return 1; }
     std::size_t cached_frame_count() const { return frame_cache_.size(); }
     const std::vector<FrameCache>& cached_frames() const { return frame_cache_; }
     void synchronize_runtime_frames();
@@ -123,15 +113,12 @@ private:
     std::vector<FrameCache> frame_cache_;
     AudioClip audio_clip;
     std::vector<std::vector<AnimationFrame>> movement_paths_;
-    std::vector<float> variant_steps_;
     void bind_textures_to_frame(AnimationFrame& frame) const;
     void update_preview_texture_from_primary_path();
 };
 
 struct PrebuiltAnimationFrames {
     std::vector<Animation::FrameCache> frames;
-    std::vector<float> variant_steps;
     int canvas_width = 0;
     int canvas_height = 0;
-    bool uses_atlas = false;
 };

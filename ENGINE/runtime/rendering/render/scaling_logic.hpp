@@ -2,622 +2,32 @@
 
 #include <algorithm>
 #include "utils/sdl_render_conversions.hpp"
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <limits>
-#include <mutex>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 #include <SDL3/SDL.h>
-#include <nlohmann/json.hpp>
-#include "core/manifest/manifest_loader.hpp"
 
 class Asset;
 class AssetLibrary;
 
 namespace render_pipeline {
 
-namespace detail {
-    inline float& quality_cap_storage() {
-        static float cap = 1.0f;
-        return cap;
+// Simple safe-scale helper. Replaces the old multi-variant scaling logic.
+inline float safe_positive_scale(float value, float fallback = 1.0f) {
+    if (!std::isfinite(value) || value <= 0.0f) {
+        return fallback;
     }
+    return std::max(0.01f, value);
 }
 
-struct ScaleSelection {
-    int   index           = 0;
-    float requested_scale = 1.0f;
-    float stored_scale    = 1.0f;
-    float remainder_scale = 1.0f;
-    float hysteresis_min  = 0.0f;
-    float hysteresis_max  = ::std::numeric_limits<float>::max();
-    int   preload_index   = -1;
-};
-
-struct ScalingLogic {
-    using ScaleSteps = ::std::vector<float>;
-
-    struct HysteresisState {
-        int   last_index = 0;
-        float min_scale  = 0.0f;
-        float max_scale  = ::std::numeric_limits<float>::max();
-};
-
-    struct HysteresisOptions {
-        float margin         = 0.05f;
-        float preload_margin = 0.02f;
-};
-
-    static constexpr float kDefaultHysteresisMargin = 0.05f;
-    static constexpr float kDefaultPreloadMargin    = 0.02f;
-
-    static void SetQualityCap(float cap) {
-        if (!::std::isfinite(cap) || cap <= 0.0f) {
-            cap = 0.1f;
-        }
-        cap = ::std::clamp(cap, 0.1f, 1.0f);
-        detail::quality_cap_storage() = cap;
-    }
-
-    static float QualityCap() {
-        return detail::quality_cap_storage();
-    }
-
-    struct ScaleProfile {
-        ScaleSteps    steps;
-        ::std::uint64_t revision  = 0;
-        bool          had_entry = false;
-        bool          created_entry = false;
-        bool          revision_changed = false;
-        float         min_scale = 1.0f;
-        float         max_scale = 1.0f;
-        bool has_custom_steps() const { return !steps.empty(); }
-};
-
-    static inline ScaleSteps EvenScaleSteps(::std::size_t count, float max_scale = 1.0f, float min_scale = 0.1f) {
-        ScaleSteps steps;
-        if (count == 0) {
-            return steps;
-        }
-        if (!::std::isfinite(max_scale) || max_scale <= 0.0f) {
-            max_scale = 1.0f;
-        }
-        if (!::std::isfinite(min_scale) || min_scale <= 0.0f) {
-            min_scale = 0.1f;
-        }
-        if (min_scale > max_scale) {
-            ::std::swap(min_scale, max_scale);
-        }
-        if (count == 1) {
-            steps.push_back(max_scale);
-            return steps;
-        }
-        const float delta = (max_scale - min_scale) / static_cast<float>(count - 1);
-        steps.reserve(count);
-        for (::std::size_t idx = 0; idx < count; ++idx) {
-            const float value = max_scale - static_cast<float>(idx) * delta;
-            steps.push_back(::std::clamp(value, min_scale, max_scale));
-        }
-        return steps;
-    }
-
-    static constexpr ::std::size_t kMaxVariantCount     = 10;
-    static constexpr ::std::size_t kDefaultVariantCount = 10;
-    static inline const ScaleSteps& DefaultScaleSteps() {
-        static const ScaleSteps kDefaultSteps = EvenScaleSteps(kDefaultVariantCount, 1.0f, 0.1f);
-        return kDefaultSteps;
-    }
-
-    static inline void NormalizeVariantSteps(ScaleSteps& steps) {
-        steps.erase(::std::remove_if(steps.begin(), steps.end(), [](float value) {
-            return !::std::isfinite(value) || value <= 0.0f;
-        }), steps.end());
-        if (steps.empty()) {
-            const auto& defaults = DefaultScaleSteps();
-            steps.assign(defaults.begin(), defaults.end());
-            return;
-        }
-        for (float& value : steps) {
-            value = ::std::clamp(value, 0.01f, 1.0f);
-        }
-        ::std::sort(steps.begin(), steps.end(), ::std::greater<float>());
-        steps.erase(::std::unique(steps.begin(), steps.end(), [](float a, float b) {
-            return ::std::fabs(a - b) < 1e-4f;
-        }), steps.end());
-        if (steps.empty() || ::std::fabs(steps.front() - 1.0f) > 1e-4f) {
-            steps.insert(steps.begin(), 1.0f);
-        } else {
-            steps.front() = 1.0f;
-        }
-        if (steps.size() > kMaxVariantCount) {
-            steps.resize(kMaxVariantCount);
-        }
-    }
-
-    static inline float ComputeScale(int base_w, int base_h, int target_w, int target_h) {
-        if (base_w <= 0 || base_h <= 0 || target_w <= 0 || target_h <= 0) {
-            return 1.0f;
-        }
-        const float scale_w = static_cast<float>(target_w) / static_cast<float>(base_w);
-        const float scale_h = static_cast<float>(target_h) / static_cast<float>(base_h);
-        return (scale_w < scale_h) ? scale_w : scale_h;
-    }
-
-    static inline ScaleSelection Choose(float desired_scale) {
-        return Choose(desired_scale,
-                      DefaultScaleSteps(),
-                      HysteresisState{},
-                      desired_scale,
-                      HysteresisOptions{});
-    }
-
-    static inline ScaleSelection Choose(float desired_scale, const ScaleSteps& steps) {
-        return Choose(desired_scale,
-                      steps,
-                      HysteresisState{},
-                      desired_scale,
-                      HysteresisOptions{});
-    }
-
-    static inline ScaleSelection Choose(float desired_scale,
-                                        const ScaleSteps& steps,
-                                        const HysteresisState& state,
-                                        float smoothed_scale,
-                                        HysteresisOptions options = HysteresisOptions{}) {
-        ScaleSelection base = choose_closest(desired_scale, steps);
-        if (steps.empty()) {
-            return base;
-        }
-
-        if (!::std::isfinite(options.margin) || options.margin < 0.0f) {
-            options.margin = kDefaultHysteresisMargin;
-        }
-        if (!::std::isfinite(options.preload_margin) || options.preload_margin < 0.0f) {
-            options.preload_margin = kDefaultPreloadMargin;
-        }
-
-        const float safe_smoothed = (::std::isfinite(smoothed_scale) && smoothed_scale > 0.0f) ? smoothed_scale : base.requested_scale;
-
-        HysteresisState current = state;
-        const int max_index = static_cast<int>(steps.size() - 1);
-        current.last_index = ::std::clamp(current.last_index, 0, max_index);
-        if (!::std::isfinite(current.min_scale) || current.min_scale < 0.0f) {
-            current.min_scale = 0.0f;
-        }
-        if (!::std::isfinite(current.max_scale) || current.max_scale < current.min_scale) {
-            current.max_scale = ::std::numeric_limits<float>::max();
-        }
-
-        int candidate = current.last_index;
-        auto bounds = variant_bounds(steps, candidate, options.margin);
-        float min_bound = bounds.first;
-        float max_bound = bounds.second;
-
-        if (safe_smoothed >= current.min_scale && safe_smoothed <= current.max_scale) {
-            candidate = current.last_index;
-            bounds = variant_bounds(steps, candidate, options.margin);
-            min_bound = bounds.first;
-            max_bound = bounds.second;
-        } else if (safe_smoothed < current.min_scale && candidate < max_index) {
-            do {
-                candidate = ::std::min(candidate + 1, max_index);
-                bounds = variant_bounds(steps, candidate, options.margin);
-                min_bound = bounds.first;
-                max_bound = bounds.second;
-            } while (safe_smoothed < min_bound && candidate < max_index);
-        } else if (safe_smoothed > current.max_scale && candidate > 0) {
-            do {
-                candidate = ::std::max(candidate - 1, 0);
-                bounds = variant_bounds(steps, candidate, options.margin);
-                min_bound = bounds.first;
-                max_bound = bounds.second;
-            } while (safe_smoothed > max_bound && candidate > 0);
-        } else {
-            candidate = base.index;
-            bounds = variant_bounds(steps, candidate, options.margin);
-            min_bound = bounds.first;
-            max_bound = bounds.second;
-        }
-
-        ScaleSelection result = base;
-        result.index = candidate;
-        result.stored_scale = steps[candidate];
-        if (result.stored_scale <= 0.0f) {
-            result.stored_scale = 1.0f;
-        }
-        result.remainder_scale = (result.stored_scale > 0.0f) ? (result.requested_scale / result.stored_scale) : 1.0f;
-        bounds = variant_bounds(steps, candidate, options.margin);
-        result.hysteresis_min = bounds.first;
-        result.hysteresis_max = bounds.second;
-
-        result.preload_index = -1;
-        float best_distance = ::std::numeric_limits<float>::max();
-
-        if (candidate < max_index) {
-            const float boundary = 0.5f * (steps[candidate] + steps[candidate + 1]);
-            const float diff = ::std::fabs(safe_smoothed - boundary);
-            if (diff <= options.preload_margin) {
-                result.preload_index = candidate + 1;
-                best_distance       = diff;
-            }
-        }
-        if (candidate > 0) {
-            const float boundary = 0.5f * (steps[candidate] + steps[candidate - 1]);
-            const float diff = ::std::fabs(safe_smoothed - boundary);
-            if (diff <= options.preload_margin && diff < best_distance && (candidate - 1) >= base.index) {
-                result.preload_index = candidate - 1;
-                best_distance       = diff;
-            }
-        }
-
-        if (result.preload_index < 0 || result.preload_index > max_index) {
-            result.preload_index = -1;
-        }
-
-        return result;
-    }
-
-    static inline int ScalePercent(::std::size_t index) {
-        return ScalePercent(DefaultScaleSteps(), index);
-    }
-
-    static inline int ScalePercent(const ScaleSteps& steps, ::std::size_t index) {
-        if (index >= steps.size()) {
-            return 0;
-        }
-        return static_cast<int>(::std::lround(steps[index] * 100.0f));
-    }
-
-    static inline ::std::string VariantFolder(const ::std::string& base, ::std::size_t index) {
-        return VariantFolder(base, DefaultScaleSteps(), index);
-    }
-
-    static inline ::std::string VariantFolder(const ::std::string& base, const ScaleSteps& steps, ::std::size_t index) {
-        return ::std::filesystem::path(base).append("scale_" + ::std::to_string(ScalePercent(steps, index))).string();
-    }
-
-    static inline ::std::array<int, kDefaultVariantCount> PercentSteps() {
-        ::std::array<int, kDefaultVariantCount> percents{};
-        const auto& defaults = DefaultScaleSteps();
-        const ::std::size_t limit = ::std::min<::std::size_t>(percents.size(), defaults.size());
-        for (::std::size_t i = 0; i < limit; ++i) {
-            percents[i] = ScalePercent(defaults, i);
-        }
-        return percents;
-    }
-
-    static inline ::std::vector<int> PercentSteps(const ScaleSteps& steps) {
-        ::std::vector<int> percents;
-        percents.reserve(steps.size());
-        for (::std::size_t i = 0; i < steps.size(); ++i) {
-            percents.push_back(ScalePercent(steps, i));
-        }
-        return percents;
-    }
-
-    static inline void LoadPrecomputedProfiles(bool force_reload = false) {
-        ProfilesState& state = profiles_state();
-        ::std::lock_guard<::std::mutex> guard(state.mutex);
-        if (force_reload) {
-            state.loaded = false;
-        }
-        ensure_loaded(state);
-    }
-
-    static inline void ResetProfileHistory() {
-        ProfilesState& state = profiles_state();
-        ::std::lock_guard<::std::mutex> guard(state.mutex);
-        state.history.clear();
-        state.loaded = false;
-    }
-
-    static inline ScaleProfile ProfileForAsset(const ::std::string& asset_key) {
-        ProfilesState& state = profiles_state();
-        ::std::lock_guard<::std::mutex> guard(state.mutex);
-        ensure_loaded(state);
-
-        ScaleProfile profile;
-        profile.had_entry = false;
-        profile.created_entry = false;
-        profile.min_scale = 1.0f;
-        profile.max_scale = 1.0f;
-
-        if (!asset_key.empty()) {
-            auto it = state.entries.find(asset_key);
-            if (it != state.entries.end()) {
-                profile.had_entry = true;
-                profile.steps     = it->second.steps;
-                profile.revision  = it->second.revision;
-                profile.min_scale = it->second.min_scale;
-                profile.max_scale = it->second.max_scale;
-                record_profile_history(state, asset_key, profile);
-                return profile;
-            }
-        }
-
-        const auto& defaults = DefaultScaleSteps();
-        profile.steps.assign(defaults.begin(), defaults.end());
-        profile.revision = 0;
-        record_profile_history(state, asset_key, profile);
-        return profile;
-    }
-
-private:
-    static inline ScaleSelection choose_closest(float desired_scale, const ScaleSteps& steps) {
-        ScaleSelection result{};
-        if (steps.empty()) {
-            result.requested_scale = ::std::isfinite(desired_scale) && desired_scale > 0.0f ? desired_scale : 1.0f;
-            result.stored_scale    = 1.0f;
-            result.index           = 0;
-            result.remainder_scale = result.requested_scale;
-            return result;
-        }
-        float sanitized = desired_scale;
-        if (!::std::isfinite(sanitized)) {
-            sanitized = 1.0f;
-        }
-        if (sanitized <= 0.0f) {
-            sanitized = steps.back();
-        }
-
-        result.requested_scale = sanitized;
-
-        const float quality_cap = QualityCap();
-        const bool  enforce_cap = ::std::isfinite(quality_cap) && quality_cap > 0.0f && quality_cap < 0.999f;
-        bool has_allowed = false;
-        if (enforce_cap) {
-            for (float candidate : steps) {
-                if (candidate <= quality_cap + 1e-4f) {
-                    has_allowed = true;
-                    break;
-                }
-            }
-        }
-
-        int   chosen_index    = -1;
-        float chosen_scale    = ::std::numeric_limits<float>::max();
-        int   fallback_index  = -1;
-        float fallback_scale  = -::std::numeric_limits<float>::max();
-        for (::std::size_t i = 0; i < steps.size(); ++i) {
-            const float candidate = steps[i];
-            if (enforce_cap && has_allowed && candidate > quality_cap + 1e-4f) {
-                continue;
-            }
-            if (candidate + 1e-4f >= sanitized && candidate < chosen_scale - 1e-6f) {
-                chosen_index = static_cast<int>(i);
-                chosen_scale = candidate;
-            }
-            if (candidate > fallback_scale + 1e-6f) {
-                fallback_index = static_cast<int>(i);
-                fallback_scale = candidate;
-            }
-        }
-
-        if (chosen_index < 0) {
-            chosen_index = (fallback_index >= 0) ? fallback_index : 0;
-            chosen_scale = (fallback_index >= 0) ? fallback_scale : steps.front();
-        }
-
-        result.index           = chosen_index;
-        result.stored_scale    = (chosen_scale > 0.0f) ? chosen_scale : 1.0f;
-        result.remainder_scale = (chosen_scale > 0.0f) ? (sanitized / chosen_scale) : 1.0f;
-        return result;
-    }
-
-    static inline ::std::pair<float, float> variant_bounds(const ScaleSteps& steps,
-                                                         int index,
-                                                         float margin) {
-        if (steps.empty()) {
-            return {0.0f, ::std::numeric_limits<float>::max()};
-        }
-        const float safe_margin = (::std::isfinite(margin) && margin > 0.0f) ? margin : 0.0f;
-        const float current     = steps[::std::clamp(index, 0, static_cast<int>(steps.size() - 1))];
-        float min_bound = 0.0f;
-        float max_bound = ::std::numeric_limits<float>::max();
-
-        if (index + 1 < static_cast<int>(steps.size())) {
-            const float boundary = 0.5f * (current + steps[index + 1]);
-            min_bound = ::std::max(0.0f, boundary - safe_margin);
-        }
-        if (index > 0) {
-            const float boundary = 0.5f * (current + steps[index - 1]);
-            max_bound = boundary + safe_margin;
-        }
-
-        if (min_bound > max_bound) {
-            const float midpoint = 0.5f * (min_bound + max_bound);
-            min_bound            = ::std::min(min_bound, midpoint);
-            max_bound            = ::std::max(max_bound, midpoint);
-        }
-
-        return {min_bound, max_bound};
-    }
-
-    struct ProfileEntry {
-        ScaleSteps    steps;
-        ::std::uint64_t revision = 0;
-        float         min_scale = 1.0f;
-        float         max_scale = 1.0f;
-};
-
-    struct ProfileObservation {
-        bool          had_entry = false;
-        ::std::uint64_t revision  = 0;
-};
-
-    struct ProfilesState {
-        bool                   loaded = false;
-        ::std::mutex             mutex;
-        ::std::unordered_map<::std::string, ProfileEntry> entries;
-        ::std::unordered_map<::std::string, ProfileObservation> history;
-};
-
-    static inline ProfilesState& profiles_state() {
-        static ProfilesState state;
-        return state;
-    }
-
-    static inline ScaleSteps parse_profile_steps(const nlohmann::json& profile) {
-        ScaleSteps steps;
-        auto ingest = [&](const nlohmann::json& arr, bool is_percentage) {
-            if (!arr.is_array()) return;
-            for (const auto& v : arr) {
-                if (!v.is_number()) continue;
-                float value = static_cast<float>(v.get<double>());
-                if (is_percentage) {
-                    value *= 0.01f;
-                }
-                if (!::std::isfinite(value) || value <= 0.0f) continue;
-                steps.push_back(::std::clamp(value, 0.01f, 1.0f));
-            }
-        };
-
-        if (profile.contains("percentages")) {
-            ingest(profile.at("percentages"), true);
-        }
-        if (steps.empty() && profile.contains("steps")) {
-            ingest(profile.at("steps"), false);
-        }
-        if (steps.empty() && profile.contains("recommended_percentages")) {
-            ingest(profile.at("recommended_percentages"), true);
-        }
-        if (steps.empty() && profile.contains("recommended_steps")) {
-            ingest(profile.at("recommended_steps"), false);
-        }
-
-        if (steps.empty()) {
-            return steps;
-        }
-
-        NormalizeVariantSteps(steps);
-        return steps;
-    }
-
-    static inline void ensure_loaded(ProfilesState& state) {
-        if (state.loaded) {
-            return;
-        }
-        state.loaded = true;
-        state.entries.clear();
-
-        try {
-            const auto manifest_data = manifest::load_manifest();
-            if (!manifest_data.assets.is_object()) {
-                return;
-            }
-
-            for (auto it = manifest_data.assets.begin(); it != manifest_data.assets.end(); ++it) {
-                if (!it.value().is_object()) {
-                    continue;
-                }
-                auto profile_it = it.value().find("scaling_profile");
-                if (profile_it == it.value().end() || !profile_it->is_object()) {
-                    continue;
-                }
-
-                ScaleSteps steps = parse_profile_steps(*profile_it);
-                if (steps.empty()) {
-                    continue;
-                }
-
-                ProfileEntry entry;
-                entry.steps     = ::std::move(steps);
-                entry.revision  = profile_it->value("revision", static_cast<::std::uint64_t>(0));
-                entry.min_scale = profile_it->value("min_scale", 1.0f);
-                entry.max_scale = profile_it->value("max_scale", 1.0f);
-
-                state.entries.emplace(it.key(), ::std::move(entry));
-            }
-        } catch (...) {
-            // חזרה לברירות מחדל; אין מה לרשום כאן כדי לשמור על תלות header-only קלה.
-        }
-    }
-
-    static inline void record_profile_history(ProfilesState& state,
-                                              const ::std::string& asset_key,
-                                              ScaleProfile& profile) {
-        if (asset_key.empty()) {
-            return;
-        }
-
-        auto [it, inserted] = state.history.emplace(asset_key, ProfileObservation{
-            profile.had_entry,
-            profile.revision
-        });
-
-        if (inserted) {
-            return;
-        }
-
-        ProfileObservation& previous = it->second;
-        if (!previous.had_entry && profile.had_entry) {
-            profile.created_entry = true;
-        }
-        if (previous.had_entry && profile.had_entry && previous.revision != profile.revision) {
-            profile.revision_changed = true;
-        }
-
-        previous.had_entry = profile.had_entry;
-        previous.revision  = profile.revision;
-    }
-};
-
-inline SDL_Texture* CreateScaledTexture(SDL_Renderer* renderer,
-                                        SDL_Texture* source,
-                                        int src_w,
-                                        int src_h,
-                                        float scale) {
-    if (!renderer || !source || scale <= 0.0f) {
-        return nullptr;
-    }
-
-    const int dst_w = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src_w) * scale)));
-    const int dst_h = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src_h) * scale)));
-
-    if (dst_w == src_w && dst_h == src_h) {
-        return nullptr;
-    }
-
-    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA32;
-    if (SDL_PropertiesID props = SDL_GetTextureProperties(source)) {
-        const Sint64 fmt = SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, static_cast<Sint64>(format));
-        format = static_cast<SDL_PixelFormat>(fmt);
-    }
-
-    SDL_Texture* scaled = SDL_CreateTexture(renderer, format, SDL_TEXTUREACCESS_TARGET, dst_w, dst_h);
-    if (!scaled) {
-        return nullptr;
-    }
-
-    SDL_SetTextureBlendMode(scaled, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureScaleMode(scaled, SDL_SCALEMODE_LINEAR);
-
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
-    SDL_SetRenderTarget(renderer, scaled);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-    SDL_RenderClear(renderer);
-
-    SDL_Rect dst{0, 0, dst_w, dst_h};
-    sdl_render::Texture(renderer, source, nullptr, &dst);
-
-    SDL_SetRenderTarget(renderer, previous_target);
-    return scaled;
-}
-
+// Create a scaled copy of an SDL_Surface using linear filtering.
 inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     if (!src || scale <= 0.0f) {
         return nullptr;
     }
 
-    if (::std::fabs(scale - 1.0f) <= 1e-4f) {
+    if (std::fabs(scale - 1.0f) <= 1e-4f) {
         SDL_Surface* copy = SDL_CreateSurface(src->w, src->h, SDL_PIXELFORMAT_RGBA32);
         if (!copy) {
             return nullptr;
@@ -630,8 +40,8 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
         return copy;
     }
 
-    const int dst_w = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src->w) * scale)));
-    const int dst_h = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src->h) * scale)));
+    const int dst_w = std::max(1, static_cast<int>(std::lround(static_cast<double>(src->w) * scale)));
+    const int dst_h = std::max(1, static_cast<int>(std::lround(static_cast<double>(src->h) * scale)));
 
     SDL_Surface* dst = SDL_CreateSurface(dst_w, dst_h, SDL_PIXELFORMAT_RGBA32);
     if (!dst) {
@@ -648,18 +58,124 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     return dst;
 }
 
+// Stub types and functions kept for compilation compatibility.
+// The actual multi-variant scaling logic has been removed.
+// GPU mipmaps and hardware scaling now handle runtime size changes.
+
+struct ScaleProfile {
+    std::vector<float> steps;
+    std::uint64_t revision = 0;
+    bool had_entry = false;
+    bool created_entry = false;
+    bool revision_changed = false;
+    float min_scale = 1.0f;
+    float max_scale = 1.0f;
+    bool has_custom_steps() const { return false; }
+};
+
+struct HysteresisState {
+    int last_index = 0;
+    float min_scale = 0.0f;
+    float max_scale = std::numeric_limits<float>::max();
+};
+
+struct ScaleSelection {
+    int index = 0;
+    float requested_scale = 1.0f;
+    float stored_scale = 1.0f;
+    float remainder_scale = 1.0f;
+    float hysteresis_min = 0.0f;
+    float hysteresis_max = std::numeric_limits<float>::max();
+    int preload_index = -1;
+};
+
+struct ScalingLogic {
+    using ScaleSteps = std::vector<float>;
+
+    static constexpr std::size_t kMaxVariantCount = 1;
+    static constexpr std::size_t kDefaultVariantCount = 1;
+
+    // Always returns { 1.0f } — single texture per frame, no multi-variant.
+    static inline const ScaleSteps& DefaultScaleSteps() {
+        static const ScaleSteps kDefaultSteps = { 1.0f };
+        return kDefaultSteps;
+    }
+
+    // No-op in single-texture mode.
+    static inline void NormalizeVariantSteps(ScaleSteps& steps) {
+        steps = DefaultScaleSteps();
+    }
+
+    // Always returns index 0 with scale 1.0 — no variant selection needed.
+    static inline ScaleSelection Choose(float desired_scale) {
+        ScaleSelection sel;
+        sel.index = 0;
+        sel.requested_scale = safe_positive_scale(desired_scale);
+        sel.stored_scale = 1.0f;
+        sel.remainder_scale = sel.requested_scale;
+        sel.preload_index = -1;
+        return sel;
+    }
+
+    static inline ScaleSelection Choose(float desired_scale, const ScaleSteps& steps) {
+        return Choose(desired_scale);
+    }
+
+    static inline ScaleSelection Choose(float desired_scale, const ScaleSteps& steps,
+                                        const HysteresisState&, float, HysteresisOptions = {}) {
+        return Choose(desired_scale);
+    }
+
+    // Always returns "100".
+    static inline int ScalePercent(std::size_t index) {
+        return 100;
+    }
+
+    static inline int ScalePercent(const ScaleSteps&, std::size_t index) {
+        return 100;
+    }
+
+    // Always returns base path.
+    static inline std::string VariantFolder(const std::string& base, std::size_t index) {
+        return base;
+    }
+
+    static inline std::string VariantFolder(const std::string& base, const ScaleSteps&, std::size_t) {
+        return base;
+    }
+
+    static inline std::array<int, 1> PercentSteps() {
+        return { 100 };
+    }
+
+    static inline std::vector<int> PercentSteps(const ScaleSteps&) {
+        return { 100 };
+    }
+
+    // No-op — no profiles to load.
+    static inline void LoadPrecomputedProfiles(bool force_reload = false) {}
+
+    static inline void ResetProfileHistory() {}
+
+    static inline ScaleProfile ProfileForAsset(const std::string&) {
+        ScaleProfile profile;
+        profile.steps = DefaultScaleSteps();
+        return profile;
+    }
+
+    static inline void SetQualityCap(float) {}
+    static inline float QualityCap() { return 1.0f; }
+
+private:
+    struct HysteresisOptions { float margin = 0.05f; float preload_margin = 0.02f; };
+};
+
 }
 
 namespace render_pipeline::shading {
 
 void ClearShadowStateFor(const Asset* asset);
 
-inline void ClearShadowStateFor(const Asset* ) {
+inline void ClearShadowStateFor(const Asset*) {}
 
 }
-
-}
-
-
-
-

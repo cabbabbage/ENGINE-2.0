@@ -20857,8 +20857,7 @@
         "fog_near_distance_px": 521,
         "fog_render_boundary_spacing": 16,
         "max_spawn_from_room": 3202,
-        "regen_seed": 4,
-        "render_radius": 11225
+        "regen_seed": 4
       },
       "map_grid_settings": {
         "grid_resolution": 8,

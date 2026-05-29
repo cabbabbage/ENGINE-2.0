@@ -850,6 +850,9 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
 
     if (map_manifest.contains("live_dynamic_spawns") && map_manifest["live_dynamic_spawns"].is_object()) {
         nlohmann::json& live_dynamic_spawns = map_manifest["live_dynamic_spawns"];
+        if (live_dynamic_spawns.erase("render_radius") > 0) {
+            changed = true;
+        }
         if (normalize_spawn_group_array(live_dynamic_spawns, "boundary_area_selectors", lookup)) {
             changed = true;
         }
@@ -902,7 +905,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     map_info["map_layers"] = nlohmann::json::array({layer});
 
     map_info["live_dynamic_spawns"] = nlohmann::json::object({
-        {"render_radius", 128},
         {"max_spawn_from_room", 128},
         {"fog_near_distance_px", 64},
         {"boundary_area_selectors",

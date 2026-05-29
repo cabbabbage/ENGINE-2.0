@@ -3531,55 +3531,26 @@ world::GridBounds Assets::live_dynamic_work_bounds_from_render_bounds(const worl
             static_cast<std::int64_t>(std::numeric_limits<int>::max())));
     };
 
-    const auto& settings = camera_.get_settings();
-    const int despawn_margin = std::max(0, dynamic_spawn_despawn_margin_world_px_);
-    const nlohmann::json* live_dynamic_spawns = nullptr;
-    if (map_info_json_.is_object()) {
-        auto live_it = map_info_json_.find("live_dynamic_spawns");
-        if (live_it != map_info_json_.end() && live_it->is_object()) {
-            live_dynamic_spawns = &(*live_it);
+    int bounded_min_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
+    int bounded_max_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
+    int bounded_min_z = std::min(render_bounds.min.world_z(), render_bounds.max.world_z());
+    int bounded_max_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
+
+    const world::CameraProjectionParams projection = camera_.projection_params();
+    const double safe_scale = std::max(1e-6, projection.meters_scale);
+    const double camera_ground_z = projection.position_z / safe_scale + projection.anchor_world_z;
+    if (std::isfinite(camera_ground_z) && std::isfinite(projection.forward_z)) {
+        constexpr double kForwardAxisEpsilon = 1e-6;
+        if (projection.forward_z < -kForwardAxisEpsilon) {
+            bounded_max_z = std::min(
+                bounded_max_z,
+                clamp_i64_to_int(static_cast<std::int64_t>(std::floor(camera_ground_z))));
+        } else if (projection.forward_z > kForwardAxisEpsilon) {
+            bounded_min_z = std::max(
+                bounded_min_z,
+                clamp_i64_to_int(static_cast<std::int64_t>(std::ceil(camera_ground_z))));
         }
     }
-
-    int render_radius = 1200;
-    if (live_dynamic_spawns) {
-        auto radius_it = live_dynamic_spawns->find("render_radius");
-        if (radius_it != live_dynamic_spawns->end() && radius_it->is_number()) {
-            try {
-                const double parsed = radius_it->get<double>();
-                if (std::isfinite(parsed)) {
-                    render_radius = static_cast<int>(std::lround(parsed));
-                }
-            } catch (...) {
-            }
-        }
-    } else if (std::isfinite(settings.dynamic_renderer_depth_efficiency_depth)) {
-        render_radius = static_cast<int>(std::lround(settings.dynamic_renderer_depth_efficiency_depth));
-    }
-    render_radius = std::clamp(render_radius, 0, 20000);
-
-    const int unclamped_radius = render_radius + despawn_margin;
-    constexpr int kMinDynamicWorkRadiusWorldPx = 1;
-    constexpr int kMaxDynamicWorkRadiusWorldPx = 200000;
-    const int work_radius = std::clamp(unclamped_radius,
-                                       kMinDynamicWorkRadiusWorldPx,
-                                       kMaxDynamicWorkRadiusWorldPx);
-
-    const SDL_Point camera_center = camera_.get_screen_center();
-    const int clamp_min_x = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.x) - work_radius);
-    const int clamp_max_x = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.x) + work_radius);
-    const int clamp_min_z = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.y) - work_radius);
-    const int clamp_max_z = clamp_i64_to_int(static_cast<std::int64_t>(camera_center.y) + work_radius);
-
-    const int render_min_x = std::min(render_bounds.min.world_x(), render_bounds.max.world_x());
-    const int render_max_x = std::max(render_bounds.min.world_x(), render_bounds.max.world_x());
-    const int render_min_z = std::min(render_bounds.min.world_z(), render_bounds.max.world_z());
-    const int render_max_z = std::max(render_bounds.min.world_z(), render_bounds.max.world_z());
-
-    const int bounded_min_x = std::max(render_min_x, clamp_min_x);
-    const int bounded_max_x = std::min(render_max_x, clamp_max_x);
-    const int bounded_min_z = std::max(render_min_z, clamp_min_z);
-    const int bounded_max_z = std::min(render_max_z, clamp_max_z);
 
     if (bounded_min_x <= bounded_max_x && bounded_min_z <= bounded_max_z) {
         return world::GridBounds::from_min_max(
@@ -3593,10 +3564,14 @@ world::GridBounds Assets::live_dynamic_work_bounds_from_render_bounds(const worl
                                            render_bounds.max.resolution_layer()));
     }
 
-    return world::GridBounds::from_xywh(clamp_min_x,
-                                        clamp_min_z,
-                                        std::max(1, work_radius * 2 + 1),
-                                        std::max(1, work_radius * 2 + 1),
+    const SDL_Point camera_center = camera_.get_screen_center();
+    const int fallback_z = std::isfinite(camera_ground_z)
+        ? clamp_i64_to_int(static_cast<std::int64_t>(std::lround(camera_ground_z)))
+        : camera_center.y;
+    return world::GridBounds::from_xywh(camera_center.x,
+                                        fallback_z,
+                                        1,
+                                        1,
                                         render_bounds.min.world_y(),
                                         render_bounds.min.resolution_layer());
 }

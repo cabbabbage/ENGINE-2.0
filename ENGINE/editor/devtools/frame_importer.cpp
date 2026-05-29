@@ -7,6 +7,8 @@
 #include "utils/stb_image_write.h"
 #include "utils/string_utils.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -26,6 +28,15 @@ std::string lower_copy(const std::string& value) {
 std::string path_string(const std::filesystem::path& path) {
     return path.generic_string();
 }
+
+struct SourceVectorRecord {
+    std::filesystem::path original_path;
+    std::string original_filename;
+    int rasterized_frame_index = 0;
+    int intrinsic_width = 0;
+    int intrinsic_height = 0;
+    long long imported_at_ticks = 0;
+};
 
 bool starts_with(const std::string& value, const std::string& prefix) {
     return value.rfind(prefix, 0) == 0;
@@ -128,12 +139,15 @@ bool validate_frame_sequence(const std::filesystem::path& folder,
     return true;
 }
 
-bool write_regular_image_as_png(const std::filesystem::path& source,
+bool write_decoded_image_as_png(const std::filesystem::path& source,
                                 const std::filesystem::path& destination,
-                                std::string& error_message) {
+                                std::string& error_message,
+                                const char* decode_failure_prefix,
+                                int* out_width = nullptr,
+                                int* out_height = nullptr) {
     SDL_Surface* loaded = IMG_Load(source.string().c_str());
     if (!loaded) {
-        error_message = "Failed to decode image '" + path_string(source) + "': " + SDL_GetError();
+        error_message = std::string(decode_failure_prefix) + " '" + path_string(source) + "': " + SDL_GetError();
         return false;
     }
 
@@ -142,6 +156,13 @@ bool write_regular_image_as_png(const std::filesystem::path& source,
     if (!converted) {
         error_message = "Failed to convert image '" + path_string(source) + "': " + SDL_GetError();
         return false;
+    }
+
+    if (out_width) {
+        *out_width = converted->w;
+    }
+    if (out_height) {
+        *out_height = converted->h;
     }
 
     const bool wrote = IMG_SavePNG(converted, destination.string().c_str());
@@ -154,6 +175,35 @@ bool write_regular_image_as_png(const std::filesystem::path& source,
         return false;
     }
     return true;
+}
+
+bool write_regular_image_as_png(const std::filesystem::path& source,
+                                const std::filesystem::path& destination,
+                                std::string& error_message) {
+    return write_decoded_image_as_png(source,
+                                      destination,
+                                      error_message,
+                                      "Failed to decode image");
+}
+
+bool write_vector_image_as_png(const std::filesystem::path& source,
+                               const std::filesystem::path& destination,
+                               int& out_width,
+                               int& out_height,
+                               std::string& error_message) {
+    out_width = 0;
+    out_height = 0;
+    const bool ok = write_decoded_image_as_png(source,
+                                               destination,
+                                               error_message,
+                                               "Failed to rasterize vector image",
+                                               &out_width,
+                                               &out_height);
+    if (!ok) {
+        error_message = "Failed to rasterize vector image " + path_string(source) +
+                        "; this SDL_image build may not include SVG support.";
+    }
+    return ok;
 }
 
 int write_gif_frames_to_staging(const std::filesystem::path& gif_path,
@@ -312,6 +362,74 @@ bool replace_destination_frames(const std::filesystem::path& staging_dir,
     return true;
 }
 
+
+bool write_vector_source_sidecars(const std::filesystem::path& output_dir,
+                                  const std::vector<SourceVectorRecord>& records,
+                                  std::string& error_message) {
+    error_message.clear();
+    if (records.empty()) {
+        return true;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path vector_dir = output_dir / ".source_vectors";
+    std::filesystem::create_directories(vector_dir, ec);
+    if (ec) {
+        error_message = "Failed to create vector source sidecar folder '" +
+                        path_string(vector_dir) + "': " + ec.message();
+        return false;
+    }
+
+    nlohmann::json sources = nlohmann::json::array();
+    for (const auto& record : records) {
+        const std::string copied_name =
+            std::to_string(record.rasterized_frame_index) + "_" + record.original_filename;
+        const std::filesystem::path copied_path = vector_dir / copied_name;
+        std::filesystem::copy_file(record.original_path,
+                                   copied_path,
+                                   std::filesystem::copy_options::overwrite_existing,
+                                   ec);
+        if (ec) {
+            error_message = "Failed to copy vector source '" + path_string(record.original_path) +
+                            "' to '" + path_string(copied_path) + "': " + ec.message();
+            return false;
+        }
+
+        const std::filesystem::path stored_source = std::filesystem::path(".source_vectors") / copied_name;
+        sources.push_back(nlohmann::json{
+            {"original_filename", record.original_filename},
+            {"stored_source", stored_source.generic_string()},
+            {"import_kind", "vector_svg"},
+            {"rasterized_frame_index", record.rasterized_frame_index},
+            {"intrinsic_raster_width", record.intrinsic_width},
+            {"intrinsic_raster_height", record.intrinsic_height},
+            {"imported_at_ticks", record.imported_at_ticks}
+        });
+    }
+
+    nlohmann::json metadata = nlohmann::json{
+        {"schema_version", 1},
+        {"sources", std::move(sources)}
+    };
+
+    const std::filesystem::path metadata_path = output_dir / "source_metadata.json";
+    std::ofstream out(metadata_path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        error_message = "Failed to open vector source metadata file '" +
+                        path_string(metadata_path) + "'";
+        return false;
+    }
+    out << metadata.dump(2);
+    out << "\n";
+    if (!out.good()) {
+        error_message = "Failed to write vector source metadata file '" +
+                        path_string(metadata_path) + "'";
+        return false;
+    }
+    return true;
+}
+
+
 } // namespace
 
 bool has_extension_ci(const std::filesystem::path& path, std::string_view extension) {
@@ -322,13 +440,22 @@ bool is_gif_file(const std::filesystem::path& path) {
     return has_extension_ci(path, ".gif");
 }
 
-bool is_supported_image_file(const std::filesystem::path& path) {
+bool is_supported_vector_image_file(const std::filesystem::path& path) {
+    return has_extension_ci(path, ".svg");
+}
+
+bool is_supported_raster_image_file(const std::filesystem::path& path) {
     return has_extension_ci(path, ".png") ||
            has_extension_ci(path, ".jpg") ||
            has_extension_ci(path, ".jpeg") ||
            has_extension_ci(path, ".bmp") ||
            has_extension_ci(path, ".webp") ||
            has_extension_ci(path, ".gif");
+}
+
+bool is_supported_image_file(const std::filesystem::path& path) {
+    return is_supported_raster_image_file(path) ||
+           is_supported_vector_image_file(path);
 }
 
 std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) {
@@ -367,7 +494,7 @@ FrameImportResult import_frames_to_directory(const std::vector<std::filesystem::
     }
     if (files.empty()) {
         result.failed_stage = "validate_input";
-        result.error_message = "No image files were provided.";
+        result.error_message = "No supported image/vector files were provided.";
         return result;
     }
 
@@ -386,6 +513,7 @@ FrameImportResult import_frames_to_directory(const std::vector<std::filesystem::
     };
 
     int next_index = 0;
+    std::vector<SourceVectorRecord> vector_records;
     for (const auto& source : normalize_sequence(files)) {
         if (!std::filesystem::exists(source, ec) || ec || !std::filesystem::is_regular_file(source, ec) || ec) {
             result.warnings.push_back("Skipped missing frame source '" + path_string(source) + "'");
@@ -393,7 +521,7 @@ FrameImportResult import_frames_to_directory(const std::vector<std::filesystem::
             continue;
         }
         if (!is_supported_image_file(source)) {
-            result.warnings.push_back("Skipped unsupported frame source '" + path_string(source) + "'");
+            result.warnings.push_back("Skipped unsupported image/vector frame source '" + path_string(source) + "'");
             continue;
         }
 
@@ -409,6 +537,25 @@ FrameImportResult import_frames_to_directory(const std::vector<std::filesystem::
 
         const std::filesystem::path dst = staging_dir / (std::to_string(next_index) + ".png");
         std::string error;
+        if (is_supported_vector_image_file(source)) {
+            int raster_w = 0;
+            int raster_h = 0;
+            if (write_vector_image_as_png(source, dst, raster_w, raster_h, error)) {
+                SourceVectorRecord record;
+                record.original_path = source;
+                record.original_filename = source.filename().string();
+                record.rasterized_frame_index = next_index;
+                record.intrinsic_width = raster_w;
+                record.intrinsic_height = raster_h;
+                record.imported_at_ticks = std::chrono::system_clock::now().time_since_epoch().count();
+                vector_records.push_back(std::move(record));
+                ++next_index;
+            } else {
+                result.warnings.push_back(error);
+            }
+            continue;
+        }
+
         if (write_regular_image_as_png(source, dst, error)) {
             ++next_index;
         } else {
@@ -431,6 +578,13 @@ FrameImportResult import_frames_to_directory(const std::vector<std::filesystem::
         result.error_message = replace_error;
         cleanup();
         return result;
+    }
+
+    if (!vector_records.empty()) {
+        std::string sidecar_error;
+        if (!write_vector_source_sidecars(output_dir, vector_records, sidecar_error)) {
+            result.warnings.push_back(sidecar_error);
+        }
     }
 
     result.frames_written = next_index;

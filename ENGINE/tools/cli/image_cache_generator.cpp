@@ -65,7 +65,7 @@ int scale_dimension(int value, float step) {
 }
 
 constexpr int kCacheManifestSchemaVersion = 1;
-constexpr const char* kCacheManifestGeneratorVersion = "image_cache_generator.v2";
+constexpr const char* kCacheManifestGeneratorVersion = "image_cache_generator.v3";
 constexpr const char* kCacheManifestFileName = "cache_manifest.json";
 constexpr std::uint64_t kFnvOffset = 14695981039346656037ull;
 constexpr std::uint64_t kFnvPrime = 1099511628211ull;
@@ -295,6 +295,66 @@ std::optional<ImageRGBA> CropToSharedCanvas(const ImageRGBA& src,
     return out;
 }
 
+std::optional<ImageRGBA> ResizeAlphaCropToSharedCanvasFast(const ImageRGBA& src,
+                                                           const AlphaBounds& bounds,
+                                                           int shared_width,
+                                                           int shared_height,
+                                                           int visible_width,
+                                                           int visible_height,
+                                                           std::string& err) {
+    err.clear();
+
+    if (!src.valid()) {
+        err = "invalid source image";
+        return std::nullopt;
+    }
+    if (!bounds.valid()) {
+        err = "invalid alpha bounds";
+        return std::nullopt;
+    }
+    if (bounds.left < 0 || bounds.top < 0 || bounds.right > src.w || bounds.bottom > src.h) {
+        err = "alpha bounds exceed source image dimensions";
+        return std::nullopt;
+    }
+    if (shared_width <= 0 || shared_height <= 0 || visible_width <= 0 || visible_height <= 0) {
+        err = "invalid output size";
+        return std::nullopt;
+    }
+    if (visible_width > shared_width || visible_height > shared_height) {
+        err = "visible crop exceeds shared crop canvas";
+        return std::nullopt;
+    }
+
+    ImageRGBA out;
+    out.w = shared_width;
+    out.h = shared_height;
+    out.pixels.assign(static_cast<std::size_t>(shared_width) * static_cast<std::size_t>(shared_height) * 4u, 0u);
+
+    const int paste_x = (shared_width - visible_width) / 2;
+    const int paste_y = shared_height - visible_height;
+    const int src_w = bounds.width();
+    const int src_h = bounds.height();
+
+    for (int y = 0; y < visible_height; ++y) {
+        const int src_y = bounds.top + std::min(src_h - 1, (y * src_h) / visible_height);
+        const std::size_t dst_row = static_cast<std::size_t>(paste_y + y) * static_cast<std::size_t>(out.w);
+        const std::size_t src_row = static_cast<std::size_t>(src_y) * static_cast<std::size_t>(src.w);
+
+        for (int x = 0; x < visible_width; ++x) {
+            const int src_x = bounds.left + std::min(src_w - 1, (x * src_w) / visible_width);
+            const std::size_t src_idx = (src_row + static_cast<std::size_t>(src_x)) * 4u;
+            const std::size_t dst_idx = (dst_row + static_cast<std::size_t>(paste_x + x)) * 4u;
+
+            out.pixels[dst_idx + 0] = src.pixels[src_idx + 0];
+            out.pixels[dst_idx + 1] = src.pixels[src_idx + 1];
+            out.pixels[dst_idx + 2] = src.pixels[src_idx + 2];
+            out.pixels[dst_idx + 3] = src.pixels[src_idx + 3];
+        }
+    }
+
+    return out;
+}
+
 bool AnimationRequestedForGeneration(const GeneratorOptions& opt,
                                      const std::string& asset_name,
                                      const std::string& /*animation_name*/) {
@@ -371,6 +431,7 @@ struct SmartVariantPlan {
     std::vector<int> percents;
     std::vector<float> steps;
     float authored_scale = 1.0f;
+    float coverage_scale = 1.0f;
     float max_camera_scale = 1.0f;
     float min_camera_scale = 0.1f;
     int scale100_w = 1;
@@ -464,6 +525,18 @@ bool IsBoundaryAsset(const nlohmann::json& asset_obj) {
     return type == "boundary";
 }
 
+float CacheCoverageScaleForAuthoredScale(float authored_scale) {
+    // Authored scale must remain a runtime/display value, but it still changes
+    // how much source resolution the cache needs. Without this, small authored
+    // assets like vibble at 33% generate full camera-coverage textures that are
+    // far larger than needed and can blow up bundle memory. Keep a tiny floor so
+    // very small sprites still have enough source coverage for close camera use.
+    if (!std::isfinite(authored_scale) || authored_scale <= 0.0f) {
+        return 1.0f;
+    }
+    return std::clamp(authored_scale, 0.05f, 4.0f);
+}
+
 std::vector<int> BuildVariantPercents(float min_step) {
     min_step = std::clamp(min_step, 0.01f, 0.91f);
     const int min_pct = std::clamp(static_cast<int>(std::ceil(static_cast<double>(min_step) * 100.0)), 1, 91);
@@ -495,6 +568,7 @@ SmartVariantPlan BuildSmartVariantPlan(const nlohmann::json& asset_obj,
                                        const SharedCropSize& shared_crop) {
     SmartVariantPlan plan;
     plan.authored_scale = ReadAuthoredScale(asset_obj);
+    plan.coverage_scale = CacheCoverageScaleForAuthoredScale(plan.authored_scale);
     plan.boundary_ratio = IsBoundaryAsset(asset_obj);
     plan.min_visible_ratio = plan.boundary_ratio
         ? camera.boundary_min_visible_screen_ratio
@@ -503,11 +577,11 @@ SmartVariantPlan BuildSmartVariantPlan(const nlohmann::json& asset_obj,
     plan.max_camera_scale = std::max(0.01f, camera.base_height_px / static_cast<float>(std::max(1, camera.min_height_px)));
     plan.min_camera_scale = std::max(0.01f, camera.base_height_px / static_cast<float>(std::max(1, camera.max_height_px)));
 
-    const float scale100_factor = std::max(0.01f, plan.max_camera_scale);
+    const float scale100_factor = std::max(0.01f, plan.max_camera_scale * plan.coverage_scale);
     plan.scale100_w = scale_dimension(shared_crop.width, scale100_factor);
     plan.scale100_h = scale_dimension(shared_crop.height, scale100_factor);
 
-    const float horizon_factor = std::max(0.01f, plan.min_camera_scale);
+    const float horizon_factor = std::max(0.01f, plan.min_camera_scale * plan.coverage_scale);
     const int horizon_w = scale_dimension(shared_crop.width, horizon_factor);
     const int horizon_h = scale_dimension(shared_crop.height, horizon_factor);
     const float min_visible_px = std::max(1.0f,
@@ -549,6 +623,7 @@ void LogSmartVariantPlan(ILogger& log,
     log.info("[ImageCacheGenerator] Asset: " + asset_name +
              "\nSource Size: " + std::to_string(source_image.w) + "x" + std::to_string(source_image.h) +
              "\nAuthored Scale %: " + FormatFloat(plan.authored_scale * 100.0f) +
+             "\nCache Coverage Scale: " + FormatFloat(plan.coverage_scale) +
              "\nCamera Min Height: " + std::to_string(camera.min_height_px) +
              "\nCamera Max Height: " + std::to_string(camera.max_height_px) +
              "\nCamera Min Zoom: " + FormatFloat(plan.max_camera_scale) +
@@ -998,119 +1073,162 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             }
         }
 
-        bool touched_asset = false;
-        for (const auto& animation_entry : animations) {
-            const std::string& animation_name = animation_entry.first;
-            const fs::path& animation_src_dir = animation_entry.second;
-            if (!AnimationRequestedForGeneration(opt, asset_name, animation_name)) {
-                continue;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bool touched_asset = false;
+for (const auto& animation_entry : animations) {
+    const std::string& animation_name = animation_entry.first;
+    const fs::path& animation_src_dir = animation_entry.second;
+    if (!AnimationRequestedForGeneration(opt, asset_name, animation_name)) {
+        continue;
+    }
+
+    const auto frames = EnumerateSourceFrames(animation_src_dir);
+    if (frames.empty()) {
+        continue;
+    }
+
+    bool touched_animation = false;
+    for (std::size_t frame_index = 0; frame_index < frames.size(); ++frame_index) {
+        const int frame_idx = static_cast<int>(frame_index);
+
+        std::optional<ImageRGBA> src_opt = LoadPngRGBA(frames[frame_index], load_err);
+        if (!src_opt.has_value()) {
+            result.error = "Failed to load source frame '" + frames[frame_index].string() + "': " + load_err;
+            if (!opt.dry_run) {
+                std::error_code ignored;
+                fs::remove_all(write_cache_root, ignored);
             }
-
-            const auto frames = EnumerateSourceFrames(animation_src_dir);
-            if (frames.empty()) {
-                continue;
-            }
-
-            bool touched_animation = false;
-            for (std::size_t frame_index = 0; frame_index < frames.size(); ++frame_index) {
-                const int frame_idx = static_cast<int>(frame_index);
-                std::optional<ImageRGBA> src_opt = LoadPngRGBA(frames[frame_index], load_err);
-                if (!src_opt.has_value()) {
-                    result.error = "Failed to load source frame '" + frames[frame_index].string() + "': " + load_err;
-                    if (!opt.dry_run) {
-                        std::error_code ignored;
-                        fs::remove_all(write_cache_root, ignored);
-                    }
-                    return result;
-                }
-                const ImageRGBA& src = src_opt.value();
-
-                for (std::size_t step_index = 0; step_index < plan.steps.size(); ++step_index) {
-                    const float step = plan.steps[step_index];
-                    const int pct = plan.percents[step_index];
-                    const fs::path out_path = CachePaths::frame_png_path(write_cache_root,
-                                                                         asset_name,
-                                                                         animation_name,
-                                                                         pct,
-                                                                         Variant::Normal,
-                                                                         frame_idx);
-
-                    ++result.stats.tasks_total;
-                    touched_animation = true;
-                    touched_asset = true;
-
-                    if (opt.dry_run) {
-                        ++result.stats.tasks_succeeded;
-                        continue;
-                    }
-
-                    const float resize_factor = std::max(0.01f, plan.max_camera_scale * step);
-                    const int dst_w = scale_dimension(src.w, resize_factor);
-                    const int dst_h = scale_dimension(src.h, resize_factor);
-                    std::optional<ImageRGBA> scaled = ResizeRGBA(src, dst_w, dst_h, load_err);
-                    if (!scaled.has_value()) {
-                        ++result.stats.tasks_failed;
-                        result.error = "Failed to resize frame '" + frames[frame_index].string() + "': " + load_err;
-                        std::error_code ignored;
-                        fs::remove_all(write_cache_root, ignored);
-                        return result;
-                    }
-
-                    const std::optional<AlphaBounds> scaled_bounds = FindAlphaBounds(scaled.value());
-                    int shared_w = scale_dimension(shared_crop_size->width, resize_factor);
-                    int shared_h = scale_dimension(shared_crop_size->height, resize_factor);
-                    if (scaled_bounds.has_value()) {
-                        shared_w = std::max(shared_w, scaled_bounds->width());
-                        shared_h = std::max(shared_h, scaled_bounds->height());
-                    }
-
-                    std::optional<ImageRGBA> cropped = CropToSharedCanvas(scaled.value(),
-                                                                          scaled_bounds,
-                                                                          shared_w,
-                                                                          shared_h,
-                                                                          load_err);
-                    if (!cropped.has_value()) {
-                        ++result.stats.tasks_failed;
-                        result.error = "Failed to alpha crop frame '" + frames[frame_index].string() + "': " + load_err;
-                        std::error_code ignored;
-                        fs::remove_all(write_cache_root, ignored);
-                        return result;
-                    }
-
-                    std::error_code ec;
-                    fs::create_directories(out_path.parent_path(), ec);
-                    if (ec) {
-                        ++result.stats.tasks_failed;
-                        result.error = "Failed creating cache directory: " + out_path.parent_path().string();
-                        fs::remove_all(write_cache_root, ec);
-                        return result;
-                    }
-
-                    std::string save_err;
-                    if (!SavePngRGBA(out_path, cropped.value(), save_err)) {
-                        ++result.stats.tasks_failed;
-                        result.error = "Failed writing frame '" + out_path.string() + "': " + save_err;
-                        std::error_code ignored;
-                        fs::remove_all(write_cache_root, ignored);
-                        return result;
-                    }
-
-                    ++result.stats.tasks_succeeded;
-                    ++result.stats.pngs_written;
-                    result.written_files.push_back(CachePaths::frame_png_path(cache_root,
-                                                                              asset_name,
-                                                                              animation_name,
-                                                                              pct,
-                                                                              Variant::Normal,
-                                                                              frame_idx));
-                }
-            }
-
-            if (touched_animation) {
-                ++result.stats.animations_touched;
-                result.touched_animations.push_back(asset_name + "::" + animation_name);
-            }
+            return result;
         }
+
+        const std::optional<AlphaBounds> src_bounds = FindAlphaBounds(src_opt.value());
+        if (!src_bounds.has_value()) {
+            result.error = "Source frame has no visible alpha pixels: " + frames[frame_index].string();
+            if (!opt.dry_run) {
+                std::error_code ignored;
+                fs::remove_all(write_cache_root, ignored);
+            }
+            src_opt.reset();
+            return result;
+        }
+
+        for (std::size_t step_index = 0; step_index < plan.steps.size(); ++step_index) {
+            const float step = plan.steps[step_index];
+            const int pct = plan.percents[step_index];
+
+            const fs::path out_path = CachePaths::frame_png_path(write_cache_root,
+                                                                 asset_name,
+                                                                 animation_name,
+                                                                 pct,
+                                                                 Variant::Normal,
+                                                                 frame_idx);
+
+            ++result.stats.tasks_total;
+            touched_animation = true;
+            touched_asset = true;
+
+            if (opt.dry_run) {
+                ++result.stats.tasks_succeeded;
+                continue;
+            }
+
+            const float resize_factor =
+                std::max(0.01f, plan.max_camera_scale * plan.coverage_scale * step);
+
+            const int shared_w = std::max(1, scale_dimension(shared_crop_size->width, resize_factor));
+            const int shared_h = std::max(1, scale_dimension(shared_crop_size->height, resize_factor));
+            const int visible_w = std::clamp(scale_dimension(src_bounds->width(), resize_factor), 1, shared_w);
+            const int visible_h = std::clamp(scale_dimension(src_bounds->height(), resize_factor), 1, shared_h);
+
+            std::optional<ImageRGBA> cropped = ResizeAlphaCropToSharedCanvasFast(src_opt.value(),
+                                                                                 src_bounds.value(),
+                                                                                 shared_w,
+                                                                                 shared_h,
+                                                                                 visible_w,
+                                                                                 visible_h,
+                                                                                 load_err);
+            if (!cropped.has_value()) {
+                ++result.stats.tasks_failed;
+                result.error = "Failed to resize/crop frame '" + frames[frame_index].string() + "': " + load_err;
+                std::error_code ignored;
+                fs::remove_all(write_cache_root, ignored);
+                src_opt.reset();
+                return result;
+            }
+
+            std::error_code ec;
+            fs::create_directories(out_path.parent_path(), ec);
+            if (ec) {
+                ++result.stats.tasks_failed;
+                result.error = "Failed creating cache directory: " + out_path.parent_path().string();
+                fs::remove_all(write_cache_root, ec);
+                cropped.reset();
+                src_opt.reset();
+                return result;
+            }
+
+            std::string save_err;
+            const bool saved = SavePngRGBA(out_path, cropped.value(), save_err);
+
+            // Free the generated PNG buffer immediately after encoding.
+            cropped.reset();
+
+            if (!saved) {
+                ++result.stats.tasks_failed;
+                result.error = "Failed writing frame '" + out_path.string() + "': " + save_err;
+                std::error_code ignored;
+                fs::remove_all(write_cache_root, ignored);
+                src_opt.reset();
+                return result;
+            }
+
+            ++result.stats.tasks_succeeded;
+            ++result.stats.pngs_written;
+            result.written_files.push_back(CachePaths::frame_png_path(cache_root,
+                                                                      asset_name,
+                                                                      animation_name,
+                                                                      pct,
+                                                                      Variant::Normal,
+                                                                      frame_idx));
+        }
+
+        // Free the original full-size source frame before the next source frame.
+        src_opt.reset();
+    }
+
+    if (touched_animation) {
+        ++result.stats.animations_touched;
+        result.touched_animations.push_back(asset_name + "::" + animation_name);
+    }
+}
+
+
+
+
+
 
         if (touched_asset && !opt.dry_run) {
             std::string cache_manifest_write_err;
@@ -1145,8 +1263,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 {"percentages", percentages},
                 {"steps", steps},
                 {"min_scale", plan.steps.empty() ? 1.0f : plan.steps.back()},
-                {"max_scale", plan.max_camera_scale},
-                {"baked_authored_scale", plan.authored_scale},
+                {"max_scale", plan.max_camera_scale * plan.coverage_scale},
+                {"coverage_scale", plan.coverage_scale},
                 {"scale100_width", plan.scale100_w},
                 {"scale100_height", plan.scale100_h}
             };
@@ -1341,6 +1459,10 @@ bool ImageCacheGenerator::SavePngRGBA(const fs::path& path, const ImageRGBA& img
         err = "invalid RGBA image";
         return false;
     }
+    // Favor generation speed over maximum PNG compression. These files are
+    // runtime cache artifacts, not authored source art.
+    stbi_write_png_compression_level = 1;
+
     if (stbi_write_png(path.string().c_str(),
                        img.w,
                        img.h,

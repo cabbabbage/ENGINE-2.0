@@ -149,6 +149,7 @@ private:
                                              std::string& out_error);
     static void configure_render_target(SDL_Texture* texture);
     static SDL_FPoint clip_to_screen(float clip_x, float clip_y, float target_width, float target_height);
+    static float resolve_camera_zoom_percent(const WarpedScreenGrid& camera);
     static void packet_to_vertices(const GpuSpriteDrawPacket& packet,
                                    std::uint32_t target_width,
                                    std::uint32_t target_height,

@@ -125,7 +125,7 @@ ImportResult import_frames_to_animation_folder(const std::filesystem::path& asse
         return out;
     }
     if (input_paths.empty()) {
-        out.message = "No image files were provided.";
+        out.message = "No supported image/vector files were provided.";
         return out;
     }
 
@@ -141,7 +141,7 @@ ImportResult import_frames_to_animation_folder(const std::filesystem::path& asse
     out.frames_written = imported.frames_written;
     out.warnings = imported.warnings;
     if (!imported.success()) {
-        out.message = imported.error_message.empty() ? "No frames were imported." : imported.error_message;
+        out.message = imported.error_message.empty() ? "No supported image/vector frames were imported." : imported.error_message;
         if (!imported.failed_stage.empty()) {
             out.message = "Import failed during " + imported.failed_stage + ": " + out.message;
         }

@@ -442,6 +442,106 @@ struct FolderAnimationCacheState {
     std::unordered_set<std::string> required_folder_animations;
 };
 
+struct CacheManifestBundleSnapshot {
+    bool present = false;
+    int schema_version = 0;
+    std::string digest;
+};
+
+struct CurrentCacheManifestSnapshot {
+    bool required = false;
+    bool present = false;
+    int schema_version = 0;
+    std::string digest;
+    std::string reason;
+};
+
+CacheManifestBundleSnapshot read_bundle_cache_manifest_snapshot(const CacheManager::BundleData& bundle) {
+    CacheManifestBundleSnapshot snapshot{};
+    if (!bundle.metadata_snapshot.is_object()) {
+        return snapshot;
+    }
+    auto it = bundle.metadata_snapshot.find("_cache_manifest");
+    if (it == bundle.metadata_snapshot.end() || !it->is_object()) {
+        return snapshot;
+    }
+    snapshot.present = true;
+    snapshot.schema_version = it->value("schema_version", 0);
+    snapshot.digest = it->value("digest", std::string{});
+    return snapshot;
+}
+
+CurrentCacheManifestSnapshot read_current_cache_manifest_snapshot(
+    const std::string& asset_name,
+    const FolderAnimationCacheState& cache_state) {
+    CurrentCacheManifestSnapshot snapshot{};
+    snapshot.required = !cache_state.required_folder_animations.empty();
+    if (!snapshot.required) {
+        return snapshot;
+    }
+
+    imgcache::CacheManifest manifest;
+    std::string err;
+    const fs::path manifest_path = imgcache::ImageCacheGenerator::CacheManifestPath(fs::path("cache"), asset_name);
+    if (!imgcache::ImageCacheGenerator::ReadCacheManifest(manifest_path, manifest, err)) {
+        snapshot.reason = "cache_manifest_missing: " + err;
+        return snapshot;
+    }
+    if (manifest.digest.empty()) {
+        snapshot.reason = "cache_manifest_missing: digest is empty in " + manifest_path.generic_string();
+        return snapshot;
+    }
+
+    snapshot.present = true;
+    snapshot.schema_version = manifest.schema_version;
+    snapshot.digest = manifest.digest;
+    return snapshot;
+}
+
+bool write_current_cache_manifest_snapshot_to_bundle_metadata(
+    const std::string& asset_name,
+    CacheManager::BundleData& bundle) {
+    FolderAnimationCacheState all_folder_animations{};
+    all_folder_animations.required_folder_animations.insert("__required__");
+    const CurrentCacheManifestSnapshot current =
+        read_current_cache_manifest_snapshot(asset_name, all_folder_animations);
+    if (!current.present) {
+        return false;
+    }
+    if (!bundle.metadata_snapshot.is_object()) {
+        bundle.metadata_snapshot = nlohmann::json::object();
+    }
+    bundle.metadata_snapshot["_cache_manifest"] = nlohmann::json{
+        {"schema_version", current.schema_version},
+        {"digest", current.digest}
+    };
+    return true;
+}
+
+bool generate_image_cache_for_asset(AssetInfo& info,
+                                    const std::unordered_set<std::string>* animation_filter,
+                                    std::string& error) {
+    error.clear();
+    imgcache::GeneratorOptions options;
+    options.force_rebuild = false;
+    options.missing_only = true;
+    options.dry_run = false;
+    options.quiet_task_logs = true;
+    options.filters.assets.insert(info.name);
+    if (animation_filter && !animation_filter->empty()) {
+        options.filters.animations = *animation_filter;
+    }
+
+    GeneratorLogBridge logger;
+    const imgcache::GenResult result = imgcache::ImageCacheGenerator::Run(options, logger);
+    if (!result.ok) {
+        error = result.error.empty() ? std::string("image cache generation failed") : result.error;
+        return false;
+    }
+    render_pipeline::ScalingLogic::LoadPrecomputedProfiles(true);
+    return true;
+}
+
 const CacheManager::BundleAnimation* find_bundle_animation(const CacheManager::BundleData& bundle,
                                                            const std::string& animation_name) {
     for (const auto& animation : bundle.animations) {
@@ -526,17 +626,21 @@ struct BundleValidationResult {
     bool required_animations_ok = true;
     bool placeholder_policy_ok = true;
     bool pixel_format_ok = true;
+    bool cache_manifest_ok = true;
+    std::string cache_manifest_reason;
 
     bool ready() const {
         return variant_layout_ok &&
                required_animations_ok &&
                placeholder_policy_ok &&
-               pixel_format_ok;
+               pixel_format_ok &&
+               cache_manifest_ok;
     }
 };
 
 BundleValidationResult validate_loaded_bundle(const CacheManager::BundleData& bundle,
                                               const fs::path& /*bundle_path*/,
+                                              const std::string& asset_name,
                                               const FolderAnimationCacheState& cache_state,
                                               bool allow_placeholder_fallback) {
     BundleValidationResult result{};
@@ -545,6 +649,34 @@ BundleValidationResult validate_loaded_bundle(const CacheManager::BundleData& bu
     result.placeholder_policy_ok = allow_placeholder_fallback ||
         !bundle_contains_transparent_placeholder_for_required_folder_animations(bundle, cache_state);
     result.pixel_format_ok = bundle_layer_formats_are_valid(bundle);
+
+    const CurrentCacheManifestSnapshot current_manifest =
+        read_current_cache_manifest_snapshot(asset_name, cache_state);
+    if (current_manifest.required) {
+        if (!current_manifest.present) {
+            result.cache_manifest_ok = false;
+            result.cache_manifest_reason = current_manifest.reason.empty()
+                ? std::string("cache_manifest_missing")
+                : current_manifest.reason;
+        } else {
+            const CacheManifestBundleSnapshot bundle_manifest =
+                read_bundle_cache_manifest_snapshot(bundle);
+            if (!bundle_manifest.present || bundle_manifest.digest.empty()) {
+                result.cache_manifest_ok = false;
+                result.cache_manifest_reason = "cache_manifest_missing: bundle metadata has no _cache_manifest.digest";
+            } else if (bundle_manifest.schema_version != current_manifest.schema_version) {
+                result.cache_manifest_ok = false;
+                result.cache_manifest_reason = "cache_manifest_changed: schema old=" +
+                    std::to_string(bundle_manifest.schema_version) + " new=" +
+                    std::to_string(current_manifest.schema_version);
+            } else if (bundle_manifest.digest != current_manifest.digest) {
+                result.cache_manifest_ok = false;
+                result.cache_manifest_reason = "cache_manifest_changed: old=" +
+                    bundle_manifest.digest + " new=" + current_manifest.digest;
+            }
+        }
+    }
+
     return result;
 }
 
@@ -561,6 +693,11 @@ std::string describe_bundle_validation_failure(const BundleValidationResult& val
     }
     if (!validation.pixel_format_ok) {
         reasons.emplace_back("cached layers use legacy non-RGBA32 pixel format");
+    }
+    if (!validation.cache_manifest_ok) {
+        reasons.emplace_back(validation.cache_manifest_reason.empty()
+            ? std::string("cache manifest validation failed")
+            : validation.cache_manifest_reason);
     }
 
     if (reasons.empty()) {
@@ -601,7 +738,7 @@ bool PrimaryAssetCache::load_cached_only(AssetInfo& info,
     }
 
     const BundleValidationResult validation =
-        validate_loaded_bundle(bundle, bundle_path, cache_state, false);
+        validate_loaded_bundle(bundle, bundle_path, info.name, cache_state, false);
     if (!validation.ready()) {
         vibble::log::info("[PrimaryAssetCache] Cached-only bundle rejected for " + info.name +
                           " (" + describe_bundle_validation_failure(validation) + ").");
@@ -632,11 +769,20 @@ bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
         *out_outcome = WarmupOutcome::Failed;
     }
 
+    if (!cache_state.required_folder_animations.empty()) {
+        std::string generation_error;
+        if (!generate_image_cache_for_asset(info, animation_filter, generation_error)) {
+            vibble::log::warn("[PrimaryAssetCache] Failed to refresh image cache for " + info.name +
+                              ": " + generation_error);
+            return false;
+        }
+    }
+
     CacheManager::BundleData bundle;
     const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
     BundleValidationResult validation{};
     const bool bundle_ready = bundle_loaded
-        ? (validation = validate_loaded_bundle(bundle, bundle_path, cache_state, allow_placeholder_fallback), validation.ready())
+        ? (validation = validate_loaded_bundle(bundle, bundle_path, info.name, cache_state, allow_placeholder_fallback), validation.ready())
         : false;
     if (bundle_ready) {
         if (out_outcome) {
@@ -749,7 +895,6 @@ PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::run_missing_cache_file_b
         if (it == batch_result.written_files_by_asset.end() || it->second.empty()) {
             continue;
         }
-        info->set_scale_percentage(100.0f);
         record_load_repairs_from_written_files(*info, it->second);
         info->consume_pending_texture_rebuild_on_load();
     }
@@ -841,6 +986,7 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info,
     out_data = CacheManager::BundleData{};
     out_data.version = 2;
     out_data.metadata_snapshot = info.info_json_;
+    write_current_cache_manifest_snapshot_to_bundle_metadata(info.name, out_data);
 
     std::vector<float> variant_steps = normalized_variant_steps(info);
     if (info.anims_json_.is_object()) {

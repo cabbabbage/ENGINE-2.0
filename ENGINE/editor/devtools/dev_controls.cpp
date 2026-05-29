@@ -401,9 +401,9 @@ DropValidationResult validate_dropped_folder(const std::filesystem::path& folder
     if (images.empty()) {
         const std::string folder_name = folder.filename().string();
         if (has_frames_subfolder) {
-            result.reason = "Folder '" + folder_name + "' has a 'frames' folder but it contains no images.";
+            result.reason = "Folder '" + folder_name + "' has a 'frames' folder but it contains no supported image/vector files.";
         } else {
-            result.reason = "Folder '" + folder_name + "' has no images and no 'frames' folder.";
+            result.reason = "Folder '" + folder_name + "' has no supported image/vector files and no 'frames' folder.";
         }
         return result;
     }
@@ -467,7 +467,7 @@ DropValidationResult validate_drop_items(const std::vector<std::filesystem::path
     for (const auto& item : items) {
         std::error_code ec;
         if (!std::filesystem::is_regular_file(item, ec) || !is_supported_image_file(item)) {
-            result.reason = "All dropped items must be image files";
+            result.reason = "All dropped items must be supported image/vector files";
             return result;
         }
     }
@@ -3245,7 +3245,7 @@ void DevControls::render_drop_choice_modal(SDL_Renderer* renderer) {
                              DMStyles::HighlightIntensity(),
                              DMStyles::ShadowIntensity());
     DrawLabelText(renderer,
-                  "Import dropped image files",
+                  "Import dropped image/vector files",
                   drop_choice_modal_.modal_rect.x + 16,
                   drop_choice_modal_.modal_rect.y + 8,
                   DMStyles::Label());

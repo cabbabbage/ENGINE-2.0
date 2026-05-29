@@ -18,6 +18,8 @@ struct FrameImportResult {
 };
 
 bool has_extension_ci(const std::filesystem::path& path, std::string_view extension);
+bool is_supported_raster_image_file(const std::filesystem::path& path);
+bool is_supported_vector_image_file(const std::filesystem::path& path);
 bool is_supported_image_file(const std::filesystem::path& path);
 bool is_gif_file(const std::filesystem::path& path);
 

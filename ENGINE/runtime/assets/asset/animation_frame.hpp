@@ -26,14 +26,12 @@ public:
     bool is_last = false;
     bool is_first = false;
 
-    std::vector<FrameVariant> variants;
+    FrameVariant variant;
     std::vector<DisplacedAssetAnchorPoint> anchor_points;
 
-    SDL_Texture* get_base_texture(int index) const {
-        if (index < 0 || static_cast<std::size_t>(index) >= variants.size()) {
-            return nullptr;
-        }
-        return variants[index].get_base_texture();
+    // Single texture per frame — GPU mipmaps handle scaling
+    SDL_Texture* get_base_texture(int /*index*/ = 0) const {
+        return variant.get_base_texture();
     }
 
 

@@ -35,7 +35,7 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
     const int flip_v = (flip & SDL_FLIP_VERTICAL) != 0 ? 1 : 0;
     const int angle_q = static_cast<int>(std::lround(asset.effective_render_angle() * 100.0));
     const int z_q = static_cast<int>(std::lround((asset.world_z_offset() + asset.render_anchor_offset_z()) * 1000.0f));
-    const int scale_q = static_cast<int>(std::lround(asset.current_remaining_scale_adjustment * 1000.0f));
+    const int scale_q = static_cast<int>(std::lround(asset.current_scale * 1000.0f));
     const int world_y_q = asset.world_y();
     Uint32 hash = 2166136261u;
     auto mix = [&](Uint32 v) {
@@ -58,16 +58,9 @@ bool query_asset_frame_variant(Asset* asset, const FrameVariant*& out_variant, S
         return false;
     }
 
-    if (asset->info) {
-        auto anim_it = asset->info->animations.find(asset->current_animation);
-        if (anim_it != asset->info->animations.end() && asset->current_frame) {
-            const auto& variants = asset->current_frame->variants;
-            if (!variants.empty()) {
-                const int variant_idx = std::clamp(asset->current_variant_index, 0, static_cast<int>(variants.size()) - 1);
-                out_variant = &variants[static_cast<std::size_t>(variant_idx)];
-                out_texture = out_variant->get_base_texture();
-            }
-        }
+    if (asset->current_frame) {
+        out_variant = &asset->current_frame->variant;
+        out_texture = out_variant->get_base_texture();
     }
 
     if (!out_texture) {
@@ -137,7 +130,6 @@ bool refresh_direct_asset_render_cache(Asset* asset, DirectAssetRenderCacheRecor
     cache_record.projection_anchor_uv = kDefaultProjectionAnchorUv;
     cache_record.blend_mode = SDL_BLENDMODE_BLEND;
     cache_record.frame_identity = asset->current_frame ? asset->current_frame->frame_index : -1;
-    cache_record.variant_identity = asset->current_variant_index;
     cache_record.texture_identity = base_tex;
     cache_record.reprojection_identity = compute_reprojection_identity(*asset);
     return true;
@@ -158,10 +150,7 @@ bool build_direct_asset_render_object(Asset* asset,
         return false;
     }
 
-    float remainder = asset->current_remaining_scale_adjustment;
-    if (!std::isfinite(remainder) || remainder <= 0.0f) {
-        remainder = 1.0f;
-    }
+    float remainder = asset->runtime_scale_remainder();
 
     int final_w = static_cast<int>(std::lround(static_cast<float>(cache_record.frame_w) * remainder));
     int final_h = static_cast<int>(std::lround(static_cast<float>(cache_record.frame_h) * remainder));

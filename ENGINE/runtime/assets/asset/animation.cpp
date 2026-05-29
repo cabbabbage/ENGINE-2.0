@@ -49,16 +49,6 @@ void destroy_prepared_texture(SDL_Texture* tex) {
     SDL_DestroyTexture(tex);
 }
 
-VariantLayerPaths build_variant_paths(const std::string& cache_root,
-                                      const std::vector<float>& variant_steps,
-                                      std::size_t variant_idx) {
-    VariantLayerPaths out;
-    const std::string folder = render_pipeline::ScalingLogic::VariantFolder(cache_root, variant_steps, variant_idx);
-    std::filesystem::path base(folder);
-    out.normal = base / "normal";
-    out.mask = base / "mask";
-    return out;
-}
 
 SDL_Texture* load_texture_from_path(SDL_Renderer* renderer,
                                     const std::filesystem::path& path,
@@ -150,61 +140,37 @@ bool Animation::rebuild_frame(int frame_index,
         return false;
     }
 
-    std::vector<float> variant_steps = variant_steps_;
-    render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps);
-
     Animation::FrameCache& cache_entry = frame_cache_[idx];
-    cache_entry.resize(variant_steps.size());
 
     const std::string cache_root = (std::filesystem::path("cache") / info.name / "animations").lexically_normal().generic_string();
+    const std::filesystem::path frame_path = std::filesystem::path(cache_root) / animation_id / (std::to_string(idx) + ".png");
 
-    bool success = true;
-
-    for (std::size_t variant_idx = 0; variant_idx < variant_steps.size(); ++variant_idx) {
-        const VariantLayerPaths paths = build_variant_paths(cache_root, variant_steps, variant_idx);
-
-        const std::filesystem::path base_path = paths.normal / (std::to_string(idx) + ".png");
-        int base_w = 0, base_h = 0;
-        SDL_Texture* base_tex = load_texture_from_path(renderer, base_path, base_w, base_h);
-        if (!base_tex) {
-            success = false;
-            continue;
-        }
-        apply_scale_mode(base_tex, info);
-
-        destroy_texture(cache_entry.textures[variant_idx]);
-
-        cache_entry.textures[variant_idx] = base_tex;
-        cache_entry.widths[variant_idx] = base_w;
-        cache_entry.heights[variant_idx] = base_h;
-        cache_entry.source_rects[variant_idx] = SDL_Rect{0, 0, base_w, base_h};
-        cache_entry.uses_atlas[variant_idx] = false;
+    int base_w = 0, base_h = 0;
+    SDL_Texture* base_tex = load_texture_from_path(renderer, frame_path, base_w, base_h);
+    if (!base_tex) {
+        return false;
     }
+    apply_scale_mode(base_tex, info);
 
+    destroy_texture(cache_entry.texture);
+    cache_entry.texture = base_tex;
+    cache_entry.width = base_w;
+    cache_entry.height = base_h;
+    cache_entry.source_rect = SDL_Rect{0, 0, base_w, base_h};
+
+    // Bind single variant to runtime frames
     for (auto& path : movement_paths_) {
-        if (idx >= path.size()) {
-            continue;
-        }
+        if (idx >= path.size()) continue;
         AnimationFrame& frame = path[idx];
-        frame.variants.clear();
-        frame.variants.reserve(variant_steps.size());
-        for (std::size_t v = 0; v < variant_steps.size(); ++v) {
-            FrameVariant variant;
-            variant.varient = static_cast<int>(v);
-            variant.base_texture = cache_entry.textures[v];
-            variant.source_rect = SDL_Rect{0, 0,
-                                           (v < cache_entry.widths.size() ? cache_entry.widths[v] : 0),
-                                           (v < cache_entry.heights.size() ? cache_entry.heights[v] : 0)};
-            variant.uses_atlas = (v < cache_entry.uses_atlas.size()) ? cache_entry.uses_atlas[v] : false;
-            frame.variants.push_back(variant);
-        }
+        frame.variant.base_texture = base_tex;
+        frame.variant.source_rect = SDL_Rect{0, 0, base_w, base_h};
     }
 
-    if (idx == 0 && !frame_cache_.empty() && !frame_cache_[0].textures.empty()) {
-        preview_texture = frame_cache_[0].textures[0];
+    if (idx == 0 && frame_cache_[0].texture) {
+        preview_texture = frame_cache_[0].texture;
     }
 
-    return success;
+    return true;
 }
 
 bool Animation::rebuild_animation(SDL_Renderer* renderer,
@@ -227,17 +193,11 @@ bool Animation::rebuild_animation(SDL_Renderer* renderer,
 
 void Animation::clear_texture_cache() {
     std::unordered_set<SDL_Texture*> destroyed;
-    auto destroy_once = [&destroyed](SDL_Texture*& tex) {
-        if (tex && destroyed.insert(tex).second) {
-            destroy_prepared_texture(tex);
-        }
-        tex = nullptr;
-    };
-
     for (auto& cache_entry : frame_cache_) {
-        for (SDL_Texture*& tex : cache_entry.textures) {
-            destroy_once(tex);
+        if (cache_entry.texture && destroyed.insert(cache_entry.texture).second) {
+            destroy_prepared_texture(cache_entry.texture);
         }
+        cache_entry.texture = nullptr;
     }
     frame_cache_.clear();
     if (audio_clip.buffer) {
@@ -245,28 +205,15 @@ void Animation::clear_texture_cache() {
     }
 }
 
-void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
-                                      std::vector<float> variant_steps) {
+void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches) {
     clear_texture_cache();
-    frame_cache_   = std::move(caches);
-    variant_steps_ = std::move(variant_steps);
-    render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps_);
-
-    const std::size_t canonical_variant_count = variant_steps_.size();
-    for (auto& cache : frame_cache_) {
-        cache.textures.resize(canonical_variant_count, nullptr);
-        cache.widths.resize(canonical_variant_count, 0);
-        cache.heights.resize(canonical_variant_count, 0);
-        cache.source_rects.resize(canonical_variant_count, SDL_Rect{0, 0, 0, 0});
-        cache.uses_atlas.resize(canonical_variant_count, false);
-    }
-
+    frame_cache_ = std::move(caches);
     number_of_frames = static_cast<int>(frame_cache_.size());
 
     movement_paths_.clear();
     movement_paths_.emplace_back();
     if (number_of_frames > 0) {
-            movement_paths_.back().resize(number_of_frames);
+        movement_paths_.back().resize(number_of_frames);
     }
     synchronize_runtime_frames();
 }
@@ -339,14 +286,11 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
 
     clear_texture_cache();
 
-    variant_steps_ = source.variant_steps_;
-    render_pipeline::ScalingLogic::NormalizeVariantSteps(variant_steps_);
     locked = source.locked;
     tags.clear();
     const std::size_t frame_count = source.frame_cache_.size();
-    const std::size_t variant_count = variant_steps_.size();
 
-    if (variant_count == 0 || frame_count == 0) {
+    if (frame_count == 0) {
         return false;
     }
 
@@ -362,27 +306,17 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     for (std::size_t frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
         const FrameCache& src_cache = source.frame_cache_[frame_idx];
         FrameCache dst_cache;
-        dst_cache.resize(variant_count);
 
-        for (std::size_t variant_idx = 0; variant_idx < variant_count; ++variant_idx) {
-            if (variant_idx >= src_cache.textures.size()) {
-                continue;
-            }
+        SDL_Texture* src_tex = src_cache.texture;
+        int tex_w = src_cache.width;
+        int tex_h = src_cache.height;
 
-            SDL_Texture* src_tex = src_cache.textures[variant_idx];
-            int tex_w = src_cache.widths[variant_idx];
-            int tex_h = src_cache.heights[variant_idx];
-
-            SDL_Texture* dst_tex = clone_texture(src_tex, tex_w, tex_h, flip_flags, &tex_w, &tex_h);
-            if (!dst_tex) {
-                continue;
-            }
-            dst_cache.textures[variant_idx] = dst_tex;
-            dst_cache.widths[variant_idx] = tex_w;
-            dst_cache.heights[variant_idx] = tex_h;
-            dst_cache.source_rects[variant_idx] = SDL_Rect{0, 0, tex_w, tex_h};
-            dst_cache.uses_atlas[variant_idx] = false;
-
+        SDL_Texture* dst_tex = clone_texture(src_tex, tex_w, tex_h, flip_flags, &tex_w, &tex_h);
+        if (dst_tex) {
+            dst_cache.texture = dst_tex;
+            dst_cache.width = tex_w;
+            dst_cache.height = tex_h;
+            dst_cache.source_rect = SDL_Rect{0, 0, tex_w, tex_h};
         }
 
         frame_cache_.push_back(std::move(dst_cache));
@@ -396,16 +330,9 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     return !frame_cache_.empty();
 }
 
-const FrameVariant* Animation::get_frame(const AnimationFrame* frame, float requested_scale) const {
-    if (!frame || frame->variants.empty()) return nullptr;
-
-    const auto selection = render_pipeline::ScalingLogic::Choose(requested_scale, variant_steps_);
-    int best_variant_idx = selection.index;
-
-    if (best_variant_idx < 0) best_variant_idx = 0;
-    if (best_variant_idx >= static_cast<int>(frame->variants.size())) best_variant_idx = static_cast<int>(frame->variants.size()) - 1;
-
-    return &frame->variants[best_variant_idx];
+const FrameVariant* Animation::get_frame(const AnimationFrame* frame, float /*requested_scale*/) const {
+    if (!frame) return nullptr;
+    return &frame->variant;
 }
 
 const AnimationFrame* Animation::get_first_frame(std::size_t path_index) const {
@@ -519,37 +446,23 @@ AnimationFrame* Animation::primary_frame_at(std::size_t index) {
 void Animation::bind_textures_to_frame(AnimationFrame& frame) const {
     const int raw_index = frame.frame_index;
     if (raw_index < 0 || raw_index >= static_cast<int>(frame_cache_.size())) {
-        frame.variants.clear();
+        frame.variant = FrameVariant{};
         return;
     }
 
     const std::size_t index = static_cast<std::size_t>(raw_index);
     const auto& cache = frame_cache_[index];
-    frame.variants.clear();
-    frame.variants.reserve(cache.textures.size());
-    for (std::size_t v = 0; v < cache.textures.size(); ++v) {
-        FrameVariant variant;
-        variant.varient = static_cast<int>(v);
-        variant.base_texture = cache.textures[v];
-        if (v < cache.source_rects.size()) {
-            variant.source_rect = cache.source_rects[v];
-        } else {
-            variant.source_rect = SDL_Rect{0, 0,
-                                           (v < cache.widths.size()) ? cache.widths[v] : 0,
-                                           (v < cache.heights.size()) ? cache.heights[v] : 0};
-        }
-        variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
-        frame.variants.push_back(variant);
-    }
+    frame.variant.base_texture = cache.texture;
+    frame.variant.source_rect = cache.source_rect;
 }
 
 void Animation::update_preview_texture_from_primary_path() {
     const AnimationFrame* first = primary_frame_at(0);
-    if (!first || first->variants.empty()) {
+    if (!first) {
         preview_texture = nullptr;
         return;
     }
-    preview_texture = first->variants[0].base_texture;
+    preview_texture = first->variant.get_base_texture();
 }
 
 void Animation::synchronize_runtime_frames() {

@@ -570,13 +570,10 @@ Asset::Asset(const Asset& o)
     , last_scaled_w_(0)
     , last_scaled_h_(0)
     , last_scaled_camera_scale_(-1.0f)
-    , last_scale_usage_()
     , last_rendered_frame_(nullptr)
-    , scale_variant_state_(o.scale_variant_state_)
     , last_scale_base_input_(o.last_scale_base_input_)
     , last_scale_perspective_input_(o.last_scale_perspective_input_)
     , last_scale_camera_input_(o.last_scale_camera_input_)
-    , last_scale_quality_cap_input_(o.last_scale_quality_cap_input_)
     , grid_id_(o.grid_id_)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
@@ -600,8 +597,6 @@ Asset::Asset(const Asset& o)
 {
 
         clear_render_caches();
-        last_scale_usage_ = o.last_scale_usage_;
-        scale_variant_state_ = o.scale_variant_state_;
         size_variation_sample_ = o.size_variation_sample_;
         base_spawn_tilt_degrees_ = o.base_spawn_tilt_degrees_;
         cached_grid_residency_    = o.cached_grid_residency_;
@@ -665,12 +660,9 @@ Asset& Asset::operator=(const Asset& o) {
         last_scaled_w_            = 0;
         last_scaled_h_            = 0;
         last_scaled_camera_scale_ = -1.0f;
-        last_scale_usage_         = o.last_scale_usage_;
-        scale_variant_state_      = o.scale_variant_state_;
         last_scale_base_input_    = o.last_scale_base_input_;
         last_scale_perspective_input_ = o.last_scale_perspective_input_;
         last_scale_camera_input_  = o.last_scale_camera_input_;
-        last_scale_quality_cap_input_ = o.last_scale_quality_cap_input_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
@@ -932,106 +924,26 @@ void Asset::update_scale_values(bool force) {
     const PerspectiveSample perspective_sample = runtime_perspective_sample();
     const float base_scale = runtime_effective_base_scale();
     const float perspective_scale = perspective_sample.scale;
-    const char* perspective_source = perspective_source_label(perspective_sample.source);
 
-    float camera_scale = 1.0f;
-    if (assets_) {
-        camera_scale = static_cast<float>(std::max(0.0001, assets_->getView().get_scale()));
-    } else if (window) {
-        camera_scale = static_cast<float>(std::max(0.0001, window->get_scale()));
-    }
-    float quality_cap = render_pipeline::ScalingLogic::QualityCap();
-    if (!std::isfinite(quality_cap) || quality_cap <= 0.0f) {
-        quality_cap = 1.0f;
-    }
-
-    const float prospective_scale = base_scale * perspective_scale;
     constexpr float kScaleEpsilon = 1e-4f;
-    const float scale_delta = prospective_scale - current_scale;
-    const bool trace_scale = should_trace_asset_scale(*this) &&
-                             should_emit_scale_trace_for_frame(*this, frame_id);
-    if (trace_scale) {
-        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
-        frame_stats.set("scale_trace.asset_name", info ? info->name : std::string{"<unknown>"});
-        frame_stats.set("scale_trace.asset_frame_id", static_cast<std::uint64_t>(frame_id));
-        frame_stats.set("scale_trace.asset_source", perspective_source);
-        frame_stats.set("scale_trace.asset_perspective", static_cast<double>(perspective_scale));
-        frame_stats.set("scale_trace.asset_base", static_cast<double>(base_scale));
-        frame_stats.set("scale_trace.asset_scale", static_cast<double>(prospective_scale));
-        frame_stats.set("scale_trace.asset_delta", static_cast<double>(scale_delta));
-    }
+    const float prospective_scale = base_scale * perspective_scale;
 
     if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&
         std::fabs(base_scale - last_scale_base_input_) < kScaleEpsilon &&
-        std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon &&
-        std::fabs(camera_scale - last_scale_camera_input_) < kScaleEpsilon &&
-        std::fabs(quality_cap - last_scale_quality_cap_input_) < kScaleEpsilon) {
+        std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon) {
         return;
     }
 
     current_scale = prospective_scale;
     last_scale_base_input_ = base_scale;
     last_scale_perspective_input_ = perspective_scale;
-    last_scale_camera_input_ = camera_scale;
-    last_scale_quality_cap_input_ = quality_cap;
 
-    // Select variants against the actual render scale so we prefer downscaling
-    // a larger source texture, and only upscale when no larger variant exists.
-    float desired_variant_scale = current_scale;
-    if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
-        desired_variant_scale = 1.0f;
+    // Single texture per frame — GPU scaling handles everything
+    // Only dirty if scale changed enough to matter
+    if (std::fabs(prospective_scale - (current_scale - (base_scale * perspective_scale - current_scale))) >= kScaleEpsilon) {
+        mark_composite_dirty();
+        mark_anchors_dirty();
     }
-
-    auto scale_profile = render_pipeline::ScalingLogic::ProfileForAsset(info ? info->name : std::string{});
-    std::vector<float> steps = scale_profile.steps;
-    render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
-    float profile_max_scale = scale_profile.max_scale;
-    if (!std::isfinite(profile_max_scale) || profile_max_scale <= 0.0f) {
-        profile_max_scale = 1.0f;
-    }
-    float desired_texture_scale = desired_variant_scale / profile_max_scale;
-    if (!std::isfinite(desired_texture_scale) || desired_texture_scale <= 0.0f) {
-        desired_texture_scale = desired_variant_scale;
-    }
-
-    render_pipeline::ScalingLogic::HysteresisState hysteresis_state{};
-    hysteresis_state.last_index = scale_variant_state_.last_variant_index;
-    hysteresis_state.min_scale = scale_variant_state_.hysteresis_min;
-    hysteresis_state.max_scale = scale_variant_state_.hysteresis_max;
-
-    const int previous_variant_index = current_variant_index;
-    auto selection = render_pipeline::ScalingLogic::Choose(
-        desired_texture_scale,
-        steps,
-        hysteresis_state,
-        desired_texture_scale,
-        render_pipeline::ScalingLogic::HysteresisOptions{});
-
-    current_nearest_variant_scale = profile_max_scale * selection.stored_scale;
-    current_variant_index = selection.index;
-    if (current_variant_index != previous_variant_index) {
-        refresh_cached_dimensions();
-    }
-
-    scale_variant_state_.last_variant_index = selection.index;
-    scale_variant_state_.hysteresis_min = selection.hysteresis_min;
-    scale_variant_state_.hysteresis_max = selection.hysteresis_max;
-
-    if (current_nearest_variant_scale > 0.0f) {
-        current_remaining_scale_adjustment = current_scale / current_nearest_variant_scale;
-    } else {
-        current_remaining_scale_adjustment = 1.0f;
-    }
-
-    last_scale_usage_.requested_scale = current_scale;
-    last_scale_usage_.texture_scale = current_nearest_variant_scale;
-    last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
-    last_scale_usage_.variant_index = current_variant_index;
-
-    // Variant/remainder changes alter package dimensions and source texture selection.
-    mark_composite_dirty();
-    mark_anchors_dirty();
-    mark_mesh_dirty();
 }
 
 float Asset::runtime_effective_base_scale() const {
@@ -1176,23 +1088,23 @@ bool Asset::clear_anchor_perspective_override() {
 
 SDL_Texture* Asset::get_current_variant_texture() const {
     if (!current_frame) return nullptr;
-    return current_frame->get_base_texture(current_variant_index);
+    return current_frame->get_base_texture();
 }
 
 SDL_Texture* Asset::get_texture()
 {
-	if (current_frame) {
-		return current_frame->get_base_texture(current_variant_index);
-	}
-	return nullptr;
+    if (current_frame) {
+        return current_frame->get_base_texture();
+    }
+    return nullptr;
 }
 
 SDL_Texture* Asset::get_current_frame() const
 {
-	if (current_frame) {
-		return current_frame->get_base_texture(current_variant_index);
-	}
-	return nullptr;
+    if (current_frame) {
+        return current_frame->get_base_texture();
+    }
+    return nullptr;
 }
 
 void Asset::set_current_animation(const std::string& name)
@@ -2081,7 +1993,6 @@ void Asset::invalidate_downscale_cache() {
         last_scaled_w_            = 0;
         last_scaled_h_            = 0;
         last_scaled_camera_scale_ = -1.0f;
-        last_scale_usage_         = {};
 
         downscale_cache_ready_revision_ = 0;
 }
@@ -2142,20 +2053,11 @@ void Asset::refresh_frame_texture_bindings() {
                 if (get_current_variant_texture()) {
                         return;
                 }
-                if (current_variant_index != 0 && current_frame->get_base_texture(0)) {
-                        current_variant_index = 0;
-                        return;
-                }
                 for (AnimationFrame* candidate = active_animation->get_first_frame();
                      candidate != nullptr;
                      candidate = candidate->next) {
-                        if (candidate->get_base_texture(current_variant_index)) {
+                        if (candidate->get_base_texture()) {
                                 current_frame = candidate;
-                                return;
-                        }
-                        if (candidate->get_base_texture(0)) {
-                                current_frame = candidate;
-                                current_variant_index = 0;
                                 return;
                         }
                 }
@@ -2183,25 +2085,14 @@ void Asset::refresh_frame_texture_bindings() {
 }
 
 float Asset::runtime_scale_remainder() const {
-        float remainder = last_scale_usage_.remainder_scale;
-        if (!std::isfinite(remainder) || remainder <= 0.0f) {
-                remainder = current_remaining_scale_adjustment;
-        }
-        if (!std::isfinite(remainder) || remainder <= 0.0f) {
-                remainder = 1.0f;
-        }
-        return remainder;
+        return 1.0f;
 }
 
 float Asset::runtime_resolved_scale() const {
-        float texture_scale = last_scale_usage_.texture_scale;
-        if (!std::isfinite(texture_scale) || texture_scale <= 0.0f) {
-                texture_scale = current_nearest_variant_scale;
+        if (!std::isfinite(current_scale) || current_scale <= 0.0f) {
+                return 1.0f;
         }
-        if (!std::isfinite(texture_scale) || texture_scale <= 0.0f) {
-                texture_scale = 1.0f;
-        }
-        return texture_scale * runtime_scale_remainder();
+        return current_scale;
 }
 
 float Asset::runtime_width_px() const {
@@ -2209,7 +2100,7 @@ float Asset::runtime_width_px() const {
         if (!(base_width > 0.0f)) {
                 return 0.0f;
         }
-        return base_width * runtime_scale_remainder();
+        return base_width * current_scale;
 }
 
 float Asset::runtime_height_px() const {
@@ -2217,13 +2108,10 @@ float Asset::runtime_height_px() const {
         if (!(base_height > 0.0f)) {
                 return 0.0f;
         }
-        return base_height * runtime_scale_remainder();
+        return base_height * current_scale;
 }
 
 void Asset::on_scale_factor_changed() {
-
-        last_scale_usage_ = {};
-
         refresh_cached_dimensions();
 
         mark_composite_dirty();
@@ -2339,7 +2227,6 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         sig.world_y = world_y();
         sig.world_z = world_z();
         sig.frame_index = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
-        sig.variant_index = current_variant_index;
         sig.flipped = flipped;
         const SDL_FlipMode render_flip = effective_render_flip();
         sig.render_flip_horizontal = (render_flip & SDL_FLIP_HORIZONTAL) != 0;
@@ -2347,11 +2234,7 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         const double render_angle = effective_render_angle();
         sig.render_rotation_degrees = std::isfinite(render_angle) ? static_cast<float>(render_angle) : 0.0f;
 
-        float remainder = current_remaining_scale_adjustment;
-        if (!std::isfinite(remainder) || remainder <= 0.0f) {
-                remainder = 1.0f;
-        }
-        sig.remainder_scale = remainder;
+        sig.remainder_scale = 1.0f;
 
         const PerspectiveSample perspective_sample = runtime_perspective_sample();
         sig.perspective_scale = perspective_sample.scale;
@@ -2390,7 +2273,6 @@ bool Asset::update_anchor_basis_if_needed() {
         const bool signature_changed =
                 world_changed ||
                 signature.frame_index != last_anchor_basis_signature_.frame_index ||
-                signature.variant_index != last_anchor_basis_signature_.variant_index ||
                 signature.flipped != last_anchor_basis_signature_.flipped ||
                 signature.render_flip_horizontal != last_anchor_basis_signature_.render_flip_horizontal ||
                 signature.render_flip_vertical != last_anchor_basis_signature_.render_flip_vertical ||

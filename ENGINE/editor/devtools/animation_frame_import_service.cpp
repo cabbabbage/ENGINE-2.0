@@ -215,44 +215,56 @@ bool verify_animation_files(const std::filesystem::path& asset_root,
     return true;
 }
 
+
 bool verify_runtime_textures(const std::shared_ptr<AssetInfo>& info,
                              const std::string& animation_id,
                              int expected_frames,
                              std::string& error_message) {
     error_message.clear();
+
     if (!info) {
         error_message = "Runtime asset info is unavailable.";
         return false;
     }
+
     auto anim_it = info->animations.find(animation_id);
     if (anim_it == info->animations.end()) {
         error_message = "Runtime animation '" + animation_id + "' is missing.";
         return false;
     }
-    const Animation& animation = anim_it->second;
-    if (animation.cached_frame_count() != static_cast<std::size_t>(expected_frames)) {
+
+    Animation& animation = anim_it->second;
+    const std::size_t cached_count = animation.cached_frame_count();
+    if (cached_count != static_cast<std::size_t>(expected_frames)) {
         error_message = "Runtime animation '" + animation_id + "' has " +
-                        std::to_string(animation.cached_frame_count()) + " frame(s), expected " +
+                        std::to_string(cached_count) + " frame(s), expected " +
                         std::to_string(expected_frames) + ".";
         return false;
     }
-    const auto& frames = animation.cached_frames();
-    for (std::size_t i = 0; i < frames.size(); ++i) {
-        bool has_texture = false;
-        for (SDL_Texture* texture : frames[i].textures) {
-            if (texture) {
-                has_texture = true;
-                break;
-            }
-        }
-        if (!has_texture) {
+
+    AnimationFrame* frame = animation.get_first_frame();
+    for (int i = 0; i < expected_frames; ++i) {
+        if (!frame) {
             error_message = "Runtime animation '" + animation_id + "' frame " +
-                            std::to_string(i) + " has no usable texture.";
+                            std::to_string(i) + " is missing from the frame chain.";
             return false;
         }
+
+        // Do not inspect Animation::FrameCache internals here. FrameCache layout
+        // has changed, and AnimationFrame already owns the stable texture accessor.
+        if (!frame->get_base_texture(0)) {
+            error_message = "Runtime animation '" + animation_id + "' frame " +
+                            std::to_string(i) + " has no usable base texture.";
+            return false;
+        }
+
+        frame = frame->next;
     }
+
     return true;
 }
+
+
 
 ImportResult reload_and_verify_runtime(Assets* assets,
                                        const std::string& asset_key,

@@ -495,6 +495,88 @@ bool PrimaryAssetCache::save_current(const AssetInfo& info) {
     return CacheManager::save_bundle(bundle_path.generic_string(), bundle);
 }
 
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::detect_missing_cache_files(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter) const {
+    return run_missing_cache_file_batch(infos, animation_filter, /*dry_run=*/true);
+}
+
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::repair_missing_cache_files(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter) const {
+    return run_missing_cache_file_batch(infos, animation_filter, /*dry_run=*/false);
+}
+
+PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::run_missing_cache_file_batch(
+    const std::vector<AssetInfo*>& infos,
+    const std::unordered_set<std::string>* animation_filter,
+    bool dry_run) const {
+    BatchRepairResult result;
+    result.ok = true;
+
+    // Phase 1: Identify assets whose cache PNGs are incomplete.
+    for (AssetInfo* info_ptr : infos) {
+        if (!info_ptr) continue;
+        AssetInfo& info = *info_ptr;
+        bool asset_needs_repair = false;
+
+        if (info.anims_json_.is_object()) {
+            for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
+                if (!it.value().is_object()) continue;
+                if (animation_filter && !animation_filter->empty() &&
+                    animation_filter->find(it.key()) == animation_filter->end()) continue;
+                const nlohmann::json& anim_json = it.value();
+                if (!anim_json.contains("source") || !anim_json["source"].is_object()) continue;
+                const auto& source = anim_json["source"];
+                if (source.value("kind", std::string{}) != "folder") continue;
+
+                const fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
+                const fs::path cache_anim_root = fs::path("cache") / info.name / "animations" / it.key();
+                const int source_frame_count = count_sequential_png(folder);
+                const int cached_frame_count = count_sequential_png(cache_anim_root);
+
+                if (cached_frame_count < source_frame_count) {
+                    asset_needs_repair = true;
+                    if (dry_run) break;
+                }
+            }
+        }
+
+        if (asset_needs_repair) {
+            result.touched_assets.push_back(info.name);
+        }
+    }
+
+    if (dry_run || result.touched_assets.empty()) {
+        return result;
+    }
+
+    // Phase 2 (repair): regenerate missing cache PNGs via ImageCacheGenerator.
+    GeneratorLogBridge logger;
+    for (const auto& asset_name : result.touched_assets) {
+        imgcache::GeneratorOptions options;
+        options.missing_only = true;
+        options.force_rebuild = false;
+        options.dry_run = false;
+        options.quiet_task_logs = true;
+        options.filters.assets.insert(asset_name);
+        if (animation_filter && !animation_filter->empty()) {
+            options.filters.animations = *animation_filter;
+        }
+
+        const imgcache::GenResult gen_result = imgcache::ImageCacheGenerator::Run(options, logger);
+        if (!gen_result.ok) {
+            result.ok = false;
+            result.error = gen_result.error;
+            return result;
+        }
+
+        result.written_files_by_asset[asset_name] = gen_result.written_files;
+    }
+
+    return result;
+}
+
 bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                                                 const CacheManager::BundleData& bundle,
                                                 std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,

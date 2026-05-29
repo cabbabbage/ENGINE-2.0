@@ -50,12 +50,23 @@ public:
         std::string animation_label;
         int frame_count = 0;
         int selected_frame = 0;
+        bool frame_editor_enabled = false;
+        bool focused = false;
+        std::vector<int> selected_frames;
         std::function<SDL_Texture*(int)> frame_texture_provider;
         std::function<void()> on_prev_animation;
         std::function<void()> on_next_animation;
         std::function<void()> on_prev_frame;
         std::function<void()> on_next_frame;
         std::function<void(int)> on_select_frame;
+        std::function<void(bool)> on_focus_changed;
+        std::function<void(int, bool)> on_frame_click;
+        std::function<void()> on_delete_frames;
+        std::function<void()> on_duplicate_frames;
+        std::function<void(int, int)> on_reorder_frame;
+        std::function<void(int)> on_insert_frame;
+        std::function<void(int)> on_replace_frame;
+        std::function<void(int)> on_interpolation_popup;
     };
 
     explicit DevFooterBar(std::string title);
@@ -118,6 +129,8 @@ private:
     int editor_frame_index_at_point(const SDL_Point& point) const;
     SDL_Rect editor_frame_chip_rect(int frame_index) const;
     bool editor_navigation_contains_point(const SDL_Point& point) const;
+    bool editor_frame_focus_bounds_contains_point(const SDL_Point& point) const;
+    void set_editor_frame_editor_focused(bool focused, bool notify_callback);
     bool handle_editor_navigation_event(const SDL_Event& e);
     void render_editor_navigation(SDL_Renderer* renderer) const;
     int content_start_x() const;
@@ -179,5 +192,15 @@ private:
     float editor_frame_scroll_offset_ = 0.0f;
     int editor_hovered_frame_index_ = -1;
     int editor_pressed_frame_index_ = -1;
+    bool editor_frame_editor_focused_ = false;
+    std::vector<int> editor_selected_frame_indices_;
+    int editor_drag_start_frame_index_ = -1;
+    int editor_drag_current_frame_index_ = -1;
+    int editor_drag_drop_insertion_index_ = -1;
+    bool editor_insertion_point_hovered_ = false;
+    int editor_insertion_point_index_ = -1;
+    bool editor_context_menu_requested_ = false;
+    SDL_Point editor_context_menu_point_{0, 0};
+    int editor_context_menu_frame_index_ = -1;
 };
 

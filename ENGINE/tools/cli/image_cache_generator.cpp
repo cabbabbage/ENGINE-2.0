@@ -4,11 +4,14 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <chrono>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <optional>
 #include <string>
 #include <unordered_set>
+#include <sstream>
 #include <vector>
 
 #include "utils/stb_image.h"
@@ -208,21 +211,12 @@ std::optional<ImageRGBA> CropToSharedCanvas(const ImageRGBA& src,
 
 bool AnimationRequestedForGeneration(const GeneratorOptions& opt,
                                      const std::string& asset_name,
-                                     const std::string& animation_name) {
-    if (!opt.filters.matches_asset(asset_name) || !opt.filters.matches_anim(animation_name)) {
-        return false;
-    }
-
-    if (!opt.has_explicit_rebuild_requests()) {
-        return true;
-    }
-
-    for (const auto& request : opt.explicit_rebuild_requests) {
-        if (request.asset_name == asset_name && request.animation_name == animation_name) {
-            return true;
-        }
-    }
-    return false;
+                                     const std::string& /*animation_name*/) {
+    // Smart texture-cache rebuilds are asset-wide: all animations and frames
+    // must share one per-asset set of scale percentages. Asset filters still
+    // narrow the selected assets, but animation/frame filters are intentionally
+    // ignored once an asset is selected for generation.
+    return opt.filters.matches_asset(asset_name);
 }
 
 std::optional<SharedCropSize> AnalyzeSharedCropSizeForAsset(
@@ -279,6 +273,281 @@ std::optional<SharedCropSize> AnalyzeSharedCropSizeForAsset(
     return shared;
 }
 
+struct CameraCacheSettings {
+    int min_height_px = 100;
+    int max_height_px = 2000;
+    float base_height_px = 1000.0f;
+    float min_visible_screen_ratio = 0.003f;
+    float boundary_min_visible_screen_ratio = 0.015f;
+};
+
+struct SmartVariantPlan {
+    std::vector<int> percents;
+    std::vector<float> steps;
+    float authored_scale = 1.0f;
+    float max_camera_scale = 1.0f;
+    float min_camera_scale = 0.1f;
+    int scale100_w = 1;
+    int scale100_h = 1;
+    int min_w = 1;
+    int min_h = 1;
+    float min_visible_ratio = 0.003f;
+    bool boundary_ratio = false;
+};
+
+float read_float_json(const nlohmann::json& node, const char* key, float fallback) {
+    auto it = node.find(key);
+    if (it == node.end() || !it->is_number()) {
+        return fallback;
+    }
+    const float value = static_cast<float>(it->get<double>());
+    return std::isfinite(value) ? value : fallback;
+}
+
+int read_int_json(const nlohmann::json& node, const char* key, int fallback) {
+    auto it = node.find(key);
+    if (it == node.end() || !it->is_number()) {
+        return fallback;
+    }
+    return std::max(1, static_cast<int>(std::lround(it->get<double>())));
+}
+
+CameraCacheSettings ResolveCameraCacheSettings(const nlohmann::json& manifest) {
+    CameraCacheSettings settings;
+    if (!manifest.contains("maps") || !manifest["maps"].is_object()) {
+        return settings;
+    }
+    for (auto it = manifest["maps"].begin(); it != manifest["maps"].end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+        auto camera_it = it.value().find("camera_settings");
+        if (camera_it == it.value().end() || !camera_it->is_object()) {
+            continue;
+        }
+        const nlohmann::json& camera = *camera_it;
+        settings.min_height_px = read_int_json(camera, "camera_height_min_px", settings.min_height_px);
+        settings.max_height_px = std::max(settings.min_height_px,
+                                          read_int_json(camera, "camera_height_max_px", settings.max_height_px));
+        settings.base_height_px = std::max(1.0f, read_float_json(camera, "base_height_px", settings.base_height_px));
+        settings.min_visible_screen_ratio = std::clamp(read_float_json(camera,
+                                                                       "min_visible_screen_ratio",
+                                                                       settings.min_visible_screen_ratio),
+                                                       0.0f,
+                                                       0.5f);
+        settings.boundary_min_visible_screen_ratio = std::clamp(read_float_json(camera,
+                                                                                "boundary_min_visible_screen_ratio",
+                                                                                settings.boundary_min_visible_screen_ratio),
+                                                                0.0f,
+                                                                0.5f);
+        return settings;
+    }
+    return settings;
+}
+
+float ReadAuthoredScale(const nlohmann::json& asset_obj) {
+    if (!asset_obj.is_object()) {
+        return 1.0f;
+    }
+    auto ss_it = asset_obj.find("size_settings");
+    if (ss_it == asset_obj.end() || !ss_it->is_object()) {
+        return 1.0f;
+    }
+    const float percent = read_float_json(*ss_it, "scale_percentage", 100.0f);
+    if (!std::isfinite(percent) || percent <= 0.0f) {
+        return 1.0f;
+    }
+    return std::max(0.01f, percent * 0.01f);
+}
+
+bool IsBoundaryAsset(const nlohmann::json& asset_obj) {
+    if (!asset_obj.is_object()) {
+        return false;
+    }
+    auto type_it = asset_obj.find("asset_type");
+    if (type_it == asset_obj.end() || !type_it->is_string()) {
+        type_it = asset_obj.find("type");
+    }
+    if (type_it == asset_obj.end() || !type_it->is_string()) {
+        return false;
+    }
+    std::string type = type_it->get<std::string>();
+    std::transform(type.begin(), type.end(), type.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return type == "boundary";
+}
+
+std::vector<int> BuildVariantPercents(float min_step) {
+    min_step = std::clamp(min_step, 0.01f, 0.91f);
+    const int min_pct = std::clamp(static_cast<int>(std::ceil(static_cast<double>(min_step) * 100.0)), 1, 91);
+    std::vector<int> percents;
+    percents.reserve(10);
+    for (int idx = 0; idx < 10; ++idx) {
+        const double t = static_cast<double>(idx) / 9.0;
+        int pct = static_cast<int>(std::lround(100.0 + (static_cast<double>(min_pct) - 100.0) * t));
+        if (!percents.empty()) {
+            pct = std::min(pct, percents.back() - 1);
+        }
+        pct = std::max(min_pct, pct);
+        percents.push_back(pct);
+    }
+    percents.front() = 100;
+    percents.back() = min_pct;
+    for (std::size_t idx = 1; idx < percents.size(); ++idx) {
+        if (percents[idx] >= percents[idx - 1]) {
+            percents[idx] = percents[idx - 1] - 1;
+        }
+    }
+    percents.back() = std::min(percents.back(), percents[percents.size() - 2] - 1);
+    percents.back() = std::max(1, percents.back());
+    return percents;
+}
+
+SmartVariantPlan BuildSmartVariantPlan(const nlohmann::json& asset_obj,
+                                       const CameraCacheSettings& camera,
+                                       const SharedCropSize& shared_crop) {
+    SmartVariantPlan plan;
+    plan.authored_scale = ReadAuthoredScale(asset_obj);
+    plan.boundary_ratio = IsBoundaryAsset(asset_obj);
+    plan.min_visible_ratio = plan.boundary_ratio
+        ? camera.boundary_min_visible_screen_ratio
+        : camera.min_visible_screen_ratio;
+
+    plan.max_camera_scale = std::max(0.01f, camera.base_height_px / static_cast<float>(std::max(1, camera.min_height_px)));
+    plan.min_camera_scale = std::max(0.01f, camera.base_height_px / static_cast<float>(std::max(1, camera.max_height_px)));
+
+    const float scale100_factor = std::max(0.01f, plan.authored_scale * plan.max_camera_scale);
+    plan.scale100_w = scale_dimension(shared_crop.width, scale100_factor);
+    plan.scale100_h = scale_dimension(shared_crop.height, scale100_factor);
+
+    const float horizon_factor = std::max(0.01f, plan.authored_scale * plan.min_camera_scale);
+    const int horizon_w = scale_dimension(shared_crop.width, horizon_factor);
+    const int horizon_h = scale_dimension(shared_crop.height, horizon_factor);
+    const float min_visible_px = std::max(1.0f,
+        std::clamp(plan.min_visible_ratio, 0.0f, 0.5f) * camera.base_height_px * 1.1f);
+    const float aspect = static_cast<float>(std::max(1, shared_crop.width)) /
+                         static_cast<float>(std::max(1, shared_crop.height));
+    const int configured_min_h = std::max(1, static_cast<int>(std::lround(min_visible_px)));
+    const int configured_min_w = std::max(1, static_cast<int>(std::lround(min_visible_px * aspect)));
+    if (std::max(horizon_w, horizon_h) >= static_cast<int>(std::lround(min_visible_px))) {
+        plan.min_w = horizon_w;
+        plan.min_h = horizon_h;
+    } else {
+        plan.min_w = configured_min_w;
+        plan.min_h = configured_min_h;
+    }
+
+    const float min_step_w = static_cast<float>(plan.min_w) / static_cast<float>(std::max(1, plan.scale100_w));
+    const float min_step_h = static_cast<float>(plan.min_h) / static_cast<float>(std::max(1, plan.scale100_h));
+    const float min_step = std::clamp(std::max(min_step_w, min_step_h), 0.01f, 0.91f);
+    plan.percents = BuildVariantPercents(min_step);
+    plan.steps.reserve(plan.percents.size());
+    for (int pct : plan.percents) {
+        plan.steps.push_back(static_cast<float>(pct) * 0.01f);
+    }
+    return plan;
+}
+
+std::string FormatFloat(float value) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(3) << value;
+    return out.str();
+}
+
+void LogSmartVariantPlan(ILogger& log,
+                         const std::string& asset_name,
+                         const ImageRGBA& source_image,
+                         const SmartVariantPlan& plan,
+                         const CameraCacheSettings& camera) {
+    log.info("[ImageCacheGenerator] Asset: " + asset_name +
+             "\nSource Size: " + std::to_string(source_image.w) + "x" + std::to_string(source_image.h) +
+             "\nAuthored Scale %: " + FormatFloat(plan.authored_scale * 100.0f) +
+             "\nCamera Min Height: " + std::to_string(camera.min_height_px) +
+             "\nCamera Max Height: " + std::to_string(camera.max_height_px) +
+             "\nCamera Min Zoom: " + FormatFloat(plan.max_camera_scale) +
+             "\nCamera Max Zoom: " + FormatFloat(plan.min_camera_scale) +
+             "\nCalculated scale_100 Size: " + std::to_string(plan.scale100_w) + "x" + std::to_string(plan.scale100_h) +
+             "\nMinimum Visible Size: " + std::to_string(plan.min_w) + "x" + std::to_string(plan.min_h) +
+             "\nMin Visible Ratio Source: " + std::string(plan.boundary_ratio ? "boundary" : "normal"));
+    for (std::size_t idx = 0; idx < plan.percents.size(); ++idx) {
+        const int out_w = scale_dimension(plan.scale100_w, plan.steps[idx]);
+        const int out_h = scale_dimension(plan.scale100_h, plan.steps[idx]);
+        log.info("Variant " + std::to_string(idx + 1) + "/" + std::to_string(plan.percents.size()) +
+                 " -> scale_" + std::to_string(plan.percents[idx]) +
+                 " -> " + std::to_string(out_w) + "x" + std::to_string(out_h));
+    }
+}
+
+bool AssetHasScalingProfile(const nlohmann::json& asset_obj) {
+    auto it = asset_obj.find("scaling_profile");
+    return it != asset_obj.end() && it->is_object();
+}
+
+bool AssetCacheMissingAnySmartVariant(const fs::path& cache_root,
+                                      const std::string& asset_name,
+                                      const std::vector<std::pair<std::string, fs::path>>& animations,
+                                      const SmartVariantPlan& plan) {
+    std::error_code ec;
+    if (!fs::exists(cache_root / asset_name, ec) || ec) {
+        return true;
+    }
+    for (const auto& animation_entry : animations) {
+        const auto frames = ImageCacheGenerator::EnumerateSourceFrames(animation_entry.second);
+        for (std::size_t frame_index = 0; frame_index < frames.size(); ++frame_index) {
+            for (int pct : plan.percents) {
+                const fs::path out_path = CachePaths::frame_png_path(cache_root,
+                                                                     asset_name,
+                                                                     animation_entry.first,
+                                                                     pct,
+                                                                     Variant::Normal,
+                                                                     static_cast<int>(frame_index));
+                if (!fs::exists(out_path, ec) || ec) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+fs::path BuildTempCacheRoot(const fs::path& cache_root, const std::string& asset_name) {
+    const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
+    return cache_root / (".tmp_" + asset_name + "_" + std::to_string(ticks));
+}
+
+bool ReplaceAssetCacheAtomically(const fs::path& cache_root,
+                                 const fs::path& temp_root,
+                                 const std::string& asset_name,
+                                 std::string& err) {
+    err.clear();
+    std::error_code ec;
+    const fs::path temp_asset = temp_root / asset_name;
+    const fs::path final_asset = cache_root / asset_name;
+    if (!fs::exists(temp_asset, ec) || ec) {
+        err = "temporary asset cache was not generated: " + temp_asset.string();
+        return false;
+    }
+    fs::create_directories(cache_root, ec);
+    if (ec) {
+        err = "failed creating cache root: " + cache_root.string();
+        return false;
+    }
+    fs::remove_all(final_asset, ec);
+    if (ec) {
+        err = "failed removing old asset cache: " + final_asset.string() + ": " + ec.message();
+        return false;
+    }
+    ec.clear();
+    fs::rename(temp_asset, final_asset, ec);
+    if (ec) {
+        err = "failed moving rebuilt asset cache into place: " + final_asset.string() + ": " + ec.message();
+        return false;
+    }
+    fs::remove_all(temp_root, ec);
+    return true;
+}
+
 } // namespace
 
 GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
@@ -313,26 +582,10 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     const fs::path repo_root = manifest_path.parent_path();
     const fs::path manifest_dir = manifest_path.parent_path();
     const fs::path cache_root = ResolveCacheRoot(repo_root, opt);
+    const CameraCacheSettings camera_settings = ResolveCameraCacheSettings(manifest);
 
-    std::vector<float> scale_steps = opt.scale_percents.empty() ? canonical_scale_steps() : std::vector<float>{};
-    if (!opt.scale_percents.empty()) {
-        scale_steps.reserve(opt.scale_percents.size());
-        for (int pct : opt.scale_percents) {
-            if (pct <= 0) {
-                continue;
-            }
-            scale_steps.push_back(std::max(0.01f, static_cast<float>(pct) * 0.01f));
-        }
-        std::sort(scale_steps.begin(), scale_steps.end(), std::greater<float>());
-        scale_steps.erase(std::unique(scale_steps.begin(), scale_steps.end(), [](float a, float b) {
-            return std::fabs(a - b) < 1e-6f;
-        }), scale_steps.end());
-        if (scale_steps.empty()) {
-            scale_steps = canonical_scale_steps();
-        }
-    }
-
-    const auto& assets = manifest["assets"];
+    bool manifest_modified = false;
+    auto& assets = manifest["assets"];
     for (auto it = assets.begin(); it != assets.end(); ++it) {
         const std::string asset_name = it.key();
         if (!opt.filters.matches_asset(asset_name)) {
@@ -341,8 +594,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         if (!it.value().is_object()) {
             continue;
         }
+        nlohmann::json& asset_obj = it.value();
 
-        const fs::path asset_src_dir = ResolveAssetSourceDir(manifest_dir, repo_root, asset_name, it.value());
+        const fs::path asset_src_dir = ResolveAssetSourceDir(manifest_dir, repo_root, asset_name, asset_obj);
         const auto animations = DiscoverAnimations(asset_src_dir);
         if (animations.empty()) {
             continue;
@@ -358,10 +612,55 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             return result;
         }
 
+        fs::path first_frame_path;
+        for (const auto& animation_entry : animations) {
+            if (!AnimationRequestedForGeneration(opt, asset_name, animation_entry.first)) {
+                continue;
+            }
+            const auto frames = EnumerateSourceFrames(animation_entry.second);
+            if (!frames.empty()) {
+                first_frame_path = frames.front();
+                break;
+            }
+        }
+        if (first_frame_path.empty()) {
+            continue;
+        }
+        std::string load_err;
+        std::optional<ImageRGBA> first_source = LoadPngRGBA(first_frame_path, load_err);
+        if (!first_source.has_value()) {
+            result.error = "Failed to load source frame '" + first_frame_path.string() + "': " + load_err;
+            return result;
+        }
+
+        const SmartVariantPlan plan = BuildSmartVariantPlan(asset_obj, camera_settings, *shared_crop_size);
+        const bool should_generate = opt.force_rebuild ||
+                                     !AssetHasScalingProfile(asset_obj) ||
+                                     ReadAuthoredScale(asset_obj) != 1.0f ||
+                                     AssetCacheMissingAnySmartVariant(cache_root, asset_name, animations, plan);
+        if (!should_generate) {
+            continue;
+        }
+
+        LogSmartVariantPlan(log, asset_name, first_source.value(), plan, camera_settings);
+
+        const fs::path write_cache_root = opt.dry_run ? cache_root : BuildTempCacheRoot(cache_root, asset_name);
+        if (!opt.dry_run) {
+            std::error_code ec;
+            fs::remove_all(write_cache_root, ec);
+            ec.clear();
+            fs::create_directories(write_cache_root, ec);
+            if (ec) {
+                result.error = "Failed creating temporary cache root: " + write_cache_root.string();
+                return result;
+            }
+        }
+
+        bool touched_asset = false;
         for (const auto& animation_entry : animations) {
             const std::string& animation_name = animation_entry.first;
             const fs::path& animation_src_dir = animation_entry.second;
-            if (!opt.filters.matches_anim(animation_name)) {
+            if (!AnimationRequestedForGeneration(opt, asset_name, animation_name)) {
                 continue;
             }
 
@@ -370,89 +669,54 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 continue;
             }
 
-            const GeneratorOptions::AnimationRebuildRequest* explicit_request = nullptr;
-            if (opt.has_explicit_rebuild_requests()) {
-                for (const auto& request : opt.explicit_rebuild_requests) {
-                    if (request.asset_name == asset_name && request.animation_name == animation_name) {
-                        explicit_request = &request;
-                        break;
-                    }
-                }
-                if (!explicit_request) {
-                    continue;
-                }
-            }
-
             bool touched_animation = false;
             for (std::size_t frame_index = 0; frame_index < frames.size(); ++frame_index) {
                 const int frame_idx = static_cast<int>(frame_index);
-                bool frame_requested = opt.filters.matches_source_frame(frame_idx);
-                bool explicit_frame_requested = false;
-                bool explicit_all_requested = false;
-                if (explicit_request) {
-                    explicit_all_requested = has_normal_variant_mask(explicit_request->all_frames_variant_mask);
-                    auto frame_it = explicit_request->frame_variant_masks.find(frame_idx);
-                    if (frame_it != explicit_request->frame_variant_masks.end()) {
-                        explicit_frame_requested = has_normal_variant_mask(frame_it->second);
-                    }
-                    frame_requested = frame_requested || explicit_all_requested || explicit_frame_requested;
-                }
-
-                if (!frame_requested) {
-                    continue;
-                }
-
-                std::string load_err;
                 std::optional<ImageRGBA> src_opt = LoadPngRGBA(frames[frame_index], load_err);
                 if (!src_opt.has_value()) {
                     result.error = "Failed to load source frame '" + frames[frame_index].string() + "': " + load_err;
+                    if (!opt.dry_run) {
+                        std::error_code ignored;
+                        fs::remove_all(write_cache_root, ignored);
+                    }
                     return result;
                 }
                 const ImageRGBA& src = src_opt.value();
 
-                for (float step : scale_steps) {
-                    const int pct = scale_percent(step);
-                    const fs::path out_path = CachePaths::frame_png_path(cache_root,
+                for (std::size_t step_index = 0; step_index < plan.steps.size(); ++step_index) {
+                    const float step = plan.steps[step_index];
+                    const int pct = plan.percents[step_index];
+                    const fs::path out_path = CachePaths::frame_png_path(write_cache_root,
                                                                          asset_name,
                                                                          animation_name,
                                                                          pct,
                                                                          Variant::Normal,
                                                                          frame_idx);
 
-                    bool should_write = opt.force_rebuild;
-                    if (!should_write && explicit_request) {
-                        should_write = explicit_all_requested || explicit_frame_requested;
-                    }
-                    if (!should_write) {
-                        std::error_code ec;
-                        should_write = !fs::exists(out_path, ec) || ec;
-                    }
-
-                    if (!should_write) {
-                        ++result.stats.pngs_skipped_existing;
-                        continue;
-                    }
-
                     ++result.stats.tasks_total;
                     touched_animation = true;
+                    touched_asset = true;
 
                     if (opt.dry_run) {
                         ++result.stats.tasks_succeeded;
                         continue;
                     }
 
-                    const int dst_w = scale_dimension(src.w, step);
-                    const int dst_h = scale_dimension(src.h, step);
+                    const float resize_factor = std::max(0.01f, plan.authored_scale * plan.max_camera_scale * step);
+                    const int dst_w = scale_dimension(src.w, resize_factor);
+                    const int dst_h = scale_dimension(src.h, resize_factor);
                     std::optional<ImageRGBA> scaled = ResizeRGBA(src, dst_w, dst_h, load_err);
                     if (!scaled.has_value()) {
                         ++result.stats.tasks_failed;
                         result.error = "Failed to resize frame '" + frames[frame_index].string() + "': " + load_err;
+                        std::error_code ignored;
+                        fs::remove_all(write_cache_root, ignored);
                         return result;
                     }
 
                     const std::optional<AlphaBounds> scaled_bounds = FindAlphaBounds(scaled.value());
-                    int shared_w = scale_dimension(shared_crop_size->width, step);
-                    int shared_h = scale_dimension(shared_crop_size->height, step);
+                    int shared_w = scale_dimension(shared_crop_size->width, resize_factor);
+                    int shared_h = scale_dimension(shared_crop_size->height, resize_factor);
                     if (scaled_bounds.has_value()) {
                         shared_w = std::max(shared_w, scaled_bounds->width());
                         shared_h = std::max(shared_h, scaled_bounds->height());
@@ -466,6 +730,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (!cropped.has_value()) {
                         ++result.stats.tasks_failed;
                         result.error = "Failed to alpha crop frame '" + frames[frame_index].string() + "': " + load_err;
+                        std::error_code ignored;
+                        fs::remove_all(write_cache_root, ignored);
                         return result;
                     }
 
@@ -474,6 +740,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (ec) {
                         ++result.stats.tasks_failed;
                         result.error = "Failed creating cache directory: " + out_path.parent_path().string();
+                        fs::remove_all(write_cache_root, ec);
                         return result;
                     }
 
@@ -481,12 +748,19 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (!SavePngRGBA(out_path, cropped.value(), save_err)) {
                         ++result.stats.tasks_failed;
                         result.error = "Failed writing frame '" + out_path.string() + "': " + save_err;
+                        std::error_code ignored;
+                        fs::remove_all(write_cache_root, ignored);
                         return result;
                     }
 
                     ++result.stats.tasks_succeeded;
                     ++result.stats.pngs_written;
-                    result.written_files.push_back(out_path);
+                    result.written_files.push_back(CachePaths::frame_png_path(cache_root,
+                                                                              asset_name,
+                                                                              animation_name,
+                                                                              pct,
+                                                                              Variant::Normal,
+                                                                              frame_idx));
                 }
             }
 
@@ -494,6 +768,43 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 ++result.stats.animations_touched;
                 result.touched_animations.push_back(asset_name + "::" + animation_name);
             }
+        }
+
+        if (touched_asset && !opt.dry_run) {
+            std::string replace_err;
+            if (!ReplaceAssetCacheAtomically(cache_root, write_cache_root, asset_name, replace_err)) {
+                ++result.stats.tasks_failed;
+                result.error = replace_err;
+                std::error_code ignored;
+                fs::remove_all(write_cache_root, ignored);
+                return result;
+            }
+
+            if (!asset_obj.contains("size_settings") || !asset_obj["size_settings"].is_object()) {
+                asset_obj["size_settings"] = nlohmann::json::object();
+            }
+            asset_obj["size_settings"]["scale_percentage"] = 100.0;
+
+            nlohmann::json percentages = nlohmann::json::array();
+            nlohmann::json steps = nlohmann::json::array();
+            for (std::size_t idx = 0; idx < plan.percents.size(); ++idx) {
+                percentages.push_back(plan.percents[idx]);
+                steps.push_back(plan.steps[idx]);
+            }
+            const std::uint64_t revision = static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count());
+            asset_obj["scaling_profile"] = nlohmann::json{
+                {"revision", revision},
+                {"percentages", percentages},
+                {"steps", steps},
+                {"min_scale", plan.steps.empty() ? 1.0f : plan.steps.back()},
+                {"max_scale", plan.max_camera_scale},
+                {"baked_authored_scale", plan.authored_scale},
+                {"scale100_width", plan.scale100_w},
+                {"scale100_height", plan.scale100_h}
+            };
+            manifest_modified = true;
         }
     }
 
@@ -512,10 +823,23 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     }
     result.stats.assets_touched = static_cast<std::uint64_t>(result.touched_assets.size());
 
+    if (manifest_modified) {
+        std::ofstream out(manifest_path, std::ios::trunc);
+        if (!out.is_open()) {
+            result.error = "Failed to open manifest for writing: " + manifest_path.string();
+            return result;
+        }
+        out << manifest.dump(2) << '\n';
+        if (!out.good()) {
+            result.error = "Failed writing manifest: " + manifest_path.string();
+            return result;
+        }
+    }
+
     if (result.stats.tasks_total == 0) {
         log.info("No cache work required.");
     } else {
-        log.info("Generated " + std::to_string(result.stats.pngs_written) + " alpha-cropped normal texture files.");
+        log.info("Generated " + std::to_string(result.stats.pngs_written) + " camera-aware texture cache files.");
     }
 
     result.ok = true;

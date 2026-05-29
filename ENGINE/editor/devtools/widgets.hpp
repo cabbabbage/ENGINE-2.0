@@ -215,6 +215,7 @@ public:
     void set_value_parser(std::function<std::optional<int>(const std::string&)> parser);
     void set_tooltip_state(DMWidgetTooltipState* state);
     void set_on_value_changed(std::function<void(int)> callback);
+    void set_on_value_committed(std::function<void(int)> callback);
     void set_enabled(bool enabled);
     bool enabled() const { return enabled_; }
     int track_center_y() const;
@@ -229,6 +230,7 @@ private:
     bool apply_interaction_value(int v);
     bool commit_pending_value();
     void notify_value_changed();
+    void notify_value_committed(int committed_value);
     int display_value() const;
     int label_space() const;
     SDL_Rect content_rect() const;
@@ -264,7 +266,9 @@ private:
     DMWidgetTooltipState* tooltip_state_ = nullptr;
     bool enabled_ = true;
     std::function<void(int)> value_changed_callback_{};
+    std::function<void(int)> value_committed_callback_{};
     int last_notified_value_ = 0;
+    int last_committed_value_ = 0;
 };
 
 class DMRangeSlider {

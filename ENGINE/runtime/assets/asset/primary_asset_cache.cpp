@@ -316,11 +316,10 @@ SDL_Surface* surface_from_layer(const CacheManager::BundleFrameLayer& layer) {
                                  layer.pitch);
 }
 
-std::vector<float> normalized_variant_steps(const AssetInfo& /*info*/) {
-    std::vector<float> steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
-    steps.erase(std::remove_if(steps.begin(), steps.end(), [](float v) { return !(v > 0.0f) || !std::isfinite(v); }), steps.end());
-    std::sort(steps.begin(), steps.end(), std::greater<float>());
-    steps.erase(std::unique(steps.begin(), steps.end(), [](float a, float b) { return std::fabs(a - b) < 1e-4f; }), steps.end());
+std::vector<float> normalized_variant_steps(const AssetInfo& info) {
+    auto profile = render_pipeline::ScalingLogic::ProfileForAsset(info.name);
+    std::vector<float> steps = profile.steps;
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
     if (steps.empty()) {
         steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
     }
@@ -328,21 +327,10 @@ std::vector<float> normalized_variant_steps(const AssetInfo& /*info*/) {
 }
 
 bool steps_match_canonical(const std::vector<float>& steps) {
-    const auto& canonical = render_pipeline::ScalingLogic::DefaultScaleSteps();
-    if (steps.size() != canonical.size()) {
-        return false;
-    }
-    for (std::size_t idx = 0; idx < canonical.size(); ++idx) {
-        if (!std::isfinite(steps[idx])) {
-            return false;
-        }
-        if (std::fabs(steps[idx] - canonical[idx]) > 1e-4f) {
-            return false;
-        }
-    }
-    return true;
+    std::vector<float> normalized = steps;
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(normalized);
+    return normalized.size() == steps.size() && !normalized.empty();
 }
-
 bool bundle_variant_layout_is_valid(const CacheManager::BundleData& bundle) {
     const std::size_t expected_variant_count = render_pipeline::ScalingLogic::DefaultScaleSteps().size();
     for (const auto& animation : bundle.animations) {
@@ -755,11 +743,13 @@ PrimaryAssetCache::BatchRepairResult PrimaryAssetCache::run_missing_cache_file_b
     }
 
     batch_result.written_files_by_asset = group_written_files_by_asset(result.written_files);
+    render_pipeline::ScalingLogic::LoadPrecomputedProfiles(true);
     for (AssetInfo* info : selected_infos) {
         auto it = batch_result.written_files_by_asset.find(info->name);
         if (it == batch_result.written_files_by_asset.end() || it->second.empty()) {
             continue;
         }
+        info->set_scale_percentage(100.0f);
         record_load_repairs_from_written_files(*info, it->second);
         info->consume_pending_texture_rebuild_on_load();
     }

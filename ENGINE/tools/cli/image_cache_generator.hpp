@@ -13,7 +13,9 @@
 // Where:
 //   cache_root default: <repo_root>/cache
 //   variant in: normal
-//   pct is one of 100, 90, 80, 70, 60, 50, 40, 30, 20, 10
+//   pct is one of ten per-asset camera-aware percentages. scale_100 is the
+//   baked largest useful on-screen size for that asset, not necessarily the
+//   raw source PNG size.
 //   out_index is integer frame index of the source sequence
 //
 // This tool will live next to the existing Python scripts, so it must follow the same
@@ -155,8 +157,9 @@ struct GeneratorOptions {
     };
     std::vector<AnimationRebuildRequest> explicit_rebuild_requests;
 
-    // Legacy compatibility option. Runtime generation enforces canonical
-    // scales: 100, 90, 80, 70, 60, 50, 40, 30, 20, 10.
+    // Legacy CLI compatibility option retained for callers that still populate
+    // it. Camera-aware generation now calculates the actual per-asset 10-step
+    // scale profile from source dimensions, authored scale, and camera bounds.
     std::vector<int> scale_percents;
 
     // If 0: generator chooses (hardware_concurrency - 1, minimum 1)

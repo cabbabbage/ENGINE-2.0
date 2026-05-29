@@ -982,7 +982,17 @@ void Asset::update_scale_values(bool force) {
         desired_variant_scale = 1.0f;
     }
 
-    const auto& steps = render_pipeline::ScalingLogic::DefaultScaleSteps();
+    auto scale_profile = render_pipeline::ScalingLogic::ProfileForAsset(info ? info->name : std::string{});
+    std::vector<float> steps = scale_profile.steps;
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
+    float profile_max_scale = scale_profile.max_scale;
+    if (!std::isfinite(profile_max_scale) || profile_max_scale <= 0.0f) {
+        profile_max_scale = 1.0f;
+    }
+    float desired_texture_scale = desired_variant_scale / profile_max_scale;
+    if (!std::isfinite(desired_texture_scale) || desired_texture_scale <= 0.0f) {
+        desired_texture_scale = desired_variant_scale;
+    }
 
     render_pipeline::ScalingLogic::HysteresisState hysteresis_state{};
     hysteresis_state.last_index = scale_variant_state_.last_variant_index;
@@ -991,13 +1001,13 @@ void Asset::update_scale_values(bool force) {
 
     const int previous_variant_index = current_variant_index;
     auto selection = render_pipeline::ScalingLogic::Choose(
-        desired_variant_scale,
+        desired_texture_scale,
         steps,
         hysteresis_state,
-        desired_variant_scale,
+        desired_texture_scale,
         render_pipeline::ScalingLogic::HysteresisOptions{});
 
-    current_nearest_variant_scale = selection.stored_scale;
+    current_nearest_variant_scale = profile_max_scale * selection.stored_scale;
     current_variant_index = selection.index;
     if (current_variant_index != previous_variant_index) {
         refresh_cached_dimensions();

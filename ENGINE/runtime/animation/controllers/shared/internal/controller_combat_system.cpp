@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 
 namespace animation_update::custom_controllers::internal {

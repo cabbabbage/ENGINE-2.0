@@ -2,7 +2,6 @@
 vcpkg
 build/
 og_art
-cache
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake

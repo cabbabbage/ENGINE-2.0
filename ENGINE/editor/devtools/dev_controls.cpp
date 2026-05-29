@@ -4568,7 +4568,6 @@ void DevControls::configure_header_button_sets() {
     create_room_btn.on_toggle = [this](bool) {
         if (room_editor_) {
             room_editor_->create_room_from_footer();
-            room_editor_->open_room_config();
         }
         sync_header_button_states();
     };
@@ -4584,7 +4583,6 @@ void DevControls::configure_header_button_sets() {
     create_trail_btn.on_toggle = [this](bool) {
         if (room_editor_) {
             room_editor_->create_trail_from_footer();
-            room_editor_->open_room_config();
         }
         sync_header_button_states();
     };

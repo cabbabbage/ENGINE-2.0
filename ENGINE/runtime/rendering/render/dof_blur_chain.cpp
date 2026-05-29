@@ -1,6 +1,7 @@
 #include "rendering/render/dof_blur_chain.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -10,6 +11,8 @@
 namespace {
 
 constexpr float kEffectEpsilon = 1.0e-4f;
+constexpr int kLensGridCols = 14;
+constexpr int kLensGridRows = 10;
 
 struct TextureStateSnapshot {
     SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
@@ -35,13 +38,31 @@ float smoothstep01(float value) {
     return t * t * (3.0f - 2.0f * t);
 }
 
-float soft_depth_ramp(float normalized_distance) {
-    const float smooth = smoothstep01(normalized_distance);
-    const float curved = std::pow(smooth, dof_blur_chain::layer_effect_tuning::kDepthRampPower);
-    if (curved <= 0.0f) {
+float absolute_depth_effect_t(int layer_distance) {
+    if (layer_distance <= 0) {
         return 0.0f;
     }
-    return std::clamp(curved + dof_blur_chain::layer_effect_tuning::kDepthRampSoftFloor, 0.0f, 1.0f);
+
+    const float t = std::clamp((static_cast<float>(layer_distance) - 0.35f) / 4.75f, 0.0f, 1.0f);
+    const float s = smoothstep01(t);
+    return std::pow(s, 2.10f);
+}
+
+float normalized_depth_effect_t(float normalized_distance) {
+    const float s = smoothstep01(normalized_distance);
+    return std::pow(s, dof_blur_chain::layer_effect_tuning::kDepthRampPower);
+}
+
+float lens_realism_depth_t(int layer_distance, float normalized_distance) {
+    const float a = absolute_depth_effect_t(layer_distance);
+    const float n = normalized_depth_effect_t(normalized_distance);
+    return std::clamp(a * 0.78f + n * 0.22f, 0.0f, 1.0f);
+}
+
+float dof_realism_depth_t(int layer_distance, float normalized_distance) {
+    const float a = absolute_depth_effect_t(layer_distance);
+    const float n = normalized_depth_effect_t(normalized_distance);
+    return std::clamp(a * 0.86f + n * 0.14f, 0.0f, 1.0f);
 }
 
 SDL_FPoint render_target_center(int width, int height) {
@@ -116,7 +137,6 @@ bool copy_texture_region(SDL_Renderer* renderer,
 
     restore_texture_state(src, src_state);
     render_diagnostics::set_render_target(renderer, previous_target);
-
     return ok;
 }
 
@@ -283,13 +303,13 @@ float compute_background_quality_scale(int width,
     float quality = 1.0f;
 
     if (safe_radius <= 5.0f) {
-        quality = 0.82f;
+        quality = 0.86f;
     } else if (safe_radius <= 10.0f) {
-        quality = 0.66f;
+        quality = 0.70f;
     } else if (safe_radius <= 18.0f) {
-        quality = 0.50f;
+        quality = 0.54f;
     } else if (safe_radius <= 32.0f) {
-        quality = 0.36f;
+        quality = 0.40f;
     } else {
         quality = dof_blur_chain::layer_effect_tuning::kMinProcessQualityScale;
     }
@@ -303,12 +323,11 @@ float compute_background_quality_scale(int width,
     return std::clamp(quality, dof_blur_chain::layer_effect_tuning::kMinProcessQualityScale, 1.0f);
 }
 
-float camera_zoom_percent_from_screen_zoom(float camera_zoom_percent) {
+float camera_zoom_percent_from_input(float camera_zoom_percent) {
     if (!std::isfinite(camera_zoom_percent)) {
         return 0.0f;
     }
 
-    // If caller passes actual percent, use it.
     if (camera_zoom_percent > 1.01f) {
         return std::clamp(camera_zoom_percent, 0.0f, 100.0f);
     }
@@ -316,18 +335,21 @@ float camera_zoom_percent_from_screen_zoom(float camera_zoom_percent) {
     return std::clamp(camera_zoom_percent * 100.0f, 0.0f, 100.0f);
 }
 
-float compute_lens_scale_delta(float camera_zoom_percent,
-                               float normalized_distance,
-                               bool foreground_layer,
-                               bool background_seed) {
+float compute_lens_barrel_strength(float camera_zoom_percent,
+                                   int layer_distance,
+                                   float normalized_distance,
+                                   bool foreground_layer,
+                                   bool background_seed) {
     if (!dof_blur_chain::layer_effect_tuning::kLensWarpEnabled) {
         return 0.0f;
     }
 
-    const float zoom_percent = camera_zoom_percent_from_screen_zoom(camera_zoom_percent);
+    const float zoom_percent = camera_zoom_percent_from_input(camera_zoom_percent);
     const float zoom01 = safe_unit(zoom_percent / 100.0f);
-    const float wide_lens_amount = std::pow(1.0f - zoom01, dof_blur_chain::layer_effect_tuning::kLensWarpWideZoomPower);
-    const float depth_amount = soft_depth_ramp(normalized_distance);
+    const float wide_lens_amount =
+        std::pow(1.0f - zoom01, dof_blur_chain::layer_effect_tuning::kLensWarpWideZoomPower);
+
+    const float depth_amount = lens_realism_depth_t(layer_distance, normalized_distance);
 
     float multiplier = foreground_layer
         ? dof_blur_chain::layer_effect_tuning::kLensWarpForegroundMultiplier
@@ -337,24 +359,26 @@ float compute_lens_scale_delta(float camera_zoom_percent,
         multiplier *= dof_blur_chain::layer_effect_tuning::kLensWarpBackgroundSeedMultiplier;
     }
 
-    const float delta =
+    const float strength =
         dof_blur_chain::layer_effect_tuning::kLensWarpMaxScaleDelta *
+        1.45f *
         wide_lens_amount *
         depth_amount *
         multiplier;
 
-    const float max_delta = std::max(0.0f, dof_blur_chain::layer_effect_tuning::kLensWarpMaxSafeScale - 1.0f);
-    return std::clamp(delta, 0.0f, max_delta);
+    const float max_strength = std::max(0.0f, dof_blur_chain::layer_effect_tuning::kLensWarpMaxSafeScale - 1.0f);
+    return std::clamp(strength, 0.0f, max_strength);
 }
 
-float compute_chromatic_px(float normalized_distance,
+float compute_chromatic_px(int layer_distance,
+                           float normalized_distance,
                            bool foreground_layer,
                            bool background_seed) {
     if (!dof_blur_chain::layer_effect_tuning::kChromaticAberrationEnabled) {
         return 0.0f;
     }
 
-    const float depth_amount = soft_depth_ramp(normalized_distance);
+    const float depth_amount = lens_realism_depth_t(layer_distance, normalized_distance);
 
     float multiplier = foreground_layer
         ? dof_blur_chain::layer_effect_tuning::kChromaticForegroundMultiplier
@@ -365,31 +389,126 @@ float compute_chromatic_px(float normalized_distance,
     }
 
     const float px =
-        (dof_blur_chain::layer_effect_tuning::kChromaticBasePx +
-         dof_blur_chain::layer_effect_tuning::kChromaticMaxPx * depth_amount) *
+        (0.25f + dof_blur_chain::layer_effect_tuning::kChromaticBasePx * 0.42f +
+         dof_blur_chain::layer_effect_tuning::kChromaticMaxPx * 0.44f * depth_amount) *
         multiplier;
 
-    return std::clamp(px, 0.0f, dof_blur_chain::layer_effect_tuning::kChromaticMaxPx * 1.5f);
+    return std::clamp(px, 0.0f, 5.25f);
 }
 
-bool apply_radial_blur_and_lens_warp(SDL_Renderer* renderer,
-                                     SDL_Texture* src,
-                                     SDL_Texture* dst,
-                                     int draw_w,
-                                     int draw_h,
-                                     float radial_radius_px,
-                                     float lens_scale_delta,
-                                     SDL_BlendMode sum_blend) {
+bool apply_barrel_lens_warp(SDL_Renderer* renderer,
+                            SDL_Texture* src,
+                            SDL_Texture* dst,
+                            int draw_w,
+                            int draw_h,
+                            int source_texture_w,
+                            int source_texture_h,
+                            float barrel_strength) {
     if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
         return false;
     }
 
-    const float lens_scale =
-        std::clamp(1.0f + std::max(0.0f, lens_scale_delta),
-                   1.0f,
-                   dof_blur_chain::layer_effect_tuning::kLensWarpMaxSafeScale);
+    if (barrel_strength <= kEffectEpsilon) {
+        const SDL_FRect src_rect{0.0f, 0.0f, static_cast<float>(draw_w), static_cast<float>(draw_h)};
+        return copy_texture_region(renderer, src, dst, &src_rect, nullptr);
+    }
 
-    if (radial_radius_px <= kEffectEpsilon && lens_scale <= 1.0001f) {
+    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+    const TextureStateSnapshot src_state = capture_texture_state(src);
+
+    clear_texture_target(renderer, dst);
+    render_diagnostics::set_render_target(renderer, dst);
+
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(src, 255);
+    SDL_SetTextureColorMod(src, 255, 255, 255);
+
+    constexpr int vertex_count = (kLensGridCols + 1) * (kLensGridRows + 1);
+    constexpr int index_count = kLensGridCols * kLensGridRows * 6;
+
+    std::array<SDL_Vertex, vertex_count> vertices{};
+    std::array<int, index_count> indices{};
+
+    const float w = static_cast<float>(draw_w);
+    const float h = static_cast<float>(draw_h);
+    const float cx = w * 0.5f;
+    const float cy = h * 0.5f;
+    const float inv_rx = 1.0f / std::max(1.0f, cx);
+    const float inv_ry = 1.0f / std::max(1.0f, cy);
+
+    const float uv_max_x = static_cast<float>(draw_w) / static_cast<float>(std::max(1, source_texture_w));
+    const float uv_max_y = static_cast<float>(draw_h) / static_cast<float>(std::max(1, source_texture_h));
+
+    int vertex_cursor = 0;
+    for (int y = 0; y <= kLensGridRows; ++y) {
+        const float v = static_cast<float>(y) / static_cast<float>(kLensGridRows);
+        const float py = v * h;
+        const float ny = (py - cy) * inv_ry;
+
+        for (int x = 0; x <= kLensGridCols; ++x) {
+            const float u = static_cast<float>(x) / static_cast<float>(kLensGridCols);
+            const float px = u * w;
+            const float nx = (px - cx) * inv_rx;
+
+            const float r2 = std::clamp(nx * nx + ny * ny, 0.0f, 2.0f);
+            const float r4 = r2 * r2;
+            const float scale = 1.0f + barrel_strength * (0.78f * r2 + 0.22f * r4);
+
+            SDL_Vertex vertex{};
+            vertex.position.x = cx + (px - cx) * scale;
+            vertex.position.y = cy + (py - cy) * scale;
+            vertex.tex_coord.x = u * uv_max_x;
+            vertex.tex_coord.y = v * uv_max_y;
+            vertex.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+
+            vertices[static_cast<std::size_t>(vertex_cursor++)] = vertex;
+        }
+    }
+
+    int index_cursor = 0;
+    for (int y = 0; y < kLensGridRows; ++y) {
+        for (int x = 0; x < kLensGridCols; ++x) {
+            const int row0 = y * (kLensGridCols + 1);
+            const int row1 = (y + 1) * (kLensGridCols + 1);
+            const int a = row0 + x;
+            const int b = row0 + x + 1;
+            const int c = row1 + x + 1;
+            const int d = row1 + x;
+
+            indices[static_cast<std::size_t>(index_cursor++)] = a;
+            indices[static_cast<std::size_t>(index_cursor++)] = b;
+            indices[static_cast<std::size_t>(index_cursor++)] = c;
+            indices[static_cast<std::size_t>(index_cursor++)] = a;
+            indices[static_cast<std::size_t>(index_cursor++)] = c;
+            indices[static_cast<std::size_t>(index_cursor++)] = d;
+        }
+    }
+
+    const bool ok = render_diagnostics::render_geometry(
+        renderer,
+        src,
+        vertices.data(),
+        static_cast<int>(vertices.size()),
+        indices.data(),
+        static_cast<int>(indices.size()));
+
+    restore_texture_state(src, src_state);
+    render_diagnostics::set_render_target(renderer, previous_target);
+    return ok;
+}
+
+bool apply_radial_zoom_blur(SDL_Renderer* renderer,
+                            SDL_Texture* src,
+                            SDL_Texture* dst,
+                            int draw_w,
+                            int draw_h,
+                            float radial_radius_px,
+                            SDL_BlendMode sum_blend) {
+    if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
+        return false;
+    }
+
+    if (radial_radius_px <= kEffectEpsilon) {
         return copy_texture_region(renderer, src, dst, nullptr, nullptr);
     }
 
@@ -404,13 +523,6 @@ bool apply_radial_blur_and_lens_warp(SDL_Renderer* renderer,
     SDL_SetTextureBlendMode(src, sum_blend);
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
-    if (radial_radius_px <= kEffectEpsilon) {
-        draw_weighted_scaled_sample(renderer, src, draw_w, draw_h, center, lens_scale, 1.0f);
-        restore_texture_state(src, src_state);
-        render_diagnostics::set_render_target(renderer, previous_target);
-        return true;
-    }
-
     const float max_dim = static_cast<float>(std::max(draw_w, draw_h));
     const float normalized_radius = std::clamp(radial_radius_px / std::max(1.0f, max_dim), 0.0f, 1.0f);
     const int sample_count = radial_sample_count(radial_radius_px);
@@ -420,7 +532,7 @@ bool apply_radial_blur_and_lens_warp(SDL_Renderer* renderer,
         normalized_radius * dof_blur_chain::layer_effect_tuning::kRadialScaleMultiplier);
 
     float total_raw_weight = 1.0f;
-    std::vector<float> weights(static_cast<std::size_t>(sample_count), 0.0f);
+    std::array<float, dof_blur_chain::layer_effect_tuning::kMaxRadialSamples> weights{};
 
     for (int i = 0; i < sample_count; ++i) {
         const float t = static_cast<float>(i + 1) / static_cast<float>(sample_count);
@@ -440,7 +552,7 @@ bool apply_radial_blur_and_lens_warp(SDL_Renderer* renderer,
                                 draw_w,
                                 draw_h,
                                 center,
-                                lens_scale,
+                                1.0f,
                                 1.0f / total_raw_weight);
 
     for (int i = 0; i < sample_count; ++i) {
@@ -453,7 +565,7 @@ bool apply_radial_blur_and_lens_warp(SDL_Renderer* renderer,
                                     draw_w,
                                     draw_h,
                                     center,
-                                    lens_scale + scale_delta,
+                                    1.0f + scale_delta,
                                     weight);
     }
 
@@ -484,31 +596,25 @@ bool apply_chromatic_aberration(SDL_Renderer* renderer,
 
     const SDL_FPoint center = render_target_center(width, height);
     const float max_dim = static_cast<float>(std::max(width, height));
-    const float scale_delta = std::clamp(chromatic_px / std::max(1.0f, max_dim), 0.0f, 0.030f);
+    const float scale_delta = std::clamp(chromatic_px / std::max(1.0f, max_dim), 0.0f, 0.014f);
 
-    const Uint8 center_alpha = static_cast<Uint8>(std::clamp(
-        static_cast<int>(std::lround(dof_blur_chain::layer_effect_tuning::kChromaticCenterOpacity * 255.0f)),
-        0,
-        255));
-
+    const float requested_fringe = dof_blur_chain::layer_effect_tuning::kChromaticFringeOpacity;
+    const float fringe_opacity = std::clamp(requested_fringe * 0.30f, 0.035f, 0.155f);
     const Uint8 fringe_alpha = static_cast<Uint8>(std::clamp(
-        static_cast<int>(std::lround(dof_blur_chain::layer_effect_tuning::kChromaticFringeOpacity * 255.0f)),
+        static_cast<int>(std::lround(fringe_opacity * 255.0f)),
         0,
         255));
 
     SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
 
-    // Center copy keeps the layer readable.
     SDL_SetTextureColorMod(src, 255, 255, 255);
-    draw_scaled_sample(renderer, src, width, height, center, 1.0f, center_alpha);
+    draw_scaled_sample(renderer, src, width, height, center, 1.0f, 255);
 
-    // Red fringe expands outward from screen center.
-    SDL_SetTextureColorMod(src, 255, 32, 32);
-    draw_scaled_sample(renderer, src, width, height, center, 1.0f + scale_delta * 1.35f, fringe_alpha);
+    SDL_SetTextureColorMod(src, 255, 48, 28);
+    draw_scaled_sample(renderer, src, width, height, center, 1.0f + scale_delta * 1.45f, fringe_alpha);
 
-    // Blue/cyan fringe contracts inward slightly. The centered copy prevents edge holes.
-    SDL_SetTextureColorMod(src, 48, 96, 255);
-    draw_scaled_sample(renderer, src, width, height, center, std::max(0.985f, 1.0f - scale_delta * 0.75f), fringe_alpha);
+    SDL_SetTextureColorMod(src, 40, 210, 255);
+    draw_scaled_sample(renderer, src, width, height, center, std::max(0.988f, 1.0f - scale_delta * 0.80f), fringe_alpha);
 
     restore_texture_state(src, src_state);
     render_diagnostics::set_render_target(renderer, previous_target);
@@ -518,15 +624,15 @@ bool apply_chromatic_aberration(SDL_Renderer* renderer,
 bool apply_layer_effect_pass(SDL_Renderer* renderer,
                              SDL_Texture* src,
                              SDL_Texture* dst,
-                             SDL_Texture* blur_work,
+                             SDL_Texture* work,
                              SDL_Texture* chromatic_work,
                              int width,
                              int height,
                              float radial_blur_px,
                              float quality_scale,
-                             float lens_scale_delta,
+                             float lens_barrel_strength,
                              float chromatic_px) {
-    if (!renderer || !src || !dst || !blur_work || !chromatic_work || width <= 0 || height <= 0) {
+    if (!renderer || !src || !dst || !work || !chromatic_work || width <= 0 || height <= 0) {
         return false;
     }
 
@@ -542,12 +648,14 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
 
     const int process_w = std::clamp(static_cast<int>(std::lround(static_cast<float>(width) * safe_quality)), 1, width);
     const int process_h = std::clamp(static_cast<int>(std::lround(static_cast<float>(height) * safe_quality)), 1, height);
-
     const bool reduced_resolution = process_w != width || process_h != height;
+
     const float process_radial = sanitized_non_negative(radial_blur_px) * safe_quality;
     const float process_chromatic = sanitized_non_negative(chromatic_px) * safe_quality;
 
-    SDL_Texture* radial_input = src;
+    SDL_Texture* current = src;
+    int current_backing_w = width;
+    int current_backing_h = height;
 
     if (reduced_resolution) {
         const SDL_FRect low_rect{
@@ -557,41 +665,67 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
             static_cast<float>(process_h)
         };
 
-        if (!copy_texture_region(renderer, src, blur_work, nullptr, &low_rect)) {
+        if (!copy_texture_region(renderer, src, work, nullptr, &low_rect)) {
             return false;
         }
 
-        radial_input = blur_work;
+        current = work;
+        current_backing_w = width;
+        current_backing_h = height;
     }
 
-    SDL_Texture* radial_output = reduced_resolution ? chromatic_work : dst;
+    if (lens_barrel_strength > kEffectEpsilon) {
+        SDL_Texture* lens_dst = reduced_resolution ? chromatic_work : work;
 
-    if (!apply_radial_blur_and_lens_warp(renderer,
-                                         radial_input,
-                                         radial_output,
-                                         process_w,
-                                         process_h,
-                                         process_radial,
-                                         lens_scale_delta,
-                                         sum_blend)) {
-        return false;
+        if (!apply_barrel_lens_warp(renderer,
+                                    current,
+                                    lens_dst,
+                                    process_w,
+                                    process_h,
+                                    current_backing_w,
+                                    current_backing_h,
+                                    lens_barrel_strength)) {
+            return false;
+        }
+
+        current = lens_dst;
+        current_backing_w = width;
+        current_backing_h = height;
     }
 
-    SDL_Texture* chromatic_input = radial_output;
+    if (process_radial > kEffectEpsilon) {
+        SDL_Texture* radial_dst = (current == work) ? chromatic_work : work;
+
+        if (!apply_radial_zoom_blur(renderer,
+                                    current,
+                                    radial_dst,
+                                    process_w,
+                                    process_h,
+                                    process_radial,
+                                    sum_blend)) {
+            return false;
+        }
+
+        current = radial_dst;
+        current_backing_w = width;
+        current_backing_h = height;
+    }
 
     if (process_chromatic > kEffectEpsilon) {
-        SDL_Texture* chromatic_dst = reduced_resolution ? blur_work : chromatic_work;
+        SDL_Texture* chroma_dst = (current == work) ? chromatic_work : work;
 
         if (!apply_chromatic_aberration(renderer,
-                                        chromatic_input,
-                                        chromatic_dst,
+                                        current,
+                                        chroma_dst,
                                         process_w,
                                         process_h,
                                         process_chromatic)) {
             return false;
         }
 
-        chromatic_input = chromatic_dst;
+        current = chroma_dst;
+        current_backing_w = width;
+        current_backing_h = height;
     }
 
     if (reduced_resolution) {
@@ -602,13 +736,11 @@ bool apply_layer_effect_pass(SDL_Renderer* renderer,
             static_cast<float>(process_h)
         };
 
-        if (!copy_texture_region(renderer, chromatic_input, dst, &low_rect, nullptr)) {
-            return false;
-        }
-    } else if (chromatic_input != dst) {
-        if (!copy_texture_region(renderer, chromatic_input, dst, nullptr, nullptr)) {
-            return false;
-        }
+        return copy_texture_region(renderer, current, dst, &low_rect, nullptr);
+    }
+
+    if (current != dst) {
+        return copy_texture_region(renderer, current, dst, nullptr, nullptr);
     }
 
     return true;
@@ -886,23 +1018,35 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
             }
 
             const int layer_distance = std::abs(layer.depth_layer - focus_depth_layer);
-            const float raw_distance_t = std::clamp(static_cast<float>(layer_distance) * inv_max_distance, 0.0f, 1.0f);
-            const float effect_t = soft_depth_ramp(raw_distance_t);
+            const float normalized_distance =
+                std::clamp(static_cast<float>(layer_distance) * inv_max_distance, 0.0f, 1.0f);
+
+            const float dof_depth_t = dof_realism_depth_t(layer_distance, normalized_distance);
+            const float lens_depth_t = lens_realism_depth_t(layer_distance, normalized_distance);
 
             const float radial_px =
                 dof_active
-                    ? base_radial_px * std::clamp(layer.blur_strength, 0.0f, 1.0f) * effect_t
+                    ? base_radial_px *
+                          std::clamp(layer.blur_strength, 0.0f, 1.0f) *
+                          dof_depth_t
                     : 0.0f;
 
-            const float lens_delta =
-                compute_lens_scale_delta(camera_zoom_percent, raw_distance_t, foreground_layer, false);
+            const float lens_barrel =
+                compute_lens_barrel_strength(camera_zoom_percent,
+                                             layer_distance,
+                                             normalized_distance,
+                                             foreground_layer,
+                                             false);
 
             const float chromatic_px =
-                compute_chromatic_px(raw_distance_t, foreground_layer, false);
+                compute_chromatic_px(layer_distance,
+                                     normalized_distance,
+                                     foreground_layer,
+                                     false);
 
             const bool needs_effect =
                 radial_px > kEffectEpsilon ||
-                lens_delta > kEffectEpsilon ||
+                lens_barrel > kEffectEpsilon ||
                 chromatic_px > kEffectEpsilon;
 
             SDL_Texture* output = source;
@@ -914,7 +1058,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                         : compute_background_quality_scale(width_,
                                                            height_,
                                                            std::max(radial_px, base_radial_px * 0.20f),
-                                                           raw_distance_t);
+                                                           lens_depth_t);
 
                 if (!process_layer_effects(source,
                                            layer_effect_target_,
@@ -922,7 +1066,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                            chromatic_work_,
                                            radial_px,
                                            quality,
-                                           lens_delta,
+                                           lens_barrel,
                                            chromatic_px,
                                            foreground_layer)) {
                     return false;
@@ -939,9 +1083,18 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
         };
 
     if (background_seed) {
-        const float seed_radial = dof_active ? base_radial_px * 0.85f : 0.0f;
-        const float seed_lens = compute_lens_scale_delta(camera_zoom_percent, 1.0f, false, true);
-        const float seed_chromatic = compute_chromatic_px(1.0f, false, true);
+        const int seed_distance = std::max(4, max_layer_distance);
+        const float seed_norm = 1.0f;
+
+        const float seed_radial =
+            dof_active ? base_radial_px * 0.70f * dof_realism_depth_t(seed_distance, seed_norm) : 0.0f;
+
+        const float seed_lens =
+            compute_lens_barrel_strength(camera_zoom_percent, seed_distance, seed_norm, false, true);
+
+        const float seed_chromatic =
+            compute_chromatic_px(seed_distance, seed_norm, false, true);
+
         const float seed_quality = std::clamp(
             compute_background_quality_scale(width_, height_, std::max(seed_radial, base_radial_px), 1.0f) *
                 layer_effect_tuning::kBackgroundSeedQualityMultiplier,
@@ -990,8 +1143,60 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
             return fail();
         }
 
-        // Focus layer stays clean. No chromatic aberration, no lens warp, no radial blur.
-        if (!composite_texture_over(source, background_mid_)) {
+        constexpr float kFocusLayerRadialMultiplier = 0.025f;
+        constexpr float kFocusLayerLensMultiplier = 0.035f;
+        constexpr float kFocusLayerChromaticMultiplier = 0.020f;
+
+        const float focus_radial_px =
+            dof_active
+                ? base_radial_px *
+                      std::clamp(layer.blur_strength, 0.0f, 1.0f) *
+                      kFocusLayerRadialMultiplier
+                : 0.0f;
+
+        const int focus_fake_distance = 1;
+        const float focus_fake_normalized_distance = 0.08f;
+
+        const float focus_lens_barrel =
+            compute_lens_barrel_strength(camera_zoom_percent,
+                                         focus_fake_distance,
+                                         focus_fake_normalized_distance,
+                                         false,
+                                         false) *
+            kFocusLayerLensMultiplier;
+
+        const float focus_chromatic_px =
+            compute_chromatic_px(focus_fake_distance,
+                                 focus_fake_normalized_distance,
+                                 false,
+                                 false) *
+            kFocusLayerChromaticMultiplier;
+
+        SDL_Texture* output = source;
+
+        if (focus_radial_px > kEffectEpsilon ||
+            focus_lens_barrel > kEffectEpsilon ||
+            focus_chromatic_px > kEffectEpsilon) {
+            if (!process_layer_effects(source,
+                                       layer_effect_target_,
+                                       blur_work_,
+                                       chromatic_work_,
+                                       focus_radial_px,
+                                       1.0f,
+                                       focus_lens_barrel,
+                                       focus_chromatic_px,
+                                       false)) {
+                return fail();
+            }
+
+            output = layer_effect_target_;
+
+            if (focus_radial_px > kEffectEpsilon) {
+                ++result.blur_pass_count;
+            }
+        }
+
+        if (!composite_texture_over(output, background_mid_)) {
             return fail();
         }
 

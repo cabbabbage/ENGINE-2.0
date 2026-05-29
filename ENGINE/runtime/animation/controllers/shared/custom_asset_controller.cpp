@@ -189,7 +189,9 @@ void CustomAssetController::initialize_anchor_candidate_children() {
             anchor_candidate_hash(anchor_name),
             catalog,
             vibble::spawn::ZeroWeightPolicy::NoSelection);
-
+        if (!resolved.has_value() || resolved->is_null || resolved->resolved_asset_name.empty()) {
+            continue;
+        }
 
         AnchorCandidateAttachment attachment{};
         attachment.anchor_name = anchor_name;

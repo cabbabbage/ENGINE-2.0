@@ -202,9 +202,11 @@ public:
         std::string asset_name;
         std::unique_ptr<DMButton> skip_button;
         std::unique_ptr<DMButton> rename_button;
+        std::unique_ptr<DMButton> replace_button;
         SDL_Rect modal_rect{0, 0, 0, 0};
         SDL_Rect skip_rect{0, 0, 0, 0};
         SDL_Rect rename_rect{0, 0, 0, 0};
+        SDL_Rect replace_rect{0, 0, 0, 0};
     };
 
     struct DropErrorPopup {
@@ -311,7 +313,9 @@ public:
                            const std::vector<std::filesystem::path>& files,
                            const DropImportRequest& request,
                            bool open_editor_and_spawn,
+                           bool replace_existing,
                            std::string& error_out);
+    bool replace_existing_drop_asset(const std::string& asset_name, std::string& error_out);
     void open_drop_choice_modal(const DropImportRequest& request);
     void begin_multi_asset_import(const DropImportRequest& request);
     void begin_multi_folder_import(const std::vector<std::filesystem::path>& folders, SDL_Point drop_screen);

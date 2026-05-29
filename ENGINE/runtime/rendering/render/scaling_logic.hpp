@@ -117,8 +117,29 @@ struct ScalingLogic {
     }
 
     static inline void NormalizeVariantSteps(ScaleSteps& steps) {
-        const auto& defaults = DefaultScaleSteps();
-        steps.assign(defaults.begin(), defaults.end());
+        steps.erase(::std::remove_if(steps.begin(), steps.end(), [](float value) {
+            return !::std::isfinite(value) || value <= 0.0f;
+        }), steps.end());
+        if (steps.empty()) {
+            const auto& defaults = DefaultScaleSteps();
+            steps.assign(defaults.begin(), defaults.end());
+            return;
+        }
+        for (float& value : steps) {
+            value = ::std::clamp(value, 0.01f, 1.0f);
+        }
+        ::std::sort(steps.begin(), steps.end(), ::std::greater<float>());
+        steps.erase(::std::unique(steps.begin(), steps.end(), [](float a, float b) {
+            return ::std::fabs(a - b) < 1e-4f;
+        }), steps.end());
+        if (steps.empty() || ::std::fabs(steps.front() - 1.0f) > 1e-4f) {
+            steps.insert(steps.begin(), 1.0f);
+        } else {
+            steps.front() = 1.0f;
+        }
+        if (steps.size() > kMaxVariantCount) {
+            steps.resize(kMaxVariantCount);
+        }
     }
 
     static inline float ComputeScale(int base_w, int base_h, int target_w, int target_h) {
@@ -455,12 +476,17 @@ private:
                     value *= 0.01f;
                 }
                 if (!::std::isfinite(value) || value <= 0.0f) continue;
-                if (value >= 0.999f) continue; // וריאנט הבסיס נשמר בנפרד
                 steps.push_back(::std::clamp(value, 0.01f, 1.0f));
             }
         };
 
-        if (profile.contains("recommended_percentages")) {
+        if (profile.contains("percentages")) {
+            ingest(profile.at("percentages"), true);
+        }
+        if (steps.empty() && profile.contains("steps")) {
+            ingest(profile.at("steps"), false);
+        }
+        if (steps.empty() && profile.contains("recommended_percentages")) {
             ingest(profile.at("recommended_percentages"), true);
         }
         if (steps.empty() && profile.contains("recommended_steps")) {
@@ -471,14 +497,7 @@ private:
             return steps;
         }
 
-        ::std::sort(steps.begin(), steps.end(), ::std::greater<float>());
-        steps.erase(::std::unique(steps.begin(), steps.end(), [](float a, float b) {
-            return ::std::fabs(a - b) < 1e-4f;
-        }), steps.end());
-
-        if (steps.size() > kMaxVariantCount) {
-            steps.resize(kMaxVariantCount);
-        }
+        NormalizeVariantSteps(steps);
         return steps;
     }
 

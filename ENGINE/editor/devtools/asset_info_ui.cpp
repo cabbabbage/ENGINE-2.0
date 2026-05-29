@@ -58,6 +58,7 @@
 #include "devtools/asset_paths.hpp"
 
 #include "devtools/animation_runtime_refresh.hpp"
+#include "devtools/animation_frame_import_service.hpp"
 
 namespace asset_paths = devmode::asset_paths;
 
@@ -131,6 +132,7 @@ class Section_BasicInfo : public DockableCollapsible {
     std::vector<std::string> type_options_;
     AssetInfoUI* ui_ = nullptr;
     void on_scale_slider_value_changed(int new_value);
+    void on_scale_slider_value_committed(int new_value);
     void on_size_variation_range_changed(const vibble::weighted_range::WeightedIntRange& range);
     void on_tilt_range_changed(const vibble::weighted_range::WeightedIntRange& range);
     void on_y_position_range_changed(const vibble::weighted_range::WeightedIntRange& range);
@@ -182,6 +184,7 @@ inline void Section_BasicInfo::build() {
     int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
     s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
+    s_scale_pct_->set_on_value_committed([this](int value) { this->on_scale_slider_value_committed(value); });
     wr_size_variation_ = std::make_unique<DMWeightedRangeWidget>("Size Variation (%)", info_->size_variation_range, 0, 20, false);
     wr_size_variation_->set_on_value_changed([this](const vibble::weighted_range::WeightedIntRange& range) {
         this->on_size_variation_range_changed(range);
@@ -2975,3 +2978,14 @@ bool AssetInfoUI::handle_delete_modal_event(const SDL_Event& e) {
     return false;
 }
 
+
+inline void Section_BasicInfo::on_scale_slider_value_committed(int /*new_value*/) {
+    if (!info_) {
+        return;
+    }
+    std::string cache_error;
+    if (!devmode::animation_import::delete_asset_cache(info_->name, cache_error) && !cache_error.empty()) {
+        std::cerr << "[AssetInfoUI] Failed to invalidate texture cache for asset '"
+                  << info_->name << "': " << cache_error << "\n";
+    }
+}

@@ -176,9 +176,11 @@ public:
         DropImportRequest request;
         std::unique_ptr<DMTextBox> name_box;
         std::unique_ptr<DMButton> create_button;
+        std::unique_ptr<DMButton> replace_button;
         std::unique_ptr<DMButton> cancel_button;
         SDL_Rect modal_rect{0, 0, 0, 0};
         SDL_Rect create_rect{0, 0, 0, 0};
+        SDL_Rect replace_rect{0, 0, 0, 0};
         SDL_Rect cancel_rect{0, 0, 0, 0};
         bool create_pressed = false;
         bool cancel_pressed = false;
@@ -308,7 +310,9 @@ public:
     void layout_drop_choice_modal();
     void layout_drop_conflict_modal();
     void layout_drop_error_popup();
+    bool drop_asset_name_exists(const std::string& asset_name) const;
     bool finalize_drop_creation(const std::string& desired_name);
+    bool finalize_drop_replacement(const std::string& desired_name);
     bool create_drop_asset(const std::string& asset_name,
                            const std::vector<std::filesystem::path>& files,
                            const DropImportRequest& request,

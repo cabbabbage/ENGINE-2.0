@@ -1189,7 +1189,7 @@ void DMNumericStepper::render(SDL_Renderer* r) const {
 }
 
 DMSlider::DMSlider(const std::string& label, int min_val, int max_val, int value)
-    : label_(label), min_(min_val), max_(max_val), value_(value) {
+    : label_(label), min_(min_val), max_(max_val), value_(value), last_committed_value_(value) {
     if (min_ > max_) {
         std::swap(min_, max_);
     }
@@ -1240,6 +1240,7 @@ bool DMSlider::commit_pending_value() {
     }
     value_ = pending_value_;
     notify_value_changed();
+    notify_value_committed(value_);
     return true;
 }
 
@@ -1303,6 +1304,11 @@ void DMSlider::set_on_value_changed(std::function<void(int)> callback) {
     last_notified_value_ = display_value();
 }
 
+void DMSlider::set_on_value_committed(std::function<void(int)> callback) {
+    value_committed_callback_ = std::move(callback);
+    last_committed_value_ = value_;
+}
+
 void DMSlider::notify_value_changed() {
     if (!value_changed_callback_) {
         return;
@@ -1313,6 +1319,17 @@ void DMSlider::notify_value_changed() {
     }
     last_notified_value_ = current;
     value_changed_callback_(current);
+}
+
+void DMSlider::notify_value_committed(int committed_value) {
+    if (!value_committed_callback_) {
+        return;
+    }
+    if (committed_value == last_committed_value_) {
+        return;
+    }
+    last_committed_value_ = committed_value;
+    value_committed_callback_(committed_value);
 }
 
 void DMSlider::set_enabled(bool enabled) {
@@ -1339,6 +1356,7 @@ void DMSlider::set_value(int v) {
     pending_value_ = clamped;
     has_pending_value_ = false;
     last_notified_value_ = value_;
+    last_committed_value_ = value_;
 }
 
 void DMSlider::set_min_value(int v) {
@@ -1451,7 +1469,11 @@ bool DMSlider::handle_event(const SDL_Event& e) {
         }
         case SDLK_RETURN:
         case SDLK_KP_ENTER: {
-            commit_pending_value();
+            if (defer_commit_until_unfocus_) {
+                commit_pending_value();
+            } else {
+                notify_value_committed(value_);
+            }
             focused_ = false;
             set_slider_scroll_capture(this, false);
             return true;
@@ -1467,7 +1489,14 @@ bool DMSlider::handle_event(const SDL_Event& e) {
         if (!now_editing) {
             std::optional<int> parsed = parse_value(edit_box_->value());
             if (parsed) {
-                set_value(*parsed);
+                const int previous = value_;
+                value_ = clamp_value(*parsed);
+                pending_value_ = value_;
+                has_pending_value_ = false;
+                if (value_ != previous) {
+                    notify_value_changed();
+                    notify_value_committed(value_);
+                }
             }
             edit_box_->set_value(format_value(display_value()));
             edit_box_.reset();
@@ -1487,7 +1516,11 @@ bool DMSlider::handle_event(const SDL_Event& e) {
         focused_ = focus;
         set_slider_scroll_capture(this, focused_);
         if (!focused_) {
-            commit_pending_value();
+            if (defer_commit_until_unfocus_) {
+                commit_pending_value();
+            } else {
+                notify_value_committed(value_);
+            }
         }
 };
     auto update_hover = [this](SDL_Point p) {
@@ -1555,6 +1588,11 @@ bool DMSlider::handle_event(const SDL_Event& e) {
             set_focus(false);
         }
         if (was_dragging) {
+            if (!defer_commit_until_unfocus_) {
+                notify_value_committed(value_);
+            } else {
+                commit_pending_value();
+            }
             return true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {

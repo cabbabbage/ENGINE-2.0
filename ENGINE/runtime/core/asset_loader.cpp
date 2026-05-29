@@ -30,6 +30,7 @@
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "gameplay/spawn/runtime_candidates.hpp"
 #include "utils/grid.hpp"
 #include "core/tile_builder.hpp"
 #include <nlohmann/json.hpp>
@@ -48,8 +49,19 @@ bool asset_info_has_default_frames(const std::shared_ptr<AssetInfo>& info) {
         return it != info->animations.end() && it->second.has_frames();
 }
 
-std::unordered_set<std::string> collect_runtime_asset_names_from_rooms(const std::vector<Room*>& rooms) {
+std::unordered_set<std::string> collect_runtime_asset_names_from_rooms(const std::vector<Room*>& rooms,
+                                                                       const AssetLibrary* asset_library) {
         std::unordered_set<std::string> names;
+        std::vector<std::string> pending;
+
+        auto add_name = [&](const std::string& name) {
+                if (name.empty()) {
+                        return;
+                }
+                if (names.insert(name).second) {
+                        pending.push_back(name);
+                }
+        };
 
         for (const Room* room : rooms) {
                 if (!room) {
@@ -62,7 +74,38 @@ std::unordered_set<std::string> collect_runtime_asset_names_from_rooms(const std
                                 continue;
                         }
 
-                        names.insert(asset->info->name);
+                        add_name(asset->info->name);
+                }
+        }
+
+        if (!asset_library) {
+                return names;
+        }
+
+        const vibble::spawn::RuntimeCandidates::AssetCatalogView catalog{
+            &asset_library->all(),
+            false
+        };
+
+        for (std::size_t index = 0; index < pending.size(); ++index) {
+                const std::string asset_name = pending[index];
+                const std::shared_ptr<AssetInfo> info = asset_library->get(asset_name);
+                if (!info) {
+                        continue;
+                }
+
+                for (const auto& child_candidate : info->anchor_point_child_candidates) {
+                        const auto candidates_it = child_candidate.candidates.find("candidates");
+                        if (candidates_it == child_candidate.candidates.end() || !candidates_it->is_array()) {
+                                continue;
+                        }
+                        const auto runtime_candidates =
+                            vibble::spawn::RuntimeCandidates::from_json(*candidates_it);
+                        std::unordered_set<std::string> child_names;
+                        runtime_candidates.append_positive_asset_names(child_names, catalog);
+                        for (const std::string& child_name : child_names) {
+                                add_name(child_name);
+                        }
                 }
         }
 
@@ -187,7 +230,7 @@ manifest_store_(manifest_store)
 
                 if (asset_library_ && renderer_) {
                         const std::unordered_set<std::string> map_asset_names =
-                            collect_runtime_asset_names_from_rooms(getRooms());
+                            collect_runtime_asset_names_from_rooms(getRooms(), asset_library_);
 
                         if (!map_asset_names.empty()) {
                                 vibble::log::info(std::string("[AssetLoader] Loading runtime animations for map-used assets (") +

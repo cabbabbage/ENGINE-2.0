@@ -69,6 +69,14 @@
 
 namespace {
 
+bool asset_info_has_default_animation_frames(const std::shared_ptr<AssetInfo>& info) {
+    if (!info) {
+        return false;
+    }
+    const auto it = info->animations.find("default");
+    return it != info->animations.end() && it->second.has_frames();
+}
+
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
@@ -3865,6 +3873,16 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
 
     std::shared_ptr<AssetInfo> info = library_.get(name);
     if (!info) {
+        return nullptr;
+    }
+
+    if (!asset_info_has_default_animation_frames(info) && renderer_) {
+        std::unordered_set<std::string> one_asset{name};
+        library_.loadAnimationsFor(renderer_, one_asset);
+    }
+    if (!asset_info_has_default_animation_frames(info)) {
+        vibble::log::warn("[Assets] Cannot spawn asset '" + name +
+                          "': default animation is missing or has no frames after runtime load.");
         return nullptr;
     }
 

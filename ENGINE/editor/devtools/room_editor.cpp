@@ -12625,14 +12625,6 @@ void RoomEditor::sync_shared_footer_navigation() {
     };
 
     DevFooterBar::EditorFrameNavigation frame_nav{};
-    frame_nav.animation_clickable = can_enter_asset_editor_subview(AssetEditorSubview::AnimationEditor);
-    frame_nav.on_activate_animation = [this]() {
-        if (!can_enter_asset_editor_subview(AssetEditorSubview::AnimationEditor)) {
-            return;
-        }
-        set_asset_editor_subview(AssetEditorSubview::AnimationEditor, true);
-    };
-
     if ((anchor_mode_active() || light_mode_active()) &&
         is_asset_pointer_live(anchor_edit_.target_asset) &&
         anchor_edit_.target_asset &&

@@ -48,7 +48,6 @@ public:
     struct EditorFrameNavigation {
         bool visible = false;
         std::string animation_label;
-        bool animation_clickable = false;
         int frame_count = 0;
         int selected_frame = 0;
         std::function<SDL_Texture*(int)> frame_texture_provider;
@@ -57,7 +56,6 @@ public:
         std::function<void()> on_prev_frame;
         std::function<void()> on_next_frame;
         std::function<void(int)> on_select_frame;
-        std::function<void()> on_activate_animation;
     };
 
     explicit DevFooterBar(std::string title);
@@ -174,12 +172,9 @@ private:
     bool editor_navigation_enabled_ = false;
     std::vector<EditorTab> editor_tabs_;
     EditorFrameNavigation editor_frame_navigation_{};
-    std::unique_ptr<DMButton> editor_prev_animation_button_;
-    std::unique_ptr<DMButton> editor_next_animation_button_;
     std::unique_ptr<DMButton> editor_prev_frame_button_;
     std::unique_ptr<DMButton> editor_next_frame_button_;
     SDL_Rect editor_tabs_row_rect_{0, 0, 0, 0};
-    SDL_Rect editor_animation_label_rect_{0, 0, 0, 0};
     SDL_Rect editor_frame_strip_rect_{0, 0, 0, 0};
     float editor_frame_scroll_offset_ = 0.0f;
     int editor_hovered_frame_index_ = -1;

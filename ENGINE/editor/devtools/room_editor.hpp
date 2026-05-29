@@ -56,6 +56,7 @@ class RoomOvalPointChildEditorPanel;
 class RoomFloorBoxToolsPanel;
 class CandidateEditorPieGraphWidget;
 class DockableCollapsible;
+class SlidingWindowContainer;
 class DMSlider;
 class SliderWidget;
 class DevFooterBar;
@@ -360,8 +361,7 @@ private:
     std::pair<int, int> get_room_dimensions() const;
     int current_grid_resolution() const;
     void refresh_spawn_group_config_ui();
-    void update_spawn_group_config_anchor();
-    SDL_Point spawn_groups_anchor_point() const;
+    void update_spawn_group_config_panel_layout();
     void clear_active_spawn_group_target();
     void sync_spawn_group_panel_with_selection();
     void update_grid_resolution_for_selection(Asset* primary);
@@ -423,9 +423,8 @@ private:
     void move_spawn_group_internal(const std::string& spawn_id, int dir);
     void reorder_spawn_group_internal(const std::string& spawn_id, size_t target_index);
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
-    void open_spawn_group_floating_panel(const std::string& spawn_id, std::optional<SDL_Point> screen_anchor = std::nullopt);
+    void open_spawn_group_config_panel(const std::string& spawn_id, std::optional<SDL_Point> requested_screen_point = std::nullopt);
     void focus_camera_on_spawn_group(const std::string& spawn_id);
-    void apply_spawn_group_floating_layout(bool reset_scroll = false);
     void reopen_room_configurator();
     void notify_room_assets_saved();
     bool enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority);
@@ -1296,6 +1295,8 @@ private:
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
     SDL_Rect room_config_bounds_{0, 0, 0, 0};
+    std::unique_ptr<SlidingWindowContainer> spawn_group_container_;
+    mutable SDL_Rect spawn_group_panel_embedded_bounds_{0, 0, 0, 0};
     DevFooterBar* shared_footer_bar_ = nullptr;
     bool room_config_dock_open_ = false;
     bool room_config_was_visible_ = false;

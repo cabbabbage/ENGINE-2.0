@@ -23827,9 +23827,9 @@
       "rooms_data": {
         "Bluebloom_Nook": {
           "display_color": [
-            31,
-            204,
-            78,
+            242,
+            94,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -23973,9 +23973,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            32,
-            31,
-            204,
+            85,
+            242,
+            198,
             255
           ],
           "geometry": "Circle",
@@ -24119,9 +24119,9 @@
         },
         "Frog_Basin": {
           "display_color": [
-            242,
-            36,
-            242,
+            204,
+            118,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -24262,9 +24262,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
-            85,
+            165,
+            36,
             242,
-            128,
             255
           ],
           "geometry": "Circle",
@@ -24410,9 +24410,9 @@
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
           "display_color": [
-            75,
-            242,
             36,
+            242,
+            76,
             255
           ],
           "geometry": "Square",
@@ -24605,9 +24605,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
-            204,
-            151,
-            71,
+            242,
+            85,
+            148,
             255
           ],
           "geometry": "Circle",
@@ -24756,9 +24756,9 @@
           "camera_tilt_deg": 26.236095428466797,
           "camera_zoom_percent": 0,
           "display_color": [
-            31,
-            110,
-            204,
+            242,
+            85,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -25108,9 +25108,9 @@
         },
         "NewRoom": {
           "display_color": [
-            31,
-            204,
-            141,
+            224,
+            34,
+            86,
             255
           ],
           "geometry": "Square",
@@ -25154,9 +25154,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            224,
-            34,
-            186,
+            71,
+            204,
+            101,
             255
           ],
           "geometry": "Square",
@@ -25200,9 +25200,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            74,
-            36,
-            242,
+            142,
+            71,
+            204,
             255
           ],
           "geometry": "Square",
@@ -25277,9 +25277,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            99,
-            204,
-            71,
+            36,
+            242,
+            224,
             255
           ],
           "geometry": "Square",
@@ -25323,9 +25323,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            214,
-            85,
-            242,
+            143,
+            204,
+            51,
             255
           ],
           "geometry": "Square",
@@ -25370,9 +25370,9 @@
         },
         "NewRoom5": {
           "display_color": [
-            191,
-            224,
-            34,
+            242,
+            197,
+            36,
             255
           ],
           "geometry": "Square",
@@ -25417,9 +25417,9 @@
         },
         "Old_Stump_Yard": {
           "display_color": [
-            71,
-            149,
-            204,
+            85,
+            242,
+            143,
             255
           ],
           "geometry": "Square",
@@ -25626,9 +25626,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
+            242,
             71,
-            204,
-            177,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -25709,9 +25709,9 @@
         },
         "Spider_Hollow": {
           "display_color": [
-            242,
-            138,
             36,
+            127,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25855,7 +25855,7 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            189,
+            218,
             36,
             242,
             255
@@ -26001,9 +26001,9 @@
         },
         "Whispering_Ring": {
           "display_color": [
-            36,
-            74,
-            242,
+            51,
+            204,
+            185,
             255
           ],
           "geometry": "Circle",
@@ -26153,8 +26153,8 @@
           "camera_zoom_percent": 49,
           "display_color": [
             242,
-            36,
-            135,
+            141,
+            61,
             255
           ],
           "geometry": "Circle",
@@ -26578,9 +26578,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            242,
-            184,
+            181,
             85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -27018,8 +27018,8 @@
           "camera_zoom_percent": 0,
           "display_color": [
             31,
+            98,
             204,
-            66,
             255
           ],
           "geometry": "Square",

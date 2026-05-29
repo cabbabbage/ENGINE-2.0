@@ -34,51 +34,52 @@ inline constexpr float kMaxScaleDelta = 0.95f;
 inline constexpr float kScaleDeltaMultiplier = 3.35f;
 } // namespace radial_blur_tuning
 
+namespace edge_lens_warp_tuning {
+// Pre-warp applied per already-composited layer before radial zoom blur.
+// It approximates lens curvature by pushing only screen-edge strips outward from the layer center.
+inline constexpr bool kEnabled = true;
+inline constexpr int kMinSamples = 2;
+inline constexpr int kMaxSamples = 9;
+inline constexpr float kMaxEdgePushRatio = 0.075f;
+inline constexpr float kMaxScaleDelta = 0.16f;
+inline constexpr float kMinEdgeBandRatio = 0.12f;
+inline constexpr float kMaxEdgeBandRatio = 0.32f;
+inline constexpr float kCornerWeight = 0.58f;
+inline constexpr float kSideWeight = 0.78f;
+inline constexpr float kBaseWeight = 1.0f;
+} // namespace edge_lens_warp_tuning
+
 namespace atmospheric_dust_tuning {
 inline constexpr bool kEnabled = true;
 inline constexpr float kAnimationFps = 18.0f;
 
-// The dust PNG owns opacity. SDL draws it at full alpha mod.
-// Do not fade by layer.
+// Dust PNG alpha owns opacity. The renderer always draws the tile at full alpha mod.
 inline constexpr float kDrawAlpha = 1.0f;
 
-// Size changes by depth only.
-// Far background gets smaller/tighter tiles.
-// Foreground gets larger/sparser tiles.
+// Depth changes scale only. Actual pixel size is based on incoming dust frame size.
 inline constexpr float kFocusTileScale = 0.50f;
 inline constexpr float kBackgroundNearTileScale = 0.46f;
 inline constexpr float kBackgroundFarTileScale = 0.12f;
 inline constexpr float kForegroundNearTileScale = 0.72f;
 inline constexpr float kForegroundFarTileScale = 1.15f;
 
-// Extra coverage passes. These are still full texture opacity.
-// They exist only to make coverage feel denser and less repetitive.
-inline constexpr float kSecondaryPassScale = 0.57f;
-inline constexpr float kTertiaryPassScale = 0.31f;
-
-inline constexpr float kMinTilePx = 18.0f;
-inline constexpr float kMaxTilePx = 420.0f;
-
-// Layer-space guard. The renderer should already avoid submitting layers past
-// max cull / efficiency depth, but this prevents runaway dust on extreme stacks.
-inline constexpr int kMaxDustLayerDistance = 64;
-
-// Converts camera/player world movement into dust texture movement.
-inline constexpr float kWorldAnchorPixelScale = 1.0f;
-
-// Different parallax makes dust feel like it lives at depth.
-// Background moves less, foreground moves more.
-inline constexpr float kBackgroundParallaxNear = 0.68f;
-inline constexpr float kBackgroundParallaxFar = 0.18f;
-inline constexpr float kForegroundParallaxNear = 0.88f;
-inline constexpr float kForegroundParallaxFar = 1.45f;
-inline constexpr float kFocusParallax = 0.72f;
+// Converts camera layer distance into tile scale.
+// Keep world-distance behavior data-driven through DustAnchor.
+inline constexpr float kDepthRampPower = 1.35f;
 } // namespace atmospheric_dust_tuning
 
 struct DustAnchor {
+    // Used only for computing distance/visibility behavior.
+    // The dust tile field itself is anchored to the bottom-center of the layer target.
     float world_x = 0.0f;
     float world_z = 0.0f;
-    float pixels_per_world_unit = 1.0f;
+
+    // Set this from camera_settings.layer_depth_interval.
+    float world_units_per_depth_layer = 1.0f;
+
+    // Set this from dynamic_renderer_depth_efficiency_depth or max_cull_depth.
+    // Dust stops past this world distance. <= 0 means no explicit world cutoff.
+    float max_dust_world_distance = 0.0f;
 };
 
 struct LayerTexture {
@@ -88,6 +89,10 @@ struct LayerTexture {
     float warp_px = 0.0f;
     float tint_strength = 0.0f;
     float phase = 0.0f;
+
+    // Optional. If left at 0 for non-focus layers, compose() falls back to:
+    // abs(depth_layer - focus_depth_layer) * DustAnchor::world_units_per_depth_layer.
+    float world_distance_from_focus = 0.0f;
 };
 
 struct CompositeResult {

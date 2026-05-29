@@ -73,6 +73,12 @@ const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
 
 class OpenGLRuntimeRenderer {
 public:
+
+    struct DustAnchor {
+        float world_x = 0.0f;
+        float world_z = 0.0f;
+        float pixels_per_world_unit = 1.0f;
+    };
     bool ensure_atmospheric_dust_textures();
     void destroy_atmospheric_dust_textures();
 

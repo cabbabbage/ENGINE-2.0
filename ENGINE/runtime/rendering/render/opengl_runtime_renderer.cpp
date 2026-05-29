@@ -1955,6 +1955,21 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
     return flush_batch();
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                          SDL_Texture* ui_overlay_texture,
                                          double ui_overlay_prepare_ms,
@@ -2364,6 +2379,13 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         (void)ensure_atmospheric_dust_textures();
         dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
 
+        const SDL_FPoint dust_world_center = camera.get_view_center_f();
+        dof_blur_chain::DustAnchor dust_anchor{};
+        dust_anchor.world_x = camera.get_view_center_f().x;
+        dust_anchor.world_z = static_cast<float>(camera.current_anchor_world_z());
+        dust_anchor.world_units_per_depth_layer = std::max(1.0f, camera_settings.layer_depth_interval);
+        dust_anchor.max_dust_world_distance = std::max(1.0f, camera_settings.dynamic_renderer_depth_efficiency_depth);
+
         const dof_blur_chain::CompositeResult dof_result =
             dof_blur_chain_.compose(dof_layers,
                                     floor_target_,
@@ -2373,7 +2395,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                     optical_center,
                                     frame_to_render->focus_depth_layer,
                                     camera_zoom_percent,
-                                    now_seconds);
+                                    now_seconds,
+                                    dust_anchor);
 
         const bool frame_contains_focus_depth_layer = std::any_of(
             frame_to_render->depth_layers.begin(),
@@ -2589,6 +2612,17 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     render_diagnostics::end_frame();
     return true;
 }
+
+
+
+
+
+
+
+
+
+
+
 
 SDL_Color OpenGLRuntimeRenderer::resolve_runtime_floor_clear_color() const {
     SDL_Color map_default{0, 0, 0, 255};

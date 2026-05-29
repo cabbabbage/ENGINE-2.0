@@ -508,6 +508,18 @@ void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, in
 }
 
 
+void Asset::clear_downscale_cache() {
+    if (last_scaled_texture_) {
+        SDL_DestroyTexture(last_scaled_texture_);
+        last_scaled_texture_ = nullptr;
+    }
+    last_scaled_source_ = nullptr;
+    last_scaled_w_ = 0;
+    last_scaled_h_ = 0;
+    last_scaled_camera_scale_ = -1.0f;
+    downscale_cache_ready_revision_ = 0;
+}
+
 Asset::~Asset() {
         clear_render_caches();
         visibility_stamp = 0;
@@ -553,10 +565,18 @@ Asset::Asset(const Asset& o)
     , controller_(nullptr)
     , tiling_info_(o.tiling_info_)
     , anim_(nullptr)
+    , last_scaled_texture_(nullptr)
+    , last_scaled_source_(nullptr)
+    , last_scaled_w_(0)
+    , last_scaled_h_(0)
+    , last_scaled_camera_scale_(-1.0f)
+    , last_scale_usage_()
     , last_rendered_frame_(nullptr)
+    , scale_variant_state_(o.scale_variant_state_)
     , last_scale_base_input_(o.last_scale_base_input_)
     , last_scale_perspective_input_(o.last_scale_perspective_input_)
     , last_scale_camera_input_(o.last_scale_camera_input_)
+    , last_scale_quality_cap_input_(o.last_scale_quality_cap_input_)
     , grid_id_(o.grid_id_)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
@@ -580,6 +600,8 @@ Asset::Asset(const Asset& o)
 {
 
         clear_render_caches();
+        last_scale_usage_ = o.last_scale_usage_;
+        scale_variant_state_ = o.scale_variant_state_;
         size_variation_sample_ = o.size_variation_sample_;
         base_spawn_tilt_degrees_ = o.base_spawn_tilt_degrees_;
         cached_grid_residency_    = o.cached_grid_residency_;
@@ -638,9 +660,17 @@ Asset& Asset::operator=(const Asset& o) {
         children_.clear();
         anim_.reset();
         tiling_info_         = o.tiling_info_;
+        last_scaled_texture_      = nullptr;
+        last_scaled_source_       = nullptr;
+        last_scaled_w_            = 0;
+        last_scaled_h_            = 0;
+        last_scaled_camera_scale_ = -1.0f;
+        last_scale_usage_         = o.last_scale_usage_;
+        scale_variant_state_      = o.scale_variant_state_;
         last_scale_base_input_    = o.last_scale_base_input_;
         last_scale_perspective_input_ = o.last_scale_perspective_input_;
         last_scale_camera_input_  = o.last_scale_camera_input_;
+        last_scale_quality_cap_input_ = o.last_scale_quality_cap_input_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
@@ -830,22 +860,54 @@ void Asset::finalize_setup() {
         if (finalized_) {
                 return;
         }
-        if (!info) return;
+        if (!info) {
+                finalized_ = true;
+                return;
+        }
+
         if (!anchors_initialized_) {
                 initialize_anchor_registry_from_animations();
         }
-        if (current_animation.empty() ||
-        !info->animations[current_animation].has_frames())
-        {
-		std::string start_id = info->start_animation.empty() ? std::string{"default"} : info->start_animation;
-		auto it = info->animations.find(start_id);
-		if (it == info->animations.end()) it = info->animations.find("default");
-		if (it == info->animations.end()) it = info->animations.begin();
-		if (it != info->animations.end() && it->second.has_frames()) {
-			current_animation = it->first;
-			Animation& anim = it->second;
+
+        auto current_it = current_animation.empty()
+                ? info->animations.end()
+                : info->animations.find(current_animation);
+
+        const bool current_animation_valid =
+                current_it != info->animations.end() && current_it->second.has_frames();
+
+        if (!current_animation_valid) {
+                auto pick_it = info->animations.end();
+
+                if (!info->start_animation.empty()) {
+                        auto start_it = info->animations.find(info->start_animation);
+                        if (start_it != info->animations.end() && start_it->second.has_frames()) {
+                                pick_it = start_it;
+                        }
+                }
+
+                if (pick_it == info->animations.end()) {
+                        auto default_it = info->animations.find("default");
+                        if (default_it != info->animations.end() && default_it->second.has_frames()) {
+                                pick_it = default_it;
+                        }
+                }
+
+                if (pick_it == info->animations.end()) {
+                        for (auto it = info->animations.begin(); it != info->animations.end(); ++it) {
+                                if (it->second.has_frames()) {
+                                        pick_it = it;
+                                        break;
+                                }
+                        }
+                }
+
+                if (pick_it != info->animations.end()) {
+                        current_animation = pick_it->first;
+                        Animation& anim = pick_it->second;
                         anim.change(current_frame, static_frame);
                         frame_progress = 0.0f;
+
                         if ((anim.randomize || anim.rnd_start) && anim.frame_count() > 1) {
                                 std::uniform_int_distribution<int> dist(0, int(anim.frame_count()) - 1);
                                 int idx;
@@ -853,22 +915,43 @@ void Asset::finalize_setup() {
                                         std::lock_guard<std::mutex> lock(asset_rng_mutex());
                                         idx = dist(asset_rng());
                                 }
+
                                 AnimationFrame* f = anim.get_first_frame();
-                                while (idx-- > 0 && f && f->next) { f = f->next; }
+                                while (idx-- > 0 && f && f->next) {
+                                        f = f->next;
+                                }
                                 current_frame = f;
                         }
+                } else {
+                        current_animation.clear();
+                        current_frame = nullptr;
+                        frame_progress = 0.0f;
+                        static_frame = true;
+
+                        static std::mutex missing_animation_log_mutex;
+                        static std::unordered_set<std::string> missing_animation_log_keys;
+
+                        const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                        bool should_log = false;
+                        {
+                                std::lock_guard<std::mutex> lock(missing_animation_log_mutex);
+                                should_log = missing_animation_log_keys.insert(asset_name).second;
+                        }
+
+                        if (should_log) {
+                                vibble::log::warn("[Asset] Asset has no framed animations; skipping animation runtime creation: asset='" +
+                                                  asset_name + "'");
+                        }
                 }
-	}
-        if (!current_animation.empty() && info->animations.count(current_animation) &&
-            info->animations[current_animation].has_frames()) {
-            ensure_animation_runtime(false);
-        } else {
-            vibble::log::warn("[Asset] Cannot create animation runtime: animation '" + current_animation + "' is missing or has no frames");
         }
+
+        ensure_animation_runtime(false);
+
         if (assets_ && !controller_) {
                 ControllerFactory cf(assets_);
                 controller_ = cf.create_for_asset(this);
         }
+
         NeighborSearchRadius = info->NeighborSearchRadius;
         refresh_cached_dimensions();
         refresh_anchor_point_cache_from_frame();
@@ -902,27 +985,106 @@ void Asset::update_scale_values(bool force) {
     const PerspectiveSample perspective_sample = runtime_perspective_sample();
     const float base_scale = runtime_effective_base_scale();
     const float perspective_scale = perspective_sample.scale;
+    const char* perspective_source = perspective_source_label(perspective_sample.source);
 
-    constexpr float kScaleEpsilon = 1e-4f;
+    float camera_scale = 1.0f;
+    if (assets_) {
+        camera_scale = static_cast<float>(std::max(0.0001, assets_->getView().get_scale()));
+    } else if (window) {
+        camera_scale = static_cast<float>(std::max(0.0001, window->get_scale()));
+    }
+    float quality_cap = render_pipeline::ScalingLogic::QualityCap();
+    if (!std::isfinite(quality_cap) || quality_cap <= 0.0f) {
+        quality_cap = 1.0f;
+    }
+
     const float prospective_scale = base_scale * perspective_scale;
+    constexpr float kScaleEpsilon = 1e-4f;
+    const float scale_delta = prospective_scale - current_scale;
+    const bool trace_scale = should_trace_asset_scale(*this) &&
+                             should_emit_scale_trace_for_frame(*this, frame_id);
+    if (trace_scale) {
+        auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+        frame_stats.set("scale_trace.asset_name", info ? info->name : std::string{"<unknown>"});
+        frame_stats.set("scale_trace.asset_frame_id", static_cast<std::uint64_t>(frame_id));
+        frame_stats.set("scale_trace.asset_source", perspective_source);
+        frame_stats.set("scale_trace.asset_perspective", static_cast<double>(perspective_scale));
+        frame_stats.set("scale_trace.asset_base", static_cast<double>(base_scale));
+        frame_stats.set("scale_trace.asset_scale", static_cast<double>(prospective_scale));
+        frame_stats.set("scale_trace.asset_delta", static_cast<double>(scale_delta));
+    }
 
     if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&
         std::fabs(base_scale - last_scale_base_input_) < kScaleEpsilon &&
-        std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon) {
+        std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon &&
+        std::fabs(camera_scale - last_scale_camera_input_) < kScaleEpsilon &&
+        std::fabs(quality_cap - last_scale_quality_cap_input_) < kScaleEpsilon) {
         return;
     }
 
-    const float previous_scale = current_scale;
     current_scale = prospective_scale;
     last_scale_base_input_ = base_scale;
     last_scale_perspective_input_ = perspective_scale;
+    last_scale_camera_input_ = camera_scale;
+    last_scale_quality_cap_input_ = quality_cap;
 
-    // Single texture per frame — GPU scaling handles runtime size changes.
-    // Dirty render packages only when scale changes enough to alter dimensions.
-    if (std::fabs(prospective_scale - previous_scale) >= kScaleEpsilon) {
-        mark_composite_dirty();
-        mark_anchors_dirty();
+    // Select variants against the actual render scale so we prefer downscaling
+    // a larger source texture, and only upscale when no larger variant exists.
+    float desired_variant_scale = current_scale;
+    if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
+        desired_variant_scale = 1.0f;
     }
+
+    auto scale_profile = render_pipeline::ScalingLogic::ProfileForAsset(info ? info->name : std::string{});
+    std::vector<float> steps = scale_profile.steps;
+    render_pipeline::ScalingLogic::NormalizeVariantSteps(steps);
+    float profile_max_scale = scale_profile.max_scale;
+    if (!std::isfinite(profile_max_scale) || profile_max_scale <= 0.0f) {
+        profile_max_scale = 1.0f;
+    }
+    float desired_texture_scale = desired_variant_scale / profile_max_scale;
+    if (!std::isfinite(desired_texture_scale) || desired_texture_scale <= 0.0f) {
+        desired_texture_scale = desired_variant_scale;
+    }
+
+    render_pipeline::ScalingLogic::HysteresisState hysteresis_state{};
+    hysteresis_state.last_index = scale_variant_state_.last_variant_index;
+    hysteresis_state.min_scale = scale_variant_state_.hysteresis_min;
+    hysteresis_state.max_scale = scale_variant_state_.hysteresis_max;
+
+    const int previous_variant_index = current_variant_index;
+    auto selection = render_pipeline::ScalingLogic::Choose(
+        desired_texture_scale,
+        steps,
+        hysteresis_state,
+        desired_texture_scale,
+        render_pipeline::ScalingLogic::HysteresisOptions{});
+
+    current_nearest_variant_scale = profile_max_scale * selection.stored_scale;
+    current_variant_index = selection.index;
+    if (current_variant_index != previous_variant_index) {
+        refresh_cached_dimensions();
+    }
+
+    scale_variant_state_.last_variant_index = selection.index;
+    scale_variant_state_.hysteresis_min = selection.hysteresis_min;
+    scale_variant_state_.hysteresis_max = selection.hysteresis_max;
+
+    if (current_nearest_variant_scale > 0.0f) {
+        current_remaining_scale_adjustment = current_scale / current_nearest_variant_scale;
+    } else {
+        current_remaining_scale_adjustment = 1.0f;
+    }
+
+    last_scale_usage_.requested_scale = current_scale;
+    last_scale_usage_.texture_scale = current_nearest_variant_scale;
+    last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
+    last_scale_usage_.variant_index = current_variant_index;
+
+    // Variant/remainder changes alter package dimensions and source texture selection.
+    mark_composite_dirty();
+    mark_anchors_dirty();
+    mark_mesh_dirty();
 }
 
 float Asset::runtime_effective_base_scale() const {
@@ -1065,30 +1227,34 @@ bool Asset::clear_anchor_perspective_override() {
     return true;
 }
 
+SDL_Texture* Asset::get_current_variant_texture() const {
+    if (!current_frame) return nullptr;
+    return current_frame->get_base_texture(current_variant_index);
+}
 
 SDL_Texture* Asset::get_texture()
 {
-    if (current_frame) {
-        return current_frame->get_base_texture();
-    }
-    return nullptr;
+	if (current_frame) {
+		return current_frame->get_base_texture(current_variant_index);
+	}
+	return nullptr;
 }
 
 SDL_Texture* Asset::get_current_frame() const
 {
-    if (current_frame) {
-        return current_frame->get_base_texture();
-    }
-    return nullptr;
+	if (current_frame) {
+		return current_frame->get_base_texture(current_variant_index);
+	}
+	return nullptr;
 }
 
 void Asset::set_current_animation(const std::string& name)
 {
-	if (info == nullptr) {
-		return;
-	}
+        if (info == nullptr || name.empty()) {
+                return;
+        }
 
-	auto it = info->animations.find(name);
+        auto it = info->animations.find(name);
         if (it == info->animations.end() && assets_) {
                 auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
                 frame_stats.set("asset_runtime_animation_load.attempted", true);
@@ -1108,7 +1274,8 @@ void Asset::set_current_animation(const std::string& name)
                                     static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count());
                                 it = info->animations.find(name);
                                 frame_stats.set("asset_runtime_animation_load.ms", load_ms);
-                                frame_stats.set("asset_runtime_animation_load.loaded", it != info->animations.end());
+                                frame_stats.set("asset_runtime_animation_load.loaded",
+                                                it != info->animations.end() && it->second.has_frames());
                                 frame_stats.set("asset_runtime_animation_load.deferred", false);
                         }
                 } else {
@@ -1129,17 +1296,37 @@ void Asset::set_current_animation(const std::string& name)
                         }
                 }
         }
-	if (it != info->animations.end()) {
-		current_animation = name;
-		Animation& anim = it->second;
-		anim.change(current_frame, static_frame);
-		frame_progress = 0.0f;
-                refresh_frame_texture_bindings();
-		refresh_cached_dimensions();
-                mark_anchors_dirty();
-                refresh_anchor_point_cache_from_frame();
-                refresh_runtime_box_cache_from_frame();
-	}
+
+        if (it == info->animations.end() || !it->second.has_frames()) {
+                static std::mutex empty_animation_log_mutex;
+                static std::unordered_set<std::string> empty_animation_log_keys;
+
+                const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                const std::string key = asset_name + "\n" + name;
+
+                bool should_log = false;
+                {
+                        std::lock_guard<std::mutex> lock(empty_animation_log_mutex);
+                        should_log = empty_animation_log_keys.insert(key).second;
+                }
+
+                if (should_log) {
+                        vibble::log::warn("[Asset] Ignoring animation with no frames: asset='" +
+                                          asset_name + "' animation='" + name + "'");
+                }
+                return;
+        }
+
+        current_animation = name;
+        Animation& anim = it->second;
+        anim.change(current_frame, static_frame);
+        frame_progress = 0.0f;
+        refresh_frame_texture_bindings();
+        refresh_cached_dimensions();
+        mark_anchors_dirty();
+        refresh_anchor_point_cache_from_frame();
+        refresh_runtime_box_cache_from_frame();
+        ensure_animation_runtime(true);
 }
 
 void Asset::update() {
@@ -1818,9 +2005,8 @@ void Asset::set_assets(Assets* a) {
             ControllerFactory cf(assets_);
             controller_ = cf.create_for_asset(this);
     }
-
 }
- 
+
 
 void Asset::set_tiling_info(std::optional<TilingInfo> info) {
     tiling_info_ = std::move(info);
@@ -1879,18 +2065,58 @@ void Asset::notify_interact(Asset* instigator) {
 
 
 void Asset::ensure_animation_runtime(bool force_recreate) {
-    if (!assets_) {
+    if (!assets_ || !info) {
         return;
     }
+
+    const auto animation_it = current_animation.empty()
+            ? info->animations.end()
+            : info->animations.find(current_animation);
+
+    if (animation_it == info->animations.end() || !animation_it->second.has_frames()) {
+        if (force_recreate) {
+            anim_runtime_.reset();
+            anim_.reset();
+        }
+
+        static std::mutex missing_runtime_log_mutex;
+        static std::unordered_set<std::string> missing_runtime_log_keys;
+
+        const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+        const std::string animation_name = current_animation.empty() ? std::string{"<empty>"} : current_animation;
+        const std::string key = asset_name + "\n" + animation_name;
+
+        bool should_log = false;
+        {
+            std::lock_guard<std::mutex> lock(missing_runtime_log_mutex);
+            should_log = missing_runtime_log_keys.insert(key).second;
+        }
+
+        if (should_log) {
+            vibble::log::warn("[Asset] Skipping animation runtime creation: asset='" +
+                              asset_name + "' animation='" + animation_name +
+                              "' is missing or has no frames");
+        }
+
+        return;
+    }
+
     if (!force_recreate && anim_ && anim_runtime_) {
         return;
     }
+
     anim_runtime_.reset();
     anim_.reset();
+
     anim_runtime_ = std::make_unique<AnimationRuntime>(this, assets_);
     anim_ = std::make_unique<AnimationUpdate>(this, assets_);
-    if (anim_runtime_) anim_runtime_->set_planner(anim_.get());
-    if (anim_) anim_->set_runtime(anim_runtime_.get());
+
+    if (anim_runtime_) {
+        anim_runtime_->set_planner(anim_.get());
+    }
+    if (anim_) {
+        anim_->set_runtime(anim_runtime_.get());
+    }
 }
 
 void Asset::set_flip() {
@@ -1962,12 +2188,23 @@ void Asset::clear_render_caches() {
     mesh_dirty_ = true;
 }
 
+void Asset::invalidate_downscale_cache() {
+        last_scaled_texture_      = nullptr;
+        last_scaled_source_       = nullptr;
+        last_scaled_w_            = 0;
+        last_scaled_h_            = 0;
+        last_scaled_camera_scale_ = -1.0f;
+        last_scale_usage_         = {};
+
+        downscale_cache_ready_revision_ = 0;
+}
+
 void Asset::refresh_cached_dimensions() {
         int width = 0;
         int height = 0;
 
         if ((width <= 0 || height <= 0)) {
-                SDL_Texture* frame = get_current_frame();
+                SDL_Texture* frame = get_current_variant_texture();
                 if (frame) {
                         float wf = 0.0f;
                         float hf = 0.0f;
@@ -2015,14 +2252,23 @@ void Asset::refresh_frame_texture_bindings() {
                 if (!current_frame || !active_animation) {
                         return;
                 }
-                if (get_current_frame()) {
+                if (get_current_variant_texture()) {
+                        return;
+                }
+                if (current_variant_index != 0 && current_frame->get_base_texture(0)) {
+                        current_variant_index = 0;
                         return;
                 }
                 for (AnimationFrame* candidate = active_animation->get_first_frame();
                      candidate != nullptr;
                      candidate = candidate->next) {
-                        if (candidate->get_base_texture()) {
+                        if (candidate->get_base_texture(current_variant_index)) {
                                 current_frame = candidate;
+                                return;
+                        }
+                        if (candidate->get_base_texture(0)) {
+                                current_frame = candidate;
+                                current_variant_index = 0;
                                 return;
                         }
                 }
@@ -2040,7 +2286,7 @@ void Asset::refresh_frame_texture_bindings() {
         mark_mesh_dirty();
         mark_anchors_dirty();
 #if !defined(NDEBUG)
-        if (get_current_frame() == nullptr) {
+        if (get_current_variant_texture() == nullptr) {
                 const std::string asset_name = info ? info->name : std::string{"<unknown>"};
                 vibble::log::warn("[AssetRefresh] Missing texture binding for asset '" +
                                   asset_name + "' animation='" + current_animation +
@@ -2049,11 +2295,26 @@ void Asset::refresh_frame_texture_bindings() {
 #endif
 }
 
-float Asset::runtime_resolved_scale() const {
-        if (!std::isfinite(current_scale) || current_scale <= 0.0f) {
-                return 1.0f;
+float Asset::runtime_scale_remainder() const {
+        float remainder = last_scale_usage_.remainder_scale;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = current_remaining_scale_adjustment;
         }
-        return current_scale;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = 1.0f;
+        }
+        return remainder;
+}
+
+float Asset::runtime_resolved_scale() const {
+        float texture_scale = last_scale_usage_.texture_scale;
+        if (!std::isfinite(texture_scale) || texture_scale <= 0.0f) {
+                texture_scale = current_nearest_variant_scale;
+        }
+        if (!std::isfinite(texture_scale) || texture_scale <= 0.0f) {
+                texture_scale = 1.0f;
+        }
+        return texture_scale * runtime_scale_remainder();
 }
 
 float Asset::runtime_width_px() const {
@@ -2061,7 +2322,7 @@ float Asset::runtime_width_px() const {
         if (!(base_width > 0.0f)) {
                 return 0.0f;
         }
-        return base_width * current_scale;
+        return base_width * runtime_scale_remainder();
 }
 
 float Asset::runtime_height_px() const {
@@ -2069,10 +2330,13 @@ float Asset::runtime_height_px() const {
         if (!(base_height > 0.0f)) {
                 return 0.0f;
         }
-        return base_height * current_scale;
+        return base_height * runtime_scale_remainder();
 }
 
 void Asset::on_scale_factor_changed() {
+
+        last_scale_usage_ = {};
+
         refresh_cached_dimensions();
 
         mark_composite_dirty();
@@ -2188,6 +2452,7 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         sig.world_y = world_y();
         sig.world_z = world_z();
         sig.frame_index = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
+        sig.variant_index = current_variant_index;
         sig.flipped = flipped;
         const SDL_FlipMode render_flip = effective_render_flip();
         sig.render_flip_horizontal = (render_flip & SDL_FLIP_HORIZONTAL) != 0;
@@ -2195,7 +2460,11 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         const double render_angle = effective_render_angle();
         sig.render_rotation_degrees = std::isfinite(render_angle) ? static_cast<float>(render_angle) : 0.0f;
 
-        sig.remainder_scale = 1.0f;
+        float remainder = current_remaining_scale_adjustment;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = 1.0f;
+        }
+        sig.remainder_scale = remainder;
 
         const PerspectiveSample perspective_sample = runtime_perspective_sample();
         sig.perspective_scale = perspective_sample.scale;
@@ -2234,6 +2503,7 @@ bool Asset::update_anchor_basis_if_needed() {
         const bool signature_changed =
                 world_changed ||
                 signature.frame_index != last_anchor_basis_signature_.frame_index ||
+                signature.variant_index != last_anchor_basis_signature_.variant_index ||
                 signature.flipped != last_anchor_basis_signature_.flipped ||
                 signature.render_flip_horizontal != last_anchor_basis_signature_.render_flip_horizontal ||
                 signature.render_flip_vertical != last_anchor_basis_signature_.render_flip_vertical ||

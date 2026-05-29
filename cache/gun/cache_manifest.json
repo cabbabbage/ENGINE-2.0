@@ -1,0 +1,72 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "512a5026cf86ec0b",
+          "height": 576,
+          "order": 0,
+          "width": 1064
+        }
+      ]
+    },
+    {
+      "name": "fire_right",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "512a5026cf86ec0b",
+          "height": 576,
+          "order": 0,
+          "width": 1064
+        },
+        {
+          "filename": "1.png",
+          "hash": "a63561d6d155268b",
+          "height": 576,
+          "order": 1,
+          "width": 1064
+        },
+        {
+          "filename": "2.png",
+          "hash": "4863caee75e11b97",
+          "height": 576,
+          "order": 2,
+          "width": 1064
+        },
+        {
+          "filename": "3.png",
+          "hash": "14d9d79a57a37124",
+          "height": 576,
+          "order": 3,
+          "width": 1064
+        },
+        {
+          "filename": "4.png",
+          "hash": "4ee52b134356738e",
+          "height": 576,
+          "order": 4,
+          "width": 1064
+        },
+        {
+          "filename": "5.png",
+          "hash": "b3d808fdfd8524ab",
+          "height": 576,
+          "order": 5,
+          "width": 1064
+        }
+      ]
+    }
+  ],
+  "asset_name": "gun",
+  "authored_scale_percentage": 9.0,
+  "crop_canvas": {
+    "shared_height": 576,
+    "shared_width": 1064
+  },
+  "digest": "e37aee37a9428de5",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

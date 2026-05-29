@@ -1,0 +1,102 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "17bb9cf4c6a45082",
+          "height": 175,
+          "order": 0,
+          "width": 130
+        },
+        {
+          "filename": "1.png",
+          "hash": "6905eef8f2004902",
+          "height": 175,
+          "order": 1,
+          "width": 130
+        },
+        {
+          "filename": "2.png",
+          "hash": "fe7cc55fdf7b059f",
+          "height": 175,
+          "order": 2,
+          "width": 130
+        },
+        {
+          "filename": "3.png",
+          "hash": "871176155b9a0e31",
+          "height": 175,
+          "order": 3,
+          "width": 130
+        },
+        {
+          "filename": "4.png",
+          "hash": "2b9b693f231f21eb",
+          "height": 175,
+          "order": 4,
+          "width": 130
+        },
+        {
+          "filename": "5.png",
+          "hash": "b6cfe1dc69c0e0d1",
+          "height": 175,
+          "order": 5,
+          "width": 130
+        },
+        {
+          "filename": "6.png",
+          "hash": "66269fcddaacbbdb",
+          "height": 175,
+          "order": 6,
+          "width": 130
+        },
+        {
+          "filename": "7.png",
+          "hash": "83f0b8723f7eddc7",
+          "height": 175,
+          "order": 7,
+          "width": 130
+        },
+        {
+          "filename": "8.png",
+          "hash": "5c1cdf80144fee1c",
+          "height": 175,
+          "order": 8,
+          "width": 130
+        },
+        {
+          "filename": "9.png",
+          "hash": "259f430f78f20899",
+          "height": 175,
+          "order": 9,
+          "width": 130
+        },
+        {
+          "filename": "10.png",
+          "hash": "13c7c50cd9cc81c1",
+          "height": 175,
+          "order": 10,
+          "width": 130
+        },
+        {
+          "filename": "11.png",
+          "hash": "1f693654701516ac",
+          "height": 175,
+          "order": 11,
+          "width": 130
+        }
+      ]
+    }
+  ],
+  "asset_name": "flame_fps_12",
+  "authored_scale_percentage": 9.0,
+  "crop_canvas": {
+    "shared_height": 175,
+    "shared_width": 130
+  },
+  "digest": "7b0635a9dcaec7cd",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

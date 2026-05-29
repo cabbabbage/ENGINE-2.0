@@ -22,6 +22,7 @@
 #include "devtools/asset_library_ui.hpp"
 #include "devtools/bottom_navigation_panel.hpp"
 #include "devtools/animation_runtime_refresh.hpp"
+#include "devtools/frame_editor_resource_service.hpp"
 #include "devtools/room_box_payload_utils.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
@@ -12786,6 +12787,14 @@ void RoomEditor::sync_shared_footer_navigation() {
                 update_asset_editor_layout();
             }
         };
+        frame_nav.frame_editor_enabled = true;
+        frame_nav.on_delete_frames = [this]() { (void)delete_asset_info_preview_frames(); };
+        frame_nav.on_duplicate_frames = [this]() { (void)duplicate_asset_info_preview_frames(); };
+        frame_nav.on_reorder_frame = [this](int from_frame, int insertion_index) {
+            (void)reorder_asset_info_preview_frames(from_frame, insertion_index);
+        };
+        frame_nav.on_insert_frame = [this](int insertion_index) { (void)insert_asset_info_preview_frame(insertion_index); };
+        frame_nav.on_replace_frame = [this](int frame_index) { (void)replace_asset_info_preview_frame(frame_index); };
     } else if (asset_editor_subview_ == AssetEditorSubview::AnimationEditor) {
         frame_nav.visible = false;
         frame_nav.animation_label = "Animation Editor";
@@ -20915,6 +20924,313 @@ void RoomEditor::navigate_impassable_box_frame(int delta) {
     if (apply_impassable_box_animation_and_frame(impassable_box_edit_.animation_id, next_frame)) {
         sync_impassable_box_tools_panel();
     }
+}
+
+
+bool RoomEditor::delete_asset_info_preview_frames() {
+    if (asset_editor_subview_ != AssetEditorSubview::AssetInfo) {
+        return false;
+    }
+    Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+    if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
+        target = selected_assets_.front();
+    }
+    if (!is_asset_pointer_live(target) || !target || !target->info) {
+        return false;
+    }
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto info = target->info;
+    nlohmann::json payload = info->animation_payload(selection.resolved_animation_id);
+    devmode::frame_editor::FrameEditorResourceContext context;
+    context.asset_name = info->name;
+    context.asset_root = info->asset_dir_path();
+    context.asset_directory = context.asset_root;
+    context.animation_id = selection.resolved_animation_id;
+    context.animation_payload = &payload;
+    context.asset_info = info.get();
+    context.shared_asset_info = info;
+    context.delete_asset_cache_on_success = true;
+    context.invalidate_preview_cache = [this, info](const std::string& animation_id) {
+        if (stack_animation_preview_provider_) {
+            stack_animation_preview_provider_->invalidate(animation_id);
+        }
+        stack_animation_preview_revision_ = 0;
+        sync_stack_animation_list_preview_provider(info.get());
+    };
+    context.save_manifest = [this, info, &payload, animation_id = selection.resolved_animation_id]() {
+        if (!info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+        return persist_asset_manifest_from_info(info,
+                                                devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                                "Frame Resource Edit",
+                                                "room-frame-resource-edit",
+                                                true);
+    };
+    int selected_frame = 0;
+    auto anim_it = info->animations.find(selection.resolved_animation_id);
+    if (anim_it != info->animations.end() && anim_it->second.has_frames()) {
+        for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+            if (anim_it->second.primary_frame_at(i) == target->current_frame) {
+                selected_frame = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+    devmode::frame_editor::FrameEditorResourceService service(std::move(context));
+    auto result = service.delete_frames({selected_frame});
+    if (!result) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[FrameEditor] Delete frame failed: %s", result.message.c_str());
+        return false;
+    }
+    apply_asset_preview_animation_and_frame(target, selection.resolved_animation_id, std::min(selected_frame, result.frame_count - 1));
+    update_asset_editor_layout();
+    return true;
+}
+
+bool RoomEditor::duplicate_asset_info_preview_frames() {
+    if (asset_editor_subview_ != AssetEditorSubview::AssetInfo) {
+        return false;
+    }
+    Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+    if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
+        target = selected_assets_.front();
+    }
+    if (!is_asset_pointer_live(target) || !target || !target->info) {
+        return false;
+    }
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto info = target->info;
+    int selected_frame = 0;
+    auto anim_it = info->animations.find(selection.resolved_animation_id);
+    if (anim_it != info->animations.end() && anim_it->second.has_frames()) {
+        for (std::size_t i = 0; i < anim_it->second.frame_count(); ++i) {
+            if (anim_it->second.primary_frame_at(i) == target->current_frame) {
+                selected_frame = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+    nlohmann::json payload = info->animation_payload(selection.resolved_animation_id);
+    devmode::frame_editor::FrameEditorResourceContext context;
+    context.asset_name = info->name;
+    context.asset_root = info->asset_dir_path();
+    context.asset_directory = context.asset_root;
+    context.animation_id = selection.resolved_animation_id;
+    context.animation_payload = &payload;
+    context.asset_info = info.get();
+    context.shared_asset_info = info;
+    context.delete_asset_cache_on_success = true;
+    context.invalidate_preview_cache = [this, info](const std::string& animation_id) {
+        if (stack_animation_preview_provider_) {
+            stack_animation_preview_provider_->invalidate(animation_id);
+        }
+        stack_animation_preview_revision_ = 0;
+        sync_stack_animation_list_preview_provider(info.get());
+    };
+    context.save_manifest = [this, info, &payload, animation_id = selection.resolved_animation_id]() {
+        if (!info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+        return persist_asset_manifest_from_info(info,
+                                                devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                                "Frame Resource Edit",
+                                                "room-frame-resource-edit",
+                                                true);
+    };
+    devmode::frame_editor::FrameEditorResourceService service(std::move(context));
+    auto result = service.duplicate_frames({selected_frame});
+    if (!result) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[FrameEditor] Duplicate frame failed: %s", result.message.c_str());
+        return false;
+    }
+    apply_asset_preview_animation_and_frame(target, selection.resolved_animation_id, selected_frame + 1);
+    update_asset_editor_layout();
+    return true;
+}
+
+bool RoomEditor::reorder_asset_info_preview_frames(int from_frame, int insertion_index) {
+    if (asset_editor_subview_ != AssetEditorSubview::AssetInfo) {
+        return false;
+    }
+    Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+    if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
+        target = selected_assets_.front();
+    }
+    if (!is_asset_pointer_live(target) || !target || !target->info) {
+        return false;
+    }
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto info = target->info;
+    nlohmann::json payload = info->animation_payload(selection.resolved_animation_id);
+    devmode::frame_editor::FrameEditorResourceContext context;
+    context.asset_name = info->name;
+    context.asset_root = info->asset_dir_path();
+    context.asset_directory = context.asset_root;
+    context.animation_id = selection.resolved_animation_id;
+    context.animation_payload = &payload;
+    context.asset_info = info.get();
+    context.shared_asset_info = info;
+    context.delete_asset_cache_on_success = true;
+    context.invalidate_preview_cache = [this, info](const std::string& animation_id) {
+        if (stack_animation_preview_provider_) {
+            stack_animation_preview_provider_->invalidate(animation_id);
+        }
+        stack_animation_preview_revision_ = 0;
+        sync_stack_animation_list_preview_provider(info.get());
+    };
+    context.save_manifest = [this, info, &payload, animation_id = selection.resolved_animation_id]() {
+        if (!info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+        return persist_asset_manifest_from_info(info,
+                                                devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                                "Frame Resource Edit",
+                                                "room-frame-resource-edit",
+                                                true);
+    };
+    devmode::frame_editor::FrameEditorResourceService service(std::move(context));
+    auto result = service.reorder_frames({from_frame}, insertion_index);
+    if (!result) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[FrameEditor] Reorder frame failed: %s", result.message.c_str());
+        return false;
+    }
+    apply_asset_preview_animation_and_frame(target, selection.resolved_animation_id, std::clamp(insertion_index, 0, result.frame_count - 1));
+    update_asset_editor_layout();
+    return true;
+}
+
+bool RoomEditor::insert_asset_info_preview_frame(int insertion_index) {
+    const auto path = devmode::dialogs::open_file(
+        parent_window_,
+        "Insert Animation Frame",
+        {},
+        {{"Images", "png;jpg;jpeg;bmp;tga;webp"}});
+    if (!path) {
+        return false;
+    }
+    if (asset_editor_subview_ != AssetEditorSubview::AssetInfo) {
+        return false;
+    }
+    Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+    if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
+        target = selected_assets_.front();
+    }
+    if (!is_asset_pointer_live(target) || !target || !target->info) {
+        return false;
+    }
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto info = target->info;
+    nlohmann::json payload = info->animation_payload(selection.resolved_animation_id);
+    devmode::frame_editor::FrameEditorResourceContext context;
+    context.asset_name = info->name;
+    context.asset_root = info->asset_dir_path();
+    context.asset_directory = context.asset_root;
+    context.animation_id = selection.resolved_animation_id;
+    context.animation_payload = &payload;
+    context.asset_info = info.get();
+    context.shared_asset_info = info;
+    context.delete_asset_cache_on_success = true;
+    context.invalidate_preview_cache = [this, info](const std::string& animation_id) {
+        if (stack_animation_preview_provider_) {
+            stack_animation_preview_provider_->invalidate(animation_id);
+        }
+        stack_animation_preview_revision_ = 0;
+        sync_stack_animation_list_preview_provider(info.get());
+    };
+    context.save_manifest = [this, info, &payload, animation_id = selection.resolved_animation_id]() {
+        if (!info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+        return persist_asset_manifest_from_info(info,
+                                                devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                                "Frame Resource Edit",
+                                                "room-frame-resource-edit",
+                                                true);
+    };
+    devmode::frame_editor::FrameEditorResourceService service(std::move(context));
+    auto result = service.insert_frame(insertion_index, *path);
+    if (!result) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[FrameEditor] Insert frame failed: %s", result.message.c_str());
+        return false;
+    }
+    apply_asset_preview_animation_and_frame(target, selection.resolved_animation_id, std::clamp(insertion_index, 0, result.frame_count - 1));
+    update_asset_editor_layout();
+    return true;
+}
+
+bool RoomEditor::replace_asset_info_preview_frame(int frame_index) {
+    const auto path = devmode::dialogs::open_file(
+        parent_window_,
+        "Replace Animation Frame",
+        {},
+        {{"Images", "png;jpg;jpeg;bmp;tga;webp"}});
+    if (!path) {
+        return false;
+    }
+    if (asset_editor_subview_ != AssetEditorSubview::AssetInfo) {
+        return false;
+    }
+    Asset* target = info_ui_ ? info_ui_->get_target_asset() : nullptr;
+    if ((!target || !is_asset_pointer_live(target)) && selected_assets_.size() == 1) {
+        target = selected_assets_.front();
+    }
+    if (!is_asset_pointer_live(target) || !target || !target->info) {
+        return false;
+    }
+    const auto selection = resolve_file_sourced_animation_selection_for_target(target, target->current_animation);
+    if (!selection.has_selection()) {
+        return false;
+    }
+    auto info = target->info;
+    nlohmann::json payload = info->animation_payload(selection.resolved_animation_id);
+    devmode::frame_editor::FrameEditorResourceContext context;
+    context.asset_name = info->name;
+    context.asset_root = info->asset_dir_path();
+    context.asset_directory = context.asset_root;
+    context.animation_id = selection.resolved_animation_id;
+    context.animation_payload = &payload;
+    context.asset_info = info.get();
+    context.shared_asset_info = info;
+    context.delete_asset_cache_on_success = true;
+    context.invalidate_preview_cache = [this, info](const std::string& animation_id) {
+        if (stack_animation_preview_provider_) {
+            stack_animation_preview_provider_->invalidate(animation_id);
+        }
+        stack_animation_preview_revision_ = 0;
+        sync_stack_animation_list_preview_provider(info.get());
+    };
+    context.save_manifest = [this, info, &payload, animation_id = selection.resolved_animation_id]() {
+        if (!info->upsert_animation(animation_id, payload)) {
+            return false;
+        }
+        return persist_asset_manifest_from_info(info,
+                                                devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                                "Frame Resource Edit",
+                                                "room-frame-resource-edit",
+                                                true);
+    };
+    devmode::frame_editor::FrameEditorResourceService service(std::move(context));
+    auto result = service.replace_frame(frame_index, *path);
+    if (!result) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[FrameEditor] Replace frame failed: %s", result.message.c_str());
+        return false;
+    }
+    apply_asset_preview_animation_and_frame(target, selection.resolved_animation_id, frame_index);
+    update_asset_editor_layout();
+    return true;
 }
 
 bool RoomEditor::apply_asset_preview_animation_and_frame(Asset* target,

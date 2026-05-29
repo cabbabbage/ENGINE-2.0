@@ -1,5 +1,8 @@
 #include "frame_editor_resource_service.hpp"
 
+#include "assets/asset/asset_info.hpp"
+#include "devtools/animation_frame_import_service.hpp"
+
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
@@ -525,10 +528,7 @@ FrameEditorResourceResult FrameEditorResourceService::apply_plan(
     }
 
     cleanup_temps();
-    const std::string asset_name = context_.asset_name.empty() ? std::string("<unknown>") : context_.asset_name;
-    SDL_Log("[FrameEditor] Raw frame resources changed for %s/%s; cache rebuild required next run.",
-            asset_name.c_str(),
-            context_.animation_id.c_str());
+    notify_successful_raw_resource_change();
 
     FrameEditorResourceResult result;
     result.success = true;
@@ -536,6 +536,55 @@ FrameEditorResourceResult FrameEditorResourceService::apply_plan(
     result.raw_folder = resolved.raw_folder;
     result.message = "Raw frame resources updated.";
     return result;
+}
+
+void FrameEditorResourceService::notify_successful_raw_resource_change() const {
+    AssetInfo* info = context_.asset_info ? context_.asset_info : context_.shared_asset_info.get();
+
+    if (info) {
+        auto animation_it = info->animations.find(context_.animation_id);
+        if (animation_it != info->animations.end()) {
+            animation_it->second.clear_texture_cache();
+        }
+
+        if (!info->reload_animations_from_disk()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[FrameEditor] Failed to reload in-memory animation metadata for %s/%s after raw frame edit.",
+                        info->name.c_str(),
+                        context_.animation_id.c_str());
+        }
+
+        animation_it = info->animations.find(context_.animation_id);
+        if (animation_it != info->animations.end()) {
+            animation_it->second.clear_texture_cache();
+        }
+
+        info->mark_texture_rebuild_on_close(context_.animation_id, AssetInfo::kTextureVariantAll);
+        info->mark_bundle_refresh_on_close();
+    }
+
+    if (context_.invalidate_preview_cache) {
+        context_.invalidate_preview_cache(context_.animation_id);
+    }
+
+    const std::string asset_name = !context_.asset_name.empty()
+        ? context_.asset_name
+        : (info && !info->name.empty() ? info->name : std::string{"<unknown>"});
+
+    if (context_.delete_asset_cache_on_success) {
+        std::string cache_error;
+        if (!devmode::animation_import::delete_asset_cache(asset_name, cache_error) && !cache_error.empty()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[FrameEditor] Raw frame resources changed for %s/%s, but cache cleanup failed: %s",
+                        asset_name.c_str(),
+                        context_.animation_id.c_str(),
+                        cache_error.c_str());
+        }
+    }
+
+    SDL_Log("[FrameEditor] Raw frame resources changed for %s/%s; cache rebuild required next run.",
+            asset_name.c_str(),
+            context_.animation_id.c_str());
 }
 
 FrameEditorResourceResult FrameEditorResourceService::delete_frames(const std::vector<int>& selected_indices) {

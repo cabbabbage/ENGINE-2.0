@@ -613,6 +613,11 @@ private:
     bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_impassable_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_asset_preview_animation_and_frame(Asset* target, const std::string& animation_id, int frame_index);
+    bool delete_asset_info_preview_frames();
+    bool duplicate_asset_info_preview_frames();
+    bool reorder_asset_info_preview_frames(int from_frame, int insertion_index);
+    bool insert_asset_info_preview_frame(int insertion_index);
+    bool replace_asset_info_preview_frame(int frame_index);
     std::vector<std::string> anchor_mode_animation_names() const;
     std::vector<std::string> oval_mode_animation_names() const;
     std::vector<std::string> movement_mode_animation_names() const;

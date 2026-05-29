@@ -345,6 +345,49 @@ bool is_supported_dust_image(const std::filesystem::path& path) {
            ext == ".jpeg";
 }
 
+SDL_FPoint resolve_packets_bottom_center(const std::vector<GpuSpriteDrawPacket>& packets,
+                                         std::uint32_t target_width,
+                                         std::uint32_t target_height,
+                                         bool& out_valid) {
+    out_valid = false;
+
+    const float width = static_cast<float>(std::max<std::uint32_t>(1u, target_width));
+    const float height = static_cast<float>(std::max<std::uint32_t>(1u, target_height));
+    float min_x = width;
+    float max_x = 0.0f;
+    float max_y = 0.0f;
+
+    for (const GpuSpriteDrawPacket& packet : packets) {
+        const int vertex_count = std::clamp(packet.vertex_count, 0, static_cast<int>(packet.vertices.size()));
+        if (vertex_count <= 0) {
+            continue;
+        }
+
+        for (int i = 0; i < vertex_count; ++i) {
+            const GpuSpriteVertex& vertex = packet.vertices[static_cast<std::size_t>(i)];
+            if (!std::isfinite(vertex.clip_x) || !std::isfinite(vertex.clip_y)) {
+                continue;
+            }
+
+            const float x = (vertex.clip_x + 1.0f) * 0.5f * width;
+            const float y = (1.0f - vertex.clip_y) * 0.5f * height;
+            min_x = std::min(min_x, x);
+            max_x = std::max(max_x, x);
+            max_y = std::max(max_y, y);
+            out_valid = true;
+        }
+    }
+
+    if (!out_valid) {
+        return SDL_FPoint{width * 0.5f, height};
+    }
+
+    return SDL_FPoint{
+        std::clamp((min_x + max_x) * 0.5f, 0.0f, width),
+        std::clamp(max_y, 0.0f, height)
+    };
+}
+
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
                             std::uint32_t target_width,
                             std::uint32_t target_height,
@@ -1736,6 +1779,10 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
                 layer.depth_layer,
                 out_data.focus_depth_layer,
                 max_distance_from_focus);
+            layer.dust_bottom_center = resolve_packets_bottom_center(layer.packets,
+                                                                     out_data.target_width,
+                                                                     out_data.target_height,
+                                                                     layer.has_dust_bottom_center);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }
@@ -2334,10 +2381,18 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                      out_error)) {
                 return false;
             }
-            dof_layers.push_back(dof_blur_chain::LayerTexture{
-                frame_to_render->focus_depth_layer + 1,
-                1.0f,
-                xy_sprite_target_});
+            bool dust_anchor_valid = false;
+            const SDL_FPoint dust_anchor = resolve_packets_bottom_center(frame_to_render->xy_sprite_draws,
+                                                                         frame_to_render->target_width,
+                                                                         frame_to_render->target_height,
+                                                                         dust_anchor_valid);
+            dof_blur_chain::LayerTexture flattened_layer{};
+            flattened_layer.depth_layer = frame_to_render->focus_depth_layer + 1;
+            flattened_layer.blur_strength = 1.0f;
+            flattened_layer.texture = xy_sprite_target_;
+            flattened_layer.dust_bottom_center = dust_anchor;
+            flattened_layer.has_dust_bottom_center = dust_anchor_valid;
+            dof_layers.push_back(flattened_layer);
             used_flattened_xy_dof_layer = true;
             return true;
         };
@@ -2361,7 +2416,13 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                     render_diagnostics::end_frame();
                     return false;
                 }
-                dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer.blur_strength_px, layer_target});
+                dof_blur_chain::LayerTexture dof_layer{};
+                dof_layer.depth_layer = layer.depth_layer;
+                dof_layer.blur_strength = layer.blur_strength_px;
+                dof_layer.texture = layer_target;
+                dof_layer.dust_bottom_center = layer.dust_bottom_center;
+                dof_layer.has_dust_bottom_center = layer.has_dust_bottom_center;
+                dof_layers.push_back(dof_layer);
             }
         } else if (!rebuild_flattened_xy_dof_layer()) {
             render_diagnostics::end_frame();
@@ -2379,7 +2440,6 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         (void)ensure_atmospheric_dust_textures();
         dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
 
-        const SDL_FPoint dust_world_center = camera.get_view_center_f();
         dof_blur_chain::DustAnchor dust_anchor{};
         dust_anchor.world_x = camera.get_view_center_f().x;
         dust_anchor.world_z = static_cast<float>(camera.current_anchor_world_z());
@@ -2418,17 +2478,17 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             (void)ensure_atmospheric_dust_textures();
             dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
 
-    resolved_dof_result =
-        dof_blur_chain_.compose(dof_layers,
-                                floor_target_,
-                                camera_settings.depth_of_field_enabled,
-                                camera_settings.blur_px,
-                                camera_settings.radial_blur_px,
-                                optical_center,
-                                frame_to_render->focus_depth_layer,
-                                camera_zoom_percent,
-                                now_seconds,
-                                dust_anchor);
+            resolved_dof_result =
+                dof_blur_chain_.compose(dof_layers,
+                                        floor_target_,
+                                        camera_settings.depth_of_field_enabled,
+                                        camera_settings.blur_px,
+                                        camera_settings.radial_blur_px,
+                                        optical_center,
+                                        frame_to_render->focus_depth_layer,
+                                        camera_zoom_percent,
+                                        now_seconds,
+                                        dust_anchor);
         }
 
         if (resolved_dof_result.valid) {

@@ -12,7 +12,7 @@ namespace {
 
 constexpr float kEffectEpsilon = 1.0e-4f;
 
-constexpr float kZoomBlurScaleMultiplier = 2.65f;
+constexpr float kZoomBlurScaleMultiplier = 0.80f;
 
 struct TextureStateSnapshot {
     SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
@@ -43,6 +43,28 @@ float lerp_float(float a, float b, float t) {
     return a + (b - a) * safe_unit(t);
 }
 
+int ping_pong_frame_index(int frame_index, int frame_count) {
+    if (frame_count <= 1) {
+        return 0;
+    }
+
+    const int cycle = frame_count * 2 - 2;
+    if (cycle <= 0) {
+        return 0;
+    }
+
+    int wrapped = frame_index % cycle;
+    if (wrapped < 0) {
+        wrapped += cycle;
+    }
+
+    if (wrapped >= frame_count) {
+        wrapped = cycle - wrapped;
+    }
+
+    return std::clamp(wrapped, 0, frame_count - 1);
+}
+
 float depth_curve(int layer_distance, float normalized_distance) {
     if (layer_distance <= 0) {
         return 0.0f;
@@ -63,13 +85,6 @@ float dust_depth_curve(float world_distance, float max_world_distance) {
 
     const float t = std::clamp(world_distance / max_world_distance, 0.0f, 1.0f);
     return std::pow(smoothstep01(t), dof_blur_chain::atmospheric_dust_tuning::kDepthRampPower);
-}
-
-SDL_FPoint screen_center_for_target(int width, int height) {
-    return SDL_FPoint{
-        static_cast<float>(std::max(1, width)) * 0.5f,
-        static_cast<float>(std::max(1, height)) * 0.5f
-    };
 }
 
 TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
@@ -94,15 +109,6 @@ void restore_texture_state(SDL_Texture* texture, const TextureStateSnapshot& sta
     SDL_SetTextureBlendMode(texture, state.blend_mode);
     SDL_SetTextureAlphaMod(texture, state.alpha_mod);
     SDL_SetTextureColorMod(texture, state.color_mod_r, state.color_mod_g, state.color_mod_b);
-}
-
-SDL_BlendMode make_sum_blend_mode() {
-    return SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_SRC_ALPHA,
-                                      SDL_BLENDFACTOR_ONE,
-                                      SDL_BLENDOPERATION_ADD,
-                                      SDL_BLENDFACTOR_ONE,
-                                      SDL_BLENDFACTOR_ONE,
-                                      SDL_BLENDOPERATION_ADD);
 }
 
 void clear_texture_target(SDL_Renderer* renderer, SDL_Texture* target) {
@@ -215,6 +221,44 @@ void draw_weighted_scaled_sample(SDL_Renderer* renderer,
     (void)render_diagnostics::render_texture(renderer, texture, &src_rect, &dst_rect);
 }
 
+SDL_FPoint resolve_layer_dust_anchor(const dof_blur_chain::LayerTexture& layer, int width, int height) {
+    const float fallback_x = static_cast<float>(std::max(1, width)) * 0.5f;
+    const float fallback_y = static_cast<float>(std::max(1, height));
+
+    if (!layer.has_dust_bottom_center ||
+        !std::isfinite(layer.dust_bottom_center.x) ||
+        !std::isfinite(layer.dust_bottom_center.y)) {
+        return SDL_FPoint{fallback_x, fallback_y};
+    }
+
+    return SDL_FPoint{
+        std::clamp(layer.dust_bottom_center.x, 0.0f, static_cast<float>(std::max(1, width))),
+        std::clamp(layer.dust_bottom_center.y, 0.0f, static_cast<float>(std::max(1, height)))
+    };
+}
+
+SDL_BlendMode accumulation_blend_mode() {
+    static const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_SRC_ALPHA,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+    return mode;
+}
+
+void set_accumulation_blend_mode(SDL_Texture* texture) {
+    if (!texture) {
+        return;
+    }
+
+    if (!SDL_SetTextureBlendMode(texture, accumulation_blend_mode())) {
+        // Preserve behavior on renderers without custom blend mode support.
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    }
+}
+
 bool prepare_damage_pulse_texture(SDL_Renderer* renderer,
                                   SDL_Texture* src,
                                   SDL_Texture* dst,
@@ -242,7 +286,7 @@ bool prepare_damage_pulse_texture(SDL_Renderer* renderer,
     clear_texture_target(renderer, dst);
     render_diagnostics::set_render_target(renderer, dst);
 
-    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    set_accumulation_blend_mode(src);
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
     const float phase_sign = std::sin(phase) >= 0.0f ? 1.0f : -1.0f;
@@ -353,6 +397,51 @@ float resolve_dust_tile_scale(const dof_blur_chain::LayerTexture& layer,
                       depth_t);
 }
 
+float camera_zoom_to_screen_scale(float camera_zoom_percent) {
+    if (!std::isfinite(camera_zoom_percent)) {
+        return 1.0f;
+    }
+
+    return 1.0f + std::clamp(camera_zoom_percent, 0.0f, 100.0f) * 0.01f;
+}
+
+float layer_parallax_factor(int depth_layer, int focus_depth_layer) {
+    const int distance = std::abs(depth_layer - focus_depth_layer);
+    const float distance_t = std::clamp(static_cast<float>(distance) / 8.0f, 0.0f, 1.0f);
+    if (depth_layer > focus_depth_layer) {
+        // Background layers move less relative to camera pan.
+        return lerp_float(0.85f, 0.35f, distance_t);
+    }
+    if (depth_layer < focus_depth_layer) {
+        // Foreground layers move more relative to camera pan.
+        return lerp_float(1.10f, 1.75f, distance_t);
+    }
+    return 1.0f;
+}
+
+SDL_FPoint layer_world_scroll_px(const dof_blur_chain::DustAnchor& dust_anchor,
+                                 int depth_layer,
+                                 int focus_depth_layer,
+                                 float tile_w,
+                                 float tile_h) {
+    if (tile_w <= 0.0f || tile_h <= 0.0f) {
+        return SDL_FPoint{0.0f, 0.0f};
+    }
+
+    const float parallax = layer_parallax_factor(depth_layer, focus_depth_layer);
+    const float units_per_layer = std::max(0.001f, dust_anchor.world_units_per_depth_layer);
+
+    // Convert world motion to tile-space phase so the dust field stays attached to layer motion.
+    const float world_to_tile_x = 1.0f / units_per_layer;
+    const float world_to_tile_y = 0.6f / units_per_layer;
+    const float tile_phase_x = dust_anchor.world_x * world_to_tile_x * parallax;
+    const float tile_phase_y = dust_anchor.world_z * world_to_tile_y * parallax;
+
+    const float scroll_x = std::fmod(tile_phase_x * tile_w, tile_w);
+    const float scroll_y = std::fmod(tile_phase_y * tile_h, tile_h);
+    return SDL_FPoint{scroll_x, scroll_y};
+}
+
 bool draw_bottom_center_anchored_dust_tiles(SDL_Renderer* renderer,
                                             const std::vector<SDL_Texture*>& dust_frames,
                                             int width,
@@ -360,6 +449,8 @@ bool draw_bottom_center_anchored_dust_tiles(SDL_Renderer* renderer,
                                             int depth_layer,
                                             float tile_w,
                                             float tile_h,
+                                            SDL_FPoint anchor,
+                                            SDL_FPoint world_scroll_px,
                                             float time_seconds) {
     if (!renderer || dust_frames.empty() || width <= 0 || height <= 0 || tile_w <= 0.0f || tile_h <= 0.0f) {
         return true;
@@ -370,11 +461,11 @@ bool draw_bottom_center_anchored_dust_tiles(SDL_Renderer* renderer,
         return true;
     }
 
-    // The dust field is locked to the bottom-center of the layer render target.
+    // The dust field is locked to the bottom-center of the layer content.
     // Tile (0, 0) has its bottom edge on this anchor. When depth changes the tile size,
     // the field expands/contracts from the layer floor edge instead of swimming around screen center.
-    const float anchor_x = static_cast<float>(width) * 0.5f;
-    const float anchor_y = static_cast<float>(height);
+    const float anchor_x = std::clamp(anchor.x + world_scroll_px.x, 0.0f, static_cast<float>(width));
+    const float anchor_y = std::clamp(anchor.y + world_scroll_px.y, 0.0f, static_cast<float>(height));
 
     const int tiles_left = static_cast<int>(std::ceil(anchor_x / tile_w)) + 2;
     const int tiles_right = static_cast<int>(std::ceil((static_cast<float>(width) - anchor_x) / tile_w)) + 2;
@@ -391,7 +482,7 @@ bool draw_bottom_center_anchored_dust_tiles(SDL_Renderer* renderer,
         for (int gx = -tiles_left; gx <= tiles_right; ++gx) {
             const std::uint32_t h = hash_tile(depth_layer, gx, gy, 211);
             const int frame_offset = static_cast<int>(h % static_cast<std::uint32_t>(frame_count));
-            const int frame_index = (base_frame + frame_offset) % frame_count;
+            const int frame_index = ping_pong_frame_index(base_frame + frame_offset, frame_count);
 
             SDL_Texture* dust = dust_frames[static_cast<std::size_t>(frame_index)];
             if (!dust) {
@@ -444,6 +535,7 @@ bool add_layer_atmospheric_dust(SDL_Renderer* renderer,
                                 int focus_depth_layer,
                                 float max_layer_world_distance,
                                 float time_seconds,
+                                float camera_zoom_percent,
                                 bool foreground_layer,
                                 bool background_seed,
                                 dof_blur_chain::DustAnchor dust_anchor) {
@@ -491,7 +583,8 @@ bool add_layer_atmospheric_dust(SDL_Renderer* renderer,
                                                      focus_depth_layer,
                                                      depth_t,
                                                      foreground_layer,
-                                                     background_seed);
+                                                     background_seed) *
+                             camera_zoom_to_screen_scale(camera_zoom_percent);
 
     const float tile_w = std::max(1.0f, source_w * std::max(0.001f, tile_scale));
     const float tile_h = std::max(1.0f, source_h * std::max(0.001f, tile_scale));
@@ -506,6 +599,15 @@ bool add_layer_atmospheric_dust(SDL_Renderer* renderer,
                                                     layer.depth_layer,
                                                     tile_w,
                                                     tile_h,
+                                                    background_seed
+                                                        ? SDL_FPoint{static_cast<float>(width) * 0.5f,
+                                                                     static_cast<float>(height)}
+                                                        : resolve_layer_dust_anchor(layer, width, height),
+                                                    layer_world_scroll_px(dust_anchor,
+                                                                          layer.depth_layer,
+                                                                          focus_depth_layer,
+                                                                          tile_w,
+                                                                          tile_h),
                                                     time_seconds);
 
     render_diagnostics::set_render_target(renderer, previous_target);
@@ -549,8 +651,7 @@ bool apply_edge_lens_warp(SDL_Renderer* renderer,
                           SDL_Texture* dst,
                           int draw_w,
                           int draw_h,
-                          float warp_strength01,
-                          SDL_BlendMode sum_blend) {
+                          float warp_strength01) {
     if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
         return false;
     }
@@ -566,7 +667,7 @@ bool apply_edge_lens_warp(SDL_Renderer* renderer,
     clear_texture_target(renderer, dst);
     render_diagnostics::set_render_target(renderer, dst);
 
-    SDL_SetTextureBlendMode(src, sum_blend);
+    set_accumulation_blend_mode(src);
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
     const float w = static_cast<float>(draw_w);
@@ -590,28 +691,19 @@ bool apply_edge_lens_warp(SDL_Renderer* renderer,
     const float max_push = max_dim * dof_blur_chain::edge_lens_warp_tuning::kMaxEdgePushRatio * strength;
     const float max_scale = dof_blur_chain::edge_lens_warp_tuning::kMaxScaleDelta * strength;
 
-    float total_weight = dof_blur_chain::edge_lens_warp_tuning::kBaseWeight;
-    for (int i = 0; i < samples; ++i) {
-        const float t = static_cast<float>(i + 1) / static_cast<float>(samples);
-        const float falloff = (1.0f - t * 0.72f) * (1.0f - t * 0.72f);
-        total_weight += falloff * dof_blur_chain::edge_lens_warp_tuning::kSideWeight * 4.0f;
-        total_weight += falloff * dof_blur_chain::edge_lens_warp_tuning::kCornerWeight * 4.0f;
-    }
-    total_weight = std::max(total_weight, 1.0e-6f);
-
     const SDL_FRect full_src{0.0f, 0.0f, w, h};
     const SDL_FRect full_dst{0.0f, 0.0f, w, h};
     bool ok = draw_weighted_texture_region(renderer,
                                            src,
                                            full_src,
                                            full_dst,
-                                           dof_blur_chain::edge_lens_warp_tuning::kBaseWeight / total_weight);
+                                           dof_blur_chain::edge_lens_warp_tuning::kBaseWeight);
 
     auto draw_strip = [&](const SDL_FRect& source, const SDL_FRect& dest, float raw_weight) {
         if (!ok) {
             return;
         }
-        ok = draw_weighted_texture_region(renderer, src, source, dest, raw_weight / total_weight);
+        ok = draw_weighted_texture_region(renderer, src, source, dest, raw_weight);
     };
 
     for (int i = 0; i < samples && ok; ++i) {
@@ -621,10 +713,10 @@ bool apply_edge_lens_warp(SDL_Renderer* renderer,
         const float scale = max_scale * curved;
         const float side_weight =
             ((1.0f - t * 0.72f) * (1.0f - t * 0.72f)) *
-            dof_blur_chain::edge_lens_warp_tuning::kSideWeight;
+            dof_blur_chain::edge_lens_warp_tuning::kSideWeight * 0.18f;
         const float corner_weight =
             ((1.0f - t * 0.72f) * (1.0f - t * 0.72f)) *
-            dof_blur_chain::edge_lens_warp_tuning::kCornerWeight;
+            dof_blur_chain::edge_lens_warp_tuning::kCornerWeight * 0.14f;
 
         const float side_push_x = push;
         const float side_push_y = push * 0.72f;
@@ -685,7 +777,7 @@ bool apply_radial_zoom_lens_blur(SDL_Renderer* renderer,
                                  int draw_w,
                                  int draw_h,
                                  float radius_px,
-                                 SDL_BlendMode sum_blend) {
+                                 SDL_FPoint optical_center) {
     if (!renderer || !src || !dst || draw_w <= 0 || draw_h <= 0 || src == dst) {
         return false;
     }
@@ -700,10 +792,13 @@ bool apply_radial_zoom_lens_blur(SDL_Renderer* renderer,
     clear_texture_target(renderer, dst);
     render_diagnostics::set_render_target(renderer, dst);
 
-    SDL_SetTextureBlendMode(src, sum_blend);
+    set_accumulation_blend_mode(src);
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
-    const SDL_FPoint center = screen_center_for_target(draw_w, draw_h);
+    const SDL_FPoint center{
+        std::clamp(optical_center.x, 0.0f, static_cast<float>(draw_w)),
+        std::clamp(optical_center.y, 0.0f, static_cast<float>(draw_h))
+    };
     const float max_dim = static_cast<float>(std::max(draw_w, draw_h));
     const float normalized_radius = std::clamp(radius_px / std::max(1.0f, max_dim), 0.0f, 1.0f);
     const int zoom_count = zoom_blur_sample_count(radius_px);
@@ -711,7 +806,8 @@ bool apply_radial_zoom_lens_blur(SDL_Renderer* renderer,
         std::min(dof_blur_chain::radial_blur_tuning::kMaxScaleDelta,
                  normalized_radius * kZoomBlurScaleMultiplier);
 
-    float total_raw_weight = 1.0f;
+    constexpr float kCenterSampleWeight = 7.0f;
+    float total_raw_weight = kCenterSampleWeight;
     std::array<float, dof_blur_chain::radial_blur_tuning::kMaxSamples> zoom_weights{};
     for (int i = 0; i < zoom_count; ++i) {
         const float t = static_cast<float>(i + 1) / static_cast<float>(std::max(1, zoom_count));
@@ -726,7 +822,13 @@ bool apply_radial_zoom_lens_blur(SDL_Renderer* renderer,
         return false;
     }
 
-    draw_weighted_scaled_sample(renderer, src, draw_w, draw_h, center, 1.0f, 1.0f / total_raw_weight);
+    draw_weighted_scaled_sample(renderer,
+                                src,
+                                draw_w,
+                                draw_h,
+                                center,
+                                1.0f,
+                                kCenterSampleWeight / total_raw_weight);
 
     for (int i = 0; i < zoom_count; ++i) {
         const float t = static_cast<float>(i + 1) / static_cast<float>(std::max(1, zoom_count));
@@ -755,6 +857,7 @@ bool apply_edge_warp_then_radial_zoom_blur(SDL_Renderer* renderer,
                                            int target_w,
                                            int target_h,
                                            float blur_radius_px,
+                                           SDL_FPoint optical_center,
                                            float quality_scale) {
     if (!renderer || !src || !dst || !scratch || target_w <= 0 || target_h <= 0 ||
         scratch == src || scratch == dst) {
@@ -766,18 +869,6 @@ bool apply_edge_warp_then_radial_zoom_blur(SDL_Renderer* renderer,
     const TextureStateSnapshot scratch_state = capture_texture_state(scratch);
     const TextureStateSnapshot dst_state = capture_texture_state(dst);
 
-    const SDL_BlendMode sum_blend = make_sum_blend_mode();
-    if (sum_blend == SDL_BLENDMODE_INVALID) {
-        const bool copied = copy_texture_region(renderer, src, dst, nullptr, nullptr);
-
-        restore_texture_state(src, src_state);
-        restore_texture_state(scratch, scratch_state);
-        restore_texture_state(dst, dst_state);
-        render_diagnostics::set_render_target(renderer, previous_target);
-
-        return copied;
-    }
-
     const float clamped_quality =
         std::clamp(quality_scale, dof_blur_chain::radial_blur_tuning::kMinProcessQualityScale, 1.0f);
 
@@ -788,6 +879,14 @@ bool apply_edge_warp_then_radial_zoom_blur(SDL_Renderer* renderer,
 
     const bool reduced_resolution = (process_w != target_w) || (process_h != target_h);
     const float process_radius = std::max(0.0f, blur_radius_px) * clamped_quality;
+    const SDL_FPoint process_optical_center{
+        std::clamp(optical_center.x * (static_cast<float>(process_w) / static_cast<float>(target_w)),
+                   0.0f,
+                   static_cast<float>(process_w)),
+        std::clamp(optical_center.y * (static_cast<float>(process_h) / static_cast<float>(target_h)),
+                   0.0f,
+                   static_cast<float>(process_h))
+    };
 
     if (process_radius <= kEffectEpsilon) {
         const bool copied = copy_texture_region(renderer, src, dst, nullptr, nullptr);
@@ -825,7 +924,7 @@ bool apply_edge_warp_then_radial_zoom_blur(SDL_Renderer* renderer,
     const float warp_strength = std::clamp(process_radius / std::max(1.0f, max_dim * 0.10f), 0.0f, 1.0f);
 
     SDL_Texture* edge_warped = (current == scratch) ? dst : scratch;
-    if (!apply_edge_lens_warp(renderer, current, edge_warped, process_w, process_h, warp_strength, sum_blend)) {
+    if (!apply_edge_lens_warp(renderer, current, edge_warped, process_w, process_h, warp_strength)) {
         restore_texture_state(src, src_state);
         restore_texture_state(scratch, scratch_state);
         restore_texture_state(dst, dst_state);
@@ -840,7 +939,7 @@ bool apply_edge_warp_then_radial_zoom_blur(SDL_Renderer* renderer,
                                      process_w,
                                      process_h,
                                      process_radius,
-                                     sum_blend)) {
+                                     process_optical_center)) {
         restore_texture_state(src, src_state);
         restore_texture_state(scratch, scratch_state);
         restore_texture_state(dst, dst_state);
@@ -1059,7 +1158,7 @@ bool Renderer::blur_step(SDL_Texture* src,
                          SDL_Texture* dst,
                          SDL_Texture* blur_work,
                          float blur_px,
-                         SDL_FPoint /*optical_center*/,
+                         SDL_FPoint optical_center,
                          float radial_blur_px,
                          float quality_scale) const {
     if (!src || !dst || !blur_work) {
@@ -1078,6 +1177,7 @@ bool Renderer::blur_step(SDL_Texture* src,
                                        width_,
                                        height_,
                                        blur_radius,
+                                       optical_center,
                                        quality_scale);
 }
 
@@ -1091,9 +1191,6 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                   float camera_zoom_percent,
                                   float time_seconds,
                                   DustAnchor dust_anchor) {
-    (void)optical_center;
-    (void)camera_zoom_percent;
-
     CompositeResult result{};
 
     if (!renderer_ || layers.empty()) {
@@ -1153,7 +1250,9 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
     std::sort(scratch_foreground_layers_.begin(),
               scratch_foreground_layers_.end(),
               [](const LayerTexture& a, const LayerTexture& b) {
-                  return a.depth_layer < b.depth_layer;
+                  // Foreground layers must composite from farther-to-nearer (relative to camera)
+                  // so the closest layer ends up on top.
+                  return a.depth_layer > b.depth_layer;
               });
 
     const float inv_max_layer_distance =
@@ -1211,6 +1310,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                         focus_depth_layer,
                                         std::max(1.0f, max_layer_world_distance),
                                         time_seconds,
+                                        camera_zoom_percent,
                                         foreground_layer,
                                         background_seed,
                                         dust_anchor)) {
@@ -1255,7 +1355,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                            background_mid_,
                            blur_work_,
                            seed_blur,
-                           screen_center_for_target(width_, height_),
+                           optical_center,
                            seed_radial,
                            background_quality)) {
                 return restore_and_return(CompositeResult{});
@@ -1309,7 +1409,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                foreground_layer_,
                                blur_work_,
                                layer_blur,
-                               screen_center_for_target(width_, height_),
+                               optical_center,
                                layer_radial,
                                layer_quality)) {
                     return false;
@@ -1370,7 +1470,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                            foreground_layer_,
                            blur_work_,
                            focus_blur,
-                           screen_center_for_target(width_, height_),
+                           optical_center,
                            focus_radial,
                            1.0f)) {
                 return restore_and_return(CompositeResult{});

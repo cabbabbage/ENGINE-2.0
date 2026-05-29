@@ -125,33 +125,23 @@ def color_from_tint(base: float, blue_tint: float, warm_tint: float) -> Color:
     )
 
 
-def wrap_positions(x: float, y: float, size: int, radius: float) -> list[tuple[float, float]]:
-    positions = [(x, y)]
+def clamp_particle_center_for_radius(
+    x: float, y: float, size: int, radius: float
+) -> tuple[float, float, float]:
+    if size <= 0:
+        return 0.0, 0.0, 0.0
 
-    near_left = x - radius < 0.0
-    near_right = x + radius >= size
-    near_top = y - radius < 0.0
-    near_bottom = y + radius >= size
+    max_radius = max(0.0, (float(size) - 1.0) * 0.5)
+    safe_radius = clamp(radius, 0.0, max_radius)
 
-    if near_left:
-        positions.append((x + size, y))
-    if near_right:
-        positions.append((x - size, y))
-    if near_top:
-        positions.append((x, y + size))
-    if near_bottom:
-        positions.append((x, y - size))
+    if safe_radius <= 0.0:
+        cx = clamp(x, 0.0, float(size - 1))
+        cy = clamp(y, 0.0, float(size - 1))
+        return cx, cy, 0.0
 
-    if near_left and near_top:
-        positions.append((x + size, y + size))
-    if near_left and near_bottom:
-        positions.append((x + size, y - size))
-    if near_right and near_top:
-        positions.append((x - size, y + size))
-    if near_right and near_bottom:
-        positions.append((x - size, y - size))
-
-    return positions
+    cx = clamp(x, safe_radius, float(size) - safe_radius)
+    cy = clamp(y, safe_radius, float(size) - safe_radius)
+    return cx, cy, safe_radius
 
 
 def draw_soft_particle(
@@ -171,17 +161,19 @@ def draw_soft_particle(
     if alpha_i <= 0:
         return
 
-    wrap_radius = radius + 8.0
-    for px, py in wrap_positions(x, y, size, wrap_radius):
-        draw.ellipse(
-            (
-                px - radius,
-                py - radius,
-                px + radius,
-                py + radius,
-            ),
-            fill=(color[0], color[1], color[2], alpha_i),
-        )
+    px, py, safe_radius = clamp_particle_center_for_radius(x, y, size, radius)
+    if safe_radius <= 0.0:
+        return
+
+    draw.ellipse(
+        (
+            px - safe_radius,
+            py - safe_radius,
+            px + safe_radius,
+            py + safe_radius,
+        ),
+        fill=(color[0], color[1], color[2], alpha_i),
+    )
 
 
 def draw_trail(
@@ -205,8 +197,8 @@ def draw_trail(
 
     for step in range(1, trail_steps + 1):
         t = step / float(trail_steps)
-        px = (x - dx * trail_length * t) % size
-        py = (y - dy * trail_length * t) % size
+        px = x - dx * trail_length * t
+        py = y - dy * trail_length * t
         local_alpha = alpha * (1.0 - t) * 0.70
         local_radius = max(0.20, radius * (1.0 - t * 0.35))
         draw_soft_particle(image, px, py, local_radius, color, local_alpha, size)
@@ -242,8 +234,8 @@ def particle_position_with_drift(
     angle = math.radians(flow_angle_deg)
     drift = drift_pixels_per_loop * phase01 * individual_speed
 
-    px = (x + math.cos(angle) * drift) % size
-    py = (y + math.sin(angle) * drift) % size
+    px = x + math.cos(angle) * drift
+    py = y + math.sin(angle) * drift
 
     return px, py
 
@@ -283,6 +275,9 @@ def make_tile(settings: DustSettings, phase01: float = 0.0) -> Image.Image:
         )
 
         radius = rng.uniform(min_radius, max_radius)
+        x, y, radius = clamp_particle_center_for_radius(x, y, size, radius)
+        if radius <= 0.0:
+            continue
 
         density = vertical_density_weight(y, size, settings.top_density, settings.bottom_density)
         center = center_fade_weight(x, y, size, settings.center_fade)
@@ -325,6 +320,9 @@ def make_tile(settings: DustSettings, phase01: float = 0.0) -> Image.Image:
         )
 
         radius = rng.uniform(glitter_min_radius, glitter_max_radius)
+        x, y, radius = clamp_particle_center_for_radius(x, y, size, radius)
+        if radius <= 0.0:
+            continue
 
         density = vertical_density_weight(y, size, settings.top_density, settings.bottom_density)
         center = center_fade_weight(x, y, size, settings.center_fade)
@@ -720,9 +718,23 @@ class DustGeneratorUI:
         if not self.animation_running:
             return
 
-        self.animation_phase = (self.animation_phase + 1.0 / 48.0) % 1.0
+        self.animation_phase += 1.0 / 48.0
+        if self.animation_phase >= 1.0:
+            self.animation_phase -= 1.0
         self.update_preview()
         self.root.after(90, self.animate_tick)
+
+    @staticmethod
+    def phase_for_frame(frame: int, frame_count: int) -> float:
+        frame_count = max(1, frame_count)
+        if frame_count <= 1:
+            return 0.0
+
+        cycle = frame_count * 2 - 2
+        step = frame % cycle
+        if step >= frame_count:
+            step = cycle - step
+        return step / float(frame_count - 1)
 
     def toggle_animation(self) -> None:
         self.animation_running = not self.animation_running
@@ -773,7 +785,7 @@ class DustGeneratorUI:
             folder.mkdir(parents=True, exist_ok=True)
 
             for frame in range(settings.frame_count):
-                phase01 = frame / float(settings.frame_count)
+                phase01 = self.phase_for_frame(frame, settings.frame_count)
                 tile = make_tile(settings, phase01)
                 tile.save(folder / f"frame_{frame:04d}.png")
 
@@ -803,7 +815,7 @@ class DustGeneratorUI:
                 folder.mkdir(parents=True, exist_ok=True)
 
                 for frame in range(variant.frame_count):
-                    phase01 = frame / float(variant.frame_count)
+                    phase01 = self.phase_for_frame(frame, variant.frame_count)
                     tile = make_tile(variant, phase01)
                     tile.save(folder / f"frame_{frame:04d}.png")
 

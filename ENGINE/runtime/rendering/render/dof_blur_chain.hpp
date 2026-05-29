@@ -26,12 +26,12 @@ inline constexpr float kMinProcessQualityScale = 0.20f;
 inline constexpr float kFarLayerQualityMultiplier = 0.48f;
 inline constexpr float kBackgroundSeedQualityMultiplier = 0.42f;
 
-inline constexpr int kMinSamples = 4;
-inline constexpr int kMaxSamples = 18;
-inline constexpr float kSamplesPerSqrtRadius = 1.75f;
+inline constexpr int kMinSamples = 3;
+inline constexpr int kMaxSamples = 10;
+inline constexpr float kSamplesPerSqrtRadius = 1.15f;
 
-inline constexpr float kMaxScaleDelta = 0.95f;
-inline constexpr float kScaleDeltaMultiplier = 3.35f;
+inline constexpr float kMaxScaleDelta = 0.18f;
+inline constexpr float kScaleDeltaMultiplier = 0.80f;
 } // namespace radial_blur_tuning
 
 namespace edge_lens_warp_tuning {
@@ -39,13 +39,13 @@ namespace edge_lens_warp_tuning {
 // It approximates lens curvature by pushing only screen-edge strips outward from the layer center.
 inline constexpr bool kEnabled = true;
 inline constexpr int kMinSamples = 2;
-inline constexpr int kMaxSamples = 9;
-inline constexpr float kMaxEdgePushRatio = 0.075f;
-inline constexpr float kMaxScaleDelta = 0.16f;
-inline constexpr float kMinEdgeBandRatio = 0.12f;
-inline constexpr float kMaxEdgeBandRatio = 0.32f;
-inline constexpr float kCornerWeight = 0.58f;
-inline constexpr float kSideWeight = 0.78f;
+inline constexpr int kMaxSamples = 5;
+inline constexpr float kMaxEdgePushRatio = 0.018f;
+inline constexpr float kMaxScaleDelta = 0.045f;
+inline constexpr float kMinEdgeBandRatio = 0.10f;
+inline constexpr float kMaxEdgeBandRatio = 0.24f;
+inline constexpr float kCornerWeight = 0.24f;
+inline constexpr float kSideWeight = 0.34f;
 inline constexpr float kBaseWeight = 1.0f;
 } // namespace edge_lens_warp_tuning
 
@@ -56,7 +56,7 @@ inline constexpr float kAnimationFps = 18.0f;
 // Dust PNG alpha owns opacity. The renderer always draws the tile at full alpha mod.
 inline constexpr float kDrawAlpha = 1.0f;
 
-// Depth changes scale only. Actual pixel size is based on incoming dust frame size.
+// Depth and camera zoom change scale. Actual pixel size is based on incoming dust frame size.
 inline constexpr float kFocusTileScale = 0.50f;
 inline constexpr float kBackgroundNearTileScale = 0.46f;
 inline constexpr float kBackgroundFarTileScale = 0.12f;
@@ -70,7 +70,7 @@ inline constexpr float kDepthRampPower = 1.35f;
 
 struct DustAnchor {
     // Used only for computing distance/visibility behavior.
-    // The dust tile field itself is anchored to the bottom-center of the layer target.
+    // The dust tile field itself is anchored to the bottom-center of the layer content.
     float world_x = 0.0f;
     float world_z = 0.0f;
 
@@ -93,6 +93,11 @@ struct LayerTexture {
     // Optional. If left at 0 for non-focus layers, compose() falls back to:
     // abs(depth_layer - focus_depth_layer) * DustAnchor::world_units_per_depth_layer.
     float world_distance_from_focus = 0.0f;
+
+    // Optional bottom-center screen-space anchor for layer-local dust tiling.
+    // Invalid coordinates fall back to the bottom-center of the render target.
+    SDL_FPoint dust_bottom_center{0.0f, 0.0f};
+    bool has_dust_bottom_center = false;
 };
 
 struct CompositeResult {

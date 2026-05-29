@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <limits>
+#include <utility>
 #include <set>
 #include <system_error>
 #include <unordered_set>
@@ -140,9 +141,123 @@ std::vector<int> sanitize_indices(const std::vector<int>& indices, int frame_cou
 
 nlohmann::json default_frame_json_for_key(const std::string& key) {
     if (key == "movement") {
-        return nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0}};
+        return nlohmann::json::array({0, 0, 0});
     }
     return nlohmann::json::array();
+}
+
+int read_movement_component(const nlohmann::json& entry, int index) {
+    if (entry.is_array()) {
+        // Canonical arrays are [dx, y(height), z(depth)]. Legacy arrays may only include [dx, depth].
+        if (index == 2 && entry.size() == 2 && entry[1].is_number()) {
+            return entry[1].is_number_integer() ? entry[1].get<int>() : static_cast<int>(entry[1].get<double>());
+        }
+        if (index == 1 && entry.size() == 2 && entry[1].is_number()) {
+            return 0;
+        }
+        if (index < static_cast<int>(entry.size()) && entry[index].is_number()) {
+            return entry[index].is_number_integer() ? entry[index].get<int>() : static_cast<int>(entry[index].get<double>());
+        }
+        return 0;
+    }
+    if (entry.is_object()) {
+        auto read_number = [](const nlohmann::json& value) -> int {
+            if (value.is_number_integer()) {
+                return value.get<int>();
+            }
+            if (value.is_number()) {
+                return static_cast<int>(value.get<double>());
+            }
+            return 0;
+        };
+
+        if (index == 0) {
+            if (entry.contains("dx")) return read_number(entry["dx"]);
+            if (entry.contains("x")) return read_number(entry["x"]);
+            return 0;
+        }
+        if (index == 1) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const int legacy_height = entry.contains("dy")
+                ? read_number(entry["dy"])
+                : (entry.contains("y") ? read_number(entry["y"]) : 0);
+            const int explicit_depth = entry.contains("dz")
+                ? read_number(entry["dz"])
+                : (entry.contains("z") ? read_number(entry["z"]) : 0);
+            if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_height != 0) {
+                return 0;
+            }
+            if (entry.contains("dy")) return read_number(entry["dy"]);
+            if (entry.contains("y")) return read_number(entry["y"]);
+            return 0;
+        }
+        if (index == 2) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const int legacy_depth = entry.contains("dy")
+                ? read_number(entry["dy"])
+                : (entry.contains("y") ? read_number(entry["y"]) : 0);
+            const int explicit_depth = entry.contains("dz")
+                ? read_number(entry["dz"])
+                : (entry.contains("z") ? read_number(entry["z"]) : 0);
+            if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_depth != 0) {
+                return legacy_depth;
+            }
+            if (entry.contains("dz")) return read_number(entry["dz"]);
+            if (entry.contains("z")) return read_number(entry["z"]);
+            if (!entry.contains("dz") && !entry.contains("z")) {
+                if (entry.contains("dy")) return read_number(entry["dy"]);
+                if (entry.contains("y")) return read_number(entry["y"]);
+            }
+        }
+    }
+    return 0;
+}
+
+float read_movement_rotation(const nlohmann::json& entry) {
+    if (entry.is_array()) {
+        if (entry.size() > 3 && entry[3].is_number()) {
+            return static_cast<float>(entry[3].get<double>());
+        }
+        return 0.0f;
+    }
+    if (entry.is_object() && entry.contains("rotation_degrees") && entry["rotation_degrees"].is_number()) {
+        return static_cast<float>(entry["rotation_degrees"].get<double>());
+    }
+    return 0.0f;
+}
+
+nlohmann::json movement_total_for_sequence(const nlohmann::json& movement) {
+    int total_dx = 0;
+    int total_dy = 0;
+    int total_dz = 0;
+    float total_dr = 0.0f;
+    if (movement.is_array()) {
+        for (const auto& entry : movement) {
+            total_dx += read_movement_component(entry, 0);
+            total_dy += read_movement_component(entry, 1);
+            total_dz += read_movement_component(entry, 2);
+            total_dr += read_movement_rotation(entry);
+        }
+    }
+    return nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}, {"dr", total_dr}};
+}
+
+void update_movement_path_totals(nlohmann::json& payload) {
+    auto movement_paths_it = payload.find("movement_paths");
+    if (movement_paths_it == payload.end() || !movement_paths_it->is_array()) {
+        return;
+    }
+
+    nlohmann::json movement_totals = nlohmann::json::array();
+    for (const auto& path : *movement_paths_it) {
+        movement_totals.push_back(movement_total_for_sequence(path));
+    }
+    payload["movement_total"] = movement_totals.empty()
+        ? nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0}, {"dr", 0.0f}}
+        : movement_totals.front();
+    payload["movement_totals"] = std::move(movement_totals);
 }
 
 nlohmann::json remap_frame_array(const nlohmann::json& source,
@@ -187,6 +302,7 @@ void remap_known_frame_json(nlohmann::json& payload,
             }
         }
         *movement_paths_it = std::move(remapped_paths);
+        update_movement_path_totals(payload);
     }
 
     payload["number_of_frames"] = static_cast<int>(source_indices.size());

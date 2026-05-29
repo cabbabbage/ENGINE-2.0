@@ -919,9 +919,7 @@ protected:
 private:
     static constexpr int kMaxBoundaryJitter = 500;
     static constexpr int kRadiusMin = 0;
-    static constexpr int kRenderRadiusMax = 20000;
     static constexpr int kMaxSpawnFromRoomMax = 20000;
-    static constexpr int kRenderRadiusDefault = 128;
     static constexpr int kMaxSpawnFromRoomDefault = 128;
     static constexpr int kFogNearDistanceDefault = 64;
 
@@ -980,27 +978,6 @@ private:
         return (*section_)["boundary_area_selectors"];
     }
 
-    int current_render_radius() const {
-        if (!section_ || !section_->is_object()) {
-            return kRenderRadiusDefault;
-        }
-        auto it = section_->find("render_radius");
-        if (it == section_->end() || !it->is_number()) {
-            return kRenderRadiusDefault;
-        }
-        int value = kRenderRadiusDefault;
-        try {
-            if (it->is_number_integer()) {
-                value = it->get<int>();
-            } else {
-                value = static_cast<int>(std::lround(it->get<double>()));
-            }
-        } catch (...) {
-            value = kRenderRadiusDefault;
-        }
-        return std::clamp(value, kRadiusMin, kRenderRadiusMax);
-    }
-
     int current_max_spawn_from_room() const {
         if (!section_ || !section_->is_object()) {
             return kMaxSpawnFromRoomDefault;
@@ -1022,19 +999,6 @@ private:
         return std::clamp(value, kRadiusMin, kMaxSpawnFromRoomMax);
     }
 
-
-    void set_render_radius(int value) {
-        if (!section_) return;
-        if (!section_->is_object()) {
-            *section_ = json::object();
-        }
-        const int clamped = std::clamp(value, kRadiusMin, kRenderRadiusMax);
-        (*section_)["render_radius"] = clamped;
-        notify_save(false);
-        if (assets_) {
-            assets_->notify_dynamic_spawn_distance_changed();
-        }
-    }
 
     void set_max_spawn_from_room(int value) {
         if (!section_) return;
@@ -1092,12 +1056,8 @@ private:
             *section_ = json::object();
             changed = true;
         }
-        const int render_radius = current_render_radius();
         const int max_spawn_from_room = current_max_spawn_from_room();
-        if (!section_->contains("render_radius") ||
-            !(*section_)["render_radius"].is_number_integer() ||
-            (*section_)["render_radius"].get<int>() != render_radius) {
-            (*section_)["render_radius"] = render_radius;
+        if (section_->erase("render_radius") > 0) {
             changed = true;
         }
         if (!section_->contains("max_spawn_from_room") ||
@@ -1199,20 +1159,7 @@ private:
             rows.push_back({add_button_widget_.get()});
         }
 
-        const int render_radius = current_render_radius();
         const int max_spawn_from_room = current_max_spawn_from_room();
-        if (!render_radius_slider_) {
-            render_radius_slider_ = std::make_unique<DMSlider>(
-                "Render Radius (px)",
-                kRadiusMin,
-                kRenderRadiusMax,
-                render_radius);
-            render_radius_slider_->set_on_value_changed([this](int value) {
-                this->set_render_radius(value);
-            });
-            render_radius_widget_ =
-                std::make_unique<SliderWidget>(render_radius_slider_.get());
-        }
         if (!max_spawn_from_room_slider_) {
             max_spawn_from_room_slider_ = std::make_unique<DMSlider>(
                 "Max Spawn From Room (px)",
@@ -1225,14 +1172,8 @@ private:
             max_spawn_from_room_widget_ =
                 std::make_unique<SliderWidget>(max_spawn_from_room_slider_.get());
         }
-        if (render_radius_slider_) {
-            render_radius_slider_->set_value(render_radius);
-        }
         if (max_spawn_from_room_slider_) {
             max_spawn_from_room_slider_->set_value(max_spawn_from_room);
-        }
-        if (render_radius_widget_) {
-            rows.push_back({render_radius_widget_.get()});
         }
         if (max_spawn_from_room_widget_) {
             rows.push_back({max_spawn_from_room_widget_.get()});
@@ -1576,8 +1517,6 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
-    std::unique_ptr<DMSlider> render_radius_slider_{};
-    std::unique_ptr<SliderWidget> render_radius_widget_{};
     std::unique_ptr<DMSlider> max_spawn_from_room_slider_{};
     std::unique_ptr<SliderWidget> max_spawn_from_room_widget_{};
     std::vector<GroupWidgets> group_widgets_{};

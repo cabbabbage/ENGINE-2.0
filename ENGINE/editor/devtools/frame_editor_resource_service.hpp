@@ -36,6 +36,9 @@ struct FrameEditorResourceContext {
     std::shared_ptr<AssetInfo> shared_asset_info;
 
     std::function<bool()> save_manifest;
+
+    bool delete_asset_cache_on_success = false;
+    std::function<void(const std::string&)> invalidate_preview_cache;
 };
 
 class FrameEditorResourceService {
@@ -58,6 +61,7 @@ private:
     FrameEditorResourceResult apply_plan(const ResolvedAnimation& resolved,
                                          const std::vector<FramePlanEntry>& plan,
                                          const std::vector<std::filesystem::path>& external_images);
+    void notify_successful_raw_resource_change() const;
 
     FrameEditorResourceContext context_;
 };

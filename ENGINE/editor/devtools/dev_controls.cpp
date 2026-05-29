@@ -42,6 +42,7 @@
 #include "devtools/dev_footer_bar.hpp"
 #include "devtools/camera_ui.hpp"
 #include "devtools/animation_frame_import_service.hpp"
+#include "devtools/manifest_asset_utils.hpp"
 #include "devtools/frame_importer.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/sdl_pointer_utils.hpp"
@@ -2633,15 +2634,17 @@ void DevControls::layout_drop_conflict_modal() {
     drop_conflict_modal_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
 
     const int button_gap = 12;
-    const int button_w = 160;
+    const int button_w = 150;
     const int button_h = DMButton::height();
-    const int total_w = button_w * 2 + button_gap;
+    const int total_w = button_w * 3 + button_gap * 2;
     const int bx = x + (modal_w - total_w) / 2;
     const int by = y + modal_h - button_h - padding;
     drop_conflict_modal_.skip_rect = SDL_Rect{bx, by, button_w, button_h};
     drop_conflict_modal_.rename_rect = SDL_Rect{bx + button_w + button_gap, by, button_w, button_h};
+    drop_conflict_modal_.replace_rect = SDL_Rect{bx + (button_w + button_gap) * 2, by, button_w, button_h};
     if (drop_conflict_modal_.skip_button) drop_conflict_modal_.skip_button->set_rect(drop_conflict_modal_.skip_rect);
     if (drop_conflict_modal_.rename_button) drop_conflict_modal_.rename_button->set_rect(drop_conflict_modal_.rename_rect);
+    if (drop_conflict_modal_.replace_button) drop_conflict_modal_.replace_button->set_rect(drop_conflict_modal_.replace_rect);
 }
 
 void DevControls::layout_drop_error_popup() {
@@ -2675,8 +2678,9 @@ void DevControls::open_drop_conflict_modal(const std::string& asset_name) {
     drop_conflict_modal_ = DropConflictModal{};
     drop_conflict_modal_.visible = true;
     drop_conflict_modal_.asset_name = asset_name;
-    drop_conflict_modal_.skip_button = std::make_unique<DMButton>("Skip", &DMStyles::HeaderButton(), 160, DMButton::height());
-    drop_conflict_modal_.rename_button = std::make_unique<DMButton>("Rename", &DMStyles::CreateButton(), 160, DMButton::height());
+    drop_conflict_modal_.skip_button = std::make_unique<DMButton>("Skip", &DMStyles::HeaderButton(), 150, DMButton::height());
+    drop_conflict_modal_.rename_button = std::make_unique<DMButton>("Rename", &DMStyles::CreateButton(), 150, DMButton::height());
+    drop_conflict_modal_.replace_button = std::make_unique<DMButton>("Replace", &DMStyles::CreateButton(), 150, DMButton::height());
     layout_drop_conflict_modal();
 }
 
@@ -2814,7 +2818,7 @@ void DevControls::process_next_multi_asset_item() {
         }
 
         std::string error;
-        if (!create_drop_asset(candidate, item.request.files, item.request, false, error)) {
+        if (!create_drop_asset(candidate, item.request.files, item.request, false, false, error)) {
             const std::string fallback_error =
                 !source_file.empty()
                     ? "Import failed for " + source_file.filename().string()
@@ -3071,6 +3075,34 @@ bool DevControls::handle_drop_conflict_modal_event(const SDL_Event& event) {
             return true;
         }
     }
+    if (drop_conflict_modal_.replace_button && drop_conflict_modal_.replace_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            const MultiAssetImportState::Item* item = current_multi_asset_import_item();
+            const std::string asset_name = drop_conflict_modal_.asset_name;
+            if (!item) {
+                reset_drop_conflict_modal();
+                multi_asset_import_.waiting_for_rename = false;
+                ++multi_asset_import_.index;
+                process_next_multi_asset_item();
+                return true;
+            }
+            DropImportRequest request = item->request;
+            reset_drop_conflict_modal();
+            std::string error;
+            if (!create_drop_asset(asset_name, request.files, request, false, true, error)) {
+                open_drop_error_popup(error.empty() ? "Failed to replace dropped asset." : error);
+                ++multi_asset_import_.index;
+                multi_asset_import_.waiting_for_rename = false;
+                return true;
+            }
+            ++multi_asset_import_.imported_count;
+            ++multi_asset_import_.index;
+            multi_asset_import_.waiting_for_rename = false;
+            process_next_multi_asset_item();
+            return true;
+        }
+    }
 
     if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
         reset_drop_conflict_modal();
@@ -3211,12 +3243,13 @@ void DevControls::render_drop_conflict_modal(SDL_Renderer* renderer) {
                   drop_conflict_modal_.modal_rect.y + 16,
                   DMStyles::Label());
     DrawLabelText(renderer,
-                  "Choose Skip or Rename.",
+                  "Choose Skip, Rename, or Replace.",
                   drop_conflict_modal_.modal_rect.x + 16,
                   drop_conflict_modal_.modal_rect.y + 46,
                   DMStyles::Label());
     if (drop_conflict_modal_.skip_button) drop_conflict_modal_.skip_button->render(renderer);
     if (drop_conflict_modal_.rename_button) drop_conflict_modal_.rename_button->render(renderer);
+    if (drop_conflict_modal_.replace_button) drop_conflict_modal_.replace_button->render(renderer);
 }
 
 void DevControls::render_drop_error_popup(SDL_Renderer* renderer) {
@@ -3273,10 +3306,81 @@ void DevControls::render_import_busy_overlay(SDL_Renderer* renderer) {
     SDL_SetRenderDrawBlendMode(renderer, prev);
 }
 
+bool DevControls::replace_existing_drop_asset(const std::string& asset_name, std::string& error_out) {
+    error_out.clear();
+    const std::string sanitized = sanitize_asset_name_local(devmode::utils::trim_whitespace_copy(asset_name));
+    if (sanitized.empty()) {
+        error_out = "Please enter a name (letters, numbers, underscore).";
+        return false;
+    }
+
+    if (assets_) {
+        assets_->clear_editor_selection();
+        std::vector<Asset*> doomed;
+        doomed.reserve(assets_->all.size());
+        for (Asset* asset : assets_->all) {
+            if (!asset || !asset->info) {
+                continue;
+            }
+            if (asset->info->name == sanitized) {
+                doomed.push_back(asset);
+            }
+        }
+        for (Asset* asset : doomed) {
+            asset->Delete();
+        }
+        if (!doomed.empty()) {
+            assets_->process_pending_removals();
+            assets_->rebuild_from_grid_state();
+            assets_->refresh_active_asset_lists();
+        }
+    }
+
+    const auto remove_result = devmode::manifest_utils::remove_asset_entry(&manifest_store_, sanitized, &std::cerr);
+    if (!remove_result.removed && manifest_store_.resolve_asset_name(sanitized)) {
+        error_out = "Failed to remove existing asset manifest entry.";
+        return false;
+    }
+    if (remove_result.used_store || manifest_store_.dirty()) {
+        manifest_store_.flush();
+    }
+
+    const std::filesystem::path asset_dir = devmode::asset_paths::asset_folder_path(sanitized).lexically_normal();
+    if (devmode::asset_paths::is_protected_asset_root(asset_dir)) {
+        error_out = "Refusing to replace protected asset folder.";
+        return false;
+    }
+
+    std::error_code ec;
+    if (std::filesystem::exists(asset_dir, ec)) {
+        ec.clear();
+        std::filesystem::remove_all(asset_dir, ec);
+        if (ec) {
+            error_out = "Failed to delete existing asset folder: " + ec.message();
+            return false;
+        }
+    } else if (ec) {
+        error_out = "Failed to inspect existing asset folder: " + ec.message();
+        return false;
+    }
+
+    std::string cache_error;
+    if (!devmode::animation_import::delete_asset_cache(sanitized, cache_error)) {
+        error_out = cache_error.empty() ? "Failed to delete existing asset cache." : cache_error;
+        return false;
+    }
+
+    if (assets_) {
+        assets_->library().remove(sanitized);
+    }
+    return true;
+}
+
 bool DevControls::create_drop_asset(const std::string& asset_name,
                                    const std::vector<std::filesystem::path>& files,
                                    const DropImportRequest& request,
                                    bool open_editor_and_spawn,
+                                   bool replace_existing,
                                    std::string& error_out) {
     ImportBusyScope busy(this, "Importing assets...");
     if (assets_) {
@@ -3291,9 +3395,16 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
         error_out = "Please enter a name (letters, numbers, underscore).";
         return false;
     }
-    if (manifest_store_.resolve_asset_name(sanitized) || (assets_ && assets_->library().get(sanitized))) {
-        error_out = "An asset with that name already exists.";
-        return false;
+    const bool already_exists = manifest_store_.resolve_asset_name(sanitized).has_value() ||
+                                (assets_ && assets_->library().get(sanitized));
+    if (already_exists) {
+        if (!replace_existing) {
+            error_out = "An asset with that name already exists.";
+            return false;
+        }
+        if (!replace_existing_drop_asset(sanitized, error_out)) {
+            return false;
+        }
     }
 
     std::vector<std::filesystem::path> validate_targets;
@@ -3346,7 +3457,7 @@ bool DevControls::create_drop_asset(const std::string& asset_name,
 
 bool DevControls::finalize_drop_creation(const std::string& desired_name) {
     std::string error;
-    if (!create_drop_asset(desired_name, drop_modal_.request.files, drop_modal_.request, true, error)) {
+    if (!create_drop_asset(desired_name, drop_modal_.request.files, drop_modal_.request, true, false, error)) {
         drop_modal_.error = error;
         return false;
     }

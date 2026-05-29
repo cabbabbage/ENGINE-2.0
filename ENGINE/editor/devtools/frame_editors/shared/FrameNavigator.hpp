@@ -24,6 +24,7 @@ public:
     void set_current_frame(int frame);
     void set_selected_frames(std::vector<int> frame_indices);
     void set_on_frame_changed(std::function<void(int)> callback);
+    void set_on_focus_requested(std::function<void()> callback);
     void set_on_before_change(std::function<bool(int, int)> callback);
     void set_on_apply_next(std::function<void()> callback);
     void set_on_apply_animation(std::function<void()> callback);
@@ -51,7 +52,9 @@ public:
     bool is_enabled() const { return enabled_; }
 
 private:
-    void request_frame_change(int frame);
+    bool request_frame_change(int frame);
+    void select_single_frame(int frame);
+    void request_focus();
     void ensure_frame_visible(int frame);
     void clamp_scroll();
     int frame_index_at_point(const SDL_Point& p) const;
@@ -84,6 +87,7 @@ private:
     std::unique_ptr<DMButton> btn_save_exit_;
 
     std::function<void(int)> on_frame_changed_;
+    std::function<void()> on_focus_requested_;
     std::function<bool(int, int)> on_before_change_;
     std::function<void()> on_apply_next_;
     std::function<void()> on_apply_animation_;

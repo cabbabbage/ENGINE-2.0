@@ -9,7 +9,7 @@
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 #include "animation_frame.hpp"
-#include "animation_frame_variant.hpp"
+#include "animation_frame_texture.hpp"
 #include "PointPercentage.hpp"
 
 inline constexpr int kBaseAnimationFps = 24;
@@ -50,7 +50,7 @@ public:
 };
 
     Animation();
-    const FrameVariant* get_frame(const AnimationFrame* frame, float requested_scale) const;
+    const FrameTextureBinding* get_frame(const AnimationFrame* frame, float requested_scale) const;
     const AnimationFrame* get_first_frame(std::size_t path_index = 0) const;
     AnimationFrame* get_first_frame(std::size_t path_index = 0);
     int index_of(const AnimationFrame* frame) const;
@@ -105,7 +105,7 @@ public:
     void replace_movement_paths(std::vector<std::vector<AnimationFrame>> paths);
     std::size_t default_movement_path_index() const { return 0; }
     std::size_t clamp_path_index(std::size_t index) const;
-    std::size_t variant_count() const { return 1; }
+    std::size_t texture_binding_count() const { return 1; }
     std::size_t cached_frame_count() const { return frame_cache_.size(); }
     const std::vector<FrameCache>& cached_frames() const { return frame_cache_; }
     void synchronize_runtime_frames();

@@ -251,8 +251,8 @@ CurrentCacheManifestSnapshot read_current_cache_manifest_snapshot(
     return snapshot;
 }
 
-bool write_cache_manifest_snapshot_to_bundle(CacheManager::BundleData& bundle) {
-    const CurrentCacheManifestSnapshot current = read_current_cache_manifest_snapshot("");
+bool write_cache_manifest_snapshot_to_bundle(CacheManager::BundleData& bundle, const std::string& asset_name) {
+    const CurrentCacheManifestSnapshot current = read_current_cache_manifest_snapshot(asset_name);
     if (!current.present) return false;
     if (!bundle.metadata_snapshot.is_object()) bundle.metadata_snapshot = nlohmann::json::object();
     bundle.metadata_snapshot["_cache_manifest"] = nlohmann::json{
@@ -365,7 +365,7 @@ bool PrimaryAssetCache::ensure_cache_ready(AssetInfo& info,
     CacheManager::BundleData rebuilt;
     rebuilt.version = 3;
     rebuilt.metadata_snapshot = info.info_json_;
-    write_cache_manifest_snapshot_to_bundle(rebuilt);
+    write_cache_manifest_snapshot_to_bundle(rebuilt, info.name);
 
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
@@ -467,7 +467,7 @@ bool PrimaryAssetCache::save_current(const AssetInfo& info) {
     CacheManager::BundleData bundle;
     bundle.version = 3;
     bundle.metadata_snapshot = info.info_json_;
-    write_cache_manifest_snapshot_to_bundle(bundle);
+    write_cache_manifest_snapshot_to_bundle(bundle, info.name);
 
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
@@ -540,6 +540,10 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
 
         prepared.canvas_width = canvas_width;
         prepared.canvas_height = canvas_height;
+#if !defined(NDEBUG)
+        vibble::log::debug("[PrimaryAssetCache] Lazily loaded " + std::to_string(prepared.frames.size()) +
+                           " resident texture(s) for " + info.name + "::" + anim.name + ".");
+#endif
         out_frames[anim.name] = std::move(prepared);
     }
     return !out_frames.empty();

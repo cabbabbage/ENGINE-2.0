@@ -559,7 +559,7 @@ void FrameEditorResourceService::notify_successful_raw_resource_change() const {
             animation_it->second.clear_texture_cache();
         }
 
-        info->mark_texture_rebuild_on_close(context_.animation_id, AssetInfo::kTextureVariantAll);
+        info->mark_texture_rebuild_on_close(context_.animation_id, AssetInfo::kTextureLayerAll);
         info->mark_bundle_refresh_on_close();
     }
 

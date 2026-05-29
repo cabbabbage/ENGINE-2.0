@@ -1779,18 +1779,15 @@ SDL_Point resolve_anchor_editor_frame_dimensions(const Asset* asset, const Anima
     int frame_w = 0;
     int frame_h = 0;
 
-    if (frame && !frame->variants.empty()) {
-        const int variant_index = asset
-            ? std::clamp(asset->current_variant_index, 0, static_cast<int>(frame->variants.size()) - 1)
-            : 0;
-        const FrameVariant& variant = frame->variants[static_cast<std::size_t>(variant_index)];
-        if (variant.source_rect.w > 0 && variant.source_rect.h > 0) {
-            frame_w = variant.source_rect.w;
-            frame_h = variant.source_rect.h;
+    if (frame) {
+        const FrameTextureBinding& binding = frame->texture_binding;
+        if (binding.source_rect.w > 0 && binding.source_rect.h > 0) {
+            frame_w = binding.source_rect.w;
+            frame_h = binding.source_rect.h;
         } else {
             float tex_w = 0.0f;
             float tex_h = 0.0f;
-            if (SDL_Texture* texture = variant.get_base_texture()) {
+            if (SDL_Texture* texture = binding.get_base_texture()) {
                 if (SDL_GetTextureSize(texture, &tex_w, &tex_h)) {
                     frame_w = static_cast<int>(std::lround(tex_w));
                     frame_h = static_cast<int>(std::lround(tex_h));
@@ -12615,14 +12612,10 @@ void RoomEditor::sync_shared_footer_navigation() {
                 frame_index,
                 static_cast<int>(anim_it->second.frame_count()));
             AnimationFrame* frame = anim_it->second.primary_frame_at(static_cast<std::size_t>(wrapped_index));
-            if (!frame || frame->variants.empty()) {
+            if (!frame) {
                 return nullptr;
             }
-            const int variant_index = std::clamp(
-                target->current_variant_index,
-                0,
-                static_cast<int>(frame->variants.size()) - 1);
-            return frame->variants[static_cast<std::size_t>(variant_index)].get_base_texture();
+            return frame->texture_binding.get_base_texture();
         };
     };
 

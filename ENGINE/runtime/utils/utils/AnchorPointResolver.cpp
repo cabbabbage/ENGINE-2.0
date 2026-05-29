@@ -175,27 +175,17 @@ bool should_warn_perspective_divergence(const Asset& asset, std::uint64_t camera
     return true;
 }
 
-float safe_remainder_scale(const Asset& asset) {
-    float remainder = asset.current_remaining_scale_adjustment;
-    if (!std::isfinite(remainder) || remainder <= 0.0f) {
-        remainder = 1.0f;
-    }
-    return remainder;
-}
-
 bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     const AnimationFrame* frame = asset.current_frame;
     SDL_Texture* texture = nullptr;
     int frame_w = 0;
     int frame_h = 0;
 
-    if (frame && !frame->variants.empty()) {
-        const int variant_idx = std::clamp(asset.current_variant_index, 0, static_cast<int>(frame->variants.size()) - 1);
-        const FrameVariant& variant = frame->variants[static_cast<std::size_t>(variant_idx)];
-        texture = variant.get_base_texture();
-        if (variant.source_rect.w > 0 && variant.source_rect.h > 0) {
-            frame_w = variant.source_rect.w;
-            frame_h = variant.source_rect.h;
+    if (frame) {
+        texture = frame->texture_binding.get_base_texture();
+        if (frame->texture_binding.source_rect.w > 0 && frame->texture_binding.source_rect.h > 0) {
+            frame_w = frame->texture_binding.source_rect.w;
+            frame_h = frame->texture_binding.source_rect.h;
         }
     }
 
@@ -216,11 +206,11 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
         return false;
     }
 
-    const float remainder = safe_remainder_scale(asset);
+    const float scale = (std::isfinite(asset.current_scale) && asset.current_scale > 0.0f) ? asset.current_scale : 1.0f;
     out.frame_w = frame_w;
     out.frame_h = frame_h;
-    out.final_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_w) * remainder)));
-    out.final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_h) * remainder)));
+    out.final_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_w) * scale)));
+    out.final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_h) * scale)));
     out.flip = asset.effective_render_flip();
     out.angle = asset.effective_render_angle();
     if (!std::isfinite(out.angle)) {
@@ -234,21 +224,8 @@ AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               const FrameDimensions& dims) {
     (void)dims;
-    // Anchors are authored in canonical texture space. Map to the active runtime variant first.
-    const float variant_scale = (std::isfinite(asset.current_nearest_variant_scale) &&
-                                 asset.current_nearest_variant_scale > 0.0f)
-                                    ? asset.current_nearest_variant_scale
-                                    : 1.0f;
-
-    const float scaled_x_f = static_cast<float>(anchor.texture_x) * variant_scale;
-    const float scaled_y_f = static_cast<float>(anchor.texture_y) * variant_scale;
-
-    SDL_Point scaled_px{
-        static_cast<int>(std::lround(scaled_x_f)),
-        static_cast<int>(std::lround(scaled_y_f))
-    };
-
-    return AnchorFrameSample{scaled_px, SDL_Point{anchor.texture_x, anchor.texture_y}};
+    SDL_Point px{anchor.texture_x, anchor.texture_y};
+    return AnchorFrameSample{px, px};
 }
 
 }  // namespace

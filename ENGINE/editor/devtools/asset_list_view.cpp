@@ -418,7 +418,7 @@ SDL_Texture* AssetListView::default_frame_texture(const AssetInfo& info) const {
         auto it = inf.animations.find(key);
         if (it != inf.animations.end() && it->second.has_frames()) {
             const AnimationFrame* first = it->second.primary_frame_at(0);
-            return (first && !first->variants.empty()) ? first->variants[0].base_texture : nullptr;
+            return first ? first->texture_binding.base_texture : nullptr;
         }
         return nullptr;
     };
@@ -434,8 +434,8 @@ SDL_Texture* AssetListView::default_frame_texture(const AssetInfo& info) const {
     }
     for (const auto& kv : info.animations) {
         const AnimationFrame* first = kv.second.primary_frame_at(0);
-        if (first && !first->variants.empty()) {
-            return first->variants[0].base_texture;
+        if (first && first->texture_binding.base_texture) {
+            return first->texture_binding.base_texture;
         }
     }
 

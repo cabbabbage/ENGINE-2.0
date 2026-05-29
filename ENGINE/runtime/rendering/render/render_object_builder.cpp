@@ -5,7 +5,7 @@
 
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/animation_frame.hpp"
-#include "assets/asset/animation_frame_variant.hpp"
+#include "assets/asset/animation_frame_texture.hpp"
 #include "rendering/render/render_object.hpp"
 
 namespace render_build {
@@ -51,16 +51,16 @@ Uint32 compute_reprojection_identity(const Asset& asset) {
     return hash;
 }
 
-bool query_asset_frame_variant(Asset* asset, const FrameVariant*& out_variant, SDL_Texture*& out_texture) {
-    out_variant = nullptr;
+bool query_asset_frame_texture(Asset* asset, const FrameTextureBinding*& out_binding, SDL_Texture*& out_texture) {
+    out_binding = nullptr;
     out_texture = nullptr;
     if (!asset) {
         return false;
     }
 
     if (asset->current_frame) {
-        out_variant = &asset->current_frame->variant;
-        out_texture = out_variant->get_base_texture();
+        out_binding = &asset->current_frame->texture_binding;
+        out_texture = out_binding->get_base_texture();
     }
 
     if (!out_texture) {
@@ -78,8 +78,8 @@ bool refresh_direct_asset_render_cache(Asset* asset, DirectAssetRenderCacheRecor
     }
 
     SDL_Texture* base_tex = nullptr;
-    const FrameVariant* selected_variant = nullptr;
-    if (!query_asset_frame_variant(asset, selected_variant, base_tex)) {
+    const FrameTextureBinding* selected_texture = nullptr;
+    if (!query_asset_frame_texture(asset, selected_texture, base_tex)) {
         return false;
     }
 
@@ -89,13 +89,13 @@ bool refresh_direct_asset_render_cache(Asset* asset, DirectAssetRenderCacheRecor
     int frame_w = 0;
     int frame_h = 0;
     SDL_Rect src_rect{0, 0, 0, 0};
-    if (selected_variant) {
-        if (selected_variant->source_rect.w > 0 && selected_variant->source_rect.h > 0) {
-            frame_w = selected_variant->source_rect.w;
-            frame_h = selected_variant->source_rect.h;
-            src_rect = selected_variant->source_rect;
+    if (selected_texture) {
+        if (selected_texture->source_rect.w > 0 && selected_texture->source_rect.h > 0) {
+            frame_w = selected_texture->source_rect.w;
+            frame_h = selected_texture->source_rect.h;
+            src_rect = selected_texture->source_rect;
         }
-        has_src_rect = selected_variant->uses_atlas;
+        has_src_rect = selected_texture->uses_atlas;
     }
 
     if (!has_src_rect && frame_w > 0 && frame_h > 0) {
@@ -150,10 +150,10 @@ bool build_direct_asset_render_object(Asset* asset,
         return false;
     }
 
-    float remainder = asset->runtime_scale_remainder();
+    const float scale = asset->runtime_resolved_scale();
 
-    int final_w = static_cast<int>(std::lround(static_cast<float>(cache_record.frame_w) * remainder));
-    int final_h = static_cast<int>(std::lround(static_cast<float>(cache_record.frame_h) * remainder));
+    int final_w = static_cast<int>(std::lround(static_cast<float>(cache_record.frame_w) * scale));
+    int final_h = static_cast<int>(std::lround(static_cast<float>(cache_record.frame_h) * scale));
     final_w = std::max(1, final_w);
     final_h = std::max(1, final_h);
 

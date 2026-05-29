@@ -8,7 +8,7 @@
 #include <SDL3/SDL.h>
 
 #include "animation/combat_geometry.hpp"
-#include "animation_frame_variant.hpp"
+#include "animation_frame_texture.hpp"
 #include "anchor_point.hpp"
 
 class AnimationFrame {
@@ -26,12 +26,12 @@ public:
     bool is_last = false;
     bool is_first = false;
 
-    FrameVariant variant;
+    FrameTextureBinding texture_binding;
     std::vector<DisplacedAssetAnchorPoint> anchor_points;
 
     // Single texture per frame — GPU mipmaps handle scaling
     SDL_Texture* get_base_texture(int /*index*/ = 0) const {
-        return variant.get_base_texture();
+        return texture_binding.get_base_texture();
     }
 
 

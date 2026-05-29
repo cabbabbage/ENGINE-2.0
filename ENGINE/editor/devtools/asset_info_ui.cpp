@@ -393,7 +393,7 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     }
     if (fw == 0 || fh == 0) return;
 
-    float package_scale = target->current_nearest_variant_scale * target->current_remaining_scale_adjustment;
+    float package_scale = target->runtime_resolved_scale();
     if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
         package_scale = 1.0f;
     }
@@ -1043,8 +1043,8 @@ std::array<std::string, 5> AssetInfoUI::build_live_stats_lines() const {
         "World position: n/a",
         "Screen position: n/a",
         "Screen size: n/a",
-        "Size variant index: n/a",
-        "Variant size: n/a"
+        "Texture source: n/a",
+        "Texture size: n/a"
     };
 
     if (!visible_ || !info_ || !target_asset_) {
@@ -1096,13 +1096,13 @@ std::array<std::string, 5> AssetInfoUI::build_live_stats_lines() const {
         }
     }
 
-    std::ostringstream variant;
-    variant << "Size variant index: " << asset->current_variant_index;
-    lines[3] = variant.str();
+    std::ostringstream texture_binding;
+    texture_binding << "Texture source: single cached frame";
+    lines[3] = texture_binding.str();
 
-    std::ostringstream variant_size;
-    variant_size << "Variant size: L " << asset->height() << " px  W " << asset->width() << " px";
-    lines[4] = variant_size.str();
+    std::ostringstream texture_size;
+    texture_size << "Texture size: L " << asset->height() << " px  W " << asset->width() << " px";
+    lines[4] = texture_size.str();
 
     return lines;
 }
@@ -2037,8 +2037,8 @@ float AssetInfoUI::compute_player_screen_height(const WarpedScreenGrid& cam) con
     SDL_Texture* player_frame = player_asset->get_current_frame();
     if (!player_frame && player_asset->info && player_asset->info->animations.count(player_asset->current_animation)) {
         AnimationFrame* frame = player_asset->info->animations[player_asset->current_animation].get_first_frame();
-        if (frame && !frame->variants.empty()) {
-            player_frame = frame->get_base_texture(0);
+        if (frame) {
+            player_frame = frame->get_base_texture();
         }
     }
     int pw = player_asset->cached_w;
@@ -2058,7 +2058,7 @@ float AssetInfoUI::compute_player_screen_height(const WarpedScreenGrid& cam) con
     if (pw != 0) player_asset->cached_w = pw;
     if (ph != 0) player_asset->cached_h = ph;
 
-    float package_scale = player_asset->current_nearest_variant_scale * player_asset->current_remaining_scale_adjustment;
+    float package_scale = player_asset->runtime_resolved_scale();
     if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
         package_scale = 1.0f;
     }
@@ -2781,9 +2781,6 @@ void AssetInfoUI::refresh_loaded_asset_instances(RuntimeRefreshScope scope,
 
     if (!context_info->name.empty()) {
 
-        render_pipeline::ScalingLogic::LoadPrecomputedProfiles(true);
-        auto profile = render_pipeline::ScalingLogic::ProfileForAsset(context_info->name);
-        (void)profile;
     }
 
     SDL_Renderer* renderer = nullptr;

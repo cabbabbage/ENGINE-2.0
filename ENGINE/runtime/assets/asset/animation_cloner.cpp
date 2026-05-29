@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "asset_info.hpp"
-#include "rendering/render/scaling_logic.hpp"
 
 namespace {
 
@@ -189,8 +188,6 @@ bool AnimationCloner::Clone(const Animation& source,
 
     dest.clear_texture_cache();
 
-    dest.variant_steps_   = source.variant_steps_;
-    render_pipeline::ScalingLogic::NormalizeVariantSteps(dest.variant_steps_);
     dest.locked           = source.locked;
     if (opts.inherit_on_end_from_source) {
         dest.on_end_animation = source.on_end_animation;
@@ -201,9 +198,8 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.frozen           = source.frozen;
     dest.audio_clip       = source.audio_clip;
 
-    const std::size_t frame_count   = source.frame_cache_.size();
-    const std::size_t variant_count = dest.variant_steps_.size();
-    if (frame_count == 0 || variant_count == 0) {
+    const std::size_t frame_count = source.frame_cache_.size();
+    if (frame_count == 0) {
         return false;
     }
 
@@ -223,30 +219,26 @@ bool AnimationCloner::Clone(const Animation& source,
         }
         const Animation::FrameCache& src_cache = source.frame_cache_[src_idx];
         Animation::FrameCache dst_cache;
-        dst_cache.resize(variant_count);
-
-        for (std::size_t v = 0; v < variant_count; ++v) {
-            SDL_Texture* src_tex = (v < src_cache.textures.size()) ? src_cache.textures[v] : nullptr;
-            int base_tex_w = (v < src_cache.widths.size()) ? src_cache.widths[v] : 0;
-            int base_tex_h = (v < src_cache.heights.size()) ? src_cache.heights[v] : 0;
-            SDL_Texture* cloned_tex = clone_texture(src_tex,
-                                                    base_tex_w,
-                                                    base_tex_h,
-                                                    flip_flags,
-                                                    renderer,
-                                                    info,
-                                                    &base_tex_w,
-                                                    &base_tex_h);
-            if (src_tex && !cloned_tex) {
-                dest.clear_texture_cache();
-                vibble::log::error("[AnimationCloner] Failed to clone animation frame texture during loading.");
-                return false;
-            }
-            dst_cache.textures[v] = cloned_tex;
-            dst_cache.widths[v]   = base_tex_w;
-            dst_cache.heights[v]  = base_tex_h;
-
+        SDL_Texture* src_tex = src_cache.texture;
+        int base_tex_w = src_cache.width;
+        int base_tex_h = src_cache.height;
+        SDL_Texture* cloned_tex = clone_texture(src_tex,
+                                                base_tex_w,
+                                                base_tex_h,
+                                                flip_flags,
+                                                renderer,
+                                                info,
+                                                &base_tex_w,
+                                                &base_tex_h);
+        if (src_tex && !cloned_tex) {
+            dest.clear_texture_cache();
+            vibble::log::error("[AnimationCloner] Failed to clone animation frame texture during loading.");
+            return false;
         }
+        dst_cache.texture = cloned_tex;
+        dst_cache.width = base_tex_w;
+        dst_cache.height = base_tex_h;
+        dst_cache.source_rect = SDL_Rect{0, 0, base_tex_w, base_tex_h};
 
         dest.frame_cache_.push_back(std::move(dst_cache));
     }

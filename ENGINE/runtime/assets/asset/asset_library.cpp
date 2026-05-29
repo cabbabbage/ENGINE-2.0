@@ -725,10 +725,8 @@ bool animation_cache_has_usable_texture(const Animation& animation) {
                 return false;
         }
         for (const auto& frame : animation.cached_frames()) {
-                for (SDL_Texture* texture : frame.textures) {
-                        if (texture) {
-                                return true;
-                        }
+                if (frame.texture) {
+                        return true;
                 }
         }
         return false;
@@ -892,58 +890,14 @@ WarmupPassStats warmup_assets(SDL_Renderer* renderer,
             ", already_loaded=" + std::to_string(stats.already_loaded) +
             " in " + std::to_string(preload_ms) + "ms");
 
-        const auto load_begin = std::chrono::steady_clock::now();
-        for (const auto& info : load_candidates) {
-                if (!info) {
-                        continue;
-                }
-                if (runtime_loaded_assets.find(info->name) != runtime_loaded_assets.end()) {
-                        continue;
-                }
-                std::vector<std::string> missing_cached_folder_animations;
-                if (asset_runtime_animation_cache_is_usable(*info, &missing_cached_folder_animations)) {
-                        runtime_loaded_assets.insert(info->name);
-                        continue;
-                }
-                if (!info->animations.empty() && !missing_cached_folder_animations.empty()) {
-                        vibble::log::warn(std::string("[AssetLibrary] ") + load_label + " retrying '" + info->name +
-                                          "' because selected folder animation(s) lack usable runtime frame textures. Missing/invalid animations: " +
-                                          summarize_names(missing_cached_folder_animations));
-                }
-                try {
-                        const auto item_begin = std::chrono::steady_clock::now();
-                        const auto load_result = info->loadAnimationsDetailed(renderer, true, true, true);
-                        const auto item_end = std::chrono::steady_clock::now();
-                        const auto item_ms = std::chrono::duration_cast<std::chrono::milliseconds>(item_end - item_begin).count();
-                        if (!load_result.ok()) {
-                                stats.load_failed.push_back(info->name);
-                                vibble::log::error(std::string("[AssetLibrary] ") + load_label + " failed for '" + info->name +
-                                                   "': selected folder animation(s) did not produce usable runtime frame textures. Missing/invalid animations: " +
-                                                   summarize_names(load_result.missing_runtime_frame_animations));
-                                continue;
-                        }
-                        runtime_loaded_assets.insert(info->name);
-                        stats.load_succeeded.push_back(info->name);
-                        vibble::log::info(std::string("[AssetLibrary] ") + load_label + " loaded '" + info->name + "' in " +
-                                          std::to_string(item_ms) + "ms");
-                } catch (const std::exception& ex) {
-                        stats.load_failed.push_back(info->name);
-                        vibble::log::error(std::string("[AssetLibrary] ") + load_label + " failed for '" + info->name +
-                                           "': " + ex.what());
-                } catch (...) {
-                        stats.load_failed.push_back(info->name);
-                        vibble::log::error(std::string("[AssetLibrary] ") + load_label + " failed for '" + info->name +
-                                           "' due to an unknown error.");
-                }
-        }
-        const auto load_end = std::chrono::steady_clock::now();
-        const auto load_ms = std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_begin).count();
+        // Startup warmup intentionally stops after ensuring cache/bundle files exist.
+        // Runtime SDL/OpenGL textures are loaded lazily by ensureAnimationsLoadedFor()
+        // when an asset is actually needed.
+        (void)load_candidates;
+
         vibble::log::info(
-            std::string("[AssetLibrary] ") + load_label + " summary: loaded=" +
-            std::to_string(stats.load_succeeded.size()) + " " + summarize_names(stats.load_succeeded) +
-            ", failed=" + std::to_string(stats.load_failed.size()) + " " + summarize_names(stats.load_failed) +
-            ", already_loaded=" + std::to_string(stats.already_loaded) +
-            " in " + std::to_string(load_ms) + "ms");
+            std::string("[AssetLibrary] ") + load_label +
+            " skipped startup texture preload; runtime textures will load lazily.");
 
         return stats;
 }
@@ -1175,8 +1129,9 @@ void AssetLibrary::ensureAnimationsLoadedFor(SDL_Renderer* renderer, const std::
         info_by_name_,
         runtime_loaded_assets_,
         sorted_names_from_set(names),
-        "Targeted preload",
-        "Targeted load");
+        "Targeted cache warmup",
+        "Targeted cache warmup");
+    loadAnimationsFor(renderer, names);
 }
 
 void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names) {
@@ -1187,7 +1142,11 @@ void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordere
     std::size_t idx = 0;
     for (const auto& name : names) {
 
-        vibble::log::debug(std::string("[AssetLibrary] (") + std::to_string(idx) + "/" + std::to_string(names.size()) + ") loading '" + name + "'...");
+        if (runtime_loaded_assets_.find(name) != runtime_loaded_assets_.end()) {
+            ++idx;
+            continue;
+        }
+        vibble::log::debug(std::string("[AssetLibrary] (") + std::to_string(idx) + "/" + std::to_string(names.size()) + ") lazily loading '" + name + "'...");
         auto it = info_by_name_.find(name);
         if (it != info_by_name_.end() && it->second) {
             try {

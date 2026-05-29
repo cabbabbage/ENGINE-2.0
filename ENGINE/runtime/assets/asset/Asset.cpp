@@ -508,18 +508,6 @@ void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, in
 }
 
 
-void Asset::clear_downscale_cache() {
-    if (last_scaled_texture_) {
-        SDL_DestroyTexture(last_scaled_texture_);
-        last_scaled_texture_ = nullptr;
-    }
-    last_scaled_source_ = nullptr;
-    last_scaled_w_ = 0;
-    last_scaled_h_ = 0;
-    last_scaled_camera_scale_ = -1.0f;
-    downscale_cache_ready_revision_ = 0;
-}
-
 Asset::~Asset() {
         clear_render_caches();
         visibility_stamp = 0;
@@ -565,11 +553,6 @@ Asset::Asset(const Asset& o)
     , controller_(nullptr)
     , tiling_info_(o.tiling_info_)
     , anim_(nullptr)
-    , last_scaled_texture_(nullptr)
-    , last_scaled_source_(nullptr)
-    , last_scaled_w_(0)
-    , last_scaled_h_(0)
-    , last_scaled_camera_scale_(-1.0f)
     , last_rendered_frame_(nullptr)
     , last_scale_base_input_(o.last_scale_base_input_)
     , last_scale_perspective_input_(o.last_scale_perspective_input_)
@@ -655,11 +638,6 @@ Asset& Asset::operator=(const Asset& o) {
         children_.clear();
         anim_.reset();
         tiling_info_         = o.tiling_info_;
-        last_scaled_texture_      = nullptr;
-        last_scaled_source_       = nullptr;
-        last_scaled_w_            = 0;
-        last_scaled_h_            = 0;
-        last_scaled_camera_scale_ = -1.0f;
         last_scale_base_input_    = o.last_scale_base_input_;
         last_scale_perspective_input_ = o.last_scale_perspective_input_;
         last_scale_camera_input_  = o.last_scale_camera_input_;
@@ -934,13 +912,14 @@ void Asset::update_scale_values(bool force) {
         return;
     }
 
+    const float previous_scale = current_scale;
     current_scale = prospective_scale;
     last_scale_base_input_ = base_scale;
     last_scale_perspective_input_ = perspective_scale;
 
-    // Single texture per frame — GPU scaling handles everything
-    // Only dirty if scale changed enough to matter
-    if (std::fabs(prospective_scale - (current_scale - (base_scale * perspective_scale - current_scale))) >= kScaleEpsilon) {
+    // Single texture per frame — GPU scaling handles runtime size changes.
+    // Dirty render packages only when scale changes enough to alter dimensions.
+    if (std::fabs(prospective_scale - previous_scale) >= kScaleEpsilon) {
         mark_composite_dirty();
         mark_anchors_dirty();
     }
@@ -1086,10 +1065,6 @@ bool Asset::clear_anchor_perspective_override() {
     return true;
 }
 
-SDL_Texture* Asset::get_current_variant_texture() const {
-    if (!current_frame) return nullptr;
-    return current_frame->get_base_texture();
-}
 
 SDL_Texture* Asset::get_texture()
 {
@@ -1987,22 +1962,12 @@ void Asset::clear_render_caches() {
     mesh_dirty_ = true;
 }
 
-void Asset::invalidate_downscale_cache() {
-        last_scaled_texture_      = nullptr;
-        last_scaled_source_       = nullptr;
-        last_scaled_w_            = 0;
-        last_scaled_h_            = 0;
-        last_scaled_camera_scale_ = -1.0f;
-
-        downscale_cache_ready_revision_ = 0;
-}
-
 void Asset::refresh_cached_dimensions() {
         int width = 0;
         int height = 0;
 
         if ((width <= 0 || height <= 0)) {
-                SDL_Texture* frame = get_current_variant_texture();
+                SDL_Texture* frame = get_current_frame();
                 if (frame) {
                         float wf = 0.0f;
                         float hf = 0.0f;
@@ -2050,7 +2015,7 @@ void Asset::refresh_frame_texture_bindings() {
                 if (!current_frame || !active_animation) {
                         return;
                 }
-                if (get_current_variant_texture()) {
+                if (get_current_frame()) {
                         return;
                 }
                 for (AnimationFrame* candidate = active_animation->get_first_frame();
@@ -2075,17 +2040,13 @@ void Asset::refresh_frame_texture_bindings() {
         mark_mesh_dirty();
         mark_anchors_dirty();
 #if !defined(NDEBUG)
-        if (get_current_variant_texture() == nullptr) {
+        if (get_current_frame() == nullptr) {
                 const std::string asset_name = info ? info->name : std::string{"<unknown>"};
                 vibble::log::warn("[AssetRefresh] Missing texture binding for asset '" +
                                   asset_name + "' animation='" + current_animation +
                                   "' frame=" + std::to_string(current_frame->frame_index));
         }
 #endif
-}
-
-float Asset::runtime_scale_remainder() const {
-        return 1.0f;
 }
 
 float Asset::runtime_resolved_scale() const {

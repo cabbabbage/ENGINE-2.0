@@ -36,7 +36,7 @@ inline void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
     SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 }
 
-struct VariantLayerPaths {
+struct LayerPaths {
     std::filesystem::path normal;
     std::filesystem::path mask;
 };
@@ -158,12 +158,12 @@ bool Animation::rebuild_frame(int frame_index,
     cache_entry.height = base_h;
     cache_entry.source_rect = SDL_Rect{0, 0, base_w, base_h};
 
-    // Bind single variant to runtime frames
+    // Bind the single resident texture to runtime frames
     for (auto& path : movement_paths_) {
         if (idx >= path.size()) continue;
         AnimationFrame& frame = path[idx];
-        frame.variant.base_texture = base_tex;
-        frame.variant.source_rect = SDL_Rect{0, 0, base_w, base_h};
+        frame.texture_binding.base_texture = base_tex;
+        frame.texture_binding.source_rect = SDL_Rect{0, 0, base_w, base_h};
     }
 
     if (idx == 0 && frame_cache_[0].texture) {
@@ -330,9 +330,9 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     return !frame_cache_.empty();
 }
 
-const FrameVariant* Animation::get_frame(const AnimationFrame* frame, float /*requested_scale*/) const {
+const FrameTextureBinding* Animation::get_frame(const AnimationFrame* frame, float /*requested_scale*/) const {
     if (!frame) return nullptr;
-    return &frame->variant;
+    return &frame->texture_binding;
 }
 
 const AnimationFrame* Animation::get_first_frame(std::size_t path_index) const {
@@ -446,14 +446,14 @@ AnimationFrame* Animation::primary_frame_at(std::size_t index) {
 void Animation::bind_textures_to_frame(AnimationFrame& frame) const {
     const int raw_index = frame.frame_index;
     if (raw_index < 0 || raw_index >= static_cast<int>(frame_cache_.size())) {
-        frame.variant = FrameVariant{};
+        frame.texture_binding = FrameTextureBinding{};
         return;
     }
 
     const std::size_t index = static_cast<std::size_t>(raw_index);
     const auto& cache = frame_cache_[index];
-    frame.variant.base_texture = cache.texture;
-    frame.variant.source_rect = cache.source_rect;
+    frame.texture_binding.base_texture = cache.texture;
+    frame.texture_binding.source_rect = cache.source_rect;
 }
 
 void Animation::update_preview_texture_from_primary_path() {
@@ -462,7 +462,7 @@ void Animation::update_preview_texture_from_primary_path() {
         preview_texture = nullptr;
         return;
     }
-    preview_texture = first->variant.get_base_texture();
+    preview_texture = first->texture_binding.get_base_texture();
 }
 
 void Animation::synchronize_runtime_frames() {

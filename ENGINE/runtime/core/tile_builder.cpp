@@ -73,14 +73,11 @@ static bool resolve_current_frame_data(const Asset* asset, ResolvedFrameData& ou
         return false;
     }
 
-    const FrameVariant* selected_variant = nullptr;
+    const FrameTextureBinding* selected_texture = nullptr;
     SDL_Texture* texture = nullptr;
     if (const AnimationFrame* frame = asset->current_animation_frame()) {
-        if (!frame->variants.empty()) {
-            const int variant_idx = std::clamp(asset->current_variant_index, 0, static_cast<int>(frame->variants.size()) - 1);
-            selected_variant = &frame->variants[static_cast<std::size_t>(variant_idx)];
-            texture = selected_variant->get_base_texture();
-        }
+        selected_texture = &frame->texture_binding;
+        texture = selected_texture->get_base_texture();
     }
     if (!texture) {
         texture = asset->get_current_frame();
@@ -102,8 +99,8 @@ static bool resolve_current_frame_data(const Asset* asset, ResolvedFrameData& ou
     }
 
     SDL_Rect source_rect{0, 0, tex_w, tex_h};
-    if (selected_variant && selected_variant->source_rect.w > 0 && selected_variant->source_rect.h > 0) {
-        source_rect = clamp_to_texture_bounds(selected_variant->source_rect, tex_w, tex_h);
+    if (selected_texture && selected_texture->source_rect.w > 0 && selected_texture->source_rect.h > 0) {
+        source_rect = clamp_to_texture_bounds(selected_texture->source_rect, tex_w, tex_h);
     }
 
     out.texture = texture;

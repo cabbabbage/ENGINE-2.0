@@ -37,18 +37,18 @@ using Mapping = std::vector<MappingEntry>;
 class AssetInfo {
 
         public:
-    static constexpr std::uint8_t kTextureVariantNone = 0u;
-    static constexpr std::uint8_t kTextureVariantNormal = 1u << 0;
-    static constexpr std::uint8_t kTextureVariantAll = kTextureVariantNormal;
+    static constexpr std::uint8_t kTextureLayerNone = 0u;
+    static constexpr std::uint8_t kTextureLayerBase = 1u << 0;
+    static constexpr std::uint8_t kTextureLayerAll = kTextureLayerBase;
 
     struct AnimationTextureRebuildRequest {
-        std::uint8_t all_frames_variants = kTextureVariantNone;
-        std::unordered_map<int, std::uint8_t> frame_variants;
+        std::uint8_t all_frames_layers = kTextureLayerNone;
+        std::unordered_map<int, std::uint8_t> frame_layers;
 
         bool empty() const;
         void clear();
-        void mark_animation(std::uint8_t variants);
-        void mark_frame(int frame_index, std::uint8_t variants);
+        void mark_animation(std::uint8_t layers);
+        void mark_frame(int frame_index, std::uint8_t layers);
         void merge(const AnimationTextureRebuildRequest& other);
     };
 
@@ -59,8 +59,8 @@ class AssetInfo {
         bool empty() const;
         void clear();
         void mark_bundle_refresh();
-        void mark_animation(const std::string& animation_name, std::uint8_t variants);
-        void mark_frame(const std::string& animation_name, int frame_index, std::uint8_t variants);
+        void mark_animation(const std::string& animation_name, std::uint8_t layers);
+        void mark_frame(const std::string& animation_name, int frame_index, std::uint8_t layers);
         void merge(const TextureRebuildBucket& other);
     };
 
@@ -180,7 +180,6 @@ class AssetInfo {
     bool floor_boxes_enabled = false;
     std::vector<FloorBox> floor_boxes;
     std::vector<ImpassableShape> impassable_shapes;
-    std::vector<float>  scale_variants;
     struct NamedArea {
         struct RenderFrame {
             int width = 0;
@@ -230,16 +229,16 @@ class AssetInfo {
     RuntimeTextureRebuildState& runtime_texture_rebuild_state() { return runtime_texture_rebuild_state_; }
     const RuntimeTextureRebuildState& runtime_texture_rebuild_state() const { return runtime_texture_rebuild_state_; }
     void clear_runtime_texture_rebuild_state();
-    void mark_texture_rebuild_on_close(const std::string& animation_name, std::uint8_t variants = kTextureVariantAll);
+    void mark_texture_rebuild_on_close(const std::string& animation_name, std::uint8_t layers = kTextureLayerAll);
     void mark_texture_frame_rebuild_on_close(const std::string& animation_name,
                                              int frame_index,
-                                             std::uint8_t variants = kTextureVariantAll);
-    void mark_all_animation_textures_on_close(std::uint8_t variants = kTextureVariantAll);
+                                             std::uint8_t layers = kTextureLayerAll);
+    void mark_all_animation_textures_on_close(std::uint8_t layers = kTextureLayerAll);
     void mark_bundle_refresh_on_close();
-    void mark_texture_rebuild_on_load(const std::string& animation_name, std::uint8_t variants = kTextureVariantAll);
+    void mark_texture_rebuild_on_load(const std::string& animation_name, std::uint8_t layers = kTextureLayerAll);
     void mark_texture_frame_rebuild_on_load(const std::string& animation_name,
                                             int frame_index,
-                                            std::uint8_t variants = kTextureVariantAll);
+                                            std::uint8_t layers = kTextureLayerAll);
     TextureRebuildBucket consume_pending_texture_rebuild_on_close();
     TextureRebuildBucket consume_pending_texture_rebuild_on_load();
     void merge_pending_texture_rebuild_on_close(const TextureRebuildBucket& pending);
@@ -344,7 +343,7 @@ class AssetInfo {
         bool changed = false;
         bool animation_changed = false;
         bool start_changed = false;
-        std::uint8_t variant_mask = kTextureVariantNone;
+        std::uint8_t texture_binding_mask = kTextureLayerNone;
         bool structural = false;
     };
 
@@ -375,8 +374,8 @@ class AssetInfo {
     void sync_oval_anchor_mappings_info_json();
     void rebuild_tag_cache();
     void rebuild_anti_tag_cache();
-    static std::uint8_t sanitize_texture_variant_mask(std::uint8_t variants);
-    static std::uint8_t classify_texture_rebuild_variants(const nlohmann::json& before_payload,
+    static std::uint8_t sanitize_texture_layer_mask(std::uint8_t layers);
+    static std::uint8_t classify_texture_rebuild_layers(const nlohmann::json& before_payload,
                                                           const nlohmann::json& after_payload);
     void bump_animation_metadata_revision();
     std::unordered_set<std::string> tag_lookup_;

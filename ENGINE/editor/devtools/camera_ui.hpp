@@ -65,13 +65,14 @@ private:
     std::unique_ptr<FloatSliderWidget> boundary_min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> max_cull_depth_slider_;
     std::unique_ptr<FloatSliderWidget> dynamic_renderer_depth_efficiency_depth_slider_;
-    std::unique_ptr<FloatSliderWidget> dynamic_renderer_depth_efficiency_min_density_ratio_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_interval_slider_;
     std::unique_ptr<FloatSliderWidget> layer_depth_falloff_slider_;
+    std::unique_ptr<FloatSliderWidget> aperture_slider_;
     std::unique_ptr<DMSlider> near_fog_distance_slider_;
     std::unique_ptr<SliderWidget> near_fog_distance_widget_;
-    std::unique_ptr<FloatSliderWidget> blur_px_slider_;
     std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
+    std::unique_ptr<DMSlider> distance_from_edge_slider_;
+    std::unique_ptr<SliderWidget> distance_from_edge_widget_;
 
     // Global camera height bounds
     std::unique_ptr<DMSlider> camera_height_min_slider_;
@@ -82,11 +83,13 @@ private:
     DMCheckbox* depth_of_field_checkbox_ = nullptr;
     std::unique_ptr<Widget> movement_section_widget_;
     std::unique_ptr<Widget> framing_section_widget_;
-    std::unique_ptr<Widget> lighting_section_widget_;
+    std::unique_ptr<Widget> lens_section_widget_;
+    std::unique_ptr<Widget> rendering_section_widget_;
     std::unique_ptr<Widget> debug_section_widget_;
     bool movement_section_expanded_ = false;
     bool framing_section_expanded_ = false;
-    bool lighting_section_expanded_ = false;
+    bool lens_section_expanded_ = false;
+    bool rendering_section_expanded_ = false;
     bool debug_section_expanded_ = false;
 
     bool applying_settings_ = false;

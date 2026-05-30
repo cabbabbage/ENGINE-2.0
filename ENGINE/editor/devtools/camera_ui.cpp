@@ -88,18 +88,19 @@ private:
 
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
-    : DockableCollapsible("Camera Settings", true, x, y),
+    : DockableCollapsible("Camera", false, x, y),
       assets_(assets) {
     movement_section_expanded_ = true;
     framing_section_expanded_ = true;
-    lighting_section_expanded_ = false;
+    lens_section_expanded_ = true;
+    rendering_section_expanded_ = true;
     debug_section_expanded_ = false;
     set_expanded(true);
-    set_visible(false);
+    set_visible(true);
     set_padding(16);
-    set_close_button_enabled(true);
+    set_close_button_enabled(false);
     set_close_button_on_left(false);
-    set_floatable(true);
+    set_floatable(false);
     build_ui();
     apply_settings_if_needed();
     sync_from_camera();
@@ -124,17 +125,11 @@ void CameraUIPanel::open() {
 }
 
 void CameraUIPanel::close() {
-    set_visible(false);
-    sync_runtime_lighting_state_with_visibility();
+    open();
 }
 
 void CameraUIPanel::toggle() {
-    set_visible(!is_visible());
-    sync_runtime_lighting_state_with_visibility();
-    if (is_visible()) {
-        suppress_apply_once_ = true;
-        sync_from_camera();
-    }
+    open();
 }
 
 bool CameraUIPanel::is_point_inside(int x, int y) const {
@@ -185,6 +180,12 @@ void CameraUIPanel::render(SDL_Renderer* renderer) const {
 }
 
 void CameraUIPanel::layout_custom_content(int screen_w, int screen_h) const {
+    (void)screen_h;
+    constexpr int kRightDockMargin = 12;
+    const SDL_Rect r = rect();
+    const int dock_x = std::max(0, screen_w - r.w - kRightDockMargin);
+    const int dock_y = DMSpacing::panel_padding();
+    const_cast<CameraUIPanel*>(this)->set_position_from_layout_manager(dock_x, dock_y);
     set_drag_handle_rect(SDL_Rect{0,0,0,0});
 }
 
@@ -195,13 +196,16 @@ void CameraUIPanel::sync_from_camera() {
 
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
     sync_debug_controls_from_settings(settings);
-    if (blur_px_slider_) blur_px_slider_->set_value(settings.blur_px);
+    if (aperture_slider_) aperture_slider_->set_value(settings.aperture);
     if (radial_blur_px_slider_) radial_blur_px_slider_->set_value(settings.radial_blur_px);
     if (depth_of_field_checkbox_) {
         depth_of_field_checkbox_->set_value(settings.depth_of_field_enabled);
     }
     if (boundary_min_render_size_slider_) {
         boundary_min_render_size_slider_->set_value(assets_->boundary_min_visible_screen_ratio());
+    }
+    if (distance_from_edge_slider_) {
+        distance_from_edge_slider_->set_value(assets_->live_dynamic_max_spawn_from_room_px());
     }
 
     // Sync camera height bounds
@@ -220,10 +224,6 @@ void CameraUIPanel::sync_debug_controls_from_settings(const WarpedScreenGrid::Re
         dynamic_renderer_depth_efficiency_depth_slider_->set_value(
             settings.dynamic_renderer_depth_efficiency_depth);
     }
-    if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
-        dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_value(
-            settings.dynamic_renderer_depth_efficiency_min_density_ratio);
-    }
     if (layer_depth_interval_slider_) layer_depth_interval_slider_->set_value(settings.layer_depth_interval);
     if (layer_depth_falloff_slider_) layer_depth_falloff_slider_->set_value(settings.layer_depth_curve);
     if (near_fog_distance_slider_ && assets_) {
@@ -237,7 +237,7 @@ void CameraUIPanel::build_ui() {
     set_padding(DMSpacing::panel_padding());
     set_row_gap(DMSpacing::item_gap());
     set_col_gap(DMSpacing::item_gap());
-    set_floating_content_width(460);
+    set_floating_content_width(420);
 
     header_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::header_gap());
 
@@ -280,17 +280,6 @@ void CameraUIPanel::build_ui() {
         "World depth where dynamic assets switch from full-update to paused+fogged behavior.");
     dynamic_renderer_depth_efficiency_depth_slider_->set_on_value_changed(
         [this](float) { on_control_value_changed(); });
-    dynamic_renderer_depth_efficiency_min_density_ratio_slider_ = std::make_unique<FloatSliderWidget>(
-        "Dynamic Efficiency Min Density",
-        0.0f,
-        1.0f,
-        0.01f,
-        defaults.dynamic_renderer_depth_efficiency_min_density_ratio,
-        2);
-    dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_tooltip(
-        "Legacy setting retained for compatibility. Dynamic thinning is disabled by depth-band behavior.");
-    dynamic_renderer_depth_efficiency_min_density_ratio_slider_->set_on_value_changed(
-        [this](float) { on_control_value_changed(); });
     layer_depth_interval_slider_ = std::make_unique<FloatSliderWidget>(
         "Layer Interval",
         1.0f,
@@ -318,9 +307,17 @@ void CameraUIPanel::build_ui() {
     near_fog_distance_widget_ = std::make_unique<SliderWidget>(near_fog_distance_slider_.get());
     near_fog_distance_widget_->set_tooltip(
         "Dynamic asset fog attenuation starts from this depth (px) in the paused+fogged band.");
-    blur_px_slider_ = std::make_unique<FloatSliderWidget>("Blur (px)", 0.0f, 128.0f, 0.01f, defaults.blur_px, 3);
-    blur_px_slider_->set_tooltip("Per-layer Gaussian-like blur budget. Larger values produce softer focus transitions and increase blur processing cost.");
-    blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+    distance_from_edge_slider_ = std::make_unique<DMSlider>(
+        "Distance From Edge (px)",
+        0,
+        20000,
+        assets_ ? assets_->live_dynamic_max_spawn_from_room_px() : 128);
+    distance_from_edge_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
+    distance_from_edge_widget_ = std::make_unique<SliderWidget>(distance_from_edge_slider_.get());
+    distance_from_edge_widget_->set_tooltip("Maximum dynamic spawn distance from room boundary edges.");
+    aperture_slider_ = std::make_unique<FloatSliderWidget>("Aperture", 0.1f, 8.0f, 0.01f, defaults.aperture, 2);
+    aperture_slider_->set_tooltip("Controls how aggressively DoF blur ramps as layers move away from the focus layer.");
+    aperture_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     radial_blur_px_slider_ = std::make_unique<FloatSliderWidget>(
         "Radial Blur (px)",
         0.0f,
@@ -366,11 +363,18 @@ void CameraUIPanel::build_ui() {
             framing_section_expanded_ = !framing_section_expanded_;
             rebuild_rows();
         });
-    lighting_section_widget_ = std::make_unique<SectionToggleWidget>(
-        "Lighting",
-        [this]() { return lighting_section_expanded_; },
+    lens_section_widget_ = std::make_unique<SectionToggleWidget>(
+        "Lens",
+        [this]() { return lens_section_expanded_; },
         [this]() {
-            lighting_section_expanded_ = !lighting_section_expanded_;
+            lens_section_expanded_ = !lens_section_expanded_;
+            rebuild_rows();
+        });
+    rendering_section_widget_ = std::make_unique<SectionToggleWidget>(
+        "Rendering",
+        [this]() { return rendering_section_expanded_; },
+        [this]() {
+            rendering_section_expanded_ = !rendering_section_expanded_;
             rebuild_rows();
         });
     debug_section_widget_ = std::make_unique<SectionToggleWidget>(
@@ -450,11 +454,20 @@ void CameraUIPanel::rebuild_rows() {
         if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     }
 
-    if (lighting_section_widget_) rows.push_back({ lighting_section_widget_.get() });
-    if (lighting_section_expanded_) {
+    if (lens_section_widget_) rows.push_back({ lens_section_widget_.get() });
+    if (lens_section_expanded_) {
         if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
-        if (blur_px_slider_) rows.push_back({ blur_px_slider_.get() });
+        if (aperture_slider_) rows.push_back({ aperture_slider_.get() });
         if (radial_blur_px_slider_) rows.push_back({ radial_blur_px_slider_.get() });
+        if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
+        if (layer_depth_falloff_slider_) rows.push_back({ layer_depth_falloff_slider_.get() });
+        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
+    }
+
+    if (rendering_section_widget_) rows.push_back({ rendering_section_widget_.get() });
+    if (rendering_section_expanded_) {
+        if (distance_from_edge_widget_) rows.push_back({ distance_from_edge_widget_.get() });
+        if (near_fog_distance_widget_) rows.push_back({ near_fog_distance_widget_.get() });
         if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     }
 
@@ -464,12 +477,6 @@ void CameraUIPanel::rebuild_rows() {
         if (dynamic_renderer_depth_efficiency_depth_slider_) {
             rows.push_back({ dynamic_renderer_depth_efficiency_depth_slider_.get() });
         }
-        if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
-            rows.push_back({ dynamic_renderer_depth_efficiency_min_density_ratio_slider_.get() });
-        }
-        if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
-        if (layer_depth_falloff_slider_) rows.push_back({ layer_depth_falloff_slider_.get() });
-        if (near_fog_distance_widget_) rows.push_back({ near_fog_distance_widget_.get() });
     }
 
     set_rows(rows);
@@ -499,13 +506,9 @@ void CameraUIPanel::apply_settings_if_needed() {
             std::max(1.0f, updated.max_cull_depth));
         dynamic_renderer_depth_efficiency_depth_slider_->set_range(0.0f, std::max(1.0f, updated.max_cull_depth));
     }
-    if (dynamic_renderer_depth_efficiency_min_density_ratio_slider_) {
-        updated.dynamic_renderer_depth_efficiency_min_density_ratio =
-            dynamic_renderer_depth_efficiency_min_density_ratio_slider_->value();
-    }
     if (layer_depth_interval_slider_) updated.layer_depth_interval = layer_depth_interval_slider_->value();
     if (layer_depth_falloff_slider_) updated.layer_depth_curve = layer_depth_falloff_slider_->value();
-    if (blur_px_slider_) updated.blur_px = blur_px_slider_->value();
+    if (aperture_slider_) updated.aperture = aperture_slider_->value();
     if (radial_blur_px_slider_) updated.radial_blur_px = radial_blur_px_slider_->value();
     if (depth_of_field_checkbox_) updated.depth_of_field_enabled = depth_of_field_checkbox_->value();
 
@@ -517,11 +520,9 @@ void CameraUIPanel::apply_settings_if_needed() {
         float_changed(updated.max_cull_depth, current.max_cull_depth) ||
         float_changed(updated.dynamic_renderer_depth_efficiency_depth,
                       current.dynamic_renderer_depth_efficiency_depth) ||
-        float_changed(updated.dynamic_renderer_depth_efficiency_min_density_ratio,
-                      current.dynamic_renderer_depth_efficiency_min_density_ratio) ||
         float_changed(updated.layer_depth_interval, current.layer_depth_interval) ||
         float_changed(updated.layer_depth_curve, current.layer_depth_curve) ||
-        float_changed(updated.blur_px, current.blur_px) ||
+        float_changed(updated.aperture, current.aperture) ||
         float_changed(updated.radial_blur_px, current.radial_blur_px) ||
         (updated.depth_of_field_enabled != current.depth_of_field_enabled);
 
@@ -537,6 +538,11 @@ void CameraUIPanel::apply_settings_if_needed() {
         : assets_->live_dynamic_fog_near_distance_px();
     const bool near_fog_changed = near_fog_distance_slider_ &&
         near_fog_distance != assets_->live_dynamic_fog_near_distance_px();
+    const int distance_from_edge = distance_from_edge_slider_
+        ? distance_from_edge_slider_->value()
+        : assets_->live_dynamic_max_spawn_from_room_px();
+    const bool distance_from_edge_changed = distance_from_edge_slider_ &&
+        distance_from_edge != assets_->live_dynamic_max_spawn_from_room_px();
 
     bool changed = false;
     if (realism_changed) {
@@ -551,8 +557,13 @@ void CameraUIPanel::apply_settings_if_needed() {
         assets_->set_live_dynamic_fog_near_distance_px(near_fog_distance);
         changed = true;
     }
+    if (distance_from_edge_changed) {
+        assets_->set_live_dynamic_max_spawn_from_room_px(distance_from_edge);
+        assets_->notify_dynamic_spawn_distance_changed();
+        changed = true;
+    }
 
-    if (realism_changed || boundary_changed || near_fog_changed) {
+    if (realism_changed || boundary_changed || near_fog_changed || distance_from_edge_changed) {
         assets_->on_camera_settings_changed();
     }
 

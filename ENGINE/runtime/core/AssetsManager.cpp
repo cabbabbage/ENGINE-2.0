@@ -878,6 +878,7 @@ void Assets::load_camera_settings_from_json() {
     }
 
     int fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
+    int max_spawn_from_room = 128;
     if (map_info_json_.contains("live_dynamic_spawns") && map_info_json_["live_dynamic_spawns"].is_object()) {
         const nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
         auto fog_it = live_dynamic.find("fog_near_distance_px");
@@ -892,10 +893,23 @@ void Assets::load_camera_settings_from_json() {
                 fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
             }
         }
+        auto max_spawn_it = live_dynamic.find("max_spawn_from_room");
+        if (max_spawn_it != live_dynamic.end() && max_spawn_it->is_number()) {
+            try {
+                if (max_spawn_it->is_number_integer()) {
+                    max_spawn_from_room = max_spawn_it->get<int>();
+                } else {
+                    max_spawn_from_room = static_cast<int>(std::lround(max_spawn_it->get<double>()));
+                }
+            } catch (...) {
+                max_spawn_from_room = 128;
+            }
+        }
     }
 
     set_boundary_min_visible_screen_ratio(boundary_ratio);
     set_live_dynamic_fog_near_distance_px(fog_near_distance);
+    set_live_dynamic_max_spawn_from_room_px(max_spawn_from_room);
     set_camera_height_bounds_px(min_height, max_height);
     dynamic_spawn_preload_margin_world_px_ = preload_margin;
     dynamic_spawn_despawn_margin_world_px_ = despawn_margin;
@@ -1186,6 +1200,22 @@ void Assets::set_live_dynamic_fog_near_distance_px(int value, bool persist) {
         live_dynamic = nlohmann::json::object();
     }
     live_dynamic["fog_near_distance_px"] = live_dynamic_fog_near_distance_px_;
+}
+
+int Assets::live_dynamic_max_spawn_from_room_px() const {
+    return live_dynamic_max_spawn_from_room_px_;
+}
+
+void Assets::set_live_dynamic_max_spawn_from_room_px(int value, bool persist) {
+    live_dynamic_max_spawn_from_room_px_ = std::clamp(value, 0, 20000);
+    if (!persist || !map_info_json_.is_object()) {
+        return;
+    }
+    nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
+    if (!live_dynamic.is_object()) {
+        live_dynamic = nlohmann::json::object();
+    }
+    live_dynamic["max_spawn_from_room"] = live_dynamic_max_spawn_from_room_px_;
 }
 
 std::pair<int, int> Assets::camera_height_bounds_px() const {

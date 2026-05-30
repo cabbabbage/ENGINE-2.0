@@ -3816,7 +3816,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         std::optional<Hit> best;
         for (const auto& h : hits) {
             const float dy = std::fabs(my - h.y);
-            if (dy > 8.0f) continue;
+            if (dy > 14.0f) continue;
             if (!best || h.prio > best->prio || (h.prio == best->prio && dy < std::fabs(my - best->y))) {
                 best = h;
             }
@@ -4170,7 +4170,19 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 const bool hovered = depth_guide_hover_selection_ == selection_kind;
                 const Uint8 alpha = static_cast<Uint8>(active ? 255 : (hovered ? std::max<Uint8>(color.a, 235) : color.a));
                 SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, alpha);
-                SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
+                const int line_thickness = active ? 6 : (hovered ? 5 : 3);
+                const int half = line_thickness / 2;
+                for (int o = -half; o <= half; ++o) {
+                    SDL_RenderLine(renderer, 0, line_y + o, screen_w_, line_y + o);
+                }
+                const int grip = active ? 11 : (hovered ? 9 : 7);
+                SDL_FRect grip_rect{
+                    static_cast<float>(std::max(0, (screen_w_ / 2) - grip)),
+                    static_cast<float>(line_y - grip),
+                    static_cast<float>(grip * 2),
+                    static_cast<float>(grip * 2)};
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                SDL_RenderFillRect(renderer, &grip_rect);
                 DMLabelStyle style = DMStyles::Label();
                 style.color = SDL_Color{color.r, color.g, color.b, alpha};
                 DrawLabelText(renderer, label, (screen_w_ / 2) + 12, std::max(0, line_y - style.font_size - 2), style);

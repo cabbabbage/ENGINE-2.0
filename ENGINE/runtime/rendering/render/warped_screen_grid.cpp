@@ -870,6 +870,10 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.layer_depth_curve = 0.0f;
     }
     settings_.layer_depth_curve = std::min(settings_.layer_depth_curve, 200.0f);
+    if (!std::isfinite(settings_.aperture) || settings_.aperture < 0.1f) {
+        settings_.aperture = 0.1f;
+    }
+    settings_.aperture = std::min(settings_.aperture, 8.0f);
     if (!std::isfinite(settings_.blur_px) || settings_.blur_px < 0.0f) {
         settings_.blur_px = 0.0f;
     }
@@ -1634,6 +1638,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
                1.0f);
     read_float("layer_depth_interval", updated.layer_depth_interval, 1.0f, 100000.0f);
     read_float("layer_depth_curve", updated.layer_depth_curve, 0.0f, 200.0f);
+    read_float("aperture", updated.aperture, 0.1f, 8.0f);
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
     read_float("blur_px", updated.blur_px, 0.0f, 128.0f);
     read_float("radial_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
@@ -1712,6 +1717,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
         settings_.dynamic_renderer_depth_efficiency_min_density_ratio;
     result["layer_depth_interval"] = settings_.layer_depth_interval;
     result["layer_depth_curve"] = settings_.layer_depth_curve;
+    result["aperture"] = settings_.aperture;
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;

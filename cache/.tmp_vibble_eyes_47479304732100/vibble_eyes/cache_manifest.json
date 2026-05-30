@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "98a685bb98e704e9",
+          "height": 29,
+          "order": 0,
+          "width": 51
+        }
+      ]
+    }
+  ],
+  "asset_name": "vibble_eyes",
+  "authored_scale_percentage": 213.99998474121094,
+  "crop_canvas": {
+    "shared_height": 29,
+    "shared_width": 51
+  },
+  "digest": "f49d9ddfa83e36a8",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

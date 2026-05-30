@@ -132,6 +132,7 @@ public:
     CompositeResult compose(const std::vector<LayerTexture>& layers,
                             SDL_Texture* background_seed,
                             bool depth_of_field_enabled,
+                            float aperture,
                             float blur_px,
                             float radial_blur_px,
                             SDL_FPoint optical_center,

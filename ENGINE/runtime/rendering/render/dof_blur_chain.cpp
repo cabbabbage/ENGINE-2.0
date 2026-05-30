@@ -89,7 +89,7 @@ int ping_pong_frame_index(int frame_index, int frame_count) {
     return std::clamp(wrapped, 0, frame_count - 1);
 }
 
-float depth_curve(int layer_distance, float normalized_distance) {
+float depth_curve(int layer_distance, float normalized_distance, float aperture) {
     if (layer_distance <= 0) {
         return 0.0f;
     }
@@ -99,7 +99,9 @@ float depth_curve(int layer_distance, float normalized_distance) {
     const float absolute_curve = std::pow(smoothstep01(absolute_t), 2.10f);
     const float normalized_curve = std::pow(smoothstep01(normalized_distance), 2.20f);
 
-    return std::clamp(absolute_curve * 0.78f + normalized_curve * 0.22f, 0.0f, 1.0f);
+    const float blended = std::clamp(absolute_curve * 0.78f + normalized_curve * 0.22f, 0.0f, 1.0f);
+    const float aperture_scale = std::clamp(aperture, 0.1f, 8.0f);
+    return std::clamp(std::pow(blended, 1.0f / aperture_scale), 0.0f, 1.0f);
 }
 
 TextureStateSnapshot capture_texture_state(SDL_Texture* texture) {
@@ -1395,6 +1397,7 @@ bool Renderer::blur_step(SDL_Texture* src,
 CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                                   SDL_Texture* background_seed,
                                   bool depth_of_field_enabled,
+                                  float aperture,
                                   float blur_px,
                                   float radial_blur_px,
                                   SDL_FPoint optical_center,
@@ -1609,7 +1612,7 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                 std::clamp(static_cast<float>(layer_distance) * inv_max_layer_distance, 0.0f, 1.0f);
 
             const float layer_strength = std::clamp(layer.blur_strength, 0.0f, 1.0f);
-            const float depth_t = depth_curve(layer_distance, layer_distance_t);
+            const float depth_t = depth_curve(layer_distance, layer_distance_t, aperture);
 
             const float layer_blur = blur_enabled ? safe_blur_px * layer_strength * depth_t : 0.0f;
             const float layer_radial = blur_enabled ? safe_radial_blur_px * layer_strength * depth_t : 0.0f;

@@ -84,6 +84,7 @@ public:
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
         bool light_radius_overlap_culling_enabled = true;
+        float aperture                     = 1.0f;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;
         bool depth_of_field_enabled         = false;

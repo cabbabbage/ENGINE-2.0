@@ -999,20 +999,6 @@ private:
         return std::clamp(value, kRadiusMin, kMaxSpawnFromRoomMax);
     }
 
-
-    void set_max_spawn_from_room(int value) {
-        if (!section_) return;
-        if (!section_->is_object()) {
-            *section_ = json::object();
-        }
-        const int clamped = std::clamp(value, kRadiusMin, kMaxSpawnFromRoomMax);
-        (*section_)["max_spawn_from_room"] = clamped;
-        notify_save(false);
-        if (assets_) {
-            assets_->notify_dynamic_spawn_distance_changed();
-        }
-    }
-
     static int clamp_jitter(int value) {
         if (!std::isfinite(static_cast<double>(value))) return 0;
         return std::clamp(value, 0, kMaxBoundaryJitter);
@@ -1157,26 +1143,6 @@ private:
 
         if (add_button_widget_) {
             rows.push_back({add_button_widget_.get()});
-        }
-
-        const int max_spawn_from_room = current_max_spawn_from_room();
-        if (!max_spawn_from_room_slider_) {
-            max_spawn_from_room_slider_ = std::make_unique<DMSlider>(
-                "Max Spawn From Room (px)",
-                kRadiusMin,
-                kMaxSpawnFromRoomMax,
-                max_spawn_from_room);
-            max_spawn_from_room_slider_->set_on_value_changed([this](int value) {
-                this->set_max_spawn_from_room(value);
-            });
-            max_spawn_from_room_widget_ =
-                std::make_unique<SliderWidget>(max_spawn_from_room_slider_.get());
-        }
-        if (max_spawn_from_room_slider_) {
-            max_spawn_from_room_slider_->set_value(max_spawn_from_room);
-        }
-        if (max_spawn_from_room_widget_) {
-            rows.push_back({max_spawn_from_room_widget_.get()});
         }
 
         auto search_extras = std::make_shared<std::vector<SearchAssets::Result>>(build_candidate_search_extra_results());
@@ -1517,8 +1483,6 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
-    std::unique_ptr<DMSlider> max_spawn_from_room_slider_{};
-    std::unique_ptr<SliderWidget> max_spawn_from_room_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
     int pie_callback_depth_ = 0;
     bool pending_rebuild_ = false;

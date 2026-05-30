@@ -606,20 +606,6 @@ bool DevFooterBar::contains(int x, int y) const {
     return editor_navigation_contains_point(p);
 }
 
-bool DevFooterBar::editor_frame_focus_bounds_contains_point(const SDL_Point& point) const {
-    if (SDL_PointInRect(&point, &editor_frame_strip_rect_)) {
-        return true;
-    }
-    auto point_in_button = [&point](const std::unique_ptr<DMButton>& button) {
-        if (!button) {
-            return false;
-        }
-        const SDL_Rect rect = button->rect();
-        return SDL_PointInRect(&point, &rect);
-    };
-    return point_in_button(editor_prev_frame_button_) || point_in_button(editor_next_frame_button_);
-}
-
 void DevFooterBar::set_editor_frame_editor_focused(bool focused, bool notify_callback) {
     focused = focused && editor_frame_navigation_.visible && editor_frame_navigation_.frame_editor_enabled;
     if (editor_frame_editor_focused_ == focused) {
@@ -1114,8 +1100,11 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
         return true;
     }
 
+    const bool pointer_in_editor_footer = pointer_event &&
+        (SDL_PointInRect(&pointer, &rect_) || editor_navigation_contains_point(pointer));
+
     if (editor_frame_editor_focused_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        if (!editor_frame_focus_bounds_contains_point(pointer)) {
+        if (!pointer_in_editor_footer) {
             set_editor_frame_editor_focused(false, true);
             return true;
         }
@@ -1140,8 +1129,7 @@ bool DevFooterBar::handle_editor_navigation_event(const SDL_Event& e) {
     used = trigger_button(editor_next_frame_button_.get()) || used;
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        if (editor_frame_navigation_.frame_editor_enabled && e.button.clicks >= 2 &&
-            editor_frame_focus_bounds_contains_point(pointer)) {
+        if (editor_frame_navigation_.frame_editor_enabled && pointer_in_editor_footer) {
             set_editor_frame_editor_focused(true, true);
             used = true;
         }

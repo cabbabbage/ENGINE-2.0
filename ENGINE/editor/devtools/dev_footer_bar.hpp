@@ -132,7 +132,6 @@ private:
     int editor_frame_index_at_point(const SDL_Point& point) const;
     SDL_Rect editor_frame_chip_rect(int frame_index) const;
     bool editor_navigation_contains_point(const SDL_Point& point) const;
-    bool editor_frame_focus_bounds_contains_point(const SDL_Point& point) const;
     void set_editor_frame_editor_focused(bool focused, bool notify_callback);
     bool handle_editor_navigation_event(const SDL_Event& e);
     void render_editor_navigation(SDL_Renderer* renderer) const;

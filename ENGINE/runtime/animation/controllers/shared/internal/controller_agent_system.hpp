@@ -48,7 +48,46 @@ public:
                                                  bool target_valid,
                                                  long long target_dist_sq,
                                                  std::chrono::steady_clock::time_point now,
-                                                 const EnemyAgentConfig& config);
+                                                 const EnemyAgentConfig& config) {
+        EnemyPhaseDecision decision{};
+        if (!target_valid) {
+            decision.phase = EnemyAgentPhase::ReturnHome;
+            return decision;
+        }
+
+        const int aggro_radius_px = std::max(0, config.ranges.aggro_radius_px);
+        const int attack_radius_px = std::max(0, config.ranges.attack_radius_px);
+        const long long aggro_radius_sq =
+            static_cast<long long>(aggro_radius_px) * static_cast<long long>(aggro_radius_px);
+        const long long attack_radius_sq =
+            static_cast<long long>(attack_radius_px) * static_cast<long long>(attack_radius_px);
+
+        if (target_dist_sq > aggro_radius_sq) {
+            decision.phase = EnemyAgentPhase::ReturnHome;
+            return decision;
+        }
+
+        if (state.mode == EnemyAgentPhase::Recover && now < state.recover_until) {
+            decision.phase = EnemyAgentPhase::Recover;
+            return decision;
+        }
+
+        if (target_dist_sq <= attack_radius_sq) {
+            decision.phase = EnemyAgentPhase::AttackWindow;
+            decision.target_should_be_committed = true;
+            if (state.mode != EnemyAgentPhase::AttackWindow) {
+                decision.enter_attack_window = true;
+            } else if (now >= state.attack_window_until && !config.kamikaze) {
+                decision.phase = EnemyAgentPhase::Recover;
+                decision.leave_attack_window_to_recover = true;
+                decision.target_should_be_committed = false;
+            }
+            return decision;
+        }
+
+        decision.phase = EnemyAgentPhase::Approach;
+        return decision;
+    }
 
     static bool move_by_delta_3d(Asset& self,
                                  const axis::WorldPos& delta,

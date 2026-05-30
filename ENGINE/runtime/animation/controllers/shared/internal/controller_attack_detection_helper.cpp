@@ -1,5 +1,6 @@
 #include "animation/controllers/shared/internal/controller_attack_detection_helper.hpp"
 
+#include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"

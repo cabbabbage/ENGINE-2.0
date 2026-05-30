@@ -47,10 +47,6 @@ json make_default_trail_template() {
         {"geometry", "Square"},
         {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
         {"coarseness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))},
-        {"edge_detail_candidates", json::object({
-            {"candidates", json::array()},
-            {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
-        })},
         {"tags", json::array()},
         {"anti_tags", json::array()},
         {"spawn_groups", json::array()}

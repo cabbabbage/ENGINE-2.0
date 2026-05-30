@@ -6857,6 +6857,86 @@
       },
       "start": "default"
     },
+    "bullet": {
+      "anchor_point_child_candidates": [],
+      "animations": {
+        "default": {
+          "invert_x": false,
+          "invert_y": false,
+          "invert_z": false,
+          "locked": false,
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          },
+          "tags": []
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bullet",
+      "asset_name": "bullet",
+      "asset_type": "Object",
+      "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
+      "floor_boxes_enabled": false,
+      "hitbox_enabled": false,
+      "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "movement_enabled": false,
+      "oval_anchor_mappings": [],
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 12.0,
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "update_radius": 0,
+      "weight_kg": 0.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
+    },
     "bush_1_fps_2": {
       "anchor_point_child_candidates": [],
       "animations": {
@@ -27826,10 +27906,10 @@
       "map_name": "forrest",
       "rooms_data": {
         "Mossy_Circle": {
-          "camera_center_dx": -4223,
-          "camera_center_dz": -8658,
-          "camera_height_px": 725,
-          "camera_tilt_deg": 48.579158782958984,
+          "camera_center_dx": -5688,
+          "camera_center_dz": -5759,
+          "camera_height_px": 885,
+          "camera_tilt_deg": 35.63592529296875,
           "camera_zoom_percent": 0,
           "coarseness": {
             "center": 3344,
@@ -27843,9 +27923,9 @@
             }
           },
           "display_color": [
-            237,
+            36,
+            212,
             242,
-            85,
             255
           ],
           "geometry": "Circle",
@@ -28385,9 +28465,9 @@
             }
           },
           "display_color": [
-            147,
-            31,
-            204,
+            131,
+            85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -28443,9 +28523,9 @@
             }
           },
           "display_color": [
-            85,
-            126,
+            219,
             242,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -28506,9 +28586,9 @@
             }
           },
           "display_color": [
-            242,
-            138,
-            36,
+            31,
+            204,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -28745,7 +28825,7 @@
           "display_color": [
             31,
             204,
-            141,
+            136,
             255
           ],
           "geometry": "Square",
@@ -28806,9 +28886,9 @@
             }
           },
           "display_color": [
-            138,
-            242,
-            85,
+            51,
+            126,
+            204,
             255
           ],
           "geometry": "Square",

@@ -23539,7 +23539,7 @@
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 2019,
         "camera_height_min_px": 200,
-        "depth_of_field_enabled": true,
+        "depth_of_field_enabled": false,
         "dynamic_renderer_depth_efficiency_depth": 2000.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.05999999865889549,
         "edge_softness": 1.0,
@@ -23722,12 +23722,17 @@
       "map_name": "forrest",
       "rooms_data": {
         "Bluebloom_Nook": {
+          "coarseness": 0,
           "display_color": [
-            63,
             204,
+            31,
             31,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -23868,12 +23873,17 @@
           }
         },
         "Foggy_Glade": {
+          "coarseness": 0,
           "display_color": [
-            242,
-            36,
-            36,
+            99,
+            204,
+            31,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -24014,12 +24024,17 @@
           }
         },
         "Frog_Basin": {
+          "coarseness": 0,
           "display_color": [
-            31,
-            32,
-            204,
+            242,
+            192,
+            85,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -24157,12 +24172,17 @@
           }
         },
         "Lantern_Mirelet": {
+          "coarseness": 0,
           "display_color": [
-            242,
-            242,
-            85,
+            204,
+            174,
+            31,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -24305,12 +24325,17 @@
           "camera_height_px": 326,
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
+          "coarseness": 0,
           "display_color": [
-            36,
+            85,
             242,
-            242,
+            225,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 7620,
@@ -24500,12 +24525,17 @@
           }
         },
         "Moonfern_Pocket": {
+          "coarseness": 0,
           "display_color": [
-            130,
-            204,
+            76,
             31,
+            204,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -24651,12 +24681,22 @@
           "camera_height_px": 643,
           "camera_tilt_deg": 17.636096954345703,
           "camera_zoom_percent": 0,
+          "coarseness": 96,
           "display_color": [
-            31,
-            154,
-            204,
+            242,
+            81,
+            36,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              }
+            ],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 14584,
@@ -24973,12 +25013,17 @@
           }
         },
         "NewRoom": {
+          "coarseness": 0,
           "display_color": [
-            36,
+            91,
             242,
-            72,
+            85,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25019,12 +25064,17 @@
           }
         },
         "NewRoom1": {
+          "coarseness": 0,
           "display_color": [
-            204,
-            51,
-            81,
+            149,
+            36,
+            242,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25065,12 +25115,17 @@
           }
         },
         "NewRoom2": {
+          "coarseness": 0,
           "display_color": [
-            242,
-            155,
-            85,
+            204,
+            31,
+            161,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25142,12 +25197,17 @@
           }
         },
         "NewRoom3": {
+          "coarseness": 0,
           "display_color": [
-            71,
-            75,
+            157,
             204,
+            31,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25188,12 +25248,17 @@
           }
         },
         "NewRoom4": {
+          "coarseness": 0,
           "display_color": [
-            153,
-            36,
-            242,
+            44,
+            204,
+            31,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25235,12 +25300,17 @@
           }
         },
         "NewRoom5": {
+          "coarseness": 0,
           "display_color": [
-            242,
-            85,
-            103,
+            204,
+            71,
+            101,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25282,12 +25352,17 @@
           }
         },
         "Old_Stump_Yard": {
+          "coarseness": 0,
           "display_color": [
+            220,
             242,
-            91,
-            36,
+            85,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 4030,
@@ -25491,12 +25566,17 @@
           "camera_height_px": 109,
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
+          "coarseness": 0,
           "display_color": [
-            204,
-            203,
-            71,
+            242,
+            213,
+            36,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 1362,
@@ -25574,12 +25654,17 @@
           }
         },
         "Spider_Hollow": {
+          "coarseness": 0,
           "display_color": [
-            89,
             242,
-            61,
+            134,
+            36,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 4030,
@@ -25720,12 +25805,17 @@
           }
         },
         "Thornstep_Croft": {
+          "coarseness": 0,
           "display_color": [
-            204,
-            71,
-            142,
+            242,
+            36,
+            66,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 4030,
@@ -25866,12 +25956,17 @@
           }
         },
         "Whispering_Ring": {
+          "coarseness": 0,
           "display_color": [
-            85,
-            242,
-            225,
+            71,
+            83,
+            204,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -26017,12 +26112,17 @@
           "camera_height_px": 288,
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
+          "coarseness": 0,
           "display_color": [
-            71,
+            189,
             204,
-            91,
+            71,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Circle",
           "height": {
             "center": 15497,
@@ -26443,12 +26543,17 @@
           "camera_height_px": 1155,
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
+          "coarseness": 0,
           "display_color": [
-            36,
-            192,
-            242,
+            178,
+            51,
+            204,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "height": {
             "center": 6668,
@@ -26778,12 +26883,17 @@
           "camera_height_px": 647,
           "camera_tilt_deg": 31.657548904418945,
           "camera_zoom_percent": 0,
+          "coarseness": 0,
           "display_color": [
             85,
             202,
             242,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "name": "MainTrail",
           "spawn_groups": [],
@@ -26801,12 +26911,17 @@
         },
         "NewTrail": {
           "camera_height_px": 1000,
+          "coarseness": 0,
           "display_color": [
+            152,
             242,
-            155,
             85,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "name": "NewTrail",
           "spawn_groups": [],
@@ -26826,16 +26941,16 @@
           "anti_tags": [],
           "camera_height_px": 1000,
           "coarseness": 0,
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "display_color": [
             150,
             242,
             85,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "name": "NewTrail1",
           "spawn_groups": [],
@@ -26854,12 +26969,17 @@
         },
         "NewTrail2": {
           "camera_height_px": 1000,
+          "coarseness": 0,
           "display_color": [
             106,
             31,
             204,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "name": "NewTrail2",
           "spawn_groups": [],
@@ -26881,12 +27001,17 @@
           "camera_height_px": 925,
           "camera_tilt_deg": 54.55751037597656,
           "camera_zoom_percent": 0,
+          "coarseness": 0,
           "display_color": [
             31,
             98,
             204,
             255
           ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "geometry": "Square",
           "name": "NewTrail3",
           "spawn_groups": [],

@@ -183,6 +183,7 @@ private:
     bool tags_dirty_ = false;
     bool trail_connection_sector_dirty_ = false;
     bool room_floor_color_dirty_ = false;
+    bool edge_detail_candidates_dirty_ = false;
 
     std::unique_ptr<DMTextBox> name_box_;
     std::unique_ptr<TextBoxWidget> name_widget_;
@@ -202,6 +203,7 @@ private:
     std::unique_ptr<StepperWidget> coarseness_widget_;
     std::unique_ptr<DMNumericStepper> edge_detail_resolution_stepper_;
     std::unique_ptr<StepperWidget> edge_detail_resolution_widget_;
+    std::unique_ptr<Widget> edge_detail_candidates_widget_;
     std::unique_ptr<Widget> trail_connection_sector_widget_;
     std::unique_ptr<DMNumericStepper> sector_direction_stepper_;
     std::unique_ptr<StepperWidget> sector_direction_widget_;

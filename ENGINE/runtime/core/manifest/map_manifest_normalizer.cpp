@@ -946,6 +946,11 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"display_color", nlohmann::json::array({85, 242, 143, 255})},
             {"geometry", "Square"},
             {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
+            {"coarseness", 0},
+            {"edge_detail_candidates", nlohmann::json::object({
+                {"candidates", nlohmann::json::array()},
+                {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
+            })},
             {"tags", nlohmann::json::array()},
             {"anti_tags", nlohmann::json::array()},
             {"spawn_groups", nlohmann::json::array()}

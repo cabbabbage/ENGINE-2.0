@@ -139,6 +139,86 @@ bool expand_with_circle(Room* room, const std::vector<Room*>& all_rooms, SDL_Poi
 #endif
 }
 
+double distance_sq(SDL_Point a, SDL_Point b) {
+    const double dx = static_cast<double>(a.x - b.x);
+    const double dy = static_cast<double>(a.y - b.y);
+    return dx * dx + dy * dy;
+}
+
+int orientation(SDL_Point a, SDL_Point b, SDL_Point c) {
+    const long long v = static_cast<long long>(b.y - a.y) * static_cast<long long>(c.x - b.x) -
+                        static_cast<long long>(b.x - a.x) * static_cast<long long>(c.y - b.y);
+    if (v == 0) return 0;
+    return v > 0 ? 1 : 2;
+}
+
+bool on_segment(SDL_Point a, SDL_Point b, SDL_Point c) {
+    return b.x <= std::max(a.x, c.x) && b.x >= std::min(a.x, c.x) &&
+           b.y <= std::max(a.y, c.y) && b.y >= std::min(a.y, c.y);
+}
+
+bool segments_intersect(SDL_Point p1, SDL_Point q1, SDL_Point p2, SDL_Point q2) {
+    const int o1 = orientation(p1, q1, p2);
+    const int o2 = orientation(p1, q1, q2);
+    const int o3 = orientation(p2, q2, p1);
+    const int o4 = orientation(p2, q2, q1);
+    if (o1 != o2 && o3 != o4) return true;
+    if (o1 == 0 && on_segment(p1, p2, q1)) return true;
+    if (o2 == 0 && on_segment(p1, q2, q1)) return true;
+    if (o3 == 0 && on_segment(p2, p1, q2)) return true;
+    if (o4 == 0 && on_segment(p2, q1, q2)) return true;
+    return false;
+}
+
+std::vector<SDL_Point> boundary_intersections(const std::vector<SDL_Point>& circle_poly,
+                                              const std::vector<SDL_Point>& boundary) {
+    std::vector<SDL_Point> out;
+    if (circle_poly.size() < 2 || boundary.size() < 2) return out;
+    for (std::size_t i = 0; i < circle_poly.size(); ++i) {
+        const SDL_Point a0 = circle_poly[i];
+        const SDL_Point a1 = circle_poly[(i + 1) % circle_poly.size()];
+        for (std::size_t j = 0; j < boundary.size(); ++j) {
+            const SDL_Point b0 = boundary[j];
+            const SDL_Point b1 = boundary[(j + 1) % boundary.size()];
+            if (segments_intersect(a0, a1, b0, b1)) {
+                out.push_back(SDL_Point{
+                    (a0.x + a1.x + b0.x + b1.x) / 4,
+                    (a0.y + a1.y + b0.y + b1.y) / 4
+                });
+            }
+        }
+    }
+    return out;
+}
+
+SDL_Point choose_next_center(Room* room,
+                             const std::vector<Room*>& all_rooms,
+                             SDL_Point current_center,
+                             const std::vector<SDL_Point>& previous_circle) {
+    if (!room || !room->room_area) return current_center;
+    const std::vector<SDL_Point> boundary = room->room_area->get_points();
+    if (boundary.empty()) return current_center;
+
+    std::vector<SDL_Point> candidates = previous_circle.empty()
+        ? boundary
+        : boundary_intersections(previous_circle, boundary);
+    if (candidates.empty()) {
+        candidates = boundary;
+    }
+
+    SDL_Point best = current_center;
+    double best_dist = -1.0;
+    for (const SDL_Point& p : candidates) {
+        if (point_inside_other_geometry(p, room, all_rooms)) continue;
+        const double d2 = distance_sq(current_center, p);
+        if (d2 > best_dist) {
+            best_dist = d2;
+            best = p;
+        }
+    }
+    return best;
+}
+
 } // namespace
 
 void apply_coarseness_expansion(std::vector<Room*>& rooms) {
@@ -150,14 +230,18 @@ void apply_coarseness_expansion(std::vector<Room*>& rooms) {
 
         const std::vector<SDL_Point> original_boundary = room->room_area->get_points();
         if (original_boundary.size() < 3) continue;
-        const int stride = std::max(1, 10 - (coarseness / 120));
+        SDL_Point cursor = original_boundary.front();
+        std::vector<SDL_Point> previous_circle;
+        const int max_steps = std::max<int>(24, static_cast<int>(original_boundary.size()) * 2);
         int expansions = 0;
-        for (std::size_t i = 0; i < original_boundary.size(); i += static_cast<std::size_t>(stride)) {
-            const SDL_Point center = original_boundary[i];
+        for (int step = 0; step < max_steps; ++step) {
+            const SDL_Point center = cursor;
             const int radius = resolve_radius_from_coarseness(coarseness, rng);
+            previous_circle = make_circle_polygon(center, radius);
             if (expand_with_circle(room, rooms, center, radius)) {
                 ++expansions;
             }
+            cursor = choose_next_center(room, rooms, center, previous_circle);
         }
         vibble::log::debug(std::string("[Coarseness] room='") + room->room_name +
                            "' coarseness=" + std::to_string(coarseness) +

@@ -16,6 +16,7 @@
 #include "widgets.hpp"
 #include "font_cache.hpp"
 #include "dev_mode_color_utils.hpp"
+#include "gameplay/spawn/spawn_group_codec.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "utils/grid.hpp"
 
@@ -738,6 +739,164 @@ private:
     int width_percent_ = kTrailSectorDefaultWidthPercent;
     ChangeCallback on_change_{};
     DragMode drag_mode_ = DragMode::None;
+};
+
+class EdgeDetailCandidatesWidget final : public Widget {
+public:
+    using ReadCallback = std::function<nlohmann::json()>;
+    using WriteCallback = std::function<void(const nlohmann::json&)>;
+
+    EdgeDetailCandidatesWidget(ReadCallback on_read, WriteCallback on_write)
+        : on_read_(std::move(on_read)), on_write_(std::move(on_write)) {}
+
+    void set_rect(const SDL_Rect& r) override { rect_ = r; }
+    const SDL_Rect& rect() const override { return rect_; }
+    int height_for_width(int) const override { return 170; }
+    bool wants_full_row() const override { return true; }
+
+    bool handle_event(const SDL_Event& e) override {
+        refresh_cache_if_needed();
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+            if (!SDL_PointInRect(&p, &rect_)) return false;
+            const int idx = row_index_at_point(p);
+            if (idx >= 0 && idx < static_cast<int>(rows_.size())) {
+                selected_ = idx;
+                if (point_in_minus(p) && selected_ >= 0 && selected_ < static_cast<int>(rows_.size())) {
+                    rows_.erase(rows_.begin() + selected_);
+                    selected_ = std::clamp(selected_, 0, static_cast<int>(rows_.size()) - 1);
+                    write_back();
+                } else if (point_in_plus(p)) {
+                    rows_.push_back(nlohmann::json::object({{"name", "null"}, {"chance", 0}}));
+                    selected_ = static_cast<int>(rows_.size()) - 1;
+                    write_back();
+                } else if (point_in_weight_up(p) && selected_ >= 0) {
+                    adjust_selected_weight(+5);
+                } else if (point_in_weight_down(p) && selected_ >= 0) {
+                    adjust_selected_weight(-5);
+                }
+                return true;
+            }
+            if (point_in_plus(p)) {
+                rows_.push_back(nlohmann::json::object({{"name", "null"}, {"chance", 0}}));
+                selected_ = static_cast<int>(rows_.size()) - 1;
+                write_back();
+                return true;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    void render(SDL_Renderer* renderer) const override {
+        if (!renderer || rect_.w <= 0 || rect_.h <= 0) return;
+        const_cast<EdgeDetailCandidatesWidget*>(this)->refresh_cache_if_needed();
+        SDL_SetRenderDrawColor(renderer, 24, 24, 24, 180);
+        sdl_render::FillRect(renderer, &rect_);
+
+        const auto label_style = DMStyles::Label();
+        draw_text(renderer, "Edge Detail Candidates (Coarseness Only)", rect_.x + 8, rect_.y + 6, label_style.color, 12);
+
+        const SDL_Rect plus = plus_rect();
+        SDL_SetRenderDrawColor(renderer, 52, 116, 72, 220);
+        sdl_render::FillRect(renderer, &plus);
+        draw_text(renderer, "+", plus.x + 8, plus.y + 3, SDL_Color{235, 255, 235, 255}, 13);
+
+        const SDL_Rect minus = minus_rect();
+        SDL_SetRenderDrawColor(renderer, 112, 54, 54, 220);
+        sdl_render::FillRect(renderer, &minus);
+        draw_text(renderer, "-", minus.x + 8, minus.y + 3, SDL_Color{255, 225, 225, 255}, 13);
+
+        const SDL_Rect wdn = weight_down_rect();
+        const SDL_Rect wup = weight_up_rect();
+        SDL_SetRenderDrawColor(renderer, 60, 60, 84, 220);
+        sdl_render::FillRect(renderer, &wdn);
+        sdl_render::FillRect(renderer, &wup);
+        draw_text(renderer, "-W", wdn.x + 5, wdn.y + 3, SDL_Color{220, 220, 255, 255}, 11);
+        draw_text(renderer, "+W", wup.x + 5, wup.y + 3, SDL_Color{220, 220, 255, 255}, 11);
+
+        int y = rect_.y + 34;
+        for (int i = 0; i < static_cast<int>(rows_.size()) && i < 5; ++i) {
+            SDL_Rect rr{rect_.x + 8, y, rect_.w - 16, 24};
+            const bool sel = i == selected_;
+            SDL_SetRenderDrawColor(renderer, sel ? 70 : 45, sel ? 90 : 45, sel ? 120 : 45, 200);
+            sdl_render::FillRect(renderer, &rr);
+            const auto& row = rows_[static_cast<std::size_t>(i)];
+            const std::string name = row.value("name", std::string("null"));
+            const double chance = vibble::spawn_group_codec::read_candidate_chance(row, 0.0);
+            draw_text(renderer, name + "  [" + std::to_string(static_cast<int>(std::lround(chance))) + "]",
+                      rr.x + 6, rr.y + 4, SDL_Color{220, 220, 220, 255}, 11);
+            y += 26;
+        }
+    }
+
+private:
+    static void draw_text(SDL_Renderer* renderer, const std::string& text, int x, int y, SDL_Color color, int font_size) {
+        if (text.empty()) return;
+        TTF_Font* font = TTF_OpenFont(DMStyles::Label().font_path.c_str(), font_size);
+        if (!font) return;
+        SDL_Surface* surface = ttf_util::RenderTextBlended(font, text.c_str(), color);
+        if (!surface) { TTF_CloseFont(font); return; }
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+        if (texture) {
+            SDL_Rect dst{x, y, surface->w, surface->h};
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
+            SDL_DestroyTexture(texture);
+        }
+        SDL_DestroySurface(surface);
+        TTF_CloseFont(font);
+    }
+
+    void refresh_cache_if_needed() {
+        if (!on_read_) return;
+        nlohmann::json source = on_read_();
+        if (!source.is_array()) source = nlohmann::json::array();
+        if (source == cached_source_) return;
+        cached_source_ = source;
+        rows_.clear();
+        for (const auto& item : source) {
+            if (item.is_object()) rows_.push_back(item);
+        }
+        selected_ = std::clamp(selected_, 0, static_cast<int>(rows_.size()) - 1);
+    }
+
+    void write_back() {
+        cached_source_ = nlohmann::json::array();
+        for (const auto& row : rows_) cached_source_.push_back(row);
+        if (on_write_) on_write_(cached_source_);
+    }
+
+    void adjust_selected_weight(int delta) {
+        if (selected_ < 0 || selected_ >= static_cast<int>(rows_.size())) return;
+        auto& row = rows_[static_cast<std::size_t>(selected_)];
+        int chance = static_cast<int>(std::lround(vibble::spawn_group_codec::read_candidate_chance(row, 0.0)));
+        chance = std::clamp(chance + delta, 0, 1000);
+        row["chance"] = chance;
+        write_back();
+    }
+
+    int row_index_at_point(SDL_Point p) const {
+        const int top = rect_.y + 34;
+        if (p.y < top) return -1;
+        const int idx = (p.y - top) / 26;
+        return idx;
+    }
+
+    SDL_Rect plus_rect() const { return SDL_Rect{rect_.x + rect_.w - 108, rect_.y + 6, 24, 20}; }
+    SDL_Rect minus_rect() const { return SDL_Rect{rect_.x + rect_.w - 80, rect_.y + 6, 24, 20}; }
+    SDL_Rect weight_down_rect() const { return SDL_Rect{rect_.x + rect_.w - 52, rect_.y + 6, 24, 20}; }
+    SDL_Rect weight_up_rect() const { return SDL_Rect{rect_.x + rect_.w - 24, rect_.y + 6, 24, 20}; }
+    bool point_in_plus(SDL_Point p) const { SDL_Rect r = plus_rect(); return SDL_PointInRect(&p, &r); }
+    bool point_in_minus(SDL_Point p) const { SDL_Rect r = minus_rect(); return SDL_PointInRect(&p, &r); }
+    bool point_in_weight_down(SDL_Point p) const { SDL_Rect r = weight_down_rect(); return SDL_PointInRect(&p, &r); }
+    bool point_in_weight_up(SDL_Point p) const { SDL_Rect r = weight_up_rect(); return SDL_PointInRect(&p, &r); }
+
+    SDL_Rect rect_{0, 0, 0, 0};
+    ReadCallback on_read_{};
+    WriteCallback on_write_{};
+    nlohmann::json cached_source_ = nlohmann::json::array();
+    std::vector<nlohmann::json> rows_{};
+    int selected_ = -1;
 };
 
 }
@@ -1506,6 +1665,7 @@ void RoomConfigurator::refresh_base_panel_rows() {
         }
         if (coarseness_widget_) rows.push_back({coarseness_widget_.get()});
         if (edge_detail_resolution_widget_) rows.push_back({edge_detail_resolution_widget_.get()});
+        if (edge_detail_candidates_widget_) rows.push_back({edge_detail_candidates_widget_.get()});
         if (edge_widget_) rows.push_back({edge_widget_.get()});
         if (curvy_widget_) rows.push_back({curvy_widget_.get()});
         if (trail_connection_sector_widget_) rows.push_back({trail_connection_sector_widget_.get()});
@@ -1875,6 +2035,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     *state_ = new_state;
     tags_dirty_ = false;
     trail_connection_sector_dirty_ = false;
+    edge_detail_candidates_dirty_ = false;
 
     state_->apply_to_json(loaded_json_, allow_height, false, include_trail_connection_sector, include_boss);
     if (include_tags) {
@@ -2144,6 +2305,24 @@ void RoomConfigurator::rebuild_rows_internal() {
         "Edge Detail Resolution", 0, vibble::grid::kMaxResolution, initial_edge_detail_resolution);
     edge_detail_resolution_stepper_->set_step(1);
     edge_detail_resolution_widget_ = std::make_unique<StepperWidget>(edge_detail_resolution_stepper_.get());
+    edge_detail_candidates_widget_ = std::make_unique<EdgeDetailCandidatesWidget>(
+        [this]() -> nlohmann::json {
+            if (!state_ || !state_->edge_detail_candidates.is_object()) {
+                return nlohmann::json::array();
+            }
+            if (!state_->edge_detail_candidates.contains("candidates") || !state_->edge_detail_candidates["candidates"].is_array()) {
+                return nlohmann::json::array();
+            }
+            return state_->edge_detail_candidates["candidates"];
+        },
+        [this](const nlohmann::json& value) {
+            if (!state_) return;
+            if (!state_->edge_detail_candidates.is_object()) {
+                state_->edge_detail_candidates = nlohmann::json::object();
+            }
+            state_->edge_detail_candidates["candidates"] = value.is_array() ? value : nlohmann::json::array();
+            edge_detail_candidates_dirty_ = true;
+        });
 
     if (!is_trail_context_) {
         trail_connection_sector_widget_ = std::make_unique<TrailConnectionSectorWidget>(
@@ -2427,6 +2606,10 @@ bool RoomConfigurator::sync_state_from_widgets() {
     if (room_floor_color_dirty_) {
         changed = true;
         room_floor_color_dirty_ = false;
+    }
+    if (edge_detail_candidates_dirty_) {
+        changed = true;
+        edge_detail_candidates_dirty_ = false;
     }
 
     if (name_box_ && !name_box_->is_editing()) {

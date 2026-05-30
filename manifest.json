@@ -23658,8 +23658,8 @@
         "Bluebloom_Nook": {
           "coarseness": 0,
           "display_color": [
-            99,
             204,
+            31,
             31,
             255
           ],
@@ -23809,9 +23809,9 @@
         "Foggy_Glade": {
           "coarseness": 0,
           "display_color": [
-            242,
-            207,
-            85,
+            96,
+            204,
+            31,
             255
           ],
           "edge_detail_candidates": {
@@ -23960,9 +23960,9 @@
         "Frog_Basin": {
           "coarseness": 0,
           "display_color": [
-            204,
-            31,
-            191,
+            242,
+            209,
+            85,
             255
           ],
           "edge_detail_candidates": {
@@ -24108,9 +24108,9 @@
         "Lantern_Mirelet": {
           "coarseness": 0,
           "display_color": [
+            39,
             242,
             36,
-            50,
             255
           ],
           "edge_detail_candidates": {
@@ -24261,8 +24261,8 @@
           "camera_zoom_percent": 100,
           "coarseness": 0,
           "display_color": [
-            169,
-            36,
+            138,
+            85,
             242,
             255
           ],
@@ -24462,8 +24462,8 @@
           "coarseness": 0,
           "display_color": [
             242,
-            170,
             36,
+            208,
             255
           ],
           "edge_detail_candidates": {
@@ -24617,9 +24617,9 @@
           "camera_zoom_percent": 0,
           "coarseness": 96,
           "display_color": [
-            85,
-            144,
-            242,
+            204,
+            96,
+            31,
             255
           ],
           "edge_detail_candidates": {
@@ -24762,16 +24762,16 @@
                 }
               ],
               "display_name": "fountain",
-              "dx": -188,
-              "dz": -184,
+              "dx": -11409,
+              "dz": 4406,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 5872,
-              "origional_width": 5976,
+              "origional_height": 528,
+              "origional_width": 664,
               "position": "Exact",
               "priority": 3,
               "quantity": 1,
@@ -24949,8 +24949,8 @@
         "NewRoom": {
           "coarseness": 0,
           "display_color": [
-            71,
             83,
+            71,
             204,
             255
           ],
@@ -25000,9 +25000,9 @@
         "NewRoom1": {
           "coarseness": 0,
           "display_color": [
-            91,
-            242,
-            85,
+            204,
+            51,
+            88,
             255
           ],
           "edge_detail_candidates": {
@@ -25051,9 +25051,9 @@
         "NewRoom2": {
           "coarseness": 0,
           "display_color": [
-            41,
-            204,
-            31,
+            242,
+            176,
+            36,
             255
           ],
           "edge_detail_candidates": {
@@ -25133,9 +25133,9 @@
         "NewRoom3": {
           "coarseness": 0,
           "display_color": [
-            157,
-            204,
-            31,
+            97,
+            242,
+            85,
             255
           ],
           "edge_detail_candidates": {
@@ -25184,9 +25184,9 @@
         "NewRoom4": {
           "coarseness": 0,
           "display_color": [
+            152,
             204,
-            71,
-            104,
+            31,
             255
           ],
           "edge_detail_candidates": {
@@ -25236,9 +25236,9 @@
         "NewRoom5": {
           "coarseness": 0,
           "display_color": [
-            242,
-            36,
-            234,
+            204,
+            31,
+            169,
             255
           ],
           "edge_detail_candidates": {
@@ -25285,12 +25285,63 @@
             }
           }
         },
+        "NewRoom6": {
+          "coarseness": 0,
+          "display_color": [
+            36,
+            153,
+            242,
+            255
+          ],
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
+          "geometry": "Square",
+          "height": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          },
+          "inherit_map_floor_color": true,
+          "inherits_live_dynamic_assets": false,
+          "is_boss": false,
+          "name": "NewRoom6",
+          "room_floor_color": [
+            0,
+            0,
+            0
+          ],
+          "spawn_groups": [],
+          "tags": [],
+          "trail_connection_sector": {
+            "direction_deg": 0.0,
+            "width_percent": 100
+          },
+          "width": {
+            "center": 1500,
+            "falloff": 150,
+            "random": true,
+            "span": 300,
+            "weights": {
+              "center": 0.3333333333333333,
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333
+            }
+          }
+        },
         "Old_Stump_Yard": {
           "coarseness": 0,
           "display_color": [
-            88,
-            36,
-            242,
+            174,
+            71,
+            204,
             255
           ],
           "edge_detail_candidates": {
@@ -25502,9 +25553,9 @@
           "camera_zoom_percent": 40,
           "coarseness": 0,
           "display_color": [
-            192,
-            204,
-            71,
+            90,
+            36,
+            242,
             255
           ],
           "edge_detail_candidates": {
@@ -25590,9 +25641,9 @@
         "Spider_Hollow": {
           "coarseness": 0,
           "display_color": [
-            171,
-            71,
+            188,
             204,
+            71,
             255
           ],
           "edge_detail_candidates": {
@@ -25741,7 +25792,7 @@
         "Thornstep_Croft": {
           "coarseness": 0,
           "display_color": [
-            57,
+            48,
             31,
             204,
             255
@@ -25893,7 +25944,7 @@
           "coarseness": 0,
           "display_color": [
             242,
-            219,
+            229,
             36,
             255
           ],
@@ -26049,7 +26100,7 @@
           "coarseness": 0,
           "display_color": [
             242,
-            121,
+            65,
             36,
             255
           ],
@@ -26479,9 +26530,9 @@
           "camera_zoom_percent": 2,
           "coarseness": 0,
           "display_color": [
-            128,
-            242,
             36,
+            242,
+            190,
             255
           ],
           "edge_detail_candidates": {
@@ -26964,6 +27015,12 @@
         "NewTrail4": {
           "anti_tags": [],
           "coarseness": 0,
+          "display_color": [
+            31,
+            170,
+            204,
+            255
+          ],
           "edge_detail_candidates": {
             "candidates": [],
             "resolution": 8

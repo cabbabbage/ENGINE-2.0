@@ -468,18 +468,27 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
     bool changed = false;
     const int default_resolution = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
     int resolution = default_resolution;
+    bool root_resolution_locked = false;
     std::map<std::string, nlohmann::json> merged_candidates;
 
-    auto merge_config = [&](const nlohmann::json& config) {
+    auto merge_config = [&](const nlohmann::json& config, bool is_root_config) {
         if (!config.is_object()) {
             return;
         }
         if (config.contains("resolution")) {
             int parsed = resolution;
             if (json_to_int(config["resolution"], parsed)) {
-                // Use the highest legacy resolution so the hoisted pool is at least as dense
-                // as every room/trail that previously owned edge-detail candidates.
-                resolution = std::max(resolution, vibble::grid::clamp_resolution(parsed));
+                const int parsed_resolution = vibble::grid::clamp_resolution(parsed);
+                if (is_root_config) {
+                    // Root map-wide edge-detail resolution is the user's configured value; preserve
+                    // it exactly instead of merging it upward with defaults or legacy entries.
+                    resolution = parsed_resolution;
+                    root_resolution_locked = true;
+                } else if (!root_resolution_locked) {
+                    // Legacy per-room/trail configs are hoisted to one map-wide pool; in that
+                    // compatibility path only, keep the densest legacy setting.
+                    resolution = std::max(resolution, parsed_resolution);
+                }
             }
         }
         auto candidates_it = config.find("candidates");
@@ -498,7 +507,7 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
 
     auto root_it = map_manifest.find("edge_detail_candidates");
     if (root_it != map_manifest.end()) {
-        merge_config(*root_it);
+        merge_config(*root_it, true);
         if (!root_it->is_object()) {
             changed = true;
         }
@@ -517,7 +526,7 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
             if (legacy_it == entry_it.value().end()) {
                 continue;
             }
-            merge_config(*legacy_it);
+            merge_config(*legacy_it, false);
             entry_it.value().erase(legacy_it);
             changed = true;
         }

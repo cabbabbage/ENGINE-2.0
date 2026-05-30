@@ -355,11 +355,20 @@ void AssetLoader::loadRooms() {
                         const Area& original_area = original_it != original_room_areas.end()
                             ? original_it->second
                             : *room->room_area;
+                        std::vector<Area> other_original_areas;
+                        other_original_areas.reserve(original_room_areas.size());
+                        for (const auto& [other_room, other_area] : original_room_areas) {
+                                if (other_room && other_room != room) {
+                                        other_original_areas.push_back(other_area);
+                                }
+                        }
+
                         AssetSpawner edge_spawner(asset_library_, normal_spawned_occupancy);
                         edge_spawner.set_map_grid_settings(room->map_grid_settings());
                         edge_spawner.spawn_edge_detail_candidates(*room,
                                                                   *room->coarseness_added_area,
                                                                   original_area,
+                                                                  other_original_areas,
                                                                   *edge_detail_candidates,
                                                                   edge_detail_claimed);
                 }

@@ -5,6 +5,7 @@
 #include "animation/controllers/shared/attack_detection_helper.hpp"
 #include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
+#include "utils/frame_stats_recorder.hpp"
 
 namespace animation_update::custom_controllers::internal {
 
@@ -75,25 +76,46 @@ bool ControllerCombatSystem::try_attack_target(Asset& self,
 
     (void)start_attack_animation(self, animation_id, required_tags, excluded_tags);
     const bool hit = apply_attack_hit(self, target);
-    if (hit) {
+    if (should_start_cooldown_after_attack(hit)) {
         start_cooldown(cooldowns, cooldown_key, cooldown_seconds);
     }
     return hit;
 }
 
+bool ControllerCombatSystem::should_start_cooldown_after_attack(bool hit_dispatched) {
+    return hit_dispatched;
+}
+
+bool ControllerCombatSystem::has_any_dispatched_hits(int hit_count) {
+    return hit_count > 0;
+}
+
 bool ControllerCombatSystem::apply_attack_hit(Asset& attacker, Asset& target) {
-    return AttackDetectionHelper::send_attack_if_hit(&attacker, &target);
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.add("enemy_ai.hit_dispatch_attempt_count", 1.0);
+    const bool hit = AttackDetectionHelper::send_attack_if_hit(&attacker, &target);
+    if (hit) {
+        frame_stats.add("enemy_ai.hit_dispatch_success_count", 1.0);
+    }
+    return hit;
 }
 
 int ControllerCombatSystem::apply_attack_hits_to_active_targets_count(Asset& attacker, Assets* assets) {
     if (!assets) {
         return 0;
     }
-    return AttackDetectionHelper::send_attacks_to_active_targets(&attacker, assets);
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.add("enemy_ai.hit_dispatch_attempt_count", 1.0);
+    const int hit_count = AttackDetectionHelper::send_attacks_to_active_targets(&attacker, assets);
+    frame_stats.add("enemy_ai.active_target_scan_hits", static_cast<double>(hit_count));
+    if (hit_count > 0) {
+        frame_stats.add("enemy_ai.hit_dispatch_success_count", static_cast<double>(hit_count));
+    }
+    return hit_count;
 }
 
 bool ControllerCombatSystem::apply_attack_hits_to_active_targets(Asset& attacker, Assets* assets) {
-    return apply_attack_hits_to_active_targets_count(attacker, assets) > 0;
+    return has_any_dispatched_hits(apply_attack_hits_to_active_targets_count(attacker, assets));
 }
 
 bool ControllerCombatSystem::is_hit_window_open(const Asset& self,

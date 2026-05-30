@@ -41,6 +41,8 @@ public:
                                   const std::string& animation_id = {},
                                   const std::vector<std::string>& required_tags = {},
                                   const std::vector<std::string>& excluded_tags = {});
+    static bool should_start_cooldown_after_attack(bool hit_dispatched);
+    static bool has_any_dispatched_hits(int hit_count);
 
     static bool apply_attack_hit(Asset& attacker, Asset& target);
     static int apply_attack_hits_to_active_targets_count(Asset& attacker, Assets* assets);

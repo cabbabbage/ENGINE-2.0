@@ -143,6 +143,23 @@ add_executable(enemy_behavior_phase_regression_test
 )
 target_include_directories(enemy_behavior_phase_regression_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+
+add_executable(enemy_combat_cooldown_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/enemy_combat_cooldown_regression_test.cpp
+)
+target_include_directories(enemy_combat_cooldown_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+
+add_executable(enemy_attack_cycle_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/enemy_attack_cycle_regression_test.cpp
+)
+target_include_directories(enemy_attack_cycle_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
 )
 
 # Unity build (jumbo) for faster compiles
@@ -189,6 +206,15 @@ endif()
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(SDL3_ttf CONFIG REQUIRED)
+target_link_libraries(enemy_behavior_phase_regression_test PRIVATE
+    SDL3::SDL3
+)
+target_link_libraries(enemy_combat_cooldown_regression_test PRIVATE
+    SDL3::SDL3
+)
+target_link_libraries(enemy_attack_cycle_regression_test PRIVATE
+    SDL3::SDL3
+)
 target_link_libraries(sprite_floor_clip_test PRIVATE
     SDL3::SDL3
 )

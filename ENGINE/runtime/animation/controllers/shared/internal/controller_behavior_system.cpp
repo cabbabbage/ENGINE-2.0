@@ -5,6 +5,7 @@
 #include <string>
 
 #include "assets/asset/Asset.hpp"
+#include "utils/frame_stats_recorder.hpp"
 #include "utils/log.hpp"
 
 namespace animation_update::custom_controllers::internal {
@@ -17,6 +18,20 @@ long long distance_sq_3d(const Asset& a, const Asset& b) {
 
 long long distance_sq_3d(const Asset& a, const axis::WorldPos& b) {
     return ControllerMovementSystem::distance_sq_3d(a, b);
+}
+
+const char* phase_name(EnemyAgentPhase phase) {
+    switch (phase) {
+    case EnemyAgentPhase::Idle: return "Idle";
+    case EnemyAgentPhase::Acquire: return "Acquire";
+    case EnemyAgentPhase::Approach: return "Approach";
+    case EnemyAgentPhase::AttackWindow: return "AttackWindow";
+    case EnemyAgentPhase::Recover: return "Recover";
+    case EnemyAgentPhase::ReturnHome: return "ReturnHome";
+    case EnemyAgentPhase::Patrol: return "Patrol";
+    case EnemyAgentPhase::Custom: return "Custom";
+    }
+    return "Unknown";
 }
 
 } // namespace
@@ -86,6 +101,17 @@ void ControllerBehaviorSystem::tick_enemy_behavior(Asset& self,
     retreat_cfg.combat_overrides.attacking_enabled = false;
 
     state.mode = decision.phase;
+    auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+    frame_stats.set("enemy_ai.phase", phase_name(state.mode));
+    frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
+    frame_stats.set("enemy_ai.return_home_fallback_count", state.return_home_fallback_count);
+    frame_stats.set("enemy_ai.attack_window_enter_count", state.attack_window_enter_count);
+    frame_stats.set("enemy_ai.attack_window_exit_count", state.attack_window_exit_count);
+    frame_stats.set("enemy_ai.recover_active", decision.phase == EnemyAgentPhase::Recover);
+    frame_stats.set("enemy_ai.approach_attempted", false);
+    frame_stats.set("enemy_ai.approach_moved", false);
+    frame_stats.set("enemy_ai.movement_attack_conflict_flag", false);
+
     if (decision.target_should_be_committed) {
         self.needs_target = false;
         self.target_reached = true;
@@ -97,6 +123,7 @@ void ControllerBehaviorSystem::tick_enemy_behavior(Asset& self,
     if (decision.phase == EnemyAgentPhase::ReturnHome) {
         moved = tick_return_home(self, state, config.return_home_threshold_px, chase_cfg);
         state.no_progress_frames = moved ? 0 : state.no_progress_frames + 1;
+        frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
         return;
     }
 
@@ -105,11 +132,15 @@ void ControllerBehaviorSystem::tick_enemy_behavior(Asset& self,
     }
 
     if (decision.enter_attack_window) {
+        ++state.attack_window_enter_count;
         state.attack_window_until =
             now + std::chrono::milliseconds(std::max(1, config.attack_window_ms));
+        frame_stats.set("enemy_ai.attack_window_enter_count", state.attack_window_enter_count);
     }
     if (decision.leave_attack_window_to_recover) {
+        ++state.attack_window_exit_count;
         state.recover_until = now + std::chrono::milliseconds(std::max(1, config.recover_ms));
+        frame_stats.set("enemy_ai.attack_window_exit_count", state.attack_window_exit_count);
     }
 
     if (decision.phase == EnemyAgentPhase::Recover) {
@@ -118,30 +149,40 @@ void ControllerBehaviorSystem::tick_enemy_behavior(Asset& self,
             *target,
             std::max(1, config.retreat_distance_px),
             retreat_cfg);
+        frame_stats.set("enemy_ai.movement_attack_conflict_flag", decision.target_should_be_committed && moved);
         state.no_progress_frames = moved ? 0 : state.no_progress_frames + 1;
+        frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
         return;
     }
     if (decision.phase == EnemyAgentPhase::Approach) {
+        frame_stats.set("enemy_ai.approach_attempted", true);
         moved = ControllerMovementSystem::seek_target(self, *target, desired_standoff_px, chase_cfg);
+        frame_stats.set("enemy_ai.approach_moved", moved);
+        frame_stats.set("enemy_ai.movement_attack_conflict_flag", decision.target_should_be_committed && moved);
         if (!moved && target_dist_sq > static_cast<long long>(config.ranges.attack_radius_px) *
                                            static_cast<long long>(config.ranges.attack_radius_px)) {
             ++state.no_progress_frames;
         } else {
             state.no_progress_frames = 0;
         }
+        frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
         if (state.no_progress_frames >= 45) {
             const std::string self_name =
                 (self.info && !self.info->name.empty()) ? self.info->name : std::string{"<unknown>"};
             vibble::log::warn("[EnemyAI] No progress while approaching target; forcing return-home fallback for '" +
                               self_name + "'");
+            ++state.return_home_fallback_count;
             state.mode = EnemyAgentPhase::ReturnHome;
             (void)tick_return_home(self, state, config.return_home_threshold_px, chase_cfg);
             state.no_progress_frames = 0;
+            frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
+            frame_stats.set("enemy_ai.return_home_fallback_count", state.return_home_fallback_count);
         }
         return;
     }
 
     state.no_progress_frames = 0;
+    frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
 }
 
 bool ControllerBehaviorSystem::tick_patrol(Asset& self,

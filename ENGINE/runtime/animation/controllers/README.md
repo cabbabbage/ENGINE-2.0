@@ -172,3 +172,20 @@ private:
 
 - Keep custom code on `CustomControllerBase` helpers; avoid including internal backend headers.
 - If you need new behavior primitives, add them to `CustomControllerBase` so all controllers share one toolkit.
+
+## Enemy AI Telemetry
+
+Frame stats now include enemy AI runtime metrics:
+
+- `enemy_ai.phase`
+- `enemy_ai.no_progress_frames`
+- `enemy_ai.return_home_fallback_count`
+- `enemy_ai.approach_attempted`
+- `enemy_ai.approach_moved`
+- `enemy_ai.recover_active`
+- `enemy_ai.attack_window_enter_count`
+- `enemy_ai.attack_window_exit_count`
+- `enemy_ai.hit_dispatch_attempt_count`
+- `enemy_ai.hit_dispatch_success_count`
+- `enemy_ai.active_target_scan_hits`
+- `enemy_ai.movement_attack_conflict_flag`

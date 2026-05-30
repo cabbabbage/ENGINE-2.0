@@ -8,6 +8,7 @@ param(
     [object]$TimeoutForcedKill = $false,
     [double]$DurationSeconds = 0,
     [string]$Map = "forrest",
+    [string]$Profile = "default",
     [int]$FrameLimit = 3600,
     [string]$LauncherLogPath,
     [string]$StdoutPath,
@@ -236,6 +237,31 @@ foreach ($metricName in $topFrameMetricNames) {
 $warningLines = @($logLines | Where-Object { $_ -match "\[(WARN|WARNING)\]" })
 $errorLines = @($logLines | Where-Object { $_ -match "\[(ERROR|FATAL)\]" })
 
+$spiderHitObserved = $false
+if ($rows.Count -gt 0 -and ($rows[0].PSObject.Properties.Name -contains "combat.vibble_last_attacker")) {
+    $spiderHits = @(
+        $rows |
+            Where-Object {
+                $_."combat.vibble_last_attacker" -match "spider"
+            }
+    )
+    $spiderHitObserved = $spiderHits.Count -gt 0
+}
+if (-not $spiderHitObserved -and $rows.Count -gt 0 -and ($rows[0].PSObject.Properties.Name -contains "extra_metrics")) {
+    $spiderHitObserved = @(
+        $rows |
+            Where-Object {
+                $_.extra_metrics -match "combat\.vibble_last_attacker=.*spider"
+            }
+    ).Count -gt 0
+}
+if (-not $spiderHitObserved -and $logLines.Count -gt 0) {
+    $spiderHitObserved = @(
+        $logLines |
+            Where-Object { $_ -match "\[Combat\] Vibble took damage attacker='.*spider.*'" }
+    ).Count -gt 0
+}
+
 $suspiciousMetrics = @(
     "main.raw_frame_total_ms",
     "main.frame_total_ms",
@@ -259,6 +285,19 @@ $suspiciousMetrics = @(
     "render.diagnostics_stale",
     "movement.player_path_blocked_ms",
     "movement.player_path_blocked_checks",
+    "enemy_ai.phase",
+    "enemy_ai.no_progress_frames",
+    "enemy_ai.return_home_fallback_count",
+    "enemy_ai.approach_attempted",
+    "enemy_ai.approach_moved",
+    "enemy_ai.recover_active",
+    "enemy_ai.attack_window_enter_count",
+    "enemy_ai.attack_window_exit_count",
+    "enemy_ai.hit_dispatch_attempt_count",
+    "enemy_ai.hit_dispatch_success_count",
+    "enemy_ai.active_target_scan_hits",
+    "enemy_ai.movement_attack_conflict_flag",
+    "combat.vibble_last_attacker",
     "dynamic_spawn.sync_ms",
     "camera.update_ms",
     "camera.visible_grid_ms",
@@ -400,6 +439,13 @@ $movementSummary = if (($pathBlockedMax -ne $null -and $pathBlockedMax -gt 20.0)
 if ($likely.Count -eq 0) {
     $likely.Add("No single dominant freeze signal was detected; compare worst frames against the suspicious metric table.") | Out-Null
 }
+if ($Profile -eq "spider_slow") {
+    if ($spiderHitObserved) {
+        $likely.Add("Spider attack verification passed: at least one spider-origin hit on vibble was observed.") | Out-Null
+    } else {
+        $likely.Add("Spider attack verification failed: no spider-origin hit on vibble was observed.") | Out-Null
+    }
+}
 
 $report = New-Object System.Collections.Generic.List[string]
 Add-SectionLine $report "# Codex Playtest Report"
@@ -413,8 +459,10 @@ Add-SectionLine $report "- Duration: $(Format-Number $DurationSeconds) seconds"
 Add-SectionLine $report "- Timed out: $TimedOut"
 Add-SectionLine $report "- Forced kill: $TimeoutForcedKill"
 Add-SectionLine $report "- Requested map: $Map"
+Add-SectionLine $report "- Playtest profile: $Profile"
 Add-SectionLine $report "- Map selected: $mapSelected"
 Add-SectionLine $report "- Game loop started: $loopStarted"
+Add-SectionLine $report "- Spider attack observed on vibble: $spiderHitObserved"
 Add-SectionLine $report "- Frame limit: $FrameLimit"
 Add-SectionLine $report
 Add-SectionLine $report "## Frame Stats"
@@ -522,9 +570,19 @@ Add-SectionLine $report ("- Launcher log: {0}" -f $LauncherLogPath)
 Add-SectionLine $report ("- stdout: {0}" -f $StdoutPath)
 Add-SectionLine $report ("- stderr: {0}" -f $StderrPath)
 
+if ($Profile -eq "spider_slow" -and -not $spiderHitObserved) {
+    Add-SectionLine $report
+    Add-SectionLine $report "## Verification Failure"
+    Add-SectionLine $report "- spider_slow profile requires at least one spider-origin hit on vibble, but none were observed."
+}
+
 $parent = Split-Path -Parent $ReportPath
 if ($parent -and -not (Test-Path $parent)) {
     New-Item -ItemType Directory -Force -Path $parent | Out-Null
 }
 $report | Set-Content -Path $ReportPath -Encoding UTF8
 Write-Host "[codex_playtest_report.ps1] Wrote report: $ReportPath"
+
+if ($Profile -eq "spider_slow" -and -not $spiderHitObserved) {
+    exit 2
+}

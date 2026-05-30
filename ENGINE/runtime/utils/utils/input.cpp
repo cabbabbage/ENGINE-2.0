@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "utils/frame_stats_recorder.hpp"
@@ -357,6 +359,12 @@ void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w
         return next;
     };
 
+    const char* raw_profile = std::getenv("VIBBLE_CODEX_PLAYTEST_PROFILE");
+    const std::string profile =
+        raw_profile ? std::string(raw_profile) : std::string("default");
+    const bool spider_slow_profile =
+        profile == "spider_slow" || profile == "SPIDER_SLOW";
+
     static std::uint32_t random_state = 0xC0D3CAFEu;
     static PlaytestSegment segment{};
     static bool initialized = false;
@@ -367,13 +375,36 @@ void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w
         segment = PlaytestSegment{};
         segment.index = 0;
         segment.start_frame = frame_id;
-        segment.length_frames = 210u;
-        segment.x = 0;
-        segment.y = -1;
-        segment.sprint = false;
-        segment.long_hold = true;
+        if (spider_slow_profile) {
+            segment.length_frames = 320u;
+            segment.x = 0;
+            segment.y = -1;
+            segment.sprint = false;
+            segment.long_hold = true;
+        } else {
+            segment.length_frames = 210u;
+            segment.x = 0;
+            segment.y = -1;
+            segment.sprint = false;
+            segment.long_hold = true;
+        }
     } else if (frame_id - segment.start_frame >= segment.length_frames) {
         segment = choose_segment(segment, random_state);
+        if (spider_slow_profile) {
+            if ((segment.index % 3u) == 0u) {
+                segment.x = 0;
+                segment.y = -1;
+            } else if ((segment.index % 3u) == 1u) {
+                segment.x = (segment.index % 2u) == 0u ? 1 : -1;
+                segment.y = -1;
+            } else {
+                segment.x = (segment.index % 2u) == 0u ? 1 : -1;
+                segment.y = 0;
+            }
+            segment.long_hold = true;
+            segment.sprint = false;
+            segment.length_frames = 220u + (segment.index % 5u) * 40u;
+        }
     }
     last_frame_id = frame_id;
 
@@ -409,16 +440,20 @@ void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w
     }
 
     const std::uint64_t segment_frame = frame_id - segment.start_frame;
-    const bool pulse_dash = (segment.long_hold && (segment_frame % 150u) < 10u) ||
-                            (!segment.long_hold && segment.length_frames > 18u && segment_frame < 4u);
-    const bool pulse_interact = !segment.long_hold && (segment.index % 7u) == 0u &&
-                                segment_frame >= 2u && segment_frame < 10u;
+    const bool pulse_dash = spider_slow_profile
+                                ? false
+                                : ((segment.long_hold && (segment_frame % 150u) < 10u) ||
+                                   (!segment.long_hold && segment.length_frames > 18u && segment_frame < 4u));
+    const bool pulse_interact = spider_slow_profile
+                                    ? false
+                                    : (!segment.long_hold && (segment.index % 7u) == 0u &&
+                                       segment_frame >= 2u && segment_frame < 10u);
     setScancodeDownForTest(SDL_SCANCODE_SPACE, pulse_dash);
     setScancodeDownForTest(SDL_SCANCODE_E, pulse_interact);
 
     const int safe_w = std::max(1, screen_w);
     const int safe_h = std::max(1, screen_h);
-    const std::uint64_t mouse_phase = (frame_id / 60u) % 4u;
+    const std::uint64_t mouse_phase = spider_slow_profile ? ((frame_id / 180u) % 4u) : ((frame_id / 60u) % 4u);
     const int mouse_x = (mouse_phase == 0u) ? (safe_w * 3) / 4
                       : (mouse_phase == 2u) ? safe_w / 4
                       : safe_w / 2;
@@ -427,7 +462,7 @@ void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w
                       : safe_h / 2;
     setMousePositionForTest(mouse_x, mouse_y);
 
-    const bool melee_down = (frame_id % 210u) < 6u;
+    const bool melee_down = spider_slow_profile ? ((frame_id % 360u) < 4u) : ((frame_id % 210u) < 6u);
     setMouseButtonDownForTest(Input::LEFT, melee_down);
 
     auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
@@ -437,6 +472,7 @@ void Input::applyCodexPlaytestDriverForTest(std::uint64_t frame_id, int screen_w
     frame_stats.set("codex_playtest.segment_kind", segment.long_hold ? "long" : "burst");
     frame_stats.set("codex_playtest.segment_length_frames", segment.length_frames);
     frame_stats.set("codex_playtest.segment_frame", segment_frame);
+    frame_stats.set("codex_playtest.profile", profile);
     frame_stats.set("codex_playtest.mouse_x", mouse_x);
     frame_stats.set("codex_playtest.mouse_y", mouse_y);
     record_key_metric(frame_stats, "input.stored.", "w", keys_down_[SDL_SCANCODE_W]);

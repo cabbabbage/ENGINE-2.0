@@ -24,6 +24,9 @@ struct BehaviorState {
     axis::WorldPos home{0, 0, 0};
     bool initialized_home = false;
     int no_progress_frames = 0;
+    int return_home_fallback_count = 0;
+    int attack_window_enter_count = 0;
+    int attack_window_exit_count = 0;
 };
 
 class ControllerBehaviorSystem {

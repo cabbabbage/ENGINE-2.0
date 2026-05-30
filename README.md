@@ -30,6 +30,20 @@ The script installs build tools (Git, MSVC Build Tools, CMake, Ninja, vcpkg), pu
 - Controllers are linked by asset name (for example, the `spider` asset maps to `spider_controller`).
 
 ## Tests
+- Configure once: `cmake --preset windows-vcpkg`
+- Build enemy AI regression targets only:
+  - `cmake --build --preset windows-vcpkg-release --config RelWithDebInfo --target enemy_behavior_phase_regression_test`
+  - `cmake --build --preset windows-vcpkg-release --config RelWithDebInfo --target enemy_combat_cooldown_regression_test`
+  - `cmake --build --preset windows-vcpkg-release --config RelWithDebInfo --target enemy_attack_cycle_regression_test`
+- Build full preset: `cmake --build --preset windows-vcpkg-release --config RelWithDebInfo`
+
+## Codex Playtest
+- Default run: `codex_playtest.bat`
+- Spider verification run:
+  - `set CODEX_PLAYTEST_PROFILE=spider_slow`
+  - `set CODEX_PLAYTEST_MAP=forrest`
+  - `codex_playtest.bat`
+- `spider_slow` profile passes only when at least one spider-origin hit on vibble is detected in frame stats/logs.
 
 ## License
 

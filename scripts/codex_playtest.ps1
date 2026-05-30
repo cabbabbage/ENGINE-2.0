@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory=$true)][string]$RepoRoot,
     [Parameter(Mandatory=$true)][string]$ExePath,
     [string]$Map = "forrest",
+    [string]$Profile = "default",
     [int]$Seconds = 60,
     [int]$FrameLimit = 3600,
     [Parameter(Mandatory=$true)][string]$ReportPath,
@@ -15,6 +16,8 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path $RepoRoot).Path
 $ExePath = (Resolve-Path $ExePath).Path
+$Map = $Map.Trim()
+$Profile = $Profile.Trim()
 $LogPath = Join-Path $RepoRoot "log.txt"
 $FrameStatsPath = Join-Path $RepoRoot "runtime_frame_stats.csv"
 $ReportScript = Join-Path $RepoRoot "scripts\codex_playtest_report.ps1"
@@ -40,6 +43,7 @@ function Write-Metadata {
         timeout_forced_kill = $TimeoutForcedKill
         duration_seconds = [Math]::Round($DurationSeconds, 3)
         map = $Map
+        profile = $Profile
         frame_limit = $FrameLimit
         requested_seconds = $Seconds
         hard_timeout_seconds = $hardTimeoutSeconds
@@ -67,10 +71,12 @@ function Invoke-Report {
         -TimeoutForcedKill:$TimeoutForcedKill `
         -DurationSeconds $DurationSeconds `
         -Map $Map `
+        -Profile $Profile `
         -FrameLimit $FrameLimit `
         -LauncherLogPath $LauncherLogPath `
         -StdoutPath $StdoutPath `
         -StderrPath $StderrPath
+    return $LASTEXITCODE
 }
 
 Add-Type @"
@@ -193,6 +199,7 @@ $env:VIBBLE_AUTOSTART_MAP = $Map
 $env:VIBBLE_RUNTIME_FRAME_LIMIT = [string]$FrameLimit
 $env:VIBBLE_SAFE_LOADING = "1"
 $env:VIBBLE_CODEX_PLAYTEST_INPUT = "1"
+$env:VIBBLE_CODEX_PLAYTEST_PROFILE = $Profile
 
 $startedAt = Get-Date
 $process = $null
@@ -220,14 +227,28 @@ try {
     $hardDeadline = $startedAt.AddSeconds($hardTimeoutSeconds)
     $step = 0
     $held = @()
-    $patterns = @(
-        @($vk.W),
-        @($vk.D),
-        @($vk.S),
-        @($vk.A),
-        @($vk.W, $vk.D),
-        @($vk.S, $vk.A)
-    )
+    $spiderSlow = $Profile -eq "spider_slow"
+    $patterns = if ($spiderSlow) {
+        @(
+            @($vk.W),
+            @($vk.W),
+            @($vk.W, $vk.A),
+            @($vk.W),
+            @($vk.W, $vk.D),
+            @($vk.W),
+            @($vk.A),
+            @($vk.D)
+        )
+    } else {
+        @(
+            @($vk.W),
+            @($vk.D),
+            @($vk.S),
+            @($vk.A),
+            @($vk.W, $vk.D),
+            @($vk.S, $vk.A)
+        )
+    }
 
     while (-not $process.HasExited -and (Get-Date) -lt $deadline -and (Get-Date) -lt $hardDeadline) {
         Focus-GameWindow $process | Out-Null
@@ -239,15 +260,15 @@ try {
             Send-KeyDown $key
         }
         Move-MousePattern -Process $process -Step $step
-        if (($step % 4) -eq 0) {
+        if (-not $spiderSlow -and ($step % 4) -eq 0) {
             Click-Left
         }
-        if (($step % 6) -eq 0) {
+        if (-not $spiderSlow -and ($step % 6) -eq 0) {
             Send-KeyDown $vk.Space
             Start-Sleep -Milliseconds 60
             Send-KeyUp $vk.Space
         }
-        Start-Sleep -Milliseconds 850
+        Start-Sleep -Milliseconds ($spiderSlow ? 1250 : 850)
         $process.Refresh()
         $step++
     }
@@ -294,7 +315,10 @@ try {
         Copy-Item -Path $StdoutPath -Destination $LogPath -Force
     }
     Write-Metadata -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration -StartedAt $startedAt -EndedAt $endedAt
-    Invoke-Report -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration
+    $reportExitCode = Invoke-Report -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration
+    if ($runExitCode -eq 0 -and $reportExitCode -ne 0) {
+        $runExitCode = $reportExitCode
+    }
 }
 
 exit $runExitCode

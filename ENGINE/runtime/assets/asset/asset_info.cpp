@@ -1347,6 +1347,27 @@ nlohmann::json encode_anchor_frame_json(const std::vector<DisplacedAssetAnchorPo
     return frame_json;
 }
 
+void normalize_anchor_frame_depth_offsets(nlohmann::json& frame_anchors_json) {
+    if (!frame_anchors_json.is_array()) {
+        return;
+    }
+
+    for (auto& anchor_json : frame_anchors_json) {
+        if (!anchor_json.is_object()) {
+            continue;
+        }
+        auto depth_it = anchor_json.find("depth_offset");
+        if (depth_it == anchor_json.end()) {
+            continue;
+        }
+        if (const auto parsed = parse_number_like_json(*depth_it)) {
+            anchor_json["depth_offset"] = quantize_depth_offset_world_units(static_cast<float>(*parsed));
+        } else {
+            anchor_json["depth_offset"] = 0.0f;
+        }
+    }
+}
+
 void normalize_anchor_points_payload(nlohmann::json& animation_payload, std::size_t frame_count) {
     if (!animation_payload.is_object()) {
         animation_payload = nlohmann::json::object();
@@ -1359,11 +1380,12 @@ void normalize_anchor_points_payload(nlohmann::json& animation_payload, std::siz
 
     nlohmann::json normalized = nlohmann::json::array();
     for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+        nlohmann::json frame_anchors = nlohmann::json::array();
         if (frame_index < anchor_points.size() && anchor_points[frame_index].is_array()) {
-            normalized.push_back(anchor_points[frame_index]);
-        } else {
-            normalized.push_back(nlohmann::json::array());
+            frame_anchors = anchor_points[frame_index];
+            normalize_anchor_frame_depth_offsets(frame_anchors);
         }
+        normalized.push_back(std::move(frame_anchors));
     }
     animation_payload["anchor_points"] = std::move(normalized);
 }

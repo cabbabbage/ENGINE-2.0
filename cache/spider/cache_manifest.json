@@ -100,12 +100,12 @@
     }
   ],
   "asset_name": "spider",
-  "authored_scale_percentage": 62.0,
+  "authored_scale_percentage": 31.0,
   "crop_canvas": {
     "shared_height": 751,
     "shared_width": 932
   },
-  "digest": "53241d7c4fea12ff",
+  "digest": "227af853eb311813",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

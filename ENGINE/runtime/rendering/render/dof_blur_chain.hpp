@@ -42,6 +42,10 @@ enum AlphaDebugMode : int {
     kAlphaDebugShowFinalBlurredOutput = 3,
     kAlphaDebugCompareAlphaClampProtection = 4,
     kAlphaDebugBlurPaddingPreview = 5,
+    kAlphaDebugFocus = 6,
+    kAlphaDebugDepthLayer = 7,
+    kAlphaDebugBlurAmount = 8,
+    kAlphaDebugFinalLensContribution = 9,
 };
 
 namespace atmospheric_dust_tuning {

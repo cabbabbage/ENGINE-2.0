@@ -84,6 +84,45 @@ public:
         float layer_depth_interval         = 250.0f;
         float layer_depth_curve            = 1.0f;
         bool light_radius_overlap_culling_enabled = true;
+        struct CinematicLensSettings {
+            bool enabled = false;
+            float focus_depth_offset = 0.0f;
+            float aperture = 1.0f;
+            float focus_falloff_acceleration = 1.65f;
+            float max_near_blur_px = 12.0f;
+            float max_far_blur_px = 48.0f;
+            float near_far_blur_bias = 0.0f;
+            float field_curvature = 0.0f;
+            float edge_softness = 1.0f;
+            float swirl_strength = 0.28f;
+            float swirl_radius_start = 0.18f;
+            float tangential_blur_stretch = 1.0f;
+            float anamorphic_strength = 0.0f;
+            float bokeh_oval_ratio = 1.0f;
+            float bokeh_rotation = 0.0f;
+            float vignette_strength = 0.26f;
+            float vignette_radius = 0.58f;
+            float vignette_softness = 0.42f;
+            float barrel_distortion = 0.035f;
+            float distortion_zoom_compensation = 0.965f;
+            float chromatic_aberration = 0.0f;
+            float chromatic_edge_start = 0.62f;
+            float chromatic_depth_influence = 0.0f;
+            float bloom_strength = 0.0f;
+            float bloom_threshold = 1.0f;
+            float bloom_radius = 0.0f;
+            float halation_strength = 0.0f;
+            int alpha_debug_mode = 0;
+            bool alpha_clamp_protection = false;
+            int blur_padding_px = 0;
+            int sample_count = 9;
+            float downsample_scale = 1.0f;
+            int quality_preset = 1;
+        };
+
+        CinematicLensSettings lens{};
+
+        // Legacy flat fields are kept for older saves/callers and mirrored to lens in set_realism_settings().
         float aperture                     = 1.0f;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;

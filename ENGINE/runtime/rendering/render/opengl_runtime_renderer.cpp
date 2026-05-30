@@ -61,27 +61,28 @@ SDL_BlendMode premultiplied_over_blend_mode() {
 dof_blur_chain::CinematicLensSettings build_cinematic_lens_settings(
     const WarpedScreenGrid::RealismSettings& camera_settings) {
     dof_blur_chain::CinematicLensSettings settings{};
-    settings.enabled = camera_settings.depth_of_field_enabled;
-    settings.focus_depth_offset = camera_settings.focus_depth_offset;
-    settings.aperture = camera_settings.aperture;
-    settings.focus_falloff_acceleration = camera_settings.focus_falloff_acceleration;
-    settings.max_near_blur_px = camera_settings.blur_px;
-    settings.max_far_blur_px = camera_settings.radial_blur_px;
-    settings.near_far_blur_bias = camera_settings.near_far_blur_bias;
-    settings.swirl_strength = camera_settings.swirl_strength;
-    settings.swirl_radius_start = camera_settings.swirl_radius_start;
-    settings.tangential_blur_stretch = camera_settings.tangential_blur_stretch;
-    settings.anamorphic_strength = camera_settings.anamorphic_strength;
-    settings.bokeh_oval_ratio = camera_settings.bokeh_oval_ratio;
-    settings.bokeh_rotation = camera_settings.bokeh_rotation;
-    settings.field_curvature = camera_settings.field_curvature;
-    settings.edge_softness = camera_settings.edge_softness;
-    settings.alpha_clamp_protection = camera_settings.alpha_clamp_protection;
-    settings.alpha_debug_mode = camera_settings.alpha_debug_mode;
-    settings.blur_padding_px = camera_settings.blur_padding_px;
-    settings.sample_count = camera_settings.lens_sample_count;
-    settings.downsample_scale = camera_settings.lens_downsample_scale;
-    settings.quality_preset = camera_settings.lens_quality_preset;
+    const auto& lens = camera_settings.lens;
+    settings.enabled = camera_settings.depth_of_field_enabled || lens.enabled;
+    settings.focus_depth_offset = lens.focus_depth_offset;
+    settings.aperture = lens.aperture;
+    settings.focus_falloff_acceleration = lens.focus_falloff_acceleration;
+    settings.max_near_blur_px = lens.max_near_blur_px;
+    settings.max_far_blur_px = lens.max_far_blur_px;
+    settings.near_far_blur_bias = lens.near_far_blur_bias;
+    settings.swirl_strength = lens.swirl_strength;
+    settings.swirl_radius_start = lens.swirl_radius_start;
+    settings.tangential_blur_stretch = lens.tangential_blur_stretch;
+    settings.anamorphic_strength = lens.anamorphic_strength;
+    settings.bokeh_oval_ratio = lens.bokeh_oval_ratio;
+    settings.bokeh_rotation = lens.bokeh_rotation;
+    settings.field_curvature = lens.field_curvature;
+    settings.edge_softness = lens.edge_softness;
+    settings.alpha_clamp_protection = lens.alpha_clamp_protection;
+    settings.alpha_debug_mode = lens.alpha_debug_mode;
+    settings.blur_padding_px = lens.blur_padding_px;
+    settings.sample_count = lens.sample_count;
+    settings.downsample_scale = lens.downsample_scale;
+    settings.quality_preset = lens.quality_preset;
     return settings;
 }
 
@@ -195,17 +196,30 @@ struct FinalLensPassSettings {
 
 FinalLensPassSettings build_final_lens_pass_settings(const WarpedScreenGrid::RealismSettings& camera_settings) {
     FinalLensPassSettings settings{};
-    settings.edge_softness = std::clamp(camera_settings.edge_softness * 0.15f, 0.0f, 1.0f);
+    const auto& lens = camera_settings.lens;
+    settings.edge_softness = lens.edge_softness;
+    settings.barrel_distortion = lens.barrel_distortion;
+    settings.distortion_zoom_compensation = lens.distortion_zoom_compensation;
+    settings.vignette_strength = lens.vignette_strength;
+    settings.vignette_radius = lens.vignette_radius;
+    settings.vignette_softness = lens.vignette_softness;
+    settings.chromatic_aberration = lens.chromatic_aberration / 160.0f;
+    settings.chromatic_edge_start = lens.chromatic_edge_start;
+    settings.chromatic_depth_influence = lens.chromatic_depth_influence;
+    settings.bloom_strength = lens.bloom_strength;
+    settings.bloom_threshold = lens.bloom_threshold;
+    settings.bloom_radius = lens.bloom_radius;
+    settings.halation_strength = lens.halation_strength;
     settings.barrel_distortion = static_cast<float>(
-        env_double_clamped_renderer("VIBBLE_FINAL_LENS_BARREL_DISTORTION", settings.barrel_distortion, -0.35, 0.35));
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_BARREL_DISTORTION", settings.barrel_distortion, -0.5, 0.5));
     settings.distortion_zoom_compensation = static_cast<float>(
-        env_double_clamped_renderer("VIBBLE_FINAL_LENS_ZOOM_COMPENSATION", settings.distortion_zoom_compensation, 0.70, 1.15));
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_ZOOM_COMPENSATION", settings.distortion_zoom_compensation, 0.0, 1.5));
     settings.vignette_strength = static_cast<float>(
-        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_STRENGTH", settings.vignette_strength, 0.0, 0.95));
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_STRENGTH", settings.vignette_strength, 0.0, 1.0));
     settings.vignette_radius = static_cast<float>(
-        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_RADIUS", settings.vignette_radius, 0.0, 1.5));
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_RADIUS", settings.vignette_radius, 0.0, 1.0));
     settings.vignette_softness = static_cast<float>(
-        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_SOFTNESS", settings.vignette_softness, 0.01, 1.5));
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_SOFTNESS", settings.vignette_softness, 0.001, 1.0));
     settings.chromatic_aberration = static_cast<float>(
         env_double_clamped_renderer("VIBBLE_FINAL_LENS_CHROMATIC_ABERRATION", settings.chromatic_aberration, 0.0, 0.05));
     settings.chromatic_edge_start = static_cast<float>(

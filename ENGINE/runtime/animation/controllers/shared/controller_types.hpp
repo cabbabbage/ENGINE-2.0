@@ -56,6 +56,7 @@ struct AttackProcessingConfig {
     std::string_view death_animation_id = "die";
     std::string_view hit_fallback_animation_id = "default";
     std::string_view death_fallback_tag = "break";
+    bool interrupt_locked_animations = false;
 };
 
 struct AttackProcessingSummary {

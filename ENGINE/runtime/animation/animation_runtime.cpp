@@ -1643,11 +1643,12 @@ bool AnimationRuntime::switch_to(const std::string& anim_id,
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {
     // Lock semantics contract:
-    // - Locked animations are protected from movement/pending-request interruption.
+    // - Locked animations are protected from movement/pending-request interruption unless
+    //   the caller explicitly opts into override_non_locked.
     // - Non-locked animations may defer movement transitions unless the caller explicitly
     //   opts into override_non_locked (e.g., authored interrupt behavior).
     // - Default idle may always transition.
-    if (override_non_locked || !self_ || !self_->info) {
+    if (!self_ || !self_->info) {
         return false;
     }
 
@@ -1660,8 +1661,11 @@ bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) con
         return false;
     }
 
-    const Animation& anim = it->second;
-    return !anim.locked;
+    if (override_non_locked) {
+        return false;
+    }
+
+    return true;
 }
 
 bool AnimationRuntime::process_cycle_boundary_event(bool cycle_boundary_before_advance,

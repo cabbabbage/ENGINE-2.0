@@ -107,12 +107,30 @@ bool AttackProcessingHelper::compute_knockback_delta(const Asset& self,
     return true;
 }
 
-void AttackProcessingHelper::apply_knockback(Asset& self, SDL_Point delta) {
+void AttackProcessingHelper::apply_knockback(Asset& self,
+                                             SDL_Point delta,
+                                             std::string_view animation_id,
+                                             bool interrupt_locked_animations) {
     if (!self.anim_) {
         return;
     }
-    self.anim_->cancel_all_movement();
-    self.anim_->move(delta, animation_update::detail::kDefaultAnimation, true, true);
+
+    const std::string movement_animation = animation_id.empty()
+        ? std::string{animation_update::detail::kDefaultAnimation}
+        : std::string{animation_id};
+
+    self.anim_->stop_movement();
+
+    const bool override_non_locked = interrupt_locked_animations;
+    if (self.grid_point()) {
+        self.anim_->move_3d(axis::WorldPos{delta.x, 0, delta.y},
+                            movement_animation,
+                            true,
+                            override_non_locked);
+        return;
+    }
+
+    self.anim_->move(delta, movement_animation, true, override_non_locked);
 }
 
 void AttackProcessingHelper::process_pending_attacks(
@@ -175,32 +193,47 @@ AttackProcessingSummary AttackProcessingHelper::process_attacks(
         }
         if (!try_play_death_animation(self, config)) {
             self.Delete();
+            return summary;
         }
-        return summary;
-    }
-
-    if (strongest_knockback.has_value()) {
-        summary.took_damage = took_damage;
-        if (self.anim_ && self.anim_->debug_enabled()) {
-            vibble::log::info("[AICombat] Knockback applied: dx=" +
-                              std::to_string(strongest_knockback->x) + " dz=" +
-                              std::to_string(strongest_knockback->y));
+        if (strongest_knockback.has_value()) {
+            if (self.anim_ && self.anim_->debug_enabled()) {
+                vibble::log::info("[AICombat] Death knockback queued: dx=" +
+                                  std::to_string(strongest_knockback->x) + " dz=" +
+                                  std::to_string(strongest_knockback->y));
+            }
+            apply_knockback(self,
+                            *strongest_knockback,
+                            self.current_animation,
+                            config.interrupt_locked_animations);
         }
-        apply_knockback(self, *strongest_knockback);
         return summary;
     }
 
     if (!took_damage) {
         return summary;
     }
+
     summary.took_damage = true;
-    if (try_set_animation(self, config.hit_animation_id)) {
-        return summary;
+    bool hit_reaction_started = try_set_animation(self, config.hit_animation_id);
+    if (!hit_reaction_started && !config.hit_fallback_animation_id.empty()) {
+        hit_reaction_started = try_set_animation(self, config.hit_fallback_animation_id);
     }
-    if (config.hit_fallback_animation_id.empty()) {
-        return summary;
+
+    if (strongest_knockback.has_value()) {
+        if (self.anim_ && self.anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Knockback queued: dx=" +
+                              std::to_string(strongest_knockback->x) + " dz=" +
+                              std::to_string(strongest_knockback->y));
+        }
+        const std::string_view movement_animation = hit_reaction_started
+            ? std::string_view{self.current_animation}
+            : animation_update::detail::kDefaultAnimation;
+        apply_knockback(self,
+                        *strongest_knockback,
+                        movement_animation,
+                        config.interrupt_locked_animations);
     }
-    (void)try_set_animation(self, config.hit_fallback_animation_id);
+
     return summary;
 }
 

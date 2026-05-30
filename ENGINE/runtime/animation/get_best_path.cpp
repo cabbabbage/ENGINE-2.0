@@ -216,11 +216,15 @@ Plan GetBestPath::operator()(const Asset& self,
 
     CollisionQueryContext local_collision_context;
     CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
+    plan.engagement_target_asset_id = context.engagement_target_asset_id;
+    plan.attacking_enabled = plan.engagement_target_asset_id.has_value();
+    const bool allow_engagement_target_overlap =
+        plan.attacking_enabled && plan.engagement_target_asset_id.has_value();
     const auto& collisions = context.collisions_for(self);
     const Assets* assets   = self.get_assets();
     const animation_update::detail::PathBlockingContext blocking_context{
-        context.engagement_target_asset_id,
-        false
+        plan.engagement_target_asset_id,
+        allow_engagement_target_overlap
     };
     const int visited_sq   = visited_thresh_px * visited_thresh_px;
     const MovementAnimationBuckets animation_buckets = gather_movement_animations(self);

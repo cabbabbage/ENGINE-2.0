@@ -7763,7 +7763,7 @@
         ]
       },
       "size_settings": {
-        "scale_percentage": 100.0,
+        "scale_percentage": 41.0,
         "size_variation": 20.0
       },
       "start": "default",
@@ -7787,14 +7787,14 @@
       "update_radius": 0,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": 0,
-        "falloff": 30,
+        "center": -2,
+        "falloff": 3,
         "random": true,
-        "span": 39,
+        "span": 3,
         "weights": {
-          "center": 0.23076923076923075,
-          "edge": 0.21153846153846156,
-          "falloff": 0.5576923076923077
+          "center": 0.45333333333333337,
+          "edge": 0.08,
+          "falloff": 0.46666666666666673
         }
       }
     },
@@ -7902,13 +7902,13 @@
       "weight_kg": 0.0,
       "y_position_range": {
         "center": 0,
-        "falloff": 30,
-        "random": true,
-        "span": 39,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
         "weights": {
-          "center": 0.23076923076923075,
-          "edge": 0.21153846153846156,
-          "falloff": 0.5576923076923077
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
         }
       }
     },
@@ -11273,6 +11273,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/rock",
       "asset_name": "rock",
+      "asset_type": "object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
       "can_invert": true,
@@ -11317,7 +11318,8 @@
         ]
       },
       "size_settings": {
-        "size_variation": 9.0
+        "scale_percentage": 100.0,
+        "size_variation": 20.0
       },
       "start": "default",
       "tags": [],
@@ -11326,25 +11328,25 @@
         "center": 0,
         "falloff": 0,
         "random": true,
-        "span": 4,
+        "span": 14,
         "weights": {
-          "center": 0.3333333333333333,
-          "edge": 0.3333333333333333,
-          "falloff": 0.3333333333333333
+          "center": 0.3287671232876712,
+          "edge": 0.3424657534246575,
+          "falloff": 0.3287671232876712
         }
       },
-      "tilt_range_max_deg": 4,
-      "tilt_range_min_deg": -4,
+      "tilt_range_max_deg": 14,
+      "tilt_range_min_deg": -14,
       "weight_kg": 0.0,
       "y_position_range": {
-        "center": -4,
-        "falloff": 0,
+        "center": -2,
+        "falloff": 1,
         "random": true,
         "span": 1,
         "weights": {
-          "center": 0.38679245283018865,
-          "edge": 0.33962264150943394,
-          "falloff": 0.27358490566037735
+          "center": 0.4625631603123565,
+          "edge": 0.29765732659623334,
+          "falloff": 0.2397795130914102
         }
       }
     },
@@ -14187,37 +14189,37 @@
               false
             ],
             [
-              -33,
+              -1,
               0,
-              44,
+              -43,
               0.0,
               false
             ],
             [
-              -33,
+              -1,
               0,
-              44,
+              -43,
               0.0,
               false
             ],
             [
-              -33,
+              -1,
               0,
-              44,
+              -43,
               0.0,
               false
             ],
             [
-              -33,
+              -1,
               0,
-              44,
+              -43,
               0.0,
               false
             ],
             [
-              -33,
+              -1,
               0,
-              44,
+              -43,
               0.0,
               false
             ]
@@ -14230,9 +14232,31 @@
                 0,
                 0.0,
                 true
-              ]
-            ],
-            [
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
               [
                 0,
                 0,
@@ -14245,15 +14269,159 @@
                 0,
                 0,
                 0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -4,
+                0,
+                34,
+                0.0
+              ],
+              [
+                -4,
+                0,
+                34,
+                0.0
+              ],
+              [
+                -4,
+                0,
+                34,
+                0.0
+              ],
+              [
+                -4,
+                0,
+                34,
+                0.0
+              ],
+              [
+                -4,
+                0,
+                34,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -43,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -43,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -43,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -43,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -43,
                 0.0
               ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": -5,
             "dy": 0,
-            "dz": 0
+            "dz": -215.0
           },
           "movement_totals": [
             {
@@ -14951,37 +15119,37 @@
               false
             ],
             [
-              -34,
+              -1,
               0,
-              -51,
+              -29,
               0.0,
               false
             ],
             [
-              -34,
+              -1,
               0,
-              -51,
+              -29,
               0.0,
               false
             ],
             [
-              -34,
+              -1,
               0,
-              -51,
+              -29,
               0.0,
               false
             ],
             [
-              -34,
+              -1,
               0,
-              -51,
+              -29,
               0.0,
               false
             ],
             [
-              -34,
+              -1,
               0,
-              -51,
+              -29,
               0.0,
               false
             ]
@@ -15102,13 +15270,89 @@
                 -51,
                 0.0
               ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -2,
+                0,
+                22,
+                0.0
+              ],
+              [
+                -2,
+                0,
+                22,
+                0.0
+              ],
+              [
+                -2,
+                0,
+                22,
+                0.0
+              ],
+              [
+                -2,
+                0,
+                22,
+                0.0
+              ],
+              [
+                -2,
+                0,
+                22,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -29,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -29,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -29,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -29,
+                0.0
+              ],
+              [
+                -1,
+                0,
+                -29,
+                0.0
+              ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -170,
+            "dx": -5,
             "dy": 0,
-            "dz": -255.0
+            "dz": -145.0
           },
           "movement_totals": [
             {
@@ -23876,10 +24120,10 @@
         "alpha_clamp_protection": false,
         "alpha_debug_mode": 0,
         "anamorphic_strength": 0.8199999928474426,
-        "aperture": 0.35999998450279236,
+        "aperture": 1.100000023841858,
         "base_height_px": 720.0,
         "blur_padding_px": 5,
-        "blur_px": 16.0,
+        "blur_px": 16.5,
         "bokeh_oval_ratio": 1.0,
         "bokeh_rotation": -84.0,
         "boundary_min_visible_screen_ratio": 0.007000000216066837,
@@ -23891,7 +24135,7 @@
         "edge_softness": 1.0,
         "field_curvature": 3.9499998092651367,
         "focus_depth_offset": 0.0,
-        "focus_falloff_acceleration": 0.8400000333786011,
+        "focus_falloff_acceleration": 1.0899999141693115,
         "layer_depth_curve": 1.0,
         "layer_depth_interval": 250.0,
         "lens_alpha_clamp_protection": false,
@@ -23912,10 +24156,10 @@
         "lens_edge_softness": 1.0,
         "lens_field_curvature": 3.9499998092651367,
         "lens_focus_depth_offset": 0.0,
-        "lens_focus_falloff_acceleration": 0.8400000333786011,
+        "lens_focus_falloff_acceleration": 1.0899999141693115,
         "lens_halation_strength": 0.0,
-        "lens_max_far_blur_px": 48.0,
-        "lens_max_near_blur_px": 16.0,
+        "lens_max_far_blur_px": 1.0,
+        "lens_max_near_blur_px": 16.5,
         "lens_near_far_blur_bias": 0.0,
         "lens_quality_preset": 1,
         "lens_sample_count": 9,
@@ -23939,7 +24183,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 48.0,
+        "radial_blur_px": 1.0,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -24119,9 +24363,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            236,
+            31,
+            204,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -24276,9 +24520,9 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            66,
+            242,
+            85,
+            198,
             255
           ],
           "geometry": "Circle",
@@ -24433,9 +24677,9 @@
             }
           },
           "display_color": [
-            67,
-            31,
-            204,
+            242,
+            85,
+            128,
             255
           ],
           "geometry": "Circle",
@@ -24587,9 +24831,9 @@
             }
           },
           "display_color": [
-            223,
-            242,
-            36,
+            31,
+            204,
+            100,
             255
           ],
           "geometry": "Circle",
@@ -24746,9 +24990,9 @@
             }
           },
           "display_color": [
-            85,
-            219,
-            242,
+            204,
+            31,
+            89,
             255
           ],
           "geometry": "Square",
@@ -24954,7 +25198,7 @@
           "display_color": [
             85,
             242,
-            168,
+            173,
             255
           ],
           "geometry": "Circle",
@@ -25114,9 +25358,9 @@
             }
           },
           "display_color": [
-            135,
-            204,
-            31,
+            85,
+            242,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -25567,9 +25811,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            120,
+            71,
+            31,
+            204,
             255
           ],
           "geometry": "Square",
@@ -25624,9 +25868,9 @@
             }
           },
           "display_color": [
-            153,
-            71,
-            204,
+            163,
+            85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25681,9 +25925,9 @@
             }
           },
           "display_color": [
-            36,
-            189,
+            229,
             242,
+            36,
             255
           ],
           "geometry": "Square",
@@ -25769,9 +26013,9 @@
             }
           },
           "display_color": [
-            34,
-            224,
-            119,
+            242,
+            36,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25826,9 +26070,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            178,
+            204,
+            184,
+            31,
             255
           ],
           "geometry": "Square",
@@ -25884,9 +26128,9 @@
             }
           },
           "display_color": [
-            204,
-            155,
-            71,
+            85,
+            138,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25942,9 +26186,9 @@
             }
           },
           "display_color": [
-            224,
-            188,
-            34,
+            204,
+            121,
+            71,
             255
           ],
           "geometry": "Square",
@@ -26000,9 +26244,9 @@
             }
           },
           "display_color": [
-            71,
-            89,
-            204,
+            36,
+            242,
+            141,
             255
           ],
           "geometry": "Square",
@@ -26220,9 +26464,9 @@
             }
           },
           "display_color": [
-            100,
-            204,
-            71,
+            36,
+            192,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -26314,9 +26558,9 @@
             }
           },
           "display_color": [
-            85,
-            134,
-            242,
+            99,
+            204,
+            71,
             255
           ],
           "geometry": "Square",
@@ -26471,9 +26715,9 @@
             }
           },
           "display_color": [
-            170,
             242,
-            36,
+            159,
+            85,
             255
           ],
           "geometry": "Square",
@@ -26628,9 +26872,9 @@
             }
           },
           "display_color": [
-            242,
-            124,
-            85,
+            71,
+            100,
+            204,
             255
           ],
           "geometry": "Circle",
@@ -26790,9 +27034,9 @@
             }
           },
           "display_color": [
-            191,
-            85,
+            177,
             242,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -27227,9 +27471,9 @@
             }
           },
           "display_color": [
-            242,
-            36,
-            224,
+            71,
+            204,
+            141,
             255
           ],
           "geometry": "Square",

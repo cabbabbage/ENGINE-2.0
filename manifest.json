@@ -23535,7 +23535,7 @@
         "blur_padding_px": 0,
         "blur_px": 12.5,
         "bokeh_oval_ratio": 1.0,
-        "bokeh_rotation": 0.0,
+        "bokeh_rotation": -180.0,
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 2019,
         "camera_height_min_px": 200,
@@ -23547,22 +23547,22 @@
         "focus_depth_offset": 0.0,
         "focus_falloff_acceleration": 2.3600001335144043,
         "layer_depth_curve": 1.0,
-        "layer_depth_interval": 250.0,
+        "layer_depth_interval": 418.0,
         "lens_alpha_clamp_protection": false,
         "lens_alpha_debug_mode": 0,
         "lens_anamorphic_strength": 0.0,
-        "lens_barrel_distortion": 0.0350000262260437,
+        "lens_barrel_distortion": -0.009999990463256836,
         "lens_bloom_radius": 0.0,
         "lens_bloom_strength": 0.0,
         "lens_bloom_threshold": 1.0,
         "lens_blur_padding_preview": 0,
         "lens_bokeh_oval_ratio": 1.0,
-        "lens_bokeh_rotation": 0.0,
+        "lens_bokeh_rotation": -180.0,
         "lens_chromatic_aberration": 0.0,
         "lens_chromatic_depth_influence": 0.0,
         "lens_chromatic_edge_start": 0.6200000047683716,
         "lens_distortion_zoom_compensation": 0.9650000333786011,
-        "lens_downsample_scale": 1.0,
+        "lens_downsample_scale": 0.9999999403953552,
         "lens_edge_softness": 1.0,
         "lens_field_curvature": 0.0,
         "lens_focus_depth_offset": 0.0,
@@ -23573,12 +23573,12 @@
         "lens_near_far_blur_bias": 0.0,
         "lens_quality_preset": 1,
         "lens_sample_count": 9,
-        "lens_swirl_radius_start": 0.17999999225139618,
-        "lens_swirl_strength": 0.2800000011920929,
-        "lens_tangential_blur_stretch": 1.0,
-        "lens_vignette_radius": 0.5799999833106995,
-        "lens_vignette_softness": 0.42000001668930054,
-        "lens_vignette_strength": 0.25999999046325684,
+        "lens_swirl_radius_start": 0.08999999612569809,
+        "lens_swirl_strength": 0.0,
+        "lens_tangential_blur_stretch": 2.2899999618530273,
+        "lens_vignette_radius": 0.23999999463558197,
+        "lens_vignette_softness": 0.2540000081062317,
+        "lens_vignette_strength": 0.0,
         "light_max_cull_depth": 13454.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
@@ -23598,9 +23598,9 @@
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
-        "swirl_radius_start": 0.17999999225139618,
-        "swirl_strength": 0.2800000011920929,
-        "tangential_blur_stretch": 1.0,
+        "swirl_radius_start": 0.08999999612569809,
+        "swirl_strength": 0.0,
+        "tangential_blur_stretch": 2.2899999618530273,
         "transition_damping": 9.0
       },
       "content_root": "content/forrest",
@@ -23723,9 +23723,9 @@
       "rooms_data": {
         "Bluebloom_Nook": {
           "display_color": [
-            242,
-            49,
-            36,
+            72,
+            204,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -23869,9 +23869,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            235,
-            242,
             36,
+            48,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -24015,9 +24015,9 @@
         },
         "Frog_Basin": {
           "display_color": [
-            99,
-            204,
-            71,
+            112,
+            242,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -24158,9 +24158,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
-            85,
             242,
-            178,
+            69,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -24306,9 +24306,9 @@
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
           "display_color": [
-            136,
             85,
             242,
+            176,
             255
           ],
           "geometry": "Square",
@@ -24501,9 +24501,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
-            204,
-            179,
-            31,
+            242,
+            219,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -24652,9 +24652,9 @@
           "camera_tilt_deg": 17.636096954345703,
           "camera_zoom_percent": 0,
           "display_color": [
-            192,
-            242,
-            85,
+            204,
+            171,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -24974,9 +24974,9 @@
         },
         "NewRoom": {
           "display_color": [
-            31,
-            204,
-            172,
+            36,
+            242,
+            62,
             255
           ],
           "geometry": "Square",
@@ -25020,9 +25020,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            165,
-            36,
-            242,
+            132,
+            204,
+            31,
             255
           ],
           "geometry": "Square",
@@ -25066,9 +25066,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            242,
-            138,
-            36,
+            31,
+            204,
+            169,
             255
           ],
           "geometry": "Square",
@@ -25143,9 +25143,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            61,
             71,
-            242,
+            204,
+            99,
             255
           ],
           "geometry": "Square",
@@ -25189,9 +25189,9 @@
         },
         "NewRoom4": {
           "display_color": [
+            153,
+            36,
             242,
-            85,
-            92,
             255
           ],
           "geometry": "Square",
@@ -25236,9 +25236,9 @@
         },
         "NewRoom5": {
           "display_color": [
-            71,
-            204,
-            137,
+            242,
+            85,
+            95,
             255
           ],
           "geometry": "Square",
@@ -25283,9 +25283,9 @@
         },
         "Old_Stump_Yard": {
           "display_color": [
-            85,
-            242,
-            36,
+            204,
+            71,
+            139,
             255
           ],
           "geometry": "Square",
@@ -25492,9 +25492,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            158,
             204,
-            71,
+            31,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -25576,8 +25576,8 @@
         "Spider_Hollow": {
           "display_color": [
             242,
-            227,
-            85,
+            134,
+            36,
             255
           ],
           "geometry": "Square",
@@ -25721,9 +25721,9 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            85,
-            242,
-            103,
+            51,
+            79,
+            204,
             255
           ],
           "geometry": "Square",
@@ -25867,9 +25867,9 @@
         },
         "Whispering_Ring": {
           "display_color": [
-            204,
+            242,
+            232,
             85,
-            31,
             255
           ],
           "geometry": "Circle",
@@ -26018,9 +26018,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
+            162,
             204,
-            51,
-            156,
+            71,
             255
           ],
           "geometry": "Circle",
@@ -26444,9 +26444,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            51,
             204,
-            90,
+            31,
+            169,
             255
           ],
           "geometry": "Square",
@@ -26852,9 +26852,9 @@
         "NewTrail2": {
           "camera_height_px": 1000,
           "display_color": [
-            242,
-            85,
-            233,
+            106,
+            31,
+            204,
             255
           ],
           "geometry": "Square",

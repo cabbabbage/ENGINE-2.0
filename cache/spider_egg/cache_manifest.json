@@ -108,12 +108,12 @@
     }
   ],
   "asset_name": "spider_egg",
-  "authored_scale_percentage": 26.999998092651367,
+  "authored_scale_percentage": 27.000001907348633,
   "crop_canvas": {
     "shared_height": 617,
     "shared_width": 1552
   },
-  "digest": "ed7406ac4e9afeff",
+  "digest": "1ca4336e71c41d84",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

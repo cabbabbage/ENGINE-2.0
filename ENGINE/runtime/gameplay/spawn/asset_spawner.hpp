@@ -22,7 +22,12 @@ class AssetSpawner {
     using Point = std::pair<int, int>;
     AssetSpawner(AssetLibrary* asset_library, std::vector<Area> exclusion_zones);
     void spawn(Room& room);
-    void spawn_edge_detail_candidates(Room& room, const Area& expansion_area, const nlohmann::json& edge_detail_candidates);
+    void spawn_edge_detail_candidates(Room& room,
+                                     const Area& expanded_area,
+                                     const Area& original_area,
+                                     const nlohmann::json& edge_detail_candidates,
+                                     std::vector<Area>& claimed_edge_detail_regions);
+    static std::optional<Area> asset_footprint_area(const Asset& asset, const std::string& name = "asset_footprint");
     std::vector<std::unique_ptr<Asset>> extract_all_assets();
     void set_map_grid_settings(const MapGridSettings& settings) { map_grid_settings_ = settings; }
 

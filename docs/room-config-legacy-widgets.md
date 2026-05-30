@@ -18,7 +18,7 @@ This document captures the old Room/Trail config panel at a high level so a futu
 - `Range sliders`
   - Controlled min/max size bounds for width and height.
 - `Single-value slider`
-  - Legacy surface parameters (removed): replaced by coarseness and edge detail candidates.
+  - Legacy surface parameters (removed): replaced by weighted coarseness ranges; edge detail candidates are configured once at map level, not per room/trail.
 - `Checkboxes`
   - Controlled boolean room flags (boss-like marker, inherit-assets style flags).
 - `Tag editor chips/list`
@@ -34,7 +34,7 @@ This document captures the old Room/Trail config panel at a high level so a futu
 
 - Name / identity metadata.
 - Geometry and dimension bounds.
-- Edge/surface shaping metadata.
+- Edge/surface shaping metadata: rooms/trails keep weighted coarseness ranges, while `edge_detail_candidates` belongs to map-level generation data and runs after coarseness expansion.
 - Room/trail tags and classification flags.
 - Spawn-group references and list actions.
 - Trail-connection directional sector metadata.

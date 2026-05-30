@@ -318,40 +318,50 @@ void AssetLoader::loadRooms() {
         world_context_->adopt_rooms(std::move(room_ptrs));
         {
                 auto rooms = getRooms();
-                vibble::mapgen::coarseness::apply_coarseness_expansion(rooms);
-                std::vector<Area> edge_detail_claimed;
-                auto add_asset_claim = [&edge_detail_claimed](Asset* asset) {
+
+                std::unordered_map<Room*, Area> original_room_areas;
+                original_room_areas.reserve(rooms.size());
+                std::vector<Area> normal_spawned_occupancy;
+                auto add_asset_claim = [&normal_spawned_occupancy](Asset* asset) {
                         if (!asset) return;
-                        const SDL_Point p = asset->world_xz_point();
-                        std::vector<SDL_Point> poly{
-                            SDL_Point{p.x - 8, p.y - 8},
-                            SDL_Point{p.x + 8, p.y - 8},
-                            SDL_Point{p.x + 8, p.y + 8},
-                            SDL_Point{p.x - 8, p.y + 8},
-                        };
-                        edge_detail_claimed.emplace_back("edge_detail_claim", poly);
+                        std::optional<Area> footprint = AssetSpawner::asset_footprint_area(*asset, "normal_asset_footprint");
+                        if (footprint) {
+                                normal_spawned_occupancy.push_back(*footprint);
+                        }
                 };
                 for (Room* room : rooms) {
-                        if (!room) continue;
+                        if (!room || !room->room_area) continue;
+                        original_room_areas.emplace(room, *room->room_area);
                         for (auto& asset_up : room->assets) {
                                 add_asset_claim(asset_up.get());
                         }
                 }
+
+                vibble::mapgen::coarseness::apply_coarseness_expansion(rooms);
+
                 const nlohmann::json* edge_detail_candidates = nullptr;
                 auto edge_detail_it = map_manifest_json_.find("edge_detail_candidates");
                 if (edge_detail_it != map_manifest_json_.end() && edge_detail_it->is_object()) {
                         edge_detail_candidates = &(*edge_detail_it);
                 }
+
+                std::vector<Area> edge_detail_claimed;
                 for (Room* room : rooms) {
                         if (!room || !room->coarseness_added_area || !edge_detail_candidates) continue;
-                        AssetSpawner edge_spawner(asset_library_, edge_detail_claimed);
-                        edge_spawner.set_map_grid_settings(room->map_grid_settings());
-                        edge_spawner.spawn_edge_detail_candidates(*room, *room->coarseness_added_area, *edge_detail_candidates);
-                        for (auto& asset_up : room->assets) {
-                                if (asset_up && asset_up->spawn_method == "Random") {
-                                        add_asset_claim(asset_up.get());
-                                }
+                        if (room->coarseness_added_area->get_points().empty() || room->coarseness_added_area->get_area() <= 0.0) {
+                                continue;
                         }
+                        auto original_it = original_room_areas.find(room);
+                        const Area& original_area = original_it != original_room_areas.end()
+                            ? original_it->second
+                            : *room->room_area;
+                        AssetSpawner edge_spawner(asset_library_, normal_spawned_occupancy);
+                        edge_spawner.set_map_grid_settings(room->map_grid_settings());
+                        edge_spawner.spawn_edge_detail_candidates(*room,
+                                                                  *room->coarseness_added_area,
+                                                                  original_area,
+                                                                  *edge_detail_candidates,
+                                                                  edge_detail_claimed);
                 }
         }
         if (getRooms().empty()) {

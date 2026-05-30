@@ -547,32 +547,57 @@ void fill_screen_quad_packet_vertices(float center_x,
     fill_quad_packet_vertices(tl, tr, br, bl, 0.0f, 0.0f, 1.0f, 1.0f, target_width, target_height, out_packet);
 }
 
-bool clip_quad_against_v_threshold(const SDL_Vertex (&quad)[4],
-                                   float visible_v,
-                                   std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices,
-                                   std::array<int, render_sprite_geometry::kMaxClippedIndices>& out_indices,
-                                   int& out_vertex_count,
-                                   int& out_index_count) {
+bool clip_quad_against_ground_parallel_line(
+    const SDL_Vertex (&quad)[4],
+    const render_floor_clip::GroundParallelClipLine& clip_line,
+    std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices,
+    std::array<int, render_sprite_geometry::kMaxClippedIndices>& out_indices,
+    int& out_vertex_count,
+    int& out_index_count) {
     out_vertices = {};
     out_indices = {};
     out_vertex_count = 0;
     out_index_count = 0;
 
-    constexpr float kEpsilon = 1.0e-6f;
-    const auto inside = [visible_v, kEpsilon](const SDL_Vertex& v) {
-        return v.tex_coord.y <= (visible_v + kEpsilon);
+    if (!clip_line.valid) {
+        return false;
+    }
+
+    constexpr float kEpsilon = 1.0e-5f;
+    const SDL_FPoint line_delta{
+        clip_line.right.x - clip_line.left.x,
+        clip_line.right.y - clip_line.left.y
     };
-    const auto interpolate = [visible_v, kEpsilon](const SDL_Vertex& a, const SDL_Vertex& b) {
+    const auto signed_distance = [&clip_line, line_delta](const SDL_FPoint& point) {
+        return line_delta.x * (point.y - clip_line.left.y) -
+               line_delta.y * (point.x - clip_line.left.x);
+    };
+
+    float inside_sign = signed_distance(clip_line.inside_reference);
+    if (!std::isfinite(inside_sign) || std::fabs(inside_sign) <= kEpsilon) {
+        inside_sign = -1.0f;
+    }
+    inside_sign = inside_sign < 0.0f ? -1.0f : 1.0f;
+
+    const auto oriented_distance = [signed_distance, inside_sign](const SDL_Vertex& vertex) {
+        return signed_distance(vertex.position) * inside_sign;
+    };
+    const auto inside = [oriented_distance, kEpsilon](const SDL_Vertex& vertex) {
+        return oriented_distance(vertex) >= -kEpsilon;
+    };
+    const auto interpolate = [oriented_distance, kEpsilon](const SDL_Vertex& a, const SDL_Vertex& b) {
         SDL_Vertex out{};
-        const float dv = b.tex_coord.y - a.tex_coord.y;
+        const float da = oriented_distance(a);
+        const float db = oriented_distance(b);
+        const float denom = da - db;
         float t = 0.0f;
-        if (std::fabs(dv) > kEpsilon) {
-            t = std::clamp((visible_v - a.tex_coord.y) / dv, 0.0f, 1.0f);
+        if (std::fabs(denom) > kEpsilon) {
+            t = std::clamp(da / denom, 0.0f, 1.0f);
         }
         out.position.x = a.position.x + (b.position.x - a.position.x) * t;
         out.position.y = a.position.y + (b.position.y - a.position.y) * t;
         out.tex_coord.x = a.tex_coord.x + (b.tex_coord.x - a.tex_coord.x) * t;
-        out.tex_coord.y = visible_v;
+        out.tex_coord.y = a.tex_coord.y + (b.tex_coord.y - a.tex_coord.y) * t;
         out.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
         return out;
     };
@@ -1783,9 +1808,22 @@ bool opengl_runtime_renderer_detail::build_floor_clipped_sprite_packet(
         return false;
     }
 
-    const float bottom_v = clip.visibility == render_floor_clip::Visibility::PartiallyVisible
-        ? clip.visible_v
-        : 1.0f;
+    if (clip.visibility == render_floor_clip::Visibility::FullyVisible) {
+        fill_quad_packet_vertices(projected.screen_tl,
+                                  projected.screen_tr,
+                                  projected.screen_br,
+                                  projected.screen_bl,
+                                  u0,
+                                  v0,
+                                  u1,
+                                  v1,
+                                  output_w,
+                                  output_h,
+                                  out_packet);
+        return true;
+    }
+
+    const float bottom_v = clip.visible_v;
     const auto make_vertex = [](const SDL_FPoint& point, float u, float v) {
         SDL_Vertex vertex{};
         vertex.position = point;
@@ -1803,8 +1841,15 @@ bool opengl_runtime_renderer_detail::build_floor_clipped_sprite_packet(
     std::array<int, render_sprite_geometry::kMaxClippedIndices> clipped_indices{};
     int clipped_vertex_count = 0;
     int clipped_index_count = 0;
-    if (!clip_quad_against_v_threshold(
-            quad, bottom_v, clipped_vertices, clipped_indices, clipped_vertex_count, clipped_index_count)) {
+    const render_floor_clip::GroundParallelClipLine clip_line =
+        render_floor_clip::compute_ground_parallel_clip_line(
+            projected.has_crop_screen_basis ? projected.crop_screen_tl : projected.screen_tl,
+            projected.has_crop_screen_basis ? projected.crop_screen_tr : projected.screen_tr,
+            projected.has_crop_screen_basis ? projected.crop_screen_br : projected.screen_br,
+            projected.has_crop_screen_basis ? projected.crop_screen_bl : projected.screen_bl,
+            bottom_v);
+    if (!clip_quad_against_ground_parallel_line(
+            quad, clip_line, clipped_vertices, clipped_indices, clipped_vertex_count, clipped_index_count)) {
         return false;
     }
     const auto to_gpu_vertex = [output_w, output_h](const SDL_Vertex& vertex) {

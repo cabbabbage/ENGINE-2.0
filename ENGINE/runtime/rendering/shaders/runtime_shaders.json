@@ -6,7 +6,7 @@
       "spirv": {
         "entrypoint": "main",
         "file_size_bytes": 8420,
-        "hash_fnv1a64": "0xa86ccd0994df1446",
+        "hash_fnv1a64": "0x4f925ab162afda56",
         "path": "spirv/cinematic_lens_final.spv",
         "stage": "fragment"
       }

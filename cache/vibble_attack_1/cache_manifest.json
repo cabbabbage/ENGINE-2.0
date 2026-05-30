@@ -5,45 +5,45 @@
       "source_frames": [
         {
           "filename": "0.png",
-          "hash": "a12381380c24fd03",
-          "height": 120,
+          "hash": "671c23c920c2a77a",
+          "height": 1080,
           "order": 0,
-          "width": 189
+          "width": 1920
         },
         {
           "filename": "1.png",
-          "hash": "12df39acb9934f36",
-          "height": 120,
+          "hash": "b8ee92354915951b",
+          "height": 1080,
           "order": 1,
-          "width": 189
+          "width": 1920
         },
         {
           "filename": "2.png",
-          "hash": "0770fc21d46bbfbe",
-          "height": 120,
+          "hash": "efaabbc2800962fd",
+          "height": 1080,
           "order": 2,
-          "width": 189
+          "width": 1920
         },
         {
           "filename": "3.png",
-          "hash": "4758754855b576ce",
-          "height": 120,
+          "hash": "9e8d391851cb452f",
+          "height": 1080,
           "order": 3,
-          "width": 189
+          "width": 1920
         },
         {
           "filename": "4.png",
-          "hash": "5e74398f3280fc18",
-          "height": 120,
+          "hash": "3935fe9c134d23b5",
+          "height": 1080,
           "order": 4,
-          "width": 189
+          "width": 1920
         },
         {
           "filename": "5.png",
-          "hash": "f8cd07f50cc3419d",
-          "height": 120,
+          "hash": "748ee1381361fcb2",
+          "height": 1080,
           "order": 5,
-          "width": 189
+          "width": 1920
         }
       ]
     },
@@ -63,10 +63,10 @@
   "asset_name": "vibble_attack_1",
   "authored_scale_percentage": 128.0,
   "crop_canvas": {
-    "shared_height": 120,
-    "shared_width": 189
+    "shared_height": 527,
+    "shared_width": 844
   },
-  "digest": "d6c5d8788717e73a",
+  "digest": "3a94143b6dd18fe8",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

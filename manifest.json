@@ -16583,8 +16583,8 @@
         ]
       },
       "size_settings": {
-        "scale_percentage": 27.0,
-        "size_variation": 8.0
+        "scale_percentage": 27.000001907348633,
+        "size_variation": 7.0
       },
       "start": "default",
       "tags": [
@@ -16597,15 +16597,15 @@
         "center": 0,
         "falloff": 0,
         "random": true,
-        "span": 11,
+        "span": 8,
         "weights": {
           "center": 0.3333333333333333,
           "edge": 0.3333333333333333,
           "falloff": 0.3333333333333333
         }
       },
-      "tilt_range_max_deg": 11,
-      "tilt_range_min_deg": -11,
+      "tilt_range_max_deg": 8,
+      "tilt_range_min_deg": -8,
       "update_radius": 0,
       "weight_kg": 195.0,
       "y_position_range": {
@@ -22649,45 +22649,7 @@
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              0,
-              0.0
-            ],
-            [
-              2,
-              0,
-              7,
-              120.0
-            ],
-            [
-              -11,
-              0,
-              5,
-              0.0
-            ],
-            [
-              0,
-              0,
-              -15,
-              -120.0
-            ],
-            [
-              -18,
-              0,
-              -33,
-              0.0
-            ],
-            [
-              9,
-              0,
-              -28,
-              0.0
-            ]
-          ],
+          "locked": true,
           "movement_paths": [
             [
               [
@@ -22697,44 +22659,47 @@
                 0.0
               ],
               [
-                2,
                 0,
-                7,
-                120.0
-              ],
-              [
-                -11,
                 0,
-                5,
-                0.0
+                0
               ],
               [
                 0,
                 0,
-                -15,
-                -120.0
+                0
               ],
               [
-                -18,
                 0,
-                -33,
-                0.0
+                0,
+                0
               ],
               [
-                9,
                 0,
-                -28,
-                0.0
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
               ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": -18,
+            "dx": 0,
             "dy": 0,
-            "dz": -64.0
+            "dz": 0
           },
-          "number_of_frames": 1,
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 6,
           "on_end": "reverse",
           "reverse_source": false,
           "rnd_start": false,
@@ -22852,8 +22817,11 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/vibble_attack_1",
       "asset_name": "vibble_attack_1",
+      "asset_type": "object",
       "attack_box_enabled": true,
       "bounce_amount": 0,
+      "can_invert": false,
+      "crop_on_load": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -23559,35 +23527,80 @@
         }
       },
       "camera_settings": {
-        "aperture": 3.2899997234344482,
+        "alpha_clamp_protection": false,
+        "alpha_debug_mode": 0,
+        "anamorphic_strength": 0.0,
+        "aperture": 0.14000000059604645,
         "base_height_px": 720.0,
-        "blur_px": 8.319999694824219,
+        "blur_padding_px": 0,
+        "blur_px": 12.5,
+        "bokeh_oval_ratio": 1.0,
+        "bokeh_rotation": 0.0,
         "boundary_min_visible_screen_ratio": 0.0010000000474974513,
         "camera_height_max_px": 2019,
         "camera_height_min_px": 200,
         "depth_of_field_enabled": true,
-        "dynamic_renderer_depth_efficiency_depth": 209.0,
+        "dynamic_renderer_depth_efficiency_depth": 2000.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.05999999865889549,
-        "layer_depth_curve": 25.760000228881836,
-        "layer_depth_interval": 1642.0,
+        "edge_softness": 1.0,
+        "field_curvature": 0.0,
+        "focus_depth_offset": 0.0,
+        "focus_falloff_acceleration": 2.3600001335144043,
+        "layer_depth_curve": 1.0,
+        "layer_depth_interval": 250.0,
+        "lens_alpha_clamp_protection": false,
+        "lens_alpha_debug_mode": 0,
+        "lens_anamorphic_strength": 0.0,
+        "lens_barrel_distortion": 0.0350000262260437,
+        "lens_bloom_radius": 0.0,
+        "lens_bloom_strength": 0.0,
+        "lens_bloom_threshold": 1.0,
+        "lens_blur_padding_preview": 0,
+        "lens_bokeh_oval_ratio": 1.0,
+        "lens_bokeh_rotation": 0.0,
+        "lens_chromatic_aberration": 0.0,
+        "lens_chromatic_depth_influence": 0.0,
+        "lens_chromatic_edge_start": 0.6200000047683716,
+        "lens_distortion_zoom_compensation": 0.9650000333786011,
+        "lens_downsample_scale": 1.0,
+        "lens_edge_softness": 1.0,
+        "lens_field_curvature": 0.0,
+        "lens_focus_depth_offset": 0.0,
+        "lens_focus_falloff_acceleration": 2.3600001335144043,
+        "lens_halation_strength": 0.0,
+        "lens_max_far_blur_px": 51.5,
+        "lens_max_near_blur_px": 12.5,
+        "lens_near_far_blur_bias": 0.0,
+        "lens_quality_preset": 1,
+        "lens_sample_count": 9,
+        "lens_swirl_radius_start": 0.17999999225139618,
+        "lens_swirl_strength": 0.2800000011920929,
+        "lens_tangential_blur_stretch": 1.0,
+        "lens_vignette_radius": 0.5799999833106995,
+        "lens_vignette_softness": 0.42000001668930054,
+        "lens_vignette_strength": 0.25999999046325684,
         "light_max_cull_depth": 13454.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
         "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
-        "max_cull_depth": 13454.0,
+        "max_cull_depth": 8000.0,
         "min_visible_screen_ratio": 0.00800000037997961,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
+        "near_far_blur_bias": 0.0,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 170.6699981689453,
+        "radial_blur_px": 51.5,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
+        "swirl_radius_start": 0.17999999225139618,
+        "swirl_strength": 0.2800000011920929,
+        "tangential_blur_stretch": 1.0,
         "transition_damping": 9.0
       },
       "content_root": "content/forrest",
@@ -23647,7 +23660,7 @@
             "spawn_id": "spn-327ae2d1230b"
           }
         ],
-        "fog_near_distance_px": 243,
+        "fog_near_distance_px": 101011,
         "fog_render_boundary_spacing": 16,
         "max_spawn_from_room": 3202,
         "regen_seed": 4
@@ -23711,8 +23724,8 @@
         "Bluebloom_Nook": {
           "display_color": [
             242,
+            49,
             36,
-            123,
             255
           ],
           "geometry": "Circle",
@@ -23856,9 +23869,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            204,
-            31,
-            31,
+            235,
+            242,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -24002,9 +24015,9 @@
         },
         "Frog_Basin": {
           "display_color": [
-            36,
-            242,
-            242,
+            99,
+            204,
+            71,
             255
           ],
           "geometry": "Circle",
@@ -24145,9 +24158,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
-            242,
             85,
-            173,
+            242,
+            178,
             255
           ],
           "geometry": "Circle",
@@ -24293,8 +24306,8 @@
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
           "display_color": [
-            36,
-            94,
+            136,
+            85,
             242,
             255
           ],
@@ -24488,9 +24501,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
-            133,
-            36,
-            242,
+            204,
+            179,
+            31,
             255
           ],
           "geometry": "Circle",
@@ -24633,15 +24646,15 @@
           }
         },
         "Mossy_Circle": {
-          "camera_center_dx": -68,
-          "camera_center_dz": -2290,
-          "camera_height_px": 295,
-          "camera_tilt_deg": 26.236095428466797,
+          "camera_center_dx": 556,
+          "camera_center_dz": 3347,
+          "camera_height_px": 643,
+          "camera_tilt_deg": 17.636096954345703,
           "camera_zoom_percent": 0,
           "display_color": [
-            31,
-            204,
-            158,
+            192,
+            242,
+            85,
             255
           ],
           "geometry": "Circle",
@@ -24941,66 +24954,6 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-9e44bfa73dfe"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "tree_dark"
-                }
-              ],
-              "display_name": "tree_dark",
-              "dx": -880,
-              "dz": -1552,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 12896,
-              "origional_width": 14032,
-              "position": "Exact",
-              "priority": 9,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-71e96812f420"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "tree_dark"
-                }
-              ],
-              "display_name": "tree_dark",
-              "dx": -1680,
-              "dz": -1520,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 10320,
-              "origional_width": 9632,
-              "position": "Exact",
-              "priority": 10,
-              "quantity": 1,
-              "resolution": 8,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-b97e539aa70f"
             }
           ],
           "trail_connection_sector": {
@@ -25021,9 +24974,9 @@
         },
         "NewRoom": {
           "display_color": [
-            242,
-            167,
-            85,
+            31,
+            204,
+            172,
             255
           ],
           "geometry": "Square",
@@ -25067,9 +25020,9 @@
         },
         "NewRoom1": {
           "display_color": [
+            165,
+            36,
             242,
-            68,
-            61,
             255
           ],
           "geometry": "Square",
@@ -25113,9 +25066,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            204,
-            31,
-            169,
+            242,
+            138,
+            36,
             255
           ],
           "geometry": "Square",
@@ -25190,9 +25143,9 @@
         },
         "NewRoom3": {
           "display_color": [
-            110,
+            61,
+            71,
             242,
-            85,
             255
           ],
           "geometry": "Square",
@@ -25236,9 +25189,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            204,
-            165,
-            31,
+            242,
+            85,
+            92,
             255
           ],
           "geometry": "Square",
@@ -25283,9 +25236,9 @@
         },
         "NewRoom5": {
           "display_color": [
-            204,
             71,
-            104,
+            204,
+            137,
             255
           ],
           "geometry": "Square",
@@ -25332,7 +25285,7 @@
           "display_color": [
             85,
             242,
-            218,
+            36,
             255
           ],
           "geometry": "Square",
@@ -25539,9 +25492,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            51,
-            130,
+            158,
             204,
+            71,
             255
           ],
           "geometry": "Circle",
@@ -25622,9 +25575,9 @@
         },
         "Spider_Hollow": {
           "display_color": [
-            158,
-            204,
-            71,
+            242,
+            227,
+            85,
             255
           ],
           "geometry": "Square",
@@ -25768,9 +25721,9 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            191,
-            36,
+            85,
             242,
+            103,
             255
           ],
           "geometry": "Square",
@@ -26065,9 +26018,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            242,
-            220,
-            85,
+            204,
+            51,
+            156,
             255
           ],
           "geometry": "Circle",
@@ -26491,9 +26444,9 @@
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
           "display_color": [
-            146,
-            85,
-            242,
+            51,
+            204,
+            90,
             255
           ],
           "geometry": "Square",
@@ -26858,14 +26811,14 @@
           "name": "NewTrail",
           "spawn_groups": [],
           "width": {
-            "center": 1166,
+            "center": 2093,
             "falloff": 75,
             "random": true,
             "span": 150,
             "weights": {
-              "center": 0.48513556386339146,
-              "edge": 0.25743221806830424,
-              "falloff": 0.25743221806830424
+              "center": 0.4115890573656218,
+              "edge": 0.2942054713171891,
+              "falloff": 0.2942054713171891
             }
           }
         },
@@ -26897,10 +26850,7 @@
           }
         },
         "NewTrail2": {
-          "anti_tags": [],
           "camera_height_px": 1000,
-          "curviness": 0,
-          "curvyness": 0,
           "display_color": [
             242,
             85,
@@ -26910,7 +26860,6 @@
           "geometry": "Square",
           "name": "NewTrail2",
           "spawn_groups": [],
-          "tags": [],
           "width": {
             "center": 750,
             "falloff": 75,

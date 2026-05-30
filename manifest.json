@@ -23656,7 +23656,17 @@
       "map_name": "forrest",
       "rooms_data": {
         "Bluebloom_Nook": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             204,
             31,
@@ -23807,7 +23817,17 @@
           }
         },
         "Foggy_Glade": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             96,
             204,
@@ -23958,7 +23978,17 @@
           }
         },
         "Frog_Basin": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             242,
             209,
@@ -24106,7 +24136,17 @@
           }
         },
         "Lantern_Mirelet": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             39,
             242,
@@ -24259,7 +24299,17 @@
           "camera_height_px": 326,
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             138,
             85,
@@ -24459,7 +24509,17 @@
           }
         },
         "Moonfern_Pocket": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             242,
             36,
@@ -24615,7 +24675,17 @@
           "camera_height_px": 399,
           "camera_tilt_deg": 40.43609619140625,
           "camera_zoom_percent": 0,
-          "coarseness": 96,
+          "coarseness": {
+            "random": true,
+            "center": 28,
+            "span": 12,
+            "falloff": 6,
+            "weights": {
+              "edge": 0.3333333333333333,
+              "falloff": 0.3333333333333333,
+              "center": 0.3333333333333333
+            }
+          },
           "display_color": [
             204,
             96,
@@ -24947,7 +25017,17 @@
           }
         },
         "NewRoom": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             83,
             71,
@@ -24998,7 +25078,17 @@
           }
         },
         "NewRoom1": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             204,
             51,
@@ -25049,7 +25139,17 @@
           }
         },
         "NewRoom2": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             242,
             176,
@@ -25131,7 +25231,17 @@
           }
         },
         "NewRoom3": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             97,
             242,
@@ -25182,7 +25292,17 @@
           }
         },
         "NewRoom4": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             152,
             204,
@@ -25234,7 +25354,17 @@
           }
         },
         "NewRoom5": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             204,
             31,
@@ -25286,7 +25416,17 @@
           }
         },
         "NewRoom6": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             36,
             153,
@@ -25337,7 +25477,17 @@
           }
         },
         "Old_Stump_Yard": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             174,
             71,
@@ -25551,7 +25701,17 @@
           "camera_height_px": 109,
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             90,
             36,
@@ -25639,7 +25799,17 @@
           }
         },
         "Spider_Hollow": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             188,
             204,
@@ -25790,7 +25960,17 @@
           }
         },
         "Thornstep_Croft": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             48,
             31,
@@ -25941,7 +26121,17 @@
           }
         },
         "Whispering_Ring": {
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             242,
             229,
@@ -26097,7 +26287,17 @@
           "camera_height_px": 288,
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             242,
             65,
@@ -26528,7 +26728,17 @@
           "camera_height_px": 1155,
           "camera_tilt_deg": 41.158355712890625,
           "camera_zoom_percent": 2,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             36,
             242,
@@ -26868,7 +27078,17 @@
           "camera_height_px": 647,
           "camera_tilt_deg": 31.657548904418945,
           "camera_zoom_percent": 0,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             85,
             202,
@@ -26896,7 +27116,17 @@
         },
         "NewTrail": {
           "camera_height_px": 1000,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             152,
             242,
@@ -26925,7 +27155,17 @@
         "NewTrail1": {
           "anti_tags": [],
           "camera_height_px": 1000,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             150,
             242,
@@ -26954,7 +27194,17 @@
         },
         "NewTrail2": {
           "camera_height_px": 1000,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             106,
             31,
@@ -26986,7 +27236,17 @@
           "camera_height_px": 925,
           "camera_tilt_deg": 54.55751037597656,
           "camera_zoom_percent": 0,
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             31,
             98,
@@ -27014,7 +27274,17 @@
         },
         "NewTrail4": {
           "anti_tags": [],
-          "coarseness": 0,
+          "coarseness": {
+            "random": false,
+            "center": 0,
+            "span": 0,
+            "falloff": 0,
+            "weights": {
+              "edge": 0.0,
+              "falloff": 0.0,
+              "center": 1.0
+            }
+          },
           "display_color": [
             31,
             170,

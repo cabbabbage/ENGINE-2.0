@@ -3,10 +3,14 @@
 #include "gameplay/map_generation/room.hpp"
 #include "utils/area.hpp"
 #include "utils/log.hpp"
+#include "utils/utils/weighted_range.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
+#include <limits>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
@@ -20,25 +24,58 @@ namespace {
 
 constexpr int kMinCoarseness = 0;
 constexpr int kMaxCoarseness = 1000;
+constexpr int kMinCoarsenessRadius = 8;
 
-int read_coarseness(const Room* room) {
-    if (!room) return 0;
-    const auto& data = room->assets_data();
-    int value = 0;
-    if (data.contains("coarseness")) {
-        const auto& j = data["coarseness"];
-        if (j.is_number_integer()) value = j.get<int>();
-        else if (j.is_number_float()) value = static_cast<int>(std::lround(j.get<double>()));
+vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
+    const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
+    if (clamped <= 0) {
+        return vibble::weighted_range::make_flat(0);
     }
-    return std::clamp(value, kMinCoarseness, kMaxCoarseness);
+    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 20));
+    const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+    return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
 }
 
-int resolve_radius_from_coarseness(int coarseness, std::mt19937& rng) {
-    const int clamped = std::clamp(coarseness, kMinCoarseness, kMaxCoarseness);
-    const int min_r = std::max(8, 12 + (clamped / 20));
-    const int max_r = std::max(min_r, 24 + (clamped / 6));
-    std::uniform_int_distribution<int> dist(min_r, max_r);
-    return dist(rng);
+std::optional<vibble::weighted_range::WeightedIntRange> read_coarseness_range(const Room* room) {
+    if (!room) return std::nullopt;
+    const auto& data = room->assets_data();
+    if (!data.is_object() || !data.contains("coarseness")) {
+        return std::nullopt;
+    }
+
+    const auto& value = data["coarseness"];
+    if (value.is_null() || (value.is_object() && value.empty())) {
+        return std::nullopt;
+    }
+
+    if (value.is_number_integer()) {
+        return coarseness_range_from_legacy(value.get<int>());
+    }
+    if (value.is_number_float()) {
+        return coarseness_range_from_legacy(static_cast<int>(std::lround(value.get<double>())));
+    }
+
+    const auto parsed = vibble::weighted_range::from_json(value, vibble::weighted_range::make_flat(0));
+    if (!vibble::weighted_range::is_valid(parsed)) {
+        return std::nullopt;
+    }
+    return parsed;
+}
+
+bool coarseness_range_enabled(const vibble::weighted_range::WeightedIntRange& range) {
+    if (!vibble::weighted_range::is_valid(range)) {
+        return false;
+    }
+    const std::int64_t max_value = range.center + std::llabs(range.span);
+    return max_value > 0;
+}
+
+int resolve_radius_from_coarseness_range(const vibble::weighted_range::WeightedIntRange& range, std::mt19937& rng) {
+    const std::int64_t resolved = vibble::weighted_range::resolve(range, rng);
+    if (resolved <= 0 || resolved > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+        return 0;
+    }
+    return static_cast<int>(resolved);
 }
 
 std::vector<SDL_Point> make_circle_polygon(SDL_Point center, int radius, int segments = 24) {
@@ -225,8 +262,8 @@ void apply_coarseness_expansion(std::vector<Room*>& rooms) {
     std::mt19937 rng(std::random_device{}());
     for (Room* room : rooms) {
         if (!room || !room->room_area) continue;
-        const int coarseness = read_coarseness(room);
-        if (coarseness <= 0) continue;
+        const auto coarseness_range = read_coarseness_range(room);
+        if (!coarseness_range || !coarseness_range_enabled(*coarseness_range)) continue;
 
         const std::vector<SDL_Point> original_boundary = room->room_area->get_points();
         if (original_boundary.size() < 3) continue;
@@ -236,7 +273,10 @@ void apply_coarseness_expansion(std::vector<Room*>& rooms) {
         int expansions = 0;
         for (int step = 0; step < max_steps; ++step) {
             const SDL_Point center = cursor;
-            const int radius = resolve_radius_from_coarseness(coarseness, rng);
+            const int radius = resolve_radius_from_coarseness_range(*coarseness_range, rng);
+            if (radius <= 0) {
+                continue;
+            }
             previous_circle = make_circle_polygon(center, radius);
             if (expand_with_circle(room, rooms, center, radius)) {
                 ++expansions;
@@ -244,7 +284,7 @@ void apply_coarseness_expansion(std::vector<Room*>& rooms) {
             cursor = choose_next_center(room, rooms, center, previous_circle);
         }
         vibble::log::debug(std::string("[Coarseness] room='") + room->room_name +
-                           "' coarseness=" + std::to_string(coarseness) +
+                           "' coarseness_radius=" + vibble::weighted_range::to_json(*coarseness_range).dump() +
                            " expansions=" + std::to_string(expansions));
     }
 }

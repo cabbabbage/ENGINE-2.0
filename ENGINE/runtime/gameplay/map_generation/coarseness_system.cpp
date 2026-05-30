@@ -2,17 +2,18 @@
 
 #include "gameplay/map_generation/room.hpp"
 #include "utils/area.hpp"
+#include "utils/grid.hpp"
 #include "utils/log.hpp"
-#include "utils/utils/weighted_range.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <exception>
 #include <limits>
-#include <optional>
 #include <random>
 #include <string>
+#include <tuple>
+#include <unordered_set>
 #include <vector>
 
 #ifdef VIBBLE_HAS_CLIPPER2
@@ -25,6 +26,35 @@ namespace {
 constexpr int kMinCoarseness = 0;
 constexpr int kMaxCoarseness = 1000;
 constexpr int kMinCoarsenessRadius = 8;
+constexpr double kMinValidArea = 0.5;
+
+struct ValidationResult {
+    bool valid = false;
+    std::string reason;
+};
+
+struct PointKey {
+    int x = 0;
+    int y = 0;
+    bool operator==(const PointKey& other) const noexcept { return x == other.x && y == other.y; }
+};
+
+struct PointKeyHash {
+    std::size_t operator()(const PointKey& p) const noexcept {
+        return (static_cast<std::size_t>(static_cast<unsigned int>(p.x)) << 32U) ^
+               static_cast<std::size_t>(static_cast<unsigned int>(p.y));
+    }
+};
+
+std::string point_to_string(SDL_Point p) {
+    return "(" + std::to_string(p.x) + "," + std::to_string(p.y) + ")";
+}
+
+std::string bounds_to_string(const std::tuple<int, int, int, int>& bounds) {
+    auto [minx, miny, maxx, maxy] = bounds;
+    return "[" + std::to_string(minx) + "," + std::to_string(miny) + " -> " +
+           std::to_string(maxx) + "," + std::to_string(maxy) + "]";
+}
 
 vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
     const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
@@ -78,108 +108,29 @@ int resolve_radius_from_coarseness_range(const vibble::weighted_range::WeightedI
     return static_cast<int>(resolved);
 }
 
-std::vector<SDL_Point> make_circle_polygon(SDL_Point center, int radius, int segments = 24) {
-    constexpr double kTwoPi = 6.28318530717958647692;
+std::vector<SDL_Point> sanitize_points(const std::vector<SDL_Point>& input) {
     std::vector<SDL_Point> out;
-    segments = std::max(8, segments);
-    out.reserve(static_cast<std::size_t>(segments));
-    for (int i = 0; i < segments; ++i) {
-        const double t = (kTwoPi * static_cast<double>(i)) / static_cast<double>(segments);
-        out.push_back(SDL_Point{
-            center.x + static_cast<int>(std::lround(std::cos(t) * static_cast<double>(radius))),
-            center.y + static_cast<int>(std::lround(std::sin(t) * static_cast<double>(radius)))
-        });
+    out.reserve(input.size());
+    for (const SDL_Point& point : input) {
+        if (!out.empty() && out.back().x == point.x && out.back().y == point.y) {
+            continue;
+        }
+        out.push_back(point);
+    }
+    if (out.size() > 1 && out.front().x == out.back().x && out.front().y == out.back().y) {
+        out.pop_back();
     }
     return out;
 }
 
-bool point_inside_other_geometry(SDL_Point p, const Room* owner, const std::vector<Room*>& all_rooms) {
-    for (const Room* other : all_rooms) {
-        if (!other || other == owner || !other->room_area) continue;
-        if (other->room_area->contains_point(p)) return true;
+double signed_area(const std::vector<SDL_Point>& points) {
+    if (points.size() < 3) return 0.0;
+    long double twice_area = 0.0;
+    for (std::size_t i = 0, j = points.size() - 1; i < points.size(); j = i++) {
+        twice_area += static_cast<long double>(points[j].x) * static_cast<long double>(points[i].y) -
+                      static_cast<long double>(points[i].x) * static_cast<long double>(points[j].y);
     }
-    return false;
-}
-
-#ifdef VIBBLE_HAS_CLIPPER2
-Clipper2Lib::PathD to_path(const std::vector<SDL_Point>& points) {
-    Clipper2Lib::PathD out;
-    out.reserve(points.size());
-    for (const auto& p : points) {
-        out.push_back(Clipper2Lib::PointD{static_cast<double>(p.x), static_cast<double>(p.y)});
-    }
-    return out;
-}
-
-std::vector<SDL_Point> to_points(const Clipper2Lib::PathD& path) {
-    std::vector<SDL_Point> out;
-    out.reserve(path.size());
-    for (const auto& p : path) {
-        out.push_back(SDL_Point{
-            static_cast<int>(std::lround(p.x)),
-            static_cast<int>(std::lround(p.y))
-        });
-    }
-    return out;
-}
-#endif
-
-bool expand_with_circle(Room* room, const std::vector<Room*>& all_rooms, SDL_Point center, int radius) {
-    if (!room || !room->room_area) return false;
-    if (point_inside_other_geometry(center, room, all_rooms)) return false;
-
-    Area circle_area("coarseness_circle", make_circle_polygon(center, radius), room->room_area->resolution());
-    circle_area.set_type(room->room_area->get_type());
-
-#ifdef VIBBLE_HAS_CLIPPER2
-    try {
-        Clipper2Lib::PathsD subject;
-        subject.push_back(to_path(room->room_area->get_points()));
-        Clipper2Lib::PathsD clip;
-        clip.push_back(to_path(circle_area.get_points()));
-        Clipper2Lib::PathsD added = Clipper2Lib::Difference(clip, subject, Clipper2Lib::FillRule::NonZero, 2);
-        if (added.empty()) {
-            return false;
-        }
-        Clipper2Lib::PathsD grown = Clipper2Lib::Union(subject, added, Clipper2Lib::FillRule::NonZero, 2);
-        if (grown.empty() || grown.front().size() < 3) {
-            return false;
-        }
-        room->room_area = std::make_unique<Area>(room->room_name, to_points(grown.front()), room->room_area->resolution());
-        room->room_area->set_type(room->type);
-        if (!room->coarseness_added_area) {
-            room->coarseness_added_area = std::make_unique<Area>(room->room_name + "_coarse_added", to_points(added.front()), room->room_area->resolution());
-        } else {
-            room->coarseness_added_area->union_with(Area("coarse_piece", to_points(added.front()), room->room_area->resolution()));
-        }
-        return true;
-    } catch (const std::exception& ex) {
-        vibble::log::warn(std::string("[Coarseness] Boolean expansion failed for room '") + room->room_name + "': " + ex.what());
-        return false;
-    }
-#else
-    std::vector<SDL_Point> added_points;
-    for (const auto& p : circle_area.get_points()) {
-        if (!room->room_area->contains_point(p)) {
-            added_points.push_back(p);
-        }
-    }
-    if (added_points.size() < 3) return false;
-    Area added("coarse_added_piece", added_points, room->room_area->resolution());
-    room->room_area->union_with(added);
-    if (!room->coarseness_added_area) {
-        room->coarseness_added_area = std::make_unique<Area>(room->room_name + "_coarse_added", added.get_points(), added.resolution());
-    } else {
-        room->coarseness_added_area->union_with(added);
-    }
-    return true;
-#endif
-}
-
-double distance_sq(SDL_Point a, SDL_Point b) {
-    const double dx = static_cast<double>(a.x - b.x);
-    const double dy = static_cast<double>(a.y - b.y);
-    return dx * dx + dy * dy;
+    return static_cast<double>(twice_area * 0.5L);
 }
 
 int orientation(SDL_Point a, SDL_Point b, SDL_Point c) {
@@ -207,85 +158,387 @@ bool segments_intersect(SDL_Point p1, SDL_Point q1, SDL_Point p2, SDL_Point q2) 
     return false;
 }
 
-std::vector<SDL_Point> boundary_intersections(const std::vector<SDL_Point>& circle_poly,
-                                              const std::vector<SDL_Point>& boundary) {
-    std::vector<SDL_Point> out;
-    if (circle_poly.size() < 2 || boundary.size() < 2) return out;
-    for (std::size_t i = 0; i < circle_poly.size(); ++i) {
-        const SDL_Point a0 = circle_poly[i];
-        const SDL_Point a1 = circle_poly[(i + 1) % circle_poly.size()];
-        for (std::size_t j = 0; j < boundary.size(); ++j) {
-            const SDL_Point b0 = boundary[j];
-            const SDL_Point b1 = boundary[(j + 1) % boundary.size()];
+bool polygon_has_self_intersection(const std::vector<SDL_Point>& points) {
+    const std::size_t n = points.size();
+    if (n < 4) return false;
+    for (std::size_t i = 0; i < n; ++i) {
+        const SDL_Point a0 = points[i];
+        const SDL_Point a1 = points[(i + 1) % n];
+        for (std::size_t j = i + 1; j < n; ++j) {
+            if (j == i || j == i + 1 || (i == 0 && j == n - 1)) {
+                continue;
+            }
+            const SDL_Point b0 = points[j];
+            const SDL_Point b1 = points[(j + 1) % n];
             if (segments_intersect(a0, a1, b0, b1)) {
-                out.push_back(SDL_Point{
-                    (a0.x + a1.x + b0.x + b1.x) / 4,
-                    (a0.y + a1.y + b0.y + b1.y) / 4
-                });
+                return true;
             }
         }
+    }
+    return false;
+}
+
+ValidationResult validate_polygon_points(const std::vector<SDL_Point>& raw_points) {
+    const std::vector<SDL_Point> points = sanitize_points(raw_points);
+    if (points.size() < 3) {
+        return {false, "fewer_than_three_points"};
+    }
+    const double area = std::abs(signed_area(points));
+    if (!(area > kMinValidArea)) {
+        return {false, "non_positive_area"};
+    }
+
+    std::unordered_set<PointKey, PointKeyHash> seen;
+    seen.reserve(points.size());
+    for (const SDL_Point& point : points) {
+        const PointKey key{point.x, point.y};
+        if (!seen.insert(key).second) {
+            return {false, std::string("duplicate_point_") + point_to_string(point)};
+        }
+    }
+
+    if (polygon_has_self_intersection(points)) {
+        return {false, "self_intersection"};
+    }
+
+    Area probe("coarseness_validation", points);
+    auto [minx, miny, maxx, maxy] = probe.get_bounds();
+    if (minx >= maxx || miny >= maxy) {
+        return {false, "unusable_bounds"};
+    }
+    return {true, {}};
+}
+
+std::vector<SDL_Point> make_circle_polygon(SDL_Point center, int radius, int resolution, int segments = 32) {
+    constexpr double kTwoPi = 6.28318530717958647692;
+    std::vector<SDL_Point> out;
+    segments = std::max(12, segments);
+    out.reserve(static_cast<std::size_t>(segments));
+    for (int i = 0; i < segments; ++i) {
+        const double t = (kTwoPi * static_cast<double>(i)) / static_cast<double>(segments);
+        SDL_Point p{
+            center.x + static_cast<int>(std::lround(std::cos(t) * static_cast<double>(radius))),
+            center.y + static_cast<int>(std::lround(std::sin(t) * static_cast<double>(radius)))
+        };
+        out.push_back(vibble::grid::snap_world_to_vertex(p, resolution));
+    }
+    return sanitize_points(out);
+}
+
+bool point_inside_other_original_geometry(SDL_Point p,
+                                          std::size_t owner_index,
+                                          const std::vector<std::unique_ptr<Area>>& originals) {
+    for (std::size_t i = 0; i < originals.size(); ++i) {
+        const Area* other = originals[i].get();
+        if (i == owner_index || !other) continue;
+        if (other->contains_point(p)) return true;
+    }
+    return false;
+}
+
+int item_resolution(const CoarsenessGeometryItem& item) {
+    if (item.geometry && item.geometry->resolution() > 0) {
+        return item.geometry->resolution();
+    }
+    return vibble::grid::clamp_resolution(item.grid_settings.grid_resolution);
+}
+
+#ifdef VIBBLE_HAS_CLIPPER2
+Clipper2Lib::PathD to_path(const std::vector<SDL_Point>& points) {
+    Clipper2Lib::PathD out;
+    out.reserve(points.size());
+    for (const auto& p : points) {
+        out.push_back(Clipper2Lib::PointD{static_cast<double>(p.x), static_cast<double>(p.y)});
     }
     return out;
 }
 
-SDL_Point choose_next_center(Room* room,
-                             const std::vector<Room*>& all_rooms,
-                             SDL_Point current_center,
-                             const std::vector<SDL_Point>& previous_circle) {
-    if (!room || !room->room_area) return current_center;
-    const std::vector<SDL_Point> boundary = room->room_area->get_points();
-    if (boundary.empty()) return current_center;
+Clipper2Lib::PathsD to_paths(const std::vector<SDL_Point>& points) {
+    Clipper2Lib::PathsD out;
+    out.push_back(to_path(points));
+    return out;
+}
 
-    std::vector<SDL_Point> candidates = previous_circle.empty()
-        ? boundary
-        : boundary_intersections(previous_circle, boundary);
-    if (candidates.empty()) {
-        candidates = boundary;
+std::vector<SDL_Point> to_points(const Clipper2Lib::PathD& path, int resolution) {
+    std::vector<SDL_Point> out;
+    out.reserve(path.size());
+    for (const auto& p : path) {
+        out.push_back(vibble::grid::snap_world_to_vertex(SDL_Point{
+            static_cast<int>(std::lround(p.x)),
+            static_cast<int>(std::lround(p.y))
+        }, resolution));
     }
+    return sanitize_points(out);
+}
 
-    SDL_Point best = current_center;
-    double best_dist = -1.0;
-    for (const SDL_Point& p : candidates) {
-        if (point_inside_other_geometry(p, room, all_rooms)) continue;
-        const double d2 = distance_sq(current_center, p);
-        if (d2 > best_dist) {
-            best_dist = d2;
-            best = p;
+double path_area_abs(const Clipper2Lib::PathD& path) {
+    return std::abs(Clipper2Lib::Area(path));
+}
+
+double paths_area_abs(const Clipper2Lib::PathsD& paths) {
+    double total = 0.0;
+    for (const auto& path : paths) {
+        total += path_area_abs(path);
+    }
+    return total;
+}
+
+std::vector<SDL_Point> largest_valid_path_points(const Clipper2Lib::PathsD& paths,
+                                                 int resolution,
+                                                 const std::string& label,
+                                                 const std::string& identifier) {
+    std::vector<SDL_Point> best;
+    double best_area = 0.0;
+    for (const auto& path : paths) {
+        std::vector<SDL_Point> candidate = to_points(path, resolution);
+        const ValidationResult validation = validate_polygon_points(candidate);
+        if (!validation.valid) {
+            vibble::log::debug("[Coarseness] " + identifier + " skipped invalid " + label +
+                               " path: " + validation.reason);
+            continue;
+        }
+        const double area = std::abs(signed_area(candidate));
+        if (area > best_area) {
+            best_area = area;
+            best = std::move(candidate);
         }
     }
     return best;
 }
 
+bool validate_paths(const Clipper2Lib::PathsD& paths,
+                    int resolution,
+                    const std::string& operation,
+                    const std::string& identifier,
+                    bool allow_empty = false) {
+    if (paths.empty()) {
+        if (allow_empty) return true;
+        vibble::log::debug("[Coarseness] " + identifier + " invalid " + operation + ": empty_path_set");
+        return false;
+    }
+    for (const auto& path : paths) {
+        const ValidationResult validation = validate_polygon_points(to_points(path, resolution));
+        if (!validation.valid) {
+            vibble::log::debug("[Coarseness] " + identifier + " invalid " + operation + ": " + validation.reason);
+            return false;
+        }
+    }
+    return true;
+}
+
+Area make_area_from_points(const CoarsenessGeometryItem& item,
+                           const std::vector<SDL_Point>& points,
+                           const std::string& fallback_name,
+                           int resolution) {
+    const std::string name = item.geometry ? item.geometry->get_name() : fallback_name;
+    Area out(name, points, resolution);
+    if (item.geometry) {
+        out.set_type(item.geometry->get_type());
+    }
+    return out;
+}
+#endif
+
 } // namespace
 
-void apply_coarseness_expansion(std::vector<Room*>& rooms) {
-    std::mt19937 rng(std::random_device{}());
-    for (Room* room : rooms) {
-        if (!room || !room->room_area) continue;
-        const auto coarseness_range = read_coarseness_range(room);
-        if (!coarseness_range || !coarseness_range_enabled(*coarseness_range)) continue;
+std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<CoarsenessGeometryItem>& items) {
+    std::vector<CoarsenessExpansionResult> results;
+    results.reserve(items.size());
 
-        const std::vector<SDL_Point> original_boundary = room->room_area->get_points();
-        if (original_boundary.size() < 3) continue;
-        SDL_Point cursor = original_boundary.front();
-        std::vector<SDL_Point> previous_circle;
-        const int max_steps = std::max<int>(24, static_cast<int>(original_boundary.size()) * 2);
-        int expansions = 0;
-        for (int step = 0; step < max_steps; ++step) {
-            const SDL_Point center = cursor;
-            const int radius = resolve_radius_from_coarseness_range(*coarseness_range, rng);
+    std::vector<std::unique_ptr<Area>> original_snapshots;
+    original_snapshots.reserve(items.size());
+    for (const CoarsenessGeometryItem& item : items) {
+        if (item.geometry) {
+            original_snapshots.push_back(std::make_unique<Area>(*item.geometry));
+        } else {
+            original_snapshots.push_back(nullptr);
+        }
+    }
+
+#ifndef VIBBLE_HAS_CLIPPER2
+    vibble::log::warn("[Coarseness] Skipping coarseness expansion: Clipper2 polygon boolean backend is unavailable.");
+    for (const CoarsenessGeometryItem& item : items) {
+        CoarsenessExpansionResult result;
+        result.identifier = item.identifier;
+        results.push_back(std::move(result));
+    }
+    return results;
+#else
+    std::mt19937 rng(std::random_device{}());
+
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        const CoarsenessGeometryItem& item = items[index];
+        CoarsenessExpansionResult result;
+        result.identifier = item.identifier;
+
+        if (!item.geometry || !original_snapshots[index]) {
+            vibble::log::debug("[Coarseness] skipped '" + item.identifier + "': missing geometry");
+            results.push_back(std::move(result));
+            continue;
+        }
+        if (!item.coarseness_range || !coarseness_range_enabled(*item.coarseness_range)) {
+            vibble::log::debug("[Coarseness] skipped '" + item.identifier + "': no valid coarseness range");
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        const int resolution = item_resolution(item);
+        const Area& original = *original_snapshots[index];
+        const std::vector<SDL_Point> original_boundary = sanitize_points(original.get_points());
+        const ValidationResult original_validation = validate_polygon_points(original_boundary);
+        if (!original_validation.valid) {
+            vibble::log::debug("[Coarseness] skipped '" + item.identifier + "': invalid original geometry " +
+                               original_validation.reason);
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        Clipper2Lib::PathsD active_paths = to_paths(original_boundary);
+        const Clipper2Lib::PathsD original_paths = to_paths(original_boundary);
+        const double original_area = original.get_area();
+        vibble::log::debug("[Coarseness] processing '" + item.identifier + "' range=" +
+                           vibble::weighted_range::to_json(*item.coarseness_range).dump() +
+                           " original_area=" + std::to_string(original_area) +
+                           " original_bounds=" + bounds_to_string(original.get_bounds()) +
+                           " resolution=" + std::to_string(resolution));
+
+        for (const SDL_Point& center : original_boundary) {
+            if (point_inside_other_original_geometry(center, index, original_snapshots)) {
+                vibble::log::debug("[Coarseness] '" + item.identifier + "' skipped boundary point " +
+                                   point_to_string(center) + ": inside other original geometry");
+                continue;
+            }
+
+            const int radius = resolve_radius_from_coarseness_range(*item.coarseness_range, rng);
+            vibble::log::debug("[Coarseness] '" + item.identifier + "' resolved radius=" + std::to_string(radius) +
+                               " at " + point_to_string(center));
             if (radius <= 0) {
                 continue;
             }
-            previous_circle = make_circle_polygon(center, radius);
-            if (expand_with_circle(room, rooms, center, radius)) {
-                ++expansions;
+
+            ++result.circles_attempted;
+            const std::vector<SDL_Point> circle_points = make_circle_polygon(center, radius, resolution);
+            const ValidationResult circle_validation = validate_polygon_points(circle_points);
+            if (!circle_validation.valid) {
+                vibble::log::debug("[Coarseness] '" + item.identifier + "' circle attempted at " +
+                                   point_to_string(center) + " radius=" + std::to_string(radius) +
+                                   " rejected: " + circle_validation.reason);
+                continue;
             }
-            cursor = choose_next_center(room, rooms, center, previous_circle);
+
+            Clipper2Lib::PathsD circle_paths = to_paths(circle_points);
+            Clipper2Lib::PathsD grown_paths;
+            try {
+                grown_paths = Clipper2Lib::Union(active_paths, circle_paths, Clipper2Lib::FillRule::NonZero, 2);
+            } catch (const std::exception& ex) {
+                vibble::log::warn("[Coarseness] Boolean union failed for '" + item.identifier + "': " + ex.what());
+                continue;
+            }
+
+            if (!validate_paths(grown_paths, resolution, "circle_union", item.identifier)) {
+                vibble::log::debug("[Coarseness] '" + item.identifier + "' circle attempted at " +
+                                   point_to_string(center) + " radius=" + std::to_string(radius) +
+                                   " rejected after union validation");
+                continue;
+            }
+
+            Clipper2Lib::PathsD expansion_paths_after_circle;
+            try {
+                expansion_paths_after_circle = Clipper2Lib::Difference(grown_paths, original_paths, Clipper2Lib::FillRule::NonZero, 2);
+            } catch (const std::exception& ex) {
+                vibble::log::warn("[Coarseness] Boolean difference failed for '" + item.identifier + "' after circle at " +
+                                  point_to_string(center) + ": " + ex.what());
+                continue;
+            }
+            if (!validate_paths(expansion_paths_after_circle, resolution, "circle_expansion_difference", item.identifier, true)) {
+                vibble::log::debug("[Coarseness] '" + item.identifier + "' circle attempted at " +
+                                   point_to_string(center) + " radius=" + std::to_string(radius) +
+                                   " rejected after expansion difference validation");
+                continue;
+            }
+
+            const double before_area = paths_area_abs(active_paths);
+            const double after_area = paths_area_abs(grown_paths);
+            const double expansion_area_after_circle = paths_area_abs(expansion_paths_after_circle);
+            active_paths = std::move(grown_paths);
+            ++result.circles_applied;
+            vibble::log::debug("[Coarseness] '" + item.identifier + "' circle applied at " + point_to_string(center) +
+                               " radius=" + std::to_string(radius) +
+                               " area_before=" + std::to_string(before_area) +
+                               " area_after=" + std::to_string(after_area) +
+                               " expansion_area=" + std::to_string(expansion_area_after_circle));
         }
-        vibble::log::debug(std::string("[Coarseness] room='") + room->room_name +
-                           "' coarseness_radius=" + vibble::weighted_range::to_json(*coarseness_range).dump() +
-                           " expansions=" + std::to_string(expansions));
+
+        Clipper2Lib::PathsD expansion_paths;
+        try {
+            expansion_paths = Clipper2Lib::Difference(active_paths, original_paths, Clipper2Lib::FillRule::NonZero, 2);
+        } catch (const std::exception& ex) {
+            vibble::log::warn("[Coarseness] Boolean difference failed for '" + item.identifier + "': " + ex.what());
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        if (!validate_paths(expansion_paths, resolution, "final_expansion_difference", item.identifier, true)) {
+            vibble::log::debug("[Coarseness] '" + item.identifier + "' rejected final expansion area after difference validation");
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        const std::vector<SDL_Point> expanded_points = largest_valid_path_points(active_paths, resolution, "expanded", item.identifier);
+        if (expanded_points.empty()) {
+            vibble::log::debug("[Coarseness] '" + item.identifier + "' rejected final expanded geometry: no valid path");
+            results.push_back(std::move(result));
+            continue;
+        }
+
+        Area expanded = make_area_from_points(item, expanded_points, item.identifier, resolution);
+        const double before_area = original.get_area();
+        const double after_area = expanded.get_area();
+        *item.geometry = expanded;
+
+        const std::vector<SDL_Point> expansion_points = largest_valid_path_points(expansion_paths, resolution, "expansion", item.identifier);
+        if (!expansion_points.empty()) {
+            result.expansion_area = std::make_unique<Area>(item.identifier + "_coarse_added", expansion_points, resolution);
+            result.expansion_area->set_type(item.geometry->get_type());
+        }
+
+        const double expansion_area = result.expansion_area ? result.expansion_area->get_area() : 0.0;
+        vibble::log::debug("[Coarseness] '" + item.identifier + "' geometry area before=" + std::to_string(before_area) +
+                           " after=" + std::to_string(after_area) +
+                           " expansion_area=" + std::to_string(expansion_area));
+        vibble::log::debug("[Coarseness] '" + item.identifier + "' final expanded bounds=" +
+                           bounds_to_string(item.geometry->get_bounds()) +
+                           " circles_attempted=" + std::to_string(result.circles_attempted) +
+                           " circles_applied=" + std::to_string(result.circles_applied));
+
+        results.push_back(std::move(result));
+    }
+
+    return results;
+#endif
+}
+
+void apply_coarseness_expansion(std::vector<Room*>& rooms) {
+    std::vector<CoarsenessGeometryItem> items;
+    std::vector<Room*> item_rooms;
+    items.reserve(rooms.size());
+    item_rooms.reserve(rooms.size());
+    for (Room* room : rooms) {
+        if (!room) continue;
+        items.push_back(CoarsenessGeometryItem{
+            room->room_name,
+            room->room_area.get(),
+            read_coarseness_range(room),
+            room->map_grid_settings(),
+        });
+        item_rooms.push_back(room);
+    }
+
+    std::vector<CoarsenessExpansionResult> results = apply_coarseness_pass(items);
+    const std::size_t count = std::min(results.size(), item_rooms.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        if (!item_rooms[i]) continue;
+        item_rooms[i]->coarseness_added_area = std::move(results[i].expansion_area);
     }
 }
 

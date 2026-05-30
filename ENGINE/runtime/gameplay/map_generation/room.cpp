@@ -1029,6 +1029,24 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(width));
         out["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(height));
         out["geometry"] = geometry;
+        int coarseness = 0;
+        if (assets_json.contains("coarseness")) {
+                const auto& c = assets_json["coarseness"];
+                if (c.is_number_integer()) {
+                        coarseness = c.get<int>();
+                } else if (c.is_number_float()) {
+                        coarseness = static_cast<int>(std::lround(c.get<double>()));
+                }
+        }
+        out["coarseness"] = std::clamp(coarseness, 0, 1000);
+        if (assets_json.contains("edge_detail_candidates") && assets_json["edge_detail_candidates"].is_object()) {
+                out["edge_detail_candidates"] = assets_json["edge_detail_candidates"];
+        } else {
+                out["edge_detail_candidates"] = nlohmann::json::object({
+                    {"candidates", nlohmann::json::array()},
+                    {"resolution", vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution)}
+                });
+        }
         out.erase("radius");
         out.erase("min_radius");
         out.erase("max_radius");

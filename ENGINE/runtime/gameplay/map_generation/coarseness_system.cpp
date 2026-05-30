@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <random>
 #include <string>
 #include <vector>

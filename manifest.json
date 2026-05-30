@@ -27460,14 +27460,6 @@
               "required_children": [],
               "source_type": "room_name",
               "value": "Very Peacful"
-            },
-            {
-              "max_instances": 1,
-              "min_instances": 1,
-              "name": "Boss_Room",
-              "required_children": [],
-              "source_type": "room_name",
-              "value": "Boss_Room"
             }
           ]
         }

@@ -52,21 +52,21 @@
       "source_frames": [
         {
           "filename": "0.png",
-          "hash": "a12381380c24fd03",
-          "height": 120,
+          "hash": "671c23c920c2a77a",
+          "height": 1080,
           "order": 0,
-          "width": 189
+          "width": 1920
         }
       ]
     }
   ],
   "asset_name": "vibble_attack_1",
-  "authored_scale_percentage": 128.0,
+  "authored_scale_percentage": 36.0,
   "crop_canvas": {
     "shared_height": 527,
     "shared_width": 844
   },
-  "digest": "3a94143b6dd18fe8",
+  "digest": "7216922a24bd8a6c",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

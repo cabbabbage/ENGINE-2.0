@@ -718,7 +718,7 @@ private:
 
     int current_grid_resolution() const {
         if (!entry_) return kMapWideGridResolutionMin;
-        int value = vibble::spawn_group_codec::read_int_field(*entry_, resolution_field_, kMapWideGridResolutionMin);
+        int value = vibble::spawn_group_codec::read_int_field(*entry_, resolution_field_.c_str(), kMapWideGridResolutionMin);
         return clamp_map_grid_resolution(value);
     }
 

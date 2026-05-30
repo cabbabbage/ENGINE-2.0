@@ -685,7 +685,7 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
     collision_context.path_variance_seed = auto_move_variance_seed(*self_, ++plan_variance_attempt_counter_);
     collision_context.set_furthest_checkpoint_distance_px(furthest_checkpoint_distance_px);
     const std::vector<axis::WorldPos> sanitized_checkpoints =
-        sanitizer_3d_.sanitize(*self_, requested_absolute, visited_thresh_);
+        sanitizer_3d_.sanitize(*self_, requested_absolute, visited_thresh_, &collision_context);
     plan3d_ = planner_3d_(*self_, sanitized_checkpoints, visited_thresh_, grid(), &collision_context);
     plan3d_.world_start = axis::WorldPos{ self_->world_x(), self_->world_y(), self_->world_z() };
     plan3d_.override_non_locked = override_non_locked;

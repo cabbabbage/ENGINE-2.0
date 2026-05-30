@@ -1068,6 +1068,7 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out.erase("max_width");
         out.erase("min_height");
         out.erase("max_height");
+        out.erase("edge_detail_candidates");
 	out["is_boss"] = assets_json.value("is_boss", false);
 	out["inherits_live_dynamic_assets"] = assets_json.value(
             "inherits_live_dynamic_assets",

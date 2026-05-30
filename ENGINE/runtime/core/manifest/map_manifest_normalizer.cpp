@@ -550,6 +550,31 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
     return changed;
 }
 
+
+bool warn_legacy_edge_detail_candidates_after_normalization(const nlohmann::json& map_manifest) {
+    bool found = false;
+    auto check_section = [&](const char* section_name) {
+        auto section_it = map_manifest.find(section_name);
+        if (section_it == map_manifest.end() || !section_it->is_object()) {
+            return;
+        }
+        for (auto entry_it = section_it->begin(); entry_it != section_it->end(); ++entry_it) {
+            if (!entry_it.value().is_object()) {
+                continue;
+            }
+            if (entry_it.value().contains("edge_detail_candidates")) {
+                std::cerr << "[MapManifestNormalizer] Warning: legacy per-entry edge_detail_candidates remains after normalization in "
+                          << section_name << " entry '" << entry_it.key()
+                          << "'; edge details must live at map-level generation data.\n";
+                found = true;
+            }
+        }
+    };
+    check_section("rooms_data");
+    check_section("trails_data");
+    return found;
+}
+
 bool normalize_room_trail_name_collisions(nlohmann::json& map_manifest) {
     auto rooms_it = map_manifest.find("rooms_data");
     auto trails_it = map_manifest.find("trails_data");
@@ -625,10 +650,8 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     nlohmann::json entry = nlohmann::json::object();
     entry["name"] = spawn_name;
     entry["geometry"] = "Circle";
-    entry["min_width"] = diameter;
-    entry["max_width"] = diameter;
-    entry["min_height"] = diameter;
-    entry["max_height"] = diameter;
+    entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
+    entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
     entry["is_boss"] = false;
     entry["inherits_live_dynamic_assets"] = false;
     entry["inherit_map_floor_color"] = true;
@@ -1242,6 +1265,7 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
     if (normalize_map_edge_detail_candidates(map_manifest)) {
         changed = true;
     }
+    warn_legacy_edge_detail_candidates_after_normalization(map_manifest);
     if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
         changed = true;
     }

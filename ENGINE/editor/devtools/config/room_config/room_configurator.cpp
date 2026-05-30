@@ -991,6 +991,7 @@ struct RoomConfigurator::State {
         dest.erase("edge_smoothness");
         dest.erase("curvyness");
         dest.erase("curviness");
+        dest.erase("edge_detail_candidates");
         dest.erase("inherits_map_assets");
         if (!allow_height) {
             dest.erase("height");

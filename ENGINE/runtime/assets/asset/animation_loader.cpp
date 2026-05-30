@@ -498,8 +498,8 @@ animation_update::FrameBoxRect parse_box_rect(const nlohmann::json& node) {
                 }
                 const auto& corner_node = corners[idx];
                 parsed_corners.push_back(animation_update::FrameBoxCorner{
-                    std::max(0, read_int_field_like(corner_node, "texture_x", 0)),
-                    std::max(0, read_int_field_like(corner_node, "texture_y", 0)),
+                    read_int_field_like(corner_node, "texture_x", 0),
+                    read_int_field_like(corner_node, "texture_y", 0),
                 });
         }
         if (!parsed_corners.empty()) {

@@ -17,7 +17,9 @@ struct FrameBoxCorner {
     int texture_y = 0;
 
     bool is_valid() const {
-        return texture_x >= 0 && texture_y >= 0;
+        // Negative texture-space coordinates are valid for boxes authored
+        // outside the sprite's visible frame.
+        return true;
     }
 };
 
@@ -46,6 +48,9 @@ struct FrameBoxRect {
         return bottom - top;
     }
 
+    // Legacy name retained for callers; this normalizes corner ordering only.
+    // Editor-authored boxes may extend outside the source texture, so do not
+    // clamp negative coordinates here.
     FrameBoxRect normalized_clamped() const {
         FrameBoxRect out = *this;
         if (out.left > out.right) {
@@ -54,16 +59,6 @@ struct FrameBoxRect {
         if (out.top > out.bottom) {
             std::swap(out.top, out.bottom);
         }
-        out.left = std::max(0, out.left);
-        out.top = std::max(0, out.top);
-        out.right = std::max(0, out.right);
-        out.bottom = std::max(0, out.bottom);
-        if (out.right < out.left) {
-            out.right = out.left;
-        }
-        if (out.bottom < out.top) {
-            out.bottom = out.top;
-        }
         return out;
     }
 
@@ -71,13 +66,13 @@ struct FrameBoxRect {
         if (points.empty()) {
             return FrameBoxRect{};
         }
-        int min_x = std::max(0, points.front().texture_x);
+        int min_x = points.front().texture_x;
         int max_x = min_x;
-        int min_y = std::max(0, points.front().texture_y);
+        int min_y = points.front().texture_y;
         int max_y = min_y;
         for (const auto& point : points) {
-            const int x = std::max(0, point.texture_x);
-            const int y = std::max(0, point.texture_y);
+            const int x = point.texture_x;
+            const int y = point.texture_y;
             min_x = std::min(min_x, x);
             max_x = std::max(max_x, x);
             min_y = std::min(min_y, y);
@@ -132,8 +127,8 @@ struct FrameBoxBase {
     FrameBoxCorner corner(FrameBoxCornerId id) const {
         const auto corner_xy = corner_float(id);
         return FrameBoxCorner{
-            std::max(0, static_cast<int>(std::lround(corner_xy[0]))),
-            std::max(0, static_cast<int>(std::lround(corner_xy[1]))),
+            static_cast<int>(std::lround(corner_xy[0])),
+            static_cast<int>(std::lround(corner_xy[1])),
         };
     }
 
@@ -151,8 +146,10 @@ struct FrameBoxBase {
     }
 
     void set_corner_clamped(FrameBoxCornerId id, int texture_x, int texture_y) {
-        const int x = std::max(0, texture_x);
-        const int y = std::max(0, texture_y);
+        // Keep authored coordinates freeform rather than clamping to texture
+        // bounds; the method name is retained for API compatibility.
+        const int x = texture_x;
+        const int y = texture_y;
         const float rotation = normalized_rotation_degrees();
         if (std::fabs(rotation) <= 1e-4f) {
             switch (id) {
@@ -252,12 +249,8 @@ struct FrameBoxBase {
         const int height = rect.height();
         int next_left = rect.left + dx;
         int next_top = rect.top + dy;
-        if (next_left < 0) {
-            next_left = 0;
-        }
-        if (next_top < 0) {
-            next_top = 0;
-        }
+        // Keep authored offsets freeform. Editor drags may intentionally move boxes
+        // outside the sprite's source texture, including negative coordinates.
         rect.left = next_left;
         rect.top = next_top;
         rect.right = rect.left + width;

@@ -8,8 +8,10 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <iostream>
+#include <map>
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
+#include "gameplay/spawn/spawn_group_codec.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "utils/utils/weighted_range.hpp"
 #include "utils/grid.hpp"
@@ -392,30 +394,6 @@ bool normalize_room_config_entry(nlohmann::json& entry,
         changed = true;
     }
 
-    auto normalize_edge_detail_candidates = [&]() {
-        nlohmann::json normalized = nlohmann::json::object();
-        nlohmann::json candidates = nlohmann::json::array();
-        int resolution = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
-        if (entry.contains("edge_detail_candidates") && entry["edge_detail_candidates"].is_object()) {
-            const auto& src = entry["edge_detail_candidates"];
-            if (src.contains("candidates") && src["candidates"].is_array()) {
-                candidates = src["candidates"];
-            }
-            if (src.contains("resolution")) {
-                int parsed = resolution;
-                (void)json_to_int(src["resolution"], parsed);
-                resolution = vibble::grid::clamp_resolution(parsed);
-            }
-        }
-        normalized["candidates"] = std::move(candidates);
-        normalized["resolution"] = resolution;
-        if (!entry.contains("edge_detail_candidates") || entry["edge_detail_candidates"] != normalized) {
-            entry["edge_detail_candidates"] = std::move(normalized);
-            changed = true;
-        }
-    };
-    normalize_edge_detail_candidates();
-
     if (!entry.contains("spawn_groups") || !entry["spawn_groups"].is_array()) {
         entry["spawn_groups"] = nlohmann::json::array();
         changed = true;
@@ -442,6 +420,133 @@ bool normalize_room_config_section(nlohmann::json& section,
             changed = true;
         }
     }
+    return changed;
+}
+
+
+void merge_edge_detail_candidate(nlohmann::json& candidate,
+                                 std::map<std::string, nlohmann::json>& merged_candidates) {
+    if (!candidate.is_object()) {
+        return;
+    }
+
+    // Duplicate edge-detail candidates are entries with the same non-weight fields;
+    // their chance/weight values are summed into a canonical chance field.
+    nlohmann::json merge_key_json = candidate;
+    merge_key_json.erase("chance");
+    merge_key_json.erase("weight");
+    const std::string merge_key = merge_key_json.dump();
+
+    double chance = vibble::spawn_group_codec::read_candidate_chance(candidate, 1.0);
+    if (!std::isfinite(chance) || chance < 0.0) {
+        chance = 0.0;
+    }
+
+    auto it = merged_candidates.find(merge_key);
+    if (it == merged_candidates.end()) {
+        nlohmann::json stored = std::move(candidate);
+        stored.erase("weight");
+        if (std::fabs(chance - std::llround(chance)) < 1e-9) {
+            stored["chance"] = static_cast<int>(std::llround(chance));
+        } else {
+            stored["chance"] = chance;
+        }
+        merged_candidates.emplace(merge_key, std::move(stored));
+        return;
+    }
+
+    const double previous = vibble::spawn_group_codec::read_candidate_chance(it->second, 0.0);
+    const double total = std::max(0.0, previous) + chance;
+    if (std::fabs(total - std::llround(total)) < 1e-9) {
+        it->second["chance"] = static_cast<int>(std::llround(total));
+    } else {
+        it->second["chance"] = total;
+    }
+}
+
+bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
+    bool changed = false;
+    const int default_resolution = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
+    int resolution = default_resolution;
+    std::map<std::string, nlohmann::json> merged_candidates;
+
+    auto merge_config = [&](const nlohmann::json& config) {
+        if (!config.is_object()) {
+            return;
+        }
+        if (config.contains("resolution")) {
+            int parsed = resolution;
+            if (json_to_int(config["resolution"], parsed)) {
+                // Use the highest legacy resolution so the hoisted pool is at least as dense
+                // as every room/trail that previously owned edge-detail candidates.
+                resolution = std::max(resolution, vibble::grid::clamp_resolution(parsed));
+            }
+        }
+        auto candidates_it = config.find("candidates");
+        if (candidates_it == config.end() || !candidates_it->is_array()) {
+            return;
+        }
+        for (const auto& candidate : *candidates_it) {
+            if (!candidate.is_object()) {
+                changed = true;
+                continue;
+            }
+            nlohmann::json candidate_copy = candidate;
+            merge_edge_detail_candidate(candidate_copy, merged_candidates);
+        }
+    };
+
+    auto root_it = map_manifest.find("edge_detail_candidates");
+    if (root_it != map_manifest.end()) {
+        merge_config(*root_it);
+        if (!root_it->is_object()) {
+            changed = true;
+        }
+    }
+
+    auto hoist_section = [&](const char* section_name) {
+        auto section_it = map_manifest.find(section_name);
+        if (section_it == map_manifest.end() || !section_it->is_object()) {
+            return;
+        }
+        for (auto entry_it = section_it->begin(); entry_it != section_it->end(); ++entry_it) {
+            if (!entry_it.value().is_object()) {
+                continue;
+            }
+            auto legacy_it = entry_it.value().find("edge_detail_candidates");
+            if (legacy_it == entry_it.value().end()) {
+                continue;
+            }
+            merge_config(*legacy_it);
+            entry_it.value().erase(legacy_it);
+            changed = true;
+        }
+    };
+    hoist_section("rooms_data");
+    hoist_section("trails_data");
+
+    nlohmann::json normalized = nlohmann::json::object();
+    normalized["candidates"] = nlohmann::json::array();
+    for (auto& [key, candidate] : merged_candidates) {
+        (void)key;
+        normalized["candidates"].push_back(std::move(candidate));
+    }
+    normalized["resolution"] = resolution;
+
+    vibble::spawn_group_codec::CandidateDefaults defaults;
+    defaults.name = "null";
+    defaults.chance = 0.0;
+    if (vibble::spawn_group_codec::sanitize_spawn_group_candidates(normalized, defaults)) {
+        changed = true;
+    }
+    const int sanitized_resolution = normalized.value("resolution", default_resolution);
+    normalized["resolution"] = vibble::grid::clamp_resolution(sanitized_resolution);
+
+    if (root_it == map_manifest.end() || *root_it != normalized) {
+        map_manifest["edge_detail_candidates"] = std::move(normalized);
+        changed = true;
+    }
+
     return changed;
 }
 
@@ -529,10 +634,6 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["inherit_map_floor_color"] = true;
     entry["room_floor_color"] = nlohmann::json::array({0, 0, 0});
     entry["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
-    entry["edge_detail_candidates"] = nlohmann::json::object({
-        {"candidates", nlohmann::json::array()},
-        {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
-    });
     entry["spawn_groups"] = nlohmann::json::array();
     entry["trail_connection_sector"] = nlohmann::json::object({
         {"direction_deg", kDefaultTrailSectorDirectionDeg},
@@ -905,6 +1006,12 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
         }
     }
 
+    if (map_manifest.contains("edge_detail_candidates") && map_manifest["edge_detail_candidates"].is_object()) {
+        if (normalize_spawn_group_candidates(map_manifest["edge_detail_candidates"], lookup)) {
+            changed = true;
+        }
+    }
+
     auto normalize_room_like_section = [&](const char* section_name) {
         auto section_it = map_manifest.find(section_name);
         if (section_it == map_manifest.end() || !section_it->is_object()) {
@@ -964,14 +1071,17 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"geometry", "Square"},
             {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
             {"coarseness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))},
-            {"edge_detail_candidates", nlohmann::json::object({
-                {"candidates", nlohmann::json::array()},
-                {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
-            })},
             {"tags", nlohmann::json::array()},
             {"anti_tags", nlohmann::json::array()},
             {"spawn_groups", nlohmann::json::array()}
         })}
+    });
+
+    map_info["edge_detail_candidates"] = nlohmann::json::object({
+        {"candidates", nlohmann::json::array({
+            nlohmann::json::object({{"name", "null"}, {"chance", 0}})
+        })},
+        {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
     });
 
     map_info["map_layers_settings"] = nlohmann::json::object({{"min_edge_distance", 200}});
@@ -1123,13 +1233,16 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         }
     };
     normalize_map_default_floor_color();
-    if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
-        changed = true;
-    }
     if (normalize_room_config_section(map_manifest["rooms_data"], true, false)) {
         changed = true;
     }
     if (normalize_room_config_section(map_manifest["trails_data"], false, true)) {
+        changed = true;
+    }
+    if (normalize_map_edge_detail_candidates(map_manifest)) {
+        changed = true;
+    }
+    if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
         changed = true;
     }
     if (normalize_room_trail_name_collisions(map_manifest)) {

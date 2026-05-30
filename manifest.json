@@ -23673,10 +23673,6 @@
             31,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -23834,10 +23830,6 @@
             31,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -23995,10 +23987,6 @@
             85,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -24153,10 +24141,6 @@
             36,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -24316,10 +24300,6 @@
             242,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 7620,
@@ -24526,10 +24506,6 @@
             208,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -24692,15 +24668,6 @@
             31,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [
-              {
-                "chance": 0,
-                "name": "null"
-              }
-            ],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 14584,
@@ -25034,10 +25001,6 @@
             204,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25095,10 +25058,6 @@
             88,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25156,10 +25115,6 @@
             36,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25248,10 +25203,6 @@
             85,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25309,10 +25260,6 @@
             31,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25371,10 +25318,6 @@
             169,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25433,10 +25376,6 @@
             242,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 1500,
@@ -25494,10 +25433,6 @@
             204,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 4030,
@@ -25718,10 +25653,6 @@
             242,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 1362,
@@ -25816,10 +25747,6 @@
             71,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 4030,
@@ -25977,10 +25904,6 @@
             204,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 4030,
@@ -26138,10 +26061,6 @@
             36,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 6100,
@@ -26304,10 +26223,6 @@
             36,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Circle",
           "height": {
             "center": 15497,
@@ -26745,10 +26660,6 @@
             190,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "height": {
             "center": 6668,
@@ -27095,10 +27006,6 @@
             242,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "name": "MainTrail",
           "spawn_groups": [],
@@ -27133,10 +27040,6 @@
             85,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "name": "NewTrail",
           "spawn_groups": [],
@@ -27172,10 +27075,6 @@
             85,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "name": "NewTrail1",
           "spawn_groups": [],
@@ -27211,10 +27110,6 @@
             204,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "name": "NewTrail2",
           "spawn_groups": [],
@@ -27253,10 +27148,6 @@
             204,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "name": "NewTrail3",
           "spawn_groups": [],
@@ -27291,10 +27182,6 @@
             204,
             255
           ],
-          "edge_detail_candidates": {
-            "candidates": [],
-            "resolution": 8
-          },
           "geometry": "Square",
           "name": "NewTrail4",
           "spawn_groups": [],
@@ -27311,6 +27198,15 @@
             }
           }
         }
+      },
+      "edge_detail_candidates": {
+        "candidates": [
+          {
+            "chance": 0,
+            "name": "null"
+          }
+        ],
+        "resolution": 8
       }
     }
   },

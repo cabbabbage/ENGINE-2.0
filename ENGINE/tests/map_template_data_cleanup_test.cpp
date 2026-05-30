@@ -24,6 +24,12 @@ int main() {
             {"height", nlohmann::json::object({{"center", 1300}, {"span", 0}})},
             {"edge_smoothness", 99},
             {"curvyness", nlohmann::json::object({{"center", 8}, {"span", 0}})},
+            {"edge_detail_candidates", nlohmann::json::object({
+                {"resolution", 7},
+                {"candidates", nlohmann::json::array({
+                    nlohmann::json::object({{"name", "Mushroom"}, {"chance", 2}})
+                })}
+            })},
             {"trail_connection_sector", nlohmann::json::object({{"direction_deg", 0}, {"width_percent", 100}})}
         })}
     });
@@ -39,6 +45,12 @@ int main() {
             {"inherits_live_dynamic_assets", true},
             {"inherit_map_floor_color", false},
             {"room_floor_color", nlohmann::json::array({1, 2, 3})},
+            {"edge_detail_candidates", nlohmann::json::object({
+                {"resolution", 9},
+                {"candidates", nlohmann::json::array({
+                    nlohmann::json::object({{"name", "Mushroom"}, {"weight", 3}})
+                })}
+            })},
             {"trail_connection_sector", nlohmann::json::object({{"direction_deg", 180}, {"width_percent", 25}})}
         })}
     });
@@ -51,8 +63,18 @@ int main() {
     assert(!room.contains("curviness"));
     assert(room.contains("coarseness"));
     assert(room["coarseness"].is_object());
-    assert(room.contains("edge_detail_candidates"));
-    assert(room["edge_detail_candidates"].is_object());
+    assert(!room.contains("edge_detail_candidates"));
+    assert(normalized.contains("edge_detail_candidates"));
+    assert(normalized["edge_detail_candidates"].is_object());
+    assert(normalized["edge_detail_candidates"].value("resolution", 0) == 9);
+    const auto& edge_candidates = normalized["edge_detail_candidates"]["candidates"];
+    bool found_merged_mushroom = false;
+    for (const auto& candidate : edge_candidates) {
+        if (candidate.value("name", std::string{}) == "Mushroom" && candidate.value("chance", 0) == 5) {
+            found_merged_mushroom = true;
+        }
+    }
+    assert(found_merged_mushroom);
     assert(room.contains("height"));
     assert(room.contains("trail_connection_sector"));
 
@@ -67,8 +89,7 @@ int main() {
     assert(!trail.contains("curviness"));
     assert(trail.contains("coarseness"));
     assert(trail["coarseness"].is_object());
-    assert(trail.contains("edge_detail_candidates"));
-    assert(trail["edge_detail_candidates"].is_object());
+    assert(!trail.contains("edge_detail_candidates"));
     assert(!trail.contains("is_boss"));
     assert(!trail.contains("inherits_live_dynamic_assets"));
     assert(!trail.contains("inherit_map_floor_color"));

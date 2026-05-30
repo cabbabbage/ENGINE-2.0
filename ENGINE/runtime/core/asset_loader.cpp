@@ -337,14 +337,16 @@ void AssetLoader::loadRooms() {
                                 add_asset_claim(asset_up.get());
                         }
                 }
+                const nlohmann::json* edge_detail_candidates = nullptr;
+                auto edge_detail_it = map_manifest_json_.find("edge_detail_candidates");
+                if (edge_detail_it != map_manifest_json_.end() && edge_detail_it->is_object()) {
+                        edge_detail_candidates = &(*edge_detail_it);
+                }
                 for (Room* room : rooms) {
-                        if (!room || !room->coarseness_added_area) continue;
-                        const auto& data = room->assets_data();
-                        auto it = data.find("edge_detail_candidates");
-                        if (it == data.end() || !it->is_object()) continue;
+                        if (!room || !room->coarseness_added_area || !edge_detail_candidates) continue;
                         AssetSpawner edge_spawner(asset_library_, edge_detail_claimed);
                         edge_spawner.set_map_grid_settings(room->map_grid_settings());
-                        edge_spawner.spawn_edge_detail_candidates(*room, *room->coarseness_added_area, *it);
+                        edge_spawner.spawn_edge_detail_candidates(*room, *room->coarseness_added_area, *edge_detail_candidates);
                         for (auto& asset_up : room->assets) {
                                 if (asset_up && asset_up->spawn_method == "Random") {
                                         add_asset_claim(asset_up.get());

@@ -209,7 +209,128 @@ ValidationResult validate_polygon_points(const std::vector<SDL_Point>& raw_point
     return {true, {}};
 }
 
+
+struct CirclePlacement {
+    SDL_Point center{0, 0};
+    int radius = 0;
+    double perimeter_distance = 0.0;
+};
+
+double distance_between(SDL_Point a, SDL_Point b) {
+    const double dx = static_cast<double>(b.x - a.x);
+    const double dy = static_cast<double>(b.y - a.y);
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+double perimeter_length(const std::vector<SDL_Point>& points) {
+    if (points.size() < 2) return 0.0;
+    double total = 0.0;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        total += distance_between(points[i], points[(i + 1) % points.size()]);
+    }
+    return total;
+}
+
+SDL_Point point_at_perimeter_distance(const std::vector<SDL_Point>& points, double target_distance, int resolution) {
+    if (points.empty()) return SDL_Point{0, 0};
+    const double total = perimeter_length(points);
+    if (!(total > 0.0)) return points.front();
+    double remaining = std::fmod(std::max(0.0, target_distance), total);
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const SDL_Point a = points[i];
+        const SDL_Point b = points[(i + 1) % points.size()];
+        const double len = distance_between(a, b);
+        if (len <= 0.0) continue;
+        if (remaining <= len) {
+            const double t = remaining / len;
+            SDL_Point p{
+                static_cast<int>(std::lround(static_cast<double>(a.x) + (static_cast<double>(b.x - a.x) * t))),
+                static_cast<int>(std::lround(static_cast<double>(a.y) + (static_cast<double>(b.y - a.y) * t)))
+            };
+            return vibble::grid::snap_world_to_vertex(p, resolution);
+        }
+        remaining -= len;
+    }
+    return vibble::grid::snap_world_to_vertex(points.back(), resolution);
+}
+
+bool circles_intersect(const CirclePlacement& a, const CirclePlacement& b) {
+    return distance_between(a.center, b.center) <= static_cast<double>(a.radius + b.radius);
+}
+
+std::vector<CirclePlacement> build_continuous_circle_chain(const std::vector<SDL_Point>& boundary,
+                                                           const vibble::weighted_range::WeightedIntRange& range,
+                                                           int resolution,
+                                                           std::mt19937& rng,
+                                                           CoarsenessExpansionResult& result) {
+    std::vector<CirclePlacement> chain;
+    const double total_perimeter = perimeter_length(boundary);
+    result.perimeter_length_processed = total_perimeter;
+    if (!(total_perimeter > 0.0)) {
+        result.uncovered_perimeter_segments = 1;
+        return chain;
+    }
+
+    double cursor = 0.0;
+    int radius = resolve_radius_from_coarseness_range(range, rng);
+    if (radius <= 0) {
+        ++result.circles_skipped;
+        result.uncovered_perimeter_segments = 1;
+        return chain;
+    }
+    chain.push_back(CirclePlacement{point_at_perimeter_distance(boundary, 0.0, resolution), radius, 0.0});
+
+    while (cursor < total_perimeter) {
+        int next_radius = resolve_radius_from_coarseness_range(range, rng);
+        if (next_radius <= 0) {
+            ++result.circles_skipped;
+            next_radius = chain.back().radius;
+            if (next_radius <= 0) break;
+        }
+
+        const double max_intersecting_step = static_cast<double>(chain.back().radius + next_radius);
+        const double desired_step = std::max(1.0, std::floor(max_intersecting_step * 0.75));
+        const double remaining = total_perimeter - cursor;
+
+        if (remaining <= static_cast<double>(chain.back().radius + chain.front().radius)) {
+            if (circles_intersect(chain.back(), chain.front())) {
+                ++result.circle_intersections_succeeded;
+            } else {
+                ++result.uncovered_perimeter_segments;
+            }
+            break;
+        }
+
+        cursor += std::min(desired_step, remaining);
+        if (cursor >= total_perimeter) break;
+
+        CirclePlacement next{point_at_perimeter_distance(boundary, cursor, resolution), next_radius, cursor};
+        if (circles_intersect(chain.back(), next)) {
+            ++result.circle_intersections_succeeded;
+        } else {
+            ++result.uncovered_perimeter_segments;
+            // Keep the boundary covered even if snapping pushed the centers apart: retry halfway.
+            const double retry_distance = (chain.back().perimeter_distance + cursor) * 0.5;
+            CirclePlacement bridge{point_at_perimeter_distance(boundary, retry_distance, resolution),
+                                   std::max(chain.back().radius, next_radius),
+                                   retry_distance};
+            if (circles_intersect(chain.back(), bridge) && circles_intersect(bridge, next)) {
+                chain.push_back(bridge);
+                result.circle_intersections_succeeded += 2;
+                --result.uncovered_perimeter_segments;
+            }
+        }
+        chain.push_back(next);
+    }
+
+    if (chain.size() > 1 && !circles_intersect(chain.back(), chain.front())) {
+        ++result.uncovered_perimeter_segments;
+    }
+    return chain;
+}
+
 std::vector<SDL_Point> make_circle_polygon(SDL_Point center, int radius, int resolution, int segments = 32) {
+    (void)resolution;
     constexpr double kTwoPi = 6.28318530717958647692;
     std::vector<SDL_Point> out;
     segments = std::max(12, segments);
@@ -220,20 +341,9 @@ std::vector<SDL_Point> make_circle_polygon(SDL_Point center, int radius, int res
             center.x + static_cast<int>(std::lround(std::cos(t) * static_cast<double>(radius))),
             center.y + static_cast<int>(std::lround(std::sin(t) * static_cast<double>(radius)))
         };
-        out.push_back(vibble::grid::snap_world_to_vertex(p, resolution));
+        out.push_back(p);
     }
     return sanitize_points(out);
-}
-
-bool point_inside_other_original_geometry(SDL_Point p,
-                                          std::size_t owner_index,
-                                          const std::vector<std::unique_ptr<Area>>& originals) {
-    for (std::size_t i = 0; i < originals.size(); ++i) {
-        const Area* other = originals[i].get();
-        if (i == owner_index || !other) continue;
-        if (other->contains_point(p)) return true;
-    }
-    return false;
 }
 
 int item_resolution(const CoarsenessGeometryItem& item) {
@@ -402,17 +512,20 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
                            " original_bounds=" + bounds_to_string(original.get_bounds()) +
                            " resolution=" + std::to_string(resolution));
 
-        for (const SDL_Point& center : original_boundary) {
-            if (point_inside_other_original_geometry(center, index, original_snapshots)) {
-                vibble::log::debug("[Coarseness] '" + item.identifier + "' skipped boundary point " +
-                                   point_to_string(center) + ": inside other original geometry");
-                continue;
-            }
+        const std::vector<CirclePlacement> circle_chain = build_continuous_circle_chain(
+            original_boundary, *item.coarseness_range, resolution, rng, result);
+        vibble::log::debug("[Coarseness] '" + item.identifier + "' perimeter_chain perimeter_length=" +
+                           std::to_string(result.perimeter_length_processed) +
+                           " generated=" + std::to_string(circle_chain.size()) +
+                           " skipped=" + std::to_string(result.circles_skipped) +
+                           " circle_intersections=" + std::to_string(result.circle_intersections_succeeded) +
+                           " uncovered_segments=" + std::to_string(result.uncovered_perimeter_segments));
 
-            const int radius = resolve_radius_from_coarseness_range(*item.coarseness_range, rng);
-            vibble::log::debug("[Coarseness] '" + item.identifier + "' resolved radius=" + std::to_string(radius) +
-                               " at " + point_to_string(center));
+        for (const CirclePlacement& circle : circle_chain) {
+            const SDL_Point center = circle.center;
+            const int radius = circle.radius;
             if (radius <= 0) {
+                ++result.circles_skipped;
                 continue;
             }
 
@@ -420,6 +533,7 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
             const std::vector<SDL_Point> circle_points = make_circle_polygon(center, radius, resolution);
             const ValidationResult circle_validation = validate_polygon_points(circle_points);
             if (!circle_validation.valid) {
+                ++result.circles_skipped;
                 vibble::log::debug("[Coarseness] '" + item.identifier + "' circle attempted at " +
                                    point_to_string(center) + " radius=" + std::to_string(radius) +
                                    " rejected: " + circle_validation.reason);
@@ -431,11 +545,13 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
             try {
                 grown_paths = Clipper2Lib::Union(active_paths, circle_paths, Clipper2Lib::FillRule::NonZero, 2);
             } catch (const std::exception& ex) {
+                ++result.circles_skipped;
                 vibble::log::warn("[Coarseness] Boolean union failed for '" + item.identifier + "': " + ex.what());
                 continue;
             }
 
             if (!validate_paths(grown_paths, resolution, "circle_union", item.identifier)) {
+                ++result.circles_skipped;
                 vibble::log::debug("[Coarseness] '" + item.identifier + "' circle attempted at " +
                                    point_to_string(center) + " radius=" + std::to_string(radius) +
                                    " rejected after union validation");
@@ -446,11 +562,13 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
             try {
                 expansion_paths_after_circle = Clipper2Lib::Difference(grown_paths, original_paths, Clipper2Lib::FillRule::NonZero, 2);
             } catch (const std::exception& ex) {
+                ++result.circles_skipped;
                 vibble::log::warn("[Coarseness] Boolean difference failed for '" + item.identifier + "' after circle at " +
                                   point_to_string(center) + ": " + ex.what());
                 continue;
             }
             if (!validate_paths(expansion_paths_after_circle, resolution, "circle_expansion_difference", item.identifier, true)) {
+                ++result.circles_skipped;
                 vibble::log::debug("[Coarseness] '" + item.identifier + "' circle attempted at " +
                                    point_to_string(center) + " radius=" + std::to_string(radius) +
                                    " rejected after expansion difference validation");
@@ -464,6 +582,7 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
             ++result.circles_applied;
             vibble::log::debug("[Coarseness] '" + item.identifier + "' circle applied at " + point_to_string(center) +
                                " radius=" + std::to_string(radius) +
+                               " perimeter_distance=" + std::to_string(circle.perimeter_distance) +
                                " area_before=" + std::to_string(before_area) +
                                " area_after=" + std::to_string(after_area) +
                                " expansion_area=" + std::to_string(expansion_area_after_circle));
@@ -503,13 +622,22 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
         }
 
         const double expansion_area = result.expansion_area ? result.expansion_area->get_area() : 0.0;
+        result.expanded_area_size = expansion_area;
         vibble::log::debug("[Coarseness] '" + item.identifier + "' geometry area before=" + std::to_string(before_area) +
                            " after=" + std::to_string(after_area) +
                            " expansion_area=" + std::to_string(expansion_area));
-        vibble::log::debug("[Coarseness] '" + item.identifier + "' final expanded bounds=" +
-                           bounds_to_string(item.geometry->get_bounds()) +
+        vibble::log::debug("[Coarseness] '" + item.identifier + "' validation perimeter_length_processed=" +
+                           std::to_string(result.perimeter_length_processed) +
+                           " total_circles_generated=" + std::to_string(circle_chain.size()) +
                            " circles_attempted=" + std::to_string(result.circles_attempted) +
-                           " circles_applied=" + std::to_string(result.circles_applied));
+                           " circles_applied=" + std::to_string(result.circles_applied) +
+                           " circles_skipped=" + std::to_string(result.circles_skipped) +
+                           " circle_to_circle_intersection_success=" +
+                           std::to_string(result.circle_intersections_succeeded) +
+                           " uncovered_perimeter_segments=" +
+                           std::to_string(result.uncovered_perimeter_segments) +
+                           " expanded_area_size=" + std::to_string(result.expanded_area_size) +
+                           " final_expanded_bounds=" + bounds_to_string(item.geometry->get_bounds()));
 
         results.push_back(std::move(result));
     }

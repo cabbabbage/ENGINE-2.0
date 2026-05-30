@@ -259,6 +259,7 @@ std::optional<Area> AssetSpawner::asset_footprint_area(const Asset& asset, const
 void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                                                 const Area& expanded_area,
                                                 const Area& original_area,
+                                                const std::vector<Area>& original_spawn_exclusion_areas,
                                                 const nlohmann::json& edge_detail_candidates,
                                                 std::vector<Area>& claimed_edge_detail_regions) {
         if (!asset_library_ || !room.room_area) {
@@ -282,8 +283,10 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
         group["display_name"] = "Edge Detail";
         group["spawn_id"] = std::string("coarse_edge_") + room.room_name;
         group["position"] = "Random";
-        group["min_number"] = 0;
-        group["max_number"] = std::max(1, static_cast<int>(std::lround(expanded_area.get_area() / 2500.0)));
+        group["min_number"] = 1;
+        // The planner quantity only activates the candidate pool. Edge-detail density is driven by
+        // the resolved occupancy vertices at the configured resolution, so do not cap placement by area.
+        group["max_number"] = 1;
         group["enforce_spacing"] = true;
         group["resolution"] = edge_detail_candidates.value(
             "resolution", vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution));
@@ -306,6 +309,9 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
         map_grid_settings_ = room.map_grid_settings();
 
         const std::size_t initial_edge_count = all_.size();
+        std::size_t total_spawn_attempts = 0;
+        std::size_t successful_spawns = 0;
+        std::size_t skipped_overlap_regions = 0;
         for (auto& queue_item : spawn_queue_) {
                 if (!queue_item.has_candidates() || queue_item.quantity <= 0) {
                         continue;
@@ -334,12 +340,11 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                 }
                 std::shuffle(vertices.begin(), vertices.end(), rng_);
 
-                int placed = 0;
-                const int target = std::max(0, queue_item.quantity);
                 for (auto* vertex : vertices) {
-                        if (!vertex || placed >= target) {
-                                break;
+                        if (!vertex) {
+                                continue;
                         }
+                        ++total_spawn_attempts;
 
                         const SDL_Point spawn_pos = vertex->world;
                         const auto candidate = queue_item.select_candidate(ctx.rng(), edge_catalog);
@@ -398,6 +403,9 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                         std::string rejection_reason;
                         if (footprint->intersects(original_area)) {
                                 rejection_reason = "intersects-original-pre-coarseness-area";
+                        } else if (intersects_any_area(*footprint, original_spawn_exclusion_areas)) {
+                                rejection_reason = "intersects-another-room-or-trail-original-area";
+                                ++skipped_overlap_regions;
                         } else if (intersects_any_area(*footprint, exclusion_zones)) {
                                 rejection_reason = "overlaps-normal-spawned-asset";
                         } else {
@@ -431,7 +439,7 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                         claimed_edge_detail_regions.push_back(*footprint);
                         ctx.checker().register_asset(result, queue_item.check_min_spacing, true);
                         occupancy.set_occupied(vertex, true);
-                        ++placed;
+                        ++successful_spawns;
                         vibble::log::debug("[EdgeDetail] spawned room/trail='" + room.room_name +
                                            "' candidate='" + candidate_name + "' footprint=" + bounds_string(*footprint));
                 }
@@ -440,8 +448,12 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
 
         current_room_ = nullptr;
         const std::size_t final_edge_count = all_.size() - initial_edge_count;
-        vibble::log::debug("[EdgeDetail] final count room/trail='" + room.room_name + "' count=" +
-                           std::to_string(final_edge_count));
+        vibble::log::debug("[EdgeDetail] validation room/trail='" + room.room_name +
+                           "' expanded_area_size=" + std::to_string(expanded_area.get_area()) +
+                           " spawn_attempts=" + std::to_string(total_spawn_attempts) +
+                           " successful_spawns=" + std::to_string(successful_spawns) +
+                           " skipped_overlap_regions=" + std::to_string(skipped_overlap_regions) +
+                           " final_count=" + std::to_string(final_edge_count));
         if (!all_.empty()) {
                 room.add_room_assets(std::move(all_));
         }

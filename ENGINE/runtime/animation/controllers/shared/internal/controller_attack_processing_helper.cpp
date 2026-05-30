@@ -14,7 +14,7 @@ namespace {
 
 constexpr float kZeroTolerance = 1e-4f;
 
-bool try_set_animation(Asset& self, std::string_view animation_id) {
+bool try_set_animation(Asset& self, std::string_view animation_id, bool force_transition = false) {
     if (!self.anim_ || !self.info || animation_id.empty()) {
         return false;
     }
@@ -22,8 +22,8 @@ bool try_set_animation(Asset& self, std::string_view animation_id) {
     if (self.info->animations.find(animation_key) == self.info->animations.end()) {
         return false;
     }
-    self.anim_->set_animation(animation_key);
-    return self.current_animation == animation_key;
+    return self.anim_->set_animation(animation_key, force_transition) &&
+           self.current_animation == animation_key;
 }
 
 } // namespace
@@ -35,11 +35,11 @@ bool AttackProcessingHelper::try_play_death_animation(
         return false;
     }
 
-    if (try_set_animation(self, config.death_animation_id)) {
+    if (try_set_animation(self, config.death_animation_id, true)) {
         return true;
     }
     if (!config.death_fallback_tag.empty()) {
-        return self.anim_->set_animation_by_tags({std::string{config.death_fallback_tag}}, {});
+        return self.anim_->set_animation_by_tags({std::string{config.death_fallback_tag}}, {}, true);
     }
     return false;
 }

@@ -12,6 +12,7 @@
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "utils/utils/weighted_range.hpp"
+#include "utils/grid.hpp"
 
 namespace manifest {
 namespace {
@@ -223,6 +224,12 @@ bool normalize_room_config_entry(nlohmann::json& entry,
         entry["name"] = key_name;
         changed = true;
     }
+
+    auto warn_legacy_drop = [&](const char* field) {
+        std::cerr << "[MapManifestNormalizer] Dropping legacy geometry field '" << field
+                  << "' in " << (is_trail_entry ? "trail" : "room")
+                  << " entry '" << key_name << "'.\n";
+    };
 
     std::string geometry = "Square";
     const bool has_geometry_string = entry.contains("geometry") && json_to_string(entry["geometry"], geometry);
@@ -1167,8 +1174,3 @@ MapManifestBootstrapResult bootstrap_map_manifest(const ManifestData& manifest_d
 }
 
 }
-    auto warn_legacy_drop = [&](const char* field) {
-        std::cerr << "[MapManifestNormalizer] Dropping legacy geometry field '" << field
-                  << "' in " << (is_trail_entry ? "trail" : "room")
-                  << " entry '" << key_name << "'.\n";
-    };

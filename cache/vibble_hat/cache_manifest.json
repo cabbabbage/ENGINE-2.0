@@ -14,12 +14,12 @@
     }
   ],
   "asset_name": "vibble_hat",
-  "authored_scale_percentage": 70.0,
+  "authored_scale_percentage": 66.99999237060547,
   "crop_canvas": {
     "shared_height": 63,
     "shared_width": 85
   },
-  "digest": "53cc7e193d2967e3",
+  "digest": "9911159f28b5755f",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

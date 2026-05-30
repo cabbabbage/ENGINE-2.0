@@ -14,12 +14,12 @@
     }
   ],
   "asset_name": "bone",
-  "authored_scale_percentage": 25.0,
+  "authored_scale_percentage": 22.999998092651367,
   "crop_canvas": {
     "shared_height": 155,
     "shared_width": 191
   },
-  "digest": "538b23237367dcc5",
+  "digest": "64e5c1cb6383de5a",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

@@ -1,0 +1,175 @@
+{
+  "animations": [
+    {
+      "name": "attack_right",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "02e7feada370dd08",
+          "height": 1080,
+          "order": 0,
+          "width": 1920
+        },
+        {
+          "filename": "1.png",
+          "hash": "fac45d7ce292b17e",
+          "height": 1080,
+          "order": 1,
+          "width": 1920
+        },
+        {
+          "filename": "2.png",
+          "hash": "dac6e02d062c53e0",
+          "height": 1080,
+          "order": 2,
+          "width": 1920
+        },
+        {
+          "filename": "3.png",
+          "hash": "1ded4e959d626f54",
+          "height": 1080,
+          "order": 3,
+          "width": 1920
+        },
+        {
+          "filename": "4.png",
+          "hash": "7524cc6f5bbab270",
+          "height": 1080,
+          "order": 4,
+          "width": 1920
+        },
+        {
+          "filename": "5.png",
+          "hash": "5d8ec0c2d1b31017",
+          "height": 1080,
+          "order": 5,
+          "width": 1920
+        },
+        {
+          "filename": "6.png",
+          "hash": "f83ef03743799035",
+          "height": 1080,
+          "order": 6,
+          "width": 1920
+        },
+        {
+          "filename": "7.png",
+          "hash": "d19869e2e3b67da2",
+          "height": 1080,
+          "order": 7,
+          "width": 1920
+        },
+        {
+          "filename": "8.png",
+          "hash": "cb3a12a29015b93d",
+          "height": 1080,
+          "order": 8,
+          "width": 1920
+        },
+        {
+          "filename": "9.png",
+          "hash": "2075c0b4b43b0a20",
+          "height": 1080,
+          "order": 9,
+          "width": 1920
+        },
+        {
+          "filename": "10.png",
+          "hash": "29d8336b8ca29330",
+          "height": 1080,
+          "order": 10,
+          "width": 1920
+        },
+        {
+          "filename": "11.png",
+          "hash": "f87a8fe7ae3136c5",
+          "height": 1080,
+          "order": 11,
+          "width": 1920
+        }
+      ]
+    },
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "717698bee9efbdd3",
+          "height": 1080,
+          "order": 0,
+          "width": 1920
+        }
+      ]
+    },
+    {
+      "name": "right",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "717698bee9efbdd3",
+          "height": 1080,
+          "order": 0,
+          "width": 1920
+        },
+        {
+          "filename": "1.png",
+          "hash": "33d8ce0176e8a4a0",
+          "height": 1080,
+          "order": 1,
+          "width": 1920
+        },
+        {
+          "filename": "2.png",
+          "hash": "554500561eca04d3",
+          "height": 1080,
+          "order": 2,
+          "width": 1920
+        },
+        {
+          "filename": "3.png",
+          "hash": "c4ed1989af496950",
+          "height": 1080,
+          "order": 3,
+          "width": 1920
+        },
+        {
+          "filename": "4.png",
+          "hash": "330b693c85a54fdc",
+          "height": 1080,
+          "order": 4,
+          "width": 1920
+        },
+        {
+          "filename": "5.png",
+          "hash": "6cb436003bc82e4e",
+          "height": 1080,
+          "order": 5,
+          "width": 1920
+        },
+        {
+          "filename": "6.png",
+          "hash": "b4b18af0701f4a21",
+          "height": 1080,
+          "order": 6,
+          "width": 1920
+        },
+        {
+          "filename": "7.png",
+          "hash": "02e7feada370dd08",
+          "height": 1080,
+          "order": 7,
+          "width": 1920
+        }
+      ]
+    }
+  ],
+  "asset_name": "boneski",
+  "authored_scale_percentage": 22.999998092651367,
+  "crop_canvas": {
+    "shared_height": 1052,
+    "shared_width": 1142
+  },
+  "digest": "e02bb164f8171f80",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

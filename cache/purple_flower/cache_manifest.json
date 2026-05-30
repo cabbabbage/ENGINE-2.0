@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "36f7928493beacca",
+          "height": 148,
+          "order": 0,
+          "width": 85
+        }
+      ]
+    }
+  ],
+  "asset_name": "purple_flower",
+  "authored_scale_percentage": 39.999996185302734,
+  "crop_canvas": {
+    "shared_height": 148,
+    "shared_width": 85
+  },
+  "digest": "bcd574efe549dbb5",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

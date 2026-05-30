@@ -28,6 +28,7 @@
 #include "utils/utils/log.hpp"
 #include "utils/utils/string_utils.hpp"
 
+#include "animation/controllers/custom_controllers/boneski_controller.hpp"
 // <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>
 
 namespace {
@@ -133,6 +134,9 @@ const std::unordered_map<std::string, ControllerFactoryFn>& controller_registry(
 
         // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
         // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
+        { "boneski_controller", [](Asset* asset) {
+                return std::make_unique<boneski_controller>(asset);
+        } },
     };
 
     return registry;

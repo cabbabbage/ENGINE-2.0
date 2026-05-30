@@ -7051,6 +7051,146 @@ void RoomEditor::regenerate_room_from_template(const std::string& template_key) 
     }
 }
 
+void RoomEditor::generate_room_from_template_at_current_location(const std::string& template_key) {
+    if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; generate skipped.");
+        return;
+    }
+    if (!assets_ || !current_room_ || !current_room_->room_area) {
+        return;
+    }
+    if (template_key.empty()) {
+        show_notice("Room generate failed: empty room template key");
+        return;
+    }
+
+    nlohmann::json& map_info = assets_->map_info_json();
+    nlohmann::json& rooms_data = map_info["rooms_data"];
+    if (!rooms_data.is_object()) {
+        show_notice("Room generate failed: map rooms_data is missing");
+        return;
+    }
+    auto template_it = rooms_data.find(template_key);
+    if (template_it == rooms_data.end() || !template_it->is_object()) {
+        show_notice("Room generate failed: selected room template is missing");
+        return;
+    }
+    const std::string template_type = vibble::strings::to_lower_copy(template_it->value("type", std::string("room")));
+    if (template_type == "trail") {
+        show_notice("Room generate failed: selected template is a trail");
+        return;
+    }
+
+    const std::string new_room_key = map_layers::make_unique_template_key(
+        map_info,
+        template_key + "_copy",
+        "NewRoom");
+    nlohmann::json new_room_entry = *template_it;
+    new_room_entry["name"] = new_room_key;
+    rooms_data[new_room_key] = std::move(new_room_entry);
+
+    auto estimate_map_radius = [](const std::vector<Room*>& rooms) -> double {
+        double max_radius = 10000.0;
+        for (Room* room : rooms) {
+            if (!room || !room->room_area) {
+                continue;
+            }
+            int min_x = 0;
+            int min_y = 0;
+            int max_x = 0;
+            int max_y = 0;
+            std::tie(min_x, min_y, max_x, max_y) = room->room_area->get_bounds();
+            max_radius = std::max(max_radius, static_cast<double>(std::max({std::abs(min_x), std::abs(min_y), std::abs(max_x), std::abs(max_y)})));
+        }
+        return std::max(1.0, max_radius);
+    };
+
+    const SDL_Point center = current_room_->room_area->get_center();
+    const double map_radius = estimate_map_radius(assets_->rooms());
+    nlohmann::json& new_room_data_ref = rooms_data[new_room_key];
+    auto created_room = std::make_unique<Room>(
+        Room::Point{center.x, center.y},
+        "room",
+        new_room_key,
+        nullptr,
+        assets_->map_id(),
+        &assets_->library(),
+        nullptr,
+        &new_room_data_ref,
+        current_room_->map_grid_settings(),
+        map_radius,
+        "rooms_data",
+        &map_info,
+        assets_->manifest_store(),
+        assets_->map_id(),
+        Room::ManifestWriter{});
+
+    Room* created_room_ptr = created_room.get();
+    created_room_ptr->layer = current_room_->layer;
+    created_room_ptr->camera_height_px = current_room_->camera_height_px;
+    created_room_ptr->camera_tilt_deg = current_room_->camera_tilt_deg;
+    created_room_ptr->camera_zoom_percent = current_room_->camera_zoom_percent;
+    created_room_ptr->camera_center_dx = current_room_->camera_center_dx;
+    created_room_ptr->camera_center_dz = current_room_->camera_center_dz;
+
+    nlohmann::json& layers = map_info["map_layers"];
+    if (layers.is_array() && created_room_ptr->layer >= 0 &&
+        created_room_ptr->layer < static_cast<int>(layers.size()) &&
+        layers[created_room_ptr->layer].is_object()) {
+        nlohmann::json& layer_entry = layers[created_room_ptr->layer];
+        if (!layer_entry.contains("rooms") || !layer_entry["rooms"].is_array()) {
+            layer_entry["rooms"] = nlohmann::json::array();
+        }
+        bool already_present = false;
+        for (const auto& candidate : layer_entry["rooms"]) {
+            if (!candidate.is_object()) {
+                continue;
+            }
+            const std::string source_type = candidate.value("source_type", std::string{});
+            const std::string value = candidate.value("value", candidate.value("name", std::string{}));
+            if ((source_type.empty() || source_type == "room_name") && value == new_room_key) {
+                already_present = true;
+                break;
+            }
+        }
+        if (!already_present) {
+            layer_entry["rooms"].push_back(nlohmann::json{
+                {"source_type", "room_name"},
+                {"value", new_room_key},
+                {"required_children", nlohmann::json::array()},
+            });
+        }
+    }
+
+    RuntimeWorldContext* world_context = assets_->runtime_world_context();
+    if (!world_context) {
+        show_notice("Room generate failed: runtime world context unavailable");
+        return;
+    }
+
+    std::vector<std::unique_ptr<Room>> new_rooms;
+    new_rooms.push_back(std::move(created_room));
+    world_context->append_rooms(std::move(new_rooms));
+
+    std::vector<std::unique_ptr<Asset>> initial_room_assets = std::move(created_room_ptr->get_room_assets());
+    integrate_spawned_assets(initial_room_assets);
+
+    assets_->set_editor_current_room(created_room_ptr);
+    assets_->notify_rooms_changed();
+    assets_->rebuild_from_grid_state();
+    assets_->refresh_active_asset_lists();
+    set_current_room(created_room_ptr, room_locked_for_edit_);
+    clear_room_trail_nav_entries();
+    rebuild_room_spawn_id_cache();
+    refresh_spawn_group_config_ui();
+    mark_spatial_index_dirty();
+
+    if (mark_map_dirty_callback_) {
+        mark_map_dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    }
+    show_notice("Room generated at current location: " + new_room_key);
+}
+
 void RoomEditor::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {
     if (!asset || !assets_) return;
 
@@ -25272,7 +25412,7 @@ void RoomEditor::ensure_room_configurator() {
         return rename_active_room(old_name, desired_name);
     });
     room_cfg_ui_->set_on_generate_room([this](const std::string& template_key) {
-        regenerate_room_from_template(template_key);
+        generate_room_from_template_at_current_location(template_key);
     });
     room_cfg_ui_->set_on_close([this]() {
         room_config_dock_open_ = false;

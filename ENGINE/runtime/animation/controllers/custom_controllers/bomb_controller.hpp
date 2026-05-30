@@ -18,9 +18,14 @@ protected:
     void on_process_pending_attacks(Asset& self) override;
 
 private:
+    bool can_detonate(const Asset& self, const Asset& target) const;
+    void detonate(Asset& self, Asset& target);
+    void dispatch_explosion_attacks(Asset& self);
+
     custom_controller_api::EnemyAgentConfig behavior_config_{};
     custom_controller_api::MovementConfig chase_move_{};
     custom_controller_api::MovementConfig retreat_move_{};
+    bool has_detonated_ = false;
 };
 
 #endif

@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "a9b728db4ebe894f",
+          "height": 147,
+          "order": 0,
+          "width": 86
+        }
+      ]
+    }
+  ],
+  "asset_name": "blue_flower",
+  "authored_scale_percentage": 53.999996185302734,
+  "crop_canvas": {
+    "shared_height": 147,
+    "shared_width": 86
+  },
+  "digest": "8fd8b502fdbab0c7",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

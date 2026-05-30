@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "5cb4e4be482c80dc",
+          "height": 37,
+          "order": 0,
+          "width": 16
+        }
+      ]
+    }
+  ],
+  "asset_name": "noose",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 37,
+    "shared_width": 16
+  },
+  "digest": "fc7e6303baaa21f6",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

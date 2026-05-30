@@ -40,7 +40,7 @@ constexpr int kTrailSectorDefaultWidthPercent = 100;
 constexpr int kTrailSectorMinWidthPercent = 25;
 constexpr int kTrailSectorMaxWidthPercent = 100;
 constexpr int kMinCoarseness = 0;
-constexpr int kMaxCoarseness = 1000;
+constexpr int kMaxCoarseness = 4000;
 constexpr int kMinCoarsenessRadius = 8;
 
 
@@ -171,8 +171,8 @@ vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value)
     if (clamped <= 0) {
         return vibble::weighted_range::make_flat(0);
     }
-    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 20));
-    const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 18));
+    const int max_radius = std::max(min_radius, 36 + (clamped / 4));
     return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
 }
 

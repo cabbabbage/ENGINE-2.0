@@ -366,7 +366,7 @@ void AssetLoader::loadRooms() {
                         AssetSpawner edge_spawner(asset_library_, normal_spawned_occupancy);
                         edge_spawner.set_map_grid_settings(room->map_grid_settings());
                         edge_spawner.spawn_edge_detail_candidates(*room,
-                                                                  *room->coarseness_added_area,
+                                                                  *room->room_area,
                                                                   original_area,
                                                                   other_original_areas,
                                                                   *edge_detail_candidates,

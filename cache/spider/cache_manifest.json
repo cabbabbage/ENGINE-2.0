@@ -1,0 +1,111 @@
+{
+  "animations": [
+    {
+      "name": "attack_left",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "21799d5d08e38723",
+          "height": 751,
+          "order": 0,
+          "width": 932
+        },
+        {
+          "filename": "1.png",
+          "hash": "29c6ec1223f786eb",
+          "height": 751,
+          "order": 1,
+          "width": 932
+        },
+        {
+          "filename": "2.png",
+          "hash": "454a489f7f5ae12b",
+          "height": 751,
+          "order": 2,
+          "width": 932
+        },
+        {
+          "filename": "3.png",
+          "hash": "ae1807ebddb3ca4c",
+          "height": 751,
+          "order": 3,
+          "width": 932
+        },
+        {
+          "filename": "4.png",
+          "hash": "5761ac3b034f9273",
+          "height": 751,
+          "order": 4,
+          "width": 932
+        },
+        {
+          "filename": "5.png",
+          "hash": "cb299f1680a896d7",
+          "height": 751,
+          "order": 5,
+          "width": 932
+        }
+      ]
+    },
+    {
+      "name": "default",
+      "source_frames": []
+    },
+    {
+      "name": "left",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "aa27998bd2d18722",
+          "height": 751,
+          "order": 0,
+          "width": 932
+        },
+        {
+          "filename": "1.png",
+          "hash": "cd23278b3f392492",
+          "height": 751,
+          "order": 1,
+          "width": 932
+        },
+        {
+          "filename": "2.png",
+          "hash": "f50665893adf0242",
+          "height": 751,
+          "order": 2,
+          "width": 932
+        },
+        {
+          "filename": "3.png",
+          "hash": "939735c84c3a6905",
+          "height": 751,
+          "order": 3,
+          "width": 932
+        },
+        {
+          "filename": "4.png",
+          "hash": "a14f0ed731518dec",
+          "height": 751,
+          "order": 4,
+          "width": 932
+        },
+        {
+          "filename": "5.png",
+          "hash": "16896c4d36d92a4f",
+          "height": 751,
+          "order": 5,
+          "width": 932
+        }
+      ]
+    }
+  ],
+  "asset_name": "spider",
+  "authored_scale_percentage": 28.0,
+  "crop_canvas": {
+    "shared_height": 751,
+    "shared_width": 932
+  },
+  "digest": "2232fcfebfe7fc01",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

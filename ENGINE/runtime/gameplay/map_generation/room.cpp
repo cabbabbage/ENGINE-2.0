@@ -1034,23 +1034,23 @@ nlohmann::json Room::create_static_room_json(std::string name) {
                 int legacy_coarseness = 0;
                 if (c.is_number_integer()) {
                         legacy_coarseness = c.get<int>();
-                        const int clamped = std::clamp(legacy_coarseness, 0, 1000);
+                        const int clamped = std::clamp(legacy_coarseness, 0, 4000);
                         if (clamped <= 0) {
                                 out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
                         } else {
-                                const int min_radius = std::max(8, 12 + (clamped / 20));
-                                const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+                                const int min_radius = std::max(8, 12 + (clamped / 18));
+                                const int max_radius = std::max(min_radius, 36 + (clamped / 4));
                                 out["coarseness"] = vibble::weighted_range::to_json(
                                     vibble::weighted_range::make_legacy_uniform(min_radius, max_radius));
                         }
                 } else if (c.is_number_float()) {
                         legacy_coarseness = static_cast<int>(std::lround(c.get<double>()));
-                        const int clamped = std::clamp(legacy_coarseness, 0, 1000);
+                        const int clamped = std::clamp(legacy_coarseness, 0, 4000);
                         if (clamped <= 0) {
                                 out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
                         } else {
-                                const int min_radius = std::max(8, 12 + (clamped / 20));
-                                const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+                                const int min_radius = std::max(8, 12 + (clamped / 18));
+                                const int max_radius = std::max(min_radius, 36 + (clamped / 4));
                                 out["coarseness"] = vibble::weighted_range::to_json(
                                     vibble::weighted_range::make_legacy_uniform(min_radius, max_radius));
                         }

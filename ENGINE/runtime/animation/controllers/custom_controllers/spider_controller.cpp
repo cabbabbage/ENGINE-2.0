@@ -9,12 +9,12 @@ spider_controller::spider_controller(Asset* self)
     behavior_config_.kamikaze = false;
     behavior_config_.ranges.aggro_radius_px = 230;
     behavior_config_.ranges.desired_standoff_px = 8;
-    behavior_config_.ranges.attack_radius_px = 90;
+    behavior_config_.ranges.attack_radius_px = 72;
     behavior_config_.retreat_distance_px = 310;
     behavior_config_.recover_ms = 520;
     behavior_config_.attack_window_ms = 220;
     behavior_config_.return_home_threshold_px = 130;
-    behavior_config_.force_attacking_enabled = false;
+    behavior_config_.force_attacking_enabled = true;
     chase_move_.visit_threshold_px = 12;
     chase_move_.allow_vertical_movement = false;
     retreat_move_.visit_threshold_px = 12;
@@ -34,11 +34,15 @@ spider_controller::spider_controller(Asset* self)
 void spider_controller::on_update(const Input& in) {
     custom_controller_api::CustomControllerBase::on_update(in);
     const auto& ctx = controller_game_context();
-    Asset* self = controller_self();
+    Asset* self = ctx.self;
     if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
+
     Asset* player = resolve_target_player();
+    if (player && !ctx.self_and_player_share_room()) {
+        player = nullptr;
+    }
     if (!player && self->anim_->debug_enabled()) {
         vibble::log::info("[AICombat] Spider could not acquire player target");
     }

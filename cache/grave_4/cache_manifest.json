@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "0adf6caa5e2aa4e6",
+          "height": 162,
+          "order": 0,
+          "width": 160
+        }
+      ]
+    }
+  ],
+  "asset_name": "grave_4",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 162,
+    "shared_width": 160
+  },
+  "digest": "61ceb897086fbadf",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

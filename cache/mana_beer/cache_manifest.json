@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "38e342cf0123db00",
+          "height": 158,
+          "order": 0,
+          "width": 149
+        }
+      ]
+    }
+  ],
+  "asset_name": "mana_beer",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 158,
+    "shared_width": 149
+  },
+  "digest": "4ff5f132b7f374c8",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

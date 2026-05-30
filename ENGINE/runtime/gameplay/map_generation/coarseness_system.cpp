@@ -24,7 +24,7 @@ namespace vibble::mapgen::coarseness {
 namespace {
 
 constexpr int kMinCoarseness = 0;
-constexpr int kMaxCoarseness = 1000;
+constexpr int kMaxCoarseness = 4000;
 constexpr int kMinCoarsenessRadius = 8;
 constexpr double kMinValidArea = 0.5;
 
@@ -61,8 +61,8 @@ vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value)
     if (clamped <= 0) {
         return vibble::weighted_range::make_flat(0);
     }
-    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 20));
-    const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 18));
+    const int max_radius = std::max(min_radius, 36 + (clamped / 4));
     return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
 }
 
@@ -271,16 +271,19 @@ std::vector<CirclePlacement> build_continuous_circle_chain(const std::vector<SDL
         return chain;
     }
 
-    double cursor = 0.0;
+    std::uniform_real_distribution<double> start_offset_distribution(0.0, total_perimeter);
+    std::uniform_real_distribution<double> step_factor_distribution(0.65, 0.95);
+    double cursor = start_offset_distribution(rng);
+    double traveled = 0.0;
     int radius = resolve_radius_from_coarseness_range(range, rng);
     if (radius <= 0) {
         ++result.circles_skipped;
         result.uncovered_perimeter_segments = 1;
         return chain;
     }
-    chain.push_back(CirclePlacement{point_at_perimeter_distance(boundary, 0.0, resolution), radius, 0.0});
+    chain.push_back(CirclePlacement{point_at_perimeter_distance(boundary, cursor, resolution), radius, cursor});
 
-    while (cursor < total_perimeter) {
+    while (traveled < total_perimeter) {
         int next_radius = resolve_radius_from_coarseness_range(range, rng);
         if (next_radius <= 0) {
             ++result.circles_skipped;
@@ -289,8 +292,8 @@ std::vector<CirclePlacement> build_continuous_circle_chain(const std::vector<SDL
         }
 
         const double max_intersecting_step = static_cast<double>(chain.back().radius + next_radius);
-        const double desired_step = std::max(1.0, std::floor(max_intersecting_step * 0.75));
-        const double remaining = total_perimeter - cursor;
+        const double desired_step = std::max(1.0, std::floor(max_intersecting_step * step_factor_distribution(rng)));
+        const double remaining = total_perimeter - traveled;
 
         if (remaining <= static_cast<double>(chain.back().radius + chain.front().radius)) {
             if (circles_intersect(chain.back(), chain.front())) {
@@ -301,8 +304,9 @@ std::vector<CirclePlacement> build_continuous_circle_chain(const std::vector<SDL
             break;
         }
 
-        cursor += std::min(desired_step, remaining);
-        if (cursor >= total_perimeter) break;
+        const double step = std::min(desired_step, remaining);
+        traveled += step;
+        cursor = std::fmod(cursor + step, total_perimeter);
 
         CirclePlacement next{point_at_perimeter_distance(boundary, cursor, resolution), next_radius, cursor};
         if (circles_intersect(chain.back(), next)) {
@@ -310,7 +314,7 @@ std::vector<CirclePlacement> build_continuous_circle_chain(const std::vector<SDL
         } else {
             ++result.uncovered_perimeter_segments;
             // Keep the boundary covered even if snapping pushed the centers apart: retry halfway.
-            const double retry_distance = (chain.back().perimeter_distance + cursor) * 0.5;
+            const double retry_distance = std::fmod(chain.back().perimeter_distance + (step * 0.5), total_perimeter);
             CirclePlacement bridge{point_at_perimeter_distance(boundary, retry_distance, resolution),
                                    std::max(chain.back().radius, next_radius),
                                    retry_distance};
@@ -329,14 +333,18 @@ std::vector<CirclePlacement> build_continuous_circle_chain(const std::vector<SDL
     return chain;
 }
 
-std::vector<SDL_Point> make_circle_polygon(SDL_Point center, int radius, int resolution, int segments = 32) {
+std::vector<SDL_Point> make_circle_polygon(SDL_Point center,
+                                           int radius,
+                                           int resolution,
+                                           int segments = 32,
+                                           double phase_radians = 0.0) {
     (void)resolution;
     constexpr double kTwoPi = 6.28318530717958647692;
     std::vector<SDL_Point> out;
     segments = std::max(12, segments);
     out.reserve(static_cast<std::size_t>(segments));
     for (int i = 0; i < segments; ++i) {
-        const double t = (kTwoPi * static_cast<double>(i)) / static_cast<double>(segments);
+        const double t = phase_radians + (kTwoPi * static_cast<double>(i)) / static_cast<double>(segments);
         SDL_Point p{
             center.x + static_cast<int>(std::lround(std::cos(t) * static_cast<double>(radius))),
             center.y + static_cast<int>(std::lround(std::sin(t) * static_cast<double>(radius)))
@@ -520,6 +528,7 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
                            " skipped=" + std::to_string(result.circles_skipped) +
                            " circle_intersections=" + std::to_string(result.circle_intersections_succeeded) +
                            " uncovered_segments=" + std::to_string(result.uncovered_perimeter_segments));
+        std::uniform_real_distribution<double> circle_phase_distribution(0.0, 6.28318530717958647692);
 
         for (const CirclePlacement& circle : circle_chain) {
             const SDL_Point center = circle.center;
@@ -530,7 +539,8 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
             }
 
             ++result.circles_attempted;
-            const std::vector<SDL_Point> circle_points = make_circle_polygon(center, radius, resolution);
+            const std::vector<SDL_Point> circle_points =
+                make_circle_polygon(center, radius, resolution, 32, circle_phase_distribution(rng));
             const ValidationResult circle_validation = validate_polygon_points(circle_points);
             if (!circle_validation.valid) {
                 ++result.circles_skipped;

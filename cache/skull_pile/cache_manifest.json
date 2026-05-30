@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "56a1a00948407937",
+          "height": 211,
+          "order": 0,
+          "width": 207
+        }
+      ]
+    }
+  ],
+  "asset_name": "skull_pile",
+  "authored_scale_percentage": 29.999998092651367,
+  "crop_canvas": {
+    "shared_height": 211,
+    "shared_width": 207
+  },
+  "digest": "99c122e5ff7a70a7",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

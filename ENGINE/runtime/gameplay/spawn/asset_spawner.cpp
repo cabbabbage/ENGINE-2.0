@@ -333,115 +333,132 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                 ctx.set_clip_area(nullptr);
 
                 auto vertices = occupancy.vertices_in_area(expanded_area);
-                if (vertices.empty()) {
-                        vibble::log::debug("[EdgeDetail] room/trail '" + room.room_name + "' has no candidate vertices");
-                        edge_checker.reset_session();
-                        continue;
-                }
-                std::shuffle(vertices.begin(), vertices.end(), rng_);
-
+                std::vector<decltype(vertices)::value_type> expansion_vertices;
+                expansion_vertices.reserve(vertices.size());
                 for (auto* vertex : vertices) {
                         if (!vertex) {
                                 continue;
                         }
-                        ++total_spawn_attempts;
+                        if (original_area.contains_point(vertex->world)) {
+                                continue;
+                        }
+                        expansion_vertices.push_back(vertex);
+                }
+                if (expansion_vertices.empty()) {
+                        vibble::log::debug("[EdgeDetail] room/trail '" + room.room_name + "' has no candidate vertices");
+                        edge_checker.reset_session();
+                        continue;
+                }
+                std::shuffle(expansion_vertices.begin(), expansion_vertices.end(), rng_);
 
+                for (auto* vertex : expansion_vertices) {
+                        if (!vertex) {
+                                continue;
+                        }
                         const SDL_Point spawn_pos = vertex->world;
-                        const auto candidate = queue_item.select_candidate(ctx.rng(), edge_catalog);
-                        const std::string candidate_name = candidate ? candidate->resolved_asset_name : std::string{"<none>"};
-                        vibble::log::debug("[EdgeDetail] attempt room/trail='" + room.room_name +
-                                           "' candidate='" + candidate_name + "' pos=(" +
-                                           std::to_string(spawn_pos.x) + "," + std::to_string(spawn_pos.y) + ")");
+                        constexpr int kMaxCandidateRetriesPerVertex = 4;
+                        std::unordered_set<std::string> attempted_candidates;
 
-                        if (!candidate || candidate->is_null || !candidate->info || candidate->resolved_asset_name.empty()) {
-                                vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
-                                                   "' reason=null-or-unresolved-candidate");
-                                occupancy.set_occupied(vertex, true);
-                                continue;
-                        }
+                        for (int attempt = 0; attempt < kMaxCandidateRetriesPerVertex; ++attempt) {
+                                ++total_spawn_attempts;
+                                const auto candidate = queue_item.select_candidate(ctx.rng(), edge_catalog);
+                                const std::string candidate_name =
+                                    candidate ? candidate->resolved_asset_name : std::string{"<none>"};
+                                vibble::log::debug("[EdgeDetail] attempt room/trail='" + room.room_name +
+                                                   "' candidate='" + candidate_name + "' pos=(" +
+                                                   std::to_string(spawn_pos.x) + "," + std::to_string(spawn_pos.y) + ")");
 
-                        const auto spawn_gp = ctx.to_grid_point(spawn_pos);
-                        if (ctx.checker().check(candidate->info,
-                                                spawn_gp,
-                                                ctx.exclusion_zones(),
-                                                ctx.all_assets(),
-                                                false,
-                                                queue_item.check_min_spacing,
-                                                false,
-                                                false,
-                                                5)) {
-                                vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
-                                                   "' candidate='" + candidate_name + "' reason=spacing-check");
-                                occupancy.set_occupied(vertex, true);
-                                continue;
-                        }
+                                if (!candidate || candidate->is_null || !candidate->info || candidate->resolved_asset_name.empty()) {
+                                        vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
+                                                           "' reason=null-or-unresolved-candidate");
+                                        continue;
+                                }
+                                if (!attempted_candidates.insert(candidate->resolved_asset_name).second) {
+                                        continue;
+                                }
 
-                        Asset* result = ctx.spawnAsset(candidate->resolved_asset_name,
-                                                       candidate->info,
-                                                       expanded_area,
-                                                       spawn_pos,
-                                                       0,
-                                                       queue_item.spawn_id,
-                                                       "EdgeDetail");
-                        if (!result) {
-                                vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
-                                                   "' candidate='" + candidate_name + "' reason=spawn-failed");
-                                occupancy.set_occupied(vertex, true);
-                                continue;
-                        }
-                        result->set_owning_room_name(room.room_name);
+                                const auto spawn_gp = ctx.to_grid_point(spawn_pos);
+                                if (ctx.checker().check(candidate->info,
+                                                        spawn_gp,
+                                                        ctx.exclusion_zones(),
+                                                        ctx.all_assets(),
+                                                        false,
+                                                        queue_item.check_min_spacing,
+                                                        false,
+                                                        false,
+                                                        5)) {
+                                        vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
+                                                           "' candidate='" + candidate_name + "' reason=spacing-check");
+                                        continue;
+                                }
 
-                        std::optional<Area> footprint = asset_footprint_area(*result, "edge_detail_footprint");
-                        if (!footprint || !area_has_points(*footprint)) {
-                                footprint = make_bounds_area("edge_detail_footprint",
-                                                             spawn_pos.x - 8,
-                                                             spawn_pos.y - 8,
-                                                             spawn_pos.x + 8,
-                                                             spawn_pos.y + 8);
-                        }
+                                Asset* result = ctx.spawnAsset(candidate->resolved_asset_name,
+                                                               candidate->info,
+                                                               expanded_area,
+                                                               spawn_pos,
+                                                               0,
+                                                               queue_item.spawn_id,
+                                                               "EdgeDetail");
+                                if (!result) {
+                                        vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
+                                                           "' candidate='" + candidate_name + "' reason=spawn-failed");
+                                        continue;
+                                }
+                                result->set_owning_room_name(room.room_name);
 
-                        std::string rejection_reason;
-                        if (footprint->intersects(original_area)) {
-                                rejection_reason = "intersects-original-pre-coarseness-area";
-                        } else if (intersects_any_area(*footprint, original_spawn_exclusion_areas)) {
-                                rejection_reason = "intersects-another-room-or-trail-original-area";
-                                ++skipped_overlap_regions;
-                        } else if (intersects_any_area(*footprint, exclusion_zones)) {
-                                rejection_reason = "overlaps-normal-spawned-asset";
-                        } else {
-                                for (const auto& existing_edge : all_) {
-                                        Asset* existing = existing_edge.get();
-                                        if (!existing || existing == result || existing->spawn_method != "EdgeDetail") {
-                                                continue;
-                                        }
-                                        std::optional<Area> existing_footprint = asset_footprint_area(*existing, "existing_edge_detail_footprint");
-                                        if (existing_footprint && footprint->intersects(*existing_footprint)) {
-                                                rejection_reason = "overlaps-another-edge-detail-asset";
-                                                break;
+                                std::optional<Area> footprint = asset_footprint_area(*result, "edge_detail_footprint");
+                                if (!footprint || !area_has_points(*footprint)) {
+                                        footprint = make_bounds_area("edge_detail_footprint",
+                                                                     spawn_pos.x - 8,
+                                                                     spawn_pos.y - 8,
+                                                                     spawn_pos.x + 8,
+                                                                     spawn_pos.y + 8);
+                                }
+
+                                std::string rejection_reason;
+                                if (footprint->intersects(original_area)) {
+                                        rejection_reason = "intersects-original-pre-coarseness-area";
+                                } else if (intersects_any_area(*footprint, original_spawn_exclusion_areas)) {
+                                        rejection_reason = "intersects-another-room-or-trail-original-area";
+                                        ++skipped_overlap_regions;
+                                } else if (intersects_any_area(*footprint, exclusion_zones)) {
+                                        rejection_reason = "overlaps-normal-spawned-asset";
+                                } else {
+                                        for (const auto& existing_edge : all_) {
+                                                Asset* existing = existing_edge.get();
+                                                if (!existing || existing == result || existing->spawn_method != "EdgeDetail") {
+                                                        continue;
+                                                }
+                                                std::optional<Area> existing_footprint =
+                                                    asset_footprint_area(*existing, "existing_edge_detail_footprint");
+                                                if (existing_footprint && footprint->intersects(*existing_footprint)) {
+                                                        rejection_reason = "overlaps-another-edge-detail-asset";
+                                                        break;
+                                                }
                                         }
                                 }
-                        }
-                        if (rejection_reason.empty() && intersects_any_area(*footprint, claimed_edge_detail_regions)) {
-                                rejection_reason = "overlaps-claimed-edge-detail-region";
-                        }
-
-                        if (!rejection_reason.empty()) {
-                                vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
-                                                   "' candidate='" + candidate_name + "' reason=" + rejection_reason +
-                                                   " footprint=" + bounds_string(*footprint));
-                                if (!all_.empty() && all_.back().get() == result) {
-                                        all_.pop_back();
+                                if (rejection_reason.empty() && intersects_any_area(*footprint, claimed_edge_detail_regions)) {
+                                        rejection_reason = "overlaps-claimed-edge-detail-region";
                                 }
-                                occupancy.set_occupied(vertex, true);
-                                continue;
-                        }
 
-                        claimed_edge_detail_regions.push_back(*footprint);
-                        ctx.checker().register_asset(result, queue_item.check_min_spacing, true);
+                                if (!rejection_reason.empty()) {
+                                        vibble::log::debug("[EdgeDetail] rejected room/trail='" + room.room_name +
+                                                           "' candidate='" + candidate_name + "' reason=" + rejection_reason +
+                                                           " footprint=" + bounds_string(*footprint));
+                                        if (!all_.empty() && all_.back().get() == result) {
+                                                all_.pop_back();
+                                        }
+                                        continue;
+                                }
+
+                                claimed_edge_detail_regions.push_back(*footprint);
+                                ctx.checker().register_asset(result, queue_item.check_min_spacing, true);
+                                ++successful_spawns;
+                                vibble::log::debug("[EdgeDetail] spawned room/trail='" + room.room_name +
+                                                   "' candidate='" + candidate_name + "' footprint=" + bounds_string(*footprint));
+                                break;
+                        }
                         occupancy.set_occupied(vertex, true);
-                        ++successful_spawns;
-                        vibble::log::debug("[EdgeDetail] spawned room/trail='" + room.room_name +
-                                           "' candidate='" + candidate_name + "' footprint=" + bounds_string(*footprint));
                 }
                 edge_checker.reset_session();
         }

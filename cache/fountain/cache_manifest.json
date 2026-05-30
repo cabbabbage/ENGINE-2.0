@@ -1,0 +1,102 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "bb4002ba5221b9fc",
+          "height": 202,
+          "order": 0,
+          "width": 188
+        },
+        {
+          "filename": "1.png",
+          "hash": "bb4002ba5221b9fc",
+          "height": 202,
+          "order": 1,
+          "width": 188
+        },
+        {
+          "filename": "2.png",
+          "hash": "0dcbb0c7d9663b6c",
+          "height": 202,
+          "order": 2,
+          "width": 188
+        },
+        {
+          "filename": "3.png",
+          "hash": "0dcbb0c7d9663b6c",
+          "height": 202,
+          "order": 3,
+          "width": 188
+        },
+        {
+          "filename": "4.png",
+          "hash": "92ff95a5bcb772d8",
+          "height": 202,
+          "order": 4,
+          "width": 188
+        },
+        {
+          "filename": "5.png",
+          "hash": "92ff95a5bcb772d8",
+          "height": 202,
+          "order": 5,
+          "width": 188
+        },
+        {
+          "filename": "6.png",
+          "hash": "f4ff5309b94c2466",
+          "height": 202,
+          "order": 6,
+          "width": 188
+        },
+        {
+          "filename": "7.png",
+          "hash": "f4ff5309b94c2466",
+          "height": 202,
+          "order": 7,
+          "width": 188
+        },
+        {
+          "filename": "8.png",
+          "hash": "92ff95a5bcb772d8",
+          "height": 202,
+          "order": 8,
+          "width": 188
+        },
+        {
+          "filename": "9.png",
+          "hash": "92ff95a5bcb772d8",
+          "height": 202,
+          "order": 9,
+          "width": 188
+        },
+        {
+          "filename": "10.png",
+          "hash": "0dcbb0c7d9663b6c",
+          "height": 202,
+          "order": 10,
+          "width": 188
+        },
+        {
+          "filename": "11.png",
+          "hash": "0dcbb0c7d9663b6c",
+          "height": 202,
+          "order": 11,
+          "width": 188
+        }
+      ]
+    }
+  ],
+  "asset_name": "fountain",
+  "authored_scale_percentage": 258.0,
+  "crop_canvas": {
+    "shared_height": 202,
+    "shared_width": 188
+  },
+  "digest": "3a91c250a09a8970",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

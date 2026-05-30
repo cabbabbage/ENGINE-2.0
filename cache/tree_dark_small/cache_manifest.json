@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "a1b03c351daaeda0",
+          "height": 1080,
+          "order": 0,
+          "width": 1920
+        }
+      ]
+    }
+  ],
+  "asset_name": "tree_dark_small",
+  "authored_scale_percentage": 53.999996185302734,
+  "crop_canvas": {
+    "shared_height": 1060,
+    "shared_width": 452
+  },
+  "digest": "aba2eb26f5abd75c",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

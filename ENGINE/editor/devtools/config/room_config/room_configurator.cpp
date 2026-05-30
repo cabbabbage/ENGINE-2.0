@@ -763,6 +763,8 @@ private:
     DragMode drag_mode_ = DragMode::None;
 };
 
+} // namespace
+
 struct RoomConfigurator::State {
     std::string name;
     std::string geometry;

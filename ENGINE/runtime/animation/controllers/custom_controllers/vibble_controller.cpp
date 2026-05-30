@@ -2,6 +2,7 @@
 #include "animation/attack.hpp"
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/anchor_bound_asset_helper.hpp"
+#include "animation/controllers/shared/internal/throw_physics.hpp"
 
 #include "animation/controllers/shared/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
@@ -31,11 +32,17 @@ constexpr std::string_view kGunAssetName = "gun";
 constexpr std::string_view kSpiderEggAssetName = "spider_egg";
 constexpr std::string_view kInteractableTag = "interactable";
 constexpr std::string_view kCanCarryTag = "can_carry";
+constexpr std::string_view kCanCarryAliasTag = "can carry";
 constexpr int kInteractRadiusPx = 150;
 constexpr float kYawSensitivity = 0.60f;
 constexpr float kPitchSensitivity = 0.80f;
 constexpr float kPitchMinDegrees = -45.0f;
 constexpr float kPitchMaxDegrees = 45.0f;
+constexpr float kDefaultVibbleWeightKg = 80.0f;
+constexpr float kThrowFloorDamageMinWeightKg = 5.0f;
+constexpr float kThrowMaxAimDistancePx = 320.0f;
+constexpr int kThrowArcSampleCount = 24;
+constexpr double kThrowArcSampleDtSeconds = 1.0 / 30.0;
 
 std::string normalize_tag_token(std::string_view value) {
     return vibble::strings::to_lower_copy(vibble::strings::trim_copy(std::string{value}));
@@ -450,6 +457,7 @@ void vibble_controller::on_update(const Input& input) {
         if (anchor_heading_changed) {
             notify_anchor_changed();
         }
+        publish_aim_assist_overlay(input);
     }
 
     if (isDashing && now >= dashEndTime) {
@@ -716,7 +724,9 @@ Asset* vibble_controller::find_closest_tagged_asset(std::string_view tag, int ra
         if (candidate == carried_world_asset_) {
             continue;
         }
-        if (!has_tag(*candidate, tag)) {
+        const bool tag_match = has_tag(*candidate, tag) ||
+            (normalized_tokens_equal(tag, kCanCarryTag) && has_tag(*candidate, kCanCarryAliasTag));
+        if (!tag_match) {
             continue;
         }
         const long long dist_sq = Range::distance_sq(player, candidate);
@@ -734,6 +744,35 @@ bool vibble_controller::is_carrying_non_gun() const {
         return !normalized_tokens_equal(carried_asset_name_, kGunAssetName);
     }
     return false;
+}
+
+bool segment_intersection_2d(const SDL_FPoint& p0,
+                             const SDL_FPoint& p1,
+                             const SDL_FPoint& q0,
+                             const SDL_FPoint& q1,
+                             float& out_t) {
+    const float sx1 = p1.x - p0.x;
+    const float sy1 = p1.y - p0.y;
+    const float sx2 = q1.x - q0.x;
+    const float sy2 = q1.y - q0.y;
+    const float denom = (-sx2 * sy1 + sx1 * sy2);
+    if (std::abs(denom) <= 1.0e-6f) {
+        return false;
+    }
+    const float s = (-sy1 * (p0.x - q0.x) + sx1 * (p0.y - q0.y)) / denom;
+    const float t = ( sx2 * (p0.y - q0.y) - sy2 * (p0.x - q0.x)) / denom;
+    if (s >= 0.0f && s <= 1.0f && t >= 0.0f && t <= 1.0f) {
+        out_t = t;
+        return true;
+    }
+    return false;
+}
+
+float safe_weight_kg(const Asset* asset, float fallback) {
+    if (!asset || !asset->info || !std::isfinite(asset->info->weight_kg) || asset->info->weight_kg <= 0.0f) {
+        return fallback;
+    }
+    return asset->info->weight_kg;
 }
 
 void vibble_controller::ensure_hand_defaults() {
@@ -787,7 +826,9 @@ void vibble_controller::update_world_carried_asset_pose() {
 
 OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
                                                      const Input& input,
-                                                     int held_frames) const {
+                                                     int held_frames,
+                                                     const Asset* carried_asset,
+                                                     bool* out_throw_damage_enabled) const {
     float dir_x = 0.0f;
     float dir_z = 0.0f;
     float vertical_scale = 1.0f;
@@ -825,7 +866,25 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
     const int clamped_hold = std::clamp(held_frames, 1, 120);
     const float force = 350.0f + static_cast<float>(clamped_hold) * 14.0f;
     const float upward_force = 220.0f + static_cast<float>(clamped_hold) * 10.0f;
-    return OrphanImpulse{dir_x, dir_z, force, upward_force * vertical_scale};
+    const float vibble_weight_kg = safe_weight_kg(&player, kDefaultVibbleWeightKg);
+    const float carried_weight_kg = safe_weight_kg(carried_asset, 0.0f);
+    const bool too_heavy = carried_weight_kg > (0.5f * vibble_weight_kg);
+    const bool too_light = carried_weight_kg < kThrowFloorDamageMinWeightKg;
+    const bool can_damage = !too_heavy && !too_light;
+    if (out_throw_damage_enabled) {
+        *out_throw_damage_enabled = can_damage;
+    }
+
+    OrphanImpulse impulse{};
+    impulse.direction_x = dir_x;
+    impulse.direction_z = dir_z;
+    impulse.force = too_heavy ? 0.0f : force;
+    impulse.upward_force = too_heavy ? 0.0f : (upward_force * vertical_scale);
+    impulse.source_mass_kg = carried_weight_kg;
+    impulse.can_deal_throw_damage = can_damage;
+    impulse.instigator_asset_name = player.info ? player.info->name : std::string{};
+    impulse.instigator_asset_id = player.spawn_id;
+    return impulse;
 }
 
 void vibble_controller::drop_carried_asset(const Input& input, int held_frames) {
@@ -837,7 +896,7 @@ void vibble_controller::drop_carried_asset(const Input& input, int held_frames) 
         return;
     }
 
-    const OrphanImpulse impulse = build_throw_impulse(*player, input, held_frames);
+    const OrphanImpulse impulse = build_throw_impulse(*player, input, held_frames, carried_world_asset_, nullptr);
     if (carried_world_asset_ && !carried_world_asset_->dead) {
         carried_world_asset_->set_anchor_hidden(false);
         carried_world_asset_->set_hidden(false);
@@ -862,7 +921,7 @@ void vibble_controller::drop_held_spider_egg_forced(const Input& input) {
         return;
     }
 
-    const OrphanImpulse impulse = build_throw_impulse(*player, input, 1);
+    const OrphanImpulse impulse = build_throw_impulse(*player, input, 1, carried_world_asset_, nullptr);
     carried_world_asset_->set_anchor_hidden(false);
     carried_world_asset_->set_hidden(false);
     carried_world_asset_->active = true;
@@ -937,6 +996,142 @@ bool vibble_controller::is_spider_egg_asset(const Asset* asset) const {
         return false;
     }
     return normalized_tokens_equal(asset->info->name, kSpiderEggAssetName);
+}
+
+void vibble_controller::publish_aim_assist_overlay(const Input& input) const {
+    runtime::context::GameRuntimeContext* runtime_ctx = controller_runtime_game_context();
+    Asset* player = controller_self();
+    if (!runtime_ctx || !player) {
+        return;
+    }
+    const Assets* owner_assets = player->get_assets();
+    if (!owner_assets || owner_assets->is_dev_mode()) {
+        runtime_ctx->set_aim_assist_overlay(runtime::context::AimAssistOverlayState{});
+        return;
+    }
+
+    runtime::context::AimAssistOverlayState overlay{};
+    overlay.enabled = true;
+    const float heading_radians =
+        wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
+    const float pitch_radians = pitch_angle_degrees_ * static_cast<float>(3.14159265358979323846 / 180.0);
+    const float horizontal_scale = std::cos(pitch_radians);
+    SDL_FPoint origin{static_cast<float>(player->world_x()), static_cast<float>(player->world_z())};
+    SDL_FPoint dir{std::cos(heading_radians) * horizontal_scale, std::sin(heading_radians) * horizontal_scale};
+    const float dir_len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+    if (dir_len > 1.0e-4f) {
+        dir.x /= dir_len;
+        dir.y /= dir_len;
+    } else {
+        dir = SDL_FPoint{1.0f, 0.0f};
+    }
+
+    const bool charging_throw = isInteracting && (interactFrames > 0) && is_carrying_non_gun();
+    if (charging_throw && carried_world_asset_ && !carried_world_asset_->dead) {
+        overlay.is_throw_arc = true;
+        const OrphanImpulse impulse = build_throw_impulse(*player, input, interactFrames, carried_world_asset_, nullptr);
+        const world::GridPoint floor_point = owner_assets->resolve_floor_world_point(
+            SDL_Point{player->world_x(), player->world_z()},
+            player->grid_resolution);
+        throw_physics::StepState state{};
+        state.world_x = static_cast<double>(player->world_x());
+        state.world_z = static_cast<double>(player->world_z());
+        state.world_y = static_cast<double>(player->world_y());
+        state.floor_y = static_cast<double>(floor_point.world_y());
+        state.velocity_x = static_cast<double>(impulse.direction_x) * static_cast<double>(impulse.force);
+        state.velocity_z = static_cast<double>(impulse.direction_z) * static_cast<double>(impulse.force);
+        state.velocity_y = static_cast<double>(impulse.upward_force);
+        state.restitution = (static_cast<double>(std::clamp(player->info ? player->info->bounce_amount : 0, 0, 100)) / 100.0) * 0.75;
+        state.active = true;
+        overlay.points.reserve(kThrowArcSampleCount + 1);
+        overlay.points.push_back(runtime::context::AimAssistOverlayPoint{
+            static_cast<float>(state.world_x),
+            static_cast<float>(state.world_z)});
+        for (int i = 0; i < kThrowArcSampleCount; ++i) {
+            const auto step_result = throw_physics::step(state, kThrowArcSampleDtSeconds, throw_physics::default_tuning());
+            overlay.points.push_back(runtime::context::AimAssistOverlayPoint{
+                static_cast<float>(state.world_x),
+                static_cast<float>(state.world_z)});
+            if (step_result.hit_floor && !state.active) {
+                break;
+            }
+        }
+        overlay.nub = overlay.points.back();
+        runtime_ctx->set_aim_assist_overlay(std::move(overlay));
+        return;
+    }
+
+    overlay.is_throw_arc = false;
+    const SDL_FPoint target{
+        origin.x + dir.x * kThrowMaxAimDistancePx,
+        origin.y + dir.y * kThrowMaxAimDistancePx
+    };
+    float best_t = 1.0f;
+    bool found_hit = false;
+    std::vector<const Assets::FrameCollisionEntry*> entries;
+    entries.reserve(128);
+    owner_assets->query_impassable_entries(*player, static_cast<int>(kThrowMaxAimDistancePx), entries);
+    for (const auto* entry : entries) {
+        if (!entry || !entry->asset || entry->asset == player) {
+            continue;
+        }
+        const bool is_hitbox = entry->asset->isHitboxEnabled();
+        const bool is_impass = entry->canonical_type == "impassable" || entry->canonical_type == "impassable_area";
+        if (!is_hitbox && !is_impass) {
+            continue;
+        }
+        const auto& pts = entry->area.get_points();
+        if (pts.size() < 2) {
+            continue;
+        }
+        for (std::size_t i = 0; i < pts.size(); ++i) {
+            const SDL_FPoint a{static_cast<float>(pts[i].x), static_cast<float>(pts[i].y)};
+            const SDL_FPoint b{static_cast<float>(pts[(i + 1) % pts.size()].x), static_cast<float>(pts[(i + 1) % pts.size()].y)};
+            float t = 1.0f;
+            if (segment_intersection_2d(origin, target, a, b, t) && t < best_t) {
+                best_t = t;
+                found_hit = true;
+            }
+        }
+        if (entry->area.contains_point(SDL_Point{static_cast<int>(std::lround(origin.x)), static_cast<int>(std::lround(origin.y))})) {
+            best_t = 0.0f;
+            found_hit = true;
+        }
+    }
+    for (Asset* candidate : owner_assets->getActive()) {
+        if (!candidate || candidate == player || candidate->dead || !candidate->active || !candidate->isHitboxEnabled()) {
+            continue;
+        }
+        const float radius = std::max(12.0f, candidate->info
+            ? 0.25f * static_cast<float>(std::max(candidate->info->original_canvas_width, candidate->info->original_canvas_height))
+            : 24.0f);
+        const SDL_FPoint c{static_cast<float>(candidate->world_x()), static_cast<float>(candidate->world_z())};
+        const SDL_FPoint seg{target.x - origin.x, target.y - origin.y};
+        const float seg_len_sq = seg.x * seg.x + seg.y * seg.y;
+        if (seg_len_sq <= 1.0e-6f) {
+            continue;
+        }
+        const float t = std::clamp(((c.x - origin.x) * seg.x + (c.y - origin.y) * seg.y) / seg_len_sq, 0.0f, 1.0f);
+        const float nx = origin.x + seg.x * t;
+        const float ny = origin.y + seg.y * t;
+        const float dx = c.x - nx;
+        const float dy = c.y - ny;
+        if ((dx * dx + dy * dy) <= (radius * radius) && t < best_t) {
+            best_t = t;
+            found_hit = true;
+        }
+    }
+    const SDL_FPoint end{
+        origin.x + (target.x - origin.x) * best_t,
+        origin.y + (target.y - origin.y) * best_t
+    };
+    overlay.points = {
+        runtime::context::AimAssistOverlayPoint{origin.x, origin.y},
+        runtime::context::AimAssistOverlayPoint{end.x, end.y}
+    };
+    overlay.nub = overlay.points.back();
+    (void)found_hit;
+    runtime_ctx->set_aim_assist_overlay(std::move(overlay));
 }
 
 void vibble_controller::handle_sprint_dash_egg_disturbance(const Input& input) {

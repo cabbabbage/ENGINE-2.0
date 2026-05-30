@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "206669fcf3ad8f61",
+          "height": 121,
+          "order": 0,
+          "width": 76
+        }
+      ]
+    }
+  ],
+  "asset_name": "3_candles",
+  "authored_scale_percentage": 29.999998092651367,
+  "crop_canvas": {
+    "shared_height": 121,
+    "shared_width": 76
+  },
+  "digest": "47b2503873274043",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

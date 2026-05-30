@@ -57,11 +57,17 @@ private:
         double velocity_z = 0.0;
         double velocity_y = 0.0;
         double restitution = 0.0;
+        bool can_deal_throw_damage = false;
+        bool throw_damage_applied = false;
+        double source_mass_kg = 0.0;
+        std::string instigator_asset_id;
+        std::string instigator_asset_name;
     };
 
     void initialize_anchor_candidate_children();
     void tick_anchor_candidate_attachments();
     void tick_orphan_fall_state();
+    void resolve_throw_impact_damage(double impact_speed, bool floor_impact);
     std::uint64_t anchor_candidate_hash(const std::string& anchor_name) const;
     std::string owner_identity_for_anchor_candidates() const;
 

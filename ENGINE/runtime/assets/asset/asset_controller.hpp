@@ -2,6 +2,7 @@
 #define ASSET_ASSET_CONTROLLER_HPP
 
 #include <optional>
+#include <string>
 
 class Asset;
 class Input;
@@ -11,6 +12,10 @@ struct OrphanImpulse {
     float direction_z = 0.0f;
     float force = 0.0f;
     float upward_force = 0.0f;
+    float source_mass_kg = 0.0f;
+    bool can_deal_throw_damage = false;
+    std::string instigator_asset_id;
+    std::string instigator_asset_name;
 };
 
 class AssetController {

@@ -40,6 +40,8 @@ void GameRuntimeContext::begin_frame(Assets* assets,
     player_motion_disturbance_.active = false;
     player_motion_disturbance_.is_dashing = false;
     player_motion_disturbance_.is_sprinting = false;
+    aim_assist_overlay_.enabled = false;
+    aim_assist_overlay_.points.clear();
     map_graph_.set_current_room(current_room_);
     prune_expired_room_fly_aggression();
 }

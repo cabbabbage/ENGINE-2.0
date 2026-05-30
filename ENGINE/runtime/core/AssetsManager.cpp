@@ -4766,6 +4766,76 @@ void Assets::render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target
         }
     }
 
+    {
+        const auto& aim_overlay = game_context_.aim_assist_overlay();
+        if (aim_overlay.enabled && renderer && aim_overlay.points.size() >= 2) {
+            auto project_floor = [this](float world_x, float world_z, SDL_FPoint& out) -> bool {
+                SDL_FPoint linear_screen{};
+                if (!camera_.project_world_point(SDL_FPoint{world_x, 0.0f}, world_z, linear_screen) ||
+                    !std::isfinite(linear_screen.x) ||
+                    !std::isfinite(linear_screen.y)) {
+                    return false;
+                }
+                linear_screen.y = camera_.warp_floor_screen_y(0.0f, linear_screen.y);
+                if (!std::isfinite(linear_screen.y)) {
+                    return false;
+                }
+                out = linear_screen;
+                return true;
+            };
+
+            std::vector<SDL_FPoint> screen_points;
+            screen_points.reserve(aim_overlay.points.size());
+            for (const auto& p : aim_overlay.points) {
+                SDL_FPoint projected{};
+                if (project_floor(p.world_x, p.world_z, projected)) {
+                    screen_points.push_back(projected);
+                }
+            }
+
+            if (screen_points.size() >= 2) {
+                SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
+                SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                const SDL_Color col = aim_overlay.is_throw_arc
+                    ? SDL_Color{140, 200, 255, 155}
+                    : SDL_Color{180, 230, 255, 140};
+                SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, col.a);
+                for (int pass = 0; pass < 3; ++pass) {
+                    const float offset = static_cast<float>(pass - 1);
+                    for (std::size_t i = 1; i < screen_points.size(); ++i) {
+                        SDL_RenderLine(renderer,
+                                       screen_points[i - 1].x + offset,
+                                       screen_points[i - 1].y,
+                                       screen_points[i].x + offset,
+                                       screen_points[i].y);
+                    }
+                }
+
+                SDL_FPoint nub_screen{};
+                if (project_floor(aim_overlay.nub.world_x, aim_overlay.nub.world_z, nub_screen)) {
+                    SDL_SetRenderDrawColor(renderer, 220, 245, 255, 180);
+                    constexpr int kNubRadius = 3;
+                    const int cx = static_cast<int>(std::lround(nub_screen.x));
+                    const int cy = static_cast<int>(std::lround(nub_screen.y));
+                    for (int dy = -kNubRadius; dy <= kNubRadius; ++dy) {
+                        const int inside = kNubRadius * kNubRadius - dy * dy;
+                        if (inside < 0) {
+                            continue;
+                        }
+                        const int dx = static_cast<int>(std::floor(std::sqrt(static_cast<float>(inside))));
+                        SDL_RenderLine(renderer,
+                                       static_cast<float>(cx - dx),
+                                       static_cast<float>(cy + dy),
+                                       static_cast<float>(cx + dx),
+                                       static_cast<float>(cy + dy));
+                    }
+                }
+                SDL_SetRenderDrawBlendMode(renderer, prev_mode);
+            }
+        }
+    }
+
     popup_manager_.render(renderer, screen_width, screen_height, now);
 
     if (screenshot_create_task_button_active(now)) {

@@ -48,10 +48,6 @@
       ]
     },
     {
-      "name": "default",
-      "source_frames": []
-    },
-    {
       "name": "left",
       "source_frames": [
         {
@@ -105,7 +101,7 @@
     "shared_height": 751,
     "shared_width": 932
   },
-  "digest": "2232fcfebfe7fc01",
+  "digest": "12d77108bf7ffafd",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

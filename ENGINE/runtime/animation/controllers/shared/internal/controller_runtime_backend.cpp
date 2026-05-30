@@ -1,4 +1,6 @@
 #include "animation/controllers/shared/internal/controller_runtime_backend.hpp"
+#include "animation/attack.hpp"
+#include "animation/controllers/shared/internal/throw_physics.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -6,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <string>
 #include <unordered_set>
 
@@ -24,14 +27,7 @@ namespace {
 
 constexpr std::uint64_t kGoldenRatio = 0x9e3779b97f4a7c15ULL;
 constexpr int kAnchorCandidateSpawnRetryLimit = 60;
-constexpr double kOrphanGravityUnitsPerSec2 = 2400.0;
-constexpr double kOrphanMaxDtSeconds = 1.0 / 20.0;
-constexpr double kOrphanMinBounceSpeed = 60.0;
 constexpr double kOrphanRestitutionMax = 0.75;
-constexpr double kOrphanSettleSpeed = 20.0;
-constexpr double kOrphanHorizontalDampingPer60Hz = 0.90;
-constexpr double kOrphanHorizontalBounceFriction = 0.65;
-constexpr double kOrphanSettleHorizontalSpeed = 18.0;
 constexpr double kOrphanMinImpulseDirection = 1e-4;
 
 std::uint64_t mix_hash(std::uint64_t seed, std::uint64_t value) {
@@ -228,48 +224,37 @@ void ControllerRuntimeBackend::tick_orphan_fall_state() {
         return;
     }
 
-    const double dt = std::clamp(
+    throw_physics::StepState step_state{};
+    step_state.world_x = orphan_fall_state_.world_x;
+    step_state.world_z = orphan_fall_state_.world_z;
+    step_state.world_y = orphan_fall_state_.world_y;
+    step_state.floor_y = orphan_fall_state_.floor_y;
+    step_state.velocity_x = orphan_fall_state_.velocity_x;
+    step_state.velocity_z = orphan_fall_state_.velocity_z;
+    step_state.velocity_y = orphan_fall_state_.velocity_y;
+    step_state.restitution = orphan_fall_state_.restitution;
+    step_state.active = orphan_fall_state_.active;
+
+    const auto step_result = throw_physics::step(
+        step_state,
         static_cast<double>(self_->frame_delta_seconds_clamped()),
-        1.0 / 240.0,
-        kOrphanMaxDtSeconds);
+        throw_physics::default_tuning());
 
-    orphan_fall_state_.velocity_y -= kOrphanGravityUnitsPerSec2 * dt;
-    orphan_fall_state_.world_x += orphan_fall_state_.velocity_x * dt;
-    orphan_fall_state_.world_z += orphan_fall_state_.velocity_z * dt;
-    orphan_fall_state_.world_y += orphan_fall_state_.velocity_y * dt;
-    const double horizontal_damping = std::pow(kOrphanHorizontalDampingPer60Hz, dt * 60.0);
-    orphan_fall_state_.velocity_x *= horizontal_damping;
-    orphan_fall_state_.velocity_z *= horizontal_damping;
+    orphan_fall_state_.world_x = step_state.world_x;
+    orphan_fall_state_.world_z = step_state.world_z;
+    orphan_fall_state_.world_y = step_state.world_y;
+    orphan_fall_state_.velocity_x = step_state.velocity_x;
+    orphan_fall_state_.velocity_z = step_state.velocity_z;
+    orphan_fall_state_.velocity_y = step_state.velocity_y;
+    orphan_fall_state_.active = step_state.active;
 
-    const double floor_y = orphan_fall_state_.floor_y;
-    if (orphan_fall_state_.world_y <= floor_y) {
-        orphan_fall_state_.world_y = floor_y;
-        const double impact_speed = std::abs(orphan_fall_state_.velocity_y);
-        const double rebound_speed = impact_speed * orphan_fall_state_.restitution;
-        if (rebound_speed > kOrphanMinBounceSpeed) {
-            orphan_fall_state_.velocity_y = rebound_speed;
-            orphan_fall_state_.velocity_x *= kOrphanHorizontalBounceFriction;
-            orphan_fall_state_.velocity_z *= kOrphanHorizontalBounceFriction;
-        } else {
-            orphan_fall_state_.velocity_y = 0.0;
-        }
-    }
-
-    const double horizontal_speed =
-        std::hypot(orphan_fall_state_.velocity_x, orphan_fall_state_.velocity_z);
-    orphan_fall_state_.active =
-        orphan_fall_state_.world_y > floor_y + 0.5 ||
-        std::abs(orphan_fall_state_.velocity_y) > kOrphanSettleSpeed ||
-        horizontal_speed > kOrphanSettleHorizontalSpeed;
-
-    if (!orphan_fall_state_.active &&
-        std::abs(orphan_fall_state_.world_y - floor_y) <= 0.5 &&
-        std::abs(orphan_fall_state_.velocity_y) <= kOrphanSettleSpeed &&
-        horizontal_speed <= kOrphanSettleHorizontalSpeed) {
-        orphan_fall_state_.world_y = floor_y;
-        orphan_fall_state_.velocity_x = 0.0;
-        orphan_fall_state_.velocity_z = 0.0;
-        orphan_fall_state_.velocity_y = 0.0;
+    if (step_result.hit_floor) {
+        resolve_throw_impact_damage(step_result.impact_speed, true);
+    } else {
+        const double impact_like_speed = std::hypot(
+            std::hypot(orphan_fall_state_.velocity_x, orphan_fall_state_.velocity_z),
+            orphan_fall_state_.velocity_y);
+        resolve_throw_impact_damage(impact_like_speed, false);
     }
 
     self_->move_to_world_position(static_cast<int>(std::lround(orphan_fall_state_.world_x)),
@@ -323,6 +308,11 @@ void ControllerRuntimeBackend::on_orphaned(Asset& self,
     orphan_fall_state_.velocity_x = 0.0;
     orphan_fall_state_.velocity_z = 0.0;
     orphan_fall_state_.velocity_y = 0.0;
+    orphan_fall_state_.source_mass_kg = 0.0;
+    orphan_fall_state_.can_deal_throw_damage = false;
+    orphan_fall_state_.throw_damage_applied = false;
+    orphan_fall_state_.instigator_asset_id.clear();
+    orphan_fall_state_.instigator_asset_name.clear();
     if (impulse.has_value()) {
         const double impulse_force = std::max(0.0, static_cast<double>(impulse->force));
         const double raw_x = static_cast<double>(impulse->direction_x);
@@ -333,16 +323,21 @@ void ControllerRuntimeBackend::on_orphaned(Asset& self,
             orphan_fall_state_.velocity_z = (raw_z / length) * impulse_force;
         }
         orphan_fall_state_.velocity_y = static_cast<double>(impulse->upward_force);
+        orphan_fall_state_.source_mass_kg = std::max(0.0, static_cast<double>(impulse->source_mass_kg));
+        orphan_fall_state_.can_deal_throw_damage = impulse->can_deal_throw_damage;
+        orphan_fall_state_.instigator_asset_id = impulse->instigator_asset_id;
+        orphan_fall_state_.instigator_asset_name = impulse->instigator_asset_name;
     }
 
     const int bounce_amount = self.info ? std::clamp(self.info->bounce_amount, 0, 100) : 0;
     orphan_fall_state_.restitution =
         (static_cast<double>(bounce_amount) / 100.0) * kOrphanRestitutionMax;
+    const throw_physics::Tuning tuning = throw_physics::default_tuning();
     orphan_fall_state_.active =
         orphan_fall_state_.world_y > orphan_fall_state_.floor_y + 0.5 ||
-        std::abs(orphan_fall_state_.velocity_y) > kOrphanSettleSpeed ||
+        std::abs(orphan_fall_state_.velocity_y) > tuning.settle_vertical_speed ||
         std::hypot(orphan_fall_state_.velocity_x, orphan_fall_state_.velocity_z) >
-            kOrphanSettleHorizontalSpeed;
+            tuning.settle_horizontal_speed;
 
     if (!orphan_fall_state_.active) {
         orphan_fall_state_.world_y = orphan_fall_state_.floor_y;
@@ -351,6 +346,70 @@ void ControllerRuntimeBackend::on_orphaned(Asset& self,
                                     static_cast<int>(std::lround(orphan_fall_state_.world_z)),
                                     orphan_fall_state_.resolution_layer);
     }
+}
+
+void ControllerRuntimeBackend::resolve_throw_impact_damage(double impact_speed, bool floor_impact) {
+    if (!self_ || self_->dead || orphan_fall_state_.throw_damage_applied || !orphan_fall_state_.can_deal_throw_damage) {
+        return;
+    }
+    if (!std::isfinite(impact_speed) || impact_speed <= 0.0) {
+        return;
+    }
+    const int damage = throw_physics::damage_from_impact_energy(orphan_fall_state_.source_mass_kg, impact_speed);
+    if (damage <= 0) {
+        return;
+    }
+
+    Asset* hit_target = nullptr;
+    Assets* owner_assets = assets();
+    if (owner_assets) {
+        const SDL_Point impact_point{
+            static_cast<int>(std::lround(orphan_fall_state_.world_x)),
+            static_cast<int>(std::lround(orphan_fall_state_.world_z))};
+        std::int64_t best_dist_sq = std::numeric_limits<std::int64_t>::max();
+        for (Asset* candidate : owner_assets->getActive()) {
+            if (!candidate || candidate == self_ || candidate->dead || !candidate->active || !candidate->isHitboxEnabled()) {
+                continue;
+            }
+            const SDL_Point candidate_point{candidate->world_x(), candidate->world_z()};
+            const std::int64_t dx = static_cast<std::int64_t>(candidate_point.x) - static_cast<std::int64_t>(impact_point.x);
+            const std::int64_t dz = static_cast<std::int64_t>(candidate_point.y) - static_cast<std::int64_t>(impact_point.y);
+            const std::int64_t dist_sq = dx * dx + dz * dz;
+            if (dist_sq < best_dist_sq && dist_sq <= static_cast<std::int64_t>(90) * 90) {
+                best_dist_sq = dist_sq;
+                hit_target = candidate;
+            }
+        }
+    }
+
+    auto make_attack = [&](Asset* target) {
+        animation_update::Attack attack{};
+        attack.attacker_asset_id = orphan_fall_state_.instigator_asset_id;
+        attack.attacker_asset_name = orphan_fall_state_.instigator_asset_name.empty()
+            ? (self_->info ? self_->info->name : std::string("thrown_object"))
+            : orphan_fall_state_.instigator_asset_name;
+        attack.target_asset_id = target ? target->spawn_id : std::string{};
+        attack.target_asset_name = (target && target->info) ? target->info->name : std::string{};
+        attack.attack_type = floor_impact ? "throw_impact_floor" : "throw_impact";
+        attack.damage_amount = damage;
+        attack.payload.damage_amount = damage;
+        attack.payload.hitback_enabled = false;
+        attack.hit_x = static_cast<float>(orphan_fall_state_.world_x);
+        attack.hit_y = static_cast<float>(orphan_fall_state_.world_y);
+        attack.hit_z = static_cast<float>(orphan_fall_state_.world_z);
+        attack.tick = owner_assets ? static_cast<std::uint64_t>(owner_assets->frame_id()) : 0ull;
+        return attack;
+    };
+
+    if (!floor_impact && !hit_target) {
+        return;
+    }
+
+    self_->send_attack(make_attack(self_));
+    if (hit_target) {
+        hit_target->send_attack(make_attack(hit_target));
+    }
+    orphan_fall_state_.throw_damage_applied = true;
 }
 
 } // namespace animation_update::custom_controllers::internal

@@ -216,6 +216,13 @@ target_link_libraries(enemy_combat_cooldown_regression_test PRIVATE
 target_link_libraries(enemy_attack_cycle_regression_test PRIVATE
     SDL3::SDL3
 )
+
+add_executable(throw_physics_runtime_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/throw_physics_runtime_test.cpp
+)
+target_include_directories(throw_physics_runtime_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
 target_link_libraries(sprite_floor_clip_test PRIVATE
     SDL3::SDL3
 )

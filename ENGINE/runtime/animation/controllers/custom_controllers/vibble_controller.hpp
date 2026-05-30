@@ -57,8 +57,13 @@ private:
     bool is_carrying_non_gun() const;
     void drop_carried_asset(const Input& input, int held_frames);
     void pickup_asset(Asset& player, Asset& target);
-    OrphanImpulse build_throw_impulse(const Asset& player, const Input& input, int held_frames) const;
+    OrphanImpulse build_throw_impulse(const Asset& player,
+                                      const Input& input,
+                                      int held_frames,
+                                      const Asset* carried_asset,
+                                      bool* out_throw_damage_enabled = nullptr) const;
     void update_world_carried_asset_pose();
+    void publish_aim_assist_overlay(const Input& input) const;
     void handle_sprint_dash_egg_disturbance(const Input& input);
     void drop_held_spider_egg_forced(const Input& input);
     bool is_spider_egg_asset(const Asset* asset) const;

@@ -4826,11 +4826,29 @@
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": 33,
             "dy": 0,
-            "dz": 0.0
+            "dz": -22
           },
           "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 33,
+              "dy": 0,
+              "dz": -22
+            },
+            {
+              "dr": 0.0,
+              "dx": 44,
+              "dy": 0,
+              "dz": 22
+            },
+            {
+              "dr": 0.0,
+              "dx": 77,
+              "dy": 0,
+              "dz": -11
+            },
             {
               "dr": 0.0,
               "dx": 0,
@@ -5901,11 +5919,23 @@
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": 49,
             "dy": 0,
-            "dz": 0.0
+            "dz": -84
           },
           "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 49,
+              "dy": 0,
+              "dz": -84
+            },
+            {
+              "dr": 0.0,
+              "dx": 70,
+              "dy": 0,
+              "dz": 49
+            },
             {
               "dr": 0.0,
               "dx": 0,
@@ -16711,7 +16741,7 @@
                     "texture_y": 656
                   }
                 ],
-                "damage_amount": 100,
+                "damage_amount": 1000,
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
@@ -16724,7 +16754,7 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
+                    "damage_amount": 1000,
                     "damage_type": "physical",
                     "element_type": "none",
                     "hitback_distance": 1000.0,
@@ -16772,7 +16802,7 @@
                     "texture_y": 531
                   }
                 ],
-                "damage_amount": 100,
+                "damage_amount": 1000,
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
@@ -16785,7 +16815,7 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
+                    "damage_amount": 1000,
                     "damage_type": "physical",
                     "element_type": "none",
                     "hitback_distance": 1000.0,
@@ -16833,7 +16863,7 @@
                     "texture_y": 455
                   }
                 ],
-                "damage_amount": 100,
+                "damage_amount": 1000,
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
@@ -16846,7 +16876,7 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
+                    "damage_amount": 1000,
                     "damage_type": "physical",
                     "element_type": "none",
                     "hitback_distance": 1000.0,
@@ -16894,7 +16924,7 @@
                     "texture_y": 457
                   }
                 ],
-                "damage_amount": 100,
+                "damage_amount": 1000,
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
@@ -16907,7 +16937,7 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
+                    "damage_amount": 1000,
                     "damage_type": "physical",
                     "element_type": "none",
                     "hitback_distance": 1000.0,
@@ -16955,7 +16985,7 @@
                     "texture_y": 528
                   }
                 ],
-                "damage_amount": 100,
+                "damage_amount": 1000,
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
@@ -16968,7 +16998,7 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
+                    "damage_amount": 1000,
                     "damage_type": "physical",
                     "element_type": "none",
                     "hitback_distance": 1000.0,
@@ -17016,7 +17046,7 @@
                     "texture_y": 648
                   }
                 ],
-                "damage_amount": 100,
+                "damage_amount": 1000,
                 "enabled": true,
                 "extrusion_backward": 20,
                 "extrusion_forward": 20,
@@ -17029,7 +17059,7 @@
                   "attack_payload": {
                     "animation_trigger": "",
                     "critical_hit_chance": 0.0,
-                    "damage_amount": 100,
+                    "damage_amount": 1000,
                     "damage_type": "physical",
                     "element_type": "none",
                     "hitback_distance": 1000.0,
@@ -17315,7 +17345,7 @@
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
-          "locked": true,
+          "locked": false,
           "movement": [
             [
               0,
@@ -17368,31 +17398,9 @@
                 0,
                 0.0,
                 true
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
+              ]
+            ],
+            [
               [
                 0,
                 0,
@@ -17406,31 +17414,9 @@
                 0,
                 0,
                 0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
+              ]
+            ],
+            [
               [
                 0,
                 0,
@@ -17444,145 +17430,9 @@
                 0,
                 0,
                 0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
               ]
             ],
             [
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ]
-            ],
-            [
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ]
-            ],
-            [
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
-              [
-                0,
-                0,
-                0,
-                0.0
-              ],
               [
                 0,
                 0,
@@ -17595,9 +17445,15 @@
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
-            "dz": 0.0
+            "dz": 0
           },
           "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
             {
               "dr": 0.0,
               "dx": 0,
@@ -17940,9 +17796,6 @@
             []
           ],
           "box_schema_version": 1,
-          "derived_modifiers": {
-            "reverse": false
-          },
           "hit_boxes": [
             [
               {
@@ -17987,9 +17840,6 @@
               }
             ]
           ],
-          "inherit_data": false,
-          "invert_frames_horizontal": false,
-          "invert_frames_vertical": false,
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
@@ -18022,9 +17872,9 @@
           "reverse_source": false,
           "rnd_start": false,
           "source": {
-            "kind": "animation",
-            "name": "attack_left",
-            "path": ""
+            "kind": "folder",
+            "name": "",
+            "path": "default"
           },
           "tags": []
         },
@@ -18295,7 +18145,7 @@
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
-          "locked": true,
+          "locked": false,
           "movement": [
             [
               0,
@@ -20208,7 +20058,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 0.0,
+                "depth_offset": -2.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -27565,9 +27415,9 @@
             }
           },
           "display_color": [
+            36,
             242,
-            61,
-            242,
+            168,
             255
           ],
           "geometry": "Circle",
@@ -27956,6 +27806,36 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-9db5fd333280"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "bomb"
+                }
+              ],
+              "display_name": "bomb",
+              "dx": 1880,
+              "dz": -5372,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 21000,
+              "origional_width": 11808,
+              "position": "Exact",
+              "priority": 12,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-5131d823d558"
             }
           ],
           "trail_connection_sector": {
@@ -27989,7 +27869,7 @@
           "display_color": [
             204,
             31,
-            100,
+            31,
             255
           ],
           "geometry": "Square",
@@ -28045,7 +27925,7 @@
             }
           },
           "display_color": [
-            113,
+            147,
             204,
             31,
             255
@@ -28108,9 +27988,9 @@
             }
           },
           "display_color": [
-            137,
-            71,
-            204,
+            242,
+            140,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -28345,9 +28225,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            158,
+            31,
+            66,
+            204,
             255
           ],
           "geometry": "Square",
@@ -28408,9 +28288,9 @@
             }
           },
           "display_color": [
-            36,
+            85,
             242,
-            46,
+            242,
             255
           ],
           "geometry": "Square",

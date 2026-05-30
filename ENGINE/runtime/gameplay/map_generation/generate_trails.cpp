@@ -14,6 +14,7 @@
 #include <limits>
 #include <numeric>
 #include <queue>
+#include <sstream>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -178,6 +179,11 @@ struct TrailBuildResult {
     std::vector<TrailSection> sections;
     std::vector<SDL_Point> polygon;
     std::vector<SDL_Point> centerline;
+};
+
+struct TrailPolygonValidationResult {
+    bool valid = false;
+    std::string reason;
 };
 
 enum class TrailFailureReason {
@@ -594,6 +600,35 @@ bool polygon_has_self_intersection(const std::vector<SDL_Point>& polygon) {
     return false;
 }
 
+std::string format_points_for_log(const std::vector<SDL_Point>& points) {
+    std::ostringstream stream;
+    stream << '[';
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        if (i != 0) {
+            stream << ", ";
+        }
+        stream << '(' << points[i].x << ',' << points[i].y << ')';
+    }
+    stream << ']';
+    return stream.str();
+}
+
+TrailPolygonValidationResult validate_trail_polygon_geometry(const std::vector<SDL_Point>& polygon) {
+    if (polygon.size() < 4) {
+        return TrailPolygonValidationResult{false, "polygon_too_small"};
+    }
+    if (polygon_has_duplicate_or_collapsed_edges(polygon)) {
+        return TrailPolygonValidationResult{false, "duplicate_or_collapsed_edge"};
+    }
+    if (std::abs(signed_polygon_area(polygon)) <= 1.0) {
+        return TrailPolygonValidationResult{false, "collapsed_or_reversed_area"};
+    }
+    if (polygon_has_self_intersection(polygon)) {
+        return TrailPolygonValidationResult{false, "self_intersection"};
+    }
+    return TrailPolygonValidationResult{true, "ok"};
+}
+
 bool polygon_intersects_polygon(const std::vector<SDL_Point>& a, const std::vector<SDL_Point>& b) {
     if (a.size() < 3 || b.size() < 3) {
         return false;
@@ -615,16 +650,7 @@ bool polygon_intersects_polygon(const std::vector<SDL_Point>& a, const std::vect
 
 bool trail_polygon_is_clean(const std::vector<SDL_Point>& polygon,
                             const std::vector<TrailObstacle>& existing_trails) {
-    if (polygon.size() < 4) {
-        return false;
-    }
-    if (polygon_has_duplicate_or_collapsed_edges(polygon)) {
-        return false;
-    }
-    if (std::abs(signed_polygon_area(polygon)) <= 1.0) {
-        return false;
-    }
-    if (polygon_has_self_intersection(polygon)) {
+    if (!validate_trail_polygon_geometry(polygon).valid) {
         return false;
     }
     Bounds bounds{};
@@ -1395,12 +1421,72 @@ Vec2 intersect_offset_lines(const OffsetDiagonalLine& a, const OffsetDiagonalLin
     return add(a.point, scale(a.dir, t));
 }
 
-SDL_Point offset_endpoint_for_segment(const SDL_Point& point,
-                                      const SDL_Point& other,
-                                      double side_distance) {
-    const Vec2 dir = diagonal_direction(point, other);
+SDL_Point offset_point_for_segment_direction(const SDL_Point& point,
+                                             const SDL_Point& segment_start,
+                                             const SDL_Point& segment_end,
+                                             double side_distance) {
+    const Vec2 dir = diagonal_direction(segment_start, segment_end);
     const Vec2 normal{-dir.y, dir.x};
     return to_point(add(to_vec2(point), scale(normal, side_distance)));
+}
+
+bool centerline_segments_are_long_enough_for_width(const std::vector<SDL_Point>& centerline, int width) {
+    if (centerline.size() < 2) {
+        return false;
+    }
+    const double min_turn_segment_length = static_cast<double>(std::max(1, width));
+    for (std::size_t i = 1; i < centerline.size(); ++i) {
+        const double segment_length = length(subtract(to_vec2(centerline[i]), to_vec2(centerline[i - 1])));
+        const bool touches_turn = (i > 1) || (i + 1 < centerline.size());
+        if (touches_turn && segment_length + kPointEpsilon < min_turn_segment_length) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool append_join_points(const std::vector<SDL_Point>& centerline,
+                        std::size_t i,
+                        double side_distance,
+                        std::vector<SDL_Point>* out_chain) {
+    if (!out_chain || i == 0 || i + 1 >= centerline.size()) {
+        return false;
+    }
+
+    const SDL_Point& prev_center = centerline[i - 1];
+    const SDL_Point& corner_center = centerline[i];
+    const SDL_Point& next_center = centerline[i + 1];
+    const OffsetDiagonalLine prev = offset_line_for_segment(prev_center, corner_center, side_distance);
+    const OffsetDiagonalLine next = offset_line_for_segment(corner_center, next_center, side_distance);
+    const Vec2 miter = intersect_offset_lines(prev, next, corner_center);
+
+    const double half_width = std::abs(side_distance);
+    const double max_miter_distance = std::max(half_width * 2.0, half_width + 1.0);
+    const double prev_length = length(subtract(to_vec2(corner_center), to_vec2(prev_center)));
+    const double next_length = length(subtract(to_vec2(next_center), to_vec2(corner_center)));
+    const double prev_projection = dot(subtract(miter, to_vec2(corner_center)), prev.dir);
+    const double next_projection = dot(subtract(miter, to_vec2(corner_center)), next.dir);
+    const bool miter_is_finite = std::isfinite(miter.x) && std::isfinite(miter.y);
+    const bool miter_too_long = length(subtract(miter, to_vec2(corner_center))) > max_miter_distance + kPointEpsilon;
+    const bool miter_runs_past_segment = std::abs(prev_projection) > prev_length + kPointEpsilon ||
+                                         std::abs(next_projection) > next_length + kPointEpsilon;
+
+    if (miter_is_finite && !miter_too_long && !miter_runs_past_segment) {
+        out_chain->push_back(to_point(miter));
+        return true;
+    }
+
+    // Unsafe miters can invert an inside corner or spike outside the trail. Fall back to a
+    // square/beveled join that preserves side orientation without crossing the opposite side.
+    out_chain->push_back(offset_point_for_segment_direction(corner_center,
+                                                            prev_center,
+                                                            corner_center,
+                                                            side_distance));
+    out_chain->push_back(offset_point_for_segment_direction(corner_center,
+                                                            corner_center,
+                                                            next_center,
+                                                            side_distance));
+    return true;
 }
 
 bool build_offset_chain(const std::vector<SDL_Point>& centerline,
@@ -1410,14 +1496,22 @@ bool build_offset_chain(const std::vector<SDL_Point>& centerline,
         return false;
     }
     out_chain->clear();
-    out_chain->reserve(centerline.size());
-    out_chain->push_back(offset_endpoint_for_segment(centerline.front(), centerline[1], side_distance));
+    out_chain->reserve(centerline.size() * 2);
+    out_chain->push_back(offset_point_for_segment_direction(centerline.front(),
+                                                            centerline.front(),
+                                                            centerline[1],
+                                                            side_distance));
     for (std::size_t i = 1; i + 1 < centerline.size(); ++i) {
-        const OffsetDiagonalLine prev = offset_line_for_segment(centerline[i - 1], centerline[i], side_distance);
-        const OffsetDiagonalLine next = offset_line_for_segment(centerline[i], centerline[i + 1], side_distance);
-        out_chain->push_back(to_point(intersect_offset_lines(prev, next, centerline[i])));
+        if (!append_join_points(centerline, i, side_distance, out_chain)) {
+            return false;
+        }
     }
-    out_chain->push_back(offset_endpoint_for_segment(centerline.back(), centerline[centerline.size() - 2], side_distance));
+    // The end cap must use the final segment direction (previous -> end). Using end -> previous
+    // flips the perpendicular and swaps the left/right boundary points, creating bow-ties.
+    out_chain->push_back(offset_point_for_segment_direction(centerline.back(),
+                                                            centerline[centerline.size() - 2],
+                                                            centerline.back(),
+                                                            side_distance));
     *out_chain = dedupe_consecutive_points(*out_chain);
     return out_chain->size() >= 2;
 }
@@ -1443,16 +1537,29 @@ void normalize_polygon_order(std::vector<SDL_Point>* polygon) {
 bool build_diagonal_corridor_polygon(const std::vector<SDL_Point>& centerline,
                                        int width,
                                        std::vector<SDL_Point>* out_polygon) {
+    if (out_polygon) {
+        out_polygon->clear();
+    }
     if (!out_polygon || centerline.size() < 2 || !polyline_has_only_exact_diagonal_segments(centerline)) {
         return false;
     }
     const int clamped_width = std::max(1, width);
+    if (!centerline_segments_are_long_enough_for_width(centerline, clamped_width)) {
+        vibble::log::warn(std::string("[GenerateTrails] Rejected trail polygon: short centerline segment") +
+                          " width=" + std::to_string(clamped_width) +
+                          " centerline=" + format_points_for_log(centerline));
+        return false;
+    }
+
     const double left_distance = static_cast<double>(clamped_width) * 0.5;
     const double right_distance = -left_distance;
     std::vector<SDL_Point> left_chain;
     std::vector<SDL_Point> right_chain;
     if (!build_offset_chain(centerline, left_distance, &left_chain) ||
         !build_offset_chain(centerline, right_distance, &right_chain)) {
+        vibble::log::warn(std::string("[GenerateTrails] Rejected trail polygon: offset chain build failed") +
+                          " width=" + std::to_string(clamped_width) +
+                          " centerline=" + format_points_for_log(centerline));
         return false;
     }
     std::vector<SDL_Point> polygon;
@@ -1468,7 +1575,13 @@ bool build_diagonal_corridor_polygon(const std::vector<SDL_Point>& centerline,
         polygon.pop_back();
     }
     normalize_polygon_order(&polygon);
-    if (polygon.size() < 4) {
+
+    const TrailPolygonValidationResult validation = validate_trail_polygon_geometry(polygon);
+    if (!validation.valid) {
+        vibble::log::warn(std::string("[GenerateTrails] Rejected invalid trail polygon: ") + validation.reason +
+                          " width=" + std::to_string(clamped_width) +
+                          " centerline=" + format_points_for_log(centerline) +
+                          " polygon=" + format_points_for_log(polygon));
         return false;
     }
     *out_polygon = std::move(polygon);

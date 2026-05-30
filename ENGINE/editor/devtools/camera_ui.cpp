@@ -432,7 +432,7 @@ void CameraUIPanel::build_ui() {
 void CameraUIPanel::configure_container() {
     container_.set_header_text("Camera");
     container_.set_scrollbar_visible(true);
-    container_.set_content_clip_enabled(false);
+    container_.set_content_clip_enabled(true);
     container_.set_on_close([this]() { this->close(); });
     container_.set_layout_function([this](const SlidingWindowContainer::LayoutContext& ctx) {
         int y = ctx.content_top;
@@ -460,6 +460,13 @@ void CameraUIPanel::configure_container() {
             }
             SDL_Rect bounds = (i < ordered_section_bounds_.size()) ? ordered_section_bounds_[i] : panel->rect();
             panel->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
+        }
+    });
+    container_.set_cancel_function([this]() {
+        for (DockableCollapsible* panel : ordered_section_panels_) {
+            if (panel) {
+                panel->cancel_child_interactions();
+            }
         }
     });
     container_.set_event_function([this](const SDL_Event& e) {

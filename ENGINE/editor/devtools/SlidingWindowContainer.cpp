@@ -28,6 +28,7 @@ void SlidingWindowContainer::set_layout_function(LayoutFunction fn) {
 void SlidingWindowContainer::set_render_function(RenderFunction fn) { render_function_ = std::move(fn); }
 void SlidingWindowContainer::set_update_function(UpdateFunction fn) { update_function_ = std::move(fn); }
 void SlidingWindowContainer::set_event_function(EventFunction fn) { event_function_ = std::move(fn); }
+void SlidingWindowContainer::set_cancel_function(CancelFunction fn) { cancel_function_ = std::move(fn); }
 void SlidingWindowContainer::set_header_text(const std::string& text) { header_text_ = text; }
 void SlidingWindowContainer::set_header_text_provider(HeaderTextProvider provider) { header_text_provider_ = std::move(provider); }
 void SlidingWindowContainer::set_on_close(std::function<void()> cb) { on_close_ = std::move(cb); }
@@ -174,11 +175,13 @@ void SlidingWindowContainer::set_visible(bool visible) {
     if (!visible_) {
         scroll_dragging_ = false;
         scrollbar_dragging_ = false;
-        DMWidgetsClearSliderScrollCaptures();
+        pointer_inside_last_frame_ = false;
+        cancel_panel_interactions();
     } else {
         scroll_ = 0;
         scroll_dragging_ = false;
         scrollbar_dragging_ = false;
+        pointer_inside_last_frame_ = false;
     }
     if (header_visibility_controller_) {
         header_visibility_controller_(visible_);
@@ -237,6 +240,10 @@ void SlidingWindowContainer::update(const Input& input, int screen_w, int screen
     const SDL_Rect interaction_rect = effective_panel_interaction_rect();
     pointer_in_panel_area =
         (mx >= interaction_rect.x && mx < interaction_rect.x + interaction_rect.w && my >= interaction_rect.y && my < interaction_rect.y + interaction_rect.h);
+    if (pointer_inside_last_frame_ && !pointer_in_panel_area) {
+        cancel_panel_interactions();
+    }
+    pointer_inside_last_frame_ = pointer_in_panel_area;
     if ((pointer_in_scroll || pointer_in_panel_area) && !DMWidgetsSliderScrollCaptured()) {
         int dy = input.getScrollY();
         if (dy != 0) {
@@ -259,6 +266,22 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
     }
 
     if (!visible_) return false;
+
+    const bool early_pointer_event =
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+    if (early_pointer_event) {
+        SDL_Point early_pointer = (e.type == SDL_EVENT_MOUSE_MOTION)
+            ? SDL_Point{static_cast<int>(e.motion.x), static_cast<int>(e.motion.y)}
+            : SDL_Point{static_cast<int>(e.button.x), static_cast<int>(e.button.y)};
+        const bool early_inside_panel = SDL_PointInRect(&early_pointer, &effective_panel_interaction_rect());
+        if (!early_inside_panel) {
+            cancel_panel_interactions();
+            pointer_inside_last_frame_ = false;
+            if (!scroll_dragging_ && !scrollbar_dragging_) {
+                return false;
+            }
+        }
+    }
 
     if (event_function_) {
         if (event_function_(e)) return true;
@@ -311,6 +334,12 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
 
         pointer_inside_panel = SDL_PointInRect(&pointer, &effective_panel_interaction_rect());
         pointer_inside = pointer_inside_panel;
+        if (!pointer_inside_panel) {
+            cancel_panel_interactions();
+            pointer_inside_last_frame_ = false;
+        } else {
+            pointer_inside_last_frame_ = true;
+        }
         if (!pointer_inside && !scroll_dragging_ && !scrollbar_dragging_) {
             return false;
         }
@@ -577,7 +606,7 @@ void SlidingWindowContainer::layout(int screen_w, int screen_h) const {
     } else {
         const auto usable = DockManager::instance().usableRect();
         int panel_y = usable.y;
-        int panel_h = std::max(0, screen_h - usable.y);
+        int panel_h = usable.h > 0 ? usable.h : std::max(0, screen_h - usable.y);
         int panel_x = (screen_w * 2) / 3;
         int panel_w = screen_w - panel_x;
         panel_ = SDL_Rect{panel_x, panel_y, panel_w, panel_h};
@@ -768,6 +797,16 @@ void SlidingWindowContainer::layout(int screen_w, int screen_h) const {
     }
 
     layout_dirty_ = false;
+}
+
+void SlidingWindowContainer::cancel_panel_interactions() const {
+    scroll_dragging_ = false;
+    scrollbar_dragging_ = false;
+    if (cancel_function_) {
+        cancel_function_();
+    }
+    DMDropdown::cancel_active_dropdown();
+    DMWidgetsClearSliderScrollCaptures();
 }
 
 void SlidingWindowContainer::update_editor_interaction_block_state() {

@@ -895,7 +895,7 @@ AssetInfoUI::AssetInfoUI() {
     container_.set_header_text_provider([this]() { return info_ ? info_->name : std::string(); });
 
     container_.set_scrollbar_visible(true);
-    container_.set_content_clip_enabled(false);
+    container_.set_content_clip_enabled(true);
 
     container_.set_layout_function([this](const SlidingWindowContainer::LayoutContext& ctx) {
         int y = ctx.content_top;
@@ -952,6 +952,17 @@ AssetInfoUI::AssetInfoUI() {
     });
 
     container_.set_on_close([this]() { this->close(); });
+
+    container_.set_cancel_function([this]() {
+        for (auto& section : sections_) {
+            if (section) {
+                section->cancel_child_interactions();
+            }
+        }
+        if (controller_action_btn_) controller_action_btn_->cancel_interaction();
+        if (duplicate_btn_) duplicate_btn_->cancel_interaction();
+        if (delete_btn_) delete_btn_->cancel_interaction();
+    });
 
     container_.set_update_function([this](const Input& input, int screen_w, int screen_h) {
         if (panel_bounds_override_active_) {
@@ -2286,7 +2297,7 @@ void AssetInfoUI::apply_section_focus_states() {
     }
 }
 
-void AssetInfoUI::focus_section(DockableCollapsible* section) {
+void AssetInfoUI::focus_section(DockableCollapsible* section, bool expand_on_focus) {
     DockableCollapsible* resolved = nullptr;
     if (section) {
         for (auto& entry : sections_) {
@@ -2302,7 +2313,7 @@ void AssetInfoUI::focus_section(DockableCollapsible* section) {
     apply_section_focus_states();
     if (focused_section_) {
         focused_section_->force_pointer_ready();
-        if (!focused_section_->is_expanded()) {
+        if (expand_on_focus && !focused_section_->is_expanded()) {
             focused_section_->set_expanded(true);
         }
     }
@@ -2356,7 +2367,7 @@ bool AssetInfoUI::handle_section_focus_event(const SDL_Event& e) {
     if (target == focused_section_) {
         return false;
     }
-    focus_section(target);
+    focus_section(target, false);
     // Keep processing this same event through the newly focused section so
     // controls react on first click instead of requiring a second click.
     return false;

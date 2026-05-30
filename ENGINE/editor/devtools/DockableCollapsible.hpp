@@ -94,6 +94,7 @@ public:
     bool embedded_focus_state() const { return embedded_focus_state_; }
     void set_embedded_interaction_enabled(bool enabled);
     bool embedded_interaction_enabled() const { return embedded_interaction_enabled_; }
+    void cancel_child_interactions();
 
 protected:
 

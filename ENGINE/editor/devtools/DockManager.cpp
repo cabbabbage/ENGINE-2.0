@@ -9,7 +9,7 @@
 
 namespace {
 constexpr int kPanelGap = 40;
-constexpr int kHeaderToPanelPadding = 30;
+constexpr int kHeaderToPanelPadding = 0;
 
 struct Interval {
     int start = 0;

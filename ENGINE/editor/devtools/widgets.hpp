@@ -221,6 +221,7 @@ public:
     int track_center_y() const;
     SDL_Rect interaction_rect() const;
     bool is_dragging() const { return dragging_; }
+    void cancel_interaction();
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* r) const;
     int preferred_height(int width) const;
@@ -296,6 +297,7 @@ public:
     bool defer_commit_until_unfocus() const { return defer_commit_until_unfocus_; }
     bool has_pending_values() const { return pending_dirty_; }
     void set_tooltip_state(DMWidgetTooltipState* state);
+    void cancel_interaction();
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* r) const;
     static int height();
@@ -359,6 +361,7 @@ public:
     bool enabled() const { return enabled_; }
     bool selected() const { return active_selected_ == this; }
     void clear_selection();
+    void cancel_interaction() { clear_selection(); }
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* r) const;
     static bool has_active_expanded();
@@ -494,7 +497,10 @@ public:
     int preferred_height(int width) const;
     static int height();
 
+    void cancel_interaction(bool commit_pending = true);
+
     static DMDropdown* active_dropdown();
+    static void cancel_active_dropdown(bool commit_pending = true);
 
     static void render_active_options(SDL_Renderer* r);
 private:
@@ -532,6 +538,7 @@ public:
     virtual const SDL_Rect& rect() const = 0;
     virtual int height_for_width(int w) const = 0;
     virtual bool handle_event(const SDL_Event& e) = 0;
+    virtual void cancel_interaction() {}
     virtual void render(SDL_Renderer* r) const = 0;
     virtual bool wants_full_row() const { return false; }
     void set_layout_dirty_callback(std::function<void()> cb) { layout_dirty_callback_ = std::move(cb); }
@@ -611,6 +618,7 @@ public:
     const SDL_Rect& rect() const override { return t_->rect(); }
     int height_for_width(int w) const override { return t_ ? t_->preferred_height(w) : DMTextBox::height(); }
     bool handle_event(const SDL_Event& e) override { return t_ ? t_->handle_event(e) : false; }
+    void cancel_interaction() override { if (t_) t_->stop_editing(); }
     void render(SDL_Renderer* r) const override { if (t_) t_->render(r); }
     bool wants_full_row() const override { return full_row_; }
 private:
@@ -725,6 +733,7 @@ public:
     const SDL_Rect& rect() const override { return s_->rect(); }
     int height_for_width(int w) const override { return s_ ? s_->preferred_height(w) : DMSlider::height(); }
     bool handle_event(const SDL_Event& e) override { return s_ ? s_->handle_event(e) : false; }
+    void cancel_interaction() override { if (s_) s_->cancel_interaction(); }
     void render(SDL_Renderer* r) const override { if (s_) s_->render(r); }
     bool wants_full_row() const override { return true; }
 private:
@@ -743,6 +752,7 @@ public:
     const SDL_Rect& rect() const override { return s_->rect(); }
     int height_for_width(int ) const override { return DMRangeSlider::height(); }
     bool handle_event(const SDL_Event& e) override { return s_ ? s_->handle_event(e) : false; }
+    void cancel_interaction() override { if (s_) s_->cancel_interaction(); }
     void render(SDL_Renderer* r) const override { if (s_) s_->render(r); }
     bool wants_full_row() const override { return true; }
 private:
@@ -761,6 +771,7 @@ public:
     const SDL_Rect& rect() const override { return w_->rect(); }
     int height_for_width(int w) const override { return w_ ? w_->preferred_height(w) : DMWeightedRangeWidget::height(); }
     bool handle_event(const SDL_Event& e) override { return w_ ? w_->handle_event(e) : false; }
+    void cancel_interaction() override { if (w_) w_->cancel_interaction(); }
     void render(SDL_Renderer* r) const override { if (w_) w_->render(r); }
     bool wants_full_row() const override { return true; }
 private:
@@ -787,6 +798,7 @@ public:
     }
     int height_for_width(int w) const override { return d_ ? d_->preferred_height(w) : DMDropdown::height(); }
     bool handle_event(const SDL_Event& e) override { return d_ ? d_->handle_event(e) : false; }
+    void cancel_interaction() override { if (d_) d_->cancel_interaction(); }
     void render(SDL_Renderer* r) const override { if (d_) d_->render(r); }
 private:
     DMDropdown* d_ = nullptr;

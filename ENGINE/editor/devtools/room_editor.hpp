@@ -60,6 +60,7 @@ class SlidingWindowContainer;
 class DMSlider;
 class SliderWidget;
 class DevFooterBar;
+class EdgeDetailCandidatesModal;
 class DevControls;
 namespace animation_update { struct AttackPayload; }
 namespace devmode::room_config { class AttackPayloadEditor; }
@@ -144,6 +145,10 @@ public:
     void toggle_room_config();
     void open_room_config();
     void close_room_config();
+    void toggle_edge_detail_candidates();
+    void open_edge_detail_candidates();
+    void close_edge_detail_candidates();
+    bool is_edge_detail_candidates_open() const;
     void create_room_from_footer();
     // Seeds a trail template for orthogonal centerline corridor generation (90° turns only).
     void create_trail_from_footer();
@@ -1299,6 +1304,7 @@ private:
     std::optional<AssetEditorSubview> pending_animation_editor_close_subview_{};
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
+    std::unique_ptr<EdgeDetailCandidatesModal> edge_detail_candidates_modal_;
     SDL_Rect room_config_bounds_{0, 0, 0, 0};
     std::unique_ptr<SlidingWindowContainer> spawn_group_container_;
     mutable SDL_Rect spawn_group_panel_embedded_bounds_{0, 0, 0, 0};

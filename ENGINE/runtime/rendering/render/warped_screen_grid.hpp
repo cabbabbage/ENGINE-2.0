@@ -88,22 +88,22 @@ public:
             bool enabled = false;
             float focus_depth_offset = 0.0f;
             float aperture = 1.0f;
-            float focus_falloff_acceleration = 1.65f;
-            float max_near_blur_px = 12.0f;
+            float focus_falloff_acceleration = 1.5f;
+            float max_near_blur_px = 16.0f;
             float max_far_blur_px = 48.0f;
             float near_far_blur_bias = 0.0f;
             float field_curvature = 0.0f;
             float edge_softness = 1.0f;
-            float swirl_strength = 0.28f;
-            float swirl_radius_start = 0.18f;
+            float swirl_strength = 0.25f;
+            float swirl_radius_start = 0.35f;
             float tangential_blur_stretch = 1.0f;
             float anamorphic_strength = 0.0f;
             float bokeh_oval_ratio = 1.0f;
             float bokeh_rotation = 0.0f;
-            float vignette_strength = 0.26f;
+            float vignette_strength = 0.25f;
             float vignette_radius = 0.58f;
             float vignette_softness = 0.42f;
-            float barrel_distortion = 0.035f;
+            float barrel_distortion = 0.03f;
             float distortion_zoom_compensation = 0.965f;
             float chromatic_aberration = 0.0f;
             float chromatic_edge_start = 0.62f;
@@ -124,13 +124,13 @@ public:
 
         // Legacy flat fields are kept for older saves/callers and mirrored to lens in set_realism_settings().
         float aperture                     = 1.0f;
-        float blur_px                      = 12.0f;
+        float blur_px                      = 16.0f;
         float radial_blur_px               = 48.0f;
         float focus_depth_offset           = 0.0f;
-        float focus_falloff_acceleration   = 1.65f;
+        float focus_falloff_acceleration   = 1.5f;
         float near_far_blur_bias           = 0.0f;
-        float swirl_strength               = 0.28f;
-        float swirl_radius_start           = 0.18f;
+        float swirl_strength               = 0.25f;
+        float swirl_radius_start           = 0.35f;
         float tangential_blur_stretch      = 1.0f;
         float anamorphic_strength          = 0.0f;
         float bokeh_oval_ratio             = 1.0f;

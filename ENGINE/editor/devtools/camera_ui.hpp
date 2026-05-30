@@ -75,7 +75,6 @@ private:
     std::unique_ptr<FloatSliderWidget> aperture_slider_;
     std::unique_ptr<DMSlider> near_fog_distance_slider_;
     std::unique_ptr<SliderWidget> near_fog_distance_widget_;
-    std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
     std::unique_ptr<FloatSliderWidget> focus_depth_offset_slider_;
     std::unique_ptr<FloatSliderWidget> focus_falloff_acceleration_slider_;
     std::unique_ptr<FloatSliderWidget> max_near_blur_px_slider_;
@@ -101,6 +100,10 @@ private:
     std::unique_ptr<FloatSliderWidget> bloom_threshold_slider_;
     std::unique_ptr<FloatSliderWidget> bloom_radius_slider_;
     std::unique_ptr<FloatSliderWidget> halation_strength_slider_;
+    std::unique_ptr<FloatSliderWidget> sample_count_slider_;
+    std::unique_ptr<FloatSliderWidget> downsample_scale_slider_;
+    std::unique_ptr<DMDropdown> quality_preset_dropdown_;
+    std::unique_ptr<DropdownWidget> quality_preset_widget_;
     std::unique_ptr<FloatSliderWidget> blur_padding_preview_slider_;
     std::unique_ptr<DMDropdown> alpha_debug_dropdown_;
     std::unique_ptr<DropdownWidget> alpha_debug_widget_;

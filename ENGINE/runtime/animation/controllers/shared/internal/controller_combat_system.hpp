@@ -43,6 +43,7 @@ public:
                                   const std::vector<std::string>& excluded_tags = {});
 
     static bool apply_attack_hit(Asset& attacker, Asset& target);
+    static int apply_attack_hits_to_active_targets_count(Asset& attacker, Assets* assets);
     static bool apply_attack_hits_to_active_targets(Asset& attacker, Assets* assets);
 
     static bool is_hit_window_open(const Asset& self, int window_start_frame, int window_end_frame);

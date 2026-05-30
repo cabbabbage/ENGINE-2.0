@@ -58,7 +58,7 @@ Use:
 - `idle_wander(min_delta, max_delta, config)` for random idle motion.
 - `return_home(threshold_px, config)` to rejoin spawn/home location.
 
-`MovementConfig` controls visit threshold, optional resolution layer override, lock behavior, and combat auto-move overrides.
+`MovementConfig` controls visit threshold, optional resolution layer override, lock behavior, ground-lock policy (`allow_vertical_movement`), and combat auto-move overrides.
 
 ## Combat, Targeting, Cooldowns, Hit Windows
 
@@ -66,11 +66,12 @@ Typical attack flow:
 
 1. Resolve target: `Asset* target = resolve_target_player();`
 2. Keep spacing with movement helpers.
-3. Trigger attack intent with `try_attack_target(...)` or explicit `start_attack(...)` + `apply_attack_hit(...)`.
+3. Trigger attack intent with `try_attack_target(...)` when you need custom cooldown-gated attacks.
 4. Use cooldown helpers (`cooldown_ready`, `start_cooldown`) for pacing.
 5. Optional animation-frame windows with `is_hit_window_open(start, end)`.
 
-For broad active hitbox dispatch, call `apply_attack_hits_to_active_targets()`.
+Prefer runtime auto-attack for enemies instead of per-frame manual hit dispatch.
+`apply_attack_hit(...)`/`apply_attack_hits_to_active_targets(...)` now report success only when at least one hit was dispatched.
 
 Damage/hit/death resolution for incoming queued attacks is handled centrally in `process_pending_attacks`, using your `attack_processing_config()`.
 
@@ -79,7 +80,7 @@ Damage/hit/death resolution for incoming queued attacks is handled centrally in 
 Use high-level behavior wrappers for common AI loops:
 
 - `run_enemy_behavior(target, config, chase_move, retreat_move)`
-  - Supports chase/attack/recover/return and optional kamikaze mode.
+  - Supports `Acquire`/`Approach`/`AttackWindow`/`Recover`/`ReturnHome` and optional kamikaze mode.
 - `run_wander_behavior(target, idle_radius_px, min_wander_delta_px, max_wander_delta_px, config)`
   - Handles simple idle/wander behavior away from or around targets.
 
@@ -138,14 +139,18 @@ public:
     explicit advanced_skirmisher_controller(Asset* self)
         : custom_controller_api::CustomControllerBase(self) {
         behavior_cfg_.kamikaze = false;
-        behavior_cfg_.chase_range_px = 220;
-        behavior_cfg_.attack_range_px = 72;
+        behavior_cfg_.ranges.aggro_radius_px = 220;
+        behavior_cfg_.ranges.desired_standoff_px = 8;
+        behavior_cfg_.ranges.attack_radius_px = 72;
         behavior_cfg_.retreat_distance_px = 260;
         behavior_cfg_.recover_ms = 450;
+        behavior_cfg_.attack_window_ms = 180;
         behavior_cfg_.return_home_threshold_px = 96;
 
         chase_cfg_.visit_threshold_px = 10;
+        chase_cfg_.allow_vertical_movement = false;
         retreat_cfg_.visit_threshold_px = 12;
+        retreat_cfg_.allow_vertical_movement = false;
         chase_cfg_.override_non_locked = false;
         retreat_cfg_.override_non_locked = false;
     }
@@ -154,17 +159,10 @@ protected:
     void on_update(const Input&) override {
         Asset* target = resolve_target_player();
         run_enemy_behavior(target, behavior_cfg_, chase_cfg_, retreat_cfg_);
-
-        if (target && is_target_in_range(*target, behavior_cfg_.attack_range_px)) {
-            // gated hit window for animation frames 2..4
-            if (start_attack("attack") && is_hit_window_open(2, 4)) {
-                apply_attack_hit(*target);
-            }
-        }
     }
 
 private:
-    custom_controller_api::EnemyBehaviorConfig behavior_cfg_{};
+    custom_controller_api::EnemyAgentConfig behavior_cfg_{};
     custom_controller_api::MovementConfig chase_cfg_{};
     custom_controller_api::MovementConfig retreat_cfg_{};
 };

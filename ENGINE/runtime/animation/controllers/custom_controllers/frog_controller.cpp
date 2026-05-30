@@ -28,7 +28,8 @@ frog_controller::frog_controller(Asset* self)
     }
 }
 
-void frog_controller::on_update(const Input&) {
+void frog_controller::on_update(const Input& in) {
+    custom_controller_api::CustomControllerBase::on_update(in);
     Asset* self = controller_self();
     if (!self || !self->anim_) {
         return;
@@ -46,19 +47,13 @@ void frog_controller::on_update(const Input&) {
     const int threat_sq = kThreatRangePx * kThreatRangePx;
     const int safe_sq = kSafeDistancePx * kSafeDistancePx;
 
-    custom_controller_api::MovementConfig flee_cfg{};
-    flee_cfg.visit_threshold_px = 10;
-    flee_cfg.override_non_locked = false;
-
     if (dist_sq <= static_cast<long long>(threat_sq)) {
         hop_away_from(*player);
-        apply_attack_hit(*player);
         return;
     }
 
     if (dist_sq < static_cast<long long>(safe_sq) && flee_until_safe_) {
         hop_away_from(*player);
-        apply_attack_hit(*player);
         return;
     }
 
@@ -66,14 +61,11 @@ void frog_controller::on_update(const Input&) {
 
     if (idle_frames_remaining_ > 0) {
         --idle_frames_remaining_;
-        apply_attack_hit(*player);
         return;
     }
 
     random_wander_away_bias(*player);
     idle_frames_remaining_ = sample_idle_frames();
-
-    apply_attack_hit(*player);
 }
 
 void frog_controller::on_process_pending_attacks(Asset& self) {

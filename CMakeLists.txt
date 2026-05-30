@@ -138,6 +138,13 @@ target_link_libraries(movement_paths_frame_edit_state_test PRIVATE
     nlohmann_json::nlohmann_json
 )
 
+add_executable(enemy_behavior_phase_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/enemy_behavior_phase_regression_test.cpp
+)
+target_include_directories(enemy_behavior_phase_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)

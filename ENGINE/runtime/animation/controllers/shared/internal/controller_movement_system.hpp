@@ -5,19 +5,14 @@
 #include <string>
 #include <vector>
 
-#include "animation/animation_update.hpp"
+#include "animation/controllers/shared/controller_types.hpp"
 #include "core/axis_convention.hpp"
 
 class Asset;
 
 namespace animation_update::custom_controllers::internal {
 
-struct MovementConfig {
-    int visit_threshold_px = 0;
-    std::optional<int> resolution_layer = std::nullopt;
-    bool override_non_locked = true;
-    AnimationUpdate::AutoMoveCombatOverrides combat_overrides{};
-};
+using MovementConfig = ::animation_update::custom_controllers::MovementConfig;
 
 struct PatrolState {
     std::size_t next_index = 0;

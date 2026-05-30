@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 #include "assets/asset/Asset.hpp"
+#include "utils/log.hpp"
 
 namespace animation_update::custom_controllers::internal {
 
@@ -38,7 +40,7 @@ bool ControllerBehaviorSystem::tick_wander(Asset& self,
     ensure_home(state, self);
 
     if (!target) {
-        state.mode = BehaviorMode::Idle;
+        state.mode = EnemyAgentPhase::Idle;
         return ControllerMovementSystem::idle_wander(self,
                                                      rng,
                                                      min_wander_delta_px,
@@ -50,11 +52,11 @@ bool ControllerBehaviorSystem::tick_wander(Asset& self,
     const long long idle_sq = static_cast<long long>(std::max(0, idle_radius_px)) *
                               static_cast<long long>(std::max(0, idle_radius_px));
     if (dist_sq <= idle_sq) {
-        state.mode = BehaviorMode::Idle;
+        state.mode = EnemyAgentPhase::Idle;
         return false;
     }
 
-    state.mode = BehaviorMode::Seek;
+    state.mode = EnemyAgentPhase::Acquire;
     return ControllerMovementSystem::idle_wander(self,
                                                  rng,
                                                  min_wander_delta_px,
@@ -65,67 +67,81 @@ bool ControllerBehaviorSystem::tick_wander(Asset& self,
 void ControllerBehaviorSystem::tick_enemy_behavior(Asset& self,
                                                    Asset* target,
                                                    BehaviorState& state,
-                                                   const EnemyBehaviorConfig& config,
+                                                   const EnemyAgentConfig& config,
                                                    const MovementConfig& chase_move,
                                                    const MovementConfig& retreat_move) {
     ensure_home(state, self);
+    const bool target_valid = target && !target->dead && target->active;
+    const int desired_standoff_px = std::max(0, config.ranges.desired_standoff_px);
+    const long long target_dist_sq = target_valid ? distance_sq_3d(self, *target) : 0;
+    const auto now = std::chrono::steady_clock::now();
+    const EnemyPhaseDecision decision =
+        decide_enemy_phase(state, target_valid, target_dist_sq, now, config);
+    bool moved = false;
 
-    if (!target || target->dead || !target->active) {
-        state.mode = BehaviorMode::Return;
-        (void)tick_return_home(self, state, config.return_home_threshold_px, chase_move);
+    MovementConfig chase_cfg = chase_move;
+    chase_cfg.combat_overrides.attacking_enabled = true;
+    chase_cfg.combat_overrides.force_attacking_enabled = config.force_attacking_enabled;
+    MovementConfig retreat_cfg = retreat_move;
+    retreat_cfg.combat_overrides.attacking_enabled = false;
+
+    state.mode = decision.phase;
+    if (decision.target_should_be_committed) {
+        self.needs_target = false;
+        self.target_reached = true;
+    } else {
+        self.target_reached = false;
+        self.needs_target = true;
+    }
+
+    if (decision.phase == EnemyAgentPhase::ReturnHome) {
+        moved = tick_return_home(self, state, config.return_home_threshold_px, chase_cfg);
+        state.no_progress_frames = moved ? 0 : state.no_progress_frames + 1;
         return;
     }
 
-    const long long attack_range_sq =
-        static_cast<long long>(std::max(0, config.attack_range_px)) *
-        static_cast<long long>(std::max(0, config.attack_range_px));
-    const long long target_dist_sq = distance_sq_3d(self, *target);
+    if (!target_valid) {
+        return;
+    }
 
-    if (config.kamikaze) {
-        state.mode = BehaviorMode::Chase;
-        if (target_dist_sq <= attack_range_sq) {
-            state.mode = BehaviorMode::Attack;
-            self.needs_target = false;
-            self.target_reached = true;
-            return;
-        }
+    if (decision.enter_attack_window) {
+        state.attack_window_until =
+            now + std::chrono::milliseconds(std::max(1, config.attack_window_ms));
+    }
+    if (decision.leave_attack_window_to_recover) {
+        state.recover_until = now + std::chrono::milliseconds(std::max(1, config.recover_ms));
+    }
 
-        MovementConfig chase_cfg = chase_move;
-        chase_cfg.combat_overrides.attacking_enabled = true;
-        chase_cfg.combat_overrides.force_attacking_enabled = config.force_attacking_enabled;
-        (void)ControllerMovementSystem::seek_target(
+    if (decision.phase == EnemyAgentPhase::Recover) {
+        moved = ControllerMovementSystem::retreat_from_target(
             self,
             *target,
-            std::max(0, config.chase_range_px),
-            chase_cfg);
+            std::max(1, config.retreat_distance_px),
+            retreat_cfg);
+        state.no_progress_frames = moved ? 0 : state.no_progress_frames + 1;
         return;
     }
-
-    const auto now = std::chrono::steady_clock::now();
-    if (state.mode == BehaviorMode::Recover) {
-        if (now < state.recover_until) {
-            (void)ControllerMovementSystem::retreat_from_target(
-                self,
-                *target,
-                std::max(1, config.retreat_distance_px),
-                retreat_move);
-            return;
+    if (decision.phase == EnemyAgentPhase::Approach) {
+        moved = ControllerMovementSystem::seek_target(self, *target, desired_standoff_px, chase_cfg);
+        if (!moved && target_dist_sq > static_cast<long long>(config.ranges.attack_radius_px) *
+                                           static_cast<long long>(config.ranges.attack_radius_px)) {
+            ++state.no_progress_frames;
+        } else {
+            state.no_progress_frames = 0;
         }
-        state.mode = BehaviorMode::Chase;
-    }
-
-    if (target_dist_sq <= attack_range_sq) {
-        state.mode = BehaviorMode::Recover;
-        state.recover_until = now + std::chrono::milliseconds(std::max(1, config.recover_ms));
+        if (state.no_progress_frames >= 45) {
+            const std::string self_name =
+                (self.info && !self.info->name.empty()) ? self.info->name : std::string{"<unknown>"};
+            vibble::log::warn("[EnemyAI] No progress while approaching target; forcing return-home fallback for '" +
+                              self_name + "'");
+            state.mode = EnemyAgentPhase::ReturnHome;
+            (void)tick_return_home(self, state, config.return_home_threshold_px, chase_cfg);
+            state.no_progress_frames = 0;
+        }
         return;
     }
 
-    state.mode = BehaviorMode::Chase;
-    (void)ControllerMovementSystem::seek_target(
-        self,
-        *target,
-        std::max(0, config.chase_range_px),
-        chase_move);
+    state.no_progress_frames = 0;
 }
 
 bool ControllerBehaviorSystem::tick_patrol(Asset& self,
@@ -136,7 +152,7 @@ bool ControllerBehaviorSystem::tick_patrol(Asset& self,
     if (patrol_points.empty()) {
         return false;
     }
-    state.mode = BehaviorMode::Patrol;
+    state.mode = EnemyAgentPhase::Patrol;
     return ControllerMovementSystem::patrol(self, patrol_points, state.patrol_state, config);
 }
 
@@ -145,7 +161,7 @@ bool ControllerBehaviorSystem::tick_return_home(Asset& self,
                                                 int arrival_threshold_px,
                                                 const MovementConfig& config) {
     ensure_home(state, self);
-    state.mode = BehaviorMode::Return;
+    state.mode = EnemyAgentPhase::ReturnHome;
     return ControllerMovementSystem::return_to_origin(self,
                                                       state.home,
                                                       std::max(0, arrival_threshold_px),

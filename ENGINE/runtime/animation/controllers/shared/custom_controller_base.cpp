@@ -151,7 +151,7 @@ void CustomControllerBase::on_after_attack() {
     if (!self || !player) {
         return;
     }
-    internal::MovementConfig config{};
+    MovementConfig config{};
     config.combat_overrides.attacking_enabled = false;
     (void)seek_target(*player, 220, config);
 }
@@ -246,7 +246,7 @@ bool CustomControllerBase::move_3d(const axis::WorldPos& delta,
 
 bool CustomControllerBase::move_toward(const axis::WorldPos& target,
                                        int step_px,
-                                       const internal::MovementConfig& config) {
+                                       const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerMovementSystem::move_toward_point(*self, target, step_px, config)
                 : false;
@@ -254,7 +254,7 @@ bool CustomControllerBase::move_toward(const axis::WorldPos& target,
 
 bool CustomControllerBase::move_away(const axis::WorldPos& point,
                                      int step_px,
-                                     const internal::MovementConfig& config) {
+                                     const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerMovementSystem::move_away_from_point(*self, point, step_px, config)
                 : false;
@@ -262,14 +262,14 @@ bool CustomControllerBase::move_away(const axis::WorldPos& point,
 
 bool CustomControllerBase::seek_target(Asset& target,
                                        int desired_range_px,
-                                       const internal::MovementConfig& config) {
+                                       const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerMovementSystem::seek_target(*self, target, desired_range_px, config)
                 : false;
 }
 
 bool CustomControllerBase::chase_target(Asset& target,
-                                        const internal::MovementConfig& config) {
+                                        const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerMovementSystem::chase_target(*self, target, config)
                 : false;
@@ -277,14 +277,14 @@ bool CustomControllerBase::chase_target(Asset& target,
 
 bool CustomControllerBase::retreat_from_target(Asset& target,
                                                int retreat_distance_px,
-                                               const internal::MovementConfig& config) {
+                                               const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerMovementSystem::retreat_from_target(*self, target, retreat_distance_px, config)
                 : false;
 }
 
 bool CustomControllerBase::patrol(const std::vector<axis::WorldPos>& points,
-                                  const internal::MovementConfig& config) {
+                                  const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerMovementSystem::patrol(*self, points, behavior_state_.patrol_state, config)
                 : false;
@@ -292,14 +292,14 @@ bool CustomControllerBase::patrol(const std::vector<axis::WorldPos>& points,
 
 bool CustomControllerBase::idle_wander(int min_delta_px,
                                        int max_delta_px,
-                                       const internal::MovementConfig& config) {
+                                       const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerMovementSystem::idle_wander(*self, rng_, min_delta_px, max_delta_px, config)
                 : false;
 }
 
 bool CustomControllerBase::return_home(int threshold_px,
-                                       const internal::MovementConfig& config) {
+                                       const MovementConfig& config) {
     Asset* self = controller_self();
     return self ? internal::ControllerBehaviorSystem::tick_return_home(*self, behavior_state_, threshold_px, config)
                 : false;
@@ -331,9 +331,9 @@ bool CustomControllerBase::face_direction(float dir_x, float dir_z, float pitch_
 }
 
 void CustomControllerBase::run_enemy_behavior(Asset* target,
-                                              const internal::EnemyBehaviorConfig& config,
-                                              const internal::MovementConfig& chase_move,
-                                              const internal::MovementConfig& retreat_move) {
+                                              const EnemyAgentConfig& config,
+                                              const MovementConfig& chase_move,
+                                              const MovementConfig& retreat_move) {
     Asset* self = controller_self();
     if (!self) {
         return;
@@ -351,7 +351,7 @@ bool CustomControllerBase::run_wander_behavior(Asset* target,
                                                int idle_radius_px,
                                                int min_wander_delta_px,
                                                int max_wander_delta_px,
-                                               const internal::MovementConfig& config) {
+                                               const MovementConfig& config) {
     Asset* self = controller_self();
     if (!self) {
         return false;

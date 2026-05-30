@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "assets/asset/Asset.hpp"
+#include "core/AssetsManager.hpp"
 
 namespace animation_update::custom_controllers::internal {
 
@@ -20,6 +21,21 @@ int resolve_visit_threshold(const MovementConfig& config, int step_px) {
     return std::min(requested, std::max(0, step_px - 1));
 }
 
+axis::WorldPos lock_to_ground_if_needed(const Asset& self,
+                                        const axis::WorldPos& requested,
+                                        const MovementConfig& config) {
+    if (config.allow_vertical_movement) {
+        return requested;
+    }
+    Assets* owner_assets = self.get_assets();
+    if (!owner_assets) {
+        return axis::WorldPos{requested.x, self.world_y(), requested.z};
+    }
+    const world::GridPoint floor_point =
+        owner_assets->resolve_floor_world_point(SDL_Point{requested.x, requested.z}, self.grid_resolution);
+    return axis::WorldPos{requested.x, floor_point.world_y(), requested.z};
+}
+
 } // namespace
 
 axis::WorldPos ControllerMovementSystem::world_position(const Asset& self) {
@@ -32,7 +48,8 @@ bool ControllerMovementSystem::auto_move_3d(Asset& self,
     if (!self.anim_) {
         return false;
     }
-    self.anim_->auto_move_3d(target,
+    const axis::WorldPos resolved_target = lock_to_ground_if_needed(self, target, config);
+    self.anim_->auto_move_3d(resolved_target,
                              std::max(0, config.visit_threshold_px),
                              config.resolution_layer,
                              config.override_non_locked,
@@ -176,7 +193,7 @@ bool ControllerMovementSystem::idle_wander(Asset& self,
     const int dy = dist(rng) / 4;
     const axis::WorldPos target{
         self.world_x() + dx,
-        self.world_y() + dy,
+        config.allow_vertical_movement ? self.world_y() + dy : self.world_y(),
         self.world_z() + dz};
     return auto_move_3d(self, target, config);
 }

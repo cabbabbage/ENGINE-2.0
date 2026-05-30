@@ -10,6 +10,7 @@
 #include "animation/animation_update.hpp"
 #include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
+#include "animation/controllers/shared/controller_types.hpp"
 #include "animation/controllers/shared/controller_game_context.hpp"
 #include "animation/controllers/shared/internal/controller_behavior_system.hpp"
 #include "animation/controllers/shared/internal/controller_combat_system.hpp"
@@ -88,38 +89,38 @@ protected:
                  bool override_non_locked = true);
     bool move_toward(const axis::WorldPos& target,
                      int step_px,
-                     const internal::MovementConfig& config = {});
+                     const MovementConfig& config = {});
     bool move_away(const axis::WorldPos& point,
                    int step_px,
-                   const internal::MovementConfig& config = {});
+                   const MovementConfig& config = {});
     bool seek_target(Asset& target,
                      int desired_range_px,
-                     const internal::MovementConfig& config = {});
+                     const MovementConfig& config = {});
     bool chase_target(Asset& target,
-                      const internal::MovementConfig& config = {});
+                      const MovementConfig& config = {});
     bool retreat_from_target(Asset& target,
                              int retreat_distance_px,
-                             const internal::MovementConfig& config = {});
+                             const MovementConfig& config = {});
     bool patrol(const std::vector<axis::WorldPos>& points,
-                const internal::MovementConfig& config = {});
+                const MovementConfig& config = {});
     bool idle_wander(int min_delta_px,
                      int max_delta_px,
-                     const internal::MovementConfig& config = {});
+                     const MovementConfig& config = {});
     bool return_home(int threshold_px,
-                     const internal::MovementConfig& config = {});
+                     const MovementConfig& config = {});
     bool face_target(Asset& target);
     bool face_direction(float dir_x, float dir_z, float pitch_radians = 0.0f);
 
     // Behavior helpers
     void run_enemy_behavior(Asset* target,
-                            const internal::EnemyBehaviorConfig& config,
-                            const internal::MovementConfig& chase_move = {},
-                            const internal::MovementConfig& retreat_move = {});
+                            const EnemyAgentConfig& config,
+                            const MovementConfig& chase_move = {},
+                            const MovementConfig& retreat_move = {});
     bool run_wander_behavior(Asset* target,
                              int idle_radius_px,
                              int min_wander_delta_px,
                              int max_wander_delta_px,
-                             const internal::MovementConfig& config = {});
+                             const MovementConfig& config = {});
 
     // Combat helpers
     bool start_attack(const std::string& animation_id,

@@ -82,16 +82,18 @@ bool ControllerCombatSystem::try_attack_target(Asset& self,
 }
 
 bool ControllerCombatSystem::apply_attack_hit(Asset& attacker, Asset& target) {
-    AttackDetectionHelper::send_attack_if_hit(&attacker, &target);
-    return true;
+    return AttackDetectionHelper::send_attack_if_hit(&attacker, &target);
+}
+
+int ControllerCombatSystem::apply_attack_hits_to_active_targets_count(Asset& attacker, Assets* assets) {
+    if (!assets) {
+        return 0;
+    }
+    return AttackDetectionHelper::send_attacks_to_active_targets(&attacker, assets);
 }
 
 bool ControllerCombatSystem::apply_attack_hits_to_active_targets(Asset& attacker, Assets* assets) {
-    if (!assets) {
-        return false;
-    }
-    AttackDetectionHelper::send_attacks_to_active_targets(&attacker, assets);
-    return true;
+    return apply_attack_hits_to_active_targets_count(attacker, assets) > 0;
 }
 
 bool ControllerCombatSystem::is_hit_window_open(const Asset& self,

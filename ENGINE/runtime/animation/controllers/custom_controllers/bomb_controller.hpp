@@ -18,7 +18,7 @@ protected:
     void on_process_pending_attacks(Asset& self) override;
 
 private:
-    custom_controller_api::EnemyBehaviorConfig behavior_config_{};
+    custom_controller_api::EnemyAgentConfig behavior_config_{};
     custom_controller_api::MovementConfig chase_move_{};
     custom_controller_api::MovementConfig retreat_move_{};
 };

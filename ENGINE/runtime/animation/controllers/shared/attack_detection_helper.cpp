@@ -125,20 +125,22 @@ bool may_overlap_attack_bounds(const XzBounds& attack_bounds, const Asset* targe
 
 } // namespace
 
-void AttackDetectionHelper::send_attack_if_hit(Asset* attacker, Asset* target) {
+bool AttackDetectionHelper::send_attack_if_hit(Asset* attacker, Asset* target) {
     if (!can_send_attacks_from(attacker) || !can_receive_attacks_from(attacker, target)) {
-        return;
+        return false;
     }
 
     const auto attack_opt = AttackValidation::compute_attack_if_hit(*attacker, *target);
     if (attack_opt.has_value()) {
         target->send_attack(*attack_opt);
+        return true;
     }
+    return false;
 }
 
-void AttackDetectionHelper::send_attacks_to_active_targets(Asset* attacker, Assets* assets) {
+int AttackDetectionHelper::send_attacks_to_active_targets(Asset* attacker, Assets* assets) {
     if (!can_send_attacks_from(attacker) || !assets) {
-        return;
+        return 0;
     }
 
     const std::uint64_t freq = SDL_GetPerformanceFrequency();
@@ -149,7 +151,7 @@ void AttackDetectionHelper::send_attacks_to_active_targets(Asset* attacker, Asse
     std::size_t hits = 0;
     const XzBounds attack_bounds = expanded_bounds(bounds_for_volumes(attacker->current_attack_box_volumes()), 16.0f);
     if (!attack_bounds.valid) {
-        return;
+        return 0;
     }
 
     const auto& active_assets = assets->getActive();
@@ -189,6 +191,7 @@ void AttackDetectionHelper::send_attacks_to_active_targets(Asset* attacker, Asse
             }
         }
     }
+    return static_cast<int>(hits);
 }
 
 } // namespace animation_update::custom_controllers

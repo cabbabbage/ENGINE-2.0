@@ -109,7 +109,7 @@ public:
     const std::string& backend_name() const;
 
 private:
-    SDL_Texture* finale_effects_target_ = nullptr;
+    SDL_Texture* lens_post_target_ = nullptr;
     struct RenderTargetLifecycleManager {
         int requested_width = 1;
         int requested_height = 1;

@@ -1460,11 +1460,11 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
 
             SDL_Color debug_color{255, 255, 255, 255};
             switch (lens_settings.alpha_debug_mode) {
-            case kAlphaDebugSourceAlpha:
+            case kAlphaDebugShowSourceAlpha:
                 layer_output = layer_source;
                 debug_color = SDL_Color{255, 255, 255, 220};
                 break;
-            case kAlphaDebugAccumulatedBlurAlpha:
+            case kAlphaDebugShowAccumulatedBlurAlpha:
                 debug_color = SDL_Color{180, 220, 255, 235};
                 break;
             case kAlphaDebugDepthLayer:

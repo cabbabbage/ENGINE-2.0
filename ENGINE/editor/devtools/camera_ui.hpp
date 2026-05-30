@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <vector>
 #include "DockableCollapsible.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
@@ -14,6 +15,10 @@ class SliderWidget;
 class DMSlider;
 class DMCheckbox;
 class CallbackCheckboxWidget;
+class DMDropdown;
+class DMButton;
+class ButtonWidget;
+class DropdownWidget;
 
 
 class CameraUIPanel : public DockableCollapsible {
@@ -71,6 +76,37 @@ private:
     std::unique_ptr<DMSlider> near_fog_distance_slider_;
     std::unique_ptr<SliderWidget> near_fog_distance_widget_;
     std::unique_ptr<FloatSliderWidget> radial_blur_px_slider_;
+    std::unique_ptr<FloatSliderWidget> focus_depth_offset_slider_;
+    std::unique_ptr<FloatSliderWidget> focus_falloff_acceleration_slider_;
+    std::unique_ptr<FloatSliderWidget> max_near_blur_px_slider_;
+    std::unique_ptr<FloatSliderWidget> max_far_blur_px_slider_;
+    std::unique_ptr<FloatSliderWidget> near_far_blur_bias_slider_;
+    std::unique_ptr<FloatSliderWidget> field_curvature_slider_;
+    std::unique_ptr<FloatSliderWidget> edge_softness_slider_;
+    std::unique_ptr<FloatSliderWidget> swirl_strength_slider_;
+    std::unique_ptr<FloatSliderWidget> swirl_radius_start_slider_;
+    std::unique_ptr<FloatSliderWidget> tangential_blur_stretch_slider_;
+    std::unique_ptr<FloatSliderWidget> anamorphic_strength_slider_;
+    std::unique_ptr<FloatSliderWidget> bokeh_oval_ratio_slider_;
+    std::unique_ptr<FloatSliderWidget> bokeh_rotation_slider_;
+    std::unique_ptr<FloatSliderWidget> vignette_strength_slider_;
+    std::unique_ptr<FloatSliderWidget> vignette_radius_slider_;
+    std::unique_ptr<FloatSliderWidget> vignette_softness_slider_;
+    std::unique_ptr<FloatSliderWidget> barrel_distortion_slider_;
+    std::unique_ptr<FloatSliderWidget> distortion_zoom_compensation_slider_;
+    std::unique_ptr<FloatSliderWidget> chromatic_aberration_slider_;
+    std::unique_ptr<FloatSliderWidget> chromatic_edge_start_slider_;
+    std::unique_ptr<FloatSliderWidget> chromatic_depth_influence_slider_;
+    std::unique_ptr<FloatSliderWidget> bloom_strength_slider_;
+    std::unique_ptr<FloatSliderWidget> bloom_threshold_slider_;
+    std::unique_ptr<FloatSliderWidget> bloom_radius_slider_;
+    std::unique_ptr<FloatSliderWidget> halation_strength_slider_;
+    std::unique_ptr<FloatSliderWidget> blur_padding_preview_slider_;
+    std::unique_ptr<DMDropdown> alpha_debug_dropdown_;
+    std::unique_ptr<DropdownWidget> alpha_debug_widget_;
+    std::unique_ptr<DMButton> reset_lens_defaults_button_;
+    std::unique_ptr<ButtonWidget> reset_lens_defaults_widget_;
+    std::vector<std::unique_ptr<Widget>> lens_label_widgets_;
     std::unique_ptr<DMSlider> distance_from_edge_slider_;
     std::unique_ptr<SliderWidget> distance_from_edge_widget_;
 
@@ -80,7 +116,9 @@ private:
     std::unique_ptr<SliderWidget> camera_height_min_widget_;
     std::unique_ptr<SliderWidget> camera_height_max_widget_;
     std::unique_ptr<CallbackCheckboxWidget> depth_of_field_widget_;
+    std::unique_ptr<CallbackCheckboxWidget> alpha_clamp_protection_widget_;
     DMCheckbox* depth_of_field_checkbox_ = nullptr;
+    DMCheckbox* alpha_clamp_protection_checkbox_ = nullptr;
     std::unique_ptr<Widget> movement_section_widget_;
     std::unique_ptr<Widget> framing_section_widget_;
     std::unique_ptr<Widget> lens_section_widget_;

@@ -47,6 +47,16 @@ std::filesystem::path project_root_path() {
 #endif
 }
 
+SDL_BlendMode premultiplied_over_blend_mode() {
+    static const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD);
+    return mode;
+}
 
 dof_blur_chain::CinematicLensSettings build_cinematic_lens_settings(
     const WarpedScreenGrid::RealismSettings& camera_settings) {
@@ -2533,11 +2543,21 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 render_diagnostics::end_frame();
                 return false;
             }
+            if (resolved_dof_result.background_mid) {
+                SDL_SetTextureBlendMode(resolved_dof_result.background_mid, premultiplied_over_blend_mode());
+                SDL_SetTextureAlphaMod(resolved_dof_result.background_mid, 255);
+                SDL_SetTextureColorMod(resolved_dof_result.background_mid, 255, 255, 255);
+            }
             if (resolved_dof_result.background_mid &&
                 !render_diagnostics::render_texture(renderer_, resolved_dof_result.background_mid, nullptr, &full_rect)) {
                 out_error = "Failed to composite DoF background target: " + safe_string(SDL_GetError());
                 render_diagnostics::end_frame();
                 return false;
+            }
+            if (resolved_dof_result.foreground_mid) {
+                SDL_SetTextureBlendMode(resolved_dof_result.foreground_mid, premultiplied_over_blend_mode());
+                SDL_SetTextureAlphaMod(resolved_dof_result.foreground_mid, 255);
+                SDL_SetTextureColorMod(resolved_dof_result.foreground_mid, 255, 255, 255);
             }
             if (resolved_dof_result.foreground_mid &&
                 !render_diagnostics::render_texture(renderer_, resolved_dof_result.foreground_mid, nullptr, &full_rect)) {

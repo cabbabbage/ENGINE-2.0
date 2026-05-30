@@ -35,6 +35,15 @@ inline constexpr int kMaxSamples = 17;
 inline constexpr float kSamplesPerSqrtRadius = 1.35f;
 } // namespace lens_blur_tuning
 
+enum AlphaDebugMode : int {
+    kAlphaDebugOff = 0,
+    kAlphaDebugShowSourceAlpha = 1,
+    kAlphaDebugShowAccumulatedBlurAlpha = 2,
+    kAlphaDebugShowFinalBlurredOutput = 3,
+    kAlphaDebugCompareAlphaClampProtection = 4,
+    kAlphaDebugBlurPaddingPreview = 5,
+};
+
 namespace atmospheric_dust_tuning {
 inline constexpr bool kEnabled = true;
 inline constexpr float kAnimationFps = 18.0f;

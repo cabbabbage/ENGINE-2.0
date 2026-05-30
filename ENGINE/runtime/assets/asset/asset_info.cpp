@@ -2198,8 +2198,7 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
         info_json_["tillable"] = tillable;
-        NeighborSearchRadius = std::clamp( data.value("neighbor_search_distance", NeighborSearchRadius), 20, 1000);
-        info_json_["neighbor_search_distance"] = NeighborSearchRadius;
+        info_json_.erase("neighbor_search_distance");
         if (info_json_.is_object()) {
                 info_json_.erase("apply_parallax");
         }
@@ -2523,6 +2522,7 @@ nlohmann::json AssetInfo::manifest_payload() const {
         if (!payload.is_object()) {
                 payload = nlohmann::json::object();
         }
+        payload.erase("neighbor_search_distance");
         payload[kMovementEnabledKey] = movement_enabled;
         payload[kAttackBoxEnabledKey] = attack_box_enabled;
         payload[kHitboxEnabledKey] = hitbox_enabled;
@@ -2668,11 +2668,6 @@ void AssetInfo::set_min_same_type_distance(int d) {
 void AssetInfo::set_min_distance_all(int d) {
         min_distance_all = d;
         info_json_["min_distance_all"] = d;
-}
-
-void AssetInfo::set_neighbor_search_radius(int radius) {
-        NeighborSearchRadius = std::clamp(radius, 20, 1000);
-        info_json_["neighbor_search_distance"] = NeighborSearchRadius;
 }
 
 void AssetInfo::set_flipable(bool v) {

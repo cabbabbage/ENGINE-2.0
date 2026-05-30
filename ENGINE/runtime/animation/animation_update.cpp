@@ -715,7 +715,8 @@ void AnimationUpdate::auto_move_3d(const std::vector<axis::WorldPos>& checkpoint
 
     if (plan3d_.strides.empty()) {
         if (debug_logging) {
-            vibble::log::info("[AnimationUpdate] auto_move_3d plan produced no strides for asset=" + asset_name);
+            vibble::log::info("[AIMove] auto_move_3d produced no valid strides for asset=" + asset_name +
+                              " (no valid movement animation/path decision)");
         }
         arm_plan_retry_cooldown(plan_frame_id);
         active_plan_mode_ = ActivePlanMode::None;
@@ -841,7 +842,8 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
 
     if (plan_.strides.empty()) {
         if (debug_logging) {
-            vibble::log::info("[AnimationUpdate] auto_move plan produced no strides for asset=" + asset_name);
+            vibble::log::info("[AIMove] auto_move produced no valid strides for asset=" + asset_name +
+                              " (no valid movement animation/path decision)");
         }
         arm_plan_retry_cooldown(plan_frame_id);
         active_plan_mode_ = ActivePlanMode::None;

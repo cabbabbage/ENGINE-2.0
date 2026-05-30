@@ -1,6 +1,7 @@
 #include "bomb_controller.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "utils/log.hpp"
 
 bomb_controller::bomb_controller(Asset* self)
     : custom_controller_api::CustomControllerBase(self) {
@@ -35,6 +36,9 @@ void bomb_controller::on_update(const Input& in) {
     }
 
     Asset* player = resolve_target_player();
+    if (!player && self->anim_->debug_enabled()) {
+        vibble::log::info("[AICombat] Bomb could not acquire player target");
+    }
     run_enemy_behavior(player, behavior_config_, chase_move_, retreat_move_);
 }
 

@@ -2,6 +2,7 @@
 
 #include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
+#include "utils/log.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -131,6 +132,10 @@ AttackProcessingSummary AttackProcessingHelper::process_attacks(
     for (const auto& attack : pending_attacks) {
         const int applied_damage = std::max(0, attack.payload.damage_amount);
         self.runtime_health = std::max(0, self.runtime_health - applied_damage);
+        if (self.anim_ && self.anim_->debug_enabled() && applied_damage > 0) {
+            vibble::log::info("[AICombat] Damage applied: " + std::to_string(applied_damage) +
+                              " remaining_health=" + std::to_string(self.runtime_health));
+        }
         took_damage = took_damage || applied_damage > 0;
         SDL_Point candidate_knockback{};
         if (!compute_knockback_delta(
@@ -165,6 +170,9 @@ AttackProcessingSummary AttackProcessingHelper::process_attacks(
     if (self.runtime_health <= 0) {
         summary.took_damage = took_damage;
         summary.died = true;
+        if (self.anim_ && self.anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Target died from processed attack");
+        }
         if (!try_play_death_animation(self, config)) {
             self.Delete();
         }
@@ -173,6 +181,11 @@ AttackProcessingSummary AttackProcessingHelper::process_attacks(
 
     if (strongest_knockback.has_value()) {
         summary.took_damage = took_damage;
+        if (self.anim_ && self.anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Knockback applied: dx=" +
+                              std::to_string(strongest_knockback->x) + " dz=" +
+                              std::to_string(strongest_knockback->y));
+        }
         apply_knockback(self, *strongest_knockback);
         return summary;
     }

@@ -127,13 +127,22 @@ bool may_overlap_attack_bounds(const XzBounds& attack_bounds, const Asset* targe
 
 bool AttackDetectionHelper::send_attack_if_hit(Asset* attacker, Asset* target) {
     if (!can_send_attacks_from(attacker) || !can_receive_attacks_from(attacker, target)) {
+        if (attacker && attacker->anim_ && attacker->anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Attack hit-check rejected before validation");
+        }
         return false;
     }
 
     const auto attack_opt = AttackValidation::compute_attack_if_hit(*attacker, *target);
     if (attack_opt.has_value()) {
         target->send_attack(*attack_opt);
+        if (attacker->anim_ && attacker->anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Attack hit-check succeeded and dispatched");
+        }
         return true;
+    }
+    if (attacker->anim_ && attacker->anim_->debug_enabled()) {
+        vibble::log::info("[AICombat] Attack hit-check missed after validation");
     }
     return false;
 }

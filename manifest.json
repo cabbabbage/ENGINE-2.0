@@ -140,7 +140,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.29999998211860657,
@@ -256,7 +255,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.23999999463558197,
@@ -336,7 +334,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 2.059999942779541,
@@ -681,7 +678,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.6299999952316284,
@@ -980,7 +976,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.85999995470047,
@@ -1069,7 +1064,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.0,
@@ -1139,7 +1133,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 2.950000047683716,
@@ -1224,7 +1217,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.2199999988079071,
@@ -2808,7 +2800,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -2908,7 +2899,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.25,
@@ -3078,7 +3068,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.17999999225139618,
@@ -3171,7 +3160,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.11999999731779099,
@@ -3256,7 +3244,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.29999998211860657,
@@ -3342,7 +3329,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.23999999463558197,
@@ -3428,7 +3414,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.23999999463558197,
@@ -3517,7 +3502,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.5999999642372131,
@@ -3607,7 +3591,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 3.3299999237060547,
@@ -3749,7 +3732,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.0,
@@ -4031,7 +4013,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.8899999856948853,
@@ -4308,7 +4289,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.32999998331069946,
@@ -4469,7 +4449,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "baked_authored_scale": 1.0,
@@ -5270,7 +5249,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.3799999952316284,
@@ -5587,7 +5565,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.11999999731779099,
@@ -5811,7 +5788,6 @@
         }
       ],
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.0099999904632568,
@@ -6365,7 +6341,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -6467,7 +6442,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -6539,7 +6513,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.9699999690055847,
@@ -6614,7 +6587,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -7367,7 +7339,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.08999999612569809,
@@ -7464,7 +7435,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.09999999403953552,
@@ -7635,7 +7605,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 194,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -7728,7 +7697,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -7843,7 +7811,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -8653,7 +8620,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 2.5799999237060547,
@@ -9021,7 +8987,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -9152,7 +9117,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.20999999344348907,
@@ -9286,7 +9250,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "baked_authored_scale": 1.0,
@@ -9391,7 +9354,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "baked_authored_scale": 1.0,
@@ -9643,7 +9605,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -10014,7 +9975,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -10217,7 +10177,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -10311,7 +10270,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.23999999463558197,
@@ -10507,7 +10465,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.28999999165534973,
@@ -10590,7 +10547,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.28999999165534973,
@@ -10670,7 +10626,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.28999999165534973,
@@ -10754,7 +10709,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.28999999165534973,
@@ -10950,7 +10904,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -11097,7 +11050,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.2199999988079071,
@@ -11189,7 +11141,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.2199999988079071,
@@ -11321,7 +11272,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.8399999141693115,
@@ -11454,7 +11404,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.3100000023841858,
@@ -13246,7 +13195,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -15288,7 +15236,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 513,
       "movement_enabled": true,
-      "neighbor_search_distance": 203,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.6200000047683716,
@@ -16547,7 +16494,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -16833,7 +16779,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -17087,7 +17032,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.6800000071525574,
@@ -17280,7 +17224,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "baked_authored_scale": 2.1599998474121094,
@@ -17394,7 +17337,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.0,
@@ -17528,7 +17470,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.0,
@@ -17770,7 +17711,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 1.0,
@@ -21860,7 +21800,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [
         {
           "asset_name": "vibble",
@@ -22829,7 +22768,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "baked_authored_scale": 1.0,
@@ -22936,7 +22874,6 @@
       "lighting_normal_map": "",
       "lighting_roughness": 1.0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "baked_authored_scale": 1.0,
@@ -23042,7 +22979,6 @@
       "hitbox_enabled": false,
       "impassable_enabled": false,
       "movement_enabled": true,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "scaling_profile": {
         "coverage_scale": 0.699999988079071,
@@ -23282,7 +23218,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -23468,7 +23403,6 @@
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "movement_enabled": false,
-      "neighbor_search_distance": 500,
       "oval_anchor_mappings": [],
       "render_radius": 0,
       "scaling_profile": {
@@ -23529,28 +23463,28 @@
       "camera_settings": {
         "alpha_clamp_protection": false,
         "alpha_debug_mode": 0,
-        "anamorphic_strength": 0.0,
-        "aperture": 2.809999942779541,
+        "anamorphic_strength": 1.9499999284744263,
+        "aperture": 0.35999998450279236,
         "base_height_px": 720.0,
         "blur_padding_px": 5,
         "blur_px": 16.0,
         "bokeh_oval_ratio": 1.0,
         "bokeh_rotation": 0.0,
-        "boundary_min_visible_screen_ratio": 0.0010000000474974513,
+        "boundary_min_visible_screen_ratio": 0.007000000216066837,
         "camera_height_max_px": 2019,
         "camera_height_min_px": 200,
-        "depth_of_field_enabled": false,
+        "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 2000.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.05999999865889549,
         "edge_softness": 1.0,
-        "field_curvature": 0.0,
+        "field_curvature": 3.9499998092651367,
         "focus_depth_offset": 0.0,
-        "focus_falloff_acceleration": 1.5,
+        "focus_falloff_acceleration": 0.8400000333786011,
         "layer_depth_curve": 1.0,
         "layer_depth_interval": 250.0,
         "lens_alpha_clamp_protection": false,
         "lens_alpha_debug_mode": 0,
-        "lens_anamorphic_strength": 0.0,
+        "lens_anamorphic_strength": 1.9499999284744263,
         "lens_barrel_distortion": -0.003999978303909302,
         "lens_bloom_radius": 0.0,
         "lens_bloom_strength": 0.0,
@@ -23559,30 +23493,30 @@
         "lens_bokeh_oval_ratio": 1.0,
         "lens_bokeh_rotation": 0.0,
         "lens_chromatic_aberration": 0.0,
-        "lens_chromatic_depth_influence": 0.0,
+        "lens_chromatic_depth_influence": 0.2199999988079071,
         "lens_chromatic_edge_start": 0.6200000047683716,
         "lens_distortion_zoom_compensation": 1.0,
         "lens_downsample_scale": 0.9999999403953552,
         "lens_edge_softness": 1.0,
-        "lens_field_curvature": 0.0,
+        "lens_field_curvature": 3.9499998092651367,
         "lens_focus_depth_offset": 0.0,
-        "lens_focus_falloff_acceleration": 1.5,
+        "lens_focus_falloff_acceleration": 0.8400000333786011,
         "lens_halation_strength": 0.0,
         "lens_max_far_blur_px": 48.0,
         "lens_max_near_blur_px": 16.0,
         "lens_near_far_blur_bias": 0.0,
         "lens_quality_preset": 1,
         "lens_sample_count": 9,
-        "lens_swirl_radius_start": 0.3499999940395355,
-        "lens_swirl_strength": 0.25,
-        "lens_tangential_blur_stretch": 1.0,
+        "lens_swirl_radius_start": 0.6200000047683716,
+        "lens_swirl_strength": 0.3700000047683716,
+        "lens_tangential_blur_stretch": 1.4900000095367432,
         "lens_vignette_radius": 0.05999999865889549,
         "lens_vignette_softness": 0.42000001668930054,
         "lens_vignette_strength": 0.8799999952316284,
         "light_max_cull_depth": 13454.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
-        "live_dynamic_min_visible_screen_ratio": 0.0010000000474974513,
+        "live_dynamic_min_visible_screen_ratio": 0.007000000216066837,
         "live_dynamic_preload_margin_world_px": 192,
         "max_camera_velocity": 2200.0,
         "max_cull_depth": 8000.0,
@@ -23598,9 +23532,9 @@
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
-        "swirl_radius_start": 0.3499999940395355,
-        "swirl_strength": 0.25,
-        "tangential_blur_stretch": 1.0,
+        "swirl_radius_start": 0.6200000047683716,
+        "swirl_strength": 0.3700000047683716,
+        "tangential_blur_stretch": 1.4900000095367432,
         "transition_damping": 9.0
       },
       "content_root": "content/forrest",
@@ -23724,8 +23658,8 @@
         "Bluebloom_Nook": {
           "coarseness": 0,
           "display_color": [
+            99,
             204,
-            31,
             31,
             255
           ],
@@ -23875,9 +23809,9 @@
         "Foggy_Glade": {
           "coarseness": 0,
           "display_color": [
-            99,
-            204,
-            31,
+            242,
+            207,
+            85,
             255
           ],
           "edge_detail_candidates": {
@@ -24026,9 +23960,9 @@
         "Frog_Basin": {
           "coarseness": 0,
           "display_color": [
-            242,
-            192,
-            85,
+            204,
+            31,
+            191,
             255
           ],
           "edge_detail_candidates": {
@@ -24174,9 +24108,9 @@
         "Lantern_Mirelet": {
           "coarseness": 0,
           "display_color": [
-            204,
-            174,
-            31,
+            242,
+            36,
+            50,
             255
           ],
           "edge_detail_candidates": {
@@ -24327,9 +24261,9 @@
           "camera_zoom_percent": 100,
           "coarseness": 0,
           "display_color": [
-            85,
+            169,
+            36,
             242,
-            225,
             255
           ],
           "edge_detail_candidates": {
@@ -24527,9 +24461,9 @@
         "Moonfern_Pocket": {
           "coarseness": 0,
           "display_color": [
-            76,
-            31,
-            204,
+            242,
+            170,
+            36,
             255
           ],
           "edge_detail_candidates": {
@@ -24676,16 +24610,16 @@
           }
         },
         "Mossy_Circle": {
-          "camera_center_dx": 556,
-          "camera_center_dz": 3347,
-          "camera_height_px": 643,
-          "camera_tilt_deg": 17.636096954345703,
+          "camera_center_dx": -1087,
+          "camera_center_dz": -3699,
+          "camera_height_px": 399,
+          "camera_tilt_deg": 40.43609619140625,
           "camera_zoom_percent": 0,
           "coarseness": 96,
           "display_color": [
+            85,
+            144,
             242,
-            81,
-            36,
             255
           ],
           "edge_detail_candidates": {
@@ -25015,9 +24949,9 @@
         "NewRoom": {
           "coarseness": 0,
           "display_color": [
-            91,
-            242,
-            85,
+            71,
+            83,
+            204,
             255
           ],
           "edge_detail_candidates": {
@@ -25066,9 +25000,9 @@
         "NewRoom1": {
           "coarseness": 0,
           "display_color": [
-            149,
-            36,
+            91,
             242,
+            85,
             255
           ],
           "edge_detail_candidates": {
@@ -25117,9 +25051,9 @@
         "NewRoom2": {
           "coarseness": 0,
           "display_color": [
+            41,
             204,
             31,
-            161,
             255
           ],
           "edge_detail_candidates": {
@@ -25250,9 +25184,9 @@
         "NewRoom4": {
           "coarseness": 0,
           "display_color": [
-            44,
             204,
-            31,
+            71,
+            104,
             255
           ],
           "edge_detail_candidates": {
@@ -25302,9 +25236,9 @@
         "NewRoom5": {
           "coarseness": 0,
           "display_color": [
-            204,
-            71,
-            101,
+            242,
+            36,
+            234,
             255
           ],
           "edge_detail_candidates": {
@@ -25354,9 +25288,9 @@
         "Old_Stump_Yard": {
           "coarseness": 0,
           "display_color": [
-            220,
+            88,
+            36,
             242,
-            85,
             255
           ],
           "edge_detail_candidates": {
@@ -25568,9 +25502,9 @@
           "camera_zoom_percent": 40,
           "coarseness": 0,
           "display_color": [
-            242,
-            213,
-            36,
+            192,
+            204,
+            71,
             255
           ],
           "edge_detail_candidates": {
@@ -25656,9 +25590,9 @@
         "Spider_Hollow": {
           "coarseness": 0,
           "display_color": [
-            242,
-            134,
-            36,
+            171,
+            71,
+            204,
             255
           ],
           "edge_detail_candidates": {
@@ -25807,9 +25741,9 @@
         "Thornstep_Croft": {
           "coarseness": 0,
           "display_color": [
-            242,
-            36,
-            66,
+            57,
+            31,
+            204,
             255
           ],
           "edge_detail_candidates": {
@@ -25958,9 +25892,9 @@
         "Whispering_Ring": {
           "coarseness": 0,
           "display_color": [
-            71,
-            83,
-            204,
+            242,
+            219,
+            36,
             255
           ],
           "edge_detail_candidates": {
@@ -26114,9 +26048,9 @@
           "camera_zoom_percent": 49,
           "coarseness": 0,
           "display_color": [
-            189,
-            204,
-            71,
+            242,
+            121,
+            36,
             255
           ],
           "edge_detail_candidates": {
@@ -26545,9 +26479,9 @@
           "camera_zoom_percent": 2,
           "coarseness": 0,
           "display_color": [
-            178,
-            51,
-            204,
+            128,
+            242,
+            36,
             255
           ],
           "edge_detail_candidates": {
@@ -27024,6 +26958,29 @@
               "center": 0.3333333333333333,
               "edge": 0.33333333333333337,
               "falloff": 0.33333333333333337
+            }
+          }
+        },
+        "NewTrail4": {
+          "anti_tags": [],
+          "coarseness": 0,
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
+          "geometry": "Square",
+          "name": "NewTrail4",
+          "spawn_groups": [],
+          "tags": [],
+          "width": {
+            "center": 1412,
+            "falloff": 0,
+            "random": false,
+            "span": 0,
+            "weights": {
+              "center": 1.0,
+              "edge": 0.0,
+              "falloff": 0.0
             }
           }
         }

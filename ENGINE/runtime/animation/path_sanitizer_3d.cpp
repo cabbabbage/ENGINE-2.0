@@ -6,6 +6,7 @@
 #include "animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "collision_query_context.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/area.hpp"
@@ -14,16 +15,13 @@ using CollisionAreaRef3D = const Assets::FrameCollisionEntry*;
 
 namespace {
 
-std::vector<CollisionAreaRef3D> gather_collision_areas(const Asset& self) {
+std::vector<CollisionAreaRef3D> gather_collision_areas(const Asset& self, int search_radius) {
     std::vector<CollisionAreaRef3D> result;
     const Assets* assets = self.get_assets();
     if (!assets) {
         return result;
     }
 
-    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
-        ? self.info->NeighborSearchRadius
-        : 0;
     assets->query_impassable_entries(self, search_radius, result);
     return result;
 }
@@ -126,10 +124,21 @@ std::vector<axis::WorldPos> PathSanitizer3D::sanitize(
         return sanitized;
     }
 
-    const auto collision_areas = gather_collision_areas(self);
-    const axis::WorldPos origin{ self.world_x(), self.world_y(), self.world_z() };
-    const long long thresh_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const Assets* assets = self.get_assets();
+    const int max_radius_cap = assets ? assets->max_impassable_query_radius() : 0;
+    const axis::WorldPos origin{ self.world_x(), self.world_y(), self.world_z() };
+    int furthest_checkpoint_distance_px = 0;
+    for (const axis::WorldPos& checkpoint : absolute_checkpoints) {
+        const long long dx = static_cast<long long>(checkpoint.x) - static_cast<long long>(origin.x);
+        const long long dz = static_cast<long long>(checkpoint.z) - static_cast<long long>(origin.z);
+        const int distance = static_cast<int>(std::lround(std::sqrt(static_cast<double>(dx * dx + dz * dz))));
+        furthest_checkpoint_distance_px = std::max(furthest_checkpoint_distance_px, distance);
+    }
+    const int search_radius = CollisionQueryContext::resolve_search_radius(
+        furthest_checkpoint_distance_px,
+        max_radius_cap);
+    const auto collision_areas = gather_collision_areas(self, search_radius);
+    const long long thresh_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const int resolution_layer = self.grid_resolution;
 
     for (const axis::WorldPos& checkpoint : absolute_checkpoints) {

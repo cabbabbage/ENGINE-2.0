@@ -35,6 +35,10 @@
 
 namespace {
 constexpr int kMaxBlockedMoveFallbackProbes = 12;
+constexpr int kLocalImpassableQueryRadiusPx = 256;
+constexpr int kSegmentImpassableMinRadiusPx = 64;
+constexpr int kUnstickMinQueryRadiusPx = 96;
+constexpr int kUnstickRadiusPaddingPx = 32;
 
 SDL_Point point_on_delta(SDL_Point from, SDL_Point delta, int step, int steps) {
     if (steps <= 0) {
@@ -55,9 +59,8 @@ bool visit_impassable_neighbors(const Asset& asset, Fn&& fn) {
     }
 
     std::vector<const Assets::FrameCollisionEntry*> entries;
-    const int search_radius = (asset.info && asset.info->NeighborSearchRadius > 0)
-        ? asset.info->NeighborSearchRadius
-        : 0;
+    const int search_radius = std::min(kLocalImpassableQueryRadiusPx,
+                                       assets->max_impassable_query_radius());
     assets->query_impassable_entries(asset, search_radius, entries);
 
     for (const Assets::FrameCollisionEntry* entry : entries) {
@@ -143,9 +146,6 @@ bool visit_impassable_neighbors_for_segment(const Asset& asset,
     }
 
     std::vector<const Assets::FrameCollisionEntry*> entries;
-    const int base_search_radius =
-        (asset.info && asset.info->NeighborSearchRadius > 0) ? asset.info->NeighborSearchRadius : 0;
-
     const SDL_Point self_center = asset.world_xz_point();
     const std::int64_t dx_from = static_cast<std::int64_t>(from.x) - static_cast<std::int64_t>(self_center.x);
     const std::int64_t dy_from = static_cast<std::int64_t>(from.y) - static_cast<std::int64_t>(self_center.y);
@@ -154,7 +154,10 @@ bool visit_impassable_neighbors_for_segment(const Asset& asset,
     const std::int64_t max_dist_sq =
         std::max(dx_from * dx_from + dy_from * dy_from, dx_to * dx_to + dy_to * dy_to);
     const int segment_coverage_radius = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(max_dist_sq))));
-    const int query_radius = std::max(base_search_radius, segment_coverage_radius);
+    const int capped_max_radius = assets->max_impassable_query_radius();
+    const int query_radius = std::min(
+        std::max(kSegmentImpassableMinRadiusPx, segment_coverage_radius + kUnstickRadiusPaddingPx),
+        capped_max_radius);
 
     assets->query_impassable_entries(asset, query_radius, entries);
 
@@ -413,6 +416,29 @@ std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
         return out;
     }
 
+    const bool enemy_asset =
+        self_->info &&
+        asset_types::canonicalize(self_->info->type) == asset_types::enemy;
+
+    Asset* player = assets_owner_->game_context().player();
+    if (!player) {
+        player = assets_owner_->player;
+    }
+    const bool player_valid =
+        player && player != self_ && player->active && !player->dead && player->isHitboxEnabled();
+
+    if (enemy_asset) {
+        if (player_valid) {
+            out.push_back(player);
+        } else if (debug_enabled_) {
+            const std::string self_name =
+                (self_->info && !self_->info->name.empty()) ? self_->info->name : std::string{"<unknown>"};
+            vibble::log::info("[AICombat] Rejecting attack target acquisition for enemy '" + self_name +
+                              "': player unavailable or not hittable");
+        }
+        return out;
+    }
+
     if (planner_iface_ && planner_iface_->pending_engagement_target_asset_id_.has_value()) {
         if (Asset* engagement_target =
                 resolve_asset_by_stable_id(*planner_iface_->pending_engagement_target_asset_id_)) {
@@ -439,11 +465,7 @@ std::vector<Asset*> AnimationRuntime::attack_candidate_targets() const {
         }
     }
 
-    Asset* player = assets_owner_->game_context().player();
-    if (!player) {
-        player = assets_owner_->player;
-    }
-    if (player && player != self_ && player->active && !player->dead && player->isHitboxEnabled()) {
+    if (player_valid) {
         out.push_back(player);
     }
 
@@ -483,6 +505,11 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
 
     const auto targets = attack_candidate_targets();
     if (targets.empty()) {
+        if (debug_enabled_) {
+            const std::string self_name =
+                (self_->info && !self_->info->name.empty()) ? self_->info->name : std::string{"<unknown>"};
+            vibble::log::info("[AICombat] No valid attack targets for '" + self_name + "'");
+        }
         if (committed_cycle_boundary && current_animation_is_attack()) {
             switch_to(animation_update::detail::kDefaultAnimation,
                       path_index_for(animation_update::detail::kDefaultAnimation));
@@ -491,6 +518,11 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     }
     const auto attack_candidates = attack_animation_candidates();
     if (attack_candidates.empty()) {
+        if (debug_enabled_) {
+            const std::string self_name =
+                (self_->info && !self_->info->name.empty()) ? self_->info->name : std::string{"<unknown>"};
+            vibble::log::info("[AICombat] No valid attack animations for '" + self_name + "'");
+        }
         if (committed_cycle_boundary && current_animation_is_attack()) {
             switch_to(animation_update::detail::kDefaultAnimation,
                       path_index_for(animation_update::detail::kDefaultAnimation));
@@ -541,6 +573,12 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
                 8,
                 true);
         if (!ranked.has_value()) {
+            if (debug_enabled_) {
+                const std::string target_name =
+                    (target->info && !target->info->name.empty()) ? target->info->name : std::string{"<unknown>"};
+                vibble::log::info("[AICombat] Rejecting target '" + target_name +
+                                  "': no hittable attack window");
+            }
             continue;
         }
 
@@ -580,6 +618,15 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     combat_state_.committed_attack_path_index = best.path_index;
     combat_state_.committed_attack_last_dispatched_frame_index = -1;
     combat_state_.committed_attack_last_payload_id.clear();
+    if (debug_enabled_) {
+        const std::string self_name =
+            (self_->info && !self_->info->name.empty()) ? self_->info->name : std::string{"<unknown>"};
+        vibble::log::info("[AICombat] Attack committed for '" + self_name +
+                          "': animation='" + best.animation_id +
+                          "' target_id='" + best.target_asset_id +
+                          "' score=" + std::to_string(static_cast<int>(best.score)) +
+                          " facing_score=" + std::to_string(best.facing_score));
+    }
     switch_to(best.animation_id, best.path_index);
     combat_state_.next_attack_cycle_eval_frame = frame_id + kAttackCycleDebounceFrames;
     return true;
@@ -646,12 +693,20 @@ void AnimationRuntime::dispatch_active_attack_payload() {
 
     Asset* target = resolve_asset_by_stable_id(*combat_state_.committed_attack_target_asset_id);
     if (!target || !target->active || target->dead || !target->isHitboxEnabled()) {
+        if (debug_enabled_) {
+            vibble::log::info("[AICombat] Clearing committed attack target: target invalid before dispatch");
+        }
         clear_attack_commitment();
         return;
     }
 
     const auto attack_opt = animation_update::AttackValidation::compute_attack_if_hit(*self_, *target);
     if (!attack_opt.has_value()) {
+        if (debug_enabled_) {
+            const std::string target_name =
+                (target->info && !target->info->name.empty()) ? target->info->name : std::string{"<unknown>"};
+            vibble::log::info("[AICombat] Attack frame not hittable against '" + target_name + "'");
+        }
         return;
     }
 
@@ -669,6 +724,15 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     }
 
     target->send_attack(attack);
+    if (debug_enabled_) {
+        const std::string target_name =
+            (target->info && !target->info->name.empty()) ? target->info->name : std::string{"<unknown>"};
+        vibble::log::info("[AICombat] Attack hit dispatched to '" + target_name +
+                          "' payload='" + attack.attack_payload_id +
+                          "' frame=" + std::to_string(attack.source_frame_index) +
+                          " damage=" + std::to_string(attack.payload.damage_amount) +
+                          " knockback=" + std::to_string(attack.payload.hitback_enabled));
+    }
     combat_state_.committed_attack_last_dispatched_frame_index = attack.source_frame_index;
     combat_state_.committed_attack_last_payload_id = attack.attack_payload_id;
     if (one_shot_attack) {
@@ -1381,11 +1445,17 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
         case Animation::OnEndDirective::Lock:
             playback_state_.lock_on_end_active = true;
             self_->static_frame = true;
+            if (debug_enabled_) {
+                vibble::log::info("[AICombat] Animation lock engaged on end: '" + self_->current_animation + "'");
+            }
             return report;
         case Animation::OnEndDirective::Reverse:
             activate_reverse_playback(ReversePlaybackMode::ReverseToDefaultAtStart);
             playback_state_.lock_on_end_active = false;
             self_->static_frame = false;
+            if (debug_enabled_) {
+                vibble::log::info("[AICombat] Animation reverse-on-end requested for '" + self_->current_animation + "'");
+            }
             break;
         case Animation::OnEndDirective::Animation: {
             const std::string requested = anim->on_end_animation.empty()
@@ -1467,7 +1537,11 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     }
 
     clear_reverse_playback_state();
+    const bool was_locked_on_end = playback_state_.lock_on_end_active;
     playback_state_.lock_on_end_active = false;
+    if (debug_enabled_ && was_locked_on_end) {
+        vibble::log::info("[AICombat] Animation lock released during switch_to()");
+    }
 
     auto it = self_->info->animations.find(anim_id);
     if (it == self_->info->animations.end()) {
@@ -1494,12 +1568,18 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     }
     const bool switched_to_attack = animation_is_attack_candidate(anim);
     if (!switched_to_attack) {
+        if (debug_enabled_ && previously_attack) {
+            vibble::log::info("[AICombat] Attack animation ended; switching to '" + self_->current_animation + "'");
+        }
         clear_attack_commitment();
     } else if (combat_state_.committed_attack_animation_id != self_->current_animation) {
         combat_state_.committed_attack_animation_id = self_->current_animation;
         combat_state_.committed_attack_path_index = path_index;
         combat_state_.committed_attack_last_dispatched_frame_index = -1;
         combat_state_.committed_attack_last_payload_id.clear();
+        if (debug_enabled_) {
+            vibble::log::info("[AICombat] Attack animation start: '" + self_->current_animation + "'");
+        }
     } else {
         combat_state_.committed_attack_path_index = path_index;
     }
@@ -1717,7 +1797,14 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     }
     const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
     std::vector<const Assets::FrameCollisionEntry*> runtime_entries;
-    const int search_radius = (self_->info && self_->info->NeighborSearchRadius > 0) ? self_->info->NeighborSearchRadius : 0;
+    const long long dx = static_cast<long long>(to.world_x()) - static_cast<long long>(from.world_x());
+    const long long dz = static_cast<long long>(to.world_z()) - static_cast<long long>(from.world_z());
+    const int path_extent =
+        static_cast<int>(std::lround(std::sqrt(static_cast<double>(dx * dx + dz * dz))));
+    const int max_radius_cap = assets ? assets->max_impassable_query_radius() : kLocalImpassableQueryRadiusPx;
+    const int search_radius = std::min(
+        std::max(kUnstickMinQueryRadiusPx, path_extent + kUnstickRadiusPaddingPx),
+        max_radius_cap);
     if (assets) {
         assets->query_impassable_entries(*self_, search_radius, runtime_entries);
         if (blockers.empty() && animation::unstick::push_out_of_impassable(*self_, assets, runtime_entries)) {

@@ -1641,7 +1641,6 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
 };
         manifest_entry["tags"] = nlohmann::json::array();
         manifest_entry["anti_tags"] = nlohmann::json::array();
-        manifest_entry["neighbor_search_distance"] = 500;
         manifest_entry["render_radius"] = 0;
         manifest_entry["update_radius"] = 0;
         manifest_entry["min_same_type_distance"] = 0;

@@ -1,6 +1,7 @@
 #include "spider_controller.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "utils/log.hpp"
 #include <optional>
 
 spider_controller::spider_controller(Asset* self)
@@ -38,6 +39,9 @@ void spider_controller::on_update(const Input& in) {
         return;
     }
     Asset* player = resolve_target_player();
+    if (!player && self->anim_->debug_enabled()) {
+        vibble::log::info("[AICombat] Spider could not acquire player target");
+    }
     run_enemy_behavior(player, behavior_config_, chase_move_, retreat_move_);
 }
 

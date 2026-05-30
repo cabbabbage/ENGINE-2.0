@@ -3,6 +3,7 @@
 #include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "utils/log.hpp"
 #include <algorithm>
 
 small_spider_controller::small_spider_controller(Asset* self)
@@ -44,6 +45,9 @@ void small_spider_controller::on_update(const Input& in) {
 
     Asset* player = resolve_target_player();
     if (!player) {
+        if (self->anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Small spider could not acquire player target");
+        }
         return;
     }
 

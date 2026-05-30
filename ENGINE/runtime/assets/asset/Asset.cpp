@@ -951,7 +951,6 @@ void Asset::finalize_setup() {
                 controller_ = cf.create_for_asset(this);
         }
 
-        NeighborSearchRadius = info->NeighborSearchRadius;
         refresh_cached_dimensions();
         refresh_anchor_point_cache_from_frame();
         refresh_runtime_box_cache_from_frame();

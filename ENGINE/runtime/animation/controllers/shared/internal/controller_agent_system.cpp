@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "utils/log.hpp"
 
 namespace animation_update::custom_controllers::internal {
 
@@ -340,6 +342,9 @@ void ControllerAgentSystem::tick_enemy_behavior(Asset& self,
                                                    const MovementConfig& chase_move,
                                                    const MovementConfig& retreat_move) {
     ensure_home(state, self);
+    const bool debug_logging = self.anim_ && self.anim_->debug_enabled();
+    const std::string self_name =
+        (self.info && !self.info->name.empty()) ? self.info->name : std::string{"<unknown>"};
     const bool target_valid = target && !target->dead && target->active;
     const int desired_standoff_px = std::max(0, config.ranges.desired_standoff_px);
     const long long target_dist_sq = target_valid ? distance_sq_3d(self, *target) : 0;
@@ -375,6 +380,9 @@ void ControllerAgentSystem::tick_enemy_behavior(Asset& self,
     }
 
     if (decision.phase == EnemyAgentPhase::ReturnHome) {
+        if (debug_logging && !target_valid) {
+            vibble::log::info("[AICombat] '" + self_name + "' target unavailable; returning home");
+        }
         moved = tick_return_home(self, state, config.return_home_threshold_px, chase_cfg);
         state.no_progress_frames = moved ? 0 : state.no_progress_frames + 1;
         frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
@@ -398,6 +406,9 @@ void ControllerAgentSystem::tick_enemy_behavior(Asset& self,
     }
 
     if (decision.phase == EnemyAgentPhase::Recover) {
+        if (debug_logging) {
+            vibble::log::info("[AICombat] '" + self_name + "' entering recover retreat phase");
+        }
         moved = ControllerAgentSystem::retreat_from_target(
             self,
             *target,
@@ -412,6 +423,12 @@ void ControllerAgentSystem::tick_enemy_behavior(Asset& self,
         frame_stats.set("enemy_ai.approach_attempted", true);
         moved = ControllerAgentSystem::seek_target(self, *target, desired_standoff_px, chase_cfg);
         frame_stats.set("enemy_ai.approach_moved", moved);
+        if (debug_logging) {
+            const std::string target_name =
+                (target->info && !target->info->name.empty()) ? target->info->name : std::string{"<unknown>"};
+            vibble::log::info("[AICombat] '" + self_name + "' approach target='" + target_name +
+                              "' moved=" + std::to_string(moved));
+        }
         frame_stats.set("enemy_ai.movement_attack_conflict_flag", decision.target_should_be_committed && moved);
         if (!moved && target_dist_sq > static_cast<long long>(config.ranges.attack_radius_px) *
                                            static_cast<long long>(config.ranges.attack_radius_px)) {
@@ -437,6 +454,9 @@ void ControllerAgentSystem::tick_enemy_behavior(Asset& self,
 
     state.no_progress_frames = 0;
     frame_stats.set("enemy_ai.no_progress_frames", state.no_progress_frames);
+    if (debug_logging && decision.phase == EnemyAgentPhase::AttackWindow) {
+        vibble::log::info("[AICombat] '" + self_name + "' attack window active");
+    }
 }
 
 bool ControllerAgentSystem::tick_patrol(Asset& self,

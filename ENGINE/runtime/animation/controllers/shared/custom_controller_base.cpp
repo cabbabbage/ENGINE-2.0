@@ -208,7 +208,7 @@ bool CustomControllerBase::play_animation_by_tags(const std::vector<std::string>
     if (!self || !self->anim_) {
         return false;
     }
-    return self->anim_->set_animation_by_tags(required_tags, excluded_tags);
+    return self->anim_->set_animation_by_tags_deterministic(required_tags, excluded_tags);
 }
 
 void CustomControllerBase::play_default_idle() {

@@ -219,7 +219,6 @@ class Asset {
     const std::string& owning_room_name() const { return owning_room_name_; }
     void set_owning_room_name(std::string name);
     void deactivate();
-    int NeighborSearchRadius;
     void set_hidden(bool state);
     bool is_hidden() const;
     void set_default_controller_animation_enforced(bool enforced) { enforce_default_controller_animation_ = enforced; }

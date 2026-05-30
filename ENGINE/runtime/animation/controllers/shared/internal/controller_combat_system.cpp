@@ -6,7 +6,9 @@
 #include "animation/controllers/shared/internal/controller_attack_processing_helper.hpp"
 #include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "utils/frame_stats_recorder.hpp"
+#include "utils/log.hpp"
 
 namespace animation_update::custom_controllers::internal {
 
@@ -48,13 +50,18 @@ bool ControllerCombatSystem::start_attack_animation(Asset& self,
         return false;
     }
     if (!required_tags.empty() || !excluded_tags.empty()) {
-        if (self.anim_->set_animation_by_tags(required_tags, excluded_tags)) {
+        if (self.anim_->set_animation_by_tags_deterministic(required_tags, excluded_tags)) {
             return true;
         }
     }
     if (!animation_id.empty()) {
         self.anim_->set_animation(animation_id);
         return true;
+    }
+    if (self.anim_->debug_enabled()) {
+        const std::string self_name =
+            (self.info && !self.info->name.empty()) ? self.info->name : std::string{"<unknown>"};
+        vibble::log::info("[AICombat] Attack requested but no valid attack animation resolved for '" + self_name + "'");
     }
     return false;
 }
@@ -69,13 +76,35 @@ bool ControllerCombatSystem::try_attack_target(Asset& self,
                                                const std::vector<std::string>& required_tags,
                                                const std::vector<std::string>& excluded_tags) {
     if (!is_target_in_range(self, target, range_px)) {
+        if (self.anim_ && self.anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Attack rejected: target out of range");
+        }
         return false;
     }
     if (!cooldown_ready(cooldowns, cooldown_key)) {
+        if (self.anim_ && self.anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Attack rejected: cooldown active for key '" + cooldown_key + "'");
+        }
         return false;
     }
 
-    (void)start_attack_animation(self, animation_id, required_tags, excluded_tags);
+    const bool attack_started =
+        start_attack_animation(self, animation_id, required_tags, excluded_tags);
+    if (!attack_started) {
+        return false;
+    }
+
+    const bool enemy_attacker =
+        self.info && asset_types::canonicalize(self.info->type) == asset_types::enemy;
+    if (enemy_attacker) {
+        // Enemy controllers should rely on runtime frame-accurate hit dispatch instead of immediate helper hits.
+        start_cooldown(cooldowns, cooldown_key, cooldown_seconds);
+        if (self.anim_ && self.anim_->debug_enabled()) {
+            vibble::log::info("[AICombat] Enemy attack started; deferring hit timing to runtime attack pipeline");
+        }
+        return true;
+    }
+
     const bool hit = apply_attack_hit(self, target);
     if (should_start_cooldown_after_attack(hit)) {
         start_cooldown(cooldowns, cooldown_key, cooldown_seconds);

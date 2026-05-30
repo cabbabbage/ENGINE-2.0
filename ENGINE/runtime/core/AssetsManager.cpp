@@ -1776,9 +1776,7 @@ void Assets::run_camera_trap_escape_pass() {
             asset->grid_resolution);
         const world::GridPoint bottom = animation_update::detail::bottom_middle_for(*asset, current);
 
-        int search_radius = (asset->info && asset->info->NeighborSearchRadius > 0)
-            ? asset->info->NeighborSearchRadius
-            : 0;
+        int search_radius = std::min(256, max_impassable_query_radius());
         if (startup_runtime_safety_active(frame_id_)) {
             search_radius = std::min(search_radius, 128);
         }

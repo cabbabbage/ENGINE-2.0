@@ -2,9 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cctype>
 #include <string>
-#include <vector>
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -27,18 +25,6 @@ constexpr int kSectionGap = 10;
 constexpr int kRowGap = 8;
 constexpr int kHeaderHeight = 22;
 
-std::string trim_copy(const std::string& value) {
-    std::size_t begin = 0;
-    while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
-        ++begin;
-    }
-    std::size_t end = value.size();
-    while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
-        --end;
-    }
-    return value.substr(begin, end - begin);
-}
-
 int parse_int_or(const std::string& text, int fallback) {
     try {
         return std::stoi(text);
@@ -53,34 +39,6 @@ float parse_float_or(const std::string& text, float fallback) {
     } catch (...) {
         return fallback;
     }
-}
-
-std::vector<std::string> parse_csv(const std::string& csv) {
-    std::vector<std::string> values;
-    std::size_t cursor = 0;
-    while (cursor <= csv.size()) {
-        const std::size_t comma = csv.find(',', cursor);
-        const std::string token = trim_copy(csv.substr(cursor, comma - cursor));
-        if (!token.empty()) {
-            values.push_back(token);
-        }
-        if (comma == std::string::npos) {
-            break;
-        }
-        cursor = comma + 1;
-    }
-    return values;
-}
-
-std::string join_csv(const std::vector<std::string>& values) {
-    std::string out;
-    for (std::size_t i = 0; i < values.size(); ++i) {
-        if (i > 0) {
-            out += ", ";
-        }
-        out += values[i];
-    }
-    return out;
 }
 
 bool payloads_equal(const animation_update::AttackPayload& lhs,
@@ -108,9 +66,6 @@ AttackPayloadEditor::AttackPayloadEditor() {
     hitback_enabled_checkbox_ = std::make_unique<DMCheckbox>("Enable Hitback", true);
     hitback_distance_textbox_ = std::make_unique<DMTextBox>("Hitback Distance", "0");
     stun_frames_textbox_ = std::make_unique<DMTextBox>("Stun Frames", "0");
-    animation_trigger_textbox_ = std::make_unique<DMTextBox>("Animation Trigger", "");
-    sound_effect_textbox_ = std::make_unique<DMTextBox>("Sound Effect", "");
-    status_effects_textbox_ = std::make_unique<DMTextBox>("Status Effects (CSV)", "");
     critical_hit_chance_textbox_ = std::make_unique<DMTextBox>("Critical Hit Chance (0-1)", "0");
     element_type_textbox_ = std::make_unique<DMTextBox>("Element Type", "none");
     recharge_seconds_textbox_ = std::make_unique<DMTextBox>("Recharge Seconds", "0");
@@ -186,15 +141,6 @@ void AttackPayloadEditor::apply_payload_to_widgets() {
     if (stun_frames_textbox_) {
         stun_frames_textbox_->set_value(std::to_string(payload_.stun_frames));
     }
-    if (animation_trigger_textbox_) {
-        animation_trigger_textbox_->set_value(payload_.animation_trigger);
-    }
-    if (sound_effect_textbox_) {
-        sound_effect_textbox_->set_value(payload_.sound_effect);
-    }
-    if (status_effects_textbox_) {
-        status_effects_textbox_->set_value(join_csv(payload_.status_effects));
-    }
     if (critical_hit_chance_textbox_) {
         critical_hit_chance_textbox_->set_value(std::to_string(payload_.critical_hit_chance));
     }
@@ -218,9 +164,6 @@ animation_update::AttackPayload AttackPayloadEditor::payload_from_widgets() cons
     payload.hitback_distance =
         parse_float_or(hitback_distance_textbox_ ? hitback_distance_textbox_->value() : "0", payload.hitback_distance);
     payload.stun_frames = parse_int_or(stun_frames_textbox_ ? stun_frames_textbox_->value() : "0", payload.stun_frames);
-    payload.animation_trigger = animation_trigger_textbox_ ? animation_trigger_textbox_->value() : payload.animation_trigger;
-    payload.sound_effect = sound_effect_textbox_ ? sound_effect_textbox_->value() : payload.sound_effect;
-    payload.status_effects = parse_csv(status_effects_textbox_ ? status_effects_textbox_->value() : std::string{});
     payload.critical_hit_chance =
         parse_float_or(critical_hit_chance_textbox_ ? critical_hit_chance_textbox_->value() : "0", payload.critical_hit_chance);
     payload.element_type = element_type_textbox_ ? element_type_textbox_->value() : payload.element_type;
@@ -267,9 +210,6 @@ bool AttackPayloadEditor::handle_event(const SDL_Event& event) {
         handle_text(damage_type_textbox_.get());
         handle_text(hitback_distance_textbox_.get());
         handle_text(stun_frames_textbox_.get());
-        handle_text(animation_trigger_textbox_.get());
-        handle_text(sound_effect_textbox_.get());
-        handle_text(status_effects_textbox_.get());
         handle_text(critical_hit_chance_textbox_.get());
         handle_text(element_type_textbox_.get());
         handle_text(recharge_seconds_textbox_.get());
@@ -296,9 +236,6 @@ bool AttackPayloadEditor::handle_event(const SDL_Event& event) {
         (damage_type_textbox_ && damage_type_textbox_->is_editing()) ||
         (hitback_distance_textbox_ && hitback_distance_textbox_->is_editing()) ||
         (stun_frames_textbox_ && stun_frames_textbox_->is_editing()) ||
-        (animation_trigger_textbox_ && animation_trigger_textbox_->is_editing()) ||
-        (sound_effect_textbox_ && sound_effect_textbox_->is_editing()) ||
-        (status_effects_textbox_ && status_effects_textbox_->is_editing()) ||
         (critical_hit_chance_textbox_ && critical_hit_chance_textbox_->is_editing()) ||
         (element_type_textbox_ && element_type_textbox_->is_editing()) ||
         (recharge_seconds_textbox_ && recharge_seconds_textbox_->is_editing());
@@ -366,9 +303,6 @@ void AttackPayloadEditor::render(SDL_Renderer* renderer) const {
     if (hitback_enabled_checkbox_) hitback_enabled_checkbox_->render(renderer);
     if (hitback_distance_textbox_) hitback_distance_textbox_->render(renderer);
     if (stun_frames_textbox_) stun_frames_textbox_->render(renderer);
-    if (animation_trigger_textbox_) animation_trigger_textbox_->render(renderer);
-    if (sound_effect_textbox_) sound_effect_textbox_->render(renderer);
-    if (status_effects_textbox_) status_effects_textbox_->render(renderer);
     if (critical_hit_chance_textbox_) critical_hit_chance_textbox_->render(renderer);
     if (element_type_textbox_) element_type_textbox_->render(renderer);
     if (recharge_seconds_textbox_) recharge_seconds_textbox_->render(renderer);
@@ -424,9 +358,6 @@ void AttackPayloadEditor::update_layout() const {
         }
         layout_textbox(hitback_distance_textbox_.get());
         layout_textbox(stun_frames_textbox_.get());
-        layout_textbox(animation_trigger_textbox_.get());
-        layout_textbox(sound_effect_textbox_.get());
-        layout_textbox(status_effects_textbox_.get());
         layout_textbox(critical_hit_chance_textbox_.get());
         layout_textbox(element_type_textbox_.get());
         layout_textbox(recharge_seconds_textbox_.get());
@@ -445,9 +376,6 @@ void AttackPayloadEditor::update_layout() const {
         hide_textbox(damage_type_textbox_.get());
         hide_textbox(hitback_distance_textbox_.get());
         hide_textbox(stun_frames_textbox_.get());
-        hide_textbox(animation_trigger_textbox_.get());
-        hide_textbox(sound_effect_textbox_.get());
-        hide_textbox(status_effects_textbox_.get());
         hide_textbox(critical_hit_chance_textbox_.get());
         hide_textbox(element_type_textbox_.get());
         hide_textbox(recharge_seconds_textbox_.get());

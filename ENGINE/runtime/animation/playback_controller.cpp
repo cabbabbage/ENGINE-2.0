@@ -31,15 +31,19 @@ std::size_t AnimationUpdate::path_index_for(const std::string& anim_id) const { 
 AnimationUpdate::MoveRequest AnimationUpdate::consume_move_request() { move_pending_ = false; pending_move_.reverse_command = pending_reverse_command_; pending_reverse_command_ = ReversePlaybackCommand::None; return pending_move_; }
 AnimationUpdate::MoveRequest3D AnimationUpdate::consume_move_request_3d() { move_pending_3d_ = false; return pending_move_3d_; }
 bool AnimationUpdate::consume_input_event() { const bool had = input_event_; input_event_ = false; return had; }
-void AnimationUpdate::set_animation(const std::string& animation_id) {
+bool AnimationUpdate::set_animation(const std::string& animation_id, bool force_transition) {
     if (!self_ || !self_->info || !runtime_) {
-        return;
+        return false;
     }
     auto it = self_->info->animations.find(animation_id);
     if (it == self_->info->animations.end()) {
-        return;
+        return false;
     }
-    runtime_->switch_to(animation_id, path_index_for(animation_id));
+    return runtime_->switch_to(
+        animation_id,
+        path_index_for(animation_id),
+        force_transition ? AnimationRuntime::TransitionLockPolicy::Force
+                         : AnimationRuntime::TransitionLockPolicy::RespectCurrentLock);
 }
 
 static std::vector<std::string> matching_animation_ids_by_tags(const Asset* self,
@@ -104,7 +108,8 @@ std::optional<std::string> AnimationUpdate::resolve_animation_by_tags_determinis
 }
 
 bool AnimationUpdate::set_animation_by_tags(const std::vector<std::string>& required_tags,
-                                            const std::vector<std::string>& excluded_tags) {
+                                            const std::vector<std::string>& excluded_tags,
+                                            bool force_transition) {
     if (!runtime_) {
         return false;
     }
@@ -112,12 +117,12 @@ bool AnimationUpdate::set_animation_by_tags(const std::vector<std::string>& requ
     if (!resolved.has_value()) {
         return false;
     }
-    set_animation(*resolved);
-    return true;
+    return set_animation(*resolved, force_transition);
 }
 
 bool AnimationUpdate::set_animation_by_tags_deterministic(const std::vector<std::string>& required_tags,
-                                                          const std::vector<std::string>& excluded_tags) {
+                                                          const std::vector<std::string>& excluded_tags,
+                                                          bool force_transition) {
     if (!runtime_) {
         return false;
     }
@@ -125,6 +130,5 @@ bool AnimationUpdate::set_animation_by_tags_deterministic(const std::vector<std:
     if (!resolved.has_value()) {
         return false;
     }
-    set_animation(*resolved);
-    return true;
+    return set_animation(*resolved, force_transition);
 }

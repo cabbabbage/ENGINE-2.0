@@ -55,8 +55,7 @@ bool ControllerCombatSystem::start_attack_animation(Asset& self,
         }
     }
     if (!animation_id.empty()) {
-        self.anim_->set_animation(animation_id);
-        return true;
+        return self.anim_->set_animation(animation_id);
     }
     if (self.anim_->debug_enabled()) {
         const std::string self_name =

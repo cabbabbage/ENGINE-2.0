@@ -492,7 +492,8 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     if (!self_ || !self_->info || !attacking_enabled_for_active_plan()) {
         if (committed_cycle_boundary && current_animation_is_attack()) {
             switch_to(animation_update::detail::kDefaultAnimation,
-                      path_index_for(animation_update::detail::kDefaultAnimation));
+                      path_index_for(animation_update::detail::kDefaultAnimation),
+                      TransitionLockPolicy::RespectCurrentLock);
         }
         return false;
     }
@@ -512,7 +513,8 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         }
         if (committed_cycle_boundary && current_animation_is_attack()) {
             switch_to(animation_update::detail::kDefaultAnimation,
-                      path_index_for(animation_update::detail::kDefaultAnimation));
+                      path_index_for(animation_update::detail::kDefaultAnimation),
+                      TransitionLockPolicy::RespectCurrentLock);
         }
         return false;
     }
@@ -525,7 +527,8 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         }
         if (committed_cycle_boundary && current_animation_is_attack()) {
             switch_to(animation_update::detail::kDefaultAnimation,
-                      path_index_for(animation_update::detail::kDefaultAnimation));
+                      path_index_for(animation_update::detail::kDefaultAnimation),
+                      TransitionLockPolicy::RespectCurrentLock);
         }
         return false;
     }
@@ -609,7 +612,8 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     if (!has_best || best.animation_id.empty() || best.target_asset_id.empty()) {
         if (committed_cycle_boundary && current_animation_is_attack()) {
             switch_to(animation_update::detail::kDefaultAnimation,
-                      path_index_for(animation_update::detail::kDefaultAnimation));
+                      path_index_for(animation_update::detail::kDefaultAnimation),
+                      TransitionLockPolicy::RespectCurrentLock);
         }
         return false;
     }
@@ -627,7 +631,10 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
                           "' score=" + std::to_string(static_cast<int>(best.score)) +
                           " facing_score=" + std::to_string(best.facing_score));
     }
-    switch_to(best.animation_id, best.path_index);
+    if (!switch_to(best.animation_id, best.path_index, TransitionLockPolicy::RespectCurrentLock)) {
+        clear_attack_commitment();
+        return false;
+    }
     combat_state_.next_attack_cycle_eval_frame = frame_id + kAttackCycleDebounceFrames;
     return true;
 }
@@ -1154,13 +1161,13 @@ void AnimationRuntime::apply_pending_move() {
 
     const std::string resolved = resolve_animation(*self_, req.animation_id);
     if (self_->current_animation != resolved) {
-        switch_to(resolved, path_index_for(resolved));
+        switch_to(resolved, path_index_for(resolved), TransitionLockPolicy::Force);
     } else {
         if (!advance(self_->current_frame)) {
             if (self_->dead) {
                 return;
             }
-            switch_to(resolved, path_index_for(resolved));
+            switch_to(resolved, path_index_for(resolved), TransitionLockPolicy::Force);
         }
     }
 
@@ -1255,13 +1262,13 @@ void AnimationRuntime::apply_pending_move_3d() {
 
     const std::string resolved = resolve_animation(*self_, req.animation_id);
     if (self_->current_animation != resolved) {
-        switch_to(resolved, path_index_for(resolved));
+        switch_to(resolved, path_index_for(resolved), TransitionLockPolicy::Force);
     } else {
         if (!advance(self_->current_frame)) {
             if (self_->dead) {
                 return;
             }
-            switch_to(resolved, path_index_for(resolved));
+            switch_to(resolved, path_index_for(resolved), TransitionLockPolicy::Force);
         }
     }
 }
@@ -1366,7 +1373,8 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
             clear_reverse_playback_state();
             if (mode_at_boundary == ReversePlaybackMode::ReverseToDefaultAtStart) {
                 switch_to(animation_update::detail::kDefaultAnimation,
-                          path_index_for(animation_update::detail::kDefaultAnimation));
+                          path_index_for(animation_update::detail::kDefaultAnimation),
+                          TransitionLockPolicy::Force);
                 frame = self_->current_frame;
                 if (!frame) {
                     report.ok = false;
@@ -1403,7 +1411,8 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                 combat_state_.committed_attack_target_asset_id.has_value()) {
                 clear_attack_commitment();
                 switch_to(animation_update::detail::kDefaultAnimation,
-                          path_index_for(animation_update::detail::kDefaultAnimation));
+                          path_index_for(animation_update::detail::kDefaultAnimation),
+                          TransitionLockPolicy::Force);
                 if (self_) {
                     self_->needs_target = true;
                 }
@@ -1466,7 +1475,7 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                 combat_state_.attack_recovery_pending = true;
                 combat_state_.attack_recovery_animation_id = resolved;
             }
-            switch_to(resolved, path_index_for(requested));
+            switch_to(resolved, path_index_for(requested), TransitionLockPolicy::Force);
             frame = self_->current_frame;
             if (!frame) {
                 report.ok = false;
@@ -1492,7 +1501,8 @@ AnimationRuntime::FrameAdvanceReport AnimationRuntime::advance_with_report(Anima
                 current_animation_is_attack() &&
                 combat_state_.committed_attack_target_asset_id.has_value();
             switch_to(animation_update::detail::kDefaultAnimation,
-                      path_index_for(animation_update::detail::kDefaultAnimation));
+                      path_index_for(animation_update::detail::kDefaultAnimation),
+                      TransitionLockPolicy::Force);
             if (completed_committed_attack && self_) {
                 self_->needs_target = true;
             }
@@ -1531,9 +1541,38 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     return advance_with_report(frame).ok;
 }
 
-void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_index) {
+bool AnimationRuntime::can_interrupt_current_animation(TransitionLockPolicy lock_policy,
+                                                       const std::string& target_anim_id) const {
+    if (lock_policy == TransitionLockPolicy::Force || !self_ || !self_->info) {
+        return true;
+    }
+    if (self_->current_animation == target_anim_id) {
+        return true;
+    }
+    if (self_->current_frame && self_->current_frame->is_last) {
+        return true;
+    }
+
+    const auto current_it = self_->info->animations.find(self_->current_animation);
+    if (current_it == self_->info->animations.end()) {
+        return true;
+    }
+    return !current_it->second.locked;
+}
+
+bool AnimationRuntime::switch_to(const std::string& anim_id,
+                                 std::size_t path_index,
+                                 TransitionLockPolicy lock_policy) {
     if (!self_ || !self_->info) {
-        return;
+        return false;
+    }
+    if (!can_interrupt_current_animation(lock_policy, anim_id)) {
+        if (debug_enabled_) {
+            vibble::log::info("[AICombat] Animation switch to '" + anim_id +
+                              "' deferred because current animation '" + self_->current_animation +
+                              "' is locked");
+        }
+        return false;
     }
 
     clear_reverse_playback_state();
@@ -1548,7 +1587,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         auto def = self_->info->animations.find(animation_update::detail::kDefaultAnimation);
         if (def == self_->info->animations.end()) {
             if (self_->info->animations.empty()) {
-                return;
+                return false;
             }
             it = self_->info->animations.begin();
         } else {
@@ -1599,6 +1638,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     self_->mark_composite_dirty();
     self_->mark_anchors_dirty();
     refresh_runtime_frame_geometry();
+    return true;
 }
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {

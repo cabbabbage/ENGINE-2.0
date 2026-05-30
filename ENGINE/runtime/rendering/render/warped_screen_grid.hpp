@@ -87,6 +87,23 @@ public:
         float aperture                     = 1.0f;
         float blur_px                      = 12.0f;
         float radial_blur_px               = 48.0f;
+        float focus_depth_offset           = 0.0f;
+        float focus_falloff_acceleration   = 1.65f;
+        float near_far_blur_bias           = 0.0f;
+        float swirl_strength               = 0.28f;
+        float swirl_radius_start           = 0.18f;
+        float tangential_blur_stretch      = 1.0f;
+        float anamorphic_strength          = 0.0f;
+        float bokeh_oval_ratio             = 1.0f;
+        float bokeh_rotation               = 0.0f;
+        float field_curvature              = 0.0f;
+        float edge_softness                = 1.0f;
+        bool alpha_clamp_protection        = false;
+        int alpha_debug_mode               = 0;
+        int blur_padding_px                = 0;
+        int lens_sample_count              = 9;
+        float lens_downsample_scale        = 1.0f;
+        int lens_quality_preset            = 1;
         bool depth_of_field_enabled         = false;
 };
 

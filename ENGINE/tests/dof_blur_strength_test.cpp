@@ -6,74 +6,61 @@
 namespace {
 
 bool nearly_equal(float lhs, float rhs) {
-    return std::fabs(lhs - rhs) <= 1.0e-6f;
+    return std::fabs(lhs - rhs) <= 1.0e-5f;
 }
 
 } // namespace
 
 int main() {
-    constexpr int focus = 7;
-    constexpr int max_distance_from_focus = 4;
+    render_depth::LensBlurDepthSettings settings{};
+    settings.aperture = 1.0f;
+    settings.focus_falloff_acceleration = 1.4f;
+    settings.max_near_blur_px = 8.0f;
+    settings.max_far_blur_px = 24.0f;
+    settings.near_far_blur_bias = 0.0f;
+    settings.focus_dead_zone = 0.05f;
 
-    const float at_focus = render_depth::dof_blur_strength_for_layer_distance(
-        focus,
-        focus,
-        max_distance_from_focus);
-    const float near_background = render_depth::dof_blur_strength_for_layer_distance(
-        focus + 1,
-        focus,
-        max_distance_from_focus);
-    const float near_foreground = render_depth::dof_blur_strength_for_layer_distance(
-        focus - 1,
-        focus,
-        max_distance_from_focus);
-    const float mid_background = render_depth::dof_blur_strength_for_layer_distance(
-        focus + 2,
-        focus,
-        max_distance_from_focus);
-    const float mid_foreground = render_depth::dof_blur_strength_for_layer_distance(
-        focus - 2,
-        focus,
-        max_distance_from_focus);
-    const float far_background = render_depth::dof_blur_strength_for_layer_distance(
-        focus + 3,
-        focus,
-        max_distance_from_focus);
-    const float far_foreground = render_depth::dof_blur_strength_for_layer_distance(
-        focus - 3,
-        focus,
-        max_distance_from_focus);
-    const float edge_background = render_depth::dof_blur_strength_for_layer_distance(
-        focus + 4,
-        focus,
-        max_distance_from_focus);
-    const float edge_foreground = render_depth::dof_blur_strength_for_layer_distance(
-        focus - 4,
-        focus,
-        max_distance_from_focus);
-    const float beyond_background = render_depth::dof_blur_strength_for_layer_distance(
-        focus + 50,
-        focus,
-        max_distance_from_focus);
-    const float beyond_foreground = render_depth::dof_blur_strength_for_layer_distance(
-        focus - 50,
-        focus,
-        max_distance_from_focus);
+    constexpr float focus_depth = 7.0f;
+
+    const float at_focus = render_depth::dof_blur_amount_for_layer_depth(focus_depth, focus_depth, settings);
+    const float near_one = render_depth::dof_blur_amount_for_layer_depth(focus_depth - 1.0f, focus_depth, settings);
+    const float near_two = render_depth::dof_blur_amount_for_layer_depth(focus_depth - 2.0f, focus_depth, settings);
+    const float near_three = render_depth::dof_blur_amount_for_layer_depth(focus_depth - 3.0f, focus_depth, settings);
+    const float far_one = render_depth::dof_blur_amount_for_layer_depth(focus_depth + 1.0f, focus_depth, settings);
+    const float far_two = render_depth::dof_blur_amount_for_layer_depth(focus_depth + 2.0f, focus_depth, settings);
+    const float far_three = render_depth::dof_blur_amount_for_layer_depth(focus_depth + 3.0f, focus_depth, settings);
 
     assert(nearly_equal(at_focus, 0.0f));
-    assert(nearly_equal(near_background, near_foreground));
-    assert(nearly_equal(mid_background, mid_foreground));
-    assert(nearly_equal(far_background, far_foreground));
-    assert(nearly_equal(edge_background, edge_foreground));
-    assert(nearly_equal(beyond_background, beyond_foreground));
-    assert(at_focus < near_background);
-    assert(near_background < mid_background);
-    assert(mid_background < far_background);
-    assert(far_background < edge_background);
-    assert(near_background < 0.25f);
-    assert(nearly_equal(mid_background, 0.5f));
-    assert(nearly_equal(edge_background, 1.0f));
-    assert(nearly_equal(beyond_background, 1.0f));
+    assert(near_one > at_focus);
+    assert(near_two > near_one);
+    assert(near_three > near_two);
+    assert(far_one > at_focus);
+    assert(far_two > far_one);
+    assert(far_three > far_two);
+
+    render_depth::LensBlurDepthSettings far_heavy = settings;
+    far_heavy.max_near_blur_px = 4.0f;
+    far_heavy.max_far_blur_px = 16.0f;
+    const float capped_near = render_depth::dof_blur_amount_for_layer_depth(focus_depth - 10.0f, focus_depth, far_heavy);
+    const float capped_far = render_depth::dof_blur_amount_for_layer_depth(focus_depth + 10.0f, focus_depth, far_heavy);
+    assert(nearly_equal(capped_near, 4.0f));
+    assert(nearly_equal(capped_far, 16.0f));
+    assert(capped_far > capped_near);
+
+    render_depth::LensBlurDepthSettings faster_aperture = settings;
+    faster_aperture.aperture = 2.0f;
+    assert(render_depth::dof_blur_amount_for_layer_depth(focus_depth + 1.0f, focus_depth, faster_aperture) > far_one);
+
+    render_depth::LensBlurDepthSettings faster_falloff = settings;
+    faster_falloff.focus_falloff_acceleration = 2.0f;
+    assert(render_depth::dof_blur_amount_for_layer_depth(focus_depth + 2.0f, focus_depth, faster_falloff) > far_two);
+
+    render_depth::LensBlurDepthSettings biased = settings;
+    biased.near_far_blur_bias = 0.5f;
+    const float biased_near = render_depth::dof_blur_amount_for_layer_depth(focus_depth - 20.0f, focus_depth, biased);
+    const float biased_far = render_depth::dof_blur_amount_for_layer_depth(focus_depth + 20.0f, focus_depth, biased);
+    assert(nearly_equal(biased_near, settings.max_near_blur_px * 0.5f));
+    assert(nearly_equal(biased_far, settings.max_far_blur_px * 1.5f));
 
     return 0;
 }

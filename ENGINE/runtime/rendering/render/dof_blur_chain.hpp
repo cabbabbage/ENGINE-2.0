@@ -23,33 +23,17 @@ inline constexpr std::uint32_t kMaxConcurrentPulses = 5;
 inline constexpr float kPhaseFrequencyHz = 8.5f;
 } // namespace damage_pulse_tuning
 
-namespace radial_blur_tuning {
+// The old radial zoom and pre-edge-warp tuning namespaces are retired.
+// Lens blur now uses a per-layer depth-bin multi-sample kernel driven by CinematicLensSettings.
+namespace lens_blur_tuning {
 inline constexpr float kMinProcessQualityScale = 0.20f;
 inline constexpr float kFarLayerQualityMultiplier = 0.48f;
 inline constexpr float kBackgroundSeedQualityMultiplier = 0.42f;
 
-inline constexpr int kMinSamples = 3;
-inline constexpr int kMaxSamples = 10;
-inline constexpr float kSamplesPerSqrtRadius = 1.15f;
-
-inline constexpr float kMaxScaleDelta = 0.18f;
-inline constexpr float kScaleDeltaMultiplier = 0.80f;
-} // namespace radial_blur_tuning
-
-namespace edge_lens_warp_tuning {
-// Pre-warp applied per already-composited layer before radial zoom blur.
-// It approximates lens curvature by pushing only screen-edge strips outward from the layer center.
-inline constexpr bool kEnabled = true;
-inline constexpr int kMinSamples = 2;
-inline constexpr int kMaxSamples = 5;
-inline constexpr float kMaxEdgePushRatio = 0.018f;
-inline constexpr float kMaxScaleDelta = 0.045f;
-inline constexpr float kMinEdgeBandRatio = 0.10f;
-inline constexpr float kMaxEdgeBandRatio = 0.24f;
-inline constexpr float kCornerWeight = 0.24f;
-inline constexpr float kSideWeight = 0.34f;
-inline constexpr float kBaseWeight = 1.0f;
-} // namespace edge_lens_warp_tuning
+inline constexpr int kMinSamples = 5;
+inline constexpr int kMaxSamples = 17;
+inline constexpr float kSamplesPerSqrtRadius = 1.35f;
+} // namespace lens_blur_tuning
 
 namespace atmospheric_dust_tuning {
 inline constexpr bool kEnabled = true;
@@ -69,6 +53,31 @@ inline constexpr float kForegroundFarTileScale = 1.15f;
 // Keep world-distance behavior data-driven through DustAnchor.
 inline constexpr float kDepthRampPower = 1.35f;
 } // namespace atmospheric_dust_tuning
+
+
+struct CinematicLensSettings {
+    bool enabled = false;
+    float focus_depth_offset = 0.0f;
+    float aperture = 1.0f;
+    float focus_falloff_acceleration = 1.65f;
+    float max_near_blur_px = 12.0f;
+    float max_far_blur_px = 48.0f;
+    float near_far_blur_bias = 0.0f;
+    float swirl_strength = 0.28f;
+    float swirl_radius_start = 0.18f;
+    float tangential_blur_stretch = 1.0f;
+    float anamorphic_strength = 0.0f;
+    float bokeh_oval_ratio = 1.0f;
+    float bokeh_rotation = 0.0f;
+    float field_curvature = 0.0f;
+    float edge_softness = 1.0f;
+    bool alpha_clamp_protection = false;
+    int alpha_debug_mode = 0;
+    int blur_padding_px = 0;
+    int sample_count = 9;
+    float downsample_scale = 1.0f;
+    int quality_preset = 1;
+};
 
 struct DustAnchor {
     // Used only for computing distance/visibility behavior.
@@ -91,15 +100,20 @@ struct DustAnchor {
 
 struct LayerTexture {
     int depth_layer = 0;
-    float blur_strength = 0.0f;
+    // Deprecated input multiplier retained for existing callers. Prefer blur_amount.
+    float blur_strength = 1.0f;
+    float layer_depth = 0.0f;
+    float world_distance_from_focus = 0.0f;
     SDL_Texture* texture = nullptr;
+    float blur_amount = 0.0f;
+    bool is_foreground = false;
+    bool is_focus_protected = false;
     float warp_px = 0.0f;
     float tint_strength = 0.0f;
     float phase = 0.0f;
 
     // Optional. If left at 0 for non-focus layers, compose() falls back to:
     // abs(depth_layer - focus_depth_layer) * DustAnchor::world_units_per_depth_layer.
-    float world_distance_from_focus = 0.0f;
 
     float dust_world_z = 0.0f;
     bool has_dust_world_z = false;
@@ -112,7 +126,7 @@ struct CompositeResult {
     std::uint32_t blur_pass_count = 0;
 };
 
-bool enabled(bool depth_of_field_enabled, float blur_px, float radial_blur_px);
+bool enabled(const CinematicLensSettings& settings);
 
 class Renderer {
 public:
@@ -131,10 +145,7 @@ public:
 
     CompositeResult compose(const std::vector<LayerTexture>& layers,
                             SDL_Texture* background_seed,
-                            bool depth_of_field_enabled,
-                            float aperture,
-                            float blur_px,
-                            float radial_blur_px,
+                            const CinematicLensSettings& lens_settings,
                             SDL_FPoint optical_center,
                             int focus_depth_layer = 0,
                             float camera_zoom_percent = 0.0f,
@@ -152,9 +163,10 @@ private:
     bool blur_step(SDL_Texture* src,
                    SDL_Texture* dst,
                    SDL_Texture* blur_work,
-                   float blur_px,
+                   const CinematicLensSettings& lens_settings,
                    SDL_FPoint optical_center,
-                   float radial_blur_px,
+                   float blur_radius_px,
+                   bool foreground_layer,
                    float quality_scale) const;
 
     SDL_Renderer* renderer_ = nullptr;

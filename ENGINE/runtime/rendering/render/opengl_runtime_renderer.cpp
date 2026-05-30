@@ -47,6 +47,47 @@ std::filesystem::path project_root_path() {
 #endif
 }
 
+
+dof_blur_chain::CinematicLensSettings build_cinematic_lens_settings(
+    const WarpedScreenGrid::RealismSettings& camera_settings) {
+    dof_blur_chain::CinematicLensSettings settings{};
+    settings.enabled = camera_settings.depth_of_field_enabled;
+    settings.focus_depth_offset = camera_settings.focus_depth_offset;
+    settings.aperture = camera_settings.aperture;
+    settings.focus_falloff_acceleration = camera_settings.focus_falloff_acceleration;
+    settings.max_near_blur_px = camera_settings.blur_px;
+    settings.max_far_blur_px = camera_settings.radial_blur_px;
+    settings.near_far_blur_bias = camera_settings.near_far_blur_bias;
+    settings.swirl_strength = camera_settings.swirl_strength;
+    settings.swirl_radius_start = camera_settings.swirl_radius_start;
+    settings.tangential_blur_stretch = camera_settings.tangential_blur_stretch;
+    settings.anamorphic_strength = camera_settings.anamorphic_strength;
+    settings.bokeh_oval_ratio = camera_settings.bokeh_oval_ratio;
+    settings.bokeh_rotation = camera_settings.bokeh_rotation;
+    settings.field_curvature = camera_settings.field_curvature;
+    settings.edge_softness = camera_settings.edge_softness;
+    settings.alpha_clamp_protection = camera_settings.alpha_clamp_protection;
+    settings.alpha_debug_mode = camera_settings.alpha_debug_mode;
+    settings.blur_padding_px = camera_settings.blur_padding_px;
+    settings.sample_count = camera_settings.lens_sample_count;
+    settings.downsample_scale = camera_settings.lens_downsample_scale;
+    settings.quality_preset = camera_settings.lens_quality_preset;
+    return settings;
+}
+
+render_depth::LensBlurDepthSettings build_lens_depth_settings(
+    const dof_blur_chain::CinematicLensSettings& lens_settings) {
+    render_depth::LensBlurDepthSettings settings{};
+    settings.focus_depth_offset = lens_settings.focus_depth_offset;
+    settings.aperture = lens_settings.aperture;
+    settings.focus_falloff_acceleration = lens_settings.focus_falloff_acceleration;
+    settings.max_near_blur_px = lens_settings.max_near_blur_px;
+    settings.max_far_blur_px = lens_settings.max_far_blur_px;
+    settings.near_far_blur_bias = lens_settings.near_far_blur_bias;
+    settings.focus_dead_zone = 0.05f;
+    return settings;
+}
+
 std::string safe_string(const char* value) {
     return value ? std::string(value) : std::string();
 }
@@ -1731,9 +1772,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         out_data.xy_sprite_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
 
     out_data.depth_layers.clear();
-    const bool dof_requested_by_settings = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
-                                                                   camera_settings.blur_px,
-                                                                   camera_settings.radial_blur_px);
+    const dof_blur_chain::CinematicLensSettings lens_settings = build_cinematic_lens_settings(camera_settings);
+    const bool dof_requested_by_settings = dof_blur_chain::enabled(lens_settings);
+    const render_depth::LensBlurDepthSettings lens_depth_settings = build_lens_depth_settings(lens_settings);
     const bool dof_requested = allow_dof_depth_layers &&
         dof_requested_by_settings;
     if (dof_requested) {
@@ -1754,12 +1795,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             return lhs > rhs;
         });
 
-        int max_distance_from_focus = 0;
-        for (int layer_id : scratch_depth_layer_ids_) {
-            max_distance_from_focus = std::max(max_distance_from_focus,
-                                               std::abs(layer_id - out_data.focus_depth_layer));
-        }
-
         out_data.depth_layers.reserve(scratch_depth_layer_ids_.size());
         for (int layer_id : scratch_depth_layer_ids_) {
             GpuDepthLayerDrawPackets layer{};
@@ -1768,10 +1803,10 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
                 std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
             }
-            layer.blur_strength_px = render_depth::dof_blur_strength_for_layer_distance(
-                layer.depth_layer,
-                out_data.focus_depth_layer,
-                max_distance_from_focus);
+            layer.blur_strength_px = render_depth::dof_blur_amount_for_layer_depth(
+                static_cast<float>(layer.depth_layer),
+                static_cast<float>(out_data.focus_depth_layer),
+                lens_depth_settings);
             assign_dust_depth_for_layer(layer,
                                         out_data.focus_depth_layer,
                                         camera.current_focus_plane_world_z(),
@@ -2173,10 +2208,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     const auto& camera = assets_->getView();
     const auto& camera_settings = camera.get_settings();
     const float camera_zoom_percent = resolve_camera_zoom_percent(camera);
-    const bool dof_requested_by_settings =
-        dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
-                                camera_settings.blur_px,
-                                camera_settings.radial_blur_px);
+    const dof_blur_chain::CinematicLensSettings lens_settings = build_cinematic_lens_settings(camera_settings);
+    const bool dof_requested_by_settings = dof_blur_chain::enabled(lens_settings);
     const float now_seconds = assets_->game_context().elapsed_seconds();
     ingest_player_damage_pulse(now_seconds);
     prune_expired_damage_pulses(now_seconds);
@@ -2382,6 +2415,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             dof_blur_chain::LayerTexture flattened_layer{};
             flattened_layer.depth_layer = frame_to_render->focus_depth_layer + 1;
             flattened_layer.blur_strength = 1.0f;
+            flattened_layer.blur_amount = lens_settings.max_far_blur_px;
             flattened_layer.texture = xy_sprite_target_;
             flattened_layer.world_distance_from_focus = fallback_distance;
             flattened_layer.dust_world_z = render_depth::world_z_from_depth_offset(
@@ -2415,7 +2449,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 }
                 dof_blur_chain::LayerTexture dof_layer{};
                 dof_layer.depth_layer = layer.depth_layer;
-                dof_layer.blur_strength = layer.blur_strength_px;
+                dof_layer.blur_strength = 1.0f;
+                dof_layer.layer_depth = static_cast<float>(layer.depth_layer);
+                dof_layer.blur_amount = layer.blur_strength_px;
+                dof_layer.is_foreground = layer.depth_layer < frame_to_render->focus_depth_layer;
+                dof_layer.is_focus_protected = layer.depth_layer == frame_to_render->focus_depth_layer;
                 dof_layer.texture = layer_target;
                 dof_layer.world_distance_from_focus = layer.world_distance_from_focus;
                 dof_layer.dust_world_z = layer.dust_world_z;
@@ -2452,10 +2490,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         const dof_blur_chain::CompositeResult dof_result =
             dof_blur_chain_.compose(dof_layers,
                                     floor_target_,
-                                    camera_settings.depth_of_field_enabled,
-                                    camera_settings.aperture,
-                                    camera_settings.blur_px,
-                                    camera_settings.radial_blur_px,
+                                    lens_settings,
                                     optical_center,
                                     frame_to_render->focus_depth_layer,
                                     camera_zoom_percent,
@@ -2485,10 +2520,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             resolved_dof_result =
                 dof_blur_chain_.compose(dof_layers,
                                         floor_target_,
-                                        camera_settings.depth_of_field_enabled,
-                                        camera_settings.aperture,
-                                        camera_settings.blur_px,
-                                        camera_settings.radial_blur_px,
+                                        lens_settings,
                                         optical_center,
                                         frame_to_render->focus_depth_layer,
                                         camera_zoom_percent,

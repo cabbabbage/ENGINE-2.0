@@ -395,6 +395,7 @@ private:
     void sync_value_from_popup_controls();
     void update_popup_geometry();
     SDL_Rect popup_toggle_rect() const;
+    SDL_Rect popup_close_rect() const;
     SDL_Rect popup_rect() const;
     SDL_Rect popup_histogram_rect() const;
     double velocity_scaled_pixels(int delta_pixels) const;

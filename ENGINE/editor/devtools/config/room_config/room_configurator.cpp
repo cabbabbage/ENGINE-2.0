@@ -2528,6 +2528,22 @@ bool RoomConfigurator::sync_state_from_widgets() {
 
 bool RoomConfigurator::handle_event(const SDL_Event& e) {
     if (!container_ || !container_->is_visible()) return false;
+    if (DMWeightedRangeWidget::has_active_expanded()) {
+        if (DMWeightedRangeWidget::handle_active_expanded_event(e)) {
+            return true;
+        }
+        switch (e.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_WHEEL:
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_TEXT_INPUT:
+            return true;
+        default:
+            break;
+        }
+    }
     if (color_picker_ && color_picker_->is_open()) {
         return color_picker_->handle_event(e);
     }
@@ -2544,6 +2560,7 @@ void RoomConfigurator::render(SDL_Renderer* r) const {
     if (color_picker_ && color_picker_->is_open()) {
         color_picker_->render(r);
     }
+    DMWeightedRangeWidget::render_active_expanded(r);
 }
 
 const SDL_Rect& RoomConfigurator::panel_rect() const {

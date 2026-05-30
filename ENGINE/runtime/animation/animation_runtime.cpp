@@ -1556,6 +1556,13 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
         }
     }
 
+    const std::string previous_animation = self_->current_animation;
+    bool previously_attack = false;
+    auto previous_it = self_->info->animations.find(previous_animation);
+    if (previous_it != self_->info->animations.end()) {
+        previously_attack = animation_is_attack_candidate(previous_it->second);
+    }
+
     Animation& anim = it->second;
     path_index = anim.clamp_path_index(path_index);
     AnimationFrame* new_frame = anim.get_first_frame(path_index);

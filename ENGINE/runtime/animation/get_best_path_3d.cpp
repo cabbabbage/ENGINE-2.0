@@ -209,13 +209,11 @@ Plan3D GetBestPath3D::operator()(const Asset& self,
     CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
     plan.engagement_target_asset_id = context.engagement_target_asset_id;
     plan.attacking_enabled = plan.engagement_target_asset_id.has_value();
-    const bool allow_engagement_target_overlap =
-        plan.attacking_enabled && plan.engagement_target_asset_id.has_value();
     const auto& collisions = context.collisions_for(self);
     const Assets* assets = self.get_assets();
     const animation_update::detail::PathBlockingContext blocking_context{
-        plan.engagement_target_asset_id,
-        allow_engagement_target_overlap
+        context.engagement_target_asset_id,
+        plan.attacking_enabled
     };
     const long long visited_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const MovementAnimationBuckets3D animation_buckets = gather_movement_animations_3d(self);

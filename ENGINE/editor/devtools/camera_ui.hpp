@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include "DockableCollapsible.hpp"
+#include "SlidingWindowContainer.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 class Assets;
@@ -31,11 +32,11 @@ public:
     void open();
     void close();
     void toggle();
-    bool is_point_inside(int x, int y) const;
+    bool is_point_inside(int x, int y) const override;
 
     void update(const Input& input, int screen_w, int screen_h);
     bool handle_event(const SDL_Event& e);
-    void render(SDL_Renderer* renderer) const;
+    void render(SDL_Renderer* renderer) const override;
 
     void sync_from_camera();
     void sync_debug_controls_from_settings(const WarpedScreenGrid::RealismSettings& settings);
@@ -47,6 +48,10 @@ public:
 private:
 
     void build_ui();
+    void configure_container();
+    void ensure_section_panels();
+    void request_container_layout();
+    DockableCollapsible* panel_at_point(SDL_Point point) const;
     void rebuild_rows();
     void apply_settings_if_needed();
     void sync_runtime_lighting_state_with_visibility();
@@ -62,9 +67,6 @@ private:
 
     bool suppress_apply_once_ = false;
     bool was_visible_ = false;
-
-    std::unique_ptr<Widget> header_spacer_;
-    std::unique_ptr<Widget> controls_spacer_;
 
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> boundary_min_render_size_slider_;
@@ -122,11 +124,14 @@ private:
     std::unique_ptr<CallbackCheckboxWidget> alpha_clamp_protection_widget_;
     DMCheckbox* depth_of_field_checkbox_ = nullptr;
     DMCheckbox* alpha_clamp_protection_checkbox_ = nullptr;
-    std::unique_ptr<Widget> movement_section_widget_;
-    std::unique_ptr<Widget> framing_section_widget_;
-    std::unique_ptr<Widget> lens_section_widget_;
-    std::unique_ptr<Widget> rendering_section_widget_;
-    std::unique_ptr<Widget> debug_section_widget_;
+    SlidingWindowContainer container_;
+    std::unique_ptr<DockableCollapsible> movement_section_panel_;
+    std::unique_ptr<DockableCollapsible> framing_section_panel_;
+    std::unique_ptr<DockableCollapsible> lens_section_panel_;
+    std::unique_ptr<DockableCollapsible> rendering_section_panel_;
+    std::unique_ptr<DockableCollapsible> debug_section_panel_;
+    std::vector<DockableCollapsible*> ordered_section_panels_;
+    mutable std::vector<SDL_Rect> ordered_section_bounds_;
     bool movement_section_expanded_ = false;
     bool framing_section_expanded_ = false;
     bool lens_section_expanded_ = false;
@@ -141,5 +146,4 @@ private:
 protected:
     std::string_view lock_settings_namespace() const override { return "camera"; }
     std::string_view lock_settings_id() const override { return "controls"; }
-    void layout_custom_content(int screen_w, int screen_h) const override;
 };

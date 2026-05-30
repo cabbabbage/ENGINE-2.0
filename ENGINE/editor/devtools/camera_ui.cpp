@@ -1,5 +1,6 @@
 #include "camera_ui.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -16,6 +17,7 @@
 #include <sstream>
 
 #include "devtools/dev_camera_controls.hpp"
+#include "devtools/DockManager.hpp"
 #include "devtools/dm_styles.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/draw_utils.hpp"
@@ -26,24 +28,6 @@
 #include "gameplay/map_generation/room.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/input.hpp"
-
-class SpacerWidget : public Widget {
-public:
-    explicit SpacerWidget(int height)
-        : height_(std::max(0, height)) {}
-
-    void set_rect(const SDL_Rect& r) override { rect_ = r; }
-    const SDL_Rect& rect() const override { return rect_; }
-    int height_for_width(int) const override { return height_; }
-    bool handle_event(const SDL_Event&) override { return false; }
-    void render(SDL_Renderer*) const override {}
-    bool wants_full_row() const override { return true; }
-
-private:
-    SDL_Rect rect_{0, 0, 0, 0};
-    int height_ = 0;
-};
-
 
 class LabelWidget : public Widget {
 public:
@@ -67,47 +51,7 @@ private:
     SDL_Rect rect_{0, 0, 0, 0};
 };
 
-class SectionToggleWidget : public Widget {
-public:
-    SectionToggleWidget(std::string title,
-                        std::function<bool()> expanded_getter,
-                        std::function<void()> on_toggle)
-        : title_(std::move(title)),
-          expanded_getter_(std::move(expanded_getter)),
-          on_toggle_(std::move(on_toggle)),
-          button_(compose_label(), &DMStyles::SecondaryButton(), 1, DMButton::height()) {}
 
-    void set_rect(const SDL_Rect& r) override { button_.set_rect(r); }
-    const SDL_Rect& rect() const override { return button_.rect(); }
-    int height_for_width(int) const override { return DMButton::height(); }
-    bool wants_full_row() const override { return true; }
-
-    bool handle_event(const SDL_Event& e) override {
-        bool used = button_.handle_event(e);
-        if (used &&
-            e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
-            e.button.button == SDL_BUTTON_LEFT &&
-            on_toggle_) {
-            on_toggle_();
-            button_.set_text(compose_label());
-        }
-        return used;
-    }
-
-    void render(SDL_Renderer* renderer) const override { button_.render(renderer); }
-
-private:
-    std::string compose_label() const {
-        const bool expanded = expanded_getter_ ? expanded_getter_() : true;
-        return std::string(expanded ? "▾ " : "▸ ") + title_;
-    }
-
-private:
-    std::string title_;
-    std::function<bool()> expanded_getter_;
-    std::function<void()> on_toggle_;
-    DMButton button_;
-};
 
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
@@ -124,6 +68,7 @@ CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     set_close_button_enabled(true);
     set_close_button_on_left(false);
     set_floatable(false);
+    configure_container();
     build_ui();
     apply_settings_if_needed();
     sync_from_camera();
@@ -142,6 +87,8 @@ void CameraUIPanel::set_dirty_callback(std::function<void()> callback) {
 
 void CameraUIPanel::open() {
     set_visible(true);
+    container_.open();
+    request_container_layout();
     sync_runtime_lighting_state_with_visibility();
     suppress_apply_once_ = true;
     sync_from_camera();
@@ -149,6 +96,7 @@ void CameraUIPanel::open() {
 
 void CameraUIPanel::close() {
     set_visible(false);
+    container_.close();
     sync_runtime_lighting_state_with_visibility();
 }
 
@@ -161,14 +109,14 @@ void CameraUIPanel::toggle() {
 }
 
 bool CameraUIPanel::is_point_inside(int x, int y) const {
-    return DockableCollapsible::is_point_inside(x, y);
+    return is_visible() && container_.is_point_inside(x, y);
 }
 
 void CameraUIPanel::update(const Input& input, int screen_w, int screen_h) {
     last_screen_w_ = screen_w;
     last_screen_h_ = screen_h;
     const bool previously_visible = was_visible_;
-    DockableCollapsible::update(input, screen_w, screen_h);
+    container_.update(input, screen_w, screen_h);
     const bool currently_visible = is_visible();
     if (currently_visible && !previously_visible) {
 
@@ -191,7 +139,7 @@ void CameraUIPanel::update(const Input& input, int screen_w, int screen_h) {
 
 bool CameraUIPanel::handle_event(const SDL_Event& e) {
     if (!is_visible()) return false;
-    bool used = DockableCollapsible::handle_event(e);
+    bool used = container_.handle_event(e);
     if (used) {
         apply_settings_if_needed();
     }
@@ -201,20 +149,10 @@ bool CameraUIPanel::handle_event(const SDL_Event& e) {
 void CameraUIPanel::render(SDL_Renderer* renderer) const {
     if (!renderer) return;
     if (is_visible()) {
-        DockableCollapsible::render(renderer);
+        container_.render(renderer, last_screen_w_, last_screen_h_);
     }
 
     DMDropdown::render_active_options(renderer);
-}
-
-void CameraUIPanel::layout_custom_content(int screen_w, int screen_h) const {
-    (void)screen_h;
-    constexpr int kRightDockMargin = 12;
-    const SDL_Rect r = rect();
-    const int dock_x = std::max(0, screen_w - r.w - kRightDockMargin);
-    const int dock_y = DMSpacing::panel_padding();
-    const_cast<CameraUIPanel*>(this)->set_position_from_layout_manager(dock_x, dock_y);
-    set_drag_handle_rect(SDL_Rect{0,0,0,0});
 }
 
 void CameraUIPanel::sync_from_camera() {
@@ -297,10 +235,6 @@ void CameraUIPanel::build_ui() {
     set_row_gap(DMSpacing::item_gap());
     set_col_gap(DMSpacing::item_gap());
     set_floating_content_width(420);
-
-    header_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::header_gap());
-
-    controls_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::small_gap());
 
     WarpedScreenGrid::RealismSettings defaults;
     if (assets_) {
@@ -477,41 +411,7 @@ void CameraUIPanel::build_ui() {
     camera_height_max_widget_ = std::make_unique<SliderWidget>(camera_height_max_slider_.get());
     camera_height_max_widget_->set_tooltip("Global maximum camera height. All room camera heights will be clamped to this value.");
 
-    movement_section_widget_ = std::make_unique<SectionToggleWidget>(
-        "Movement",
-        [this]() { return movement_section_expanded_; },
-        [this]() {
-            movement_section_expanded_ = !movement_section_expanded_;
-            rebuild_rows();
-        });
-    framing_section_widget_ = std::make_unique<SectionToggleWidget>(
-        "Framing",
-        [this]() { return framing_section_expanded_; },
-        [this]() {
-            framing_section_expanded_ = !framing_section_expanded_;
-            rebuild_rows();
-        });
-    lens_section_widget_ = std::make_unique<SectionToggleWidget>(
-        "Lens",
-        [this]() { return lens_section_expanded_; },
-        [this]() {
-            lens_section_expanded_ = !lens_section_expanded_;
-            rebuild_rows();
-        });
-    rendering_section_widget_ = std::make_unique<SectionToggleWidget>(
-        "Rendering",
-        [this]() { return rendering_section_expanded_; },
-        [this]() {
-            rendering_section_expanded_ = !rendering_section_expanded_;
-            rebuild_rows();
-        });
-    debug_section_widget_ = std::make_unique<SectionToggleWidget>(
-        "Debug",
-        [this]() { return debug_section_expanded_; },
-        [this]() {
-            debug_section_expanded_ = !debug_section_expanded_;
-            rebuild_rows();
-        });
+    ensure_section_panels();
 
     lens_label_widgets_.clear();
     for (const char* label : {
@@ -526,6 +426,169 @@ void CameraUIPanel::build_ui() {
     }
 
     rebuild_rows();
+}
+
+
+void CameraUIPanel::configure_container() {
+    container_.set_header_text("Camera");
+    container_.set_scrollbar_visible(true);
+    container_.set_content_clip_enabled(false);
+    container_.set_on_close([this]() { this->close(); });
+    container_.set_layout_function([this](const SlidingWindowContainer::LayoutContext& ctx) {
+        int y = ctx.content_top;
+        ordered_section_bounds_.resize(ordered_section_panels_.size());
+        const int embed_screen_h = last_screen_h_ > 0 ? last_screen_h_ : std::max(1, ctx.content_width);
+        for (std::size_t i = 0; i < ordered_section_panels_.size(); ++i) {
+            DockableCollapsible* panel = ordered_section_panels_[i];
+            if (!panel || !panel->is_visible()) {
+                ordered_section_bounds_[i] = SDL_Rect{0, 0, 0, 0};
+                continue;
+            }
+            const int panel_height = panel->embedded_height(ctx.content_width, embed_screen_h);
+            SDL_Rect bounds{ctx.content_x, y - ctx.scroll_value, ctx.content_width, panel_height};
+            ordered_section_bounds_[i] = bounds;
+            panel->set_rect(bounds);
+            y += panel_height + ctx.gap;
+        }
+        return y + ctx.gap;
+    });
+    container_.set_render_function([this](SDL_Renderer* renderer) {
+        for (std::size_t i = 0; i < ordered_section_panels_.size(); ++i) {
+            DockableCollapsible* panel = ordered_section_panels_[i];
+            if (!panel || !panel->is_visible()) {
+                continue;
+            }
+            SDL_Rect bounds = (i < ordered_section_bounds_.size()) ? ordered_section_bounds_[i] : panel->rect();
+            panel->render_embedded(renderer, bounds, last_screen_w_, last_screen_h_);
+        }
+    });
+    container_.set_event_function([this](const SDL_Event& e) {
+        const bool pointer_event =
+            e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION;
+        const bool wheel_event = e.type == SDL_EVENT_MOUSE_WHEEL;
+        auto dispatch_to_panel = [this, &e](DockableCollapsible* panel) {
+            if (!panel || !panel->is_visible()) {
+                return false;
+            }
+            if (!panel->handle_event(e)) {
+                return false;
+            }
+            movement_section_expanded_ = movement_section_panel_ ? movement_section_panel_->is_expanded() : movement_section_expanded_;
+            framing_section_expanded_ = framing_section_panel_ ? framing_section_panel_->is_expanded() : framing_section_expanded_;
+            lens_section_expanded_ = lens_section_panel_ ? lens_section_panel_->is_expanded() : lens_section_expanded_;
+            rendering_section_expanded_ = rendering_section_panel_ ? rendering_section_panel_->is_expanded() : rendering_section_expanded_;
+            debug_section_expanded_ = debug_section_panel_ ? debug_section_panel_->is_expanded() : debug_section_expanded_;
+            request_container_layout();
+            return true;
+        };
+
+        DockableCollapsible* pointer_panel = nullptr;
+        if (pointer_event) {
+            SDL_Point point{};
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
+                point = sdl_mouse_util::MotionPoint(e.motion);
+            } else {
+                point = sdl_mouse_util::ButtonPoint(e.button);
+            }
+            pointer_panel = panel_at_point(point);
+        } else if (wheel_event) {
+            SDL_Point point{};
+            sdl_mouse_util::GetMouseState(&point.x, &point.y);
+            pointer_panel = panel_at_point(point);
+        }
+
+        if (dispatch_to_panel(pointer_panel)) {
+            return true;
+        }
+
+        if (!pointer_event && !wheel_event) {
+            for (DockableCollapsible* panel : ordered_section_panels_) {
+                if (dispatch_to_panel(panel)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    });
+    container_.set_update_function([this](const Input& input, int screen_w, int screen_h) {
+        (void)input;
+        SDL_Rect usable = DockManager::instance().usableRect();
+        if (usable.w > 0 && usable.h > 0) {
+            int panel_x = screen_w - std::max(screen_w / 3, 320);
+            panel_x = std::clamp(panel_x, 0, screen_w);
+            const int panel_w = std::max(0, screen_w - panel_x);
+            container_.set_panel_bounds_override(SDL_Rect{panel_x, usable.y, panel_w, usable.h});
+        } else {
+            container_.clear_panel_bounds_override();
+        }
+        for (DockableCollapsible* panel : ordered_section_panels_) {
+            if (panel) {
+                panel->update(input, screen_w, screen_h);
+            }
+        }
+    });
+}
+
+void CameraUIPanel::ensure_section_panels() {
+    auto configure_panel = [](DockableCollapsible& panel) {
+        panel.set_floatable(false);
+        panel.set_close_button_enabled(false);
+        panel.set_show_header(true);
+        panel.set_scroll_enabled(false);
+        panel.set_row_gap(DMSpacing::item_gap());
+        panel.set_col_gap(DMSpacing::item_gap());
+        panel.set_padding(DMSpacing::panel_padding());
+        panel.reset_scroll();
+        panel.set_visible(true);
+        panel.force_pointer_ready();
+        panel.setLocked(false);
+        panel.set_embedded_focus_state(false);
+        panel.set_embedded_interaction_enabled(true);
+    };
+    auto ensure_panel = [&](std::unique_ptr<DockableCollapsible>& panel, const char* title, bool expanded) {
+        if (!panel) {
+            panel = std::make_unique<DockableCollapsible>(title, false);
+            configure_panel(*panel);
+        }
+        panel->set_title(title);
+        panel->set_expanded(expanded);
+    };
+
+    ensure_panel(movement_section_panel_, "Movement", movement_section_expanded_);
+    ensure_panel(framing_section_panel_, "Framing", framing_section_expanded_);
+    ensure_panel(lens_section_panel_, "Lens", lens_section_expanded_);
+    ensure_panel(rendering_section_panel_, "Rendering", rendering_section_expanded_);
+    ensure_panel(debug_section_panel_, "Debug", debug_section_expanded_);
+
+    ordered_section_panels_ = {
+        movement_section_panel_.get(),
+        framing_section_panel_.get(),
+        lens_section_panel_.get(),
+        rendering_section_panel_.get(),
+        debug_section_panel_.get(),
+    };
+    ordered_section_bounds_.resize(ordered_section_panels_.size());
+}
+
+void CameraUIPanel::request_container_layout() {
+    container_.request_layout();
+}
+
+DockableCollapsible* CameraUIPanel::panel_at_point(SDL_Point point) const {
+    for (std::size_t i = 0; i < ordered_section_panels_.size(); ++i) {
+        DockableCollapsible* panel = ordered_section_panels_[i];
+        if (!panel || !panel->is_visible()) {
+            continue;
+        }
+        SDL_Rect bounds = (i < ordered_section_bounds_.size()) ? ordered_section_bounds_[i] : panel->rect();
+        if (bounds.w <= 0 || bounds.h <= 0) {
+            bounds = panel->rect();
+        }
+        if (bounds.w > 0 && bounds.h > 0 && SDL_PointInRect(&point, &bounds)) {
+            return panel;
+        }
+    }
+    return nullptr;
 }
 
 void CameraUIPanel::sync_runtime_lighting_state_with_visibility() {
@@ -577,90 +640,80 @@ void CameraUIPanel::clamp_all_room_camera_heights(int min_val, int max_val) {
 
 
 void CameraUIPanel::rebuild_rows() {
-    Rows rows;
-    if (header_spacer_) rows.push_back({ header_spacer_.get() });
-    if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    if (movement_section_widget_) rows.push_back({ movement_section_widget_.get() });
-    if (movement_section_expanded_) {
-        if (camera_height_min_widget_) rows.push_back({ camera_height_min_widget_.get() });
-        if (camera_height_max_widget_) rows.push_back({ camera_height_max_widget_.get() });
-        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    }
+    ensure_section_panels();
 
-    if (framing_section_widget_) rows.push_back({ framing_section_widget_.get() });
-    if (framing_section_expanded_) {
-        if (min_render_size_slider_) rows.push_back({ min_render_size_slider_.get() });
-        if (boundary_min_render_size_slider_) rows.push_back({ boundary_min_render_size_slider_.get() });
-        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    }
+    Rows movement_rows;
+    if (camera_height_min_widget_) movement_rows.push_back({ camera_height_min_widget_.get() });
+    if (camera_height_max_widget_) movement_rows.push_back({ camera_height_max_widget_.get() });
+    if (movement_section_panel_) movement_section_panel_->set_rows(movement_rows);
 
-    if (lens_section_widget_) rows.push_back({ lens_section_widget_.get() });
-    if (lens_section_expanded_) {
-        auto push_label = [&](std::size_t index) {
-            if (index < lens_label_widgets_.size()) rows.push_back({ lens_label_widgets_[index].get() });
-        };
-        push_label(0);
-        if (depth_of_field_widget_) rows.push_back({ depth_of_field_widget_.get() });
-        if (focus_depth_offset_slider_) rows.push_back({ focus_depth_offset_slider_.get() });
-        if (reset_lens_defaults_widget_) rows.push_back({ reset_lens_defaults_widget_.get() });
-        push_label(1);
-        if (aperture_slider_) rows.push_back({ aperture_slider_.get() });
-        if (focus_falloff_acceleration_slider_) rows.push_back({ focus_falloff_acceleration_slider_.get() });
-        if (max_near_blur_px_slider_) rows.push_back({ max_near_blur_px_slider_.get() });
-        if (max_far_blur_px_slider_) rows.push_back({ max_far_blur_px_slider_.get() });
-        if (near_far_blur_bias_slider_) rows.push_back({ near_far_blur_bias_slider_.get() });
-        if (field_curvature_slider_) rows.push_back({ field_curvature_slider_.get() });
-        if (edge_softness_slider_) rows.push_back({ edge_softness_slider_.get() });
-        if (layer_depth_interval_slider_) rows.push_back({ layer_depth_interval_slider_.get() });
-        if (layer_depth_falloff_slider_) rows.push_back({ layer_depth_falloff_slider_.get() });
-        push_label(2);
-        if (swirl_strength_slider_) rows.push_back({ swirl_strength_slider_.get() });
-        if (swirl_radius_start_slider_) rows.push_back({ swirl_radius_start_slider_.get() });
-        if (tangential_blur_stretch_slider_) rows.push_back({ tangential_blur_stretch_slider_.get() });
-        if (anamorphic_strength_slider_) rows.push_back({ anamorphic_strength_slider_.get() });
-        if (bokeh_oval_ratio_slider_) rows.push_back({ bokeh_oval_ratio_slider_.get() });
-        if (bokeh_rotation_slider_) rows.push_back({ bokeh_rotation_slider_.get() });
-        push_label(3);
-        if (vignette_strength_slider_) rows.push_back({ vignette_strength_slider_.get() });
-        if (vignette_radius_slider_) rows.push_back({ vignette_radius_slider_.get() });
-        if (vignette_softness_slider_) rows.push_back({ vignette_softness_slider_.get() });
-        if (barrel_distortion_slider_) rows.push_back({ barrel_distortion_slider_.get() });
-        if (distortion_zoom_compensation_slider_) rows.push_back({ distortion_zoom_compensation_slider_.get() });
-        push_label(4);
-        if (chromatic_aberration_slider_) rows.push_back({ chromatic_aberration_slider_.get() });
-        if (chromatic_edge_start_slider_) rows.push_back({ chromatic_edge_start_slider_.get() });
-        if (chromatic_depth_influence_slider_) rows.push_back({ chromatic_depth_influence_slider_.get() });
-        push_label(5);
-        if (bloom_strength_slider_) rows.push_back({ bloom_strength_slider_.get() });
-        if (bloom_threshold_slider_) rows.push_back({ bloom_threshold_slider_.get() });
-        if (bloom_radius_slider_) rows.push_back({ bloom_radius_slider_.get() });
-        if (halation_strength_slider_) rows.push_back({ halation_strength_slider_.get() });
-        if (sample_count_slider_) rows.push_back({ sample_count_slider_.get() });
-        if (downsample_scale_slider_) rows.push_back({ downsample_scale_slider_.get() });
-        if (quality_preset_widget_) rows.push_back({ quality_preset_widget_.get() });
-        push_label(6);
-        if (alpha_debug_widget_) rows.push_back({ alpha_debug_widget_.get() });
-        if (alpha_clamp_protection_widget_) rows.push_back({ alpha_clamp_protection_widget_.get() });
-        if (blur_padding_preview_slider_) rows.push_back({ blur_padding_preview_slider_.get() });
-        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    }
+    Rows framing_rows;
+    if (min_render_size_slider_) framing_rows.push_back({ min_render_size_slider_.get() });
+    if (boundary_min_render_size_slider_) framing_rows.push_back({ boundary_min_render_size_slider_.get() });
+    if (framing_section_panel_) framing_section_panel_->set_rows(framing_rows);
 
-    if (rendering_section_widget_) rows.push_back({ rendering_section_widget_.get() });
-    if (rendering_section_expanded_) {
-        if (distance_from_edge_widget_) rows.push_back({ distance_from_edge_widget_.get() });
-        if (near_fog_distance_widget_) rows.push_back({ near_fog_distance_widget_.get() });
-        if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
-    }
+    Rows lens_rows;
+    auto push_label = [&](std::size_t index) {
+        if (index < lens_label_widgets_.size()) lens_rows.push_back({ lens_label_widgets_[index].get() });
+    };
+    push_label(0);
+    if (depth_of_field_widget_) lens_rows.push_back({ depth_of_field_widget_.get() });
+    if (focus_depth_offset_slider_) lens_rows.push_back({ focus_depth_offset_slider_.get() });
+    if (reset_lens_defaults_widget_) lens_rows.push_back({ reset_lens_defaults_widget_.get() });
+    push_label(1);
+    if (aperture_slider_) lens_rows.push_back({ aperture_slider_.get() });
+    if (focus_falloff_acceleration_slider_) lens_rows.push_back({ focus_falloff_acceleration_slider_.get() });
+    if (max_near_blur_px_slider_) lens_rows.push_back({ max_near_blur_px_slider_.get() });
+    if (max_far_blur_px_slider_) lens_rows.push_back({ max_far_blur_px_slider_.get() });
+    if (near_far_blur_bias_slider_) lens_rows.push_back({ near_far_blur_bias_slider_.get() });
+    if (field_curvature_slider_) lens_rows.push_back({ field_curvature_slider_.get() });
+    if (edge_softness_slider_) lens_rows.push_back({ edge_softness_slider_.get() });
+    if (layer_depth_interval_slider_) lens_rows.push_back({ layer_depth_interval_slider_.get() });
+    if (layer_depth_falloff_slider_) lens_rows.push_back({ layer_depth_falloff_slider_.get() });
+    push_label(2);
+    if (swirl_strength_slider_) lens_rows.push_back({ swirl_strength_slider_.get() });
+    if (swirl_radius_start_slider_) lens_rows.push_back({ swirl_radius_start_slider_.get() });
+    if (tangential_blur_stretch_slider_) lens_rows.push_back({ tangential_blur_stretch_slider_.get() });
+    if (anamorphic_strength_slider_) lens_rows.push_back({ anamorphic_strength_slider_.get() });
+    if (bokeh_oval_ratio_slider_) lens_rows.push_back({ bokeh_oval_ratio_slider_.get() });
+    if (bokeh_rotation_slider_) lens_rows.push_back({ bokeh_rotation_slider_.get() });
+    push_label(3);
+    if (vignette_strength_slider_) lens_rows.push_back({ vignette_strength_slider_.get() });
+    if (vignette_radius_slider_) lens_rows.push_back({ vignette_radius_slider_.get() });
+    if (vignette_softness_slider_) lens_rows.push_back({ vignette_softness_slider_.get() });
+    if (barrel_distortion_slider_) lens_rows.push_back({ barrel_distortion_slider_.get() });
+    if (distortion_zoom_compensation_slider_) lens_rows.push_back({ distortion_zoom_compensation_slider_.get() });
+    push_label(4);
+    if (chromatic_aberration_slider_) lens_rows.push_back({ chromatic_aberration_slider_.get() });
+    if (chromatic_edge_start_slider_) lens_rows.push_back({ chromatic_edge_start_slider_.get() });
+    if (chromatic_depth_influence_slider_) lens_rows.push_back({ chromatic_depth_influence_slider_.get() });
+    push_label(5);
+    if (bloom_strength_slider_) lens_rows.push_back({ bloom_strength_slider_.get() });
+    if (bloom_threshold_slider_) lens_rows.push_back({ bloom_threshold_slider_.get() });
+    if (bloom_radius_slider_) lens_rows.push_back({ bloom_radius_slider_.get() });
+    if (halation_strength_slider_) lens_rows.push_back({ halation_strength_slider_.get() });
+    if (sample_count_slider_) lens_rows.push_back({ sample_count_slider_.get() });
+    if (downsample_scale_slider_) lens_rows.push_back({ downsample_scale_slider_.get() });
+    if (quality_preset_widget_) lens_rows.push_back({ quality_preset_widget_.get() });
+    push_label(6);
+    if (alpha_debug_widget_) lens_rows.push_back({ alpha_debug_widget_.get() });
+    if (alpha_clamp_protection_widget_) lens_rows.push_back({ alpha_clamp_protection_widget_.get() });
+    if (blur_padding_preview_slider_) lens_rows.push_back({ blur_padding_preview_slider_.get() });
+    if (lens_section_panel_) lens_section_panel_->set_rows(lens_rows);
 
-    if (debug_section_widget_) rows.push_back({ debug_section_widget_.get() });
-    if (debug_section_expanded_) {
-        if (max_cull_depth_slider_) rows.push_back({ max_cull_depth_slider_.get() });
-        if (dynamic_renderer_depth_efficiency_depth_slider_) {
-            rows.push_back({ dynamic_renderer_depth_efficiency_depth_slider_.get() });
-        }
-    }
+    Rows rendering_rows;
+    if (distance_from_edge_widget_) rendering_rows.push_back({ distance_from_edge_widget_.get() });
+    if (near_fog_distance_widget_) rendering_rows.push_back({ near_fog_distance_widget_.get() });
+    if (rendering_section_panel_) rendering_section_panel_->set_rows(rendering_rows);
 
-    set_rows(rows);
+    Rows debug_rows;
+    if (max_cull_depth_slider_) debug_rows.push_back({ max_cull_depth_slider_.get() });
+    if (dynamic_renderer_depth_efficiency_depth_slider_) {
+        debug_rows.push_back({ dynamic_renderer_depth_efficiency_depth_slider_.get() });
+    }
+    if (debug_section_panel_) debug_section_panel_->set_rows(debug_rows);
+
+    request_container_layout();
 }
 
 void CameraUIPanel::apply_settings_if_needed() {

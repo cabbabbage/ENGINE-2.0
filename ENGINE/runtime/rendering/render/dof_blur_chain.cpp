@@ -132,7 +132,11 @@ bool copy_texture_region(SDL_Renderer* renderer,
     clear_texture_target(renderer, dst);
     render_diagnostics::set_render_target(renderer, dst);
 
-    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    // DoF intermediates are treated as premultiplied-alpha render targets.
+    // Raw copy preserves already-premultiplied RGB instead of applying a
+    // second straight-alpha blend that would pull blur back toward the source
+    // silhouette and create dark fringes.
+    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_NONE);
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
 
@@ -160,7 +164,9 @@ void draw_weighted_offset_sample(SDL_Renderer* renderer,
         return;
     }
 
-    SDL_SetTextureAlphaMod(texture, static_cast<Uint8>(alpha));
+    const Uint8 mod = static_cast<Uint8>(alpha);
+    SDL_SetTextureAlphaMod(texture, mod);
+    SDL_SetTextureColorMod(texture, mod, mod, mod);
 
     const SDL_FRect src_rect{
         0.0f,
@@ -179,13 +185,24 @@ void draw_weighted_offset_sample(SDL_Renderer* renderer,
     (void)render_diagnostics::render_texture(renderer, texture, &src_rect, &dst_rect);
 }
 
-SDL_BlendMode accumulation_blend_mode() {
+SDL_BlendMode premultiplied_accumulation_blend_mode() {
     static const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(
-        SDL_BLENDFACTOR_SRC_ALPHA,
+        SDL_BLENDFACTOR_ONE,
         SDL_BLENDFACTOR_ONE,
         SDL_BLENDOPERATION_ADD,
         SDL_BLENDFACTOR_ONE,
         SDL_BLENDFACTOR_ONE,
+        SDL_BLENDOPERATION_ADD);
+    return mode;
+}
+
+SDL_BlendMode premultiplied_over_blend_mode() {
+    static const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
         SDL_BLENDOPERATION_ADD);
     return mode;
 }
@@ -195,9 +212,9 @@ void set_accumulation_blend_mode(SDL_Texture* texture) {
         return;
     }
 
-    if (!SDL_SetTextureBlendMode(texture, accumulation_blend_mode())) {
+    if (!SDL_SetTextureBlendMode(texture, premultiplied_accumulation_blend_mode())) {
         // Preserve behavior on renderers without custom blend mode support.
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_ADD);
     }
 }
 
@@ -251,7 +268,7 @@ bool prepare_damage_pulse_texture(SDL_Renderer* renderer,
             0,
             255));
 
-        SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureBlendMode(src, premultiplied_over_blend_mode());
         SDL_SetTextureAlphaMod(src, tint_alpha);
         SDL_SetTextureColorMod(src, 255, green_blue, green_blue);
         (void)render_diagnostics::render_texture(renderer, src, nullptr, nullptr);
@@ -913,11 +930,21 @@ bool apply_layer_lens_blur(SDL_Renderer* renderer,
             oval_y * (anamorphic_px * t) +
             radial_y * radial_px;
 
-        SDL_SetTextureAlphaMod(process_source, static_cast<Uint8>(std::clamp(
-                                                static_cast<int>(std::lround(weight * 255.0f)),
-                                                0,
-                                                255)));
-        const SDL_FRect dst_rect{offset_x, offset_y, static_cast<float>(process_w), static_cast<float>(process_h)};
+        const Uint8 weight_mod = static_cast<Uint8>(std::clamp(
+            static_cast<int>(std::lround(weight * 255.0f)),
+            0,
+            255));
+        SDL_SetTextureAlphaMod(process_source, weight_mod);
+        SDL_SetTextureColorMod(process_source, weight_mod, weight_mod, weight_mod);
+        const float padding = static_cast<float>(std::clamp(
+            static_cast<int>(std::lround(static_cast<float>(settings.blur_padding_px) * clamped_quality)),
+            0,
+            std::max(process_w, process_h)));
+        const SDL_FRect dst_rect{
+            offset_x - padding,
+            offset_y - padding,
+            static_cast<float>(process_w) + padding * 2.0f,
+            static_cast<float>(process_h) + padding * 2.0f};
         (void)render_diagnostics::render_texture(renderer, process_source, &src_rect, &dst_rect);
     }
 
@@ -930,11 +957,17 @@ bool apply_layer_lens_blur(SDL_Renderer* renderer,
         }
     }
 
-    if (settings.alpha_clamp_protection && copied_to_dst) {
-        // Conservative first-version protection: re-copying with normal blending prevents extreme
-        // additive alpha buildup, while the default path keeps accumulated alpha for silhouette smear.
-        copied_to_dst = copy_texture_region(renderer, dst, scratch, nullptr, nullptr) &&
-                        copy_texture_region(renderer, scratch, dst, nullptr, nullptr);
+    const bool alpha_clamp_protection_enabled = settings.alpha_clamp_protection ||
+        settings.alpha_debug_mode == dof_blur_chain::kAlphaDebugCompareAlphaClampProtection;
+    if (alpha_clamp_protection_enabled && copied_to_dst) {
+        // Explicit protection/debug path only. Re-rendering the source over the blur makes
+        // source-alpha clamping visually obvious for comparison, while the normal path above
+        // leaves accumulated blur alpha free to bleed beyond the original silhouette.
+        render_diagnostics::set_render_target(renderer, dst);
+        SDL_SetTextureBlendMode(src, premultiplied_over_blend_mode());
+        SDL_SetTextureAlphaMod(src, 255);
+        SDL_SetTextureColorMod(src, 255, 255, 255);
+        copied_to_dst = render_diagnostics::render_texture(renderer, src, nullptr, nullptr);
     }
 
     restore_texture_state(src, src_state);
@@ -1076,7 +1109,7 @@ bool Renderer::ensure_target(SDL_Texture*& texture, const char* label) {
         return false;
     }
 
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureBlendMode(texture, premultiplied_over_blend_mode());
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
 
     (void)label;
@@ -1110,7 +1143,7 @@ bool Renderer::composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const 
 
     render_diagnostics::set_render_target(renderer_, dst);
 
-    SDL_SetTextureBlendMode(src, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureBlendMode(src, premultiplied_over_blend_mode());
     SDL_SetTextureAlphaMod(src, 255);
     SDL_SetTextureColorMod(src, 255, 255, 255);
 

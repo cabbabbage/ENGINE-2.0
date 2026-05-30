@@ -10,6 +10,7 @@ void main() {
     vec4 floor_color = texture(u_floor, v_uv);
     vec4 layer_color = texture(u_layers, v_uv);
     float layer_alpha = clamp(layer_color.a, 0.0, 1.0);
+    // u_layers is premultiplied by the blur path, so do not multiply RGB by alpha again here.
     vec3 composed_rgb = layer_color.rgb + floor_color.rgb * (1.0 - layer_alpha);
     out_color = vec4(composed_rgb, 1.0);
 }

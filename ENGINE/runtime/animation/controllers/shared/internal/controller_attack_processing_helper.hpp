@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <string_view>
 #include <vector>
 
 #include "animation/controllers/shared/controller_types.hpp"
@@ -30,7 +31,10 @@ public:
                                         SDL_Point& out_delta,
                                         float max_distance = 50.0f,
                                         int max_damage = 100);
-    static void apply_knockback(Asset& self, SDL_Point delta);
+    static void apply_knockback(Asset& self,
+                                SDL_Point delta,
+                                std::string_view animation_id = animation_update::detail::kDefaultAnimation,
+                                bool interrupt_locked_animations = false);
 };
 
 } // namespace animation_update::custom_controllers::internal

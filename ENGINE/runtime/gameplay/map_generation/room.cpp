@@ -1029,16 +1029,38 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(width));
         out["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(height));
         out["geometry"] = geometry;
-        int coarseness = 0;
         if (assets_json.contains("coarseness")) {
                 const auto& c = assets_json["coarseness"];
+                int legacy_coarseness = 0;
                 if (c.is_number_integer()) {
-                        coarseness = c.get<int>();
+                        legacy_coarseness = c.get<int>();
+                        const int clamped = std::clamp(legacy_coarseness, 0, 1000);
+                        if (clamped <= 0) {
+                                out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
+                        } else {
+                                const int min_radius = std::max(8, 12 + (clamped / 20));
+                                const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+                                out["coarseness"] = vibble::weighted_range::to_json(
+                                    vibble::weighted_range::make_legacy_uniform(min_radius, max_radius));
+                        }
                 } else if (c.is_number_float()) {
-                        coarseness = static_cast<int>(std::lround(c.get<double>()));
+                        legacy_coarseness = static_cast<int>(std::lround(c.get<double>()));
+                        const int clamped = std::clamp(legacy_coarseness, 0, 1000);
+                        if (clamped <= 0) {
+                                out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
+                        } else {
+                                const int min_radius = std::max(8, 12 + (clamped / 20));
+                                const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+                                out["coarseness"] = vibble::weighted_range::to_json(
+                                    vibble::weighted_range::make_legacy_uniform(min_radius, max_radius));
+                        }
+                } else {
+                        out["coarseness"] = vibble::weighted_range::to_json(
+                            vibble::weighted_range::from_json(c, vibble::weighted_range::make_flat(0)));
                 }
+        } else {
+                out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
         }
-        out["coarseness"] = std::clamp(coarseness, 0, 1000);
         if (assets_json.contains("edge_detail_candidates") && assets_json["edge_detail_candidates"].is_object()) {
                 out["edge_detail_candidates"] = assets_json["edge_detail_candidates"];
         } else {

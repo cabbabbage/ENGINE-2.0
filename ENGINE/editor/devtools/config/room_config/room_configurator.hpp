@@ -199,8 +199,8 @@ private:
     std::unique_ptr<SliderWidget> edge_widget_;
     std::unique_ptr<DMWeightedRangeWidget> curvy_range_widget_;
     std::unique_ptr<WeightedRangeWidget> curvy_widget_;
-    std::unique_ptr<DMNumericStepper> coarseness_stepper_;
-    std::unique_ptr<StepperWidget> coarseness_widget_;
+    std::unique_ptr<DMWeightedRangeWidget> coarseness_range_widget_;
+    std::unique_ptr<WeightedRangeWidget> coarseness_widget_;
     std::unique_ptr<DMNumericStepper> edge_detail_resolution_stepper_;
     std::unique_ptr<StepperWidget> edge_detail_resolution_widget_;
     std::unique_ptr<Widget> edge_detail_candidates_widget_;

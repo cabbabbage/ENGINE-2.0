@@ -28,6 +28,7 @@ constexpr int kMinTrailSectorWidthPercent = 25;
 constexpr int kMaxTrailSectorWidthPercent = 100;
 constexpr int kMinCoarseness = 0;
 constexpr int kMaxCoarseness = 1000;
+constexpr int kMinCoarsenessRadius = 8;
 constexpr double kDegreesFullRotation = 360.0;
 
 bool json_to_int(const nlohmann::json& value, int& out) {
@@ -69,6 +70,25 @@ vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohman
         return fallback;
     }
     return vibble::weighted_range::from_json(entry.at(key), fallback);
+}
+
+
+vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
+    const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
+    if (clamped <= 0) {
+        return vibble::weighted_range::make_flat(0);
+    }
+    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 20));
+    const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+    return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
+}
+
+vibble::weighted_range::WeightedIntRange normalize_coarseness_range_value(const nlohmann::json& value) {
+    int legacy = 0;
+    if (json_to_int(value, legacy)) {
+        return coarseness_range_from_legacy(legacy);
+    }
+    return vibble::weighted_range::from_json(value, vibble::weighted_range::make_flat(0));
 }
 
 vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const nlohmann::json& entry,
@@ -364,14 +384,11 @@ bool normalize_room_config_entry(nlohmann::json& entry,
         changed = true;
     }
 
-    int coarseness = 0;
-    const bool has_coarseness = entry.contains("coarseness");
-    if (has_coarseness) {
-        (void)json_to_int(entry["coarseness"], coarseness);
-    }
-    coarseness = std::clamp(coarseness, kMinCoarseness, kMaxCoarseness);
-    if (!has_coarseness || !entry["coarseness"].is_number_integer() || entry["coarseness"].get<int>() != coarseness) {
-        entry["coarseness"] = coarseness;
+    const nlohmann::json normalized_coarseness = vibble::weighted_range::to_json(
+        entry.contains("coarseness") ? normalize_coarseness_range_value(entry["coarseness"])
+                                      : vibble::weighted_range::make_flat(0));
+    if (!entry.contains("coarseness") || entry["coarseness"] != normalized_coarseness) {
+        entry["coarseness"] = normalized_coarseness;
         changed = true;
     }
 
@@ -511,7 +528,7 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["inherits_live_dynamic_assets"] = false;
     entry["inherit_map_floor_color"] = true;
     entry["room_floor_color"] = nlohmann::json::array({0, 0, 0});
-    entry["coarseness"] = 0;
+    entry["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
     entry["edge_detail_candidates"] = nlohmann::json::object({
         {"candidates", nlohmann::json::array()},
         {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
@@ -946,7 +963,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"display_color", nlohmann::json::array({85, 242, 143, 255})},
             {"geometry", "Square"},
             {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
-            {"coarseness", 0},
+            {"coarseness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))},
             {"edge_detail_candidates", nlohmann::json::object({
                 {"candidates", nlohmann::json::array()},
                 {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
@@ -964,6 +981,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_room["geometry"] = "Circle";
     spawn_room["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
     spawn_room["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
+    spawn_room["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
     spawn_room["is_boss"] = false;
     spawn_room["inherits_live_dynamic_assets"] = true;
     spawn_room["trail_connection_sector"] = nlohmann::json::object({

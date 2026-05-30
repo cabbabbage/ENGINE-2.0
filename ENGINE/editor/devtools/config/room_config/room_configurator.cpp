@@ -43,6 +43,8 @@ constexpr int kTrailSectorMinWidthPercent = 25;
 constexpr int kTrailSectorMaxWidthPercent = 100;
 constexpr int kMinCoarseness = 0;
 constexpr int kMaxCoarseness = 1000;
+constexpr int kMinCoarsenessRadius = 8;
+
 
 const nlohmann::json& empty_object() {
     static const nlohmann::json kEmpty = nlohmann::json::object();
@@ -164,6 +166,28 @@ std::optional<int> read_legacy_radius_value(const nlohmann::json& obj) {
         return std::max(0, *value);
     }
     return std::nullopt;
+}
+
+vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
+    const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
+    if (clamped <= 0) {
+        return vibble::weighted_range::make_flat(0);
+    }
+    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 20));
+    const int max_radius = std::max(min_radius, 24 + (clamped / 6));
+    return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
+}
+
+vibble::weighted_range::WeightedIntRange read_coarseness_range_field(const nlohmann::json& obj) {
+    const auto fallback = vibble::weighted_range::make_flat(0);
+    if (!obj.is_object() || !obj.contains("coarseness")) {
+        return fallback;
+    }
+    const auto& value = obj["coarseness"];
+    if (auto legacy = read_json_int(obj, "coarseness")) {
+        return coarseness_range_from_legacy(*legacy);
+    }
+    return vibble::weighted_range::from_json(value, fallback);
 }
 
 bool append_unique(std::vector<std::string>& options, const std::string& value) {
@@ -915,7 +939,7 @@ struct RoomConfigurator::State {
     bool inherits_assets = false;
     bool inherit_map_floor_color = true;
     SDL_Color room_floor_color{0, 0, 0, 255};
-    int coarseness = 0;
+    vibble::weighted_range::WeightedIntRange coarseness = vibble::weighted_range::make_flat(0);
     nlohmann::json edge_detail_candidates = nlohmann::json::object({
         {"candidates", nlohmann::json::array()},
         {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
@@ -954,9 +978,9 @@ struct RoomConfigurator::State {
             trail_connection_width_percent = clamped_width;
             mutated = true;
         }
-        const int clamped_coarseness = std::clamp(coarseness, kMinCoarseness, kMaxCoarseness);
-        if (clamped_coarseness != coarseness) {
-            coarseness = clamped_coarseness;
+        const auto coarseness_json = vibble::weighted_range::to_json(coarseness);
+        coarseness = vibble::weighted_range::from_json(coarseness_json, vibble::weighted_range::make_flat(0));
+        if (vibble::weighted_range::to_json(coarseness) != coarseness_json) {
             mutated = true;
         }
         if (!edge_detail_candidates.is_object()) {
@@ -1104,11 +1128,7 @@ struct RoomConfigurator::State {
         } else {
             room_floor_color = SDL_Color{0, 0, 0, 255};
         }
-        if (auto value = read_json_int(src, "coarseness")) {
-            coarseness = *value;
-        } else {
-            coarseness = 0;
-        }
+        coarseness = read_coarseness_range_field(src);
         if (src.contains("edge_detail_candidates") && src["edge_detail_candidates"].is_object()) {
             edge_detail_candidates = src["edge_detail_candidates"];
         } else {
@@ -1152,7 +1172,7 @@ struct RoomConfigurator::State {
         dest["width"] = vibble::weighted_range::to_json(width_range);
         dest["height"] = allow_height ? vibble::weighted_range::to_json(height_range)
                                        : vibble::weighted_range::to_json(width_range);
-        dest["coarseness"] = std::clamp(coarseness, kMinCoarseness, kMaxCoarseness);
+        dest["coarseness"] = vibble::weighted_range::to_json(coarseness);
         dest["edge_detail_candidates"] = edge_detail_candidates;
 
         (void)include_camera;
@@ -2008,7 +2028,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
             new_state.inherits_assets != state_->inherits_assets ||
             new_state.inherit_map_floor_color != state_->inherit_map_floor_color ||
             !colors_equal(new_state.room_floor_color, state_->room_floor_color) ||
-            new_state.coarseness != state_->coarseness ||
+            vibble::weighted_range::to_json(new_state.coarseness) != vibble::weighted_range::to_json(state_->coarseness) ||
             new_state.edge_detail_candidates != state_->edge_detail_candidates;
     }
 
@@ -2295,10 +2315,9 @@ void RoomConfigurator::rebuild_rows_internal() {
     edge_widget_.reset();
     curvy_range_widget_.reset();
     curvy_widget_.reset();
-    coarseness_stepper_ = std::make_unique<DMNumericStepper>(
-        "Coarseness", kMinCoarseness, kMaxCoarseness, state_->coarseness);
-    coarseness_stepper_->set_step(1);
-    coarseness_widget_ = std::make_unique<StepperWidget>(coarseness_stepper_.get());
+    coarseness_range_widget_ = std::make_unique<DMWeightedRangeWidget>(
+        "Coarseness Radius", state_->coarseness, kMinCoarseness, kMaxCoarseness, false);
+    coarseness_widget_ = std::make_unique<WeightedRangeWidget>(coarseness_range_widget_.get());
     const int initial_edge_detail_resolution = state_->edge_detail_candidates.value(
         "resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution));
     edge_detail_resolution_stepper_ = std::make_unique<DMNumericStepper>(
@@ -2659,9 +2678,9 @@ bool RoomConfigurator::sync_state_from_widgets() {
             changed = true;
         }
     }
-    if (coarseness_stepper_) {
-        const int value = std::clamp(coarseness_stepper_->value(), kMinCoarseness, kMaxCoarseness);
-        if (value != state_->coarseness) {
+    if (coarseness_range_widget_) {
+        const auto value = coarseness_range_widget_->value();
+        if (vibble::weighted_range::to_json(value) != vibble::weighted_range::to_json(state_->coarseness)) {
             state_->coarseness = value;
             changed = true;
         }
@@ -2755,8 +2774,8 @@ bool RoomConfigurator::sync_state_from_widgets() {
     if (height_range_widget_) {
         height_range_widget_->set_value(state_->height_range);
     }
-    if (coarseness_stepper_) {
-        coarseness_stepper_->set_value(state_->coarseness);
+    if (coarseness_range_widget_) {
+        coarseness_range_widget_->set_value(state_->coarseness);
     }
     if (edge_detail_resolution_stepper_) {
         edge_detail_resolution_stepper_->set_value(

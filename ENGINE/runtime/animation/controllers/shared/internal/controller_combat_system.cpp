@@ -2,7 +2,8 @@
 
 #include <algorithm>
 
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/internal/controller_attack_detection_helper.hpp"
+#include "animation/controllers/shared/internal/controller_attack_processing_helper.hpp"
 #include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 #include "utils/frame_stats_recorder.hpp"

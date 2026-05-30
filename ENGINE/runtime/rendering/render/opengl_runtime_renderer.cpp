@@ -736,6 +736,36 @@ void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
     }
 }
 
+SDL_FPoint resolve_optical_center_px(SDL_Renderer* renderer,
+                                     SDL_Point screen_center,
+                                     int target_width,
+                                     int target_height) {
+    const float target_w = static_cast<float>(std::max(1, target_width));
+    const float target_h = static_cast<float>(std::max(1, target_height));
+    float x = static_cast<float>(screen_center.x);
+    float y = static_cast<float>(screen_center.y);
+
+    int output_w = 0;
+    int output_h = 0;
+    if (renderer &&
+        SDL_GetCurrentRenderOutputSize(renderer, &output_w, &output_h) &&
+        output_w > 0 &&
+        output_h > 0) {
+        const bool looks_like_output_space =
+            x < 0.0f || y < 0.0f || x > target_w || y > target_h;
+        if (looks_like_output_space) {
+            const float nx = std::clamp(x / static_cast<float>(output_w), 0.0f, 1.0f);
+            const float ny = std::clamp(y / static_cast<float>(output_h), 0.0f, 1.0f);
+            x = nx * target_w;
+            y = ny * target_h;
+        }
+    }
+
+    return SDL_FPoint{
+        std::clamp(x, 0.0f, target_w),
+        std::clamp(y, 0.0f, target_h)};
+}
+
 } // namespace
 
 bool opengl_runtime_renderer_detail::draw_packet_sort_predicate_floor(const GpuSpriteDrawPacket& lhs,
@@ -2764,9 +2794,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         apply_damage_pulse_to_layers();
 
         const SDL_Point screen_center = assets_->getView().get_screen_center();
-        const SDL_FPoint optical_center{
-            std::clamp(static_cast<float>(screen_center.x), 0.0f, static_cast<float>(frame_to_render->target_width)),
-            std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(frame_to_render->target_height))};
+        const SDL_FPoint optical_center = resolve_optical_center_px(
+            renderer_,
+            screen_center,
+            static_cast<int>(frame_to_render->target_width),
+            static_cast<int>(frame_to_render->target_height));
         dof_blur_chain_.set_output_dimensions(static_cast<int>(frame_to_render->target_width),
                                               static_cast<int>(frame_to_render->target_height));
 
@@ -2936,9 +2968,11 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     }
 
     const SDL_Point final_screen_center = assets_->getView().get_screen_center();
-    const SDL_FPoint final_optical_center{
-        std::clamp(static_cast<float>(final_screen_center.x), 0.0f, static_cast<float>(frame_to_render->target_width)),
-        std::clamp(static_cast<float>(final_screen_center.y), 0.0f, static_cast<float>(frame_to_render->target_height))};
+    const SDL_FPoint final_optical_center = resolve_optical_center_px(
+        renderer_,
+        final_screen_center,
+        static_cast<int>(frame_to_render->target_width),
+        static_cast<int>(frame_to_render->target_height));
     const FinalLensPassSettings final_lens_settings = build_final_lens_pass_settings(camera_settings);
     const bool bypass_final_lens_for_debug = draw_anchor_debug || draw_movement_debug || draw_impass_floor_debug;
     const std::uint64_t final_lens_begin = SDL_GetPerformanceCounter();

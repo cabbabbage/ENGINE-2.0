@@ -3058,7 +3058,7 @@ void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
             room_config_panel_visible_ = visible;
             if (header_visibility_callback_) {
 
-                header_visibility_callback_(visible);
+                header_visibility_callback_(false);
             }
         });
     }
@@ -3067,7 +3067,7 @@ void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
             asset_info_panel_visible_ = visible;
             if (header_visibility_callback_) {
 
-                header_visibility_callback_(visible);
+                header_visibility_callback_(false);
             }
         });
     }
@@ -6184,7 +6184,7 @@ void RoomEditor::open_asset_info_editor(const std::shared_ptr<AssetInfo>& info) 
         info_ui_->set_header_visibility_callback([this](bool visible) {
             asset_info_panel_visible_ = visible;
             if (header_visibility_callback_) {
-                header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
+                header_visibility_callback_(false);
             }
         });
     }
@@ -6348,7 +6348,7 @@ void RoomEditor::close_asset_info_editor() {
     if (asset_info_panel_visible_) {
         asset_info_panel_visible_ = false;
         if (header_visibility_callback_) {
-            header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
+            header_visibility_callback_(false);
         }
     }
     if (active_modal_ == ActiveModal::AssetInfo) {
@@ -25205,7 +25205,7 @@ void RoomEditor::ensure_room_configurator() {
         room_config_panel_visible_ = visible;
         room_config_dock_open_ = visible;
         if (header_visibility_callback_) {
-            header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
+            header_visibility_callback_(false);
         }
     });
     room_cfg_ui_->set_bounds(room_config_bounds_);

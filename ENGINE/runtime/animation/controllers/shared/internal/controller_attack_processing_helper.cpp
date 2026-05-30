@@ -1,4 +1,4 @@
-#include "animation/controllers/shared/attack_processing_helper.hpp"
+#include "animation/controllers/shared/internal/controller_attack_processing_helper.hpp"
 
 #include "animation/animation_update.hpp"
 #include "assets/asset/Asset.hpp"
@@ -7,7 +7,7 @@
 #include <cmath>
 #include <optional>
 
-namespace animation_update::custom_controllers {
+namespace animation_update::custom_controllers::internal {
 
 namespace {
 
@@ -191,4 +191,4 @@ AttackProcessingSummary AttackProcessingHelper::process_attacks(
     return summary;
 }
 
-} // namespace animation_update::custom_controllers
+} // namespace animation_update::custom_controllers::internal

@@ -8,13 +8,11 @@
 #include <vector>
 
 #include "animation/animation_update.hpp"
-#include "animation/controllers/shared/attack_processing_helper.hpp"
 #include "animation/controllers/shared/child_asset.hpp"
 #include "animation/controllers/shared/controller_types.hpp"
 #include "animation/controllers/shared/controller_game_context.hpp"
-#include "animation/controllers/shared/internal/controller_behavior_system.hpp"
+#include "animation/controllers/shared/internal/controller_agent_system.hpp"
 #include "animation/controllers/shared/internal/controller_combat_system.hpp"
-#include "animation/controllers/shared/internal/controller_movement_system.hpp"
 #include "assets/asset/asset_controller.hpp"
 
 class Asset;

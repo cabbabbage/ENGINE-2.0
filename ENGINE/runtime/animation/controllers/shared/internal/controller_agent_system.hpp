@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <chrono>
 #include <optional>
 #include <random>
 #include <string>
@@ -12,14 +14,42 @@ class Asset;
 
 namespace animation_update::custom_controllers::internal {
 
+using EnemyAgentPhase = ::animation_update::custom_controllers::EnemyAgentPhase;
+using EnemyAgentConfig = ::animation_update::custom_controllers::EnemyAgentConfig;
 using MovementConfig = ::animation_update::custom_controllers::MovementConfig;
 
 struct PatrolState {
     std::size_t next_index = 0;
 };
 
-class ControllerMovementSystem {
+struct BehaviorState {
+    EnemyAgentPhase mode = EnemyAgentPhase::Idle;
+    PatrolState patrol_state{};
+    std::chrono::steady_clock::time_point recover_until{};
+    std::chrono::steady_clock::time_point attack_window_until{};
+    axis::WorldPos home{0, 0, 0};
+    bool initialized_home = false;
+    int no_progress_frames = 0;
+    int return_home_fallback_count = 0;
+    int attack_window_enter_count = 0;
+    int attack_window_exit_count = 0;
+};
+
+class ControllerAgentSystem {
 public:
+    struct EnemyPhaseDecision {
+        EnemyAgentPhase phase = EnemyAgentPhase::Idle;
+        bool target_should_be_committed = false;
+        bool enter_attack_window = false;
+        bool leave_attack_window_to_recover = false;
+    };
+
+    static EnemyPhaseDecision decide_enemy_phase(const BehaviorState& state,
+                                                 bool target_valid,
+                                                 long long target_dist_sq,
+                                                 std::chrono::steady_clock::time_point now,
+                                                 const EnemyAgentConfig& config);
+
     static bool move_by_delta_3d(Asset& self,
                                  const axis::WorldPos& delta,
                                  const std::string& animation,
@@ -59,10 +89,34 @@ public:
     static bool face_target(Asset& self, const Asset& target);
     static bool face_direction(Asset& self, float dir_x, float dir_z, float pitch_radians = 0.0f);
 
+    static bool tick_wander(Asset& self,
+                            Asset* target,
+                            BehaviorState& state,
+                            std::mt19937& rng,
+                            int idle_radius_px,
+                            int min_wander_delta_px,
+                            int max_wander_delta_px,
+                            const MovementConfig& config = {});
+    static void tick_enemy_behavior(Asset& self,
+                                    Asset* target,
+                                    BehaviorState& state,
+                                    const EnemyAgentConfig& config,
+                                    const MovementConfig& chase_move = {},
+                                    const MovementConfig& retreat_move = {});
+    static bool tick_patrol(Asset& self,
+                            BehaviorState& state,
+                            const std::vector<axis::WorldPos>& patrol_points,
+                            const MovementConfig& config = {});
+    static bool tick_return_home(Asset& self,
+                                 BehaviorState& state,
+                                 int arrival_threshold_px,
+                                 const MovementConfig& config = {});
+
     static long long distance_sq_3d(const Asset& a, const Asset& b);
     static long long distance_sq_3d(const Asset& a, const axis::WorldPos& b);
 
 private:
+    static void ensure_home(BehaviorState& state, const Asset& self);
     static axis::WorldPos world_position(const Asset& self);
     static bool auto_move_3d(Asset& self,
                              const axis::WorldPos& target,

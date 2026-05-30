@@ -4010,6 +4010,15 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.button.timestamp == last_mouse_down_timestamp_ &&
+            e.button.x == last_mouse_down_x_ &&
+            e.button.y == last_mouse_down_y_) {
+            return true;
+        }
+        last_mouse_down_timestamp_ = e.button.timestamp;
+        last_mouse_down_x_ = e.button.x;
+        last_mouse_down_y_ = e.button.y;
+
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         const bool inside = SDL_PointInRect(&p, &box_rect_);
         if (inside) {

@@ -4,8 +4,6 @@
 #include "animation/controllers/shared/controller_types.hpp"
 
 namespace animation_update::custom_controllers {
-using PatrolState = internal::PatrolState;
-using BehaviorState = internal::BehaviorState;
 using EnemyBehaviorConfig = EnemyAgentConfig;
 }
 

@@ -240,7 +240,7 @@ bool CustomControllerBase::move_3d(const axis::WorldPos& delta,
                                    const std::string& animation,
                                    bool override_non_locked) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::move_by_delta_3d(*self, delta, animation, override_non_locked)
+    return self ? internal::ControllerAgentSystem::move_by_delta_3d(*self, delta, animation, override_non_locked)
                 : false;
 }
 
@@ -248,7 +248,7 @@ bool CustomControllerBase::move_toward(const axis::WorldPos& target,
                                        int step_px,
                                        const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::move_toward_point(*self, target, step_px, config)
+    return self ? internal::ControllerAgentSystem::move_toward_point(*self, target, step_px, config)
                 : false;
 }
 
@@ -256,7 +256,7 @@ bool CustomControllerBase::move_away(const axis::WorldPos& point,
                                      int step_px,
                                      const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::move_away_from_point(*self, point, step_px, config)
+    return self ? internal::ControllerAgentSystem::move_away_from_point(*self, point, step_px, config)
                 : false;
 }
 
@@ -264,14 +264,14 @@ bool CustomControllerBase::seek_target(Asset& target,
                                        int desired_range_px,
                                        const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::seek_target(*self, target, desired_range_px, config)
+    return self ? internal::ControllerAgentSystem::seek_target(*self, target, desired_range_px, config)
                 : false;
 }
 
 bool CustomControllerBase::chase_target(Asset& target,
                                         const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::chase_target(*self, target, config)
+    return self ? internal::ControllerAgentSystem::chase_target(*self, target, config)
                 : false;
 }
 
@@ -279,14 +279,14 @@ bool CustomControllerBase::retreat_from_target(Asset& target,
                                                int retreat_distance_px,
                                                const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::retreat_from_target(*self, target, retreat_distance_px, config)
+    return self ? internal::ControllerAgentSystem::retreat_from_target(*self, target, retreat_distance_px, config)
                 : false;
 }
 
 bool CustomControllerBase::patrol(const std::vector<axis::WorldPos>& points,
                                   const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::patrol(*self, points, behavior_state_.patrol_state, config)
+    return self ? internal::ControllerAgentSystem::patrol(*self, points, behavior_state_.patrol_state, config)
                 : false;
 }
 
@@ -294,14 +294,14 @@ bool CustomControllerBase::idle_wander(int min_delta_px,
                                        int max_delta_px,
                                        const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerMovementSystem::idle_wander(*self, rng_, min_delta_px, max_delta_px, config)
+    return self ? internal::ControllerAgentSystem::idle_wander(*self, rng_, min_delta_px, max_delta_px, config)
                 : false;
 }
 
 bool CustomControllerBase::return_home(int threshold_px,
                                        const MovementConfig& config) {
     Asset* self = controller_self();
-    return self ? internal::ControllerBehaviorSystem::tick_return_home(*self, behavior_state_, threshold_px, config)
+    return self ? internal::ControllerAgentSystem::tick_return_home(*self, behavior_state_, threshold_px, config)
                 : false;
 }
 
@@ -310,7 +310,7 @@ bool CustomControllerBase::face_target(Asset& target) {
     if (!self) {
         return false;
     }
-    const bool changed = internal::ControllerMovementSystem::face_target(*self, target);
+    const bool changed = internal::ControllerAgentSystem::face_target(*self, target);
     if (changed) {
         notify_anchor_changed();
     }
@@ -323,7 +323,7 @@ bool CustomControllerBase::face_direction(float dir_x, float dir_z, float pitch_
         return false;
     }
     const bool changed =
-        internal::ControllerMovementSystem::face_direction(*self, dir_x, dir_z, pitch_radians);
+        internal::ControllerAgentSystem::face_direction(*self, dir_x, dir_z, pitch_radians);
     if (changed) {
         notify_anchor_changed();
     }
@@ -338,7 +338,7 @@ void CustomControllerBase::run_enemy_behavior(Asset* target,
     if (!self) {
         return;
     }
-    internal::ControllerBehaviorSystem::tick_enemy_behavior(
+    internal::ControllerAgentSystem::tick_enemy_behavior(
         *self,
         target,
         behavior_state_,
@@ -356,7 +356,7 @@ bool CustomControllerBase::run_wander_behavior(Asset* target,
     if (!self) {
         return false;
     }
-    return internal::ControllerBehaviorSystem::tick_wander(*self,
+    return internal::ControllerAgentSystem::tick_wander(*self,
                                                            target,
                                                            behavior_state_,
                                                            rng_,
@@ -498,3 +498,4 @@ void CustomControllerBase::notify_anchor_changed(const std::string& anchor_name)
 }
 
 } // namespace animation_update::custom_controllers
+

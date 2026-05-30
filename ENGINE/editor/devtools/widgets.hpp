@@ -526,6 +526,9 @@ private:
     int pending_index_ = 0;
     bool has_pending_index_ = false;
     int hovered_option_index_ = -1;
+    Uint64 last_mouse_down_timestamp_ = 0;
+    int last_mouse_down_x_ = 0;
+    int last_mouse_down_y_ = 0;
     static DMDropdown* active_;
     DMWidgetTooltipState* tooltip_state_ = nullptr;
     std::function<void(int)> on_selection_changed_{};

@@ -275,8 +275,12 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
             : SDL_Point{static_cast<int>(e.button.x), static_cast<int>(e.button.y)};
         const bool early_inside_panel = SDL_PointInRect(&early_pointer, &effective_panel_interaction_rect());
         if (!early_inside_panel) {
+            const bool had_captured_widget = DMWidgetsSliderScrollCaptured() || (DMDropdown::active_dropdown() != nullptr);
             cancel_panel_interactions();
             pointer_inside_last_frame_ = false;
+            if (had_captured_widget) {
+                return true;
+            }
             if (!scroll_dragging_ && !scrollbar_dragging_) {
                 return false;
             }
@@ -335,8 +339,12 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
         pointer_inside_panel = SDL_PointInRect(&pointer, &effective_panel_interaction_rect());
         pointer_inside = pointer_inside_panel;
         if (!pointer_inside_panel) {
+            const bool had_captured_widget = DMWidgetsSliderScrollCaptured() || (DMDropdown::active_dropdown() != nullptr);
             cancel_panel_interactions();
             pointer_inside_last_frame_ = false;
+            if (had_captured_widget) {
+                return true;
+            }
         } else {
             pointer_inside_last_frame_ = true;
         }

@@ -1,4 +1,4 @@
-#include "animation/controllers/shared/attack_detection_helper.hpp"
+#include "animation/controllers/shared/internal/controller_attack_detection_helper.hpp"
 
 #include "animation/attack_validation.hpp"
 #include "assets/asset/Asset.hpp"
@@ -12,7 +12,7 @@
 #include <limits>
 #include <string>
 
-namespace animation_update::custom_controllers {
+namespace animation_update::custom_controllers::internal {
 
 namespace {
 
@@ -194,4 +194,4 @@ int AttackDetectionHelper::send_attacks_to_active_targets(Asset* attacker, Asset
     return static_cast<int>(hits);
 }
 
-} // namespace animation_update::custom_controllers
+} // namespace animation_update::custom_controllers::internal

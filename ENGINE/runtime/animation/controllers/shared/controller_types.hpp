@@ -1,6 +1,8 @@
 #pragma once
 
 #include <optional>
+#include <string_view>
+#include <vector>
 
 #include "animation/animation_update.hpp"
 
@@ -44,6 +46,22 @@ struct EnemyAgentConfig {
     bool force_attacking_enabled = false;
     bool require_ground_contact = true;
     int airborne_buffer_px = 1;
+};
+
+struct AttackProcessingConfig {
+    float max_knockback_distance = 50.0f;
+    int max_damage_for_knockback = 100;
+    float knockback_scale = 1.0f;
+    std::string_view hit_animation_id = "hit";
+    std::string_view death_animation_id = "die";
+    std::string_view hit_fallback_animation_id = "default";
+    std::string_view death_fallback_tag = "break";
+};
+
+struct AttackProcessingSummary {
+    bool had_pending_attacks = false;
+    bool took_damage = false;
+    bool died = false;
 };
 
 } // namespace animation_update::custom_controllers

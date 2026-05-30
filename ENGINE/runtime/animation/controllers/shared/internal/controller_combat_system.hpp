@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "animation/controllers/shared/attack_processing_helper.hpp"
+#include "animation/controllers/shared/controller_types.hpp"
 
 class Asset;
 class Assets;

@@ -1,10 +1,10 @@
 #include <cassert>
 #include <chrono>
 
-#include "animation/controllers/shared/internal/controller_behavior_system.hpp"
+#include "animation/controllers/shared/internal/controller_agent_system.hpp"
 
 int main() {
-    using System = animation_update::custom_controllers::internal::ControllerBehaviorSystem;
+    using System = animation_update::custom_controllers::internal::ControllerAgentSystem;
     using Phase = animation_update::custom_controllers::EnemyAgentPhase;
     using Config = animation_update::custom_controllers::EnemyAgentConfig;
     using State = animation_update::custom_controllers::internal::BehaviorState;
@@ -55,4 +55,3 @@ int main() {
         assert(!d.leave_attack_window_to_recover);
     }
 }
-

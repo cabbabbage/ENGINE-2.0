@@ -96,6 +96,7 @@ class Room {
     std::vector<Room*> connected_rooms;
     std::vector<std::unique_ptr<Asset>> assets;
     std::unique_ptr<Area> room_area;
+    std::unique_ptr<Area> coarseness_added_area;
     std::unique_ptr<AssetSpawnPlanner> planner;
     std::string type;
     nlohmann::json create_static_room_json(std::string name);

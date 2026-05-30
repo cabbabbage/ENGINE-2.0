@@ -160,6 +160,45 @@ void AssetSpawner::spawn(Room& room) {
         room.add_room_assets(std::move(all_));
 }
 
+void AssetSpawner::spawn_edge_detail_candidates(Room& room, const Area& expansion_area, const nlohmann::json& edge_detail_candidates) {
+        if (!asset_library_ || !room.room_area) {
+                return;
+        }
+        if (!edge_detail_candidates.is_object()) {
+                return;
+        }
+        if (!edge_detail_candidates.contains("candidates") || !edge_detail_candidates["candidates"].is_array()) {
+                return;
+        }
+
+        nlohmann::json group = nlohmann::json::object();
+        group["display_name"] = "Edge Detail";
+        group["spawn_id"] = std::string("coarse_edge_") + room.room_name;
+        group["position"] = "Random";
+        group["min_number"] = 0;
+        group["max_number"] = std::max(1, static_cast<int>(std::lround(expansion_area.get_area() / 2500.0)));
+        group["enforce_spacing"] = true;
+        group["resolution"] = edge_detail_candidates.value(
+            "resolution", vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution));
+        group["candidates"] = edge_detail_candidates["candidates"];
+
+        nlohmann::json source = nlohmann::json::object();
+        source["spawn_groups"] = nlohmann::json::array({group});
+        std::vector<nlohmann::json> sources;
+        sources.push_back(std::move(source));
+        std::vector<AssetSpawnPlanner::SourceContext> contexts(1);
+        contexts[0].json_ref = &sources[0];
+        AssetSpawnPlanner planner(sources, expansion_area, *asset_library_, contexts);
+
+        current_room_ = &room;
+        map_grid_settings_ = room.map_grid_settings();
+        run_spawning(&planner, expansion_area);
+        current_room_ = nullptr;
+        if (!all_.empty()) {
+                room.add_room_assets(std::move(all_));
+        }
+}
+
 std::vector<std::unique_ptr<Asset>> AssetSpawner::extract_all_assets() {
 	return std::move(all_);
 }

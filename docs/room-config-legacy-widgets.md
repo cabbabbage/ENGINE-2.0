@@ -18,7 +18,7 @@ This document captures the old Room/Trail config panel at a high level so a futu
 - `Range sliders`
   - Controlled min/max size bounds for width and height.
 - `Single-value slider`
-  - Controlled surface parameters such as edge smoothness and curvature-like shaping.
+  - Legacy surface parameters (removed): replaced by coarseness and edge detail candidates.
 - `Checkboxes`
   - Controlled boolean room flags (boss-like marker, inherit-assets style flags).
 - `Tag editor chips/list`

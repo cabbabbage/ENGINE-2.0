@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
+#include <iostream>
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/map_grid_settings.hpp"
@@ -24,6 +25,8 @@ constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
 constexpr int kDefaultTrailSectorWidthPercent = 100;
 constexpr int kMinTrailSectorWidthPercent = 25;
 constexpr int kMaxTrailSectorWidthPercent = 100;
+constexpr int kMinCoarseness = 0;
+constexpr int kMaxCoarseness = 1000;
 constexpr double kDegreesFullRotation = 360.0;
 
 bool json_to_int(const nlohmann::json& value, int& out) {
@@ -341,38 +344,53 @@ bool normalize_room_config_entry(nlohmann::json& entry,
         changed = true;
     }
 
-    if (entry.erase("edge_smoothness") > 0) changed = true;
-    if (is_trail_entry) {
-        auto normalize_zero_int = [&](const char* key) {
-            auto it = entry.find(key);
-            if (it == entry.end()) {
-                return;
+    if (entry.erase("edge_smoothness") > 0) {
+        warn_legacy_drop("edge_smoothness");
+        changed = true;
+    }
+    if (entry.erase("curvyness") > 0) {
+        warn_legacy_drop("curvyness");
+        changed = true;
+    }
+    if (entry.erase("curviness") > 0) {
+        warn_legacy_drop("curviness");
+        changed = true;
+    }
+
+    int coarseness = 0;
+    const bool has_coarseness = entry.contains("coarseness");
+    if (has_coarseness) {
+        (void)json_to_int(entry["coarseness"], coarseness);
+    }
+    coarseness = std::clamp(coarseness, kMinCoarseness, kMaxCoarseness);
+    if (!has_coarseness || !entry["coarseness"].is_number_integer() || entry["coarseness"].get<int>() != coarseness) {
+        entry["coarseness"] = coarseness;
+        changed = true;
+    }
+
+    auto normalize_edge_detail_candidates = [&]() {
+        nlohmann::json normalized = nlohmann::json::object();
+        nlohmann::json candidates = nlohmann::json::array();
+        int resolution = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
+        if (entry.contains("edge_detail_candidates") && entry["edge_detail_candidates"].is_object()) {
+            const auto& src = entry["edge_detail_candidates"];
+            if (src.contains("candidates") && src["candidates"].is_array()) {
+                candidates = src["candidates"];
             }
-            int value = 0;
-            if (it->is_number_integer()) {
-                value = it->get<int>();
-            } else if (it->is_number_float()) {
-                value = static_cast<int>(std::lround(it->get<double>()));
+            if (src.contains("resolution")) {
+                int parsed = resolution;
+                (void)json_to_int(src["resolution"], parsed);
+                resolution = vibble::grid::clamp_resolution(parsed);
             }
-            if (!it->is_number() || value != 0) {
-                entry[key] = 0;
-                changed = true;
-            }
-        };
-        // Keep legacy trail keys stable, but force orthogonal layouts at runtime.
-        normalize_zero_int("curvyness");
-        normalize_zero_int("curviness");
-        if (entry.contains("curvyness") && !entry.contains("curviness")) {
-            entry["curviness"] = 0;
-            changed = true;
-        } else if (entry.contains("curviness") && !entry.contains("curvyness")) {
-            entry["curvyness"] = 0;
+        }
+        normalized["candidates"] = std::move(candidates);
+        normalized["resolution"] = resolution;
+        if (!entry.contains("edge_detail_candidates") || entry["edge_detail_candidates"] != normalized) {
+            entry["edge_detail_candidates"] = std::move(normalized);
             changed = true;
         }
-    } else {
-        if (entry.erase("curvyness") > 0) changed = true;
-        if (entry.erase("curviness") > 0) changed = true;
-    }
+    };
+    normalize_edge_detail_candidates();
 
     if (!entry.contains("spawn_groups") || !entry["spawn_groups"].is_array()) {
         entry["spawn_groups"] = nlohmann::json::array();
@@ -486,6 +504,11 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
     entry["inherits_live_dynamic_assets"] = false;
     entry["inherit_map_floor_color"] = true;
     entry["room_floor_color"] = nlohmann::json::array({0, 0, 0});
+    entry["coarseness"] = 0;
+    entry["edge_detail_candidates"] = nlohmann::json::object({
+        {"candidates", nlohmann::json::array()},
+        {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
+    });
     entry["spawn_groups"] = nlohmann::json::array();
     entry["trail_connection_sector"] = nlohmann::json::object({
         {"direction_deg", kDefaultTrailSectorDirectionDeg},
@@ -1144,3 +1167,8 @@ MapManifestBootstrapResult bootstrap_map_manifest(const ManifestData& manifest_d
 }
 
 }
+    auto warn_legacy_drop = [&](const char* field) {
+        std::cerr << "[MapManifestNormalizer] Dropping legacy geometry field '" << field
+                  << "' in " << (is_trail_entry ? "trail" : "room")
+                  << " entry '" << key_name << "'.\n";
+    };

@@ -36,7 +36,7 @@ Area::Area(const std::string& name, const std::vector<Point>& pts, int resolutio
 
 Area::Area(const std::string& name, SDL_Point center, int w, int h,
            const std::string& geometry,
-           int edge_smoothness,
+           int legacy_unused_smoothing,
            int map_width, int map_height,
            int resolution)
 : area_name_(name)
@@ -46,9 +46,9 @@ Area::Area(const std::string& name, SDL_Point center, int w, int h,
         }
         resolution_ = vibble::grid::clamp_resolution(resolution);
         if (geometry == "Circle") {
-                generate_circle(center, w / 2, h / 2, edge_smoothness, map_width, map_height);
+                generate_circle(center, w / 2, h / 2, legacy_unused_smoothing, map_width, map_height);
         } else if (geometry == "Square") {
-                generate_square(center, w, h, edge_smoothness, map_width, map_height);
+                generate_square(center, w, h, legacy_unused_smoothing, map_width, map_height);
         } else if (geometry == "Point") {
                 generate_point(center, map_width, map_height);
         } else {
@@ -144,8 +144,8 @@ void Area::generate_point(SDL_Point center, int map_width, int map_height) {
         apply_resolution_to_points();
 }
 
-void Area::generate_circle(SDL_Point center, int horizontal_radius, int vertical_radius, int edge_smoothness, int map_width, int map_height) {
-        (void)edge_smoothness;
+void Area::generate_circle(SDL_Point center, int horizontal_radius, int vertical_radius, int legacy_unused_smoothing, int map_width, int map_height) {
+        (void)legacy_unused_smoothing;
         constexpr int count = 64;
         const int clamped_horizontal_radius = std::max(1, horizontal_radius);
         const int clamped_vertical_radius = std::max(1, vertical_radius);
@@ -163,8 +163,8 @@ void Area::generate_circle(SDL_Point center, int horizontal_radius, int vertical
         apply_resolution_to_points();
 }
 
-void Area::generate_square(SDL_Point center, int w, int h, int edge_smoothness, int map_width, int map_height) {
-        (void)edge_smoothness;
+void Area::generate_square(SDL_Point center, int w, int h, int legacy_unused_smoothing, int map_width, int map_height) {
+        (void)legacy_unused_smoothing;
 	int half_w = w / 2, half_h = h / 2;
 	points.clear();
 	points.reserve(4);

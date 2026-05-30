@@ -6706,8 +6706,11 @@ void RoomEditor::create_trail_from_footer() {
     trail_entry["name"] = key;
     trail_entry["geometry"] = "Square";
     trail_entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(600, 900));
-    trail_entry["curvyness"] = 0;
-    trail_entry["curviness"] = 0;
+    trail_entry["coarseness"] = 0;
+    trail_entry["edge_detail_candidates"] = nlohmann::json::object({
+        {"candidates", nlohmann::json::array()},
+        {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)}
+    });
     trail_entry["tags"] = nlohmann::json::array();
     trail_entry["anti_tags"] = nlohmann::json::array();
     if (!trail_entry.contains("spawn_groups") || !trail_entry["spawn_groups"].is_array()) {

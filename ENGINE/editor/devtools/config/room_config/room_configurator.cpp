@@ -16,6 +16,8 @@
 #include "widgets.hpp"
 #include "font_cache.hpp"
 #include "dev_mode_color_utils.hpp"
+#include "utils/map_grid_settings.hpp"
+#include "utils/grid.hpp"
 
 #include <algorithm>
 #include <array>
@@ -38,6 +40,8 @@ constexpr double kTrailSectorDefaultDirectionDeg = 0.0;
 constexpr int kTrailSectorDefaultWidthPercent = 100;
 constexpr int kTrailSectorMinWidthPercent = 25;
 constexpr int kTrailSectorMaxWidthPercent = 100;
+constexpr int kMinCoarseness = 0;
+constexpr int kMaxCoarseness = 1000;
 
 const nlohmann::json& empty_object() {
     static const nlohmann::json kEmpty = nlohmann::json::object();
@@ -752,6 +756,11 @@ struct RoomConfigurator::State {
     bool inherits_assets = false;
     bool inherit_map_floor_color = true;
     SDL_Color room_floor_color{0, 0, 0, 255};
+    int coarseness = 0;
+    nlohmann::json edge_detail_candidates = nlohmann::json::object({
+        {"candidates", nlohmann::json::array()},
+        {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
+    });
 
     bool geometry_is_circle() const { return lowercase_copy(geometry) == "circle"; }
 
@@ -784,6 +793,31 @@ struct RoomConfigurator::State {
             std::clamp(trail_connection_width_percent, kTrailSectorMinWidthPercent, kTrailSectorMaxWidthPercent);
         if (clamped_width != trail_connection_width_percent) {
             trail_connection_width_percent = clamped_width;
+            mutated = true;
+        }
+        const int clamped_coarseness = std::clamp(coarseness, kMinCoarseness, kMaxCoarseness);
+        if (clamped_coarseness != coarseness) {
+            coarseness = clamped_coarseness;
+            mutated = true;
+        }
+        if (!edge_detail_candidates.is_object()) {
+            edge_detail_candidates = nlohmann::json::object();
+            mutated = true;
+        }
+        if (!edge_detail_candidates.contains("candidates") || !edge_detail_candidates["candidates"].is_array()) {
+            edge_detail_candidates["candidates"] = nlohmann::json::array();
+            mutated = true;
+        }
+        int edge_resolution = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
+        if (edge_detail_candidates.contains("resolution")) {
+            if (auto value = read_json_int(edge_detail_candidates, "resolution")) {
+                edge_resolution = vibble::grid::clamp_resolution(*value);
+            }
+        }
+        if (!edge_detail_candidates.contains("resolution") ||
+            !edge_detail_candidates["resolution"].is_number_integer() ||
+            edge_detail_candidates["resolution"].get<int>() != edge_resolution) {
+            edge_detail_candidates["resolution"] = edge_resolution;
             mutated = true;
         }
         return mutated;
@@ -911,6 +945,19 @@ struct RoomConfigurator::State {
         } else {
             room_floor_color = SDL_Color{0, 0, 0, 255};
         }
+        if (auto value = read_json_int(src, "coarseness")) {
+            coarseness = *value;
+        } else {
+            coarseness = 0;
+        }
+        if (src.contains("edge_detail_candidates") && src["edge_detail_candidates"].is_object()) {
+            edge_detail_candidates = src["edge_detail_candidates"];
+        } else {
+            edge_detail_candidates = nlohmann::json::object({
+                {"candidates", nlohmann::json::array()},
+                {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
+            });
+        }
         trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
         trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
         if (src.contains("trail_connection_sector") && src["trail_connection_sector"].is_object()) {
@@ -946,6 +993,8 @@ struct RoomConfigurator::State {
         dest["width"] = vibble::weighted_range::to_json(width_range);
         dest["height"] = allow_height ? vibble::weighted_range::to_json(height_range)
                                        : vibble::weighted_range::to_json(width_range);
+        dest["coarseness"] = std::clamp(coarseness, kMinCoarseness, kMaxCoarseness);
+        dest["edge_detail_candidates"] = edge_detail_candidates;
 
         (void)include_camera;
 
@@ -1028,6 +1077,8 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     if (allow_height) {
         copy_field("height");
     }
+    copy_field("coarseness");
+    copy_field("edge_detail_candidates");
     if (include_trail_connection_sector || source.contains("trail_connection_sector")) {
         copy_field("trail_connection_sector");
     }
@@ -1453,6 +1504,8 @@ void RoomConfigurator::refresh_base_panel_rows() {
         if (height_range_control_) {
             rows.push_back({height_range_control_.get()});
         }
+        if (coarseness_widget_) rows.push_back({coarseness_widget_.get()});
+        if (edge_detail_resolution_widget_) rows.push_back({edge_detail_resolution_widget_.get()});
         if (edge_widget_) rows.push_back({edge_widget_.get()});
         if (curvy_widget_) rows.push_back({curvy_widget_.get()});
         if (trail_connection_sector_widget_) rows.push_back({trail_connection_sector_widget_.get()});
@@ -1794,7 +1847,9 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
             new_state.is_boss != state_->is_boss ||
             new_state.inherits_assets != state_->inherits_assets ||
             new_state.inherit_map_floor_color != state_->inherit_map_floor_color ||
-            !colors_equal(new_state.room_floor_color, state_->room_floor_color);
+            !colors_equal(new_state.room_floor_color, state_->room_floor_color) ||
+            new_state.coarseness != state_->coarseness ||
+            new_state.edge_detail_candidates != state_->edge_detail_candidates;
     }
 
     bool tags_changed = false;
@@ -2079,6 +2134,16 @@ void RoomConfigurator::rebuild_rows_internal() {
     edge_widget_.reset();
     curvy_range_widget_.reset();
     curvy_widget_.reset();
+    coarseness_stepper_ = std::make_unique<DMNumericStepper>(
+        "Coarseness", kMinCoarseness, kMaxCoarseness, state_->coarseness);
+    coarseness_stepper_->set_step(1);
+    coarseness_widget_ = std::make_unique<StepperWidget>(coarseness_stepper_.get());
+    const int initial_edge_detail_resolution = state_->edge_detail_candidates.value(
+        "resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution));
+    edge_detail_resolution_stepper_ = std::make_unique<DMNumericStepper>(
+        "Edge Detail Resolution", 0, vibble::grid::kMaxResolution, initial_edge_detail_resolution);
+    edge_detail_resolution_stepper_->set_step(1);
+    edge_detail_resolution_widget_ = std::make_unique<StepperWidget>(edge_detail_resolution_stepper_.get());
 
     if (!is_trail_context_) {
         trail_connection_sector_widget_ = std::make_unique<TrailConnectionSectorWidget>(
@@ -2411,6 +2476,22 @@ bool RoomConfigurator::sync_state_from_widgets() {
             changed = true;
         }
     }
+    if (coarseness_stepper_) {
+        const int value = std::clamp(coarseness_stepper_->value(), kMinCoarseness, kMaxCoarseness);
+        if (value != state_->coarseness) {
+            state_->coarseness = value;
+            changed = true;
+        }
+    }
+    if (edge_detail_resolution_stepper_) {
+        const int value = vibble::grid::clamp_resolution(edge_detail_resolution_stepper_->value());
+        const int current = state_->edge_detail_candidates.value(
+            "resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution));
+        if (value != current) {
+            state_->edge_detail_candidates["resolution"] = value;
+            changed = true;
+        }
+    }
     if (sector_direction_stepper_) {
         int v = std::clamp(sector_direction_stepper_->value(), 0, 359);
         const double normalized = normalize_angle_degrees(static_cast<double>(v));
@@ -2490,6 +2571,13 @@ bool RoomConfigurator::sync_state_from_widgets() {
     }
     if (height_range_widget_) {
         height_range_widget_->set_value(state_->height_range);
+    }
+    if (coarseness_stepper_) {
+        coarseness_stepper_->set_value(state_->coarseness);
+    }
+    if (edge_detail_resolution_stepper_) {
+        edge_detail_resolution_stepper_->set_value(
+            state_->edge_detail_candidates.value("resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)));
     }
     if (changed) {
         const bool include_tags = !room_metadata_only_mode_;

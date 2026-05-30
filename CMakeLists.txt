@@ -206,6 +206,7 @@ endif()
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(SDL3_ttf CONFIG REQUIRED)
+find_package(Clipper2 CONFIG QUIET)
 target_link_libraries(enemy_behavior_phase_regression_test PRIVATE
     SDL3::SDL3
 )
@@ -323,6 +324,10 @@ target_link_libraries(engine
         ${GLAD_TARGET}
         OpenGL::GL
 )
+if (Clipper2_FOUND)
+    target_link_libraries(engine PRIVATE Clipper2::Clipper2)
+    target_compile_definitions(engine PRIVATE VIBBLE_HAS_CLIPPER2=1)
+endif()
 if (WINSDK_UM_X64_LIBDIR)
     target_link_directories(engine PRIVATE "${WINSDK_UM_X64_LIBDIR}")
 endif()

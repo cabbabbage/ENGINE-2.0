@@ -49,6 +49,10 @@ int main() {
     assert(!room.contains("edge_smoothness"));
     assert(!room.contains("curvyness"));
     assert(!room.contains("curviness"));
+    assert(room.contains("coarseness"));
+    assert(room["coarseness"].is_number_integer());
+    assert(room.contains("edge_detail_candidates"));
+    assert(room["edge_detail_candidates"].is_object());
     assert(room.contains("height"));
     assert(room.contains("trail_connection_sector"));
 
@@ -61,6 +65,10 @@ int main() {
     assert(!trail.contains("edge_smoothness"));
     assert(!trail.contains("curvyness"));
     assert(!trail.contains("curviness"));
+    assert(trail.contains("coarseness"));
+    assert(trail["coarseness"].is_number_integer());
+    assert(trail.contains("edge_detail_candidates"));
+    assert(trail["edge_detail_candidates"].is_object());
     assert(!trail.contains("is_boss"));
     assert(!trail.contains("inherits_live_dynamic_assets"));
     assert(!trail.contains("inherit_map_floor_color"));

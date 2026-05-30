@@ -26,11 +26,13 @@
 #include "utils/area.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "gameplay/map_generation/generate_rooms.hpp"
+#include "gameplay/map_generation/coarseness_system.hpp"
 #include "gameplay/map_generation/map_graph.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "gameplay/spawn/runtime_candidates.hpp"
+#include "gameplay/spawn/asset_spawner.hpp"
 #include "utils/grid.hpp"
 #include "core/tile_builder.hpp"
 #include <nlohmann/json.hpp>
@@ -314,6 +316,42 @@ void AssetLoader::loadRooms() {
         MapGridSettings grid_settings = map_grid_settings_;
         auto room_ptrs = generator.build( asset_library_, map_radius_, layer_radii_, rooms_data_        ? *rooms_data_        : empty_rooms, trails_data_       ? *trails_data_       : empty_trails, grid_settings);
         world_context_->adopt_rooms(std::move(room_ptrs));
+        {
+                auto rooms = getRooms();
+                vibble::mapgen::coarseness::apply_coarseness_expansion(rooms);
+                std::vector<Area> edge_detail_claimed;
+                auto add_asset_claim = [&edge_detail_claimed](Asset* asset) {
+                        if (!asset) return;
+                        const SDL_Point p = asset->world_xz_point();
+                        std::vector<SDL_Point> poly{
+                            SDL_Point{p.x - 8, p.y - 8},
+                            SDL_Point{p.x + 8, p.y - 8},
+                            SDL_Point{p.x + 8, p.y + 8},
+                            SDL_Point{p.x - 8, p.y + 8},
+                        };
+                        edge_detail_claimed.emplace_back("edge_detail_claim", poly);
+                };
+                for (Room* room : rooms) {
+                        if (!room) continue;
+                        for (auto& asset_up : room->assets) {
+                                add_asset_claim(asset_up.get());
+                        }
+                }
+                for (Room* room : rooms) {
+                        if (!room || !room->coarseness_added_area) continue;
+                        const auto& data = room->assets_data();
+                        auto it = data.find("edge_detail_candidates");
+                        if (it == data.end() || !it->is_object()) continue;
+                        AssetSpawner edge_spawner(asset_library_, edge_detail_claimed);
+                        edge_spawner.set_map_grid_settings(room->map_grid_settings());
+                        edge_spawner.spawn_edge_detail_candidates(*room, *room->coarseness_added_area, *it);
+                        for (auto& asset_up : room->assets) {
+                                if (asset_up && asset_up->spawn_method == "Random") {
+                                        add_asset_claim(asset_up.get());
+                                }
+                        }
+                }
+        }
         if (getRooms().empty()) {
                 throw std::runtime_error("[AssetLoader] Room generation produced zero rooms after manifest normalization.");
         }

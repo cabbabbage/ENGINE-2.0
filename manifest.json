@@ -26825,8 +26825,11 @@
         "NewTrail1": {
           "anti_tags": [],
           "camera_height_px": 1000,
-          "curviness": 0,
-          "curvyness": 0,
+          "coarseness": 0,
+          "edge_detail_candidates": {
+            "candidates": [],
+            "resolution": 8
+          },
           "display_color": [
             150,
             242,

@@ -19,7 +19,11 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path $RepoRoot).Path
 $LogPath = Join-Path $RepoRoot "log.txt"
-$FrameStatsPath = Join-Path $RepoRoot "runtime_frame_stats.csv"
+$Map = $Map.Trim()
+$Profile = $Profile.Trim()
+$FrameStatsPathPrimary = Join-Path $RepoRoot "runtime_frame_stats.csv"
+$FrameStatsPathFallback = Join-Path $RepoRoot "ENGINE\runtime_frame_stats.csv"
+$FrameStatsPath = $FrameStatsPathPrimary
 
 function Convert-ToBool {
     param($Value)
@@ -150,9 +154,19 @@ if (Test-Path $MetadataPath) {
 }
 
 $rows = @()
-if (Test-Path $FrameStatsPath) {
+if (Test-Path $FrameStatsPathPrimary) {
     try {
-        $rows = @(Import-Csv -Path $FrameStatsPath)
+        $rows = @(Import-Csv -Path $FrameStatsPathPrimary)
+    } catch {
+        $rows = @()
+    }
+}
+if ($rows.Count -eq 0 -and (Test-Path $FrameStatsPathFallback)) {
+    try {
+        $rows = @(Import-Csv -Path $FrameStatsPathFallback)
+        if ($rows.Count -gt 0) {
+            $FrameStatsPath = $FrameStatsPathFallback
+        }
     } catch {
         $rows = @()
     }

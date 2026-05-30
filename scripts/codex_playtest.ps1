@@ -20,6 +20,7 @@ $Map = $Map.Trim()
 $Profile = $Profile.Trim()
 $LogPath = Join-Path $RepoRoot "log.txt"
 $FrameStatsPath = Join-Path $RepoRoot "runtime_frame_stats.csv"
+$FrameStatsPathAlt = Join-Path $RepoRoot "ENGINE\runtime_frame_stats.csv"
 $ReportScript = Join-Path $RepoRoot "scripts\codex_playtest_report.ps1"
 $Seconds = [Math]::Max(1, $Seconds)
 $FrameLimit = [Math]::Max(1, $FrameLimit)
@@ -231,13 +232,19 @@ try {
     $patterns = if ($spiderSlow) {
         @(
             @($vk.W),
+            @(),
             @($vk.W),
+            @(),
             @($vk.W, $vk.A),
+            @(),
             @($vk.W),
+            @(),
             @($vk.W, $vk.D),
-            @($vk.W),
+            @(),
             @($vk.A),
-            @($vk.D)
+            @(),
+            @($vk.D),
+            @()
         )
     } else {
         @(
@@ -259,7 +266,9 @@ try {
         foreach ($key in $held) {
             Send-KeyDown $key
         }
-        Move-MousePattern -Process $process -Step $step
+        if (-not $spiderSlow -or ($step % 6) -eq 0) {
+            Move-MousePattern -Process $process -Step $step
+        }
         if (-not $spiderSlow -and ($step % 4) -eq 0) {
             Click-Left
         }
@@ -268,7 +277,8 @@ try {
             Start-Sleep -Milliseconds 60
             Send-KeyUp $vk.Space
         }
-        Start-Sleep -Milliseconds ($spiderSlow ? 1250 : 850)
+        $sleepMs = if ($spiderSlow) { 1800 } else { 850 }
+        Start-Sleep -Milliseconds $sleepMs
         $process.Refresh()
         $step++
     }
@@ -314,8 +324,12 @@ try {
     if ((-not (Test-Path $LogPath)) -and (Test-Path $StdoutPath)) {
         Copy-Item -Path $StdoutPath -Destination $LogPath -Force
     }
+    if ((-not (Test-Path $FrameStatsPath)) -and (Test-Path $FrameStatsPathAlt)) {
+        Copy-Item -Path $FrameStatsPathAlt -Destination $FrameStatsPath -Force
+    }
     Write-Metadata -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration -StartedAt $startedAt -EndedAt $endedAt
-    $reportExitCode = Invoke-Report -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration
+    $reportExitCode = [int](Invoke-Report -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration)
+    Write-Host "[codex_playtest.ps1] Report exit code: $reportExitCode"
     if ($runExitCode -eq 0 -and $reportExitCode -ne 0) {
         $runExitCode = $reportExitCode
     }

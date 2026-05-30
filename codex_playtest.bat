@@ -50,6 +50,7 @@ echo [codex_playtest.bat] Report: %REPORT_PATH%
 
 call :RotateFile "%REPO_ROOT%\log.txt"
 call :RotateFile "%REPO_ROOT%\runtime_frame_stats.csv"
+call :RotateFile "%REPO_ROOT%\ENGINE\runtime_frame_stats.csv"
 for %%P in (
     "%REPO_ROOT%\codex_playtest_stdout.log"
     "%REPO_ROOT%\codex_playtest_stderr.log"

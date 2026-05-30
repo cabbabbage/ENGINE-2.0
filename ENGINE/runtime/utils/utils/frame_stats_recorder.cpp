@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -783,7 +784,20 @@ FrameStatsRecorder& FrameStatsRecorder::instance() {
 }
 
 bool FrameStatsRecorder::enabled() const {
-    return kRuntimeFrameStatsDebugEnabled;
+    if (kRuntimeFrameStatsDebugEnabled) {
+        return true;
+    }
+    const char* explicit_enable = std::getenv("VIBBLE_RUNTIME_FRAME_STATS");
+    if (explicit_enable != nullptr) {
+        const std::string value(explicit_enable);
+        if (value == "1" || value == "true" || value == "TRUE" ||
+            value == "yes" || value == "YES" || value == "on" ||
+            value == "ON") {
+            return true;
+        }
+    }
+    const char* codex_playtest = std::getenv("VIBBLE_CODEX_PLAYTEST_INPUT");
+    return codex_playtest != nullptr && std::string(codex_playtest) == "1";
 }
 
 void FrameStatsRecorder::begin_run() {

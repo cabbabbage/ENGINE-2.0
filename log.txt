@@ -1,1112 +1,996 @@
 [INFO] +-0.000s: [Main] Starting game engine...
-[INFO] +0.002s: [Main] Startup uses existing asset caches; missing cache entries regenerate on demand.
-[INFO] +0.279s: [EngineRenderer] Renderer=OpenGL name=opengl max_texture_size=32768 render_targets=yes scale_mode=yes vsync=on
-[INFO] +0.280s: [Main] Render quality tier: OpenGL full.
-[INFO] +0.282s: [Main] Screen resolution: 1920x1080
-[INFO] +0.287s: [Main] Shared frame pacing target: 30.00 FPS (33.333 ms/frame)
-[INFO] +0.302s: [Main] Preparing asset metadata cache...
-[INFO] +0.316s: [FrameData] Loading animations manifest from C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/manifest.json
+[INFO] +0.003s: [Main] Startup uses existing asset caches; missing cache entries regenerate on demand.
+[INFO] +0.280s: [EngineRenderer] Renderer=OpenGL name=opengl max_texture_size=32768 render_targets=yes scale_mode=yes vsync=on
+[INFO] +0.283s: [Main] Render quality tier: OpenGL full.
+[INFO] +0.286s: [Main] Screen resolution: 1920x1080
+[INFO] +0.292s: [Main] Shared frame pacing target: 30.00 FPS (33.333 ms/frame)
+[INFO] +0.308s: [Main] Preparing asset metadata cache...
+[INFO] +0.327s: [FrameData] Loading animations manifest from C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/manifest.json
 [AssetInfo] Player asset 'vibble' loaded
 
-[INFO] +0.362s: [AssetLibrary] Loaded 91 assets (ok=91, failed=0) in 12ms
-[INFO] +0.368s: [Main] Asset metadata cache ready for 91 asset(s).
-[INFO] +0.368s: [Main] SAFE loading is enabled; deferring full animation preload until runtime requests it.
-[WARN] +0.368s: [Main] Auto-start map 'forrest ' not found; using first available map.
-[INFO] +0.369s: [Main] Auto-selecting map via VIBBLE_AUTOSTART_MAP: forrest
-[INFO] +0.388s: [MainApp] Constructing AssetLoader...
-[INFO] +0.388s: [AssetLoader] Start for map 'forrest' at root 'C:\Users\cal_m\OneDrive\Documents\GitHub\ENGINE-2.0\content\forrest'.
-[INFO] +0.388s: [AssetLoader] Asset library mode: shared
-[INFO] +0.388s: [Loading] Loading map data
-[INFO] +0.494s: [AssetLoader] Map JSON parsed in 106ms
-[INFO] +0.630s: [AssetLoader] Audio initialized in 135ms
-[INFO] +0.630s: [Loading] Loading assets
-[INFO] +0.632s: [AssetLoader] Asset library ready with 91 known assets
-[INFO] +0.632s: [Loading] Creating map
-[INFO] +0.634s: [AssetLoader] Starting room generation for map 'forrest'
-[INFO] +0.634s: [GenerateRooms] Starting build for map 'forrest' with 2 layers
-[INFO] +0.634s: [GenerateRooms] Creating root room: Mossy_Circle
-[INFO] +0.635s: [GenerateRooms] Draft layer 1 level=1 radius=21483.000000 children=3 attempt=1
-[INFO] +0.637s: [GenerateRooms] Draft layout built attempt=1/8 rooms=4 required_connections=3
-[WARN] +0.637s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Loot_Room candidates=1332 budget=64
-[INFO] +0.641s: [GenerateTrails] Built trail room rooms=Mossy_Circle<->Loot_Room route_pair_attempts=22 layout_ms=0.064400 room_ctor_ms=0.010800
-[WARN] +0.641s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Loot_Room candidates=1296 budget=64
-[WARN] +0.673s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Loot_Room candidates=1296 budget=64
-[INFO] +0.683s: [GenerateTrails] Built trail room rooms=Mossy_Circle<->Loot_Room route_pair_attempts=27 layout_ms=0.082500 room_ctor_ms=0.014200
-[WARN] +0.683s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Mossy_Circle candidates=1296 budget=64
-[INFO] +0.685s: [GenerateTrails] Built trail room rooms=Mossy_Circle<->Mossy_Circle route_pair_attempts=8 layout_ms=0.054600 room_ctor_ms=0.009100
-[INFO] +0.685s: [GenerateTrails] Summary total_connections=3 successes=3 failures=0 asset_attempts=4 layout_attempts=108 straight_attempts=108 curved_attempts=0 room_rejects=77 trail_rejects=0 section_failures=0 polygon_failures=18 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 split_attempts=0 split_successes=0 split_exhausted=0 unresolved_rooms=0 total_ms=48.245100
-[INFO] +0.711s: [GenerateRooms] Build completed successfully attempt=1 total_rooms=7 optional_skips=0 total_ms=77.362300
-[INFO] +0.712s: [AssetLoader] Room generation completed successfully: 7 rooms created
-[INFO] +0.712s: [AssetLoader] Rooms created: 7 in 79ms
-[INFO] +0.712s: [Loading] Loading assets
-[INFO] +0.713s: [AssetLoader] Loading runtime animations for all known assets (91)...
-[INFO] +0.721s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.737s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.769s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.799s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.851s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.945s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.957s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.967s: [PrimaryAssetCache] No cache work required.
-[INFO] +0.978s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.002s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.027s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.036s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.045s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.055s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.065s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.085s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.102s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.378s: [AssetLibrary] Loaded 91 assets (ok=91, failed=0) in 14ms
+[INFO] +0.384s: [Main] Asset metadata cache ready for 91 asset(s).
+[INFO] +0.384s: [Main] SAFE loading is enabled; deferring full animation preload until runtime requests it.
+[INFO] +0.384s: [Main] Auto-selecting map via VIBBLE_AUTOSTART_MAP: forrest
+[INFO] +0.405s: [MainApp] Constructing AssetLoader...
+[INFO] +0.405s: [AssetLoader] Start for map 'forrest' at root 'C:\Users\cal_m\OneDrive\Documents\GitHub\ENGINE-2.0\content\forrest'.
+[INFO] +0.405s: [AssetLoader] Asset library mode: shared
+[INFO] +0.405s: [Loading] Loading map data
+[INFO] +0.543s: [AssetLoader] Map JSON parsed in 137ms
+[INFO] +0.613s: [AssetLoader] Audio initialized in 69ms
+[INFO] +0.614s: [Loading] Loading assets
+[INFO] +0.615s: [AssetLoader] Asset library ready with 91 known assets
+[INFO] +0.615s: [Loading] Creating map
+[INFO] +0.617s: [AssetLoader] Starting room generation for map 'forrest'
+[INFO] +0.617s: [GenerateRooms] Starting build for map 'forrest' with 2 layers
+[INFO] +0.617s: [GenerateRooms] Creating root room: Mossy_Circle
+[INFO] +0.618s: [GenerateRooms] Draft layer 1 level=1 radius=21483.000000 children=3 attempt=1
+[INFO] +0.620s: [GenerateRooms] Draft layout built attempt=1/8 rooms=4 required_connections=3
+[WARN] +0.621s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Loot_Room candidates=1332 budget=64
+[INFO] +0.621s: [GenerateTrails] Built trail room rooms=Mossy_Circle<->Loot_Room route_pair_attempts=1 layout_ms=0.085700 room_ctor_ms=0.007900
+[WARN] +0.622s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Mossy_Circle candidates=1296 budget=64
+[INFO] +0.622s: [GenerateTrails] Built trail room rooms=Mossy_Circle<->Mossy_Circle route_pair_attempts=1 layout_ms=0.075000 room_ctor_ms=0.007700
+[WARN] +0.622s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Loot_Room candidates=1332 budget=64
+[WARN] +0.656s: [GenerateTrails] Route pair budget clamp rooms=Mossy_Circle<->Loot_Room candidates=1332 budget=64
+[INFO] +0.657s: [GenerateTrails] Built trail room rooms=Mossy_Circle<->Loot_Room route_pair_attempts=5 layout_ms=0.094900 room_ctor_ms=0.011200
+[INFO] +0.658s: [GenerateTrails] Summary total_connections=3 successes=3 failures=0 asset_attempts=4 layout_attempts=71 straight_attempts=71 curved_attempts=0 room_rejects=68 trail_rejects=0 section_failures=0 polygon_failures=0 sector_contact_failures=1 sector_boundary_failures=0 route_budget_failures=0 split_attempts=0 split_successes=0 split_exhausted=0 unresolved_rooms=0 total_ms=37.062000
+[INFO] +0.673s: [GenerateRooms] Build completed successfully attempt=1 total_rooms=7 optional_skips=0 total_ms=55.972200
+[INFO] +0.674s: [AssetLoader] Room generation completed successfully: 7 rooms created
+[INFO] +0.674s: [AssetLoader] Rooms created: 7 in 58ms
+[INFO] +0.674s: [Loading] Loading assets
+[INFO] +0.676s: [AssetLoader] Loading runtime animations for all known assets (91)...
+[INFO] +0.683s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.705s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.744s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.777s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.827s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.926s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.936s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.948s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.961s: [PrimaryAssetCache] No cache work required.
+[INFO] +0.989s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.017s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.028s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.039s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.050s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.061s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.083s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.100s: [PrimaryAssetCache] No cache work required.
 [INFO] +1.112s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.122s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.132s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.143s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.153s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.163s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.173s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.183s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.123s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.134s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.146s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.158s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.170s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.181s: [PrimaryAssetCache] No cache work required.
 [INFO] +1.193s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.202s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.213s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.228s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.247s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.270s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.291s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.306s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.323s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.341s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.356s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.423s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.479s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.492s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.506s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.521s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.536s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.554s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.566s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.583s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.598s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.627s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.649s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.677s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.727s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.744s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.755s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.767s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.811s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.852s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.864s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.875s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.887s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.904s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.915s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.925s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.204s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.216s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.230s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.245s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.266s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.293s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.316s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.333s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.352s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.371s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.388s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.466s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.529s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.543s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.557s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.573s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.591s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.613s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.623s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.642s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.657s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.693s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.716s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.743s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.793s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.809s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.819s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.831s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.880s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.924s: [PrimaryAssetCache] No cache work required.
 [INFO] +1.935s: [PrimaryAssetCache] No cache work required.
 [INFO] +1.946s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.957s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.970s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.981s: [PrimaryAssetCache] No cache work required.
-[INFO] +1.992s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.002s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.014s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.076s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.155s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.355s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.429s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.438s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.448s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.464s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.481s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.492s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.501s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.569s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.638s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.661s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.917s: [PrimaryAssetCache] No cache work required.
-[INFO] +2.986s: [AssetLibrary] Preload 'tree_fps_2' took 317ms
-[INFO] +3.016s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.059s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.070s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.078s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.086s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.095s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.105s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.119s: [PrimaryAssetCache] No cache work required.
-[INFO] +3.123s: [AssetLibrary] Runtime animation preload complete: requested=91 loaded=91 failed_or_incomplete=0
-[INFO] +3.123s: [AssetLoader] Runtime animation load completed for all known asset type(s): requested=91 in 2409.000000ms
-[INFO] +3.123s: [Loading] Loading assets
-[INFO] +3.125s: [AssetLoader] Finalizing assets across rooms...
-[INFO] +3.128s: [AssetLoader] finalizeAssets complete: 771/771 assets ready, lazy_loaded_asset_types=0
-[INFO] +3.129s: [AssetLoader] Asset finalization completed; all assets are ready.
-[INFO] +3.129s: [AssetLoader] Map metadata loaded in 106.000000ms
-[INFO] +3.129s: [AssetLoader] Asset library ready in 1.000000ms
-[INFO] +3.129s: [AssetLoader] Rooms built in 79.000000ms
-[INFO] +3.129s: [AssetLoader] Initialization completed in 2740.000000ms
-[INFO] +3.129s: [AssetLoader] Boundary startup filtering moved to runtime visibility culling. distance_candidates=0 hidden_applied=0
-[INFO] +3.129s: [Loading] Spawning assets
-[INFO] +3.131s: [AssetLoader] Extracted 771 visible assets from rooms
-[INFO] +3.131s: [AssetLoader] Boundary startup visibility summary: extracted=4
-[INFO] +3.132s: [AssetLoader] Boundary startup visibility summary: registered=4 filtered=0
-[INFO] +3.132s: [TileBuilder] Chunk tile build: chunks_with_tiles=0, chunk_textures=0, draw_contributions=0, texture_bytes=0, elapsed_ms=0
-[INFO] +3.133s: [MainApp] AssetLoader constructed in 2741ms
-[INFO] +3.133s: [MainApp] Asset spawning finished for map 'forrest'.
-[INFO] +3.133s: [MainApp] 771 assets created and cached.
-[INFO] +3.133s: [MainApp] Creating Assets object...
-[INFO] +3.134s: [Assets] Constructor: Starting InitializeAssets initialization
-[INFO] +3.134s: [InitializeAssets] Processing 771 assets from world grid
-[INFO] +3.134s: [InitializeAssets] Asset 1/771: spider_egg
-[INFO] +3.134s: [InitializeAssets] Asset 2/771: spider
-[INFO] +3.135s: [InitializeAssets] Asset 3/771: 3_candles
-[INFO] +3.147s: [InitializeAssets] Asset 4/771: spider_egg
-[INFO] +3.147s: [InitializeAssets] Asset 5/771: spider_egg
-[INFO] +3.147s: [InitializeAssets] Asset 6/771: spider_egg
-[INFO] +3.147s: [InitializeAssets] Asset 7/771: 3_candles
-[INFO] +3.158s: [InitializeAssets] Asset 8/771: vibble
-[INFO] +3.165s: [InitializeAssets] Asset 9/771: spider_egg
-[INFO] +3.165s: [InitializeAssets] Asset 10/771: 3_candles
-[INFO] +3.176s: [InitializeAssets] Asset 11/771: spider_egg
-[INFO] +3.176s: [InitializeAssets] Asset 12/771: spider_egg
-[INFO] +3.176s: [InitializeAssets] Asset 13/771: 3_candles
-[INFO] +3.187s: [InitializeAssets] Asset 14/771: spider_egg
-[INFO] +3.187s: [InitializeAssets] Asset 15/771: spider_egg
-[INFO] +3.187s: [InitializeAssets] Asset 16/771: spider_egg
-[INFO] +3.187s: [InitializeAssets] Asset 17/771: fountain
-[INFO] +3.187s: [InitializeAssets] Asset 18/771: spider_egg
-[INFO] +3.187s: [InitializeAssets] Asset 19/771: spider_egg
-[INFO] +3.187s: [InitializeAssets] Asset 20/771: 3_candles
-[INFO] +3.198s: [InitializeAssets] Asset 21/771: spider_egg
-[INFO] +3.198s: [InitializeAssets] Asset 22/771: 3_candles
-[INFO] +3.209s: [InitializeAssets] Asset 23/771: spider_egg
-[INFO] +3.209s: [InitializeAssets] Asset 24/771: spider_egg
-[INFO] +3.210s: [InitializeAssets] Asset 25/771: spider_egg
-[INFO] +3.211s: [InitializeAssets] Asset 26/771: spider_egg
-[INFO] +3.211s: [InitializeAssets] Asset 27/771: spider_egg
-[INFO] +3.211s: [InitializeAssets] Asset 28/771: spider_egg
-[INFO] +3.211s: [InitializeAssets] Asset 29/771: spider_egg
-[INFO] +3.211s: [InitializeAssets] Asset 30/771: spider_egg
-[INFO] +3.211s: [InitializeAssets] Asset 31/771: 3_candles
-[INFO] +3.223s: [InitializeAssets] Asset 32/771: spider_egg
-[INFO] +3.223s: [InitializeAssets] Asset 33/771: 3_candles
-[INFO] +3.234s: [InitializeAssets] Asset 34/771: 3_candles
-[INFO] +3.245s: [InitializeAssets] Asset 35/771: spider_egg
-[INFO] +3.245s: [InitializeAssets] Asset 36/771: 3_candles
-[INFO] +3.256s: [InitializeAssets] Asset 37/771: 3_candles
-[INFO] +3.266s: [InitializeAssets] Asset 38/771: spider_egg
-[INFO] +3.266s: [InitializeAssets] Asset 39/771: spider_egg
-[INFO] +3.266s: [InitializeAssets] Asset 40/771: 3_candles
-[INFO] +3.278s: [InitializeAssets] Asset 41/771: spider_egg
-[INFO] +3.278s: [InitializeAssets] Asset 42/771: 3_candles
-[INFO] +3.288s: [InitializeAssets] Asset 43/771: 3_candles
-[INFO] +3.299s: [InitializeAssets] Asset 44/771: spider_egg
-[INFO] +3.299s: [InitializeAssets] Asset 45/771: 3_candles
-[INFO] +3.310s: [InitializeAssets] Asset 46/771: spider_egg
-[INFO] +3.310s: [InitializeAssets] Asset 47/771: spider_egg
-[INFO] +3.310s: [InitializeAssets] Asset 48/771: spider_egg
-[INFO] +3.310s: [InitializeAssets] Asset 49/771: 3_candles
-[INFO] +3.321s: [InitializeAssets] Asset 50/771: 3_candles
-[INFO] +3.331s: [InitializeAssets] Asset 51/771: spider_egg
-[INFO] +3.331s: [InitializeAssets] Asset 52/771: 3_candles
-[INFO] +3.342s: [InitializeAssets] Asset 53/771: spider_egg
-[INFO] +3.342s: [InitializeAssets] Asset 54/771: 3_candles
-[INFO] +3.355s: [InitializeAssets] Asset 55/771: spider_egg
-[INFO] +3.356s: [InitializeAssets] Asset 56/771: 3_candles
-[INFO] +3.367s: [InitializeAssets] Asset 57/771: chest_opening
-[INFO] +3.367s: [InitializeAssets] Asset 58/771: spider_egg
-[INFO] +3.367s: [InitializeAssets] Asset 59/771: 3_candles
-[INFO] +3.378s: [InitializeAssets] Asset 60/771: spider_egg
-[INFO] +3.378s: [InitializeAssets] Asset 61/771: 3_candles
-[INFO] +3.389s: [InitializeAssets] Asset 62/771: spider_egg
-[INFO] +3.389s: [InitializeAssets] Asset 63/771: 3_candles
-[INFO] +3.400s: [InitializeAssets] Asset 64/771: 3_candles
-[INFO] +3.412s: [InitializeAssets] Asset 65/771: 3_candles
-[INFO] +3.424s: [InitializeAssets] Asset 66/771: spider_egg
-[INFO] +3.425s: [InitializeAssets] Asset 67/771: spider_egg
-[INFO] +3.425s: [InitializeAssets] Asset 68/771: 3_candles
-[INFO] +3.436s: [InitializeAssets] Asset 69/771: spider_egg
-[INFO] +3.436s: [InitializeAssets] Asset 70/771: spider_egg
-[INFO] +3.436s: [InitializeAssets] Asset 71/771: 3_candles
-[INFO] +3.447s: [InitializeAssets] Asset 72/771: spider_egg
-[INFO] +3.447s: [InitializeAssets] Asset 73/771: 3_candles
-[INFO] +3.459s: [InitializeAssets] Asset 74/771: spider_egg
-[INFO] +3.459s: [InitializeAssets] Asset 75/771: spider_egg
-[INFO] +3.459s: [InitializeAssets] Asset 76/771: 3_candles
-[INFO] +3.470s: [InitializeAssets] Asset 77/771: 3_candles
-[INFO] +3.481s: [InitializeAssets] Asset 78/771: spider_egg
-[INFO] +3.481s: [InitializeAssets] Asset 79/771: spider_egg
-[INFO] +3.481s: [InitializeAssets] Asset 80/771: 3_candles
-[INFO] +3.492s: [InitializeAssets] Asset 81/771: 3_candles
-[INFO] +3.503s: [InitializeAssets] Asset 82/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 83/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 84/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 85/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 86/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 87/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 88/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 89/771: spider_egg
-[INFO] +3.503s: [InitializeAssets] Asset 90/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 91/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 92/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 93/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 94/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 95/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 96/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 97/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 98/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 99/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 100/771: spider_egg
-[INFO] +3.504s: [InitializeAssets] Asset 101/771: 3_candles
-[INFO] +3.516s: [InitializeAssets] Asset 102/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 103/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 104/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 105/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 106/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 107/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 108/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 109/771: spider_egg
-[INFO] +3.516s: [InitializeAssets] Asset 110/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 111/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 112/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 113/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 114/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 115/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 116/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 117/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 118/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 119/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 120/771: spider_egg
-[INFO] +3.517s: [InitializeAssets] Asset 121/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 122/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 123/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 124/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 125/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 126/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 127/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 128/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 129/771: spider_egg
-[INFO] +3.518s: [InitializeAssets] Asset 130/771: 3_candles
-[INFO] +3.529s: [InitializeAssets] Asset 131/771: spider_egg
-[INFO] +3.529s: [InitializeAssets] Asset 132/771: spider_egg
-[INFO] +3.529s: [InitializeAssets] Asset 133/771: spider_egg
-[INFO] +3.529s: [InitializeAssets] Asset 134/771: spider_egg
-[INFO] +3.529s: [InitializeAssets] Asset 135/771: spider_egg
-[INFO] +3.529s: [InitializeAssets] Asset 136/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 137/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 138/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 139/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 140/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 141/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 142/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 143/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 144/771: vibble_attack_1
-[INFO] +3.530s: [InitializeAssets] Asset 145/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 146/771: tree_dark
-[INFO] +3.530s: [InitializeAssets] Asset 147/771: spider_egg
-[INFO] +3.530s: [InitializeAssets] Asset 148/771: tree_dark
-[INFO] +3.531s: [InitializeAssets] Asset 149/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 150/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 151/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 152/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 153/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 154/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 155/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 156/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 157/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 158/771: spider_egg
-[INFO] +3.531s: [InitializeAssets] Asset 159/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 160/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 161/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 162/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 163/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 164/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 165/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 166/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 167/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 168/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 169/771: spider_egg
-[INFO] +3.532s: [InitializeAssets] Asset 170/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 171/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 172/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 173/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 174/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 175/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 176/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 177/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 178/771: spider_egg
-[INFO] +3.533s: [InitializeAssets] Asset 179/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 180/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 181/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 182/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 183/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 184/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 185/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 186/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 187/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 188/771: spider_egg
-[INFO] +3.534s: [InitializeAssets] Asset 189/771: 3_candles
-[INFO] +3.545s: [InitializeAssets] Asset 190/771: spider_egg
-[INFO] +3.545s: [InitializeAssets] Asset 191/771: spider_egg
-[INFO] +3.545s: [InitializeAssets] Asset 192/771: chest_opening
-[INFO] +3.545s: [InitializeAssets] Asset 193/771: spider_egg
-[INFO] +3.545s: [InitializeAssets] Asset 194/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 195/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 196/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 197/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 198/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 199/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 200/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 201/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 202/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 203/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 204/771: spider_egg
-[INFO] +3.546s: [InitializeAssets] Asset 205/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 206/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 207/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 208/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 209/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 210/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 211/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 212/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 213/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 214/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 215/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 216/771: spider_egg
-[INFO] +3.547s: [InitializeAssets] Asset 217/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 218/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 219/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 220/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 221/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 222/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 223/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 224/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 225/771: spider_egg
-[INFO] +3.548s: [InitializeAssets] Asset 226/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 227/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 228/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 229/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 230/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 231/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 232/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 233/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 234/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 235/771: spider_egg
-[INFO] +3.549s: [InitializeAssets] Asset 236/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 237/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 238/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 239/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 240/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 241/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 242/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 243/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 244/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 245/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 246/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 247/771: spider_egg
-[INFO] +3.550s: [InitializeAssets] Asset 248/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 249/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 250/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 251/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 252/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 253/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 254/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 255/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 256/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 257/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 258/771: spider_egg
-[INFO] +3.551s: [InitializeAssets] Asset 259/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 260/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 261/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 262/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 263/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 264/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 265/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 266/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 267/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 268/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 269/771: spider
-[INFO] +3.552s: [InitializeAssets] Asset 270/771: spider_egg
-[INFO] +3.552s: [InitializeAssets] Asset 271/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 272/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 273/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 274/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 275/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 276/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 277/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 278/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 279/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 280/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 281/771: spider_egg
-[INFO] +3.553s: [InitializeAssets] Asset 282/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 283/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 284/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 285/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 286/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 287/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 288/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 289/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 290/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 291/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 292/771: spider_egg
-[INFO] +3.554s: [InitializeAssets] Asset 293/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 294/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 295/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 296/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 297/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 298/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 299/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 300/771: spider_egg
-[INFO] +3.555s: [InitializeAssets] Asset 301/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 302/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 303/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 304/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 305/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 306/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 307/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 308/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 309/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 310/771: spider_egg
-[INFO] +3.556s: [InitializeAssets] Asset 311/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 312/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 313/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 314/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 315/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 316/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 317/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 318/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 319/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 320/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 321/771: spider_egg
-[INFO] +3.557s: [InitializeAssets] Asset 322/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 323/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 324/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 325/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 326/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 327/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 328/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 329/771: small_spider
-[INFO] +3.558s: [InitializeAssets] Asset 330/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 331/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 332/771: spider_egg
-[INFO] +3.558s: [InitializeAssets] Asset 333/771: spider_egg
-[INFO] +3.559s: [InitializeAssets] Asset 334/771: spider_egg
-[INFO] +3.559s: [InitializeAssets] Asset 335/771: spider_egg
-[INFO] +3.559s: [InitializeAssets] Asset 336/771: spider_egg
-[INFO] +3.559s: [InitializeAssets] Asset 337/771: spider_egg
-[INFO] +3.559s: [InitializeAssets] Asset 338/771: spider_egg
-[INFO] +3.559s: [InitializeAssets] Asset 339/771: spider_egg
-[INFO] +3.559s: [InitializeAssets] Asset 340/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 341/771: spider
-[INFO] +3.560s: [InitializeAssets] Asset 342/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 343/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 344/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 345/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 346/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 347/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 348/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 349/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 350/771: spider_egg
-[INFO] +3.560s: [InitializeAssets] Asset 351/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 352/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 353/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 354/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 355/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 356/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 357/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 358/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 359/771: spider_egg
-[INFO] +3.561s: [InitializeAssets] Asset 360/771: spider_egg
-[INFO] +3.562s: [InitializeAssets] Asset 361/771: spider_egg
-[INFO] +3.562s: [InitializeAssets] Asset 362/771: 3_candles
-[INFO] +3.572s: [InitializeAssets] Asset 363/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 364/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 365/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 366/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 367/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 368/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 369/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 370/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 371/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 372/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 373/771: spider_egg
-[INFO] +3.573s: [InitializeAssets] Asset 374/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 375/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 376/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 377/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 378/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 379/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 380/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 381/771: small_spider
-[INFO] +3.574s: [InitializeAssets] Asset 382/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 383/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 384/771: spider_egg
-[INFO] +3.574s: [InitializeAssets] Asset 385/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 386/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 387/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 388/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 389/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 390/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 391/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 392/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 393/771: spider_egg
-[INFO] +3.575s: [InitializeAssets] Asset 394/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 395/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 396/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 397/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 398/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 399/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 400/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 401/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 402/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 403/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 404/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 405/771: spider_egg
-[INFO] +3.576s: [InitializeAssets] Asset 406/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 407/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 408/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 409/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 410/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 411/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 412/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 413/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 414/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 415/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 416/771: spider_egg
-[INFO] +3.577s: [InitializeAssets] Asset 417/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 418/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 419/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 420/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 421/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 422/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 423/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 424/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 425/771: spider_egg
-[INFO] +3.578s: [InitializeAssets] Asset 426/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 427/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 428/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 429/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 430/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 431/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 432/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 433/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 434/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 435/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 436/771: spider_egg
-[INFO] +3.579s: [InitializeAssets] Asset 437/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 438/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 439/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 440/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 441/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 442/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 443/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 444/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 445/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 446/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 447/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 448/771: spider_egg
-[INFO] +3.580s: [InitializeAssets] Asset 449/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 450/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 451/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 452/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 453/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 454/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 455/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 456/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 457/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 458/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 459/771: spider_egg
-[INFO] +3.581s: [InitializeAssets] Asset 460/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 461/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 462/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 463/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 464/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 465/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 466/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 467/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 468/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 469/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 470/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 471/771: spider_egg
-[INFO] +3.582s: [InitializeAssets] Asset 472/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 473/771: fountain
-[INFO] +3.583s: [InitializeAssets] Asset 474/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 475/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 476/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 477/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 478/771: spider
-[INFO] +3.583s: [InitializeAssets] Asset 479/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 480/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 481/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 482/771: spider_egg
-[INFO] +3.583s: [InitializeAssets] Asset 483/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 484/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 485/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 486/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 487/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 488/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 489/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 490/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 491/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 492/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 493/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 494/771: spider_egg
-[INFO] +3.584s: [InitializeAssets] Asset 495/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 496/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 497/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 498/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 499/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 500/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 501/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 502/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 503/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 504/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 505/771: spider_egg
-[INFO] +3.585s: [InitializeAssets] Asset 506/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 507/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 508/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 509/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 510/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 511/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 512/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 513/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 514/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 515/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 516/771: spider_egg
-[INFO] +3.586s: [InitializeAssets] Asset 517/771: 3_candles
-[INFO] +3.598s: [InitializeAssets] Asset 518/771: spider_egg
-[INFO] +3.598s: [InitializeAssets] Asset 519/771: spider_egg
-[INFO] +3.598s: [InitializeAssets] Asset 520/771: spider_egg
-[INFO] +3.598s: [InitializeAssets] Asset 521/771: spider_egg
-[INFO] +3.598s: [InitializeAssets] Asset 522/771: spider_egg
-[INFO] +3.598s: [InitializeAssets] Asset 523/771: spider_egg
-[INFO] +3.598s: [InitializeAssets] Asset 524/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 525/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 526/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 527/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 528/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 529/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 530/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 531/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 532/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 533/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 534/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 535/771: spider_egg
-[INFO] +3.599s: [InitializeAssets] Asset 536/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 537/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 538/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 539/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 540/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 541/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 542/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 543/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 544/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 545/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 546/771: spider_egg
-[INFO] +3.600s: [InitializeAssets] Asset 547/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 548/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 549/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 550/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 551/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 552/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 553/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 554/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 555/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 556/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 557/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 558/771: spider_egg
-[INFO] +3.601s: [InitializeAssets] Asset 559/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 560/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 561/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 562/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 563/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 564/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 565/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 566/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 567/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 568/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 569/771: spider_egg
-[INFO] +3.602s: [InitializeAssets] Asset 570/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 571/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 572/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 573/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 574/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 575/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 576/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 577/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 578/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 579/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 580/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 581/771: spider_egg
-[INFO] +3.603s: [InitializeAssets] Asset 582/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 583/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 584/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 585/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 586/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 587/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 588/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 589/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 590/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 591/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 592/771: spider_egg
-[INFO] +3.604s: [InitializeAssets] Asset 593/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 594/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 595/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 596/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 597/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 598/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 599/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 600/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 601/771: spider_egg
-[INFO] +3.605s: [InitializeAssets] Asset 602/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 603/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 604/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 605/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 606/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 607/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 608/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 609/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 610/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 611/771: spider_egg
-[INFO] +3.606s: [InitializeAssets] Asset 612/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 613/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 614/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 615/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 616/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 617/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 618/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 619/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 620/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 621/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 622/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 623/771: spider_egg
-[INFO] +3.607s: [InitializeAssets] Asset 624/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 625/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 626/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 627/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 628/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 629/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 630/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 631/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 632/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 633/771: spider_egg
-[INFO] +3.608s: [InitializeAssets] Asset 634/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 635/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 636/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 637/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 638/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 639/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 640/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 641/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 642/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 643/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 644/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 645/771: spider_egg
-[INFO] +3.609s: [InitializeAssets] Asset 646/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 647/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 648/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 649/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 650/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 651/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 652/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 653/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 654/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 655/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 656/771: spider_egg
-[INFO] +3.610s: [InitializeAssets] Asset 657/771: vibble
-[INFO] +3.618s: [InitializeAssets] Asset 658/771: 3_candles
-[INFO] +3.629s: [InitializeAssets] Asset 659/771: 3_candles
-[INFO] +3.641s: [InitializeAssets] Asset 660/771: 3_candles
-[INFO] +3.652s: [InitializeAssets] Asset 661/771: 3_candles
-[INFO] +3.664s: [InitializeAssets] Asset 662/771: 3_candles
-[INFO] +3.675s: [InitializeAssets] Asset 663/771: 3_candles
-[INFO] +3.687s: [InitializeAssets] Asset 664/771: 3_candles
-[INFO] +3.698s: [InitializeAssets] Asset 665/771: 3_candles
-[INFO] +3.709s: [InitializeAssets] Asset 666/771: spider_egg
-[INFO] +3.709s: [InitializeAssets] Asset 667/771: 3_candles
-[INFO] +3.720s: [InitializeAssets] Asset 668/771: 3_candles
-[INFO] +3.731s: [InitializeAssets] Asset 669/771: spider_egg
-[INFO] +3.731s: [InitializeAssets] Asset 670/771: 3_candles
-[INFO] +3.743s: [InitializeAssets] Asset 671/771: 3_candles
-[INFO] +3.754s: [InitializeAssets] Asset 672/771: 3_candles
-[INFO] +3.765s: [InitializeAssets] Asset 673/771: 3_candles
-[INFO] +3.776s: [InitializeAssets] Asset 674/771: spider_egg
-[INFO] +3.776s: [InitializeAssets] Asset 675/771: 3_candles
-[INFO] +3.788s: [InitializeAssets] Asset 676/771: 3_candles
-[INFO] +3.799s: [InitializeAssets] Asset 677/771: 3_candles
-[INFO] +3.810s: [InitializeAssets] Asset 678/771: 3_candles
-[INFO] +3.821s: [InitializeAssets] Asset 679/771: 3_candles
-[INFO] +3.832s: [InitializeAssets] Asset 680/771: 3_candles
-[INFO] +3.844s: [InitializeAssets] Asset 681/771: 3_candles
-[INFO] +3.857s: [InitializeAssets] Asset 682/771: 3_candles
-[INFO] +3.868s: [InitializeAssets] Asset 683/771: spider_egg
-[INFO] +3.868s: [InitializeAssets] Asset 684/771: spider_egg
-[INFO] +3.868s: [InitializeAssets] Asset 685/771: spider_egg
-[INFO] +3.868s: [InitializeAssets] Asset 686/771: spider_egg
-[INFO] +3.868s: [InitializeAssets] Asset 687/771: spider_egg
-[INFO] +3.868s: [InitializeAssets] Asset 688/771: spider_egg
-[INFO] +3.868s: [InitializeAssets] Asset 689/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 690/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 691/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 692/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 693/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 694/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 695/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 696/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 697/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 698/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 699/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 700/771: spider_egg
-[INFO] +3.869s: [InitializeAssets] Asset 701/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 702/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 703/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 704/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 705/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 706/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 707/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 708/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 709/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 710/771: spider_egg
-[INFO] +3.870s: [InitializeAssets] Asset 711/771: vibble_attack_1
-[INFO] +3.870s: [InitializeAssets] Asset 712/771: tree_dark
-[INFO] +3.871s: [InitializeAssets] Asset 713/771: tree_dark
-[INFO] +3.871s: [InitializeAssets] Asset 714/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 715/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 716/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 717/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 718/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 719/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 720/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 721/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 722/771: spider_egg
-[INFO] +3.871s: [InitializeAssets] Asset 723/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 724/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 725/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 726/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 727/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 728/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 729/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 730/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 731/771: spider_egg
-[INFO] +3.872s: [InitializeAssets] Asset 732/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 733/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 734/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 735/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 736/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 737/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 738/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 739/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 740/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 741/771: spider_egg
-[INFO] +3.873s: [InitializeAssets] Asset 742/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 743/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 744/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 745/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 746/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 747/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 748/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 749/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 750/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 751/771: spider_egg
-[INFO] +3.874s: [InitializeAssets] Asset 752/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 753/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 754/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 755/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 756/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 757/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 758/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 759/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 760/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 761/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 762/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 763/771: spider_egg
-[INFO] +3.875s: [InitializeAssets] Asset 764/771: spider_egg
-[INFO] +3.876s: [InitializeAssets] Asset 765/771: spider_egg
-[INFO] +3.876s: [InitializeAssets] Asset 766/771: spider_egg
-[INFO] +3.876s: [InitializeAssets] Asset 767/771: spider_egg
-[INFO] +3.876s: [InitializeAssets] Asset 768/771: spider_egg
-[INFO] +3.876s: [InitializeAssets] Asset 769/771: spider_egg
-[INFO] +3.876s: [InitializeAssets] Asset 770/771: spider_egg
-[INFO] +3.876s: [InitializeAssets] Asset 771/771: spider_egg
-[INFO] +3.876s: [Assets] Constructor: InitializeAssets complete
-[INFO] +3.876s: [Assets] Constructor: Creating OpenGL runtime renderer
-[INFO] +4.389s: [OpenGLRuntimeRenderer] Loaded 48 atmospheric dust frame texture(s) from C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0\resources\dust
-[INFO] +4.390s: [Assets] Constructor: OpenGL runtime renderer created successfully
-[INFO] +4.390s: [Assets] Constructor: Setting up assets (952 total)
-[INFO] +4.390s: [Assets] Constructor: Asset finalization complete
-[INFO] +4.626s: [Assets] Constructor: Initialization complete
-[INFO] +4.627s: [MainApp] Assets object created successfully.
-[INFO] +4.627s: [Init] Assets initialized: 771 assets across 7 rooms in 0.00s
-[INFO] +4.627s: [Assets] Reloading camera settings from manifest
-[INFO] +4.627s: [Assets] Camera settings reloaded and marked dirty for refresh
-[INFO] +4.639s: [MenuUI] Runtime frame limit: 7200
-[INFO] +4.639s: [CodexPlaytest] In-engine input driver enabled for MenuUI runtime.
-[WARN] +4.688s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +4.723s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +4.759s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +4.795s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +4.835s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +4.878s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +4.919s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +4.964s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +5.312s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +5.366s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +9.802s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.039s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.211s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.232s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.265s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.301s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.331s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.364s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.409s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +10.532s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +11.326s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +11.875s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.058s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.191s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.224s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.324s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.360s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.424s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.522s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.565s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.657s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.724s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +12.886s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +13.031s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +13.084s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +13.249s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +13.456s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +13.689s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +13.715s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +13.953s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +14.029s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +14.177s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +14.420s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +14.874s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +15.405s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +15.506s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +15.746s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +16.201s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +16.347s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +16.406s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +16.777s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +16.869s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +17.114s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +17.344s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +18.040s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +18.139s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +18.172s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +18.271s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +18.644s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +19.239s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +19.271s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +19.331s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +19.399s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +19.540s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +19.898s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +20.000s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +20.237s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +20.445s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +20.475s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +20.715s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +20.917s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +20.974s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +21.244s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +21.481s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +21.746s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +22.114s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +22.182s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +22.646s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +23.492s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +23.992s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +24.159s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +24.192s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +29.311s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +29.367s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +29.396s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +30.333s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +30.934s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +30.990s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.011s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.044s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.077s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.151s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.179s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.245s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.343s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.366s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +31.499s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.377s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.445s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.468s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.502s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.566s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.632s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.664s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.730s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.798s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.829s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +32.896s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +33.058s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +33.189s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +33.254s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +33.692s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +33.884s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +35.062s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +35.286s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +35.526s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.085s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.110s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.143s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.210s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.248s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.374s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.544s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.605s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +37.739s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +38.406s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +38.604s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +39.294s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +39.525s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +40.195s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +40.220s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +40.888s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +41.128s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +41.364s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +41.519s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +41.685s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +41.918s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.017s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.049s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.083s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.149s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.181s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.247s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.313s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.379s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.411s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.545s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.710s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.845s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +42.941s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +43.371s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +44.301s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +44.531s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +47.027s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +49.091s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +49.751s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +55.719s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +55.749s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +55.820s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[WARN] +55.854s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
-[MenuUI] ESC -> menu_active=true
-[MenuUI] Button clicked: End Run
+[INFO] +1.960s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.975s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.986s: [PrimaryAssetCache] No cache work required.
+[INFO] +1.997s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.006s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.017s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.028s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.038s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.051s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.062s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.072s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.082s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.137s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.213s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.413s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.499s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.509s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.519s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.538s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.561s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.572s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.582s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.674s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.777s: [PrimaryAssetCache] No cache work required.
+[INFO] +2.802s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.075s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.154s: [AssetLibrary] Preload 'tree_fps_2' took 343ms
+[INFO] +3.184s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.235s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.248s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.257s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.265s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.274s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.286s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.300s: [PrimaryAssetCache] No cache work required.
+[INFO] +3.306s: [AssetLibrary] Runtime animation preload complete: requested=91 loaded=91 failed_or_incomplete=0
+[INFO] +3.307s: [AssetLoader] Runtime animation load completed for all known asset type(s): requested=91 in 2630.000000ms
+[INFO] +3.307s: [Loading] Loading assets
+[INFO] +3.309s: [AssetLoader] Finalizing assets across rooms...
+[INFO] +3.313s: [AssetLoader] finalizeAssets complete: 741/741 assets ready, lazy_loaded_asset_types=0
+[INFO] +3.313s: [AssetLoader] Asset finalization completed; all assets are ready.
+[INFO] +3.314s: [AssetLoader] Map metadata loaded in 137.000000ms
+[INFO] +3.314s: [AssetLoader] Asset library ready in 1.000000ms
+[INFO] +3.314s: [AssetLoader] Rooms built in 58.000000ms
+[INFO] +3.314s: [AssetLoader] Initialization completed in 2908.000000ms
+[INFO] +3.315s: [AssetLoader] Boundary startup filtering moved to runtime visibility culling. distance_candidates=0 hidden_applied=0
+[INFO] +3.316s: [Loading] Spawning assets
+[INFO] +3.318s: [AssetLoader] Extracted 741 visible assets from rooms
+[INFO] +3.318s: [AssetLoader] Boundary startup visibility summary: extracted=4
+[INFO] +3.319s: [AssetLoader] Boundary startup visibility summary: registered=4 filtered=0
+[INFO] +3.320s: [TileBuilder] Chunk tile build: chunks_with_tiles=0, chunk_textures=0, draw_contributions=0, texture_bytes=0, elapsed_ms=0
+[INFO] +3.321s: [MainApp] AssetLoader constructed in 2910ms
+[INFO] +3.321s: [MainApp] Asset spawning finished for map 'forrest'.
+[INFO] +3.321s: [MainApp] 741 assets created and cached.
+[INFO] +3.321s: [MainApp] Creating Assets object...
+[INFO] +3.323s: [Assets] Constructor: Starting InitializeAssets initialization
+[INFO] +3.323s: [InitializeAssets] Processing 741 assets from world grid
+[INFO] +3.323s: [InitializeAssets] Asset 1/741: spider_egg
+[INFO] +3.324s: [InitializeAssets] Asset 2/741: grass_1_fps_2
+[INFO] +3.324s: [InitializeAssets] Asset 3/741: spider_egg
+[INFO] +3.325s: [InitializeAssets] Asset 4/741: spider_egg
+[INFO] +3.325s: [InitializeAssets] Asset 5/741: 3_candles
+[INFO] +3.337s: [InitializeAssets] Asset 6/741: 3_candles
+[INFO] +3.350s: [InitializeAssets] Asset 7/741: fountain
+[INFO] +3.350s: [InitializeAssets] Asset 8/741: vibble
+[INFO] +3.359s: [InitializeAssets] Asset 9/741: spider_egg
+[INFO] +3.359s: [InitializeAssets] Asset 10/741: spider_egg
+[INFO] +3.359s: [InitializeAssets] Asset 11/741: spider_egg
+[INFO] +3.359s: [InitializeAssets] Asset 12/741: 3_candles
+[INFO] +3.371s: [InitializeAssets] Asset 13/741: spider_egg
+[INFO] +3.372s: [InitializeAssets] Asset 14/741: spider_egg
+[INFO] +3.372s: [InitializeAssets] Asset 15/741: spider_egg
+[INFO] +3.372s: [InitializeAssets] Asset 16/741: spider_egg
+[INFO] +3.372s: [InitializeAssets] Asset 17/741: 3_candles
+[INFO] +3.384s: [InitializeAssets] Asset 18/741: 3_candles
+[INFO] +3.398s: [InitializeAssets] Asset 19/741: 3_candles
+[INFO] +3.410s: [InitializeAssets] Asset 20/741: spider_egg
+[INFO] +3.410s: [InitializeAssets] Asset 21/741: spider_egg
+[INFO] +3.410s: [InitializeAssets] Asset 22/741: spider_egg
+[INFO] +3.410s: [InitializeAssets] Asset 23/741: spider_egg
+[INFO] +3.411s: [InitializeAssets] Asset 24/741: spider_egg
+[INFO] +3.411s: [InitializeAssets] Asset 25/741: spider_egg
+[INFO] +3.411s: [InitializeAssets] Asset 26/741: 3_candles
+[INFO] +3.423s: [InitializeAssets] Asset 27/741: 3_candles
+[INFO] +3.435s: [InitializeAssets] Asset 28/741: 3_candles
+[INFO] +3.447s: [InitializeAssets] Asset 29/741: spider_egg
+[INFO] +3.447s: [InitializeAssets] Asset 30/741: spider_egg
+[INFO] +3.447s: [InitializeAssets] Asset 31/741: spider_egg
+[INFO] +3.448s: [InitializeAssets] Asset 32/741: 3_candles
+[INFO] +3.460s: [InitializeAssets] Asset 33/741: spider_egg
+[INFO] +3.460s: [InitializeAssets] Asset 34/741: spider_egg
+[INFO] +3.460s: [InitializeAssets] Asset 35/741: spider_egg
+[INFO] +3.460s: [InitializeAssets] Asset 36/741: 3_candles
+[INFO] +3.472s: [InitializeAssets] Asset 37/741: spider_egg
+[INFO] +3.472s: [InitializeAssets] Asset 38/741: 3_candles
+[INFO] +3.484s: [InitializeAssets] Asset 39/741: spider_egg
+[INFO] +3.484s: [InitializeAssets] Asset 40/741: 3_candles
+[INFO] +3.498s: [InitializeAssets] Asset 41/741: spider_egg
+[INFO] +3.498s: [InitializeAssets] Asset 42/741: 3_candles
+[INFO] +3.510s: [InitializeAssets] Asset 43/741: spider_egg
+[INFO] +3.510s: [InitializeAssets] Asset 44/741: spider_egg
+[INFO] +3.510s: [InitializeAssets] Asset 45/741: 3_candles
+[INFO] +3.523s: [InitializeAssets] Asset 46/741: spider_egg
+[INFO] +3.523s: [InitializeAssets] Asset 47/741: 3_candles
+[INFO] +3.536s: [InitializeAssets] Asset 48/741: spider
+[INFO] +3.537s: [InitializeAssets] Asset 49/741: spider_egg
+[INFO] +3.537s: [InitializeAssets] Asset 50/741: spider_egg
+[INFO] +3.537s: [InitializeAssets] Asset 51/741: 3_candles
+[INFO] +3.549s: [InitializeAssets] Asset 52/741: 3_candles
+[INFO] +3.562s: [InitializeAssets] Asset 53/741: spider_egg
+[INFO] +3.562s: [InitializeAssets] Asset 54/741: spider_egg
+[INFO] +3.562s: [InitializeAssets] Asset 55/741: 3_candles
+[INFO] +3.574s: [InitializeAssets] Asset 56/741: spider_egg
+[INFO] +3.574s: [InitializeAssets] Asset 57/741: spider_egg
+[INFO] +3.575s: [InitializeAssets] Asset 58/741: 3_candles
+[INFO] +3.586s: [InitializeAssets] Asset 59/741: spider_egg
+[INFO] +3.586s: [InitializeAssets] Asset 60/741: spider_egg
+[INFO] +3.586s: [InitializeAssets] Asset 61/741: spider_egg
+[INFO] +3.586s: [InitializeAssets] Asset 62/741: spider_egg
+[INFO] +3.586s: [InitializeAssets] Asset 63/741: 3_candles
+[INFO] +3.599s: [InitializeAssets] Asset 64/741: 3_candles
+[INFO] +3.611s: [InitializeAssets] Asset 65/741: spider_egg
+[INFO] +3.611s: [InitializeAssets] Asset 66/741: spider_egg
+[INFO] +3.611s: [InitializeAssets] Asset 67/741: spider_egg
+[INFO] +3.612s: [InitializeAssets] Asset 68/741: 3_candles
+[INFO] +3.624s: [InitializeAssets] Asset 69/741: 3_candles
+[INFO] +3.636s: [InitializeAssets] Asset 70/741: spider_egg
+[INFO] +3.636s: [InitializeAssets] Asset 71/741: spider_egg
+[INFO] +3.636s: [InitializeAssets] Asset 72/741: spider_egg
+[INFO] +3.636s: [InitializeAssets] Asset 73/741: spider_egg
+[INFO] +3.637s: [InitializeAssets] Asset 74/741: 3_candles
+[INFO] +3.649s: [InitializeAssets] Asset 75/741: spider_egg
+[INFO] +3.649s: [InitializeAssets] Asset 76/741: 3_candles
+[INFO] +3.662s: [InitializeAssets] Asset 77/741: spider_egg
+[INFO] +3.662s: [InitializeAssets] Asset 78/741: spider_egg
+[INFO] +3.662s: [InitializeAssets] Asset 79/741: 3_candles
+[INFO] +3.675s: [InitializeAssets] Asset 80/741: 3_candles
+[INFO] +3.686s: [InitializeAssets] Asset 81/741: spider_egg
+[INFO] +3.687s: [InitializeAssets] Asset 82/741: spider_egg
+[INFO] +3.687s: [InitializeAssets] Asset 83/741: spider_egg
+[INFO] +3.687s: [InitializeAssets] Asset 84/741: 3_candles
+[INFO] +3.700s: [InitializeAssets] Asset 85/741: 3_candles
+[INFO] +3.712s: [InitializeAssets] Asset 86/741: 3_candles
+[INFO] +3.725s: [InitializeAssets] Asset 87/741: spider_egg
+[INFO] +3.725s: [InitializeAssets] Asset 88/741: spider_egg
+[INFO] +3.725s: [InitializeAssets] Asset 89/741: spider_egg
+[INFO] +3.726s: [InitializeAssets] Asset 90/741: spider_egg
+[INFO] +3.726s: [InitializeAssets] Asset 91/741: spider_egg
+[INFO] +3.726s: [InitializeAssets] Asset 92/741: spider_egg
+[INFO] +3.726s: [InitializeAssets] Asset 93/741: spider_egg
+[INFO] +3.726s: [InitializeAssets] Asset 94/741: spider_egg
+[INFO] +3.726s: [InitializeAssets] Asset 95/741: spider_egg
+[INFO] +3.726s: [InitializeAssets] Asset 96/741: spider_egg
+[INFO] +3.727s: [InitializeAssets] Asset 97/741: spider_egg
+[INFO] +3.727s: [InitializeAssets] Asset 98/741: spider_egg
+[INFO] +3.727s: [InitializeAssets] Asset 99/741: spider_egg
+[INFO] +3.727s: [InitializeAssets] Asset 100/741: spider_egg
+[INFO] +3.727s: [InitializeAssets] Asset 101/741: spider_egg
+[INFO] +3.727s: [InitializeAssets] Asset 102/741: spider_egg
+[INFO] +3.727s: [InitializeAssets] Asset 103/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 104/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 105/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 106/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 107/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 108/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 109/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 110/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 111/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 112/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 113/741: spider_egg
+[INFO] +3.728s: [InitializeAssets] Asset 114/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 115/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 116/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 117/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 118/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 119/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 120/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 121/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 122/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 123/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 124/741: spider_egg
+[INFO] +3.729s: [InitializeAssets] Asset 125/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 126/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 127/741: tree_dark
+[INFO] +3.730s: [InitializeAssets] Asset 128/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 129/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 130/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 131/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 132/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 133/741: vibble_attack_1
+[INFO] +3.730s: [InitializeAssets] Asset 134/741: spider_egg
+[INFO] +3.730s: [InitializeAssets] Asset 135/741: tree_dark
+[INFO] +3.731s: [InitializeAssets] Asset 136/741: tree_dark
+[INFO] +3.731s: [InitializeAssets] Asset 137/741: spider_egg
+[INFO] +3.731s: [InitializeAssets] Asset 138/741: 3_candles
+[INFO] +3.744s: [InitializeAssets] Asset 139/741: tree_dark
+[INFO] +3.744s: [InitializeAssets] Asset 140/741: spider_egg
+[INFO] +3.744s: [InitializeAssets] Asset 141/741: spider_egg
+[INFO] +3.744s: [InitializeAssets] Asset 142/741: 3_candles
+[INFO] +3.756s: [InitializeAssets] Asset 143/741: spider_egg
+[INFO] +3.756s: [InitializeAssets] Asset 144/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 145/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 146/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 147/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 148/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 149/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 150/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 151/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 152/741: spider_egg
+[INFO] +3.757s: [InitializeAssets] Asset 153/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 154/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 155/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 156/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 157/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 158/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 159/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 160/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 161/741: spider_egg
+[INFO] +3.758s: [InitializeAssets] Asset 162/741: 3_candles
+[INFO] +3.771s: [InitializeAssets] Asset 163/741: spider_egg
+[INFO] +3.771s: [InitializeAssets] Asset 164/741: spider_egg
+[INFO] +3.771s: [InitializeAssets] Asset 165/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 166/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 167/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 168/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 169/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 170/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 171/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 172/741: spider_egg
+[INFO] +3.772s: [InitializeAssets] Asset 173/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 174/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 175/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 176/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 177/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 178/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 179/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 180/741: spider_egg
+[INFO] +3.773s: [InitializeAssets] Asset 181/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 182/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 183/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 184/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 185/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 186/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 187/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 188/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 189/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 190/741: spider_egg
+[INFO] +3.774s: [InitializeAssets] Asset 191/741: spider_egg
+[INFO] +3.775s: [InitializeAssets] Asset 192/741: spider_egg
+[INFO] +3.775s: [InitializeAssets] Asset 193/741: spider_egg
+[INFO] +3.775s: [InitializeAssets] Asset 194/741: 3_candles
+[INFO] +3.787s: [InitializeAssets] Asset 195/741: spider_egg
+[INFO] +3.787s: [InitializeAssets] Asset 196/741: spider_egg
+[INFO] +3.787s: [InitializeAssets] Asset 197/741: spider_egg
+[INFO] +3.788s: [InitializeAssets] Asset 198/741: spider_egg
+[INFO] +3.788s: [InitializeAssets] Asset 199/741: spider_egg
+[INFO] +3.788s: [InitializeAssets] Asset 200/741: spider_egg
+[INFO] +3.788s: [InitializeAssets] Asset 201/741: spider_egg
+[INFO] +3.788s: [InitializeAssets] Asset 202/741: spider_egg
+[INFO] +3.788s: [InitializeAssets] Asset 203/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 204/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 205/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 206/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 207/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 208/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 209/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 210/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 211/741: spider_egg
+[INFO] +3.789s: [InitializeAssets] Asset 212/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 213/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 214/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 215/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 216/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 217/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 218/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 219/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 220/741: spider_egg
+[INFO] +3.790s: [InitializeAssets] Asset 221/741: spider_egg
+[INFO] +3.791s: [InitializeAssets] Asset 222/741: spider_egg
+[INFO] +3.791s: [InitializeAssets] Asset 223/741: spider_egg
+[INFO] +3.791s: [InitializeAssets] Asset 224/741: spider_egg
+[INFO] +3.791s: [InitializeAssets] Asset 225/741: spider_egg
+[INFO] +3.791s: [InitializeAssets] Asset 226/741: spider_egg
+[INFO] +3.791s: [InitializeAssets] Asset 227/741: spider_egg
+[INFO] +3.791s: [InitializeAssets] Asset 228/741: 3_candles
+[INFO] +3.804s: [InitializeAssets] Asset 229/741: spider_egg
+[INFO] +3.804s: [InitializeAssets] Asset 230/741: spider_egg
+[INFO] +3.804s: [InitializeAssets] Asset 231/741: spider_egg
+[INFO] +3.805s: [InitializeAssets] Asset 232/741: spider_egg
+[INFO] +3.805s: [InitializeAssets] Asset 233/741: spider_egg
+[INFO] +3.805s: [InitializeAssets] Asset 234/741: spider_egg
+[INFO] +3.805s: [InitializeAssets] Asset 235/741: spider_egg
+[INFO] +3.805s: [InitializeAssets] Asset 236/741: spider_egg
+[INFO] +3.806s: [InitializeAssets] Asset 237/741: spider_egg
+[INFO] +3.806s: [InitializeAssets] Asset 238/741: spider_egg
+[INFO] +3.806s: [InitializeAssets] Asset 239/741: spider_egg
+[INFO] +3.806s: [InitializeAssets] Asset 240/741: spider_egg
+[INFO] +3.806s: [InitializeAssets] Asset 241/741: spider_egg
+[INFO] +3.806s: [InitializeAssets] Asset 242/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 243/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 244/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 245/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 246/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 247/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 248/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 249/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 250/741: spider_egg
+[INFO] +3.807s: [InitializeAssets] Asset 251/741: 3_candles
+[INFO] +3.819s: [InitializeAssets] Asset 252/741: spider_egg
+[INFO] +3.819s: [InitializeAssets] Asset 253/741: spider_egg
+[INFO] +3.819s: [InitializeAssets] Asset 254/741: spider_egg
+[INFO] +3.819s: [InitializeAssets] Asset 255/741: spider_egg
+[INFO] +3.819s: [InitializeAssets] Asset 256/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 257/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 258/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 259/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 260/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 261/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 262/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 263/741: spider_egg
+[INFO] +3.820s: [InitializeAssets] Asset 264/741: spider_egg
+[INFO] +3.821s: [InitializeAssets] Asset 265/741: spider_egg
+[INFO] +3.821s: [InitializeAssets] Asset 266/741: spider_egg
+[INFO] +3.821s: [InitializeAssets] Asset 267/741: spider_egg
+[INFO] +3.821s: [InitializeAssets] Asset 268/741: spider
+[INFO] +3.821s: [InitializeAssets] Asset 269/741: spider_egg
+[INFO] +3.821s: [InitializeAssets] Asset 270/741: spider_egg
+[INFO] +3.821s: [InitializeAssets] Asset 271/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 272/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 273/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 274/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 275/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 276/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 277/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 278/741: spider_egg
+[INFO] +3.822s: [InitializeAssets] Asset 279/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 280/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 281/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 282/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 283/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 284/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 285/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 286/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 287/741: spider_egg
+[INFO] +3.823s: [InitializeAssets] Asset 288/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 289/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 290/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 291/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 292/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 293/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 294/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 295/741: spider_egg
+[INFO] +3.824s: [InitializeAssets] Asset 296/741: spider_egg
+[INFO] +3.825s: [InitializeAssets] Asset 297/741: spider_egg
+[INFO] +3.825s: [InitializeAssets] Asset 298/741: spider_egg
+[INFO] +3.825s: [InitializeAssets] Asset 299/741: spider_egg
+[INFO] +3.825s: [InitializeAssets] Asset 300/741: 3_candles
+[INFO] +3.838s: [InitializeAssets] Asset 301/741: spider_egg
+[INFO] +3.838s: [InitializeAssets] Asset 302/741: spider_egg
+[INFO] +3.838s: [InitializeAssets] Asset 303/741: spider_egg
+[INFO] +3.838s: [InitializeAssets] Asset 304/741: spider_egg
+[INFO] +3.838s: [InitializeAssets] Asset 305/741: spider_egg
+[INFO] +3.839s: [InitializeAssets] Asset 306/741: spider_egg
+[INFO] +3.839s: [InitializeAssets] Asset 307/741: spider_egg
+[INFO] +3.839s: [InitializeAssets] Asset 308/741: spider_egg
+[INFO] +3.839s: [InitializeAssets] Asset 309/741: spider_egg
+[INFO] +3.839s: [InitializeAssets] Asset 310/741: spider_egg
+[INFO] +3.839s: [InitializeAssets] Asset 311/741: chest_opening
+[INFO] +3.840s: [InitializeAssets] Asset 312/741: spider_egg
+[INFO] +3.840s: [InitializeAssets] Asset 313/741: spider_egg
+[INFO] +3.840s: [InitializeAssets] Asset 314/741: spider
+[INFO] +3.840s: [InitializeAssets] Asset 315/741: spider_egg
+[INFO] +3.840s: [InitializeAssets] Asset 316/741: spider_egg
+[INFO] +3.840s: [InitializeAssets] Asset 317/741: spider_egg
+[INFO] +3.840s: [InitializeAssets] Asset 318/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 319/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 320/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 321/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 322/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 323/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 324/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 325/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 326/741: spider_egg
+[INFO] +3.841s: [InitializeAssets] Asset 327/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 328/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 329/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 330/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 331/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 332/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 333/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 334/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 335/741: spider_egg
+[INFO] +3.842s: [InitializeAssets] Asset 336/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 337/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 338/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 339/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 340/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 341/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 342/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 343/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 344/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 345/741: spider_egg
+[INFO] +3.843s: [InitializeAssets] Asset 346/741: spider_egg
+[INFO] +3.844s: [InitializeAssets] Asset 347/741: spider_egg
+[INFO] +3.844s: [InitializeAssets] Asset 348/741: spider_egg
+[INFO] +3.844s: [InitializeAssets] Asset 349/741: spider_egg
+[INFO] +3.844s: [InitializeAssets] Asset 350/741: spider_egg
+[INFO] +3.844s: [InitializeAssets] Asset 351/741: spider_egg
+[INFO] +3.844s: [InitializeAssets] Asset 352/741: spider_egg
+[INFO] +3.844s: [InitializeAssets] Asset 353/741: spider_egg
+[INFO] +3.845s: [InitializeAssets] Asset 354/741: 3_candles
+[INFO] +3.857s: [InitializeAssets] Asset 355/741: spider_egg
+[INFO] +3.857s: [InitializeAssets] Asset 356/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 357/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 358/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 359/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 360/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 361/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 362/741: small_spider
+[INFO] +3.858s: [InitializeAssets] Asset 363/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 364/741: spider_egg
+[INFO] +3.858s: [InitializeAssets] Asset 365/741: spider_egg
+[INFO] +3.859s: [InitializeAssets] Asset 366/741: spider_egg
+[INFO] +3.859s: [InitializeAssets] Asset 367/741: spider_egg
+[INFO] +3.859s: [InitializeAssets] Asset 368/741: spider_egg
+[INFO] +3.859s: [InitializeAssets] Asset 369/741: 3_candles
+[INFO] +3.872s: [InitializeAssets] Asset 370/741: spider_egg
+[INFO] +3.872s: [InitializeAssets] Asset 371/741: 3_candles
+[INFO] +3.884s: [InitializeAssets] Asset 372/741: spider_egg
+[INFO] +3.884s: [InitializeAssets] Asset 373/741: spider_egg
+[INFO] +3.884s: [InitializeAssets] Asset 374/741: spider_egg
+[INFO] +3.884s: [InitializeAssets] Asset 375/741: spider_egg
+[INFO] +3.884s: [InitializeAssets] Asset 376/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 377/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 378/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 379/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 380/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 381/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 382/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 383/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 384/741: spider_egg
+[INFO] +3.885s: [InitializeAssets] Asset 385/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 386/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 387/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 388/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 389/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 390/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 391/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 392/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 393/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 394/741: spider_egg
+[INFO] +3.886s: [InitializeAssets] Asset 395/741: spider_egg
+[INFO] +3.887s: [InitializeAssets] Asset 396/741: spider_egg
+[INFO] +3.887s: [InitializeAssets] Asset 397/741: spider_egg
+[INFO] +3.887s: [InitializeAssets] Asset 398/741: spider_egg
+[INFO] +3.887s: [InitializeAssets] Asset 399/741: spider_egg
+[INFO] +3.887s: [InitializeAssets] Asset 400/741: spider_egg
+[INFO] +3.887s: [InitializeAssets] Asset 401/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 402/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 403/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 404/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 405/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 406/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 407/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 408/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 409/741: spider_egg
+[INFO] +3.888s: [InitializeAssets] Asset 410/741: spider_egg
+[INFO] +3.889s: [InitializeAssets] Asset 411/741: spider_egg
+[INFO] +3.889s: [InitializeAssets] Asset 412/741: spider_egg
+[INFO] +3.889s: [InitializeAssets] Asset 413/741: spider_egg
+[INFO] +3.889s: [InitializeAssets] Asset 414/741: spider_egg
+[INFO] +3.889s: [InitializeAssets] Asset 415/741: spider_egg
+[INFO] +3.889s: [InitializeAssets] Asset 416/741: vibble
+[INFO] +3.898s: [InitializeAssets] Asset 417/741: spider_egg
+[INFO] +3.898s: [InitializeAssets] Asset 418/741: spider_egg
+[INFO] +3.898s: [InitializeAssets] Asset 419/741: spider_egg
+[INFO] +3.898s: [InitializeAssets] Asset 420/741: spider_egg
+[INFO] +3.898s: [InitializeAssets] Asset 421/741: 3_candles
+[INFO] +3.912s: [InitializeAssets] Asset 422/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 423/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 424/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 425/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 426/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 427/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 428/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 429/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 430/741: spider_egg
+[INFO] +3.913s: [InitializeAssets] Asset 431/741: 3_candles
+[INFO] +3.926s: [InitializeAssets] Asset 432/741: spider_egg
+[INFO] +3.926s: [InitializeAssets] Asset 433/741: spider_egg
+[INFO] +3.926s: [InitializeAssets] Asset 434/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 435/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 436/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 437/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 438/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 439/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 440/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 441/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 442/741: spider_egg
+[INFO] +3.927s: [InitializeAssets] Asset 443/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 444/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 445/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 446/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 447/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 448/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 449/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 450/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 451/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 452/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 453/741: spider_egg
+[INFO] +3.928s: [InitializeAssets] Asset 454/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 455/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 456/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 457/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 458/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 459/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 460/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 461/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 462/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 463/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 464/741: spider_egg
+[INFO] +3.929s: [InitializeAssets] Asset 465/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 466/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 467/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 468/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 469/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 470/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 471/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 472/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 473/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 474/741: spider_egg
+[INFO] +3.930s: [InitializeAssets] Asset 475/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 476/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 477/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 478/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 479/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 480/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 481/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 482/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 483/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 484/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 485/741: spider_egg
+[INFO] +3.931s: [InitializeAssets] Asset 486/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 487/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 488/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 489/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 490/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 491/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 492/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 493/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 494/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 495/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 496/741: spider_egg
+[INFO] +3.932s: [InitializeAssets] Asset 497/741: spider_egg
+[INFO] +3.933s: [InitializeAssets] Asset 498/741: fountain
+[INFO] +3.933s: [InitializeAssets] Asset 499/741: 3_candles
+[INFO] +3.947s: [InitializeAssets] Asset 500/741: spider_egg
+[INFO] +3.947s: [InitializeAssets] Asset 501/741: 3_candles
+[INFO] +3.959s: [InitializeAssets] Asset 502/741: 3_candles
+[INFO] +3.972s: [InitializeAssets] Asset 503/741: 3_candles
+[INFO] +3.985s: [InitializeAssets] Asset 504/741: spider_egg
+[INFO] +3.985s: [InitializeAssets] Asset 505/741: spider_egg
+[INFO] +3.986s: [InitializeAssets] Asset 506/741: 3_candles
+[INFO] +4.000s: [InitializeAssets] Asset 507/741: 3_candles
+[INFO] +4.013s: [InitializeAssets] Asset 508/741: 3_candles
+[INFO] +4.026s: [InitializeAssets] Asset 509/741: 3_candles
+[INFO] +4.040s: [InitializeAssets] Asset 510/741: spider
+[INFO] +4.040s: [InitializeAssets] Asset 511/741: spider_egg
+[INFO] +4.040s: [InitializeAssets] Asset 512/741: spider_egg
+[INFO] +4.040s: [InitializeAssets] Asset 513/741: spider_egg
+[INFO] +4.040s: [InitializeAssets] Asset 514/741: spider_egg
+[INFO] +4.040s: [InitializeAssets] Asset 515/741: spider_egg
+[INFO] +4.040s: [InitializeAssets] Asset 516/741: spider_egg
+[INFO] +4.040s: [InitializeAssets] Asset 517/741: spider_egg
+[INFO] +4.040s: [InitializeAssets] Asset 518/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 519/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 520/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 521/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 522/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 523/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 524/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 525/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 526/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 527/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 528/741: spider_egg
+[INFO] +4.041s: [InitializeAssets] Asset 529/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 530/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 531/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 532/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 533/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 534/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 535/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 536/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 537/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 538/741: spider_egg
+[INFO] +4.042s: [InitializeAssets] Asset 539/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 540/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 541/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 542/741: vibble_attack_1
+[INFO] +4.043s: [InitializeAssets] Asset 543/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 544/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 545/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 546/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 547/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 548/741: spider_egg
+[INFO] +4.043s: [InitializeAssets] Asset 549/741: spider_egg
+[INFO] +4.044s: [InitializeAssets] Asset 550/741: spider_egg
+[INFO] +4.044s: [InitializeAssets] Asset 551/741: spider_egg
+[INFO] +4.044s: [InitializeAssets] Asset 552/741: spider_egg
+[INFO] +4.044s: [InitializeAssets] Asset 553/741: spider_egg
+[INFO] +4.044s: [InitializeAssets] Asset 554/741: spider_egg
+[INFO] +4.044s: [InitializeAssets] Asset 555/741: spider_egg
+[INFO] +4.045s: [InitializeAssets] Asset 556/741: spider_egg
+[INFO] +4.045s: [InitializeAssets] Asset 557/741: spider_egg
+[INFO] +4.045s: [InitializeAssets] Asset 558/741: spider_egg
+[INFO] +4.045s: [InitializeAssets] Asset 559/741: spider_egg
+[INFO] +4.045s: [InitializeAssets] Asset 560/741: spider_egg
+[INFO] +4.045s: [InitializeAssets] Asset 561/741: spider_egg
+[INFO] +4.045s: [InitializeAssets] Asset 562/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 563/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 564/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 565/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 566/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 567/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 568/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 569/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 570/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 571/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 572/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 573/741: spider_egg
+[INFO] +4.046s: [InitializeAssets] Asset 574/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 575/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 576/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 577/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 578/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 579/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 580/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 581/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 582/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 583/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 584/741: spider_egg
+[INFO] +4.047s: [InitializeAssets] Asset 585/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 586/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 587/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 588/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 589/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 590/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 591/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 592/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 593/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 594/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 595/741: spider_egg
+[INFO] +4.048s: [InitializeAssets] Asset 596/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 597/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 598/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 599/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 600/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 601/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 602/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 603/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 604/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 605/741: spider_egg
+[INFO] +4.049s: [InitializeAssets] Asset 606/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 607/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 608/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 609/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 610/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 611/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 612/741: chest_opening
+[INFO] +4.050s: [InitializeAssets] Asset 613/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 614/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 615/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 616/741: spider_egg
+[INFO] +4.050s: [InitializeAssets] Asset 617/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 618/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 619/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 620/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 621/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 622/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 623/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 624/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 625/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 626/741: spider_egg
+[INFO] +4.051s: [InitializeAssets] Asset 627/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 628/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 629/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 630/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 631/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 632/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 633/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 634/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 635/741: small_spider
+[INFO] +4.052s: [InitializeAssets] Asset 636/741: spider_egg
+[INFO] +4.052s: [InitializeAssets] Asset 637/741: spider_egg
+[INFO] +4.053s: [InitializeAssets] Asset 638/741: spider_egg
+[INFO] +4.053s: [InitializeAssets] Asset 639/741: spider_egg
+[INFO] +4.053s: [InitializeAssets] Asset 640/741: spider_egg
+[INFO] +4.053s: [InitializeAssets] Asset 641/741: spider_egg
+[INFO] +4.053s: [InitializeAssets] Asset 642/741: spider_egg
+[INFO] +4.053s: [InitializeAssets] Asset 643/741: spider_egg
+[INFO] +4.053s: [InitializeAssets] Asset 644/741: spider_egg
+[INFO] +4.054s: [InitializeAssets] Asset 645/741: spider_egg
+[INFO] +4.054s: [InitializeAssets] Asset 646/741: spider_egg
+[INFO] +4.054s: [InitializeAssets] Asset 647/741: spider_egg
+[INFO] +4.054s: [InitializeAssets] Asset 648/741: spider_egg
+[INFO] +4.054s: [InitializeAssets] Asset 649/741: spider_egg
+[INFO] +4.054s: [InitializeAssets] Asset 650/741: spider_egg
+[INFO] +4.054s: [InitializeAssets] Asset 651/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 652/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 653/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 654/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 655/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 656/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 657/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 658/741: spider_egg
+[INFO] +4.055s: [InitializeAssets] Asset 659/741: spider_egg
+[INFO] +4.056s: [InitializeAssets] Asset 660/741: spider_egg
+[INFO] +4.056s: [InitializeAssets] Asset 661/741: spider_egg
+[INFO] +4.056s: [InitializeAssets] Asset 662/741: spider_egg
+[INFO] +4.056s: [InitializeAssets] Asset 663/741: spider_egg
+[INFO] +4.056s: [InitializeAssets] Asset 664/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 665/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 666/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 667/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 668/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 669/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 670/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 671/741: spider_egg
+[INFO] +4.057s: [InitializeAssets] Asset 672/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 673/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 674/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 675/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 676/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 677/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 678/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 679/741: spider_egg
+[INFO] +4.058s: [InitializeAssets] Asset 680/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 681/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 682/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 683/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 684/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 685/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 686/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 687/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 688/741: spider_egg
+[INFO] +4.059s: [InitializeAssets] Asset 689/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 690/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 691/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 692/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 693/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 694/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 695/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 696/741: spider_egg
+[INFO] +4.060s: [InitializeAssets] Asset 697/741: spider_egg
+[INFO] +4.061s: [InitializeAssets] Asset 698/741: spider_egg
+[INFO] +4.061s: [InitializeAssets] Asset 699/741: spider_egg
+[INFO] +4.061s: [InitializeAssets] Asset 700/741: spider_egg
+[INFO] +4.061s: [InitializeAssets] Asset 701/741: spider_egg
+[INFO] +4.061s: [InitializeAssets] Asset 702/741: spider_egg
+[INFO] +4.061s: [InitializeAssets] Asset 703/741: spider_egg
+[INFO] +4.061s: [InitializeAssets] Asset 704/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 705/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 706/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 707/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 708/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 709/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 710/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 711/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 712/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 713/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 714/741: spider_egg
+[INFO] +4.062s: [InitializeAssets] Asset 715/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 716/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 717/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 718/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 719/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 720/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 721/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 722/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 723/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 724/741: spider_egg
+[INFO] +4.063s: [InitializeAssets] Asset 725/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 726/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 727/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 728/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 729/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 730/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 731/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 732/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 733/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 734/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 735/741: spider_egg
+[INFO] +4.064s: [InitializeAssets] Asset 736/741: spider_egg
+[INFO] +4.065s: [InitializeAssets] Asset 737/741: spider_egg
+[INFO] +4.065s: [InitializeAssets] Asset 738/741: spider_egg
+[INFO] +4.065s: [InitializeAssets] Asset 739/741: spider_egg
+[INFO] +4.065s: [InitializeAssets] Asset 740/741: spider_egg
+[INFO] +4.065s: [InitializeAssets] Asset 741/741: spider_egg
+[INFO] +4.065s: [Assets] Constructor: InitializeAssets complete
+[INFO] +4.065s: [Assets] Constructor: Creating OpenGL runtime renderer
+[INFO] +4.656s: [OpenGLRuntimeRenderer] Loaded 48 atmospheric dust frame texture(s) from C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0\resources\dust
+[INFO] +4.656s: [Assets] Constructor: OpenGL runtime renderer created successfully
+[INFO] +4.657s: [Assets] Constructor: Setting up assets (898 total)
+[INFO] +4.657s: [Assets] Constructor: Asset finalization complete
+[INFO] +4.889s: [Assets] Constructor: Initialization complete
+[INFO] +4.889s: [MainApp] Assets object created successfully.
+[INFO] +4.889s: [Init] Assets initialized: 741 assets across 7 rooms in 0.00s
+[INFO] +4.889s: [Assets] Reloading camera settings from manifest
+[INFO] +4.890s: [Assets] Camera settings reloaded and marked dirty for refresh
+[INFO] +4.904s: [MenuUI] Runtime frame limit: 9000
+[INFO] +4.904s: [CodexPlaytest] In-engine input driver enabled for MenuUI runtime.
+[WARN] +4.943s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.046s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.123s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.201s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.270s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.330s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.390s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.453s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +5.850s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +7.948s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +8.441s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +8.897s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +9.039s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +9.998s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +10.254s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +10.471s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +10.731s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +11.474s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +11.743s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +11.852s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +11.943s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +12.109s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +12.304s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +12.335s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +12.499s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +13.099s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +13.232s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +13.452s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +13.585s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +13.939s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +14.024s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +14.153s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +14.378s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +14.608s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +14.786s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +14.871s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +15.007s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +15.092s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +15.287s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +15.530s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +15.773s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +15.928s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +16.077s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +16.226s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +16.374s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +16.472s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +16.734s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +16.889s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +17.609s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +18.237s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +18.442s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +18.672s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +18.913s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +19.229s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +19.708s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +19.909s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +20.127s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +20.389s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +20.690s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +20.927s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +21.303s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +21.551s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +21.619s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +21.694s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +21.852s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +22.002s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +22.070s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +22.203s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +22.369s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +22.747s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +22.827s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +23.056s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +23.191s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +23.252s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +23.512s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +23.741s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +23.991s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
+[WARN] +93.644s: [Assets] Recoverable OpenGL runtime frame deferral detected. Skipping this frame and allowing deferred target creation to complete.
 [Assets] Creating Dev Controls
 [DevControls] ctor start
 [DevControls] ctor complete
 [Assets] Dev Controls constructed, wiring context
-[DevControls] Exit save sequence begin (reason='pause_menu_end_run')
+[DevControls] Exit save sequence begin (reason='sdl_event_quit')
 [DevControls] Exit save sequence complete (batch_saved=true, dirty_remaining=false, cache_rebuild=not-needed)
-[Assets] Exit save sequence complete (reason='pause_menu_end_run')
-[MenuUI] Exit save sequence finished (reason='pause_menu_end_run')
-[MenuUI] End Run -> return to main menu (exit_save=ok)
-[INFO] +70.557s: [MenuUI] Runtime frame limit reached; exiting automation run.
+[Assets] Exit save sequence complete (reason='sdl_event_quit')
+[MenuUI] Exit save sequence finished (reason='sdl_event_quit')
+[WARN] +158.942s: [FreezeWatchdog] start stall_ms=2642.0533 stage=assets_update_begin frame=3642 recovered=0

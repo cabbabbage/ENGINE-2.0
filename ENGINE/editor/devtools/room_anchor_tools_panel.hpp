@@ -74,6 +74,7 @@ public:
     void set_rename_text(const std::string& value);
     std::string rename_text() const;
     void set_detail_values(const DetailValues& values);
+    void set_depth_offset_value(float depth_offset);
     void set_light_editor_mode(bool enabled);
     bool light_editor_mode() const { return light_editor_mode_; }
     void set_light_values(const LightValues& values);

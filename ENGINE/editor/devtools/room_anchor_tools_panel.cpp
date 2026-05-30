@@ -221,7 +221,7 @@ std::string RoomAnchorToolsPanel::rename_text() const {
 
 void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
     if (depth_textbox_ && !depth_textbox_->is_editing()) {
-        depth_textbox_->set_value(format_depth_offset(values.depth_offset));
+        set_depth_offset_value(values.depth_offset);
     }
     if (rotation_slider_) {
         int rotation_degrees = static_cast<int>(std::lround(values.rotation_degrees));
@@ -244,6 +244,12 @@ void RoomAnchorToolsPanel::set_detail_values(const DetailValues& values) {
     }
     if (scaling_method_dropdown_) {
         scaling_method_dropdown_->set_selected(scaling_method_to_dropdown_index(values.scaling_method));
+    }
+}
+
+void RoomAnchorToolsPanel::set_depth_offset_value(float depth_offset) {
+    if (depth_textbox_) {
+        depth_textbox_->set_value(format_depth_offset(depth_offset));
     }
 }
 
@@ -331,6 +337,8 @@ RoomAnchorToolsPanel::DetailValues RoomAnchorToolsPanel::collect_detail_values()
         scaling_method_dropdown_ ? scaling_method_dropdown_->selected() : 0);
     if (!std::isfinite(values.depth_offset)) {
         values.depth_offset = 0.0f;
+    } else {
+        values.depth_offset = static_cast<float>(std::lround(values.depth_offset));
     }
     if (!std::isfinite(values.rotation_degrees)) {
         values.rotation_degrees = 0.0f;

@@ -39,6 +39,13 @@ using json_coercion::read_float_field_like;
 using json_coercion::read_int_field_like;
 using json_coercion::read_string_field_like;
 
+float quantize_anchor_depth_offset_world_units(float value) {
+        if (!std::isfinite(value)) {
+                return 0.0f;
+        }
+        return static_cast<float>(std::lround(value));
+}
+
 std::string read_on_end_value(const nlohmann::json& payload) {
         if (!payload.is_object() || !payload.contains("on_end")) {
                 return "default";
@@ -238,10 +245,8 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node,
 
         anchor.texture_x = node["texture_x"].get<int>();
         anchor.texture_y = node["texture_y"].get<int>();
-        anchor.depth_offset = read_float_field_like(node, "depth_offset", 0.0f);
-        if (!std::isfinite(anchor.depth_offset)) {
-                anchor.depth_offset = 0.0f;
-        }
+        anchor.depth_offset = quantize_anchor_depth_offset_world_units(
+            read_float_field_like(node, "depth_offset", 0.0f));
         anchor.flip_horizontal = read_bool_field_like(node, "flip_horizontal", default_flip_horizontal);
         anchor.flip_vertical = read_bool_field_like(node, "flip_vertical", default_flip_vertical);
         anchor.rotation_degrees = read_float_field_like(node, "rotation_degrees", default_rotation_degrees);

@@ -882,6 +882,31 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.radial_blur_px = 0.0f;
     }
     settings_.radial_blur_px = std::min(settings_.radial_blur_px, 256.0f);
+    if (!std::isfinite(settings_.focus_depth_offset)) { settings_.focus_depth_offset = 0.0f; }
+    if (!std::isfinite(settings_.focus_falloff_acceleration) || settings_.focus_falloff_acceleration < 0.01f) { settings_.focus_falloff_acceleration = 0.01f; }
+    settings_.focus_falloff_acceleration = std::min(settings_.focus_falloff_acceleration, 8.0f);
+    if (!std::isfinite(settings_.near_far_blur_bias)) { settings_.near_far_blur_bias = 0.0f; }
+    settings_.near_far_blur_bias = std::clamp(settings_.near_far_blur_bias, -1.0f, 1.0f);
+    if (!std::isfinite(settings_.swirl_strength)) { settings_.swirl_strength = 0.0f; }
+    settings_.swirl_strength = std::clamp(settings_.swirl_strength, -4.0f, 4.0f);
+    if (!std::isfinite(settings_.swirl_radius_start)) { settings_.swirl_radius_start = 0.18f; }
+    settings_.swirl_radius_start = std::clamp(settings_.swirl_radius_start, 0.0f, 1.0f);
+    if (!std::isfinite(settings_.tangential_blur_stretch)) { settings_.tangential_blur_stretch = 1.0f; }
+    settings_.tangential_blur_stretch = std::clamp(settings_.tangential_blur_stretch, 0.0f, 4.0f);
+    if (!std::isfinite(settings_.anamorphic_strength)) { settings_.anamorphic_strength = 0.0f; }
+    settings_.anamorphic_strength = std::clamp(settings_.anamorphic_strength, 0.0f, 4.0f);
+    if (!std::isfinite(settings_.bokeh_oval_ratio) || settings_.bokeh_oval_ratio < 0.05f) { settings_.bokeh_oval_ratio = 0.05f; }
+    settings_.bokeh_oval_ratio = std::min(settings_.bokeh_oval_ratio, 8.0f);
+    if (!std::isfinite(settings_.bokeh_rotation)) { settings_.bokeh_rotation = 0.0f; }
+    if (!std::isfinite(settings_.field_curvature)) { settings_.field_curvature = 0.0f; }
+    if (!std::isfinite(settings_.edge_softness) || settings_.edge_softness < 0.0f) { settings_.edge_softness = 0.0f; }
+    settings_.edge_softness = std::min(settings_.edge_softness, 4.0f);
+    settings_.alpha_debug_mode = std::clamp(settings_.alpha_debug_mode, 0, 3);
+    settings_.blur_padding_px = std::clamp(settings_.blur_padding_px, 0, 256);
+    settings_.lens_sample_count = std::clamp(settings_.lens_sample_count, 1, 17);
+    if (!std::isfinite(settings_.lens_downsample_scale) || settings_.lens_downsample_scale <= 0.0f) { settings_.lens_downsample_scale = 1.0f; }
+    settings_.lens_downsample_scale = std::clamp(settings_.lens_downsample_scale, 0.20f, 1.0f);
+    settings_.lens_quality_preset = std::clamp(settings_.lens_quality_preset, 0, 3);
     camera_.set_fallback_height(settings_.base_height_px);
     invalidate_camera_cache();
 
@@ -1610,6 +1635,13 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         }
         target = it->get<bool>();
     };
+    auto read_int = [&](const char* key, int& target, int min_value, int max_value) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_number_integer()) {
+            return;
+        }
+        target = std::clamp(it->get<int>(), min_value, max_value);
+    };
     auto read_transition_float = [&](const char* key, float fallback, float min_value, float max_value) {
         auto it = data.find(key);
         if (it == data.end() || !it->is_number()) {
@@ -1642,6 +1674,23 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_bool("light_radius_overlap_culling_enabled", updated.light_radius_overlap_culling_enabled);
     read_float("blur_px", updated.blur_px, 0.0f, 128.0f);
     read_float("radial_blur_px", updated.radial_blur_px, 0.0f, 256.0f);
+    read_float("focus_depth_offset", updated.focus_depth_offset, -512.0f, 512.0f);
+    read_float("focus_falloff_acceleration", updated.focus_falloff_acceleration, 0.01f, 8.0f);
+    read_float("near_far_blur_bias", updated.near_far_blur_bias, -1.0f, 1.0f);
+    read_float("swirl_strength", updated.swirl_strength, -4.0f, 4.0f);
+    read_float("swirl_radius_start", updated.swirl_radius_start, 0.0f, 1.0f);
+    read_float("tangential_blur_stretch", updated.tangential_blur_stretch, 0.0f, 4.0f);
+    read_float("anamorphic_strength", updated.anamorphic_strength, 0.0f, 4.0f);
+    read_float("bokeh_oval_ratio", updated.bokeh_oval_ratio, 0.05f, 8.0f);
+    read_float("bokeh_rotation", updated.bokeh_rotation, -6.2831855f, 6.2831855f);
+    read_float("field_curvature", updated.field_curvature, -8.0f, 8.0f);
+    read_float("edge_softness", updated.edge_softness, 0.0f, 4.0f);
+    read_bool("alpha_clamp_protection", updated.alpha_clamp_protection);
+    read_int("alpha_debug_mode", updated.alpha_debug_mode, 0, 3);
+    read_int("blur_padding_px", updated.blur_padding_px, 0, 256);
+    read_int("lens_sample_count", updated.lens_sample_count, 1, 17);
+    read_float("lens_downsample_scale", updated.lens_downsample_scale, 0.20f, 1.0f);
+    read_int("lens_quality_preset", updated.lens_quality_preset, 0, 3);
     read_bool("depth_of_field_enabled", updated.depth_of_field_enabled);
     set_realism_settings(updated);
 
@@ -1721,6 +1770,23 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["light_radius_overlap_culling_enabled"] = settings_.light_radius_overlap_culling_enabled;
     result["blur_px"] = settings_.blur_px;
     result["radial_blur_px"] = settings_.radial_blur_px;
+    result["focus_depth_offset"] = settings_.focus_depth_offset;
+    result["focus_falloff_acceleration"] = settings_.focus_falloff_acceleration;
+    result["near_far_blur_bias"] = settings_.near_far_blur_bias;
+    result["swirl_strength"] = settings_.swirl_strength;
+    result["swirl_radius_start"] = settings_.swirl_radius_start;
+    result["tangential_blur_stretch"] = settings_.tangential_blur_stretch;
+    result["anamorphic_strength"] = settings_.anamorphic_strength;
+    result["bokeh_oval_ratio"] = settings_.bokeh_oval_ratio;
+    result["bokeh_rotation"] = settings_.bokeh_rotation;
+    result["field_curvature"] = settings_.field_curvature;
+    result["edge_softness"] = settings_.edge_softness;
+    result["alpha_clamp_protection"] = settings_.alpha_clamp_protection;
+    result["alpha_debug_mode"] = settings_.alpha_debug_mode;
+    result["blur_padding_px"] = settings_.blur_padding_px;
+    result["lens_sample_count"] = settings_.lens_sample_count;
+    result["lens_downsample_scale"] = settings_.lens_downsample_scale;
+    result["lens_quality_preset"] = settings_.lens_quality_preset;
     result["depth_of_field_enabled"] = settings_.depth_of_field_enabled;
     result["transition_damping"] = transition_settings_.transition_damping;
     result["max_camera_velocity"] = transition_settings_.max_camera_velocity;

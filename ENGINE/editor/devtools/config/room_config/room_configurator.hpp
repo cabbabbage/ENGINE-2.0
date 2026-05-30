@@ -146,7 +146,7 @@ private:
     void forget_collapsible(const DockableCollapsible* panel);
     bool base_panel_expanded(const std::string& key) const;
     void set_base_panel_expanded(const std::string& key, bool expanded);
-    void focus_panel(DockableCollapsible* panel);
+    void focus_panel(DockableCollapsible* panel, bool expand_on_focus = true);
     void clear_panel_focus();
     void apply_panel_focus_states();
     DockableCollapsible* panel_at_point(SDL_Point p) const;

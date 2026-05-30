@@ -1345,9 +1345,17 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
             if (panel) panel->update(input, screen_w, screen_h);
         }
     });
+    container.set_cancel_function([this]() {
+        for (auto* panel : ordered_base_panels_) {
+            if (panel) {
+                panel->cancel_child_interactions();
+            }
+        }
+        focused_panel_ = nullptr;
+    });
     container.set_blocks_editor_interactions(blocks_editor_interactions_);
     container.set_scrollbar_visible(true);
-    container.set_content_clip_enabled(false);
+    container.set_content_clip_enabled(true);
     container.set_header_visible(show_header_);
     container.set_header_visibility_controller(header_visibility_controller_);
     if (!has_bounds_override_) {
@@ -1361,6 +1369,7 @@ void RoomConfigurator::clear_container_callbacks(SlidingWindowContainer& contain
     container.set_layout_function({});
     container.set_render_function({});
     container.set_event_function({});
+    container.set_cancel_function({});
     container.set_update_function({});
     container.set_header_visibility_controller({});
     container.set_blocks_editor_interactions(false);
@@ -1649,7 +1658,7 @@ void RoomConfigurator::apply_panel_focus_states() {
     }
 }
 
-void RoomConfigurator::focus_panel(DockableCollapsible* panel) {
+void RoomConfigurator::focus_panel(DockableCollapsible* panel, bool expand_on_focus) {
     auto is_active = [this](DockableCollapsible* candidate) -> bool {
         if (!candidate) {
             return false;
@@ -1668,7 +1677,7 @@ void RoomConfigurator::focus_panel(DockableCollapsible* panel) {
     apply_panel_focus_states();
     if (focused_panel_) {
         focused_panel_->force_pointer_ready();
-        if (!focused_panel_->is_expanded()) {
+        if (expand_on_focus && !focused_panel_->is_expanded()) {
             focused_panel_->set_expanded(true);
         }
     }
@@ -1711,7 +1720,7 @@ bool RoomConfigurator::handle_panel_focus_event(const SDL_Event& e) {
         return false;
     }
     if (target != focused_panel_) {
-        focus_panel(target);
+        focus_panel(target, false);
     }
     // Do not consume the focus click; forward it to the panel so controls respond
     // on first click instead of requiring a second click.

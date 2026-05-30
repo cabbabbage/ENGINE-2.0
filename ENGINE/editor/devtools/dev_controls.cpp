@@ -3589,7 +3589,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
     const bool hide_headers_pre =
-        modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre ||
+        modal_hide_pre || layers_panel_open_pre ||
         asset_editor_tab_active || shift_block_headers_footers_;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = DockManager::instance().computeUsableRect(
@@ -3615,7 +3615,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     modal_headers_hidden_ = modal_hide;
     const bool hide_headers =
-        modal_hide || sliding_headers_hidden_ || layers_panel_open ||
+        modal_hide || layers_panel_open ||
         asset_editor_tab_active || shift_block_headers_footers_;
     other_settings_.set_enabled(enabled_);
     other_settings_.set_header_suppressed(hide_headers);
@@ -3931,7 +3931,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
 
-    const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open ||
+    const bool hide_headers = modal_headers_hidden_ || layers_panel_open ||
                               asset_editor_tab_active;
     other_settings_.set_header_suppressed(hide_headers);
 
@@ -4835,7 +4835,7 @@ void DevControls::apply_header_suppression() {
         const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
         const bool header_block = modal_hide || shift_block_headers_footers_;
         map_mode_ui_->set_headers_suppressed(header_block);
-        map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
+        map_mode_ui_->set_dev_sliding_headers_hidden(false);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
             const bool footer_enabled = !shift_block_headers_footers_;
             footer->set_visible(footer_enabled);
@@ -4866,7 +4866,7 @@ void DevControls::update_header_and_footer_bounds() {
     const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || shift_block_headers_footers_;
+    const bool hide_headers = modal_hide || layers_panel_open || shift_block_headers_footers_;
     if (hide_headers) {
         last_header_rect_ = SDL_Rect{0, 0, 0, 0};
     } else {

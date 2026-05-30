@@ -25293,7 +25293,7 @@ void RoomEditor::ensure_spawn_group_config_ui() {
         spawn_group_container_->set_header_visible(true);
         spawn_group_container_->set_close_button_enabled(true);
         spawn_group_container_->set_scrollbar_visible(true);
-        spawn_group_container_->set_content_clip_enabled(false);
+        spawn_group_container_->set_content_clip_enabled(true);
         spawn_group_container_->set_blocks_editor_interactions(false);
         spawn_group_container_->set_panel_bounds_override(room_config_bounds_);
         spawn_group_container_->set_on_close([this]() {
@@ -25323,6 +25323,11 @@ void RoomEditor::ensure_spawn_group_config_ui() {
         spawn_group_container_->set_render_function([this](SDL_Renderer* renderer) {
             if (spawn_group_panel_ && spawn_group_panel_->is_visible()) {
                 spawn_group_panel_->render_embedded(renderer, spawn_group_panel_embedded_bounds_, screen_w_, screen_h_);
+            }
+        });
+        spawn_group_container_->set_cancel_function([this]() {
+            if (spawn_group_panel_) {
+                spawn_group_panel_->cancel_child_interactions();
             }
         });
         spawn_group_container_->set_event_function([this](const SDL_Event& e) {
@@ -25361,14 +25366,18 @@ void RoomEditor::ensure_spawn_group_config_ui() {
 void RoomEditor::update_room_config_bounds() {
     constexpr int kPanelWidth = 420;
     constexpr int kMargin = 12;
-    const int footer_h = (shared_footer_bar_ && shared_footer_bar_->visible()) ? shared_footer_bar_->rect().h : 0;
-    const int usable_h = std::max(240, screen_h_ - footer_h - (kMargin * 2));
+    SDL_Rect usable = DockManager::instance().usableRect();
+    if (usable.w <= 0 || usable.h <= 0) {
+        const int footer_h = (shared_footer_bar_ && shared_footer_bar_->visible()) ? shared_footer_bar_->rect().h : 0;
+        usable = SDL_Rect{kMargin, kMargin, std::max(0, screen_w_ - (kMargin * 2)),
+                          std::max(240, screen_h_ - footer_h - (kMargin * 2))};
+    }
     const int panel_w = std::min(std::max(320, kPanelWidth), std::max(320, screen_w_ - (kMargin * 2)));
     room_config_bounds_ = SDL_Rect{
         std::max(kMargin, screen_w_ - panel_w - kMargin),
-        kMargin,
+        usable.y,
         panel_w,
-        usable_h
+        std::max(0, usable.h)
     };
 }
 

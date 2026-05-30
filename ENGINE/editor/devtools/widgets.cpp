@@ -1299,6 +1299,26 @@ void DMSlider::set_tooltip_state(DMWidgetTooltipState* state) {
     }
 }
 
+void DMSlider::cancel_interaction() {
+    if (edit_box_) {
+        edit_box_->stop_editing();
+        edit_box_.reset();
+    }
+    const bool was_active = focused_ || dragging_;
+    dragging_ = false;
+    hovered_ = false;
+    knob_hovered_ = false;
+    focused_ = false;
+    set_slider_scroll_capture(this, false);
+    if (was_active) {
+        if (defer_commit_until_unfocus_) {
+            commit_pending_value();
+        } else {
+            notify_value_committed(value_);
+        }
+    }
+}
+
 void DMSlider::set_on_value_changed(std::function<void(int)> callback) {
     value_changed_callback_ = std::move(callback);
     last_notified_value_ = display_value();
@@ -1913,6 +1933,28 @@ void DMRangeSlider::set_tooltip_state(DMWidgetTooltipState* state) {
     tooltip_state_ = state;
     if (tooltip_state_) {
         DMWidgetTooltipResetHover(*tooltip_state_);
+    }
+}
+
+void DMRangeSlider::cancel_interaction() {
+    if (edit_min_) {
+        edit_min_->stop_editing();
+        edit_min_.reset();
+    }
+    if (edit_max_) {
+        edit_max_->stop_editing();
+        edit_max_.reset();
+    }
+    const bool was_active = focused_ || dragging_min_ || dragging_max_;
+    dragging_min_ = false;
+    dragging_max_ = false;
+    focused_ = false;
+    hovered_ = false;
+    min_hovered_ = false;
+    max_hovered_ = false;
+    set_slider_scroll_capture(this, false);
+    if (was_active && defer_commit_until_unfocus_) {
+        commit_pending_values();
     }
 }
 
@@ -3700,6 +3742,25 @@ DMDropdown::~DMDropdown() {
 DMDropdown* DMDropdown::active_ = nullptr;
 
 DMDropdown* DMDropdown::active_dropdown() { return active_; }
+
+void DMDropdown::cancel_active_dropdown(bool commit_pending) {
+    if (active_) {
+        active_->cancel_interaction(commit_pending);
+    }
+}
+
+void DMDropdown::cancel_interaction(bool commit_pending) {
+    if (focused_ && active_ == this && commit_pending) {
+        commit_pending_selection();
+    }
+    focused_ = false;
+    has_pending_index_ = false;
+    hovered_ = false;
+    hovered_option_index_ = -1;
+    if (active_ == this) {
+        active_ = nullptr;
+    }
+}
 
 struct DMDropdown::OptionEntry {
     int index = 0;

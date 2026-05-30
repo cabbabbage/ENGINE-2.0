@@ -1,6 +1,7 @@
 #include "rendering/render/dof_blur_chain.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <vector>

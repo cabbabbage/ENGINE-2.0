@@ -176,9 +176,233 @@ double env_double_clamped_renderer(const char* name, double default_value, doubl
     return std::clamp(parsed, min_value, max_value);
 }
 
+struct FinalLensPassSettings {
+    float barrel_distortion = 0.035f;
+    float distortion_zoom_compensation = 0.965f;
+    float vignette_strength = 0.26f;
+    float vignette_radius = 0.58f;
+    float vignette_softness = 0.42f;
+    float vignette_depth_influence = 0.0f;
+    float chromatic_aberration = 0.0f;
+    float chromatic_edge_start = 0.62f;
+    float chromatic_depth_influence = 0.0f;
+    float edge_softness = 0.0f;
+    float bloom_strength = 0.0f;
+    float bloom_threshold = 1.0f;
+    float bloom_radius = 0.0f;
+    float halation_strength = 0.0f;
+};
+
+FinalLensPassSettings build_final_lens_pass_settings(const WarpedScreenGrid::RealismSettings& camera_settings) {
+    FinalLensPassSettings settings{};
+    settings.edge_softness = std::clamp(camera_settings.edge_softness * 0.15f, 0.0f, 1.0f);
+    settings.barrel_distortion = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_BARREL_DISTORTION", settings.barrel_distortion, -0.35, 0.35));
+    settings.distortion_zoom_compensation = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_ZOOM_COMPENSATION", settings.distortion_zoom_compensation, 0.70, 1.15));
+    settings.vignette_strength = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_STRENGTH", settings.vignette_strength, 0.0, 0.95));
+    settings.vignette_radius = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_RADIUS", settings.vignette_radius, 0.0, 1.5));
+    settings.vignette_softness = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_SOFTNESS", settings.vignette_softness, 0.01, 1.5));
+    settings.chromatic_aberration = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_CHROMATIC_ABERRATION", settings.chromatic_aberration, 0.0, 0.05));
+    settings.chromatic_edge_start = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_CHROMATIC_EDGE_START", settings.chromatic_edge_start, 0.0, 1.0));
+    settings.edge_softness = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_EDGE_SOFTNESS", settings.edge_softness, 0.0, 1.0));
+    return settings;
+}
+
+bool final_lens_pass_has_visible_effect(const FinalLensPassSettings& settings) {
+    return std::abs(settings.barrel_distortion) > 1.0e-5f ||
+           settings.vignette_strength > 1.0e-5f ||
+           settings.chromatic_aberration > 1.0e-5f ||
+           settings.edge_softness > 1.0e-5f ||
+           settings.bloom_strength > 1.0e-5f ||
+           settings.halation_strength > 1.0e-5f;
+}
+
+float smoothstep_range(float edge0, float edge1, float value) {
+    const float denom = edge1 - edge0;
+    if (std::abs(denom) <= 1.0e-6f) {
+        return value >= edge1 ? 1.0f : 0.0f;
+    }
+    const float t = std::clamp((value - edge0) / denom, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+bool copy_fullscreen_texture(SDL_Renderer* renderer,
+                             SDL_Texture* source,
+                             SDL_Texture* destination,
+                             int width,
+                             int height,
+                             std::string& out_error) {
+    if (!render_diagnostics::set_render_target(renderer, destination)) {
+        out_error = "Failed to bind final lens copy target: " + safe_string(SDL_GetError());
+        return false;
+    }
+    SDL_SetRenderViewport(renderer, nullptr);
+    SDL_SetRenderClipRect(renderer, nullptr);
+    SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+
+    SDL_BlendMode previous_blend = SDL_BLENDMODE_BLEND;
+    Uint8 previous_alpha = 255;
+    Uint8 previous_r = 255;
+    Uint8 previous_g = 255;
+    Uint8 previous_b = 255;
+    SDL_GetTextureBlendMode(source, &previous_blend);
+    SDL_GetTextureAlphaMod(source, &previous_alpha);
+    SDL_GetTextureColorMod(source, &previous_r, &previous_g, &previous_b);
+
+    SDL_SetTextureBlendMode(source, SDL_BLENDMODE_NONE);
+    SDL_SetTextureAlphaMod(source, 255);
+    SDL_SetTextureColorMod(source, 255, 255, 255);
+    const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+    const bool ok = render_diagnostics::render_texture(renderer, source, nullptr, &full_rect);
+
+    SDL_SetTextureBlendMode(source, previous_blend);
+    SDL_SetTextureAlphaMod(source, previous_alpha);
+    SDL_SetTextureColorMod(source, previous_r, previous_g, previous_b);
+
+    if (!ok) {
+        out_error = "Failed to copy final lens source: " + safe_string(SDL_GetError());
+        return false;
+    }
+    out_error.clear();
+    return true;
+}
+
+bool apply_final_lens_pass(SDL_Renderer* renderer,
+                           SDL_Texture* source,
+                           SDL_Texture* destination,
+                           int width,
+                           int height,
+                           SDL_FPoint optical_center_px,
+                           const FinalLensPassSettings& settings,
+                           bool bypass,
+                           std::string& out_error) {
+    if (!renderer || !source || !destination || width <= 0 || height <= 0) {
+        out_error = "Invalid final lens pass input.";
+        return false;
+    }
+
+    if (bypass || !final_lens_pass_has_visible_effect(settings)) {
+        return copy_fullscreen_texture(renderer, source, destination, width, height, out_error);
+    }
+
+    if (!render_diagnostics::set_render_target(renderer, destination)) {
+        out_error = "Failed to bind final lens target: " + safe_string(SDL_GetError());
+        return false;
+    }
+    SDL_SetRenderViewport(renderer, nullptr);
+    SDL_SetRenderClipRect(renderer, nullptr);
+    SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+
+    SDL_BlendMode previous_blend = SDL_BLENDMODE_BLEND;
+    Uint8 previous_alpha = 255;
+    Uint8 previous_r = 255;
+    Uint8 previous_g = 255;
+    Uint8 previous_b = 255;
+    SDL_GetTextureBlendMode(source, &previous_blend);
+    SDL_GetTextureAlphaMod(source, &previous_alpha);
+    SDL_GetTextureColorMod(source, &previous_r, &previous_g, &previous_b);
+    SDL_SetTextureBlendMode(source, SDL_BLENDMODE_NONE);
+    SDL_SetTextureAlphaMod(source, 255);
+    SDL_SetTextureColorMod(source, 255, 255, 255);
+
+    constexpr int kGridX = 32;
+    constexpr int kGridY = 18;
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
+    vertices.reserve((kGridX + 1) * (kGridY + 1));
+    indices.reserve(kGridX * kGridY * 6);
+
+    const float inv_w = 1.0f / static_cast<float>(std::max(1, width));
+    const float inv_h = 1.0f / static_cast<float>(std::max(1, height));
+    const SDL_FPoint optical_uv{
+        std::clamp(optical_center_px.x * inv_w, 0.0f, 1.0f),
+        std::clamp(optical_center_px.y * inv_h, 0.0f, 1.0f)};
+    const float aspect = static_cast<float>(width) / static_cast<float>(std::max(1, height));
+    const float zoom_compensation = std::clamp(settings.distortion_zoom_compensation, 0.70f, 1.15f);
+
+    for (int y = 0; y <= kGridY; ++y) {
+        const float v = static_cast<float>(y) / static_cast<float>(kGridY);
+        for (int x = 0; x <= kGridX; ++x) {
+            const float u = static_cast<float>(x) / static_cast<float>(kGridX);
+            const float centered_x = (u - optical_uv.x) * aspect;
+            const float centered_y = v - optical_uv.y;
+            const float r2 = centered_x * centered_x + centered_y * centered_y;
+            const float distortion = 1.0f + settings.barrel_distortion * r2;
+            const float sample_x = optical_uv.x + ((centered_x * distortion * zoom_compensation) / aspect);
+            const float sample_y = optical_uv.y + centered_y * distortion * zoom_compensation;
+
+            const float radius = std::sqrt(r2);
+            const float vignette = smoothstep_range(settings.vignette_radius,
+                                                    settings.vignette_radius + settings.vignette_softness,
+                                                    radius);
+            const float vintage_falloff = 1.0f - settings.vignette_strength * vignette * (0.85f + 0.15f * radius);
+            const Uint8 color = static_cast<Uint8>(std::clamp(
+                static_cast<int>(std::lround(std::clamp(vintage_falloff, 0.0f, 1.0f) * 255.0f)),
+                0,
+                255));
+            SDL_Vertex vertex{};
+            vertex.position = SDL_FPoint{u * static_cast<float>(width), v * static_cast<float>(height)};
+            vertex.color = SDL_FColor{
+                static_cast<float>(color) / 255.0f,
+                static_cast<float>(color) / 255.0f,
+                static_cast<float>(color) / 255.0f,
+                1.0f};
+            vertex.tex_coord = SDL_FPoint{
+                std::clamp(sample_x, 0.001f, 0.999f),
+                std::clamp(sample_y, 0.001f, 0.999f)};
+            vertices.push_back(vertex);
+        }
+    }
+
+    for (int y = 0; y < kGridY; ++y) {
+        for (int x = 0; x < kGridX; ++x) {
+            const int i0 = y * (kGridX + 1) + x;
+            const int i1 = i0 + 1;
+            const int i2 = i0 + (kGridX + 1);
+            const int i3 = i2 + 1;
+            indices.push_back(i0);
+            indices.push_back(i2);
+            indices.push_back(i1);
+            indices.push_back(i1);
+            indices.push_back(i2);
+            indices.push_back(i3);
+        }
+    }
+
+    const bool ok = SDL_RenderGeometry(renderer,
+                                       source,
+                                       vertices.data(),
+                                       static_cast<int>(vertices.size()),
+                                       indices.data(),
+                                       static_cast<int>(indices.size()));
+
+    SDL_SetTextureBlendMode(source, previous_blend);
+    SDL_SetTextureAlphaMod(source, previous_alpha);
+    SDL_SetTextureColorMod(source, previous_r, previous_g, previous_b);
+
+    if (!ok) {
+        out_error = "Failed to render final lens pass: " + safe_string(SDL_GetError());
+        return false;
+    }
+
+    out_error.clear();
+    return true;
+}
+
 std::uint32_t creation_budget_count_per_frame() {
     static const std::uint32_t count = static_cast<std::uint32_t>(
-        env_int_clamped_renderer("VIBBLE_RENDER_MAX_CREATIONS_PER_FRAME", 3, 1, 1024));
+        env_int_clamped_renderer("VIBBLE_RENDER_MAX_CREATIONS_PER_FRAME", 4, 1, 1024));
     return count;
 }
 
@@ -1140,7 +1364,7 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(floor_target_);
     render_diagnostics::destroy_texture(xy_sprite_target_);
     render_diagnostics::destroy_texture(composite_target_);
-    render_diagnostics::destroy_texture(finale_effects_target_);
+    render_diagnostics::destroy_texture(lens_post_target_);
 
     destroy_depth_layer_targets();
     dof_blur_chain_.destroy_targets();
@@ -1197,6 +1421,7 @@ bool OpenGLRuntimeRenderer::process_creation_queue(const GpuSceneFrameData& fram
             if (job.label == "floor") target = &floor_target_;
             else if (job.label == "xy_sprite") target = &xy_sprite_target_;
             else if (job.label == "composite") target = &composite_target_;
+            else if (job.label == "lens_post") target = &lens_post_target_;
             if (target && !*target) {
                 *target = create_render_target(renderer_, static_cast<int>(frame_data.target_width),
                                                static_cast<int>(frame_data.target_height), job.label, out_error);
@@ -1895,10 +2120,11 @@ bool OpenGLRuntimeRenderer::ensure_render_targets(const GpuSceneFrameData& frame
     if (!floor_target_) queue_missing_main("floor");
     if (!xy_sprite_target_) queue_missing_main("xy_sprite");
     if (!composite_target_) queue_missing_main("composite");
+    if (!lens_post_target_) queue_missing_main("lens_post");
     if (!process_creation_queue(frame_data, out_error)) {
         return false;
     }
-    if (!floor_target_ || !xy_sprite_target_ || !composite_target_) {
+    if (!floor_target_ || !xy_sprite_target_ || !composite_target_ || !lens_post_target_) {
         out_error = "Render target creation deferred by per-frame budget.";
         return false;
     }
@@ -2567,9 +2793,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             }
             render_diagnostics::set_blur_pass_count(resolved_dof_result.blur_pass_count);
             if (used_flattened_xy_dof_layer) {
-                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_flattened_xy_layer->ui_overlay");
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_flattened_xy_layer->final_lens->ui_overlay");
             } else {
-                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->ui_overlay");
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->final_lens->ui_overlay");
             }
             dof_composited = true;
         } else {
@@ -2636,7 +2862,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             return false;
         }
         xy_pass_ms += elapsed_ms(xy_begin, SDL_GetPerformanceCounter());
-        render_diagnostics::set_composite_layers_submitted("direct_scene->ui_overlay");
+        render_diagnostics::set_composite_layers_submitted("direct_scene->final_lens->ui_overlay");
     }
 
     if (draw_anchor_debug) {
@@ -2648,8 +2874,33 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                           assets_->is_dev_mode());
     }
 
+    const SDL_Point final_screen_center = assets_->getView().get_screen_center();
+    const SDL_FPoint final_optical_center{
+        std::clamp(static_cast<float>(final_screen_center.x), 0.0f, static_cast<float>(frame_to_render->target_width)),
+        std::clamp(static_cast<float>(final_screen_center.y), 0.0f, static_cast<float>(frame_to_render->target_height))};
+    const FinalLensPassSettings final_lens_settings = build_final_lens_pass_settings(camera_settings);
+    const bool bypass_final_lens_for_debug = draw_anchor_debug || draw_movement_debug || draw_impass_floor_debug;
+    const std::uint64_t final_lens_begin = SDL_GetPerformanceCounter();
+    if (!apply_final_lens_pass(renderer_,
+                               composite_target_,
+                               lens_post_target_,
+                               static_cast<int>(frame_to_render->target_width),
+                               static_cast<int>(frame_to_render->target_height),
+                               final_optical_center,
+                               final_lens_settings,
+                               bypass_final_lens_for_debug,
+                               out_error)) {
+        render_diagnostics::end_frame();
+        return false;
+    }
+    composite_pass_ms += elapsed_ms(final_lens_begin, SDL_GetPerformanceCounter());
+
     if (frame_to_render->ui_overlay_texture) {
         const std::uint64_t ui_begin = SDL_GetPerformanceCounter();
+        if (!bind_target_no_clear(lens_post_target_)) {
+            render_diagnostics::end_frame();
+            return false;
+        }
         if (!render_diagnostics::render_texture(renderer_, frame_to_render->ui_overlay_texture, nullptr, &full_rect)) {
             out_error = "Failed to composite UI overlay texture: " + safe_string(SDL_GetError());
             render_diagnostics::end_frame();
@@ -2663,8 +2914,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         render_diagnostics::end_frame();
         return false;
     }
-    if (!render_diagnostics::render_texture(renderer_, composite_target_, nullptr, &full_rect)) {
-        out_error = "Failed to present composite target: " + safe_string(SDL_GetError());
+    if (!render_diagnostics::render_texture(renderer_, lens_post_target_, nullptr, &full_rect)) {
+        out_error = "Failed to present final lens target: " + safe_string(SDL_GetError());
         render_diagnostics::end_frame();
         return false;
     }

@@ -2,6 +2,15 @@
   "build_tool_version": 2,
   "manifest_version": 2,
   "variants": {
+    "cinematic_lens_final": {
+      "spirv": {
+        "entrypoint": "main",
+        "file_size_bytes": 8420,
+        "hash_fnv1a64": "0xa86ccd0994df1446",
+        "path": "spirv/cinematic_lens_final.spv",
+        "stage": "fragment"
+      }
+    },
     "fullscreen_vertex": {
       "spirv": {
         "entrypoint": "main",

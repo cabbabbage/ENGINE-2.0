@@ -13,6 +13,7 @@ REQUIRED_VARIANTS = [
     "fullscreen_vertex",
     "sprite_textured",
     "sprite_batched",
+    "cinematic_lens_final",
 ]
 
 STAGE_HINTS = {
@@ -20,6 +21,7 @@ STAGE_HINTS = {
     "sprite_batch_vertex": "vertex",
     "sprite_textured": "fragment",
     "sprite_batched": "fragment",
+    "cinematic_lens_final": "fragment",
 }
 
 VALID_STAGES = {"auto", "vertex", "fragment", "compute"}

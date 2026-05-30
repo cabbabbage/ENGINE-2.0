@@ -194,10 +194,6 @@ private:
     std::unique_ptr<WeightedRangeWidget> height_range_control_;
     int width_slider_max_range_ = 0;
     int height_slider_max_range_ = 0;
-    std::unique_ptr<DMSlider> edge_slider_;
-    std::unique_ptr<SliderWidget> edge_widget_;
-    std::unique_ptr<DMWeightedRangeWidget> curvy_range_widget_;
-    std::unique_ptr<WeightedRangeWidget> curvy_widget_;
     std::unique_ptr<DMWeightedRangeWidget> coarseness_range_widget_;
     std::unique_ptr<WeightedRangeWidget> coarseness_widget_;
     std::unique_ptr<Widget> trail_connection_sector_widget_;

@@ -4617,6 +4617,28 @@ void DevControls::configure_header_button_sets() {
 };
     room_buttons.push_back(std::move(room_config_btn));
 
+    MapModeUI::HeaderButtonConfig edge_details_btn;
+    edge_details_btn.id = "edge_details";
+    edge_details_btn.label = "Edge Details";
+    edge_details_btn.active = room_editor_ && room_editor_->is_edge_detail_candidates_open();
+    edge_details_btn.group = FooterButtonGroup::Panels;
+    edge_details_btn.style_override = &DMStyles::ListButton();
+    edge_details_btn.active_style_override = &DMStyles::AccentButton();
+    edge_details_btn.on_toggle = [this](bool active) {
+        if (!room_editor_) {
+            sync_header_button_states();
+            return;
+        }
+        if (active) {
+            close_misc_options_panel();
+            room_editor_->open_edge_detail_candidates();
+        } else {
+            room_editor_->close_edge_detail_candidates();
+        }
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(edge_details_btn));
+
     MapModeUI::HeaderButtonConfig create_room_btn;
     create_room_btn.id = "create_room";
     create_room_btn.label = "Create Room";
@@ -4734,7 +4756,9 @@ void DevControls::sync_header_button_states() {
         return;
     }
     const bool room_config_open = room_editor_ && room_editor_->is_room_config_open();
+    const bool edge_details_open = room_editor_ && room_editor_->is_edge_detail_candidates_open();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "room_config", room_config_open);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "edge_details", edge_details_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "misc_options", is_misc_options_panel_open());
     const bool library_open = room_editor_ && room_editor_->is_asset_library_open();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "asset_library", library_open);
@@ -4763,6 +4787,7 @@ void DevControls::sync_header_button_states() {
             camera_open ||
             layers_open ||
             boundary_open ||
+            edge_details_open ||
             misc_options_panel_open_ ||
             (regenerate_popup_ && regenerate_popup_->visible()) ||
             map_ui_panels_open ||
@@ -4775,6 +4800,7 @@ void DevControls::sync_header_button_states() {
             (regenerate_popup_ && regenerate_popup_->visible()) ||
             false ||
             boundary_open ||
+            edge_details_open ||
             camera_open ||
             misc_options_panel_open_ ||
             map_ui_panels_open;
@@ -4795,6 +4821,7 @@ void DevControls::close_all_floating_panels() {
     if (room_editor_) {
         room_editor_->close_asset_library();
         room_editor_->close_asset_info_editor();
+        room_editor_->close_edge_detail_candidates();
     }
     if (camera_panel_) {
         camera_panel_->close();

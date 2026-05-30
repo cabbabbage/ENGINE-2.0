@@ -24,6 +24,7 @@
 #include "devtools/animation_runtime_refresh.hpp"
 #include "devtools/frame_editor_resource_service.hpp"
 #include "devtools/room_box_payload_utils.hpp"
+#include "devtools/map_assets_modals.hpp"
 #include "devtools/room_anchor_mode_utils.hpp"
 #include "devtools/room_anchor_tools_panel.hpp"
 #include "devtools/room_box_tools_panel.hpp"
@@ -2953,6 +2954,9 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
     }
     configure_shared_panel();
     refresh_room_config_visibility();
+    if (edge_detail_candidates_modal_) {
+        edge_detail_candidates_modal_->set_screen_dimensions(screen_w_, screen_h_);
+    }
 
     if (spawn_group_panel_) {
         spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -3358,6 +3362,9 @@ void RoomEditor::update_ui(const Input& input) {
         room_cfg_ui_->update(input, screen_w_, screen_h_);
         update_spawn_group_config_panel_layout();
     }
+    if (edge_detail_candidates_modal_ && edge_detail_candidates_modal_->visible()) {
+        edge_detail_candidates_modal_->update(input);
+    }
 
     if (spawn_group_panel_) {
         spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
@@ -3640,6 +3647,22 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         return result;
 };
 
+    auto route_edge_detail_candidates = [&]() -> RouteResult {
+        RouteResult result;
+        if (!edge_detail_candidates_modal_ || !edge_detail_candidates_modal_->visible()) {
+            return result;
+        }
+        if (edge_detail_candidates_modal_->handle_event(event)) {
+            result.handled = true;
+            result.pointer_blocked = true;
+            return result;
+        }
+        if (pointer_based && edge_detail_candidates_modal_->is_point_inside(mx, my)) {
+            result.pointer_blocked = true;
+        }
+        return result;
+    };
+
     auto route_spawn_groups = [&]() -> RouteResult {
         RouteResult result;
         if (!spawn_group_panel_ || !spawn_group_panel_->is_visible()) {
@@ -3876,6 +3899,9 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     if (apply_result(route_room_config(), pointer_blocked)) {
         return true;
     }
+    if (apply_result(route_edge_detail_candidates(), pointer_blocked)) {
+        return true;
+    }
     if (apply_result(route_spawn_groups(), pointer_blocked)) {
         return true;
     }
@@ -3936,6 +3962,10 @@ bool RoomEditor::is_room_panel_blocking_point(int x, int y) const {
     if (room_cfg_ui_ && room_cfg_ui_->visible() && room_cfg_ui_->is_point_inside(x, y)) {
         return true;
     }
+    if (edge_detail_candidates_modal_ && edge_detail_candidates_modal_->visible() &&
+        edge_detail_candidates_modal_->is_point_inside(x, y)) {
+        return true;
+    }
     if (spawn_group_panel_ && spawn_group_panel_->is_visible() && spawn_group_container_ && spawn_group_container_->is_point_inside(x, y)) {
         return true;
     }
@@ -3974,6 +4004,10 @@ bool RoomEditor::is_room_ui_blocking_point(int x, int y) const {
     }
 
     if (room_cfg_ui_ && room_cfg_ui_->visible() && room_cfg_ui_->is_point_inside(x, y)) {
+        return true;
+    }
+    if (edge_detail_candidates_modal_ && edge_detail_candidates_modal_->visible() &&
+        edge_detail_candidates_modal_->is_point_inside(x, y)) {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
@@ -6046,6 +6080,9 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
     if (room_cfg_ui_ && room_cfg_ui_->visible()) {
         room_cfg_ui_->render(renderer);
     }
+    if (edge_detail_candidates_modal_ && edge_detail_candidates_modal_->visible()) {
+        edge_detail_candidates_modal_->render(renderer);
+    }
     if (spawn_group_panel_ && spawn_group_panel_->is_visible() && spawn_group_container_) {
         spawn_group_container_->render(renderer, screen_w_, screen_h_);
     }
@@ -6286,6 +6323,9 @@ void RoomEditor::set_manifest_store(devmode::core::ManifestStore* store) {
     }
     if (room_cfg_ui_) {
         room_cfg_ui_->set_manifest_store(manifest_store_);
+    }
+    if (edge_detail_candidates_modal_) {
+        edge_detail_candidates_modal_->set_manifest_store(manifest_store_);
     }
     if (anchor_candidate_editor_.pie_widget) {
         anchor_candidate_editor_.pie_widget->set_manifest_store(manifest_store_);
@@ -6638,6 +6678,45 @@ void RoomEditor::close_room_config() {
 
 bool RoomEditor::is_room_config_open() const {
     return room_cfg_ui_ && room_cfg_ui_->visible();
+}
+
+void RoomEditor::toggle_edge_detail_candidates() {
+    if (is_edge_detail_candidates_open()) {
+        close_edge_detail_candidates();
+    } else {
+        open_edge_detail_candidates();
+    }
+}
+
+void RoomEditor::open_edge_detail_candidates() {
+    if (!assets_) {
+        return;
+    }
+    if (!edge_detail_candidates_modal_) {
+        edge_detail_candidates_modal_ = std::make_unique<EdgeDetailCandidatesModal>();
+    }
+    edge_detail_candidates_modal_->set_screen_dimensions(screen_w_, screen_h_);
+    edge_detail_candidates_modal_->set_manifest_store(manifest_store_);
+    edge_detail_candidates_modal_->set_assets(assets_);
+    edge_detail_candidates_modal_->open(assets_->map_info_json(), [this]() {
+        if (assets_) {
+            assets_->mark_map_data_dirty();
+        }
+        if (mark_map_dirty_callback_) {
+            mark_map_dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        }
+        return true;
+    });
+}
+
+void RoomEditor::close_edge_detail_candidates() {
+    if (edge_detail_candidates_modal_) {
+        edge_detail_candidates_modal_->close();
+    }
+}
+
+bool RoomEditor::is_edge_detail_candidates_open() const {
+    return edge_detail_candidates_modal_ && edge_detail_candidates_modal_->visible();
 }
 
 bool RoomEditor::is_camera_settings_open() const {

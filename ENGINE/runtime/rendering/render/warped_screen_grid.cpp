@@ -901,7 +901,7 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     if (!std::isfinite(settings_.field_curvature)) { settings_.field_curvature = 0.0f; }
     if (!std::isfinite(settings_.edge_softness) || settings_.edge_softness < 0.0f) { settings_.edge_softness = 0.0f; }
     settings_.edge_softness = std::min(settings_.edge_softness, 4.0f);
-    settings_.alpha_debug_mode = std::clamp(settings_.alpha_debug_mode, 0, 3);
+    settings_.alpha_debug_mode = std::clamp(settings_.alpha_debug_mode, 0, 5);
     settings_.blur_padding_px = std::clamp(settings_.blur_padding_px, 0, 256);
     settings_.lens_sample_count = std::clamp(settings_.lens_sample_count, 1, 17);
     if (!std::isfinite(settings_.lens_downsample_scale) || settings_.lens_downsample_scale <= 0.0f) { settings_.lens_downsample_scale = 1.0f; }
@@ -1686,7 +1686,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("field_curvature", updated.field_curvature, -8.0f, 8.0f);
     read_float("edge_softness", updated.edge_softness, 0.0f, 4.0f);
     read_bool("alpha_clamp_protection", updated.alpha_clamp_protection);
-    read_int("alpha_debug_mode", updated.alpha_debug_mode, 0, 3);
+    read_int("alpha_debug_mode", updated.alpha_debug_mode, 0, 5);
     read_int("blur_padding_px", updated.blur_padding_px, 0, 256);
     read_int("lens_sample_count", updated.lens_sample_count, 1, 17);
     read_float("lens_downsample_scale", updated.lens_downsample_scale, 0.20f, 1.0f);

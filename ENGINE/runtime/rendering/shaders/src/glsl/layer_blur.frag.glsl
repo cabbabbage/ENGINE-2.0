@@ -6,12 +6,18 @@ layout(location = 0) out vec4 out_color;
 
 layout(set = 2, binding = 0) uniform sampler2D u_scene;
 
+vec4 sample_premultiplied(vec2 uv) {
+    vec4 sample_color = texture(u_scene, uv);
+    sample_color.rgb *= sample_color.a;
+    return sample_color;
+}
+
 vec4 sample_blur(vec2 uv, vec2 step_offset) {
-    vec4 result = texture(u_scene, uv) * 0.2270270270;
-    result += texture(u_scene, uv + step_offset * 1.3846153846) * 0.3162162162;
-    result += texture(u_scene, uv - step_offset * 1.3846153846) * 0.3162162162;
-    result += texture(u_scene, uv + step_offset * 3.2307692308) * 0.0702702703;
-    result += texture(u_scene, uv - step_offset * 3.2307692308) * 0.0702702703;
+    vec4 result = sample_premultiplied(uv) * 0.2270270270;
+    result += sample_premultiplied(uv + step_offset * 1.3846153846) * 0.3162162162;
+    result += sample_premultiplied(uv - step_offset * 1.3846153846) * 0.3162162162;
+    result += sample_premultiplied(uv + step_offset * 3.2307692308) * 0.0702702703;
+    result += sample_premultiplied(uv - step_offset * 3.2307692308) * 0.0702702703;
     return result;
 }
 
@@ -19,7 +25,7 @@ void main() {
     vec2 direction = v_color.xy;
     float blur_radius_px = max(v_color.z, 0.0);
     if (blur_radius_px <= 0.0 || dot(direction, direction) <= 0.0) {
-        out_color = texture(u_scene, v_uv);
+        out_color = sample_premultiplied(v_uv);
         return;
     }
 

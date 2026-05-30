@@ -328,7 +328,8 @@ try {
         Copy-Item -Path $FrameStatsPathAlt -Destination $FrameStatsPath -Force
     }
     Write-Metadata -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration -StartedAt $startedAt -EndedAt $endedAt
-    $reportExitCode = [int](Invoke-Report -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration)
+    $null = Invoke-Report -BuildExitCode 0 -RunExitCode $runExitCode -TimedOut $timedOut -TimeoutForcedKill $forcedKill -DurationSeconds $duration
+    $reportExitCode = [int]$LASTEXITCODE
     Write-Host "[codex_playtest.ps1] Report exit code: $reportExitCode"
     if ($runExitCode -eq 0 -and $reportExitCode -ne 0) {
         $runExitCode = $reportExitCode

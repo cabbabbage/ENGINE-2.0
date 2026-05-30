@@ -1587,8 +1587,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
             const auto& corner = corners[corner_index];
             DisplacedAssetAnchorPoint sample_anchor{};
             sample_anchor.name = "__box_corner";
-            sample_anchor.texture_x = std::max(0, corner.texture_x);
-            sample_anchor.texture_y = std::max(0, corner.texture_y);
+            sample_anchor.texture_x = corner.texture_x;
+            sample_anchor.texture_y = corner.texture_y;
             sample_anchor.depth_offset = 0;
 
             const anchor_points::FrameAnchorSample sample =
@@ -1750,8 +1750,8 @@ void Asset::refresh_runtime_box_cache_from_frame() {
             for (const auto& point : authored_shape.points) {
                 DisplacedAssetAnchorPoint sample_anchor{};
                 sample_anchor.name = "__impassable_shape_point";
-                sample_anchor.texture_x = std::max(0, point.x);
-                sample_anchor.texture_y = std::max(0, point.y);
+                sample_anchor.texture_x = point.x;
+                sample_anchor.texture_y = point.y;
                 sample_anchor.depth_offset = 0;
 
                 const auto sample =

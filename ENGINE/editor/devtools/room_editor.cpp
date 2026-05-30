@@ -984,8 +984,8 @@ bool project_impassable_shape(const Asset& target,
     for (const auto& point : shape.points) {
         DisplacedAssetAnchorPoint sample_anchor{};
         sample_anchor.name = "__impassable_shape_point";
-        sample_anchor.texture_x = std::max(0, point.x);
-        sample_anchor.texture_y = std::max(0, point.y);
+        sample_anchor.texture_x = point.x;
+        sample_anchor.texture_y = point.y;
         sample_anchor.depth_offset = 0;
         const auto sample = anchor_points::resolve_frame_anchor_sample(
             target,
@@ -1425,12 +1425,10 @@ bool solve_texture_point_for_screen_target(
     }
 
     auto clamp_tex_x = [&](int value) {
-        const int non_negative = std::max(0, value);
-        return (max_texture_x >= 0) ? std::clamp(non_negative, 0, max_texture_x) : non_negative;
+        return (max_texture_x >= 0) ? std::clamp(value, 0, max_texture_x) : value;
     };
     auto clamp_tex_y = [&](int value) {
-        const int non_negative = std::max(0, value);
-        return (max_texture_y >= 0) ? std::clamp(non_negative, 0, max_texture_y) : non_negative;
+        return (max_texture_y >= 0) ? std::clamp(value, 0, max_texture_y) : value;
     };
 
     int tex_x = clamp_tex_x(initial_texture_x);
@@ -16675,8 +16673,8 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
 
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = *it;
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
+                sample_anchor.texture_x = texture_x;
+                sample_anchor.texture_y = texture_y;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
@@ -18157,8 +18155,8 @@ bool RoomEditor::drag_oval_center_to_screen(SDL_Point screen_point) {
             }
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = center_anchor;
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
+                sample_anchor.texture_x = texture_x;
+                sample_anchor.texture_y = texture_y;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
@@ -23229,8 +23227,8 @@ bool RoomEditor::drag_hitbox_box_to_screen(int box_index, SDL_Point screen_point
 
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = anchor_template;
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
+                sample_anchor.texture_x = texture_x;
+                sample_anchor.texture_y = texture_y;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
@@ -23367,8 +23365,8 @@ bool RoomEditor::drag_hitbox_corner_to_screen(int box_index, int point_index, SD
             const float extrusion_backward = static_cast<float>(std::max(1, box.extrusion_backward));
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = anchor_template;
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
+                sample_anchor.texture_x = texture_x;
+                sample_anchor.texture_y = texture_y;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
@@ -23489,8 +23487,8 @@ bool RoomEditor::drag_attack_box_to_screen(int box_index, SDL_Point screen_point
 
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = anchor_template;
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
+                sample_anchor.texture_x = texture_x;
+                sample_anchor.texture_y = texture_y;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
@@ -23601,8 +23599,8 @@ bool RoomEditor::drag_attack_box_corner_to_screen(int box_index, int point_index
             const float extrusion_backward = static_cast<float>(std::max(1, box.extrusion_backward));
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor = anchor_template;
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
+                sample_anchor.texture_x = texture_x;
+                sample_anchor.texture_y = texture_y;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
                     sample_anchor,
@@ -23727,8 +23725,8 @@ bool RoomEditor::drag_impassable_box_corner_to_screen(int box_index, int point_i
             auto sample_screen = [&](int texture_x, int texture_y, SDL_FPoint& out_screen) {
                 DisplacedAssetAnchorPoint sample_anchor{};
                 sample_anchor.name = "__impassable_shape_point";
-                sample_anchor.texture_x = std::max(0, texture_x);
-                sample_anchor.texture_y = std::max(0, texture_y);
+                sample_anchor.texture_x = texture_x;
+                sample_anchor.texture_y = texture_y;
                 sample_anchor.depth_offset = 0;
                 const auto sample = anchor_points::resolve_frame_anchor_sample(
                     *target,
@@ -23754,10 +23752,10 @@ bool RoomEditor::drag_impassable_box_corner_to_screen(int box_index, int point_i
             }
             std::vector<AssetInfo::ImpassableShapePoint> candidate = shape.points;
             candidate[static_cast<std::size_t>(clamped_point)] = AssetInfo::ImpassableShapePoint{
-                std::max(0, solved_x),
-                std::max(0, solved_y)};
+                solved_x,
+                solved_y};
             normalize_impassable_shape_winding(candidate);
-            if (candidate.size() < 3 || impassable_shape_self_intersects(candidate)) {
+            if (candidate.size() < 3) {
                 return false;
             }
             const auto previous = shape.points[static_cast<std::size_t>(clamped_point)];

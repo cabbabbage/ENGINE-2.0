@@ -31,20 +31,24 @@ constexpr std::string_view kMeleeAttackAnimation = "attack";
 constexpr std::string_view kMeleeAnchorName = "melee";
 constexpr std::string_view kHandAnchorName = "hand";
 constexpr std::string_view kGunAssetName = "gun";
+constexpr std::string_view kBulletAssetName = "bullet";
 constexpr std::string_view kSpiderEggAssetName = "spider_egg";
 constexpr std::string_view kInteractableTag = "interactable";
 constexpr std::string_view kCanCarryTag = "can_carry";
 constexpr std::string_view kCanCarryAliasTag = "can carry";
 constexpr int kInteractRadiusPx = 150;
-constexpr float kYawSensitivity = 0.60f;
-constexpr float kPitchSensitivity = 0.80f;
-constexpr float kPitchMinDegrees = -45.0f;
-constexpr float kPitchMaxDegrees = 45.0f;
+constexpr float kYawSensitivity = 0.30f;
+constexpr float kPitchSensitivity = 0.40f;
+constexpr float kPitchMinDegrees = -85.0f;
+constexpr float kPitchMaxDegrees = 42.0f;
 constexpr float kDefaultVibbleWeightKg = 80.0f;
 constexpr float kThrowFloorDamageMinWeightKg = 5.0f;
 constexpr float kThrowMaxAimDistancePx = 320.0f;
 constexpr int kThrowArcSampleCount = 24;
 constexpr double kThrowArcSampleDtSeconds = 1.0 / 30.0;
+constexpr float kThrowChargeMaxSeconds = 5.0f;
+constexpr float kBulletSpeedPxPerSecond = 2600.0f;
+constexpr float kBulletFireCooldownSeconds = 2.0f;
 
 std::string normalize_tag_token(std::string_view value) {
     return vibble::strings::to_lower_copy(vibble::strings::trim_copy(std::string{value}));
@@ -259,12 +263,17 @@ void vibble_controller::movement(const Input& input) {
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool dash_pressed = input.isScancodeDown(SDL_SCANCODE_SPACE);
     const bool interact_pressed = input.isScancodeDown(SDL_SCANCODE_E);
-    const bool melee_pressed = input.wasPressed(Input::LEFT);
+    const bool fire_pressed = input.wasPressed(Input::LEFT);
+    const bool melee_pressed = input.wasPressed(Input::RIGHT);
 
     const vibble::player_direction::DirectionIntent direction_intent =
         resolve_direction_intent_for_player(player, input_x, input_y);
     const int world_x = direction_intent.world_x;
     const int world_y = direction_intent.world_y;
+
+    if (fire_pressed && !is_carrying_non_gun()) {
+        (void)try_fire_bullet(input);
+    }
 
     if (melee_pressed && canMelee) {
         canMelee = false;
@@ -335,6 +344,10 @@ void vibble_controller::movement(const Input& input) {
     frame_stats.set("movement.player_dash_active", isDashing);
     frame_stats.set("movement.player_input_x", input_x);
     frame_stats.set("movement.player_input_y", input_y);
+    frame_stats.set("movement.player_mouse_dx", input.getDX());
+    frame_stats.set("movement.player_mouse_dy", input.getDY());
+    frame_stats.set("movement.player_aim_yaw_deg", yaw_angle_degrees_);
+    frame_stats.set("movement.player_aim_pitch_deg", pitch_angle_degrees_);
     frame_stats.set("movement.player_world_intent_x", world_x);
     frame_stats.set("movement.player_world_intent_y", world_y);
 
@@ -748,6 +761,97 @@ bool vibble_controller::is_carrying_non_gun() const {
     return false;
 }
 
+bool vibble_controller::try_fire_bullet(const Input& input) {
+    Asset* player = controller_self();
+    Assets* owner_assets = controller_assets();
+    if (!player || !owner_assets) {
+        return false;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    if (now < bulletCooldownEndTime_) {
+        return false;
+    }
+
+    float spawn_world_x = static_cast<float>(player->world_x());
+    float spawn_world_y = static_cast<float>(player->world_y());
+    float spawn_world_z = static_cast<float>(player->world_z());
+    if (const auto hand_anchor = player->anchor_state(std::string{kHandAnchorName},
+                                                      anchor_points::GridMaterialization::None,
+                                                      Asset::AnchorResolveMode::ForceRecompute);
+        hand_anchor.has_value() && hand_anchor->is_active()) {
+        spawn_world_x = hand_anchor->world_exact_pos_2d.x;
+        spawn_world_y = hand_anchor->world_exact_pos_2d.y;
+        spawn_world_z = hand_anchor->world_exact_z;
+    }
+
+    Asset* bullet = owner_assets->spawn_asset(
+        std::string{kBulletAssetName},
+        SDL_Point{
+            static_cast<int>(std::lround(spawn_world_x)),
+            static_cast<int>(std::lround(spawn_world_z))
+        });
+    if (!bullet || bullet->dead) {
+        return false;
+    }
+
+    bullet->move_to_world_position(static_cast<int>(std::lround(spawn_world_x)),
+                                   static_cast<int>(std::lround(spawn_world_y)),
+                                   static_cast<int>(std::lround(spawn_world_z)),
+                                   bullet->grid_resolution);
+    bullet->set_anchor_hidden(false);
+    bullet->set_hidden(false);
+    bullet->active = true;
+
+    float dir_x = 0.0f;
+    float dir_z = 0.0f;
+    float horizontal_scale = 1.0f;
+    float vertical_scale = 0.0f;
+    const bool dev_mode = owner_assets->is_dev_mode();
+    if (dev_mode) {
+        if (const std::optional<SDL_Point> mouse_world = input.mouse_world_position()) {
+            dir_x = static_cast<float>(mouse_world->x) - spawn_world_x;
+            dir_z = static_cast<float>(mouse_world->y) - spawn_world_z;
+        }
+        if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
+            dir_x = std::cos(wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0));
+            dir_z = std::sin(wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0));
+        }
+    } else {
+        const float heading_radians =
+            wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
+        const float pitch_radians = pitch_angle_degrees_ * static_cast<float>(3.14159265358979323846 / 180.0);
+        dir_x = std::cos(heading_radians);
+        dir_z = std::sin(heading_radians);
+        horizontal_scale = std::max(0.0f, std::cos(pitch_radians));
+        vertical_scale = std::sin(pitch_radians);
+    }
+
+    const float dir_len = std::sqrt(dir_x * dir_x + dir_z * dir_z);
+    if (dir_len > 1e-4f) {
+        dir_x /= dir_len;
+        dir_z /= dir_len;
+    } else {
+        dir_x = 1.0f;
+        dir_z = 0.0f;
+    }
+
+    OrphanImpulse impulse{};
+    impulse.direction_x = dir_x;
+    impulse.direction_z = dir_z;
+    impulse.force = kBulletSpeedPxPerSecond * horizontal_scale;
+    impulse.upward_force = kBulletSpeedPxPerSecond * vertical_scale;
+    impulse.source_mass_kg = 0.0f;
+    impulse.can_deal_throw_damage = false;
+    impulse.instigator_asset_name = player->info ? player->info->name : std::string{};
+    impulse.instigator_asset_id = player->spawn_id;
+
+    bullet->notify_orphaned(player, impulse);
+    bulletCooldownEndTime_ = now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+        std::chrono::duration<float>(kBulletFireCooldownSeconds));
+    return true;
+}
+
 bool segment_intersection_2d(const SDL_FPoint& p0,
                              const SDL_FPoint& p1,
                              const SDL_FPoint& q0,
@@ -833,6 +937,7 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
                                                      bool* out_throw_damage_enabled) const {
     float dir_x = 0.0f;
     float dir_z = 0.0f;
+    float horizontal_force_scale = 1.0f;
     float vertical_scale = 1.0f;
     const Assets* owner_assets = player.get_assets();
     const bool dev_mode = owner_assets && owner_assets->is_dev_mode();
@@ -850,9 +955,9 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
         const float heading_radians =
             wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
         const float pitch_radians = pitch_angle_degrees_ * static_cast<float>(3.14159265358979323846 / 180.0);
-        const float horizontal_scale = std::cos(pitch_radians);
-        dir_x = std::cos(heading_radians) * horizontal_scale;
-        dir_z = std::sin(heading_radians) * horizontal_scale;
+        dir_x = std::cos(heading_radians);
+        dir_z = std::sin(heading_radians);
+        horizontal_force_scale = std::max(0.0f, std::cos(pitch_radians));
         vertical_scale = std::sin(pitch_radians);
     }
     if (std::abs(dir_x) <= 1e-4f && std::abs(dir_z) <= 1e-4f) {
@@ -865,9 +970,12 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
         dir_z /= length;
     }
 
-    const int clamped_hold = std::clamp(held_frames, 1, 120);
-    const float force = 350.0f + static_cast<float>(clamped_hold) * 14.0f;
-    const float upward_force = 220.0f + static_cast<float>(clamped_hold) * 10.0f;
+    const float hold_seconds = std::clamp(
+        static_cast<float>(std::max(held_frames, 0)) * player.frame_delta_seconds_clamped(),
+        0.0f,
+        kThrowChargeMaxSeconds);
+    const float force = 350.0f + hold_seconds * (14.0f * 60.0f);
+    const float upward_force = 220.0f + hold_seconds * (10.0f * 60.0f);
     const float vibble_weight_kg = safe_weight_kg(&player, kDefaultVibbleWeightKg);
     const float carried_weight_kg = safe_weight_kg(carried_asset, 0.0f);
     const bool too_heavy = carried_weight_kg > (0.5f * vibble_weight_kg);
@@ -880,7 +988,7 @@ OrphanImpulse vibble_controller::build_throw_impulse(const Asset& player,
     OrphanImpulse impulse{};
     impulse.direction_x = dir_x;
     impulse.direction_z = dir_z;
-    impulse.force = too_heavy ? 0.0f : force;
+    impulse.force = too_heavy ? 0.0f : (force * horizontal_force_scale);
     impulse.upward_force = too_heavy ? 0.0f : (upward_force * vertical_scale);
     impulse.source_mass_kg = carried_weight_kg;
     impulse.can_deal_throw_damage = can_damage;
@@ -1017,9 +1125,19 @@ void vibble_controller::publish_aim_assist_overlay(const Input& input) const {
     const float heading_radians =
         wrap_degrees_180(yaw_angle_degrees_) * static_cast<float>(3.14159265358979323846 / 180.0);
     const float pitch_radians = pitch_angle_degrees_ * static_cast<float>(3.14159265358979323846 / 180.0);
-    const float horizontal_scale = std::cos(pitch_radians);
-    SDL_FPoint origin{static_cast<float>(player->world_x()), static_cast<float>(player->world_z())};
-    SDL_FPoint dir{std::cos(heading_radians) * horizontal_scale, std::sin(heading_radians) * horizontal_scale};
+    const float horizontal_scale = std::max(0.0f, std::cos(pitch_radians));
+    const float vertical_scale = std::sin(pitch_radians);
+    SDL_FPoint origin_xz{static_cast<float>(player->world_x()), static_cast<float>(player->world_z())};
+    float origin_y = static_cast<float>(player->world_y());
+    if (const auto hand_anchor = player->anchor_state(std::string{kHandAnchorName},
+                                                      anchor_points::GridMaterialization::None,
+                                                      Asset::AnchorResolveMode::ForceRecompute);
+        hand_anchor.has_value() && hand_anchor->is_active()) {
+        origin_xz.x = hand_anchor->world_exact_pos_2d.x;
+        origin_xz.y = hand_anchor->world_exact_z;
+        origin_y = hand_anchor->world_exact_pos_2d.y;
+    }
+    SDL_FPoint dir{std::cos(heading_radians), std::sin(heading_radians)};
     const float dir_len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
     if (dir_len > 1.0e-4f) {
         dir.x /= dir_len;
@@ -1033,26 +1151,31 @@ void vibble_controller::publish_aim_assist_overlay(const Input& input) const {
         overlay.is_throw_arc = true;
         const OrphanImpulse impulse = build_throw_impulse(*player, input, interactFrames, carried_world_asset_, nullptr);
         const world::GridPoint floor_point = owner_assets->resolve_floor_world_point(
-            SDL_Point{player->world_x(), player->world_z()},
-            player->grid_resolution);
+            SDL_Point{
+                static_cast<int>(std::lround(origin_xz.x)),
+                static_cast<int>(std::lround(origin_xz.y))
+            },
+            carried_world_asset_->grid_resolution);
         throw_physics::StepState state{};
-        state.world_x = static_cast<double>(player->world_x());
-        state.world_z = static_cast<double>(player->world_z());
-        state.world_y = static_cast<double>(player->world_y());
+        state.world_x = static_cast<double>(origin_xz.x);
+        state.world_z = static_cast<double>(origin_xz.y);
+        state.world_y = static_cast<double>(origin_y);
         state.floor_y = static_cast<double>(floor_point.world_y());
         state.velocity_x = static_cast<double>(impulse.direction_x) * static_cast<double>(impulse.force);
         state.velocity_z = static_cast<double>(impulse.direction_z) * static_cast<double>(impulse.force);
         state.velocity_y = static_cast<double>(impulse.upward_force);
-        state.restitution = (static_cast<double>(std::clamp(player->info ? player->info->bounce_amount : 0, 0, 100)) / 100.0) * 0.75;
+        state.restitution = (static_cast<double>(std::clamp(carried_world_asset_->info ? carried_world_asset_->info->bounce_amount : 0, 0, 100)) / 100.0) * 0.75;
         state.active = true;
         overlay.points.reserve(kThrowArcSampleCount + 1);
         overlay.points.push_back(runtime::context::AimAssistOverlayPoint{
             static_cast<float>(state.world_x),
+            static_cast<float>(state.world_y),
             static_cast<float>(state.world_z)});
         for (int i = 0; i < kThrowArcSampleCount; ++i) {
             const auto step_result = throw_physics::step(state, kThrowArcSampleDtSeconds, throw_physics::default_tuning());
             overlay.points.push_back(runtime::context::AimAssistOverlayPoint{
                 static_cast<float>(state.world_x),
+                static_cast<float>(state.world_y),
                 static_cast<float>(state.world_z)});
             if (step_result.hit_floor && !state.active) {
                 break;
@@ -1064,10 +1187,12 @@ void vibble_controller::publish_aim_assist_overlay(const Input& input) const {
     }
 
     overlay.is_throw_arc = false;
-    const SDL_FPoint target{
-        origin.x + dir.x * kThrowMaxAimDistancePx,
-        origin.y + dir.y * kThrowMaxAimDistancePx
+    const float horizontal_distance = kThrowMaxAimDistancePx * horizontal_scale;
+    const SDL_FPoint target_xz{
+        origin_xz.x + dir.x * horizontal_distance,
+        origin_xz.y + dir.y * horizontal_distance
     };
+    const float target_y = origin_y + kThrowMaxAimDistancePx * vertical_scale;
     float best_t = 1.0f;
     bool found_hit = false;
     std::vector<const Assets::FrameCollisionEntry*> entries;
@@ -1090,12 +1215,12 @@ void vibble_controller::publish_aim_assist_overlay(const Input& input) const {
             const SDL_FPoint a{static_cast<float>(pts[i].x), static_cast<float>(pts[i].y)};
             const SDL_FPoint b{static_cast<float>(pts[(i + 1) % pts.size()].x), static_cast<float>(pts[(i + 1) % pts.size()].y)};
             float t = 1.0f;
-            if (segment_intersection_2d(origin, target, a, b, t) && t < best_t) {
+            if (segment_intersection_2d(origin_xz, target_xz, a, b, t) && t < best_t) {
                 best_t = t;
                 found_hit = true;
             }
         }
-        if (entry->area.contains_point(SDL_Point{static_cast<int>(std::lround(origin.x)), static_cast<int>(std::lround(origin.y))})) {
+        if (entry->area.contains_point(SDL_Point{static_cast<int>(std::lround(origin_xz.x)), static_cast<int>(std::lround(origin_xz.y))})) {
             best_t = 0.0f;
             found_hit = true;
         }
@@ -1108,14 +1233,14 @@ void vibble_controller::publish_aim_assist_overlay(const Input& input) const {
             ? 0.25f * static_cast<float>(std::max(candidate->info->original_canvas_width, candidate->info->original_canvas_height))
             : 24.0f);
         const SDL_FPoint c{static_cast<float>(candidate->world_x()), static_cast<float>(candidate->world_z())};
-        const SDL_FPoint seg{target.x - origin.x, target.y - origin.y};
+        const SDL_FPoint seg{target_xz.x - origin_xz.x, target_xz.y - origin_xz.y};
         const float seg_len_sq = seg.x * seg.x + seg.y * seg.y;
         if (seg_len_sq <= 1.0e-6f) {
             continue;
         }
-        const float t = std::clamp(((c.x - origin.x) * seg.x + (c.y - origin.y) * seg.y) / seg_len_sq, 0.0f, 1.0f);
-        const float nx = origin.x + seg.x * t;
-        const float ny = origin.y + seg.y * t;
+        const float t = std::clamp(((c.x - origin_xz.x) * seg.x + (c.y - origin_xz.y) * seg.y) / seg_len_sq, 0.0f, 1.0f);
+        const float nx = origin_xz.x + seg.x * t;
+        const float ny = origin_xz.y + seg.y * t;
         const float dx = c.x - nx;
         const float dy = c.y - ny;
         if ((dx * dx + dy * dy) <= (radius * radius) && t < best_t) {
@@ -1123,13 +1248,14 @@ void vibble_controller::publish_aim_assist_overlay(const Input& input) const {
             found_hit = true;
         }
     }
-    const SDL_FPoint end{
-        origin.x + (target.x - origin.x) * best_t,
-        origin.y + (target.y - origin.y) * best_t
+    const SDL_FPoint end_xz{
+        origin_xz.x + (target_xz.x - origin_xz.x) * best_t,
+        origin_xz.y + (target_xz.y - origin_xz.y) * best_t
     };
+    const float end_y = origin_y + (target_y - origin_y) * best_t;
     overlay.points = {
-        runtime::context::AimAssistOverlayPoint{origin.x, origin.y},
-        runtime::context::AimAssistOverlayPoint{end.x, end.y}
+        runtime::context::AimAssistOverlayPoint{origin_xz.x, origin_y, origin_xz.y},
+        runtime::context::AimAssistOverlayPoint{end_xz.x, end_y, end_xz.y}
     };
     overlay.nub = overlay.points.back();
     (void)found_hit;

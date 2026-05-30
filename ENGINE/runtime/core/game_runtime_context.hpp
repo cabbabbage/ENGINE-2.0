@@ -45,6 +45,7 @@ struct PlayerDamagePulseState {
 
 struct AimAssistOverlayPoint {
     float world_x = 0.0f;
+    float world_y = 0.0f;
     float world_z = 0.0f;
 };
 

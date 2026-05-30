@@ -407,9 +407,41 @@ oval_anchor_math::WorldPoint3 resolve_flat_oval_world_point(float center_x,
 oval_anchor_math::WorldPoint3 resolve_final_oval_world_point(float center_x,
                                                              float center_y,
                                                              float center_z,
-                                                             const DisplacedAssetAnchorPoint& anchor) {
+                                                             const DisplacedAssetAnchorPoint& anchor,
+                                                             float heading_radians,
+                                                             float pitch_radians) {
     const auto flat_point = resolve_flat_oval_world_point(center_x, center_y, center_z, anchor);
-    return oval_anchor_math::apply_vertical_offset(flat_point, anchor.depth_offset);
+    auto point = oval_anchor_math::apply_vertical_offset(flat_point, anchor.depth_offset);
+    if (!point.valid) {
+        return point;
+    }
+
+    if (!std::isfinite(heading_radians) ||
+        !std::isfinite(pitch_radians) ||
+        std::fabs(pitch_radians) <= 1e-6f) {
+        return point;
+    }
+
+    // Rotate the anchor displacement by pitch around the local right axis
+    // derived from the current yaw heading so oval anchors respond to up/down aim.
+    const float vx = point.x - center_x;
+    const float vy = point.y - center_y;
+    const float vz = point.z - center_z;
+
+    const float cos_pitch = std::cos(pitch_radians);
+    const float sin_pitch = std::sin(pitch_radians);
+    const float right_x = std::sin(heading_radians);
+    const float right_z = -std::cos(heading_radians);
+    const float axis_dot_v = right_x * vx + right_z * vz;
+    const float cross_x = right_z * vy;
+    const float cross_y = -(right_z * vx - right_x * vz);
+    const float cross_z = -right_x * vy;
+
+    point.x = center_x + (vx * cos_pitch + cross_x * sin_pitch + right_x * axis_dot_v * (1.0f - cos_pitch));
+    point.y = center_y + (vy * cos_pitch + cross_y * sin_pitch);
+    point.z = center_z + (vz * cos_pitch + cross_z * sin_pitch + right_z * axis_dot_v * (1.0f - cos_pitch));
+    point.valid = std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
+    return point;
 }
 
 }
@@ -2702,11 +2734,15 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
                                                           center_y,
                                                           center_z,
                                                           *synthesized_anchor);
+                        const float effective_pitch_radians =
+                            directional_pitch_valid_ ? directional_pitch_radians_ : 0.0f;
                         oval_anchor_math::WorldPoint3 final_point =
                             resolve_final_oval_world_point(center_x,
                                                            center_y,
                                                            center_z,
-                                                           *synthesized_anchor);
+                                                           *synthesized_anchor,
+                                                           effective_heading_radians,
+                                                           effective_pitch_radians);
                         if (!final_point.valid) {
                                 final_point = flat_point;
                         }

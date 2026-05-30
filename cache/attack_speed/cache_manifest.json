@@ -14,12 +14,12 @@
     }
   ],
   "asset_name": "attack_speed",
-  "authored_scale_percentage": 24.0,
+  "authored_scale_percentage": 29.0,
   "crop_canvas": {
     "shared_height": 168,
     "shared_width": 92
   },
-  "digest": "5131b0a84cb2bdda",
+  "digest": "49aebf18b0225863",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

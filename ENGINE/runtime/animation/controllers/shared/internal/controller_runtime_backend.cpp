@@ -401,7 +401,29 @@ void ControllerRuntimeBackend::resolve_throw_impact_damage(double impact_speed, 
         return attack;
     };
 
-    if (!floor_impact && !hit_target) {
+    bool impassable_contact = false;
+    if (!floor_impact && !hit_target && owner_assets) {
+        std::vector<const Assets::FrameCollisionEntry*> entries;
+        owner_assets->query_impassable_entries(*self_, 96, entries);
+        const SDL_Point impact_point{
+            static_cast<int>(std::lround(orphan_fall_state_.world_x)),
+            static_cast<int>(std::lround(orphan_fall_state_.world_z))};
+        for (const auto* entry : entries) {
+            if (!entry || !entry->asset || entry->asset == self_) {
+                continue;
+            }
+            const bool is_impass = entry->canonical_type == "impassable" || entry->canonical_type == "impassable_area";
+            if (!is_impass) {
+                continue;
+            }
+            if (entry->area.contains_point(impact_point)) {
+                impassable_contact = true;
+                break;
+            }
+        }
+    }
+
+    if (!floor_impact && !hit_target && !impassable_contact) {
         return;
     }
 

@@ -48,8 +48,10 @@ void Input::handleEvent(const SDL_Event& e) {
         break;
 
     case SDL_EVENT_MOUSE_MOTION:
-        dx_ = static_cast<int>(std::lround(e.motion.xrel));
-        dy_ = static_cast<int>(std::lround(e.motion.yrel));
+        // Accumulate all per-frame relative motion so look input is stable even
+        // when multiple mouse-motion events arrive in a single frame.
+        dx_ += static_cast<int>(std::lround(e.motion.xrel));
+        dy_ += static_cast<int>(std::lround(e.motion.yrel));
         x_ = static_cast<int>(std::lround(e.motion.x));
         y_ = static_cast<int>(std::lround(e.motion.y));
         mouse_motion_dirty_ = true;

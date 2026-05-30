@@ -57,6 +57,7 @@ private:
     bool is_carrying_non_gun() const;
     void drop_carried_asset(const Input& input, int held_frames);
     void pickup_asset(Asset& player, Asset& target);
+    bool try_fire_bullet(const Input& input);
     OrphanImpulse build_throw_impulse(const Asset& player,
                                       const Input& input,
                                       int held_frames,
@@ -88,6 +89,7 @@ private:
     bool isMeleeing = false;
     float meleeCooldown = 0.5f;
     std::chrono::steady_clock::time_point meleeCooldownEndTime;
+    std::chrono::steady_clock::time_point bulletCooldownEndTime_{};
     std::chrono::steady_clock::time_point nextEggDisturbanceTime_{};
 
     float subpixel_x_ = 0.0f;

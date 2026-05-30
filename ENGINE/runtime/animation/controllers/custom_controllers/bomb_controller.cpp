@@ -16,7 +16,6 @@ constexpr int kDetonationTriggerRadiusPx = 42;
 constexpr int kExplosionRadiusPx = 130;
 constexpr int kExplosionDamage = 70;
 constexpr float kExplosionHitbackDistancePx = 140.0f;
-constexpr int kGroundContactBufferPx = 2;
 
 long long distance_sq_3d(const Asset& a, const Asset& b) {
     const long long dx = static_cast<long long>(b.world_x()) - static_cast<long long>(a.world_x());
@@ -30,7 +29,7 @@ long long distance_sq_3d(const Asset& a, const Asset& b) {
 bomb_controller::bomb_controller(Asset* self)
     : custom_controller_api::CustomControllerBase(self) {
     behavior_config_.kamikaze = true;
-    behavior_config_.ranges.aggro_radius_px = 190;
+    behavior_config_.ranges.aggro_radius_px = 260;
     behavior_config_.ranges.desired_standoff_px = 0;
     behavior_config_.ranges.attack_radius_px = kDetonationTriggerRadiusPx;
     behavior_config_.retreat_distance_px = 0;
@@ -39,10 +38,10 @@ bomb_controller::bomb_controller(Asset* self)
     behavior_config_.return_home_threshold_px = 0;
     behavior_config_.force_attacking_enabled = true;
     chase_move_.visit_threshold_px = 10;
-    chase_move_.override_non_locked = false;
+    chase_move_.override_non_locked = true;
     chase_move_.allow_vertical_movement = false;
     retreat_move_.visit_threshold_px = 10;
-    retreat_move_.override_non_locked = false;
+    retreat_move_.override_non_locked = true;
     retreat_move_.allow_vertical_movement = false;
     Asset* owner = controller_self();
     if (owner && owner->anim_) {
@@ -77,6 +76,9 @@ void bomb_controller::on_update(const Input& in) {
         vibble::log::info("[AICombat] Bomb could not acquire player target");
     }
     run_enemy_behavior(player, behavior_config_, chase_move_, retreat_move_);
+    if (player) {
+        (void)face_target(*player);
+    }
 }
 
 void bomb_controller::on_death() {
@@ -102,12 +104,6 @@ bool bomb_controller::can_detonate(const Asset& self, const Asset& target) const
         return false;
     }
 
-    const world::GridPoint floor_point =
-        owner_assets->resolve_floor_world_point(SDL_Point{self.world_x(), self.world_z()}, self.grid_resolution);
-    if (self.world_y() > floor_point.world_y() + kGroundContactBufferPx) {
-        return false;
-    }
-
     const long long trigger_sq = static_cast<long long>(kDetonationTriggerRadiusPx) *
                                  static_cast<long long>(kDetonationTriggerRadiusPx);
     return distance_sq_3d(self, target) <= trigger_sq;
@@ -119,7 +115,8 @@ void bomb_controller::detonate(Asset& self, Asset& target) {
         return;
     }
     has_detonated_ = true;
-    dispatch_explosion_attacks(self);
+    (void)start_attack("die", {"attack", "die"});
+    dispatch_explosion_attacks(self, &target);
 
     animation_update::Attack self_kill{};
     self_kill.attacker_asset_id = animation_update::detail::stable_asset_id(self);
@@ -139,7 +136,7 @@ void bomb_controller::detonate(Asset& self, Asset& target) {
     self.send_attack(self_kill);
 }
 
-void bomb_controller::dispatch_explosion_attacks(Asset& self) {
+void bomb_controller::dispatch_explosion_attacks(Asset& self, Asset* primary_target) {
     Assets* owner_assets = self.get_assets();
     if (!owner_assets) {
         return;
@@ -187,6 +184,7 @@ void bomb_controller::dispatch_explosion_attacks(Asset& self) {
         target->send_attack(attack);
     };
 
+    dispatch_to_target(primary_target);
     for (Asset* candidate : owner_assets->getActive()) {
         dispatch_to_target(candidate);
     }

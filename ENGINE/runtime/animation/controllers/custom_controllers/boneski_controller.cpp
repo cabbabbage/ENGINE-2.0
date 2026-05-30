@@ -15,10 +15,10 @@ boneski_controller::boneski_controller(Asset* self)
     behavior_config_.force_attacking_enabled = true;
 
     chase_move_.visit_threshold_px = 12;
-    chase_move_.override_non_locked = false;
+    chase_move_.override_non_locked = true;
     chase_move_.allow_vertical_movement = false;
     retreat_move_.visit_threshold_px = 12;
-    retreat_move_.override_non_locked = false;
+    retreat_move_.override_non_locked = true;
     retreat_move_.allow_vertical_movement = false;
 
     Asset* owner = controller_self();
@@ -43,4 +43,12 @@ void boneski_controller::on_update(const Input& in) {
     }
 
     run_enemy_behavior(player, behavior_config_, chase_move_, retreat_move_);
+    if (player && behavior_state().mode == custom_controller_api::EnemyAgentPhase::AttackWindow) {
+        (void)face_target(*player);
+        (void)try_attack_target(*player,
+                                "boneski_primary",
+                                0.7f,
+                                behavior_config_.ranges.attack_radius_px + 24,
+                                "attack_right");
+    }
 }

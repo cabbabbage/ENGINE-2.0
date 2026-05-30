@@ -133,6 +133,7 @@
       "asset_type": "object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
+      "can_invert": true,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
@@ -198,7 +199,7 @@
       },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
-      "weight_kg": 0.0,
+      "weight_kg": 30.0,
       "y_position_range": {
         "center": 0,
         "falloff": 0,
@@ -226,12 +227,29 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -254,6 +272,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "oval_anchor_mappings": [],
       "scaling_profile": {
@@ -289,23 +310,44 @@
         ]
       },
       "size_settings": {
-        "scale_percentage": 24.0,
+        "scale_percentage": 29.0,
         "size_variation": 2.0
       },
       "start": "default",
       "tags": [
         "bottle",
+        "can_carry",
         "drink",
         "interactable",
         "power_up",
         "small_surface_top"
       ],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 10,
+        "random": true,
+        "span": 20,
+        "weights": {
+          "center": 0.3333333333333333,
+          "edge": 0.3333333333333333,
+          "falloff": 0.3333333333333333
+        }
+      },
       "tilt_range_max_deg": 20,
       "tilt_range_min_deg": -20,
-      "weight_kg": 125.0,
-      "y_pos_max": 0,
-      "y_pos_min": -8
+      "weight_kg": 123.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "axe_in_stump": {
       "anchor_point_child_candidates": [],
@@ -1258,6 +1300,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/blue_flower",
       "asset_name": "blue_flower",
+      "asset_type": "object",
       "attack_box_enabled": false,
       "bounce_amount": 0,
       "can_invert": true,
@@ -1308,6 +1351,7 @@
       "start": "default",
       "tags": [
         "blue",
+        "can_carry",
         "floor_decor",
         "flower",
         "plant",
@@ -1327,7 +1371,7 @@
       },
       "tilt_range_max_deg": 2,
       "tilt_range_min_deg": -2,
-      "weight_kg": 0.0,
+      "weight_kg": 2.0,
       "y_position_range": {
         "center": 0,
         "falloff": 0,
@@ -5708,51 +5752,51 @@
               false
             ],
             [
+              6,
               0,
-              0,
-              0,
+              -19,
               0.0,
               false
             ],
             [
+              6,
               0,
-              0,
-              0,
+              -19,
               0.0,
               false
             ],
             [
+              6,
               0,
-              0,
-              0,
+              -19,
               0.0,
               false
             ],
             [
+              6,
               0,
-              0,
-              0,
+              -19,
               0.0,
               false
             ],
             [
+              6,
               0,
-              0,
-              0,
+              -19,
               0.0,
               false
             ],
             [
+              6,
               0,
-              0,
-              0,
+              -19,
               0.0,
               false
             ],
             [
+              6,
               0,
-              0,
-              0,
+              -19,
               0.0,
               false
             ]
@@ -5915,13 +5959,113 @@
                 0,
                 0.0
               ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                16,
+                0.0
+              ],
+              [
+                0,
+                0,
+                16,
+                0.0
+              ],
+              [
+                0,
+                0,
+                16,
+                0.0
+              ],
+              [
+                0,
+                0,
+                16,
+                0.0
+              ],
+              [
+                0,
+                0,
+                16,
+                0.0
+              ],
+              [
+                0,
+                0,
+                16,
+                0.0
+              ],
+              [
+                0,
+                0,
+                16,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                6,
+                0,
+                -19,
+                0.0
+              ],
+              [
+                6,
+                0,
+                -19,
+                0.0
+              ],
+              [
+                6,
+                0,
+                -19,
+                0.0
+              ],
+              [
+                6,
+                0,
+                -19,
+                0.0
+              ],
+              [
+                6,
+                0,
+                -19,
+                0.0
+              ],
+              [
+                6,
+                0,
+                -19,
+                0.0
+              ],
+              [
+                6,
+                0,
+                -19,
+                0.0
+              ]
             ]
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 49,
+            "dx": 42,
             "dy": 0,
-            "dz": -84
+            "dz": -133.0
           },
           "movement_totals": [
             {
@@ -6025,12 +6169,29 @@
               0
             ]
           ],
+          "movement_paths": [
+            [
+              [
+                0,
+                0,
+                0
+              ]
+            ]
+          ],
           "movement_total": {
             "dr": 0.0,
             "dx": 0,
             "dy": 0,
             "dz": 0
           },
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
           "number_of_frames": 1,
           "on_end": "default",
           "reverse_source": false,
@@ -6052,6 +6213,9 @@
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": true,
       "oval_anchor_mappings": [],
       "scaling_profile": {
@@ -6093,17 +6257,38 @@
       "start": "default",
       "tags": [
         "book",
+        "can_carry",
         "man-made",
         "red",
         "small",
         "small_surface_top"
       ],
       "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
-      "weight_kg": 0.0,
-      "y_pos_max": 0,
-      "y_pos_min": 0
+      "weight_kg": 50.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "book_1": {
       "anchor_point_child_candidates": [],
@@ -14853,26 +15038,55 @@
       }
     },
     "small_rock": {
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
           "locked": false,
+          "movement_totals": [
+            {
+              "dr": 0.0,
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
+          ],
+          "number_of_frames": 1,
           "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "tags": []
         }
       },
+      "anti_tags": [
+        "bone",
+        "colorful",
+        "man-made",
+        "mushroom",
+        "plant",
+        "scary"
+      ],
       "asset_directory": "resources/assets/small_rock",
       "asset_name": "small_rock",
+      "asset_type": "object",
       "attack_box_enabled": false,
+      "bounce_amount": 0,
+      "can_invert": false,
       "floor_boxes_enabled": false,
       "hitbox_enabled": false,
       "impassable_enabled": false,
+      "lighting_height_bias": 0.0,
+      "lighting_normal_map": "",
+      "lighting_roughness": 1.0,
       "movement_enabled": false,
+      "oval_anchor_mappings": [],
       "scaling_profile": {
         "baked_authored_scale": 1.0,
         "max_scale": 3.5999999046325684,
@@ -14905,7 +15119,41 @@
           0.04999999701976776
         ]
       },
-      "start": "default"
+      "size_settings": {
+        "size_variation": 0.0
+      },
+      "start": "default",
+      "tags": [
+        "can_carry",
+        "floor_decor",
+        "small"
+      ],
+      "tillable": false,
+      "tilt_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      },
+      "tilt_range_max_deg": 0,
+      "tilt_range_min_deg": 0,
+      "weight_kg": 175.0,
+      "y_position_range": {
+        "center": 0,
+        "falloff": 0,
+        "random": false,
+        "span": 0,
+        "weights": {
+          "center": 1.0,
+          "edge": 0.0,
+          "falloff": 0.0
+        }
+      }
     },
     "small_rock_1": {
       "anchor_point_child_candidates": [],
@@ -17486,7 +17734,7 @@
             }
           ],
           "number_of_frames": 1,
-          "on_end": "reverse",
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -18155,37 +18403,37 @@
               false
             ],
             [
+              -22,
               0,
-              0,
-              0,
+              6,
               0.0,
               false
             ],
             [
+              -22,
               0,
-              0,
-              0,
+              6,
               0.0,
               false
             ],
             [
+              -22,
               0,
-              0,
-              0,
+              6,
               0.0,
               false
             ],
             [
+              -22,
               0,
-              0,
-              0,
+              6,
               0.0,
               false
             ],
             [
+              -22,
               0,
-              0,
-              0,
+              6,
               0.0,
               false
             ]
@@ -18198,6 +18446,36 @@
                 0,
                 0.0,
                 true
+              ],
+              [
+                -18,
+                0,
+                -28,
+                0.0
+              ],
+              [
+                -18,
+                0,
+                -28,
+                0.0
+              ],
+              [
+                -18,
+                0,
+                -28,
+                0.0
+              ],
+              [
+                -18,
+                0,
+                -28,
+                0.0
+              ],
+              [
+                -18,
+                0,
+                -28,
+                0.0
               ]
             ],
             [
@@ -18207,9 +18485,107 @@
                 0,
                 0.0,
                 true
+              ],
+              [
+                -11,
+                0,
+                32,
+                0.0
+              ],
+              [
+                -11,
+                0,
+                32,
+                0.0
+              ],
+              [
+                -11,
+                0,
+                32,
+                0.0
+              ],
+              [
+                -11,
+                0,
+                32,
+                0.0
+              ],
+              [
+                -11,
+                0,
+                32,
+                0.0
               ]
             ],
             [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                -22,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -22,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -22,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -22,
+                0,
+                6,
+                0.0
+              ],
+              [
+                -22,
+                0,
+                6,
+                0.0
+              ]
+            ],
+            [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
               [
                 0,
                 0,
@@ -18223,9 +18599,31 @@
                 0,
                 0,
                 0.0
-              ]
-            ],
-            [
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
               [
                 0,
                 0,
@@ -18234,6 +18632,36 @@
               ]
             ],
             [
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
+              [
+                0,
+                0,
+                0,
+                0.0
+              ],
               [
                 0,
                 0,
@@ -18244,9 +18672,9 @@
           ],
           "movement_total": {
             "dr": 0.0,
-            "dx": 0,
+            "dx": -110,
             "dy": 0,
-            "dz": 0
+            "dz": 30.0
           },
           "movement_totals": [
             {
@@ -18287,7 +18715,7 @@
             }
           ],
           "number_of_frames": 1,
-          "on_end": "reverse",
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
@@ -21505,7 +21933,7 @@
           "anchor_points": [
             [
               {
-                "depth_offset": -0.30000001192092896,
+                "depth_offset": 0.0,
                 "flip_horizontal": true,
                 "flip_vertical": true,
                 "hidden": false,
@@ -21549,7 +21977,7 @@
                 "hidden": false,
                 "name": "melee_oval_center",
                 "resolve_x": true,
-                "rotation_degrees": 0.0,
+                "rotation_degrees": -131.0,
                 "scaling_method": "parent",
                 "texture_x": 183,
                 "texture_y": 363
@@ -25724,7 +26152,7 @@
               "texture_y": -14
             }
           ],
-          "radius_offset_degrees": 235.0,
+          "radius_offset_degrees": 229.0,
           "width_radius_x": 50.0
         },
         {
@@ -25786,7 +26214,7 @@
               "texture_y": -14
             }
           ],
-          "radius_offset_degrees": 15.0,
+          "radius_offset_degrees": 360.0,
           "width_radius_x": 50.0
         }
       ],
@@ -25843,7 +26271,7 @@
       },
       "tilt_range_max_deg": 0,
       "tilt_range_min_deg": 0,
-      "weight_kg": 116.0,
+      "weight_kg": 301.0,
       "y_position_range": {
         "center": 0,
         "falloff": 0,
@@ -27166,11 +27594,11 @@
       "camera_settings": {
         "alpha_clamp_protection": false,
         "alpha_debug_mode": 0,
-        "anamorphic_strength": 0.8199999928474426,
-        "aperture": 1.100000023841858,
+        "anamorphic_strength": 0.8499999642372131,
+        "aperture": 4.539999961853027,
         "base_height_px": 720.0,
         "blur_padding_px": 5,
-        "blur_px": 16.5,
+        "blur_px": 64.5,
         "bokeh_oval_ratio": 1.0,
         "bokeh_rotation": -84.0,
         "boundary_min_visible_screen_ratio": 0.007000000216066837,
@@ -27179,16 +27607,16 @@
         "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 2000.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.05999999865889549,
-        "edge_softness": 1.0,
-        "field_curvature": 3.9499998092651367,
-        "focus_depth_offset": 0.0,
-        "focus_falloff_acceleration": 1.0899999141693115,
+        "edge_softness": 0.26999998092651367,
+        "field_curvature": 1.119999885559082,
+        "focus_depth_offset": -74.0,
+        "focus_falloff_acceleration": 1.809999942779541,
         "layer_depth_curve": 1.0,
         "layer_depth_interval": 250.0,
         "lens_alpha_clamp_protection": false,
         "lens_alpha_debug_mode": 0,
-        "lens_anamorphic_strength": 0.8199999928474426,
-        "lens_barrel_distortion": 0.04300004243850708,
+        "lens_anamorphic_strength": 0.8499999642372131,
+        "lens_barrel_distortion": 0.054000020027160645,
         "lens_bloom_radius": 0.0,
         "lens_bloom_strength": 0.0,
         "lens_bloom_threshold": 1.0,
@@ -27200,22 +27628,22 @@
         "lens_chromatic_edge_start": 0.14999999105930328,
         "lens_distortion_zoom_compensation": 0.9830000400543213,
         "lens_downsample_scale": 0.6899999976158142,
-        "lens_edge_softness": 1.0,
-        "lens_field_curvature": 3.9499998092651367,
-        "lens_focus_depth_offset": 0.0,
-        "lens_focus_falloff_acceleration": 1.0899999141693115,
+        "lens_edge_softness": 0.26999998092651367,
+        "lens_field_curvature": 1.119999885559082,
+        "lens_focus_depth_offset": -74.0,
+        "lens_focus_falloff_acceleration": 1.809999942779541,
         "lens_halation_strength": 0.0,
-        "lens_max_far_blur_px": 1.0,
-        "lens_max_near_blur_px": 16.5,
-        "lens_near_far_blur_bias": 0.0,
+        "lens_max_far_blur_px": 5.0,
+        "lens_max_near_blur_px": 64.5,
+        "lens_near_far_blur_bias": -0.3100000023841858,
         "lens_quality_preset": 1,
         "lens_sample_count": 9,
-        "lens_swirl_radius_start": 0.6200000047683716,
-        "lens_swirl_strength": 0.3700000047683716,
-        "lens_tangential_blur_stretch": 0.5799999833106995,
-        "lens_vignette_radius": 0.05999999865889549,
+        "lens_swirl_radius_start": 0.5899999737739563,
+        "lens_swirl_strength": 0.38999998569488525,
+        "lens_tangential_blur_stretch": 1.0399999618530273,
+        "lens_vignette_radius": 0.14999999105930328,
         "lens_vignette_softness": 0.42000001668930054,
-        "lens_vignette_strength": 0.5999999642372131,
+        "lens_vignette_strength": 0.7599999904632568,
         "light_max_cull_depth": 13454.0,
         "light_radius_overlap_culling_enabled": true,
         "live_dynamic_despawn_margin_world_px": 256,
@@ -27226,18 +27654,18 @@
         "min_visible_screen_ratio": 0.00800000037997961,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
-        "near_far_blur_bias": 0.0,
+        "near_far_blur_bias": -0.3100000023841858,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 1.0,
+        "radial_blur_px": 5.0,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
         "settle_duration_after_stop": 0.20000000298023224,
-        "swirl_radius_start": 0.6200000047683716,
-        "swirl_strength": 0.3700000047683716,
-        "tangential_blur_stretch": 0.5799999833106995,
+        "swirl_radius_start": 0.5899999737739563,
+        "swirl_strength": 0.38999998569488525,
+        "tangential_blur_stretch": 1.0399999618530273,
         "transition_damping": 9.0
       },
       "content_root": "content/forrest",
@@ -27398,26 +27826,26 @@
       "map_name": "forrest",
       "rooms_data": {
         "Mossy_Circle": {
-          "camera_center_dx": 465,
-          "camera_center_dz": -1647,
-          "camera_height_px": 797,
-          "camera_tilt_deg": 32.97916030883789,
+          "camera_center_dx": -4223,
+          "camera_center_dz": -8658,
+          "camera_height_px": 725,
+          "camera_tilt_deg": 48.579158782958984,
           "camera_zoom_percent": 0,
           "coarseness": {
-            "center": 942,
-            "falloff": 0,
+            "center": 3344,
+            "falloff": 8,
             "random": true,
-            "span": 45,
+            "span": 8,
             "weights": {
-              "center": 0.34722222677091297,
-              "edge": 0.305555546458174,
-              "falloff": 0.34722222677091297
+              "center": 0.5182059734206214,
+              "edge": 0.15277777841808413,
+              "falloff": 0.3290162481612945
             }
           },
           "display_color": [
+            237,
+            242,
             85,
-            242,
-            242,
             255
           ],
           "geometry": "Circle",
@@ -27836,6 +28264,96 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-5131d823d558"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "attack_speed"
+                }
+              ],
+              "display_name": "attack_speed",
+              "dx": -1172,
+              "dz": -1232,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 19856,
+              "origional_width": 15064,
+              "position": "Exact",
+              "priority": 13,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-72724bf3880b"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "small_rock"
+                }
+              ],
+              "display_name": "small_rock",
+              "dx": -3700,
+              "dz": -5072,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 19856,
+              "origional_width": 15064,
+              "position": "Exact",
+              "priority": 14,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-369b76e0ae8f"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "book"
+                }
+              ],
+              "display_name": "book",
+              "dx": -3624,
+              "dz": -2760,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 15952,
+              "origional_width": 18624,
+              "position": "Exact",
+              "priority": 15,
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f1cb30a5d830"
             }
           ],
           "trail_connection_sector": {
@@ -27867,9 +28385,9 @@
             }
           },
           "display_color": [
-            204,
+            147,
             31,
-            111,
+            204,
             255
           ],
           "geometry": "Square",
@@ -27925,9 +28443,9 @@
             }
           },
           "display_color": [
-            154,
-            204,
-            31,
+            85,
+            126,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -27988,9 +28506,9 @@
             }
           },
           "display_color": [
-            98,
-            31,
-            204,
+            242,
+            138,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -28225,9 +28743,9 @@
             }
           },
           "display_color": [
-            242,
-            85,
-            181,
+            31,
+            204,
+            141,
             255
           ],
           "geometry": "Square",
@@ -28288,9 +28806,9 @@
             }
           },
           "display_color": [
-            31,
-            187,
-            204,
+            138,
+            242,
+            85,
             255
           ],
           "geometry": "Square",

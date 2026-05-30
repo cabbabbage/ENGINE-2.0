@@ -48,6 +48,18 @@
       ]
     },
     {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "f7000bc95cd93e1b",
+          "height": 1080,
+          "order": 0,
+          "width": 1920
+        }
+      ]
+    },
+    {
       "name": "left",
       "source_frames": [
         {
@@ -101,7 +113,7 @@
     "shared_height": 751,
     "shared_width": 932
   },
-  "digest": "12d77108bf7ffafd",
+  "digest": "79572e005a029b98",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

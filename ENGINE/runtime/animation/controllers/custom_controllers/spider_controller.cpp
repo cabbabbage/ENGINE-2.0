@@ -21,8 +21,8 @@ spider_controller::spider_controller(Asset* self)
     retreat_move_.allow_vertical_movement = false;
     chase_move_.resolution_layer = std::nullopt;
     retreat_move_.resolution_layer = std::nullopt;
-    chase_move_.override_non_locked = false;
-    retreat_move_.override_non_locked = false;
+    chase_move_.override_non_locked = true;
+    retreat_move_.override_non_locked = true;
     Asset* owner = controller_self();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
@@ -47,6 +47,14 @@ void spider_controller::on_update(const Input& in) {
         vibble::log::info("[AICombat] Spider could not acquire player target");
     }
     run_enemy_behavior(player, behavior_config_, chase_move_, retreat_move_);
+    if (player && behavior_state().mode == custom_controller_api::EnemyAgentPhase::AttackWindow) {
+        (void)face_target(*player);
+        (void)try_attack_target(*player,
+                                "spider_primary",
+                                0.55f,
+                                behavior_config_.ranges.attack_radius_px + 24,
+                                "attack_left");
+    }
 }
 
 void spider_controller::on_process_pending_attacks(Asset& self) {

@@ -23,6 +23,8 @@
 
 namespace {
 
+namespace throw_physics = animation_update::custom_controllers::internal::throw_physics;
+
 constexpr std::string_view kMeleeChildAssetName = "vibble_attack_1";
 constexpr std::string_view kLegacyMeleeChildAssetName = "vibble_attack";
 constexpr std::string_view kMeleeAttackAnimation = "attack";

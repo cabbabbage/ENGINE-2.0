@@ -61,12 +61,12 @@
     }
   ],
   "asset_name": "gun",
-  "authored_scale_percentage": 9.0,
+  "authored_scale_percentage": 19.999998092651367,
   "crop_canvas": {
     "shared_height": 576,
     "shared_width": 1064
   },
-  "digest": "e37aee37a9428de5",
+  "digest": "f2a443d0c9fe682c",
   "generator_version": "image_cache_generator.v4",
   "schema_version": 2
 }

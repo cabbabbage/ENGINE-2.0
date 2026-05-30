@@ -14441,6 +14441,9 @@
             []
           ],
           "box_schema_version": 1,
+          "derived_modifiers": {
+            "reverse": false
+          },
           "hit_boxes": [
             [
               {
@@ -14485,19 +14488,12 @@
               }
             ]
           ],
+          "inherit_data": false,
+          "invert_frames_horizontal": false,
+          "invert_frames_vertical": false,
           "invert_x": false,
           "invert_y": false,
           "invert_z": false,
-          "locked": false,
-          "movement": [
-            [
-              0,
-              0,
-              0,
-              0.0,
-              true
-            ]
-          ],
           "movement_paths": [
             [
               [
@@ -14526,9 +14522,9 @@
           "reverse_source": false,
           "rnd_start": false,
           "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
+            "kind": "animation",
+            "name": "attack_left",
+            "path": ""
           },
           "tags": []
         },
@@ -17332,125 +17328,11 @@
       "y_pos_min": 0
     },
     "tree_dark": {
-      "anchor_point_child_candidates": [
-        {
-          "anchor_point_name": "norm_anhor_point_1",
-          "candidates": {
-            "candidates": [
-              {
-                "chance": 5,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "fog_2"
-              }
-            ]
-          },
-          "orphan_on_end": true
-        },
-        {
-          "anchor_point_name": "norm_anhor_point_1_copy",
-          "candidates": {
-            "candidates": [
-              {
-                "chance": 5,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "fog_2"
-              }
-            ]
-          },
-          "orphan_on_end": true
-        },
-        {
-          "anchor_point_name": "norm_anhor_point_1_copy_2",
-          "candidates": {
-            "candidates": [
-              {
-                "chance": 5,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "fog_2"
-              }
-            ]
-          },
-          "orphan_on_end": true
-        },
-        {
-          "anchor_point_name": "norm_anhor_point_1_copy_2_copy",
-          "candidates": {
-            "candidates": [
-              {
-                "chance": 5,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "fog_2"
-              }
-            ]
-          },
-          "orphan_on_end": true
-        }
-      ],
+      "anchor_point_child_candidates": [],
       "animations": {
         "default": {
           "anchor_points": [
-            [
-              {
-                "depth_offset": 10.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "norm_anhor_point_1",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 224,
-                "texture_y": 976
-              },
-              {
-                "depth_offset": 24.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "norm_anhor_point_1_copy_2",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 242,
-                "texture_y": 784
-              },
-              {
-                "depth_offset": -16.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "norm_anhor_point_1_copy_2_copy",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 251,
-                "texture_y": 668
-              },
-              {
-                "depth_offset": -21.0,
-                "flip_horizontal": true,
-                "flip_vertical": true,
-                "hidden": false,
-                "name": "norm_anhor_point_1_copy",
-                "resolve_x": true,
-                "rotation_degrees": 0.0,
-                "scaling_method": "parent",
-                "texture_x": 241,
-                "texture_y": 858
-              }
-            ]
+            []
           ],
           "invert_x": false,
           "invert_y": false,
@@ -23121,7 +23003,7 @@
         ]
       },
       "size_settings": {
-        "scale_percentage": 127.0,
+        "scale_percentage": 214.0,
         "size_variation": 0.0
       },
       "start": "default",
@@ -23700,7 +23582,7 @@
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
-        "radial_blur_px": 29.26999855041504,
+        "radial_blur_px": 18.939998626708984,
         "room_blend_damping_scale": 0.41999998688697815,
         "room_blend_follow_weight_scale": 0.2800000011920929,
         "room_blend_velocity_scale": 0.6000000238418579,
@@ -23827,9 +23709,9 @@
       "rooms_data": {
         "Bluebloom_Nook": {
           "display_color": [
-            242,
-            242,
             85,
+            242,
+            156,
             255
           ],
           "geometry": "Circle",
@@ -23973,9 +23855,9 @@
         },
         "Foggy_Glade": {
           "display_color": [
-            204,
-            99,
-            31,
+            85,
+            112,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -24119,9 +24001,9 @@
         },
         "Frog_Basin": {
           "display_color": [
-            177,
             242,
-            85,
+            241,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -24262,9 +24144,9 @@
         },
         "Lantern_Mirelet": {
           "display_color": [
-            85,
-            146,
-            242,
+            204,
+            31,
+            87,
             255
           ],
           "geometry": "Circle",
@@ -24410,9 +24292,9 @@
           "camera_tilt_deg": 22.900136947631836,
           "camera_zoom_percent": 100,
           "display_color": [
-            36,
+            195,
             242,
-            242,
+            85,
             255
           ],
           "geometry": "Square",
@@ -24605,9 +24487,9 @@
         },
         "Moonfern_Pocket": {
           "display_color": [
-            36,
-            242,
-            161,
+            31,
+            204,
+            169,
             255
           ],
           "geometry": "Circle",
@@ -24756,9 +24638,9 @@
           "camera_tilt_deg": 26.236095428466797,
           "camera_zoom_percent": 0,
           "display_color": [
-            242,
-            104,
             85,
+            206,
+            242,
             255
           ],
           "geometry": "Circle",
@@ -24952,16 +24834,16 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -3559,
-              "dz": -3086,
+              "dx": -1588,
+              "dz": -4038,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 8944,
-              "origional_width": 17680,
+              "origional_height": 10320,
+              "origional_width": 9632,
               "position": "Exact",
               "priority": 5,
               "quantity": 1,
@@ -25088,6 +24970,35 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-71e96812f420"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_dark"
+                }
+              ],
+              "display_name": "tree_dark",
+              "dx": -1680,
+              "dz": -1520,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 10320,
+              "origional_width": 9632,
+              "position": "Exact",
+              "quantity": 1,
+              "resolution": 8,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b97e539aa70f"
             }
           ],
           "trail_connection_sector": {
@@ -25108,9 +25019,9 @@
         },
         "NewRoom": {
           "display_color": [
-            98,
-            85,
+            94,
             242,
+            85,
             255
           ],
           "geometry": "Square",
@@ -25154,9 +25065,9 @@
         },
         "NewRoom1": {
           "display_color": [
-            226,
-            85,
-            242,
+            137,
+            31,
+            204,
             255
           ],
           "geometry": "Square",
@@ -25200,9 +25111,9 @@
         },
         "NewRoom2": {
           "display_color": [
-            102,
+            108,
+            61,
             242,
-            85,
             255
           ],
           "geometry": "Square",
@@ -25278,8 +25189,8 @@
         "NewRoom3": {
           "display_color": [
             204,
-            31,
-            78,
+            151,
+            71,
             255
           ],
           "geometry": "Square",
@@ -25323,9 +25234,9 @@
         },
         "NewRoom4": {
           "display_color": [
-            242,
-            180,
             36,
+            38,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25370,9 +25281,9 @@
         },
         "NewRoom5": {
           "display_color": [
-            134,
-            31,
-            204,
+            219,
+            85,
+            242,
             255
           ],
           "geometry": "Square",
@@ -25417,9 +25328,9 @@
         },
         "Old_Stump_Yard": {
           "display_color": [
-            36,
-            38,
-            242,
+            71,
+            149,
+            204,
             255
           ],
           "geometry": "Square",
@@ -25626,9 +25537,9 @@
           "camera_tilt_deg": 18.473590850830078,
           "camera_zoom_percent": 40,
           "display_color": [
-            143,
-            204,
-            71,
+            242,
+            36,
+            125,
             255
           ],
           "geometry": "Circle",
@@ -25709,9 +25620,9 @@
         },
         "Spider_Hollow": {
           "display_color": [
-            242,
-            36,
-            129,
+            204,
+            91,
+            31,
             255
           ],
           "geometry": "Square",
@@ -25855,9 +25766,9 @@
         },
         "Thornstep_Croft": {
           "display_color": [
-            225,
-            242,
-            36,
+            147,
+            204,
+            71,
             255
           ],
           "geometry": "Square",
@@ -26001,9 +25912,9 @@
         },
         "Whispering_Ring": {
           "display_color": [
-            51,
+            36,
+            242,
             135,
-            204,
             255
           ],
           "geometry": "Circle",
@@ -26152,9 +26063,9 @@
           "camera_tilt_deg": 23.86580467224121,
           "camera_zoom_percent": 49,
           "display_color": [
-            85,
-            229,
             242,
+            180,
+            36,
             255
           ],
           "geometry": "Circle",
@@ -26580,7 +26491,7 @@
           "display_color": [
             85,
             242,
-            148,
+            208,
             255
           ],
           "geometry": "Square",

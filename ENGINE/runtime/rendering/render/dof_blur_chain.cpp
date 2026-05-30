@@ -791,12 +791,20 @@ int lens_blur_sample_count(float radius_px, const dof_blur_chain::CinematicLensS
         return 0;
     }
 
-    const int requested = settings.sample_count > 0 ? settings.sample_count :
+    int preset_cap = dof_blur_chain::lens_blur_tuning::kMaxSamples;
+    switch (std::clamp(settings.quality_preset, 0, 3)) {
+    case 1: preset_cap = 13; break;
+    case 2: preset_cap = 9; break;
+    case 3: preset_cap = 5; break;
+    default: preset_cap = dof_blur_chain::lens_blur_tuning::kMaxSamples; break;
+    }
+
+    const int requested = settings.sample_count > 0 ? std::min(settings.sample_count, preset_cap) :
         (dof_blur_chain::lens_blur_tuning::kMinSamples +
          static_cast<int>(std::ceil(std::sqrt(radius_px) * dof_blur_chain::lens_blur_tuning::kSamplesPerSqrtRadius)));
     int odd_count = std::clamp(requested,
                                dof_blur_chain::lens_blur_tuning::kMinSamples,
-                               dof_blur_chain::lens_blur_tuning::kMaxSamples);
+                               std::min(dof_blur_chain::lens_blur_tuning::kMaxSamples, preset_cap));
     if ((odd_count % 2) == 0) {
         ++odd_count;
     }
@@ -838,7 +846,14 @@ bool apply_layer_lens_blur(SDL_Renderer* renderer,
                                      1,
                                      target_h);
     const bool reduced_resolution = (process_w != target_w) || (process_h != target_h);
-    const float process_radius = std::max(0.0f, blur_radius_px) * clamped_quality;
+    float capped_radius_px = std::max(0.0f, blur_radius_px);
+    switch (std::clamp(settings.quality_preset, 0, 3)) {
+    case 1: capped_radius_px = std::min(capped_radius_px, 96.0f); break;
+    case 2: capped_radius_px = std::min(capped_radius_px, 64.0f); break;
+    case 3: capped_radius_px = std::min(capped_radius_px, 36.0f); break;
+    default: break;
+    }
+    const float process_radius = capped_radius_px * clamped_quality;
     const SDL_FPoint process_optical_center{
         std::clamp(optical_center.x * (static_cast<float>(process_w) / static_cast<float>(target_w)),
                    0.0f,
@@ -890,7 +905,8 @@ bool apply_layer_lens_blur(SDL_Renderer* renderer,
     const float edge_weight = smoothstep01((radius01 - swirl_start) / std::max(1.0e-4f, 1.0f - swirl_start));
     const float swirl_sign = foreground_layer ? -1.0f : 1.0f;
     const float swirl_px = process_radius * settings.swirl_strength * edge_weight * swirl_sign;
-    const float rotation = std::isfinite(settings.bokeh_rotation) ? settings.bokeh_rotation : 0.0f;
+    const float rotation_degrees = std::isfinite(settings.bokeh_rotation) ? settings.bokeh_rotation : 0.0f;
+    const float rotation = rotation_degrees * 3.14159265358979323846f / 180.0f;
     const float oval_x = std::cos(rotation);
     const float oval_y = std::sin(rotation);
     const float oval_ratio = std::max(0.05f, std::isfinite(settings.bokeh_oval_ratio) ? settings.bokeh_oval_ratio : 1.0f);
@@ -1134,7 +1150,7 @@ bool Renderer::copy_texture(SDL_Texture* src, SDL_Texture* dst) const {
     return copy_texture_region(renderer_, src, dst, nullptr, nullptr);
 }
 
-bool Renderer::composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const {
+bool Renderer::composite_texture_over(SDL_Texture* src, SDL_Texture* dst, SDL_Color color_mod) const {
     if (!renderer_ || !src || !dst) {
         return false;
     }
@@ -1145,8 +1161,8 @@ bool Renderer::composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const 
     render_diagnostics::set_render_target(renderer_, dst);
 
     SDL_SetTextureBlendMode(src, premultiplied_over_blend_mode());
-    SDL_SetTextureAlphaMod(src, 255);
-    SDL_SetTextureColorMod(src, 255, 255, 255);
+    SDL_SetTextureAlphaMod(src, color_mod.a);
+    SDL_SetTextureColorMod(src, color_mod.r, color_mod.g, color_mod.b);
 
     const bool ok = render_diagnostics::render_texture(renderer_, src, nullptr, nullptr);
 
@@ -1442,7 +1458,42 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
                 layer_output = foreground_layer_;
             }
 
-            return composite_texture_over(layer_output, composite_target);
+            SDL_Color debug_color{255, 255, 255, 255};
+            switch (lens_settings.alpha_debug_mode) {
+            case kAlphaDebugSourceAlpha:
+                layer_output = layer_source;
+                debug_color = SDL_Color{255, 255, 255, 220};
+                break;
+            case kAlphaDebugAccumulatedBlurAlpha:
+                debug_color = SDL_Color{180, 220, 255, 235};
+                break;
+            case kAlphaDebugDepthLayer:
+                debug_color = foreground_layer ? SDL_Color{255, 170, 120, 235}
+                                               : SDL_Color{120, 190, 255, 235};
+                break;
+            case kAlphaDebugBlurAmount: {
+                const Uint8 intensity = static_cast<Uint8>(std::clamp(
+                    static_cast<int>(std::lround(
+                        std::clamp(layer_blur / std::max(1.0f, lens_settings.max_far_blur_px), 0.0f, 1.0f) *
+                        255.0f)),
+                    0,
+                    255));
+                debug_color = SDL_Color{255, intensity, static_cast<Uint8>(255 - intensity / 2), 240};
+                break;
+            }
+            case kAlphaDebugFocus:
+                debug_color = layer.is_focus_protected ? SDL_Color{80, 255, 120, 255}
+                                                       : SDL_Color{120, 120, 120, 180};
+                break;
+            case kAlphaDebugBlurPaddingPreview:
+                debug_color = lens_settings.blur_padding_px > 0 ? SDL_Color{255, 220, 90, 230}
+                                                                : SDL_Color{255, 255, 255, 220};
+                break;
+            default:
+                break;
+            }
+
+            return composite_texture_over(layer_output, composite_target, debug_color);
         };
 
     for (const LayerTexture& layer : scratch_background_layers_) {
@@ -1490,7 +1541,10 @@ CompositeResult Renderer::compose(const std::vector<LayerTexture>& layers,
             output = foreground_layer_;
         }
 
-        if (!composite_texture_over(output, background_mid_)) {
+        const SDL_Color focus_debug_color = lens_settings.alpha_debug_mode == kAlphaDebugFocus
+            ? SDL_Color{80, 255, 120, 255}
+            : SDL_Color{255, 255, 255, 255};
+        if (!composite_texture_over(output, background_mid_, focus_debug_color)) {
             return restore_and_return(CompositeResult{});
         }
 

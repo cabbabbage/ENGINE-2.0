@@ -178,9 +178,9 @@ double env_double_clamped_renderer(const char* name, double default_value, doubl
 }
 
 struct FinalLensPassSettings {
-    float barrel_distortion = 0.035f;
+    float barrel_distortion = 0.03f;
     float distortion_zoom_compensation = 0.965f;
-    float vignette_strength = 0.26f;
+    float vignette_strength = 0.25f;
     float vignette_radius = 0.58f;
     float vignette_softness = 0.42f;
     float vignette_depth_influence = 0.0f;
@@ -394,12 +394,59 @@ bool apply_final_lens_pass(SDL_Renderer* renderer,
         }
     }
 
-    const bool ok = SDL_RenderGeometry(renderer,
-                                       source,
-                                       vertices.data(),
-                                       static_cast<int>(vertices.size()),
-                                       indices.data(),
-                                       static_cast<int>(indices.size()));
+    bool ok = render_diagnostics::render_geometry(renderer,
+                                                   source,
+                                                   vertices.data(),
+                                                   static_cast<int>(vertices.size()),
+                                                   indices.data(),
+                                                   static_cast<int>(indices.size()));
+
+    if (ok && (settings.edge_softness > 1.0e-5f || settings.bloom_strength > 1.0e-5f ||
+               settings.halation_strength > 1.0e-5f || settings.chromatic_aberration > 1.0e-5f)) {
+        SDL_SetTextureBlendMode(source, SDL_BLENDMODE_ADD);
+        const float max_dim = static_cast<float>(std::max(width, height));
+        const float edge_alpha = std::clamp(settings.edge_softness * 0.16f, 0.0f, 0.24f);
+        const float bloom_alpha = std::clamp(settings.bloom_strength * 0.18f +
+                                                 settings.halation_strength * 0.10f,
+                                             0.0f,
+                                             0.30f);
+        auto draw_soft_copy = [&](float inflate_px, float alpha, Uint8 r, Uint8 g, Uint8 b) {
+            if (alpha <= 1.0e-5f || !ok) {
+                return;
+            }
+            SDL_SetTextureAlphaMod(source, static_cast<Uint8>(std::clamp(
+                                               static_cast<int>(std::lround(alpha * 255.0f)),
+                                               0,
+                                               255)));
+            SDL_SetTextureColorMod(source, r, g, b);
+            const SDL_FRect dst{
+                -inflate_px,
+                -inflate_px,
+                static_cast<float>(width) + inflate_px * 2.0f,
+                static_cast<float>(height) + inflate_px * 2.0f};
+            ok = render_diagnostics::render_texture(renderer, source, nullptr, &dst);
+        };
+        draw_soft_copy(max_dim * 0.006f, edge_alpha, 220, 220, 220);
+        draw_soft_copy(std::max(1.0f, settings.bloom_radius * max_dim * 0.012f), bloom_alpha, 255, 224, 196);
+
+        const float ca = std::clamp(settings.chromatic_aberration, 0.0f, 0.05f);
+        if (ca > 1.0e-5f && ok) {
+            const float edge_bias = 1.0f - std::clamp(settings.chromatic_edge_start, 0.0f, 1.0f);
+            const float shift = std::max(0.5f, ca * max_dim * (0.45f + edge_bias));
+            SDL_SetTextureAlphaMod(source, static_cast<Uint8>(std::clamp(
+                                               static_cast<int>(settings.chromatic_depth_influence * 70.0f + 28.0f),
+                                               0,
+                                               96)));
+            SDL_SetTextureColorMod(source, 255, 120, 120);
+            const SDL_FRect red_dst{-shift, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+            ok = render_diagnostics::render_texture(renderer, source, nullptr, &red_dst);
+            if (ok) {
+                SDL_SetTextureColorMod(source, 120, 190, 255);
+                const SDL_FRect blue_dst{shift, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+                ok = render_diagnostics::render_texture(renderer, source, nullptr, &blue_dst);
+            }
+        }
+    }
 
     SDL_SetTextureBlendMode(source, previous_blend);
     SDL_SetTextureAlphaMod(source, previous_alpha);
@@ -2907,7 +2954,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         render_diagnostics::end_frame();
         return false;
     }
-    composite_pass_ms += elapsed_ms(final_lens_begin, SDL_GetPerformanceCounter());
+    const double final_lens_ms = elapsed_ms(final_lens_begin, SDL_GetPerformanceCounter());
+    composite_pass_ms += final_lens_ms;
+    render_diagnostics::add_lens_pass_ms(final_lens_ms);
 
     if (frame_to_render->ui_overlay_texture) {
         const std::uint64_t ui_begin = SDL_GetPerformanceCounter();
@@ -2975,6 +3024,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " empty_scene_hold_bypassed_startup_policy=0"
                   << " dof_last_ms=" << last_dof_path_ms_
                   << " composite=" << composite_pass_ms
+                  << " lens_pass=" << final_lens_ms
                   << " ui_prepare=" << ui_overlay_prepare_ms
                   << " ui_copy=" << ui_overlay_ms
                   << " backbuffer=" << backbuffer_ms

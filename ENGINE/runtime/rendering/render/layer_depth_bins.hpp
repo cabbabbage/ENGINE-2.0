@@ -13,8 +13,8 @@ constexpr int kDofFocusBucketRadius = 2;
 struct LensBlurDepthSettings {
     float focus_depth_offset = 0.0f;
     float aperture = 1.0f;
-    float focus_falloff_acceleration = 1.65f;
-    float max_near_blur_px = 12.0f;
+    float focus_falloff_acceleration = 1.5f;
+    float max_near_blur_px = 16.0f;
     float max_far_blur_px = 48.0f;
     float near_far_blur_bias = 0.0f;
     float focus_dead_zone = 1.0e-3f;

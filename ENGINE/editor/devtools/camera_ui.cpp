@@ -225,7 +225,6 @@ void CameraUIPanel::sync_from_camera() {
     if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
     sync_debug_controls_from_settings(settings);
     if (aperture_slider_) aperture_slider_->set_value(settings.aperture);
-    if (radial_blur_px_slider_) radial_blur_px_slider_->set_value(settings.radial_blur_px);
     if (depth_of_field_checkbox_) {
         depth_of_field_checkbox_->set_value(settings.depth_of_field_enabled);
     }
@@ -283,6 +282,9 @@ void CameraUIPanel::sync_debug_controls_from_settings(const WarpedScreenGrid::Re
     if (bloom_threshold_slider_) bloom_threshold_slider_->set_value(lens.bloom_threshold);
     if (bloom_radius_slider_) bloom_radius_slider_->set_value(lens.bloom_radius);
     if (halation_strength_slider_) halation_strength_slider_->set_value(lens.halation_strength);
+    if (sample_count_slider_) sample_count_slider_->set_value(static_cast<float>(lens.sample_count));
+    if (downsample_scale_slider_) downsample_scale_slider_->set_value(lens.downsample_scale);
+    if (quality_preset_dropdown_) quality_preset_dropdown_->set_selected(lens.quality_preset);
     if (blur_padding_preview_slider_) blur_padding_preview_slider_->set_value(static_cast<float>(lens.blur_padding_px));
     if (alpha_debug_dropdown_) alpha_debug_dropdown_->set_selected(lens.alpha_debug_mode);
     if (alpha_clamp_protection_checkbox_) alpha_clamp_protection_checkbox_->set_value(lens.alpha_clamp_protection);
@@ -375,15 +377,6 @@ void CameraUIPanel::build_ui() {
     aperture_slider_ = std::make_unique<FloatSliderWidget>("Aperture", 0.1f, 8.0f, 0.01f, defaults.aperture, 2);
     aperture_slider_->set_tooltip("Controls how aggressively DoF blur ramps as layers move away from the focus layer.");
     aperture_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-    radial_blur_px_slider_ = std::make_unique<FloatSliderWidget>(
-        "Radial Blur (px)",
-        0.0f,
-        256.0f,
-        0.01f,
-        defaults.radial_blur_px,
-        3);
-    radial_blur_px_slider_->set_tooltip("Additional radial blur from the optical center. Higher values can add cinematic depth but increase post-process work.");
-    radial_blur_px_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
     auto dof_checkbox = std::make_unique<DMCheckbox>("Enable Depth Effects", defaults.depth_of_field_enabled);
     depth_of_field_checkbox_ = dof_checkbox.get();
     depth_of_field_widget_ = std::make_unique<CallbackCheckboxWidget>(
@@ -426,6 +419,14 @@ void CameraUIPanel::build_ui() {
     make_lens_slider(bloom_threshold_slider_, "Bloom Threshold", 0.0f, 1.0f, 0.01f, lens_defaults.bloom_threshold, 2);
     make_lens_slider(bloom_radius_slider_, "Bloom Radius", 0.0f, 1.0f, 0.01f, lens_defaults.bloom_radius, 2);
     make_lens_slider(halation_strength_slider_, "Halation Strength", 0.0f, 1.0f, 0.01f, lens_defaults.halation_strength, 2);
+    make_lens_slider(sample_count_slider_, "Sample Count", 1.0f, 17.0f, 1.0f, static_cast<float>(lens_defaults.sample_count), 0);
+    make_lens_slider(downsample_scale_slider_, "Far Downsample Scale", 0.2f, 1.0f, 0.01f, lens_defaults.downsample_scale, 2);
+    quality_preset_dropdown_ = std::make_unique<DMDropdown>(
+        "Quality Preset",
+        std::vector<std::string>{"Ultra", "High", "Balanced", "Performance"},
+        lens_defaults.quality_preset);
+    quality_preset_dropdown_->set_on_selection_changed([this](int) { on_control_value_changed(); });
+    quality_preset_widget_ = std::make_unique<DropdownWidget>(quality_preset_dropdown_.get());
     make_lens_slider(blur_padding_preview_slider_, "Blur Padding Preview", 0.0f, 256.0f, 1.0f, static_cast<float>(lens_defaults.blur_padding_px), 0);
 
     alpha_debug_dropdown_ = std::make_unique<DMDropdown>(
@@ -634,6 +635,9 @@ void CameraUIPanel::rebuild_rows() {
         if (bloom_threshold_slider_) rows.push_back({ bloom_threshold_slider_.get() });
         if (bloom_radius_slider_) rows.push_back({ bloom_radius_slider_.get() });
         if (halation_strength_slider_) rows.push_back({ halation_strength_slider_.get() });
+        if (sample_count_slider_) rows.push_back({ sample_count_slider_.get() });
+        if (downsample_scale_slider_) rows.push_back({ downsample_scale_slider_.get() });
+        if (quality_preset_widget_) rows.push_back({ quality_preset_widget_.get() });
         push_label(6);
         if (alpha_debug_widget_) rows.push_back({ alpha_debug_widget_.get() });
         if (alpha_clamp_protection_widget_) rows.push_back({ alpha_clamp_protection_widget_.get() });
@@ -713,6 +717,9 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (bloom_threshold_slider_) updated.lens.bloom_threshold = bloom_threshold_slider_->value();
     if (bloom_radius_slider_) updated.lens.bloom_radius = bloom_radius_slider_->value();
     if (halation_strength_slider_) updated.lens.halation_strength = halation_strength_slider_->value();
+    if (sample_count_slider_) updated.lens.sample_count = static_cast<int>(std::lround(sample_count_slider_->value()));
+    if (downsample_scale_slider_) updated.lens.downsample_scale = downsample_scale_slider_->value();
+    if (quality_preset_dropdown_) updated.lens.quality_preset = quality_preset_dropdown_->selected();
     if (alpha_debug_dropdown_) updated.lens.alpha_debug_mode = alpha_debug_dropdown_->selected();
     if (blur_padding_preview_slider_) {
         updated.lens.blur_padding_px = static_cast<int>(std::lround(blur_padding_preview_slider_->value()));

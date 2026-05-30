@@ -32,6 +32,7 @@ struct RenderFrameStats {
     double sdl_render_target_ms = 0.0;
     double sdl_render_texture_ms = 0.0;
     double sdl_render_geometry_ms = 0.0;
+    double lens_pass_ms = 0.0;
     std::uint32_t draw_submission_packet_build_count = 0;
     std::uint32_t draw_submission_resource_create_count = 0;
     std::uint32_t draw_submission_pipeline_bind_count = 0;
@@ -128,6 +129,7 @@ void add_draw_submission_packet_build_sort_ms(double elapsed_ms, std::uint32_t p
 void add_draw_submission_resource_create_ms(double elapsed_ms, std::uint32_t create_count = 0);
 void add_draw_submission_pipeline_bind_ms(double elapsed_ms, std::uint32_t bind_count = 0);
 void add_draw_submission_submit_present_handoff_ms(double elapsed_ms, std::uint32_t handoff_count = 0);
+void add_lens_pass_ms(double elapsed_ms);
 void set_draw_submission_breakdown(double unaccounted_ms,
                                    double target_sync_ms,
                                    double first_ensure_ms,

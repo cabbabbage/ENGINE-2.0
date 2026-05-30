@@ -72,12 +72,12 @@ struct CinematicLensSettings {
     bool enabled = false;
     float focus_depth_offset = 0.0f;
     float aperture = 1.0f;
-    float focus_falloff_acceleration = 1.65f;
-    float max_near_blur_px = 12.0f;
+    float focus_falloff_acceleration = 1.5f;
+    float max_near_blur_px = 16.0f;
     float max_far_blur_px = 48.0f;
     float near_far_blur_bias = 0.0f;
-    float swirl_strength = 0.28f;
-    float swirl_radius_start = 0.18f;
+    float swirl_strength = 0.25f;
+    float swirl_radius_start = 0.35f;
     float tangential_blur_stretch = 1.0f;
     float anamorphic_strength = 0.0f;
     float bokeh_oval_ratio = 1.0f;
@@ -171,7 +171,7 @@ private:
 
     void clear_target(SDL_Texture* texture) const;
     bool copy_texture(SDL_Texture* src, SDL_Texture* dst) const;
-    bool composite_texture_over(SDL_Texture* src, SDL_Texture* dst) const;
+    bool composite_texture_over(SDL_Texture* src, SDL_Texture* dst, SDL_Color color_mod = SDL_Color{255, 255, 255, 255}) const;
 
     bool blur_step(SDL_Texture* src,
                    SDL_Texture* dst,

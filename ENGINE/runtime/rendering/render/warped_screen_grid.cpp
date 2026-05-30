@@ -909,22 +909,22 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     settings_.lens.enabled = settings_.depth_of_field_enabled || settings_.lens.enabled;
     settings_.lens.aperture = clamp_float(settings_.lens.aperture, 1.0f, 0.1f, 8.0f);
     settings_.lens.focus_depth_offset = clamp_float(settings_.lens.focus_depth_offset, 0.0f, -512.0f, 512.0f);
-    settings_.lens.focus_falloff_acceleration = clamp_float(settings_.lens.focus_falloff_acceleration, 1.65f, 0.5f, 4.0f);
-    settings_.lens.max_near_blur_px = clamp_float(settings_.lens.max_near_blur_px, 12.0f, 0.0f, 128.0f);
+    settings_.lens.focus_falloff_acceleration = clamp_float(settings_.lens.focus_falloff_acceleration, 1.5f, 0.5f, 4.0f);
+    settings_.lens.max_near_blur_px = clamp_float(settings_.lens.max_near_blur_px, 16.0f, 0.0f, 128.0f);
     settings_.lens.max_far_blur_px = clamp_float(settings_.lens.max_far_blur_px, 48.0f, 0.0f, 256.0f);
     settings_.lens.near_far_blur_bias = clamp_float(settings_.lens.near_far_blur_bias, 0.0f, -1.0f, 1.0f);
     settings_.lens.field_curvature = clamp_float(settings_.lens.field_curvature, 0.0f, -4.0f, 4.0f);
     settings_.lens.edge_softness = clamp_float(settings_.lens.edge_softness, 1.0f, 0.0f, 1.0f);
-    settings_.lens.swirl_strength = clamp_float(settings_.lens.swirl_strength, 0.28f, 0.0f, 2.0f);
-    settings_.lens.swirl_radius_start = clamp_float(settings_.lens.swirl_radius_start, 0.18f, 0.0f, 1.0f);
+    settings_.lens.swirl_strength = clamp_float(settings_.lens.swirl_strength, 0.25f, 0.0f, 2.0f);
+    settings_.lens.swirl_radius_start = clamp_float(settings_.lens.swirl_radius_start, 0.35f, 0.0f, 1.0f);
     settings_.lens.tangential_blur_stretch = clamp_float(settings_.lens.tangential_blur_stretch, 1.0f, 0.0f, 4.0f);
     settings_.lens.anamorphic_strength = clamp_float(settings_.lens.anamorphic_strength, 0.0f, 0.0f, 2.0f);
     settings_.lens.bokeh_oval_ratio = clamp_float(settings_.lens.bokeh_oval_ratio, 1.0f, 1.0f, 4.0f);
     settings_.lens.bokeh_rotation = clamp_float(settings_.lens.bokeh_rotation, 0.0f, -180.0f, 180.0f);
-    settings_.lens.vignette_strength = clamp_float(settings_.lens.vignette_strength, 0.26f, 0.0f, 1.0f);
+    settings_.lens.vignette_strength = clamp_float(settings_.lens.vignette_strength, 0.25f, 0.0f, 1.0f);
     settings_.lens.vignette_radius = clamp_float(settings_.lens.vignette_radius, 0.58f, 0.0f, 1.0f);
     settings_.lens.vignette_softness = clamp_float(settings_.lens.vignette_softness, 0.42f, 0.001f, 1.0f);
-    settings_.lens.barrel_distortion = clamp_float(settings_.lens.barrel_distortion, 0.035f, -0.5f, 0.5f);
+    settings_.lens.barrel_distortion = clamp_float(settings_.lens.barrel_distortion, 0.03f, -0.5f, 0.5f);
     settings_.lens.distortion_zoom_compensation = clamp_float(settings_.lens.distortion_zoom_compensation, 0.965f, 0.0f, 1.5f);
     settings_.lens.chromatic_aberration = clamp_float(settings_.lens.chromatic_aberration, 0.0f, 0.0f, 8.0f);
     settings_.lens.chromatic_edge_start = clamp_float(settings_.lens.chromatic_edge_start, 0.62f, 0.0f, 1.0f);
@@ -1795,6 +1795,9 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_int("lens_alpha_debug_mode", updated.lens.alpha_debug_mode, 0, 9);
     read_bool("lens_alpha_clamp_protection", updated.lens.alpha_clamp_protection);
     read_int("lens_blur_padding_preview", updated.lens.blur_padding_px, 0, 256);
+    read_int("lens_sample_count", updated.lens.sample_count, 1, 17);
+    read_float("lens_downsample_scale", updated.lens.downsample_scale, 0.20f, 1.0f);
+    read_int("lens_quality_preset", updated.lens.quality_preset, 0, 3);
     set_realism_settings(updated);
 
     transition_settings_.transition_damping = read_transition_float(
@@ -1919,6 +1922,9 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["lens_alpha_debug_mode"] = settings_.lens.alpha_debug_mode;
     result["lens_alpha_clamp_protection"] = settings_.lens.alpha_clamp_protection;
     result["lens_blur_padding_preview"] = settings_.lens.blur_padding_px;
+    result["lens_sample_count"] = settings_.lens.sample_count;
+    result["lens_downsample_scale"] = settings_.lens.downsample_scale;
+    result["lens_quality_preset"] = settings_.lens.quality_preset;
     result["transition_damping"] = transition_settings_.transition_damping;
     result["max_camera_velocity"] = transition_settings_.max_camera_velocity;
     result["room_blend_damping_scale"] = transition_settings_.room_blend_damping_scale;

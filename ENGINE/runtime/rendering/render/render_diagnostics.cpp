@@ -114,6 +114,7 @@ void begin_frame() {
     g_frame_stats.sdl_render_target_ms = 0.0;
     g_frame_stats.sdl_render_texture_ms = 0.0;
     g_frame_stats.sdl_render_geometry_ms = 0.0;
+    g_frame_stats.lens_pass_ms = 0.0;
     g_frame_stats.draw_submission_packet_build_count = 0;
     g_frame_stats.draw_submission_resource_create_count = 0;
     g_frame_stats.draw_submission_pipeline_bind_count = 0;
@@ -263,6 +264,10 @@ void add_draw_submission_pipeline_bind_ms(double elapsed_ms_value, std::uint32_t
 void add_draw_submission_submit_present_handoff_ms(double elapsed_ms_value, std::uint32_t handoff_count) {
     g_frame_stats.draw_submission_submit_present_handoff_ms += std::max(0.0, elapsed_ms_value);
     g_frame_stats.draw_submission_submit_handoff_count += handoff_count;
+}
+
+void add_lens_pass_ms(double elapsed_ms_value) {
+    g_frame_stats.lens_pass_ms += std::max(0.0, elapsed_ms_value);
 }
 
 void set_draw_submission_breakdown(double unaccounted_ms,

@@ -40,6 +40,14 @@ struct ProjectedSpriteFrame {
     SDL_FPoint screen_tr{0.0f, 0.0f};
     SDL_FPoint screen_br{0.0f, 0.0f};
     SDL_FPoint screen_bl{0.0f, 0.0f};
+    // Screen-space crop basis before sprite-local rotation is applied. Floor/sink
+    // clipping uses this ground-parallel basis so the cut line follows the
+    // projected world X/horizon direction instead of drifting with asset tilt.
+    SDL_FPoint crop_screen_tl{0.0f, 0.0f};
+    SDL_FPoint crop_screen_tr{0.0f, 0.0f};
+    SDL_FPoint crop_screen_br{0.0f, 0.0f};
+    SDL_FPoint crop_screen_bl{0.0f, 0.0f};
+    bool has_crop_screen_basis = false;
     int frame_width_px = 0;
     int frame_height_px = 0;
     int final_width_px = 0;

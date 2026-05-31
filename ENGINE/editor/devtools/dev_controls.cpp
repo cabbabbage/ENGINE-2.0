@@ -2019,6 +2019,8 @@ void DevControls::open_right_docked_panel(RightDockedPanel panel) {
 
     close_all_right_docked_panels(panel);
     close_misc_options_panel();
+    set_active_right_docked_panel(panel);
+    apply_header_suppression();
 
     switch (panel) {
         case RightDockedPanel::Camera:

@@ -75,14 +75,19 @@ int main() {
         }
     }
     assert(found_merged_mushroom);
-    assert(room.contains("height"));
+    assert(room.contains("size"));
+    assert(!room.contains("geometry"));
+    assert(!room.contains("width"));
+    assert(!room.contains("height"));
     assert(room.contains("trail_connection_sector"));
 
     assert(!normalized["trails_data"].contains("MainTrail"));
     assert(normalized["trails_data"].contains("MainTrail_Trail"));
     const auto& trail = normalized["trails_data"]["MainTrail_Trail"];
     assert(trail.value("name", std::string{}) == "MainTrail_Trail");
-    assert(trail.contains("width"));
+    assert(trail.contains("size"));
+    assert(!trail.contains("geometry"));
+    assert(!trail.contains("width"));
     assert(!trail.contains("height"));
     assert(!trail.contains("edge_smoothness"));
     assert(!trail.contains("curvyness"));

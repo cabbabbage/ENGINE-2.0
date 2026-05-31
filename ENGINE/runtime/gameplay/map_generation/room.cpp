@@ -26,34 +26,9 @@ namespace {
 
 using vibble::strings::to_lower_copy;
 
-constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 40000;
-
-int resolve_weighted_dimension(const vibble::weighted_range::WeightedIntRange& range, std::mt19937& rng) {
-        const std::int64_t resolved = vibble::weighted_range::resolve(range, rng);
-        if (resolved < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
-                return std::numeric_limits<int>::min();
-        }
-        if (resolved > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
-                return std::numeric_limits<int>::max();
-        }
-        return static_cast<int>(resolved);
-}
-
-std::pair<int, int> range_bounds(const vibble::weighted_range::WeightedIntRange& value) {
-        const std::int64_t min_value = value.center - value.span;
-        const std::int64_t max_value = value.center + value.span;
-        const auto clamp_i64_to_int = [](std::int64_t v) {
-                if (v < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
-                        return std::numeric_limits<int>::min();
-                }
-                if (v > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
-                        return std::numeric_limits<int>::max();
-                }
-                return static_cast<int>(v);
-        };
-        return {clamp_i64_to_int(min_value), clamp_i64_to_int(max_value)};
-}
+constexpr int kDefaultRoomSize = 9;
+constexpr int kMinRoomSize = 7;
+constexpr int kMaxRoomSize = 20;
 
 RoomAreaSerialization::Kind parse_kind_value(const std::string& value) {
         if (value.empty()) return RoomAreaSerialization::Kind::Unknown;
@@ -502,44 +477,29 @@ Room::Room(Point origin,
             room_area->set_type(type.empty() ? "room" : type);
         }
     } else {
-        std::string geometry = assets_json.value("geometry", "square");
-        if (!geometry.empty()) {
-            geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
-        }
-
-        const auto default_range = vibble::weighted_range::make_legacy_uniform(64, 64);
-        const auto ranges = room_legacy_migration::resolve_dimension_ranges(
+        const auto size_info = room_legacy_migration::resolve_room_size(
             assets_json,
-            default_range,
+            kDefaultRoomSize,
             [this](const char* reason) {
                 std::cout << "[Room] Legacy room migration executed for '" << room_name
                           << "' reason=" << (reason ? reason : "unknown") << "\n";
             });
-        vibble::weighted_range::WeightedIntRange width_range = ranges.width;
-        vibble::weighted_range::WeightedIntRange height_range = ranges.height;
-
-        std::mt19937 rng(std::random_device{}());
-        const int width = std::max(1, resolve_weighted_dimension(width_range, rng));
-        const int height = std::max(1, resolve_weighted_dimension(height_range, rng));
+        const int size = std::clamp(size_info.size, kMinRoomSize, kMaxRoomSize);
 
         if (testing) {
             std::cout << "[Room] Creating area from JSON: " << room_name
-                      << " (" << width << "x" << height << ")"
+                      << " (size=" << size << ")"
                       << " at (" << map_origin.first << ", " << map_origin.second << ")"
-                      << ", geometry: " << geometry
                       << ", map radius: " << map_radius << "\n";
         }
 
         room_area = std::make_unique<Area>(
             room_name,
             SDL_Point{map_origin.first, map_origin.second},
-            width,
-            height,
-            geometry,
-            0,
+            size,
             map_w,
             map_h,
-            3);
+            size);
 
         if (room_area) {
             room_area->set_type("room");
@@ -666,15 +626,10 @@ std::pair<int, int> Room::current_room_dimensions() const {
                 return {w, h};
         }
 
-        const auto default_range = vibble::weighted_range::make_legacy_uniform(64, 64);
-        const auto ranges = room_legacy_migration::resolve_dimension_ranges(assets_json, default_range, nullptr);
-        vibble::weighted_range::WeightedIntRange width_range = ranges.width;
-        vibble::weighted_range::WeightedIntRange height_range = ranges.height;
-        std::mt19937 rng(std::random_device{}());
-        const int width = std::max(1, resolve_weighted_dimension(width_range, rng));
-        const int height = std::max(1, resolve_weighted_dimension(height_range, rng));
-
-        return {width, height};
+        const auto size_info = room_legacy_migration::resolve_room_size(assets_json, kDefaultRoomSize, nullptr);
+        const int size = std::clamp(size_info.size, kMinRoomSize, kMaxRoomSize);
+        const int radius = size * vibble::grid::delta(size);
+        return {radius * 2, radius * 2};
 }
 
 void Room::load_named_areas_from_json() {
@@ -1020,15 +975,14 @@ void Room::upsert_named_area(const Area& area,
 
 nlohmann::json Room::create_static_room_json(std::string name) {
         json out;
-	const std::string geometry = assets_json.value("geometry", "Square");
-	int width = 0, height = 0;
-	if (room_area) {
-		bounds_to_size(room_area->get_bounds(), width, height);
-	}
+        const auto size_info = room_legacy_migration::resolve_room_size(assets_json, kDefaultRoomSize, nullptr);
+        const int size = std::clamp(size_info.size, kMinRoomSize, kMaxRoomSize);
+        int width = 0, height = 0;
+        if (room_area) {
+                bounds_to_size(room_area->get_bounds(), width, height);
+        }
 	out["name"] = std::move(name);
-        out["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(width));
-        out["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(height));
-        out["geometry"] = geometry;
+        out["size"] = size;
         if (assets_json.contains("coarseness")) {
                 const auto& c = assets_json["coarseness"];
                 int legacy_coarseness = 0;
@@ -1068,6 +1022,7 @@ nlohmann::json Room::create_static_room_json(std::string name) {
         out.erase("max_width");
         out.erase("min_height");
         out.erase("max_height");
+        out.erase("geometry");
         out.erase("edge_detail_candidates");
 	out["is_boss"] = assets_json.value("is_boss", false);
 	out["inherits_live_dynamic_assets"] = assets_json.value(

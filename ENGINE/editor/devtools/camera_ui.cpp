@@ -54,9 +54,29 @@ private:
 
 
 
-CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
-    : DockableCollapsible("Camera", false, x, y),
-      assets_(assets) {
+const char* CameraUIPanel::panel_title(PanelKind kind) {
+    switch (kind) {
+        case PanelKind::Camera: return "Camera";
+        case PanelKind::Lens: return "Lens";
+        case PanelKind::SceneEffects: return "Scene Effects";
+    }
+    return "Camera";
+}
+
+const char* CameraUIPanel::panel_lock_id(PanelKind kind) {
+    switch (kind) {
+        case PanelKind::Camera: return "controls_camera";
+        case PanelKind::Lens: return "controls_lens";
+        case PanelKind::SceneEffects: return "controls_scene_effects";
+    }
+    return "controls_camera";
+}
+
+CameraUIPanel::CameraUIPanel(Assets* assets, PanelKind kind, int x, int y)
+    : DockableCollapsible(panel_title(kind), false, x, y),
+      assets_(assets),
+      panel_kind_(kind),
+      lock_settings_id_(panel_lock_id(kind)) {
     movement_section_expanded_ = true;
     framing_section_expanded_ = true;
     lens_section_expanded_ = true;
@@ -563,9 +583,18 @@ void CameraUIPanel::ensure_section_panels() {
 
     ensure_panel(movement_section_panel_, "Movement", movement_section_expanded_);
     ensure_panel(framing_section_panel_, "Framing", framing_section_expanded_);
-    ensure_panel(lens_section_panel_, "Lens", lens_section_expanded_);
+    ensure_panel(lens_section_panel_, panel_kind_ == PanelKind::SceneEffects ? "Scene Effects" : "Lens", lens_section_expanded_);
     ensure_panel(rendering_section_panel_, "Rendering", rendering_section_expanded_);
     ensure_panel(debug_section_panel_, "Debug", debug_section_expanded_);
+
+    const bool show_camera_sections = panel_kind_ == PanelKind::Camera;
+    const bool show_lens_section = panel_kind_ == PanelKind::Lens;
+    const bool show_scene_effects_section = panel_kind_ == PanelKind::SceneEffects;
+    if (movement_section_panel_) movement_section_panel_->set_visible(show_camera_sections);
+    if (framing_section_panel_) framing_section_panel_->set_visible(show_camera_sections);
+    if (rendering_section_panel_) rendering_section_panel_->set_visible(show_camera_sections);
+    if (debug_section_panel_) debug_section_panel_->set_visible(show_camera_sections);
+    if (lens_section_panel_) lens_section_panel_->set_visible(show_lens_section || show_scene_effects_section);
 
     ordered_section_panels_ = {
         movement_section_panel_.get(),
@@ -663,49 +692,52 @@ void CameraUIPanel::rebuild_rows() {
     auto push_label = [&](std::size_t index) {
         if (index < lens_label_widgets_.size()) lens_rows.push_back({ lens_label_widgets_[index].get() });
     };
-    push_label(0);
-    if (depth_of_field_widget_) lens_rows.push_back({ depth_of_field_widget_.get() });
-    if (focus_depth_offset_slider_) lens_rows.push_back({ focus_depth_offset_slider_.get() });
-    if (reset_lens_defaults_widget_) lens_rows.push_back({ reset_lens_defaults_widget_.get() });
-    push_label(1);
-    if (aperture_slider_) lens_rows.push_back({ aperture_slider_.get() });
-    if (focus_falloff_acceleration_slider_) lens_rows.push_back({ focus_falloff_acceleration_slider_.get() });
-    if (max_near_blur_px_slider_) lens_rows.push_back({ max_near_blur_px_slider_.get() });
-    if (max_far_blur_px_slider_) lens_rows.push_back({ max_far_blur_px_slider_.get() });
-    if (near_far_blur_bias_slider_) lens_rows.push_back({ near_far_blur_bias_slider_.get() });
-    if (field_curvature_slider_) lens_rows.push_back({ field_curvature_slider_.get() });
-    if (edge_softness_slider_) lens_rows.push_back({ edge_softness_slider_.get() });
-    if (layer_depth_interval_slider_) lens_rows.push_back({ layer_depth_interval_slider_.get() });
-    if (layer_depth_falloff_slider_) lens_rows.push_back({ layer_depth_falloff_slider_.get() });
-    push_label(2);
-    if (swirl_strength_slider_) lens_rows.push_back({ swirl_strength_slider_.get() });
-    if (swirl_radius_start_slider_) lens_rows.push_back({ swirl_radius_start_slider_.get() });
-    if (tangential_blur_stretch_slider_) lens_rows.push_back({ tangential_blur_stretch_slider_.get() });
-    if (anamorphic_strength_slider_) lens_rows.push_back({ anamorphic_strength_slider_.get() });
-    if (bokeh_oval_ratio_slider_) lens_rows.push_back({ bokeh_oval_ratio_slider_.get() });
-    if (bokeh_rotation_slider_) lens_rows.push_back({ bokeh_rotation_slider_.get() });
-    push_label(3);
-    if (vignette_strength_slider_) lens_rows.push_back({ vignette_strength_slider_.get() });
-    if (vignette_radius_slider_) lens_rows.push_back({ vignette_radius_slider_.get() });
-    if (vignette_softness_slider_) lens_rows.push_back({ vignette_softness_slider_.get() });
-    if (barrel_distortion_slider_) lens_rows.push_back({ barrel_distortion_slider_.get() });
-    if (distortion_zoom_compensation_slider_) lens_rows.push_back({ distortion_zoom_compensation_slider_.get() });
-    push_label(4);
-    if (chromatic_aberration_slider_) lens_rows.push_back({ chromatic_aberration_slider_.get() });
-    if (chromatic_edge_start_slider_) lens_rows.push_back({ chromatic_edge_start_slider_.get() });
-    if (chromatic_depth_influence_slider_) lens_rows.push_back({ chromatic_depth_influence_slider_.get() });
-    push_label(5);
-    if (bloom_strength_slider_) lens_rows.push_back({ bloom_strength_slider_.get() });
-    if (bloom_threshold_slider_) lens_rows.push_back({ bloom_threshold_slider_.get() });
-    if (bloom_radius_slider_) lens_rows.push_back({ bloom_radius_slider_.get() });
-    if (halation_strength_slider_) lens_rows.push_back({ halation_strength_slider_.get() });
-    if (sample_count_slider_) lens_rows.push_back({ sample_count_slider_.get() });
-    if (downsample_scale_slider_) lens_rows.push_back({ downsample_scale_slider_.get() });
-    if (quality_preset_widget_) lens_rows.push_back({ quality_preset_widget_.get() });
-    push_label(6);
-    if (alpha_debug_widget_) lens_rows.push_back({ alpha_debug_widget_.get() });
-    if (alpha_clamp_protection_widget_) lens_rows.push_back({ alpha_clamp_protection_widget_.get() });
-    if (blur_padding_preview_slider_) lens_rows.push_back({ blur_padding_preview_slider_.get() });
+    if (panel_kind_ == PanelKind::Lens) {
+        push_label(0);
+        if (depth_of_field_widget_) lens_rows.push_back({ depth_of_field_widget_.get() });
+        if (focus_depth_offset_slider_) lens_rows.push_back({ focus_depth_offset_slider_.get() });
+        if (reset_lens_defaults_widget_) lens_rows.push_back({ reset_lens_defaults_widget_.get() });
+        push_label(1);
+        if (aperture_slider_) lens_rows.push_back({ aperture_slider_.get() });
+        if (focus_falloff_acceleration_slider_) lens_rows.push_back({ focus_falloff_acceleration_slider_.get() });
+        if (max_near_blur_px_slider_) lens_rows.push_back({ max_near_blur_px_slider_.get() });
+        if (max_far_blur_px_slider_) lens_rows.push_back({ max_far_blur_px_slider_.get() });
+        if (near_far_blur_bias_slider_) lens_rows.push_back({ near_far_blur_bias_slider_.get() });
+        if (field_curvature_slider_) lens_rows.push_back({ field_curvature_slider_.get() });
+        if (edge_softness_slider_) lens_rows.push_back({ edge_softness_slider_.get() });
+        if (layer_depth_interval_slider_) lens_rows.push_back({ layer_depth_interval_slider_.get() });
+        if (layer_depth_falloff_slider_) lens_rows.push_back({ layer_depth_falloff_slider_.get() });
+        push_label(2);
+        if (swirl_strength_slider_) lens_rows.push_back({ swirl_strength_slider_.get() });
+        if (swirl_radius_start_slider_) lens_rows.push_back({ swirl_radius_start_slider_.get() });
+        if (tangential_blur_stretch_slider_) lens_rows.push_back({ tangential_blur_stretch_slider_.get() });
+        if (anamorphic_strength_slider_) lens_rows.push_back({ anamorphic_strength_slider_.get() });
+        if (bokeh_oval_ratio_slider_) lens_rows.push_back({ bokeh_oval_ratio_slider_.get() });
+        if (bokeh_rotation_slider_) lens_rows.push_back({ bokeh_rotation_slider_.get() });
+    } else if (panel_kind_ == PanelKind::SceneEffects) {
+        push_label(3);
+        if (vignette_strength_slider_) lens_rows.push_back({ vignette_strength_slider_.get() });
+        if (vignette_radius_slider_) lens_rows.push_back({ vignette_radius_slider_.get() });
+        if (vignette_softness_slider_) lens_rows.push_back({ vignette_softness_slider_.get() });
+        if (barrel_distortion_slider_) lens_rows.push_back({ barrel_distortion_slider_.get() });
+        if (distortion_zoom_compensation_slider_) lens_rows.push_back({ distortion_zoom_compensation_slider_.get() });
+        push_label(4);
+        if (chromatic_aberration_slider_) lens_rows.push_back({ chromatic_aberration_slider_.get() });
+        if (chromatic_edge_start_slider_) lens_rows.push_back({ chromatic_edge_start_slider_.get() });
+        if (chromatic_depth_influence_slider_) lens_rows.push_back({ chromatic_depth_influence_slider_.get() });
+        push_label(5);
+        if (bloom_strength_slider_) lens_rows.push_back({ bloom_strength_slider_.get() });
+        if (bloom_threshold_slider_) lens_rows.push_back({ bloom_threshold_slider_.get() });
+        if (bloom_radius_slider_) lens_rows.push_back({ bloom_radius_slider_.get() });
+        if (halation_strength_slider_) lens_rows.push_back({ halation_strength_slider_.get() });
+        if (sample_count_slider_) lens_rows.push_back({ sample_count_slider_.get() });
+        if (downsample_scale_slider_) lens_rows.push_back({ downsample_scale_slider_.get() });
+        if (quality_preset_widget_) lens_rows.push_back({ quality_preset_widget_.get() });
+        push_label(6);
+        if (alpha_debug_widget_) lens_rows.push_back({ alpha_debug_widget_.get() });
+        if (alpha_clamp_protection_widget_) lens_rows.push_back({ alpha_clamp_protection_widget_.get() });
+        if (blur_padding_preview_slider_) lens_rows.push_back({ blur_padding_preview_slider_.get() });
+    }
     if (lens_section_panel_) lens_section_panel_->set_rows(lens_rows);
 
     Rows rendering_rows;

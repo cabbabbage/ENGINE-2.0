@@ -27675,10 +27675,10 @@
         "alpha_clamp_protection": false,
         "alpha_debug_mode": 0,
         "anamorphic_strength": 0.8499999642372131,
-        "aperture": 4.539999961853027,
+        "aperture": 1.6699999570846558,
         "base_height_px": 720.0,
         "blur_padding_px": 5,
-        "blur_px": 64.5,
+        "blur_px": 2.5,
         "bokeh_oval_ratio": 1.0,
         "bokeh_rotation": -84.0,
         "boundary_min_visible_screen_ratio": 0.007000000216066837,
@@ -27687,10 +27687,10 @@
         "depth_of_field_enabled": true,
         "dynamic_renderer_depth_efficiency_depth": 2000.0,
         "dynamic_renderer_depth_efficiency_min_density_ratio": 0.05999999865889549,
-        "edge_softness": 0.26999998092651367,
-        "field_curvature": 1.119999885559082,
+        "edge_softness": 0.04999999701976776,
+        "field_curvature": -2.8600001335144043,
         "focus_depth_offset": -74.0,
-        "focus_falloff_acceleration": 1.809999942779541,
+        "focus_falloff_acceleration": 0.9599999785423279,
         "layer_depth_curve": 1.0,
         "layer_depth_interval": 250.0,
         "lens_alpha_clamp_protection": false,
@@ -27707,15 +27707,15 @@
         "lens_chromatic_depth_influence": 0.11999999731779099,
         "lens_chromatic_edge_start": 0.14999999105930328,
         "lens_distortion_zoom_compensation": 0.9830000400543213,
-        "lens_downsample_scale": 0.6899999976158142,
-        "lens_edge_softness": 0.26999998092651367,
-        "lens_field_curvature": 1.119999885559082,
+        "lens_downsample_scale": 0.8100000023841858,
+        "lens_edge_softness": 0.04999999701976776,
+        "lens_field_curvature": -2.8600001335144043,
         "lens_focus_depth_offset": -74.0,
-        "lens_focus_falloff_acceleration": 1.809999942779541,
+        "lens_focus_falloff_acceleration": 0.9599999785423279,
         "lens_halation_strength": 0.0,
         "lens_max_far_blur_px": 5.0,
-        "lens_max_near_blur_px": 64.5,
-        "lens_near_far_blur_bias": -0.3100000023841858,
+        "lens_max_near_blur_px": 2.5,
+        "lens_near_far_blur_bias": -1.0,
         "lens_quality_preset": 1,
         "lens_sample_count": 9,
         "lens_swirl_radius_start": 0.5899999737739563,
@@ -27734,7 +27734,7 @@
         "min_visible_screen_ratio": 0.00800000037997961,
         "min_visible_uses_light_radius": true,
         "movement_look_ahead_weight": 0.11999999731779099,
-        "near_far_blur_bias": -0.3100000023841858,
+        "near_far_blur_bias": -1.0,
         "player_follow_weight": 0.3499999940395355,
         "player_hard_leash_px": 360.0,
         "player_soft_leash_px": 220.0,
@@ -27856,7 +27856,7 @@
       },
       "map_layers": [
         {
-          "bounding_extent": 10341.5,
+          "bounding_extent": 4608.0,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -27874,12 +27874,12 @@
           ]
         },
         {
-          "bounding_extent": 5366.630250911647,
+          "bounding_extent": 4608.0,
           "level": 1,
           "max_rooms": 3,
           "min_rooms": 3,
           "name": "layer_1",
-          "ring_radius": 16509.0,
+          "ring_radius": 10016.0,
           "rooms": [
             {
               "max_instances": 2,
@@ -27906,10 +27906,10 @@
       "map_name": "forrest",
       "rooms_data": {
         "Mossy_Circle": {
-          "camera_center_dx": -5688,
-          "camera_center_dz": -5759,
-          "camera_height_px": 885,
-          "camera_tilt_deg": 35.63592529296875,
+          "camera_center_dx": -2750,
+          "camera_center_dz": -4314,
+          "camera_height_px": 578,
+          "camera_tilt_deg": 35.395111083984375,
           "camera_zoom_percent": 0,
           "coarseness": {
             "center": 3344,
@@ -27923,23 +27923,11 @@
             }
           },
           "display_color": [
-            36,
-            212,
             242,
+            242,
+            85,
             255
           ],
-          "geometry": "Circle",
-          "height": {
-            "center": 14584,
-            "falloff": 2045,
-            "random": true,
-            "span": 6099,
-            "weights": {
-              "center": 0.4305555555555556,
-              "edge": 0.3416666666666665,
-              "falloff": 0.2277777777777779
-            }
-          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": true,
           "is_boss": false,
@@ -27953,6 +27941,7 @@
             "forest_micro",
             "thematic"
           ],
+          "size": 9,
           "spawn_groups": [
             {
               "candidates": [
@@ -28439,17 +28428,6 @@
           "trail_connection_sector": {
             "direction_deg": 359.0,
             "width_percent": 100
-          },
-          "width": {
-            "center": 14584,
-            "falloff": 2045,
-            "random": true,
-            "span": 6099,
-            "weights": {
-              "center": 0.4305555555555556,
-              "edge": 0.3416666666666665,
-              "falloff": 0.2277777777777779
-            }
           }
         },
         "NewRoom": {
@@ -28465,23 +28443,11 @@
             }
           },
           "display_color": [
-            131,
-            85,
             242,
+            36,
+            172,
             255
           ],
-          "geometry": "Square",
-          "height": {
-            "center": 1500,
-            "falloff": 150,
-            "random": true,
-            "span": 300,
-            "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.3333333333333333,
-              "falloff": 0.3333333333333333
-            }
-          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
@@ -28492,22 +28458,12 @@
             0
           ],
           "room_tags": [],
+          "size": 9,
           "spawn_groups": [],
           "tags": [],
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
-          },
-          "width": {
-            "center": 1500,
-            "falloff": 150,
-            "random": true,
-            "span": 300,
-            "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.3333333333333333,
-              "falloff": 0.3333333333333333
-            }
           }
         },
         "NewRoom1": {
@@ -28523,23 +28479,11 @@
             }
           },
           "display_color": [
-            219,
+            85,
             242,
-            36,
+            148,
             255
           ],
-          "geometry": "Circle",
-          "height": {
-            "center": 3796,
-            "falloff": 0,
-            "random": false,
-            "span": 0,
-            "weights": {
-              "center": 1.0,
-              "edge": 0.0,
-              "falloff": 0.0
-            }
-          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
@@ -28550,22 +28494,12 @@
             0
           ],
           "room_tags": [],
+          "size": 9,
           "spawn_groups": [],
           "tags": [],
           "trail_connection_sector": {
             "direction_deg": 0.0,
             "width_percent": 100
-          },
-          "width": {
-            "center": 3796,
-            "falloff": 0,
-            "random": false,
-            "span": 0,
-            "weights": {
-              "center": 1.0,
-              "edge": 0.0,
-              "falloff": 0.0
-            }
           }
         },
         "Very Peacful": {
@@ -28586,23 +28520,11 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            31,
+            36,
+            242,
+            242,
             255
           ],
-          "geometry": "Circle",
-          "height": {
-            "center": 4367,
-            "falloff": 150,
-            "random": true,
-            "span": 300,
-            "weights": {
-              "center": 0.3055555555555556,
-              "edge": 0.34722222222222227,
-              "falloff": 0.34722222222222227
-            }
-          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
@@ -28613,6 +28535,7 @@
             0
           ],
           "room_tags": [],
+          "size": 9,
           "spawn_groups": [
             {
               "candidates": [
@@ -28797,17 +28720,6 @@
           "trail_connection_sector": {
             "direction_deg": 178.0,
             "width_percent": 75
-          },
-          "width": {
-            "center": 4367,
-            "falloff": 150,
-            "random": true,
-            "span": 300,
-            "weights": {
-              "center": 0.3055555555555556,
-              "edge": 0.34722222222222227,
-              "falloff": 0.34722222222222227
-            }
           }
         },
         "Very Peacful1": {
@@ -28823,23 +28735,11 @@
             }
           },
           "display_color": [
-            31,
-            204,
-            136,
+            154,
+            242,
+            36,
             255
           ],
-          "geometry": "Square",
-          "height": {
-            "center": 1749,
-            "falloff": 150,
-            "random": true,
-            "span": 300,
-            "weights": {
-              "center": 0.2828719917743493,
-              "edge": 0.35856400411282535,
-              "falloff": 0.35856400411282535
-            }
-          },
           "inherit_map_floor_color": true,
           "inherits_live_dynamic_assets": false,
           "is_boss": false,
@@ -28850,22 +28750,12 @@
             0
           ],
           "room_tags": [],
+          "size": 9,
           "spawn_groups": [],
           "tags": [],
           "trail_connection_sector": {
             "direction_deg": 178.0,
             "width_percent": 71
-          },
-          "width": {
-            "center": 2064,
-            "falloff": 150,
-            "random": true,
-            "span": 300,
-            "weights": {
-              "center": 0.3592587484453475,
-              "edge": 0.3203706257773263,
-              "falloff": 0.3203706257773263
-            }
           }
         },
         "nahhhh": {
@@ -28886,23 +28776,11 @@
             }
           },
           "display_color": [
-            51,
-            126,
-            204,
+            231,
+            85,
+            242,
             255
           ],
-          "geometry": "Square",
-          "height": {
-            "center": 7620,
-            "falloff": 0,
-            "random": false,
-            "span": 0,
-            "weights": {
-              "center": 1.0,
-              "edge": 0.0,
-              "falloff": 0.0
-            }
-          },
           "inherit_map_floor_color": false,
           "inherits_live_dynamic_assets": true,
           "is_boss": false,
@@ -28913,6 +28791,7 @@
             52
           ],
           "room_tags": [],
+          "size": 9,
           "spawn_groups": [
             {
               "candidates": [
@@ -29375,17 +29254,6 @@
           "trail_connection_sector": {
             "direction_deg": 182.0,
             "width_percent": 79
-          },
-          "width": {
-            "center": 7559,
-            "falloff": 0,
-            "random": false,
-            "span": 0,
-            "weights": {
-              "center": 1.0,
-              "edge": 0.0,
-              "falloff": 0.0
-            }
           }
         }
       },
@@ -29424,20 +29292,9 @@
             242,
             255
           ],
-          "geometry": "Square",
           "name": "MainTrail",
-          "spawn_groups": [],
-          "width": {
-            "center": 1169,
-            "falloff": 0,
-            "random": false,
-            "span": 0,
-            "weights": {
-              "center": 1.0,
-              "edge": 0.0,
-              "falloff": 0.0
-            }
-          }
+          "size": 9,
+          "spawn_groups": []
         },
         "NewTrail": {
           "camera_height_px": 1000,
@@ -29458,20 +29315,9 @@
             85,
             255
           ],
-          "geometry": "Square",
           "name": "NewTrail",
-          "spawn_groups": [],
-          "width": {
-            "center": 2093,
-            "falloff": 75,
-            "random": true,
-            "span": 150,
-            "weights": {
-              "center": 0.4115890573656218,
-              "edge": 0.2942054713171891,
-              "falloff": 0.2942054713171891
-            }
-          }
+          "size": 9,
+          "spawn_groups": []
         },
         "NewTrail1": {
           "camera_height_px": 1000,
@@ -29492,8 +29338,8 @@
             158,
             255
           ],
-          "geometry": "Square",
           "name": "NewTrail1",
+          "size": 9,
           "spawn_groups": [
             {
               "candidates": [
@@ -29555,18 +29401,7 @@
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-fac433b7fe9f"
             }
-          ],
-          "width": {
-            "center": 1342,
-            "falloff": 75,
-            "random": true,
-            "span": 150,
-            "weights": {
-              "center": 0.4859326063726331,
-              "edge": 0.2570336968136835,
-              "falloff": 0.2570336968136835
-            }
-          }
+          ]
         },
         "NewTrail2": {
           "camera_height_px": 1000,
@@ -29587,20 +29422,9 @@
             204,
             255
           ],
-          "geometry": "Square",
           "name": "NewTrail2",
-          "spawn_groups": [],
-          "width": {
-            "center": 750,
-            "falloff": 75,
-            "random": true,
-            "span": 150,
-            "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.3333333333333333,
-              "falloff": 0.3333333333333333
-            }
-          }
+          "size": 9,
+          "spawn_groups": []
         },
         "NewTrail3": {
           "camera_center_dx": -1243,
@@ -29625,20 +29449,9 @@
             204,
             255
           ],
-          "geometry": "Square",
           "name": "NewTrail3",
-          "spawn_groups": [],
-          "width": {
-            "center": 1765,
-            "falloff": 75,
-            "random": true,
-            "span": 150,
-            "weights": {
-              "center": 0.3333333333333333,
-              "edge": 0.33333333333333337,
-              "falloff": 0.33333333333333337
-            }
-          }
+          "size": 9,
+          "spawn_groups": []
         },
         "NewTrail4": {
           "anti_tags": [],
@@ -29659,21 +29472,10 @@
             204,
             255
           ],
-          "geometry": "Square",
           "name": "NewTrail4",
+          "size": 9,
           "spawn_groups": [],
-          "tags": [],
-          "width": {
-            "center": 1412,
-            "falloff": 0,
-            "random": false,
-            "span": 0,
-            "weights": {
-              "center": 1.0,
-              "edge": 0.0,
-              "falloff": 0.0
-            }
-          }
+          "tags": []
         }
       }
     }

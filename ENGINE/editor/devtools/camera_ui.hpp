@@ -24,7 +24,13 @@ class DropdownWidget;
 
 class CameraUIPanel : public DockableCollapsible {
 public:
-    explicit CameraUIPanel(Assets* assets, int x = 80, int y = 80);
+    enum class PanelKind {
+        Camera,
+        Lens,
+        SceneEffects
+    };
+
+    explicit CameraUIPanel(Assets* assets, PanelKind kind = PanelKind::Camera, int x = 80, int y = 80);
     ~CameraUIPanel() override;
 
     void set_assets(Assets* assets);
@@ -41,11 +47,14 @@ public:
     void sync_from_camera();
     void sync_debug_controls_from_settings(const WarpedScreenGrid::RealismSettings& settings);
     void set_dirty_callback(std::function<void()> callback);
+    PanelKind panel_kind() const { return panel_kind_; }
     bool is_debug_section_expanded() const { return debug_section_expanded_; }
 
 
 
 private:
+    static const char* panel_title(PanelKind kind);
+    static const char* panel_lock_id(PanelKind kind);
 
     void build_ui();
     void configure_container();
@@ -64,6 +73,8 @@ private:
 
 private:
     Assets* assets_ = nullptr;
+    PanelKind panel_kind_ = PanelKind::Camera;
+    std::string lock_settings_id_;
 
     bool suppress_apply_once_ = false;
     bool was_visible_ = false;
@@ -145,5 +156,5 @@ private:
 
 protected:
     std::string_view lock_settings_namespace() const override { return "camera"; }
-    std::string_view lock_settings_id() const override { return "controls"; }
+    std::string_view lock_settings_id() const override { return lock_settings_id_; }
 };

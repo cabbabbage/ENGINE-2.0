@@ -19,11 +19,9 @@
 namespace manifest {
 namespace {
 
-constexpr int kDefaultSpawnRadius = 1500;
-constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 40000;
-constexpr int kDefaultRoomMinDimension = 500;
-constexpr int kDefaultRoomMaxDimension = 40000;
+constexpr int kDefaultRoomSize = 9;
+constexpr int kMinRoomSize = 7;
+constexpr int kMaxRoomSize = 20;
 constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
 constexpr int kDefaultTrailSectorWidthPercent = 100;
 constexpr int kMinTrailSectorWidthPercent = 25;
@@ -45,14 +43,6 @@ bool json_to_int(const nlohmann::json& value, int& out) {
     return false;
 }
 
-bool json_to_string(const nlohmann::json& value, std::string& out) {
-    if (!value.is_string()) {
-        return false;
-    }
-    out = value.get<std::string>();
-    return true;
-}
-
 bool json_to_double(const nlohmann::json& value, double& out) {
     if (value.is_number_float()) {
         out = value.get<double>();
@@ -63,15 +53,6 @@ bool json_to_double(const nlohmann::json& value, double& out) {
         return true;
     }
     return false;
-}
-
-vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& entry,
-                                                                   const char* key,
-                                                                   const vibble::weighted_range::WeightedIntRange& fallback) {
-    if (!entry.is_object() || !entry.contains(key)) {
-        return fallback;
-    }
-    return vibble::weighted_range::from_json(entry.at(key), fallback);
 }
 
 
@@ -91,47 +72,6 @@ vibble::weighted_range::WeightedIntRange normalize_coarseness_range_value(const 
         return coarseness_range_from_legacy(legacy);
     }
     return vibble::weighted_range::from_json(value, vibble::weighted_range::make_flat(0));
-}
-
-vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const nlohmann::json& entry,
-                                                                         const char* min_key,
-                                                                         const char* max_key,
-                                                                         const vibble::weighted_range::WeightedIntRange& fallback) {
-    if (!entry.is_object()) {
-        return fallback;
-    }
-    bool has_min = false;
-    bool has_max = false;
-    std::int64_t min_value = fallback.center;
-    std::int64_t max_value = fallback.center;
-    if (entry.contains(min_key)) {
-        if (entry[min_key].is_number_integer()) {
-            min_value = entry[min_key].get<std::int64_t>();
-            has_min = true;
-        } else if (entry[min_key].is_number_float()) {
-            min_value = static_cast<std::int64_t>(std::llround(entry[min_key].get<double>()));
-            has_min = true;
-        }
-    }
-    if (entry.contains(max_key)) {
-        if (entry[max_key].is_number_integer()) {
-            max_value = entry[max_key].get<std::int64_t>();
-            has_max = true;
-        } else if (entry[max_key].is_number_float()) {
-            max_value = static_cast<std::int64_t>(std::llround(entry[max_key].get<double>()));
-            has_max = true;
-        }
-    }
-    if (!has_min && !has_max) {
-        return fallback;
-    }
-    if (!has_min) {
-        min_value = max_value;
-    }
-    if (!has_max) {
-        max_value = min_value;
-    }
-    return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
 }
 
 double normalize_direction_degrees(double value) {
@@ -206,30 +146,12 @@ bool normalize_trail_connection_sector(nlohmann::json& entry, bool include_for_r
     return changed;
 }
 
-void sanitize_dimension_pair(int& min_value, int& max_value) {
-    if (min_value <= 0 && max_value > 0) {
-        min_value = max_value;
-    } else if (max_value <= 0 && min_value > 0) {
-        max_value = min_value;
-    } else if (min_value <= 0 && max_value <= 0) {
-        min_value = kDefaultRoomMinDimension;
-        max_value = kDefaultRoomMaxDimension;
+int normalize_room_size(const nlohmann::json& entry) {
+    int size = kDefaultRoomSize;
+    if (entry.is_object() && entry.contains("size")) {
+        (void)json_to_int(entry["size"], size);
     }
-
-    min_value = std::clamp(min_value, kMinRoomDimension, kMaxRoomDimension);
-    max_value = std::clamp(max_value, kMinRoomDimension, kMaxRoomDimension);
-    if (max_value < min_value) {
-        std::swap(min_value, max_value);
-    }
-}
-
-bool geometry_is_circle(const std::string& geometry) {
-    std::string lowered;
-    lowered.reserve(geometry.size());
-    for (char ch : geometry) {
-        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    }
-    return lowered == "circle";
+    return std::clamp(size, kMinRoomSize, kMaxRoomSize);
 }
 
 bool normalize_room_config_entry(nlohmann::json& entry,
@@ -253,55 +175,19 @@ bool normalize_room_config_entry(nlohmann::json& entry,
                   << " entry '" << key_name << "'.\n";
     };
 
-    std::string geometry = "Square";
-    const bool has_geometry_string = entry.contains("geometry") && json_to_string(entry["geometry"], geometry);
-    if (!has_geometry_string || geometry.empty()) {
-        geometry = "Square";
-        entry["geometry"] = geometry;
+    const int normalized_size = normalize_room_size(entry);
+    if (!entry.contains("size") || !entry["size"].is_number_integer() || entry["size"].get<int>() != normalized_size) {
+        entry["size"] = normalized_size;
         changed = true;
     }
-
-    const auto default_range = vibble::weighted_range::make_legacy_uniform(kDefaultRoomMinDimension, kDefaultRoomMaxDimension);
-    vibble::weighted_range::WeightedIntRange width_range = read_weighted_range_field(entry, "width", default_range);
-    if (!entry.contains("width")) {
-        if (entry.contains("min_width") || entry.contains("max_width")) {
-            width_range = read_weighted_range_legacy_pair(entry, "min_width", "max_width", default_range);
-        } else if (entry.contains("min_radius") || entry.contains("max_radius") || entry.contains("radius")) {
-            width_range = read_weighted_range_legacy_pair(entry, "min_radius", "max_radius", default_range);
-        }
-    }
-
-    vibble::weighted_range::WeightedIntRange height_range = width_range;
-    if (!is_trail_entry) {
-        height_range = read_weighted_range_field(entry, "height", width_range);
-        if (!entry.contains("height") && (entry.contains("min_height") || entry.contains("max_height"))) {
-            height_range = read_weighted_range_legacy_pair(entry, "min_height", "max_height", width_range);
-        }
-    }
-
-    if (!is_trail_entry && geometry_is_circle(geometry)) {
-        if (entry.contains("min_radius") || entry.contains("max_radius") || entry.contains("radius")) {
-            width_range = read_weighted_range_legacy_pair(entry, "min_radius", "max_radius", default_range);
-        }
-        height_range = width_range;
-    }
-
-    const nlohmann::json width_json = vibble::weighted_range::to_json(width_range);
-    const nlohmann::json height_json = vibble::weighted_range::to_json(height_range);
-    if (!entry.contains("width") || entry["width"] != width_json) {
-        entry["width"] = width_json;
-        changed = true;
-    }
-    if (!is_trail_entry && (!entry.contains("height") || entry["height"] != height_json)) {
-        entry["height"] = height_json;
-        changed = true;
-    }
-    if (is_trail_entry && entry.erase("height") > 0) changed = true;
 
     if (entry.erase("min_width") > 0) changed = true;
     if (entry.erase("max_width") > 0) changed = true;
     if (entry.erase("min_height") > 0) changed = true;
     if (entry.erase("max_height") > 0) changed = true;
+    if (entry.erase("width") > 0) changed = true;
+    if (entry.erase("height") > 0) changed = true;
+    if (entry.erase("geometry") > 0) changed = true;
     if (entry.erase("radius") > 0) changed = true;
     if (entry.erase("min_radius") > 0) changed = true;
     if (entry.erase("max_radius") > 0) changed = true;
@@ -655,12 +541,9 @@ bool ensure_map_layers_settings_defaults(nlohmann::json& root) {
 }
 
 nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
-    const int diameter = kDefaultSpawnRadius * 2;
     nlohmann::json entry = nlohmann::json::object();
     entry["name"] = spawn_name;
-    entry["geometry"] = "Circle";
-    entry["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
-    entry["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
+    entry["size"] = kDefaultRoomSize;
     entry["is_boss"] = false;
     entry["inherits_live_dynamic_assets"] = false;
     entry["inherit_map_floor_color"] = true;
@@ -677,7 +560,7 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
 nlohmann::json make_room_spawn_group(const std::string& map_name,
                                      const std::string& display_name,
                                      const std::string& asset_name) {
-    const int diameter = kDefaultSpawnRadius * 2;
+    const int default_extent = kDefaultRoomSize * vibble::grid::delta(kDefaultRoomSize) * 2;
     std::string cleaned = map_name;
     for (char& ch : cleaned) {
         if (std::isspace(static_cast<unsigned char>(ch))) {
@@ -698,8 +581,8 @@ nlohmann::json make_room_spawn_group(const std::string& map_name,
     group["locked"] = false;
     group["min_number"] = 1;
     group["max_number"] = 1;
-    group["origional_height"] = diameter;
-    group["origional_width"] = diameter;
+    group["origional_height"] = default_extent;
+    group["origional_width"] = default_extent;
     group["resolution"] = 6;
     group["resolve_geometry_to_room_size"] = true;
     group["resolve_quantity_to_room_size"] = false;
@@ -1071,7 +954,6 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
 } // namespace
 
 nlohmann::json build_default_map_manifest(const std::string& map_name) {
-    const int diameter = kDefaultSpawnRadius * 2;
 
     nlohmann::json map_info = nlohmann::json::object();
 
@@ -1100,8 +982,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"MainTrail", nlohmann::json::object({
             {"name", "MainTrail"},
             {"display_color", nlohmann::json::array({85, 242, 143, 255})},
-            {"geometry", "Square"},
-            {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
+            {"size", kDefaultRoomSize},
             {"coarseness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))},
             {"tags", nlohmann::json::array()},
             {"anti_tags", nlohmann::json::array()},
@@ -1120,9 +1001,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
 
     nlohmann::json spawn_room = nlohmann::json::object();
     spawn_room["name"] = "Spawn";
-    spawn_room["geometry"] = "Circle";
-    spawn_room["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
-    spawn_room["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
+    spawn_room["size"] = kDefaultRoomSize;
     spawn_room["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
     spawn_room["is_boss"] = false;
     spawn_room["inherits_live_dynamic_assets"] = true;
@@ -1138,10 +1017,10 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"kind", "Spawn"},
             {"resolution", 3},
             {"points", nlohmann::json::array({
-                nlohmann::json::object({{"x", -256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", 256}}),
-                nlohmann::json::object({{"x", -256}, {"y", 256}})
+                nlohmann::json::object({{"x", 0}, {"y", -256}}),
+                nlohmann::json::object({{"x", 256}, {"y", 0}}),
+                nlohmann::json::object({{"x", 0}, {"y", 256}}),
+                nlohmann::json::object({{"x", -256}, {"y", 0}})
             })}
         })
     });

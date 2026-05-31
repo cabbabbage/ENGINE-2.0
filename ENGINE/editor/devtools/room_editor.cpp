@@ -2,6 +2,7 @@
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/sdl_mouse_utils.hpp"
 #include "utils/ttf_render_utils.hpp"
+#include "utils/grid.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -9696,44 +9697,19 @@ void RoomEditor::mark_geometry_dirty(Room* room) {
 bool RoomEditor::regenerate_geometry(Room* room) {
     if (!room || !room->room_area || !assets_) return false;
     auto& root = room->assets_data();
-    const auto default_range = vibble::weighted_range::make_legacy_uniform(1, 1);
-    vibble::weighted_range::WeightedIntRange width_range = root.contains("width")
-        ? read_weighted_range_field(root, "width", default_range)
-        : (root.contains("min_width") || root.contains("max_width")
-               ? read_weighted_range_legacy_pair(root, "min_width", "max_width", default_range)
-               : default_range);
-    vibble::weighted_range::WeightedIntRange height_range = root.contains("height")
-        ? read_weighted_range_field(root, "height", width_range)
-        : (root.contains("min_height") || root.contains("max_height")
-               ? read_weighted_range_legacy_pair(root, "min_height", "max_height", width_range)
-               : width_range);
-    if (root.contains("geometry")) {
-        std::string g = root.value("geometry", std::string{"square"});
-        std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-        if (g == "circle") {
-            height_range = width_range;
-        }
-    }
-    std::mt19937 rng(std::random_device{}());
-    const int chosen_w = std::max(1, resolve_weighted_dimension(width_range, rng));
-    const int chosen_h = std::max(1, resolve_weighted_dimension(height_range, rng));
-
-    constexpr int kRegeneratedRoomEdgeSmoothness = 0;
-    std::string geometry = root.value("geometry", std::string{"Square"});
-    if (!geometry.empty()) geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
+    int size = root.value("size", 9);
+    size = std::clamp(size, 7, 20);
     const SDL_Point center = room->room_area->get_center();
-    const int map_w = std::max(1, std::abs(center.x) * 2 + chosen_w * 4);
-    const int map_h = std::max(1, std::abs(center.y) * 2 + chosen_h * 4);
+    const int radius = size * vibble::grid::delta(size);
+    const int map_w = std::max(1, std::abs(center.x) * 2 + radius * 8);
+    const int map_h = std::max(1, std::abs(center.y) * 2 + radius * 8);
     try {
         room->room_area = std::make_unique<Area>(room->room_name,
                                                  center,
-                                                 chosen_w,
-                                                 chosen_h,
-                                                 geometry,
-                                                 kRegeneratedRoomEdgeSmoothness,
+                                                 size,
                                                  map_w,
                                                  map_h,
-                                                 room->room_area->resolution());
+                                                 size);
         room->room_area->set_type(room->type);
     } catch (...) {
         return false;

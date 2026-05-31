@@ -126,7 +126,7 @@ private:
     void request_rebuild();
     void load_tags_from_json(const nlohmann::json& data);
     void write_tags_to_json(nlohmann::json& object) const;
-    std::string selected_geometry() const;
+    int selected_size() const;
     bool sync_state_from_widgets();
     const nlohmann::json& live_room_json() const;
     nlohmann::json& live_room_json();
@@ -176,8 +176,6 @@ private:
     std::size_t metadata_snapshot_hash_ = 0;
     bool is_trail_context_ = false;
 
-    std::vector<std::string> geometry_options_;
-
     std::vector<std::string> room_tags_;
     std::vector<std::string> room_anti_tags_;
     bool tags_dirty_ = false;
@@ -186,14 +184,8 @@ private:
 
     std::unique_ptr<DMTextBox> name_box_;
     std::unique_ptr<TextBoxWidget> name_widget_;
-    std::unique_ptr<DMDropdown> geometry_dropdown_;
-    std::unique_ptr<DropdownWidget> geometry_widget_;
-    std::unique_ptr<DMWeightedRangeWidget> width_range_widget_;
-    std::unique_ptr<WeightedRangeWidget> width_range_control_;
-    std::unique_ptr<DMWeightedRangeWidget> height_range_widget_;
-    std::unique_ptr<WeightedRangeWidget> height_range_control_;
-    int width_slider_max_range_ = 0;
-    int height_slider_max_range_ = 0;
+    std::unique_ptr<DMNumericStepper> size_stepper_;
+    std::unique_ptr<StepperWidget> size_widget_;
     std::unique_ptr<DMWeightedRangeWidget> coarseness_range_widget_;
     std::unique_ptr<WeightedRangeWidget> coarseness_widget_;
     std::unique_ptr<Widget> trail_connection_sector_widget_;

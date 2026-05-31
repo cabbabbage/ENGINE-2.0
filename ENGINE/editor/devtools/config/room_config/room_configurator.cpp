@@ -30,8 +30,9 @@
 
 namespace {
 constexpr int kRoomConfigPanelMinWidth = 260;
-constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 40000;
+constexpr int kDefaultRoomSize = 9;
+constexpr int kMinRoomSize = 7;
+constexpr int kMaxRoomSize = 20;
 constexpr int kSliderExpansionMargin = 64;
 constexpr int kSliderExpansionFactor = 2;
 constexpr double kDegreesFullCircle = 360.0;
@@ -154,16 +155,6 @@ std::optional<std::string> read_json_string(const nlohmann::json& obj, const std
         return std::nullopt;
     }
     return value.get<std::string>();
-}
-
-std::optional<int> read_legacy_radius_value(const nlohmann::json& obj) {
-    if (!obj.is_object()) {
-        return std::nullopt;
-    }
-    if (auto value = read_json_int(obj, "radius")) {
-        return std::max(0, *value);
-    }
-    return std::nullopt;
 }
 
 vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
@@ -767,11 +758,7 @@ private:
 
 struct RoomConfigurator::State {
     std::string name;
-    std::string geometry;
-    vibble::weighted_range::WeightedIntRange width_range =
-        vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
-    vibble::weighted_range::WeightedIntRange height_range =
-        vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
+    int size = kDefaultRoomSize;
     double trail_connection_direction_deg = kTrailSectorDefaultDirectionDeg;
     int trail_connection_width_percent = kTrailSectorDefaultWidthPercent;
     bool is_boss = false;
@@ -781,26 +768,14 @@ struct RoomConfigurator::State {
     SDL_Color room_floor_color{0, 0, 0, 255};
     vibble::weighted_range::WeightedIntRange coarseness = vibble::weighted_range::make_flat(0);
 
-    bool geometry_is_circle() const { return lowercase_copy(geometry) == "circle"; }
-
     bool ensure_valid(bool allow_height, bool enforce_dimensions = true) {
         (void)enforce_dimensions;
+        (void)allow_height;
         bool mutated = false;
-        const auto width_json = vibble::weighted_range::to_json(width_range);
-        const auto height_json = vibble::weighted_range::to_json(height_range);
-        width_range = vibble::weighted_range::from_json(width_json, vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension));
-        height_range = vibble::weighted_range::from_json(height_json, vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension));
-        if (vibble::weighted_range::to_json(width_range) != width_json) {
+        const int clamped_size = std::clamp(size, kMinRoomSize, kMaxRoomSize);
+        if (clamped_size != size) {
+            size = clamped_size;
             mutated = true;
-        }
-        if (vibble::weighted_range::to_json(height_range) != height_json) {
-            mutated = true;
-        }
-        if (!allow_height || geometry_is_circle()) {
-            if (vibble::weighted_range::to_json(height_range) != vibble::weighted_range::to_json(width_range)) {
-                height_range = width_range;
-                mutated = true;
-            }
         }
 
         const double normalized_direction = normalize_angle_degrees(trail_connection_direction_deg);
@@ -825,6 +800,8 @@ struct RoomConfigurator::State {
     void load_from_json(const nlohmann::json& data,
                         const std::vector<std::string>& geometry_options,
                         bool allow_height) {
+        (void)geometry_options;
+        (void)allow_height;
         const nlohmann::json& src = data.is_object() ? data : empty_object();
         if (auto value = read_json_string(src, "name")) {
             name = *value;
@@ -834,88 +811,9 @@ struct RoomConfigurator::State {
             name.clear();
         }
 
-        if (auto value = read_json_string(src, "geometry")) {
-            geometry = *value;
-        } else {
-            geometry = geometry_options.empty() ? std::string{} : geometry_options.front();
-        }
-        if (geometry.empty()) {
-            geometry = geometry_options.empty() ? std::string{"Square"} : geometry_options.front();
-        }
-
-        const auto width_fallback = vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
-        const auto height_fallback = vibble::weighted_range::make_legacy_uniform(500, kMaxRoomDimension);
-        if (src.contains("width")) {
-            width_range = vibble::weighted_range::from_json(src["width"], width_fallback);
-        } else {
-            int legacy_min = 500;
-            int legacy_max = kMaxRoomDimension;
-            if (auto value = read_json_int(src, "min_width")) {
-                legacy_min = *value;
-            }
-            if (auto value = read_json_int(src, "max_width")) {
-                legacy_max = *value;
-            }
-            int legacy_min_radius = 0;
-            int legacy_max_radius = 0;
-            bool has_legacy_min_radius = false;
-            bool has_legacy_max_radius = false;
-            if (auto value = read_json_int(src, "min_radius")) {
-                legacy_min_radius = std::max(0, *value);
-                has_legacy_min_radius = true;
-            }
-            if (auto value = read_json_int(src, "max_radius")) {
-                legacy_max_radius = std::max(0, *value);
-                has_legacy_max_radius = true;
-            }
-            if (auto value = read_legacy_radius_value(src)) {
-                if (!has_legacy_min_radius) {
-                    legacy_min_radius = *value;
-                    has_legacy_min_radius = true;
-                }
-                if (!has_legacy_max_radius) {
-                    legacy_max_radius = *value;
-                    has_legacy_max_radius = true;
-                }
-            }
-            if (has_legacy_min_radius || has_legacy_max_radius) {
-                if (legacy_min_radius <= 0 && legacy_max_radius > 0) {
-                    legacy_min_radius = legacy_max_radius;
-                }
-                if (legacy_max_radius <= 0 && legacy_min_radius > 0) {
-                    legacy_max_radius = legacy_min_radius;
-                }
-                if (legacy_max_radius < legacy_min_radius) {
-                    std::swap(legacy_min_radius, legacy_max_radius);
-                }
-                legacy_min = legacy_min_radius > 0 ? legacy_min_radius * 2 : legacy_min;
-                legacy_max = legacy_max_radius > 0 ? legacy_max_radius * 2 : legacy_min;
-            }
-            width_range = vibble::weighted_range::make_legacy_uniform(legacy_min, legacy_max);
-        }
-
-        if (allow_height && src.contains("height")) {
-            height_range = vibble::weighted_range::from_json(src["height"], height_fallback);
-        } else if (allow_height) {
-            bool has_min_height = false;
-            bool has_max_height = false;
-            int legacy_min = 500;
-            int legacy_max = kMaxRoomDimension;
-            if (auto value = read_json_int(src, "min_height")) {
-                legacy_min = *value;
-                has_min_height = true;
-            }
-            if (auto value = read_json_int(src, "max_height")) {
-                legacy_max = *value;
-                has_max_height = true;
-            }
-            if (!has_min_height && !has_max_height) {
-                height_range = width_range;
-            } else {
-                height_range = vibble::weighted_range::make_legacy_uniform(legacy_min, legacy_max);
-            }
-        } else {
-            height_range = width_range;
+        size = kDefaultRoomSize;
+        if (auto value = read_json_int(src, "size")) {
+            size = *value;
         }
 
         has_boss_field = src.is_object() && src.contains("is_boss");
@@ -957,7 +855,7 @@ struct RoomConfigurator::State {
             }
         }
 
-        ensure_valid(allow_height);
+        ensure_valid(true);
     }
 
     void apply_to_json(nlohmann::json& dest,
@@ -965,9 +863,10 @@ struct RoomConfigurator::State {
                        bool include_camera = true,
                        bool include_trail_connection_sector = true,
                        bool include_boss = true) const {
+        (void)allow_height;
         if (!dest.is_object()) dest = nlohmann::json::object();
         dest["name"] = name;
-        dest["geometry"] = geometry;
+        dest["size"] = std::clamp(size, kMinRoomSize, kMaxRoomSize);
         if (include_boss) {
             dest["is_boss"] = is_boss;
         } else {
@@ -977,9 +876,6 @@ struct RoomConfigurator::State {
         dest["inherit_map_floor_color"] = inherit_map_floor_color;
         dest["room_floor_color"] = nlohmann::json::array(
             {static_cast<int>(room_floor_color.r), static_cast<int>(room_floor_color.g), static_cast<int>(room_floor_color.b)});
-        dest["width"] = vibble::weighted_range::to_json(width_range);
-        dest["height"] = allow_height ? vibble::weighted_range::to_json(height_range)
-                                       : vibble::weighted_range::to_json(width_range);
         dest["coarseness"] = vibble::weighted_range::to_json(coarseness);
         (void)include_camera;
 
@@ -990,13 +886,15 @@ struct RoomConfigurator::State {
         dest.erase("max_width");
         dest.erase("min_height");
         dest.erase("max_height");
+        dest.erase("width");
+        dest.erase("height");
+        dest.erase("geometry");
         dest.erase("edge_smoothness");
         dest.erase("curvyness");
         dest.erase("curviness");
         dest.erase("edge_detail_candidates");
         dest.erase("inherits_map_assets");
         if (!allow_height) {
-            dest.erase("height");
             dest.erase("inherit_map_floor_color");
             dest.erase("inherits_live_dynamic_assets");
             dest.erase("room_floor_color");
@@ -1058,11 +956,8 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
     };
     copy_field("name");
     copy_field("room_name");
-    copy_field("geometry");
-    copy_field("width");
-    if (allow_height) {
-        copy_field("height");
-    }
+    (void)allow_height;
+    copy_field("size");
     copy_field("coarseness");
     if (include_trail_connection_sector || source.contains("trail_connection_sector")) {
         copy_field("trail_connection_sector");
@@ -1081,7 +976,6 @@ nlohmann::json collect_owned_metadata_fields_raw(const nlohmann::json& source,
 }
 
 RoomConfigurator::RoomConfigurator() {
-    geometry_options_ = {"Square", "Circle"};
     state_ = std::make_unique<State>();
     default_container_ = std::make_unique<SlidingWindowContainer>();
     container_ = default_container_.get();
@@ -1460,7 +1354,7 @@ void RoomConfigurator::ensure_base_panels() {
         }
     };
 
-    const std::string geometry_title = is_trail_context_ ? "Trail Geometry" : "Room Geometry";
+    const std::string geometry_title = is_trail_context_ ? "Trail Size" : "Room Size";
     const std::string tags_title = is_trail_context_ ? "Trail Tags" : "Room Tags";
     const std::string types_title = is_trail_context_ ? "Trail Types" : "Room Types";
     const std::string spawn_groups_title = "Spawn Groups";
@@ -1482,13 +1376,7 @@ void RoomConfigurator::refresh_base_panel_rows() {
     if (geometry_panel_) {
         DockableCollapsible::Rows rows;
         if (name_widget_) rows.push_back({name_widget_.get()});
-        if (geometry_widget_) rows.push_back({geometry_widget_.get()});
-        if (width_range_control_) {
-            rows.push_back({width_range_control_.get()});
-        }
-        if (height_range_control_) {
-            rows.push_back({height_range_control_.get()});
-        }
+        if (size_widget_) rows.push_back({size_widget_.get()});
         if (coarseness_widget_) rows.push_back({coarseness_widget_.get()});
         if (trail_connection_sector_widget_) rows.push_back({trail_connection_sector_widget_.get()});
         if (sector_direction_widget_) rows.push_back({sector_direction_widget_.get()});
@@ -1812,8 +1700,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
         collect_owned_metadata_fields_raw(source_object, include_tags, allow_height, include_trail_connection_sector);
 
     State new_state = state_ ? *state_ : State{};
-    new_state.load_from_json(source_object, geometry_options_, allow_height);
-    bool geometry_added = append_unique(geometry_options_, new_state.geometry);
+    new_state.load_from_json(source_object, {}, allow_height);
 
     bool state_changed = false;
     if (!state_) {
@@ -1821,9 +1708,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     } else {
         state_changed =
             new_state.name != state_->name ||
-            new_state.geometry != state_->geometry ||
-            vibble::weighted_range::to_json(new_state.width_range) != vibble::weighted_range::to_json(state_->width_range) ||
-            vibble::weighted_range::to_json(new_state.height_range) != vibble::weighted_range::to_json(state_->height_range) ||
+            new_state.size != state_->size ||
             std::abs(new_state.trail_connection_direction_deg - state_->trail_connection_direction_deg) > 1e-6 ||
             new_state.trail_connection_width_percent != state_->trail_connection_width_percent ||
             new_state.is_boss != state_->is_boss ||
@@ -1901,7 +1786,7 @@ bool RoomConfigurator::apply_room_data(const nlohmann::json& data) {
     metadata_snapshot_ = std::move(new_snapshot);
     metadata_snapshot_hash_ = new_snapshot_hash;
 
-    return geometry_added || state_changed || tags_changed || snapshot_changed || needs_persist;
+    return state_changed || tags_changed || snapshot_changed || needs_persist;
 }
 
 void RoomConfigurator::open(const nlohmann::json& room_data) {
@@ -2016,12 +1901,9 @@ bool RoomConfigurator::is_locked() const {
     return false;
 }
 
-std::string RoomConfigurator::selected_geometry() const {
-    if (!state_) return geometry_options_.empty() ? std::string{} : geometry_options_.front();
-    if (geometry_options_.empty()) return state_->geometry;
-    auto it = std::find(geometry_options_.begin(), geometry_options_.end(), state_->geometry);
-    if (it != geometry_options_.end()) return *it;
-    return geometry_options_.front();
+int RoomConfigurator::selected_size() const {
+    if (!state_) return kDefaultRoomSize;
+    return std::clamp(state_->size, kMinRoomSize, kMaxRoomSize);
 }
 
 void RoomConfigurator::rebuild_rows() {
@@ -2080,36 +1962,13 @@ void RoomConfigurator::rebuild_rows_internal() {
     name_box_ = std::make_unique<DMTextBox>(is_trail_context_ ? "Trail Name" : "Room Name", state_->name);
     name_widget_ = std::make_unique<TextBoxWidget>(name_box_.get());
 
-    bool allow_geometry_choice = !is_trail_context_;
-    const bool allow_height = !is_trail_context_;
-    if (allow_geometry_choice) {
-        auto geom_it = std::find(geometry_options_.begin(), geometry_options_.end(), state_->geometry);
-        int geom_index = 0;
-        if (geom_it != geometry_options_.end()) {
-            geom_index = static_cast<int>(std::distance(geometry_options_.begin(), geom_it));
-        }
-        geometry_dropdown_ = std::make_unique<DMDropdown>("", geometry_options_, geom_index);
-        geometry_widget_ = std::make_unique<DropdownWidget>(geometry_dropdown_.get());
-    } else {
-        geometry_dropdown_.reset();
-        geometry_widget_.reset();
-    }
-
-    width_slider_max_range_ = 0;
-    const std::string context_label = is_trail_context_ ? "Trail" : "Room";
-
-    width_range_widget_ = std::make_unique<DMWeightedRangeWidget>(context_label + " Width", state_->width_range, kMinRoomDimension, kMaxRoomDimension, false);
-    width_range_control_ = std::make_unique<WeightedRangeWidget>(width_range_widget_.get());
-
-    if (allow_height) {
-        height_slider_max_range_ = 0;
-        height_range_widget_ = std::make_unique<DMWeightedRangeWidget>(context_label + " Height", state_->height_range, kMinRoomDimension, kMaxRoomDimension, false);
-        height_range_control_ = std::make_unique<WeightedRangeWidget>(height_range_widget_.get());
-    } else {
-        height_range_widget_.reset();
-        height_range_control_.reset();
-        height_slider_max_range_ = 0;
-    }
+    size_stepper_ = std::make_unique<DMNumericStepper>(
+        "Size",
+        kMinRoomSize,
+        kMaxRoomSize,
+        std::clamp(state_->size, kMinRoomSize, kMaxRoomSize));
+    size_stepper_->set_step(1);
+    size_widget_ = std::make_unique<StepperWidget>(size_stepper_.get());
 
     coarseness_range_widget_ = std::make_unique<DMWeightedRangeWidget>(
         "Coarseness Radius", state_->coarseness, kMinCoarseness, kMaxCoarseness, false);
@@ -2416,31 +2275,10 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
-    if (geometry_dropdown_) {
-        if (geometry_options_.empty()) {
-            geometry_options_.push_back("Square");
-        }
-        int idx = std::clamp(geometry_dropdown_->selected(), 0, static_cast<int>(geometry_options_.size()) - 1);
-        std::string selected = geometry_options_[idx];
-        if (selected != state_->geometry) {
-            state_->geometry = selected;
-            rebuild_required = true;
-            changed = true;
-        }
-    }
-
-    if (width_range_widget_) {
-        const auto value = width_range_widget_->value();
-        if (vibble::weighted_range::to_json(value) != vibble::weighted_range::to_json(state_->width_range)) {
-            state_->width_range = value;
-            changed = true;
-        }
-    }
-
-    if (height_range_widget_) {
-        const auto value = height_range_widget_->value();
-        if (vibble::weighted_range::to_json(value) != vibble::weighted_range::to_json(state_->height_range)) {
-            state_->height_range = value;
+    if (size_stepper_) {
+        int value = std::clamp(size_stepper_->value(), kMinRoomSize, kMaxRoomSize);
+        if (value != state_->size) {
+            state_->size = value;
             changed = true;
         }
     }
@@ -2525,11 +2363,8 @@ bool RoomConfigurator::sync_state_from_widgets() {
         sector_width_stepper_->set_value(state_->trail_connection_width_percent);
     }
 
-    if (width_range_widget_) {
-        width_range_widget_->set_value(state_->width_range);
-    }
-    if (height_range_widget_) {
-        height_range_widget_->set_value(state_->height_range);
+    if (size_stepper_) {
+        size_stepper_->set_value(state_->size);
     }
     if (coarseness_range_widget_) {
         coarseness_range_widget_->set_value(state_->coarseness);

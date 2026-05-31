@@ -20,7 +20,7 @@ class Area {
     Area() : Area("default_area", 0) {}
     explicit Area(const std::string& name, int resolution = 0);
     Area(const std::string& name, const std::vector<Point>& pts, int resolution = 0);
-    Area(const std::string& name, SDL_Point center, int w, int h, const std::string& geometry, int legacy_unused_smoothing, int map_width, int map_height, int resolution = 0);
+    Area(const std::string& name, SDL_Point center, int size, int map_width, int map_height, int resolution = 0);
     Area(const std::string& name, const std::string& json_path, float scale);
     Area(const std::string& name, const Area& base, SDL_Renderer* renderer, int window_w = 0, int window_h = 0);
     Area(const std::string& name, SDL_Texture* background, SDL_Renderer* renderer, int window_w = 0, int window_h = 0);
@@ -29,8 +29,7 @@ class Area {
     void apply_offset(int dx, int dy);
     void align(SDL_Point target);
     std::tuple<int, int, int, int> get_bounds() const;
-    void generate_circle(SDL_Point center, int horizontal_radius, int vertical_radius, int legacy_unused_smoothing, int map_width, int map_height);
-    void generate_square(SDL_Point center, int w, int h, int legacy_unused_smoothing, int map_width, int map_height);
+    void generate_diamond(SDL_Point center, int size, int map_width, int map_height);
     void generate_point(SDL_Point center, int map_width, int map_height);
     void contract(int inset);
     double get_area() const;

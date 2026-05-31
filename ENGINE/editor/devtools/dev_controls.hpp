@@ -238,6 +238,8 @@ public:
     void exit_map_editor_mode(bool focus_player, bool restore_previous_state);
     void handle_map_selection();
     void toggle_camera_panel();
+    void toggle_lens_panel();
+    void toggle_scene_effects_panel();
     void close_camera_panel();
     void toggle_boundary_assets_modal();
     void open_boundary_assets_modal();
@@ -390,6 +392,8 @@ private:
     std::function<void()> map_grid_regen_cb_;
     std::unique_ptr<MapModeUI> map_mode_ui_;
     std::unique_ptr<CameraUIPanel> camera_panel_;
+    std::unique_ptr<CameraUIPanel> lens_panel_;
+    std::unique_ptr<CameraUIPanel> scene_effects_panel_;
     std::unique_ptr<RegenerateRoomPopup> regenerate_popup_;
     std::string map_path_;
     bool pointer_over_camera_panel_ = false;
